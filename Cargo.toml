@@ -1,0 +1,19 @@
+[package]
+name = "spade"
+version = "0.1.0"
+authors = ["TheZoq2 <frans.skarman@protonmail.com>"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+log = "0.4"
+env_logger = "0.7"
+colored = "2.0"
+logos = "0.11.4"
+
+anyhow = "1.0.32"
+thiserror = "1.0.20"
+
+parse_tree_macros = {path = "parse_tree_macros"}
+
