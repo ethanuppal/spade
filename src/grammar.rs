@@ -3,7 +3,7 @@ use crate::lexer::TokenKind;
 
 #[derive(PartialEq, Debug, Clone)]
 pub enum Type {
-    Named(Identifier)
+    Named(Identifier),
 }
 
 #[derive(PartialEq, Debug, Clone)]
@@ -14,10 +14,7 @@ pub enum Expression {
     Parenthisised(Box<Expression>),
 }
 
-
 #[derive(PartialEq, Debug, Clone)]
 pub enum Statement {
-    Binding(Identifier, Option<Type>, Expression)
+    Binding(Identifier, Option<Type>, Expression),
 }
-
-

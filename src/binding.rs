@@ -1,8 +1,7 @@
 use std::collections::HashMap;
 
-use crate::identifier::Identifier;
 use crate::expression::Expression;
-
+use crate::identifier::Identifier;
 
 pub enum BindTarget {
     Signal(Expression),
@@ -19,7 +18,10 @@ pub struct Bindings {
 
 impl Bindings {
     pub fn new() -> Self {
-        Self {inner: HashMap::new(), next_id: 0}
+        Self {
+            inner: HashMap::new(),
+            next_id: 0,
+        }
     }
 
     pub fn add_named(&mut self, name: Identifier, target: BindTarget) {

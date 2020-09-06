@@ -7,4 +7,3 @@ pub enum Error {
     #[error("Attempting to bind twice to the name {0}")]
     DuplicateBinding(Identifier),
 }
-

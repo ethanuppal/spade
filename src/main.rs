@@ -1,13 +1,13 @@
 pub mod binding;
 pub mod codegen;
 pub mod constant;
-pub mod expression;
-pub mod identifier;
-pub mod types;
 pub mod error;
+pub mod expression;
 pub mod grammar;
+pub mod identifier;
 pub mod lexer;
 pub mod parser;
+pub mod types;
 
 mod testcode;
 

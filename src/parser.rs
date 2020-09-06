@@ -1,13 +1,12 @@
+use colored::*;
 use logos::Lexer;
 use thiserror::Error;
-use colored::*;
 
 use parse_tree_macros::trace_parser;
 
-use crate::lexer::TokenKind;
+use crate::grammar::{Expression, Statement, Type};
 use crate::identifier::Identifier;
-use crate::grammar::{Statement, Expression, Type};
-
+use crate::lexer::TokenKind;
 
 /// A token with location info
 #[derive(Clone, Debug, PartialEq)]
@@ -20,11 +19,10 @@ impl Token {
     pub fn new(kind: TokenKind, lexer: &Lexer<TokenKind>) -> Self {
         Self {
             kind,
-            span: lexer.span()
+            span: lexer.span(),
         }
     }
 }
-
 
 #[derive(Error, Debug, Clone, PartialEq)]
 pub enum Error {
@@ -33,7 +31,10 @@ pub enum Error {
     #[error("Lexer error")]
     LexerError,
     #[error("Unexpected token. got {}, expected {expected:?}", got.as_str())]
-    UnexpectedToken { got: TokenKind, expected: Vec<&'static str> },
+    UnexpectedToken {
+        got: TokenKind,
+        expected: Vec<&'static str>,
+    },
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
@@ -49,13 +50,12 @@ impl<'a> Parser<'a> {
         Self {
             lex,
             peeked: None,
-            parse_stack: vec![]
+            parse_stack: vec![],
         }
     }
 }
 
-
-// Actual parsing functions 
+// Actual parsing functions
 impl<'a> Parser<'a> {
     #[trace_parser]
     fn identifier(&mut self) -> Result<Identifier> {
@@ -63,8 +63,7 @@ impl<'a> Parser<'a> {
 
         if let TokenKind::Identifier(name) = token.kind {
             Ok(Identifier::Str(name))
-        }
-        else {
+        } else {
             unreachable!("eat_cond should have checked this");
         }
     }
@@ -78,9 +77,12 @@ impl<'a> Parser<'a> {
             let operator = self.eat_unconditional()?;
             let rest = self.expression()?;
             // TODO: Do not use a string here
-            Ok(Expression::BinaryOperator(Box::new(start), operator.kind, Box::new(rest)))
-        }
-        else {
+            Ok(Expression::BinaryOperator(
+                Box::new(start),
+                operator.kind,
+                Box::new(rest),
+            ))
+        } else {
             Ok(start)
         }
     }
@@ -92,9 +94,12 @@ impl<'a> Parser<'a> {
             let operator = self.eat_unconditional()?;
             let rest = self.base_expression()?;
             // TODO: Do not use a string here
-            Ok(Expression::BinaryOperator(Box::new(start), operator.kind, Box::new(rest)))
-        }
-        else {
+            Ok(Expression::BinaryOperator(
+                Box::new(start),
+                operator.kind,
+                Box::new(rest),
+            ))
+        } else {
             Ok(start)
         }
     }
@@ -106,16 +111,13 @@ impl<'a> Parser<'a> {
             let inner = self.expression()?;
             self.eat(TokenKind::CloseParen)?;
             Ok(inner)
-        }
-        else if self.peek_cond(TokenKind::is_integer, "integer")? {
+        } else if self.peek_cond(TokenKind::is_integer, "integer")? {
             match self.eat_unconditional()?.kind {
                 TokenKind::Integer(val) => Ok(Expression::IntLiteral(val)),
-                _ => unreachable!()
+                _ => unreachable!(),
             }
-        }
-        else {
-            self.identifier()
-                .map(Expression::Identifier)
+        } else {
+            self.identifier().map(Expression::Identifier)
         }
     }
 
@@ -134,8 +136,7 @@ impl<'a> Parser<'a> {
         let t = if self.peek_kind(&TokenKind::Colon)? {
             self.eat_unconditional()?;
             Some(self.parse_type()?)
-        }
-        else {
+        } else {
             None
         };
 
@@ -174,23 +175,25 @@ impl<'a> Parser<'a> {
     fn eat_cond(
         &mut self,
         condition: impl Fn(&TokenKind) -> bool,
-        expected_description: &'static str
+        expected_description: &'static str,
     ) -> Result<Token> {
         // Check if we already have a peeked token
         let next = self.eat_unconditional()?;
 
-
         // Make sure we ate the correct token
         if !condition(&next.kind) {
-            Err(Error::UnexpectedToken{got: next.kind, expected: vec![expected_description]})
-        }
-        else {
+            Err(Error::UnexpectedToken {
+                got: next.kind,
+                expected: vec![expected_description],
+            })
+        } else {
             Ok(next)
         }
     }
 
     fn eat_unconditional(&mut self) -> Result<Token> {
-        let food = self.peeked
+        let food = self
+            .peeked
             .take()
             .map(Ok)
             .unwrap_or_else(|| self.next_token())?;
@@ -202,8 +205,7 @@ impl<'a> Parser<'a> {
     fn peek(&mut self) -> Result<Option<Token>> {
         if let Some(prev) = self.peeked.clone() {
             Ok(Some(prev))
-        }
-        else {
+        } else {
             let result = match self.next_token() {
                 Ok(token) => Some(token),
                 Err(Error::Eof) => None,
@@ -214,9 +216,10 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn peek_kind(&mut self, expected: &TokenKind) -> Result<bool>{
+    fn peek_kind(&mut self, expected: &TokenKind) -> Result<bool> {
         let result = self.peek_cond_no_tracing(|kind| kind == expected)?;
-        self.parse_stack.push(ParseStackEntry::PeekingFor(expected.clone(), result));
+        self.parse_stack
+            .push(ParseStackEntry::PeekingFor(expected.clone(), result));
         Ok(result)
     }
 
@@ -225,25 +228,25 @@ impl<'a> Parser<'a> {
     /// If we reached EOF and the peek returns None, returns false
     fn peek_cond(&mut self, cond: impl Fn(&TokenKind) -> bool, msg: &str) -> Result<bool> {
         let result = self.peek_cond_no_tracing(cond)?;
-        self.parse_stack.push(ParseStackEntry::PeekingWithCondition(msg.to_string(), result));
+        self.parse_stack.push(ParseStackEntry::PeekingWithCondition(
+            msg.to_string(),
+            result,
+        ));
         Ok(result)
     }
 
     fn peek_cond_no_tracing(&mut self, cond: impl Fn(&TokenKind) -> bool) -> Result<bool> {
-        self.peek()
-            .map(|token| {
-                if let Some(inner) = token {
-                    cond(&inner.kind)
-                }
-                else {
-                    false
-                }
-            })
+        self.peek().map(|token| {
+            if let Some(inner) = token {
+                cond(&inner.kind)
+            } else {
+                false
+            }
+        })
     }
 
     fn next_token(&mut self) -> Result<Token> {
-        let kind = self.lex.next()
-            .ok_or(Error::Eof)?;
+        let kind = self.lex.next().ok_or(Error::Eof)?;
 
         if let TokenKind::Error = kind {
             Err(Error::LexerError)?
@@ -253,15 +256,13 @@ impl<'a> Parser<'a> {
     }
 }
 
-
-
 pub enum ParseStackEntry {
     Enter(String),
     Ate(Token),
     PeekingWithCondition(String, bool),
     PeekingFor(TokenKind, bool),
     Exit,
-    ExitWithError(Error)
+    ExitWithError(Error),
 }
 pub fn format_parse_stack(stack: &[ParseStackEntry]) -> String {
     let mut result = String::new();
@@ -274,29 +275,31 @@ pub fn format_parse_stack(stack: &[ParseStackEntry]) -> String {
                 next_indent_amount += 1;
                 format!("{} `{}`", "trying".white(), function.blue())
             }
-            ParseStackEntry::Ate(token) => {
-                format!(
-                    "{} '{}'",
-                    "Eating".bright_yellow(),
-                    token.kind.as_str().bright_purple()
-                )
-            }
-            ParseStackEntry::PeekingFor(kind, success) => {
-                format!(
-                    "{} {} {}",
-                    "peeking for".white(),
-                    kind.as_str().bright_blue(),
-                    if *success {"✓".green()} else {"𐄂".red()}
-                )
-            }
-            ParseStackEntry::PeekingWithCondition(needle, success) => {
-                format!(
-                    "{} {} {}",
-                    "peeking conditionally for ".white(),
-                    needle.bright_blue(),
-                    if *success {"✓".green()} else {"𐄂".red()}
-                )
-            }
+            ParseStackEntry::Ate(token) => format!(
+                "{} '{}'",
+                "Eating".bright_yellow(),
+                token.kind.as_str().bright_purple()
+            ),
+            ParseStackEntry::PeekingFor(kind, success) => format!(
+                "{} {} {}",
+                "peeking for".white(),
+                kind.as_str().bright_blue(),
+                if *success {
+                    "✓".green()
+                } else {
+                    "𐄂".red()
+                }
+            ),
+            ParseStackEntry::PeekingWithCondition(needle, success) => format!(
+                "{} {} {}",
+                "peeking conditionally for ".white(),
+                needle.bright_blue(),
+                if *success {
+                    "✓".green()
+                } else {
+                    "𐄂".red()
+                }
+            ),
             ParseStackEntry::Exit => {
                 next_indent_amount -= 1;
                 format!("")
@@ -306,8 +309,8 @@ pub fn format_parse_stack(stack: &[ParseStackEntry]) -> String {
                 format!("{} {}", "Giving up: ".bright_red(), err)
             }
         };
-        if let ParseStackEntry::Exit = entry { }
-        else {
+        if let ParseStackEntry::Exit = entry {
+        } else {
             for _ in 0..indent_amount {
                 result += "| ";
             }
@@ -342,7 +345,7 @@ mod tests {
                     expected
                 );
             }
-        }
+        };
     }
 
     #[test]
@@ -389,7 +392,6 @@ mod tests {
 
     #[test]
     fn bracketed_expressions_are_expressions() {
-
         let expected_value = Expression::BinaryOperator(
             Box::new(Expression::Identifier("a".into())),
             TokenKind::Multiplication,
@@ -404,7 +406,6 @@ mod tests {
     }
     #[test]
     fn repeated_bracketed_expressions_work() {
-
         let expected_value = Expression::BinaryOperator(
             Box::new(Expression::BinaryOperator(
                 Box::new(Expression::Identifier("b".into())),
@@ -423,13 +424,12 @@ mod tests {
         check_parse!("123", expression, Ok(Expression::IntLiteral(123)));
     }
 
-
     #[test]
     fn bindings_work() {
         let expected = Statement::Binding(
             Identifier::Str("test".to_string()),
             None,
-            Expression::IntLiteral(123)
+            Expression::IntLiteral(123),
         );
         check_parse!("let test = 123;", statement, Ok(expected));
     }
@@ -439,7 +439,7 @@ mod tests {
         let expected = Statement::Binding(
             Identifier::Str("test".to_string()),
             Some(Type::Named(Identifier::Str("bool".to_string()))),
-            Expression::IntLiteral(123)
+            Expression::IntLiteral(123),
         );
         check_parse!("let test: bool = 123;", statement, Ok(expected));
     }

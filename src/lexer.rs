@@ -31,7 +31,6 @@ pub enum TokenKind {
     #[token("=")]
     Assignment,
 
-
     #[token("(")]
     OpenParen,
     #[token(")")]
@@ -80,8 +79,7 @@ impl TokenKind {
     pub fn is_ident(&self) -> bool {
         if let TokenKind::Identifier(_) = self {
             true
-        }
-        else {
+        } else {
             false
         }
     }
@@ -95,7 +93,10 @@ mod tests {
     fn identifiers_work() {
         let mut lex = TokenKind::lexer("abc123_");
 
-        assert_eq!(lex.next(), Some(TokenKind::Identifier("abc123_".to_string())));
+        assert_eq!(
+            lex.next(),
+            Some(TokenKind::Identifier("abc123_".to_string()))
+        );
     }
 
     #[test]
