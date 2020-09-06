@@ -4,9 +4,12 @@ use thiserror::Error;
 
 use parse_tree_macros::trace_parser;
 
-use crate::grammar::{Entity, Expression, Register, Statement, Type};
-use crate::identifier::Identifier;
+use crate::ast::{
+    Entity, ExprKind, Expression, HasSpan, Identifier, KindWithLocation, Register, Statement,
+    StmtKind, Type, TypeKind,
+};
 use crate::lexer::TokenKind;
+use crate::location_info::lspan;
 
 /// A token with location info
 #[derive(Clone, Debug, PartialEq)]
@@ -68,7 +71,7 @@ impl<'a> Parser<'a> {
         let token = self.eat_cond(TokenKind::is_ident, "Identifier")?;
 
         if let TokenKind::Identifier(name) = token.kind {
-            Ok(Identifier::Str(name))
+            Ok(Identifier::new(name, lspan(token.span)))
         } else {
             unreachable!("eat_cond should have checked this");
         }
@@ -82,12 +85,9 @@ impl<'a> Parser<'a> {
         if self.is_next_addition_operator()? {
             let operator = self.eat_unconditional()?;
             let rest = self.expression()?;
-            // TODO: Do not use a string here
-            Ok(Expression::BinaryOperator(
-                Box::new(start),
-                operator.kind,
-                Box::new(rest),
-            ))
+
+            let span = start.span.merge(rest.span);
+            Ok(ExprKind::BinaryOperator(Box::new(start), operator.kind, Box::new(rest)).at(span))
         } else {
             Ok(start)
         }
@@ -99,12 +99,9 @@ impl<'a> Parser<'a> {
         if self.is_next_multiplication_operator()? {
             let operator = self.eat_unconditional()?;
             let rest = self.base_expression()?;
+            let span = start.span.merge(rest.span);
             // TODO: Do not use a string here
-            Ok(Expression::BinaryOperator(
-                Box::new(start),
-                operator.kind,
-                Box::new(rest),
-            ))
+            Ok(ExprKind::BinaryOperator(Box::new(start), operator.kind, Box::new(rest)).at(span))
         } else {
             Ok(start)
         }
@@ -117,19 +114,23 @@ impl<'a> Parser<'a> {
             self.eat(&TokenKind::CloseParen)?;
             Ok(inner)
         } else if self.peek_cond(TokenKind::is_integer, "integer")? {
-            match self.eat_unconditional()?.kind {
-                TokenKind::Integer(val) => Ok(Expression::IntLiteral(val)),
+            let token = self.eat_unconditional()?;
+            match token.kind {
+                TokenKind::Integer(val) => Ok(ExprKind::IntLiteral(val).at(lspan(token.span))),
                 _ => unreachable!(),
             }
         } else {
-            self.identifier().map(Expression::Identifier)
+            let ident = self.identifier()?;
+            let span = ident.span;
+            Ok(ExprKind::Identifier(ident).at(span))
         }
     }
 
     // Types
     #[trace_parser]
     fn parse_type(&mut self) -> Result<Type> {
-        Ok(Type::Named(self.identifier()?))
+        let (ident, span) = self.identifier()?.sep_span();
+        Ok(TypeKind::Named(ident).at(span))
     }
 
     /// A name with an associated type, as used in argument definitions as well
@@ -150,7 +151,7 @@ impl<'a> Parser<'a> {
     #[trace_parser]
     fn binding(&mut self) -> Result<Option<Statement>> {
         if self.peek_and_eat_kind(&TokenKind::Let)? {
-            let ident = self.identifier()?;
+            let (ident, start_span) = self.identifier()?.sep_span();
 
             let t = if self.peek_and_eat_kind(&TokenKind::Colon)? {
                 Some(self.parse_type()?)
@@ -159,15 +160,18 @@ impl<'a> Parser<'a> {
             };
 
             self.eat(&TokenKind::Assignment)?;
-            let value = self.expression()?;
+            let (value, end_span) = self.expression()?.sep_span();
             self.eat(&TokenKind::Semi)?;
 
-            Ok(Some(Statement::Binding(ident, t, value)))
+            Ok(Some(
+                StmtKind::Binding(ident, t, value).at(start_span.merge(end_span)),
+            ))
         } else {
             Ok(None)
         }
     }
 
+    /*
     #[trace_parser]
     fn register_reset_definition(&mut self) -> Result<(Expression, Expression)> {
         let condition = self.expression()?;
@@ -308,6 +312,7 @@ impl<'a> Parser<'a> {
         }
         Ok(result)
     }
+    */
 }
 
 // Helper functions for checking the type of tokens
@@ -539,7 +544,12 @@ pub fn format_parse_stack(stack: &[ParseStackEntry]) -> String {
 mod tests {
     use super::*;
 
+    use crate::location_info::dummy;
     use logos::Logos;
+
+    pub fn _ident(name: &str) -> Identifier {
+        Identifier::new(name.to_string(), dummy())
+    }
 
     macro_rules! check_parse {
         ($string:expr , $method:ident, $expected:expr) => {
@@ -563,90 +573,102 @@ mod tests {
 
     #[test]
     fn parsing_identifier_works() {
-        check_parse!("abc123_", identifier, Ok("abc123_".into()));
+        check_parse!("abc123_", identifier, Ok(_ident("abc123_")));
     }
 
     #[test]
     fn addition_operatoins_are_expressions() {
-        let expected_value = Expression::BinaryOperator(
-            Box::new(Expression::Identifier("a".into())),
+        let expected_value = ExprKind::BinaryOperator(
+            Box::new(ExprKind::Identifier(_ident("a")).nowhere()),
             TokenKind::Plus,
-            Box::new(Expression::Identifier("b".into())),
-        );
+            Box::new(ExprKind::Identifier(_ident("b")).nowhere()),
+        )
+        .nowhere();
 
         check_parse!("a + b", expression, Ok(expected_value.clone()));
     }
 
     #[test]
     fn multiplications_are_expressions() {
-        let expected_value = Expression::BinaryOperator(
-            Box::new(Expression::Identifier("a".into())),
+        let expected_value = ExprKind::BinaryOperator(
+            Box::new(ExprKind::Identifier(_ident("a")).nowhere()),
             TokenKind::Multiplication,
-            Box::new(Expression::Identifier("b".into())),
-        );
+            Box::new(ExprKind::Identifier(_ident("b")).nowhere()),
+        )
+        .nowhere();
 
         check_parse!("a * b", expression, Ok(expected_value.clone()));
     }
 
     #[test]
     fn multiplication_before_addition() {
-        let expected_value = Expression::BinaryOperator(
-            Box::new(Expression::BinaryOperator(
-                Box::new(Expression::Identifier("a".into())),
-                TokenKind::Multiplication,
-                Box::new(Expression::Identifier("b".into())),
-            )),
+        let expected_value = ExprKind::BinaryOperator(
+            Box::new(
+                ExprKind::BinaryOperator(
+                    Box::new(ExprKind::Identifier(_ident("a")).nowhere()),
+                    TokenKind::Multiplication,
+                    Box::new(ExprKind::Identifier(_ident("b")).nowhere()),
+                )
+                .nowhere(),
+            ),
             TokenKind::Plus,
-            Box::new(Expression::Identifier("c".into())),
-        );
+            Box::new(ExprKind::Identifier(_ident("c")).nowhere()),
+        )
+        .nowhere();
 
         check_parse!("a*b + c", expression, Ok(expected_value.clone()));
     }
 
     #[test]
     fn bracketed_expressions_are_expressions() {
-        let expected_value = Expression::BinaryOperator(
-            Box::new(Expression::Identifier("a".into())),
+        let expected_value = ExprKind::BinaryOperator(
+            Box::new(ExprKind::Identifier(_ident("a")).nowhere()),
             TokenKind::Multiplication,
-            Box::new(Expression::BinaryOperator(
-                Box::new(Expression::Identifier("b".into())),
-                TokenKind::Plus,
-                Box::new(Expression::Identifier("c".into())),
-            )),
-        );
+            Box::new(
+                ExprKind::BinaryOperator(
+                    Box::new(ExprKind::Identifier(_ident("b")).nowhere()),
+                    TokenKind::Plus,
+                    Box::new(ExprKind::Identifier(_ident("c")).nowhere()),
+                )
+                .nowhere(),
+            ),
+        )
+        .nowhere();
 
         check_parse!("a * (b + c)", expression, Ok(expected_value.clone()));
     }
     #[test]
     fn repeated_bracketed_expressions_work() {
-        let expected_value = Expression::BinaryOperator(
-            Box::new(Expression::BinaryOperator(
-                Box::new(Expression::Identifier("b".into())),
-                TokenKind::Plus,
-                Box::new(Expression::Identifier("c".into())),
-            )),
+        let expected_value = ExprKind::BinaryOperator(
+            Box::new(
+                ExprKind::BinaryOperator(
+                    Box::new(ExprKind::Identifier(_ident("b")).nowhere()),
+                    TokenKind::Plus,
+                    Box::new(ExprKind::Identifier(_ident("c")).nowhere()),
+                )
+                .nowhere(),
+            ),
             TokenKind::Multiplication,
-            Box::new(Expression::Identifier("a".into())),
-        );
+            Box::new(ExprKind::Identifier(_ident("a")).nowhere()),
+        )
+        .nowhere();
 
         check_parse!("((b + c) * a)", expression, Ok(expected_value.clone()));
     }
 
     #[test]
     fn literals_are_expressions() {
-        check_parse!("123", expression, Ok(Expression::IntLiteral(123)));
+        check_parse!("123", expression, Ok(ExprKind::IntLiteral(123).nowhere()));
     }
 
     #[test]
     fn bindings_work() {
-        let expected = Statement::Binding(
-            Identifier::Str("test".to_string()),
-            None,
-            Expression::IntLiteral(123),
-        );
-        check_parse!("let test = 123;", statement, Ok(Some(expected)));
+        let expected =
+            StmtKind::Binding(_ident("test"), None, ExprKind::IntLiteral(123).nowhere()).nowhere();
+        check_parse!("let test = 123;", binding, Ok(Some(expected)));
     }
 
+    /*
     #[test]
     fn bindings_with_types_work() {
         let expected = Statement::Binding(
@@ -755,4 +777,5 @@ mod tests {
 
         check_parse!(code, statement, Ok(Some(expected)));
     }
+    */
 }

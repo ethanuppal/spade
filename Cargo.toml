@@ -9,6 +9,8 @@ edition = "2018"
 [dependencies]
 colored = "2.0"
 logos = "0.11.4"
+codespan = "0.9"
+derivative = "2.1"
 
 anyhow = "1.0.32"
 thiserror = "1.0.20"
