@@ -14,8 +14,14 @@ pub enum TokenKind {
     Integer(u128),
 
     // Keywords
+    #[token("reg")]
+    Reg,
     #[token("let")]
     Let,
+    #[token("entity")]
+    Entity,
+    #[token("reset")]
+    Reset,
 
     // Math operators
     #[token("+")]
@@ -36,6 +42,15 @@ pub enum TokenKind {
     #[token(")")]
     CloseParen,
 
+    #[token("{")]
+    OpenBrace,
+    #[token("}")]
+    CloseBrace,
+
+    #[token("->")]
+    SlimArrow,
+    #[token(",")]
+    Comma,
     #[token(";")]
     Semi,
     #[token(":")]
@@ -54,16 +69,28 @@ impl TokenKind {
         match self {
             TokenKind::Identifier(_) => "identifier",
             TokenKind::Integer(_) => "integer",
+
             TokenKind::Let => "let",
+            TokenKind::Reg => "reg",
+            TokenKind::Entity => "entity",
+            TokenKind::Reset => "reset",
+
             TokenKind::Assignment => "=",
             TokenKind::Plus => "+",
             TokenKind::Minus => "-",
             TokenKind::Multiplication => "*",
             TokenKind::Division => "/",
+
             TokenKind::OpenParen => "(",
             TokenKind::CloseParen => ")",
+            TokenKind::OpenBrace => "{",
+            TokenKind::CloseBrace => "}",
+
+            TokenKind::SlimArrow => "->",
             TokenKind::Semi => ";",
             TokenKind::Colon => ":",
+            TokenKind::Comma => ",",
+
             TokenKind::Whitespace => "whitespace",
             TokenKind::Error => "error",
         }

@@ -4,7 +4,7 @@ use thiserror::Error;
 
 use parse_tree_macros::trace_parser;
 
-use crate::grammar::{Expression, Statement, Type};
+use crate::grammar::{Entity, Expression, Register, Statement, Type};
 use crate::identifier::Identifier;
 use crate::lexer::TokenKind;
 
@@ -35,6 +35,12 @@ pub enum Error {
         got: TokenKind,
         expected: Vec<&'static str>,
     },
+    #[error("Expected to find a {} to match {friend:?}", expected.as_str())]
+    UnmatchedPair { friend: Token, expected: TokenKind },
+
+    // Non general errors
+    #[error("A register clock must be specified")]
+    RegisterClockMissing,
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
@@ -106,10 +112,9 @@ impl<'a> Parser<'a> {
 
     #[trace_parser]
     fn base_expression(&mut self) -> Result<Expression> {
-        if self.peek_kind(&TokenKind::OpenParen)? {
-            self.eat_unconditional()?;
+        if self.peek_and_eat_kind(&TokenKind::OpenParen)? {
             let inner = self.expression()?;
-            self.eat(TokenKind::CloseParen)?;
+            self.eat(&TokenKind::CloseParen)?;
             Ok(inner)
         } else if self.peek_cond(TokenKind::is_integer, "integer")? {
             match self.eat_unconditional()?.kind {
@@ -127,24 +132,172 @@ impl<'a> Parser<'a> {
         Ok(Type::Named(self.identifier()?))
     }
 
-    // Statemenets
+    /// A name with an associated type, as used in argument definitions as well
+    /// as struct defintions
+    ///
+    /// name: Type
+    // TODO: Use this for let bindings
     #[trace_parser]
-    fn statement(&mut self) -> Result<Statement> {
-        self.eat(TokenKind::Let)?;
-        let ident = self.identifier()?;
+    fn name_and_type(&mut self) -> Result<(Identifier, Type)> {
+        let name = self.identifier()?;
+        self.eat(&TokenKind::Colon);
+        let t = self.parse_type()?;
+        Ok((name, t))
+    }
 
-        let t = if self.peek_kind(&TokenKind::Colon)? {
-            self.eat_unconditional()?;
+    // Statemenets
+
+    #[trace_parser]
+    fn binding(&mut self) -> Result<Option<Statement>> {
+        if self.peek_and_eat_kind(&TokenKind::Let)? {
+            let ident = self.identifier()?;
+
+            let t = if self.peek_and_eat_kind(&TokenKind::Colon)? {
+                Some(self.parse_type()?)
+            } else {
+                None
+            };
+
+            self.eat(&TokenKind::Assignment)?;
+            let value = self.expression()?;
+            self.eat(&TokenKind::Semi)?;
+
+            Ok(Some(Statement::Binding(ident, t, value)))
+        } else {
+            Ok(None)
+        }
+    }
+
+    #[trace_parser]
+    fn register_reset_definition(&mut self) -> Result<(Expression, Expression)> {
+        let condition = self.expression()?;
+        self.eat(&TokenKind::Colon)?;
+        let value = self.expression()?;
+
+        Ok((condition, value))
+    }
+
+    #[trace_parser]
+    fn register(&mut self) -> Result<Option<Statement>> {
+        if self.peek_and_eat_kind(&TokenKind::Reg)? {
+            // Clock selection
+            let clock = self
+                .surrounded(
+                    &TokenKind::OpenParen,
+                    |s| s.identifier().map(Some),
+                    &TokenKind::CloseParen,
+                )
+                .map_err(|_| Error::RegisterClockMissing)?
+                // Identifier parsing can not fail since we map it into a Some. Therefore,
+                // unwrap is safe
+                .unwrap();
+
+            let reset = if self.peek_and_eat_kind(&TokenKind::Reset)? {
+                self.surrounded(
+                    &TokenKind::OpenParen,
+                    |s| s.register_reset_definition().map(Some),
+                    &TokenKind::CloseParen,
+                )?
+            } else {
+                None
+            };
+
+            // Name
+            let name = self.identifier()?;
+
+            // Value
+            self.eat(&TokenKind::Assignment)?;
+            let value = self.expression()?;
+
+            Ok(Some(Statement::Register(Register {
+                name,
+                clock,
+                reset,
+                value,
+            })))
+        } else {
+            Ok(None)
+        }
+    }
+
+    /// If the next token is the start of a statement, return that statement,
+    /// otherwise None
+    #[trace_parser]
+    fn statement(&mut self) -> Result<Option<Statement>> {
+        self.first_successful(vec![&Self::binding, &Self::register])
+    }
+
+    #[trace_parser]
+    fn statements(&mut self) -> Result<Vec<Statement>> {
+        let mut result = vec![];
+        while let Some(statement) = self.statement()? {
+            result.push(statement)
+        }
+        Ok(result)
+    }
+
+    // Entities
+    #[trace_parser]
+    fn entity(&mut self) -> Result<Entity> {
+        self.eat(&TokenKind::Entity)?;
+        let name = self.identifier()?;
+
+        // Input types
+        self.eat(&TokenKind::OpenParen)?;
+        let inputs = self.comma_separated(Self::name_and_type, &TokenKind::CloseParen)?;
+        self.eat(&TokenKind::CloseParen)?;
+
+        // Return type
+        let output_type = if self.peek_and_eat_kind(&TokenKind::SlimArrow)? {
             Some(self.parse_type()?)
         } else {
             None
-        };
+        }
+        .unwrap_or(Type::UnitType);
 
-        self.eat(TokenKind::Assignment)?;
-        let value = self.expression()?;
-        self.eat(TokenKind::Semi)?;
+        // Body (TODO: might want to make this a separate structure like a block)
+        self.eat(&TokenKind::OpenBrace)?;
+        let statements = self.statements()?;
+        let output_value = self.expression()?;
+        self.eat(&TokenKind::CloseBrace)?;
 
-        Ok(Statement::Binding(ident, t, value))
+        Ok(Entity {
+            name: name.to_string(),
+            inputs,
+            statements,
+            output_type,
+            output_value,
+        })
+    }
+
+    // Helpers
+    #[trace_parser]
+    fn comma_separated<T>(
+        &mut self,
+        inner: impl Fn(&mut Self) -> Result<T>,
+        // This end marker is used for allowing trailing commas. It should
+        // be whatever ends the collection that is searched. I.e. (a,b,c,) should have
+        // `)`, and {} should have `}`
+        end_marker: &TokenKind,
+    ) -> Result<Vec<T>> {
+        let mut result = vec![];
+
+        loop {
+            // The list might be empty
+            if self.peek_kind(end_marker)? {
+                break;
+            }
+            result.push(inner(self)?);
+
+            // Now we expect to either find a comma, in which case we resume the
+            // search, or an end marker, in which case we abort
+            if self.peek_kind(end_marker)? {
+                break;
+            } else {
+                self.eat(&TokenKind::Comma)?;
+            }
+        }
+        Ok(result)
     }
 }
 
@@ -166,10 +319,50 @@ impl<'a> Parser<'a> {
     }
 }
 
+// Helper functions for combining parsers
+impl<'a> Parser<'a> {
+    fn first_successful<T>(
+        &mut self,
+        parsers: Vec<&dyn Fn(&mut Self) -> Result<Option<T>>>,
+    ) -> Result<Option<T>> {
+        for parser in parsers {
+            match parser(self) {
+                Ok(Some(val)) => return Ok(Some(val)),
+                Ok(None) => continue,
+                Err(e) => return Err(e),
+            }
+        }
+        Ok(None)
+    }
+
+    /// Attempts to parse an inner structure surrouned by two tokens, like `( x )`.
+    ///
+    /// If the `start` token is not found, an error is produced.
+    ///
+    /// If the `start` token is found, but the inner parser returns `None`, `None` is returned.
+    ///
+    /// If the end token is not found, return a missmatch error
+    fn surrounded<T>(
+        &mut self,
+        start: &TokenKind,
+        inner: impl Fn(&mut Self) -> Result<Option<T>>,
+        end: &TokenKind,
+    ) -> Result<Option<T>> {
+        let opener = self.eat(start)?;
+        let result = inner(self)?;
+        // TODO: Better error handling here. We are throwing away potential EOFs
+        self.eat(end).map_err(|_| Error::UnmatchedPair {
+            friend: opener,
+            expected: end.clone(),
+        })?;
+        Ok(result)
+    }
+}
+
 // Helper functions for advancing the token stream
 impl<'a> Parser<'a> {
-    fn eat(&mut self, expected: TokenKind) -> Result<Token> {
-        self.eat_cond(|k| k == &expected, expected.as_str())
+    fn eat(&mut self, expected: &TokenKind) -> Result<Token> {
+        self.eat_cond(|k| k == expected, expected.as_str())
     }
 
     fn eat_cond(
@@ -200,6 +393,17 @@ impl<'a> Parser<'a> {
 
         self.parse_stack.push(ParseStackEntry::Ate(food.clone()));
         Ok(food)
+    }
+
+    /// Peeks the next token, checks if it matches `kind`. If so, it eats it
+    /// and returns true, otherwise it returns false.
+    fn peek_and_eat_kind(&mut self, kind: &TokenKind) -> Result<bool> {
+        if self.peek_kind(kind)? {
+            self.eat_unconditional()?;
+            Ok(true)
+        } else {
+            Ok(false)
+        }
     }
 
     fn peek(&mut self) -> Result<Option<Token>> {
@@ -431,7 +635,7 @@ mod tests {
             None,
             Expression::IntLiteral(123),
         );
-        check_parse!("let test = 123;", statement, Ok(expected));
+        check_parse!("let test = 123;", statement, Ok(Some(expected)));
     }
 
     #[test]
@@ -441,6 +645,85 @@ mod tests {
             Some(Type::Named(Identifier::Str("bool".to_string()))),
             Expression::IntLiteral(123),
         );
-        check_parse!("let test: bool = 123;", statement, Ok(expected));
+        check_parse!("let test: bool = 123;", statement, Ok(Some(expected)));
+    }
+
+    #[test]
+    fn entity_without_inputs() {
+        let code = include_str!("../parser_test_code/entity_without_inputs.sp");
+        let expected = Entity {
+            name: "no_inputs".to_string(),
+            inputs: vec![],
+            statements: vec![
+                Statement::Binding(
+                    Identifier::Str("test".to_string()),
+                    None,
+                    Expression::IntLiteral(123),
+                ),
+                Statement::Binding(
+                    Identifier::Str("test2".to_string()),
+                    None,
+                    Expression::IntLiteral(123),
+                ),
+            ],
+            output_type: Type::UnitType,
+            output_value: Expression::Identifier(Identifier::Str("test".to_string())),
+        };
+
+        check_parse!(code, entity, Ok(expected));
+    }
+
+    #[test]
+    fn entity_with_inputs() {
+        let code = include_str!("../parser_test_code/entity_with_inputs.sp");
+        let expected = Entity {
+            name: "with_inputs".to_string(),
+            inputs: vec![
+                (
+                    Identifier::Str("clk".to_string()),
+                    Type::Named(Identifier::Str("bool".to_string())),
+                ),
+                (
+                    Identifier::Str("rst".to_string()),
+                    Type::Named(Identifier::Str("bool".to_string())),
+                ),
+            ],
+            statements: vec![],
+            output_type: Type::Named(Identifier::Str("bool".to_string())),
+            output_value: Expression::Identifier(Identifier::Str("clk".to_string())),
+        };
+
+        check_parse!(code, entity, Ok(expected));
+    }
+
+    #[test]
+    fn parsing_register_without_reset_works() {
+        let code = "reg(clk) name = 1;";
+
+        let expected = Statement::Register(Register {
+            name: Identifier::Str("name".to_string()),
+            clock: Identifier::Str("clk".to_string()),
+            reset: None,
+            value: Expression::IntLiteral(1),
+        });
+
+        check_parse!(code, statement, Ok(Some(expected)));
+    }
+
+    #[test]
+    fn parsing_register_with_reset_works() {
+        let code = "reg(clk) reset(rst: 0) name = 1;";
+
+        let expected = Statement::Register(Register {
+            name: Identifier::Str("name".to_string()),
+            clock: Identifier::Str("clk".to_string()),
+            reset: Some((
+                Expression::Identifier(Identifier::Str("rst".to_string())),
+                Expression::IntLiteral(0),
+            )),
+            value: Expression::IntLiteral(1),
+        });
+
+        check_parse!(code, statement, Ok(Some(expected)));
     }
 }

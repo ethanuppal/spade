@@ -14,11 +14,3 @@ mod testcode;
 fn main() {
     println!("Hello, world!");
 }
-
-/*
-Language structure:
-
-The language is expression based, there are no statements (probably)
-
-Registers provide persistent storage of expressions
-*/
