@@ -4,12 +4,9 @@ use thiserror::Error;
 
 use parse_tree_macros::trace_parser;
 
-use crate::ast::{
-    Entity, ExprKind, Expression, HasSpan, Identifier, KindWithLocation, Register, Statement,
-    StmtKind, Type, TypeKind,
-};
+use crate::ast::{Entity, Expression, Identifier, Register, Statement, Type, WithLocation};
 use crate::lexer::TokenKind;
-use crate::location_info::lspan;
+use crate::location_info::{lspan, Loc};
 
 /// A token with location info
 #[derive(Clone, Debug, PartialEq)]
@@ -67,11 +64,11 @@ impl<'a> Parser<'a> {
 // Actual parsing functions
 impl<'a> Parser<'a> {
     #[trace_parser]
-    fn identifier(&mut self) -> Result<Identifier> {
+    fn identifier(&mut self) -> Result<Loc<Identifier>> {
         let token = self.eat_cond(TokenKind::is_ident, "Identifier")?;
 
         if let TokenKind::Identifier(name) = token.kind {
-            Ok(Identifier::new(name, lspan(token.span)))
+            Ok(Identifier(name).at(lspan(token.span)))
         } else {
             unreachable!("eat_cond should have checked this");
         }
@@ -79,7 +76,7 @@ impl<'a> Parser<'a> {
 
     // Expression parsing
     #[trace_parser]
-    fn expression(&mut self) -> Result<Expression> {
+    fn expression(&mut self) -> Result<Loc<Expression>> {
         let start = self.multiplicative_expression()?;
 
         if self.is_next_addition_operator()? {
@@ -87,50 +84,52 @@ impl<'a> Parser<'a> {
             let rest = self.expression()?;
 
             let span = start.span.merge(rest.span);
-            Ok(ExprKind::BinaryOperator(Box::new(start), operator.kind, Box::new(rest)).at(span))
+            Ok(Expression::BinaryOperator(Box::new(start), operator.kind, Box::new(rest)).at(span))
         } else {
             Ok(start)
         }
     }
 
     #[trace_parser]
-    fn multiplicative_expression(&mut self) -> Result<Expression> {
-        let start = self.base_expression()?;
+    fn multiplicative_expression(&mut self) -> Result<Loc<Expression>> {
+        let (start, start_span) = self.base_expression()?.separate();
         if self.is_next_multiplication_operator()? {
             let operator = self.eat_unconditional()?;
-            let rest = self.base_expression()?;
-            let span = start.span.merge(rest.span);
+            let (rest, end_span) = self.base_expression()?.separate();
             // TODO: Do not use a string here
-            Ok(ExprKind::BinaryOperator(Box::new(start), operator.kind, Box::new(rest)).at(span))
+            Ok(
+                Expression::BinaryOperator(Box::new(start), operator.kind, Box::new(rest))
+                    .at(start_span.merge(end_span)),
+            )
         } else {
             Ok(start)
         }
     }
 
     #[trace_parser]
-    fn base_expression(&mut self) -> Result<Expression> {
-        if self.peek_and_eat_kind(&TokenKind::OpenParen)? {
+    fn base_expression(&mut self) -> Result<Loc<Expression>> {
+        if self.peek_and_eat_kind(&TokenKind::OpenParen)?.is_some() {
             let inner = self.expression()?;
             self.eat(&TokenKind::CloseParen)?;
             Ok(inner)
         } else if self.peek_cond(TokenKind::is_integer, "integer")? {
             let token = self.eat_unconditional()?;
             match token.kind {
-                TokenKind::Integer(val) => Ok(ExprKind::IntLiteral(val).at(lspan(token.span))),
+                TokenKind::Integer(val) => Ok(Expression::IntLiteral(val).at(lspan(token.span))),
                 _ => unreachable!(),
             }
         } else {
             let ident = self.identifier()?;
             let span = ident.span;
-            Ok(ExprKind::Identifier(ident).at(span))
+            Ok(Expression::Identifier(ident).at(span))
         }
     }
 
     // Types
     #[trace_parser]
-    fn parse_type(&mut self) -> Result<Type> {
-        let (ident, span) = self.identifier()?.sep_span();
-        Ok(TypeKind::Named(ident).at(span))
+    fn parse_type(&mut self) -> Result<Loc<Type>> {
+        let (ident, span) = self.identifier()?.separate();
+        Ok(Type::Named(ident).at(span))
     }
 
     /// A name with an associated type, as used in argument definitions as well
@@ -139,7 +138,7 @@ impl<'a> Parser<'a> {
     /// name: Type
     // TODO: Use this for let bindings
     #[trace_parser]
-    fn name_and_type(&mut self) -> Result<(Identifier, Type)> {
+    fn name_and_type(&mut self) -> Result<(Loc<Identifier>, Loc<Type>)> {
         let name = self.identifier()?;
         self.eat(&TokenKind::Colon);
         let t = self.parse_type()?;
@@ -149,31 +148,30 @@ impl<'a> Parser<'a> {
     // Statemenets
 
     #[trace_parser]
-    fn binding(&mut self) -> Result<Option<Statement>> {
-        if self.peek_and_eat_kind(&TokenKind::Let)? {
-            let (ident, start_span) = self.identifier()?.sep_span();
+    fn binding(&mut self) -> Result<Option<Loc<Statement>>> {
+        if self.peek_and_eat_kind(&TokenKind::Let)?.is_some() {
+            let (ident, start_span) = self.identifier()?.separate();
 
-            let t = if self.peek_and_eat_kind(&TokenKind::Colon)? {
+            let t = if self.peek_and_eat_kind(&TokenKind::Colon)?.is_some() {
                 Some(self.parse_type()?)
             } else {
                 None
             };
 
             self.eat(&TokenKind::Assignment)?;
-            let (value, end_span) = self.expression()?.sep_span();
+            let (value, end_span) = self.expression()?.separate();
             self.eat(&TokenKind::Semi)?;
 
             Ok(Some(
-                StmtKind::Binding(ident, t, value).at(start_span.merge(end_span)),
+                Statement::Binding(ident, t, value).at(start_span.merge(end_span)),
             ))
         } else {
             Ok(None)
         }
     }
 
-    /*
     #[trace_parser]
-    fn register_reset_definition(&mut self) -> Result<(Expression, Expression)> {
+    fn register_reset_definition(&mut self) -> Result<(Loc<Expression>, Loc<Expression>)> {
         let condition = self.expression()?;
         self.eat(&TokenKind::Colon)?;
         let value = self.expression()?;
@@ -182,8 +180,8 @@ impl<'a> Parser<'a> {
     }
 
     #[trace_parser]
-    fn register(&mut self) -> Result<Option<Statement>> {
-        if self.peek_and_eat_kind(&TokenKind::Reg)? {
+    fn register(&mut self) -> Result<Option<Loc<Statement>>> {
+        if let Some(start_token) = self.peek_and_eat_kind(&TokenKind::Reg)? {
             // Clock selection
             let clock = self
                 .surrounded(
@@ -200,14 +198,14 @@ impl<'a> Parser<'a> {
             let name = self.identifier()?;
 
             // Optional type
-            let value_type = if self.peek_and_eat_kind(&TokenKind::Colon)? {
+            let value_type = if self.peek_and_eat_kind(&TokenKind::Colon)?.is_some() {
                 Some(self.parse_type()?)
             } else {
                 None
             };
 
             // Optional reset
-            let reset = if self.peek_and_eat_kind(&TokenKind::Reset)? {
+            let reset = if self.peek_and_eat_kind(&TokenKind::Reset)?.is_some() {
                 self.surrounded(
                     &TokenKind::OpenParen,
                     |s| s.register_reset_definition().map(Some),
@@ -219,15 +217,21 @@ impl<'a> Parser<'a> {
 
             // Value
             self.eat(&TokenKind::Assignment)?;
-            let value = self.expression()?;
+            let (value, end_span) = self.expression()?.separate();
 
-            Ok(Some(Statement::Register(Register {
-                name,
-                clock,
-                reset,
-                value,
-                value_type,
-            })))
+            let span = lspan(start_token.span).merge(end_span);
+            let result = Statement::Register(
+                Register {
+                    name,
+                    clock,
+                    reset,
+                    value,
+                    value_type,
+                }
+                .at(span),
+            )
+            .at(span);
+            Ok(Some(result))
         } else {
             Ok(None)
         }
@@ -236,12 +240,12 @@ impl<'a> Parser<'a> {
     /// If the next token is the start of a statement, return that statement,
     /// otherwise None
     #[trace_parser]
-    fn statement(&mut self) -> Result<Option<Statement>> {
+    fn statement(&mut self) -> Result<Option<Loc<Statement>>> {
         self.first_successful(vec![&Self::binding, &Self::register])
     }
 
     #[trace_parser]
-    fn statements(&mut self) -> Result<Vec<Statement>> {
+    fn statements(&mut self) -> Result<Vec<Loc<Statement>>> {
         let mut result = vec![];
         while let Some(statement) = self.statement()? {
             result.push(statement)
@@ -251,8 +255,8 @@ impl<'a> Parser<'a> {
 
     // Entities
     #[trace_parser]
-    fn entity(&mut self) -> Result<Entity> {
-        self.eat(&TokenKind::Entity)?;
+    fn entity(&mut self) -> Result<Loc<Entity>> {
+        let start_token = self.eat(&TokenKind::Entity)?;
         let name = self.identifier()?;
 
         // Input types
@@ -261,26 +265,27 @@ impl<'a> Parser<'a> {
         self.eat(&TokenKind::CloseParen)?;
 
         // Return type
-        let output_type = if self.peek_and_eat_kind(&TokenKind::SlimArrow)? {
+        let output_type = if self.peek_and_eat_kind(&TokenKind::SlimArrow)?.is_some() {
             Some(self.parse_type()?)
         } else {
             None
         }
-        .unwrap_or(Type::UnitType);
+        .unwrap_or(Type::UnitType.nowhere());
 
         // Body (TODO: might want to make this a separate structure like a block)
         self.eat(&TokenKind::OpenBrace)?;
         let statements = self.statements()?;
         let output_value = self.expression()?;
-        self.eat(&TokenKind::CloseBrace)?;
+        let end_token = self.eat(&TokenKind::CloseBrace)?;
 
         Ok(Entity {
-            name: name.to_string(),
+            name,
             inputs,
             statements,
             output_type,
             output_value,
-        })
+        }
+        .at(lspan(start_token.span).merge(lspan(end_token.span))))
     }
 
     // Helpers
@@ -312,7 +317,6 @@ impl<'a> Parser<'a> {
         }
         Ok(result)
     }
-    */
 }
 
 // Helper functions for checking the type of tokens
@@ -409,14 +413,13 @@ impl<'a> Parser<'a> {
         Ok(food)
     }
 
-    /// Peeks the next token, checks if it matches `kind`. If so, it eats it
-    /// and returns true, otherwise it returns false.
-    fn peek_and_eat_kind(&mut self, kind: &TokenKind) -> Result<bool> {
+    /// Peeks the next token. If it is the sepcified kind, returns that token, otherwise
+    /// returns None
+    fn peek_and_eat_kind(&mut self, kind: &TokenKind) -> Result<Option<Token>> {
         if self.peek_kind(kind)? {
-            self.eat_unconditional()?;
-            Ok(true)
+            Ok(Some(self.eat_unconditional()?))
         } else {
-            Ok(false)
+            Ok(None)
         }
     }
 
@@ -547,8 +550,8 @@ mod tests {
     use crate::location_info::dummy;
     use logos::Logos;
 
-    pub fn _ident(name: &str) -> Identifier {
-        Identifier::new(name.to_string(), dummy())
+    pub fn _ident(name: &str) -> Loc<Identifier> {
+        Identifier(name.to_string()).nowhere()
     }
 
     macro_rules! check_parse {
@@ -578,10 +581,10 @@ mod tests {
 
     #[test]
     fn addition_operatoins_are_expressions() {
-        let expected_value = ExprKind::BinaryOperator(
-            Box::new(ExprKind::Identifier(_ident("a")).nowhere()),
+        let expected_value = Expression::BinaryOperator(
+            Box::new(Expression::Identifier(_ident("a")).nowhere()),
             TokenKind::Plus,
-            Box::new(ExprKind::Identifier(_ident("b")).nowhere()),
+            Box::new(Expression::Identifier(_ident("b")).nowhere()),
         )
         .nowhere();
 
@@ -590,10 +593,10 @@ mod tests {
 
     #[test]
     fn multiplications_are_expressions() {
-        let expected_value = ExprKind::BinaryOperator(
-            Box::new(ExprKind::Identifier(_ident("a")).nowhere()),
+        let expected_value = Expression::BinaryOperator(
+            Box::new(Expression::Identifier(_ident("a")).nowhere()),
             TokenKind::Multiplication,
-            Box::new(ExprKind::Identifier(_ident("b")).nowhere()),
+            Box::new(Expression::Identifier(_ident("b")).nowhere()),
         )
         .nowhere();
 
@@ -602,17 +605,17 @@ mod tests {
 
     #[test]
     fn multiplication_before_addition() {
-        let expected_value = ExprKind::BinaryOperator(
+        let expected_value = Expression::BinaryOperator(
             Box::new(
-                ExprKind::BinaryOperator(
-                    Box::new(ExprKind::Identifier(_ident("a")).nowhere()),
+                Expression::BinaryOperator(
+                    Box::new(Expression::Identifier(_ident("a")).nowhere()),
                     TokenKind::Multiplication,
-                    Box::new(ExprKind::Identifier(_ident("b")).nowhere()),
+                    Box::new(Expression::Identifier(_ident("b")).nowhere()),
                 )
                 .nowhere(),
             ),
             TokenKind::Plus,
-            Box::new(ExprKind::Identifier(_ident("c")).nowhere()),
+            Box::new(Expression::Identifier(_ident("c")).nowhere()),
         )
         .nowhere();
 
@@ -621,14 +624,14 @@ mod tests {
 
     #[test]
     fn bracketed_expressions_are_expressions() {
-        let expected_value = ExprKind::BinaryOperator(
-            Box::new(ExprKind::Identifier(_ident("a")).nowhere()),
+        let expected_value = Expression::BinaryOperator(
+            Box::new(Expression::Identifier(_ident("a")).nowhere()),
             TokenKind::Multiplication,
             Box::new(
-                ExprKind::BinaryOperator(
-                    Box::new(ExprKind::Identifier(_ident("b")).nowhere()),
+                Expression::BinaryOperator(
+                    Box::new(Expression::Identifier(_ident("b")).nowhere()),
                     TokenKind::Plus,
-                    Box::new(ExprKind::Identifier(_ident("c")).nowhere()),
+                    Box::new(Expression::Identifier(_ident("c")).nowhere()),
                 )
                 .nowhere(),
             ),
@@ -639,17 +642,17 @@ mod tests {
     }
     #[test]
     fn repeated_bracketed_expressions_work() {
-        let expected_value = ExprKind::BinaryOperator(
+        let expected_value = Expression::BinaryOperator(
             Box::new(
-                ExprKind::BinaryOperator(
-                    Box::new(ExprKind::Identifier(_ident("b")).nowhere()),
+                Expression::BinaryOperator(
+                    Box::new(Expression::Identifier(_ident("b")).nowhere()),
                     TokenKind::Plus,
-                    Box::new(ExprKind::Identifier(_ident("c")).nowhere()),
+                    Box::new(Expression::Identifier(_ident("c")).nowhere()),
                 )
                 .nowhere(),
             ),
             TokenKind::Multiplication,
-            Box::new(ExprKind::Identifier(_ident("a")).nowhere()),
+            Box::new(Expression::Identifier(_ident("a")).nowhere()),
         )
         .nowhere();
 
@@ -658,24 +661,25 @@ mod tests {
 
     #[test]
     fn literals_are_expressions() {
-        check_parse!("123", expression, Ok(ExprKind::IntLiteral(123).nowhere()));
+        check_parse!("123", expression, Ok(Expression::IntLiteral(123).nowhere()));
     }
 
     #[test]
     fn bindings_work() {
         let expected =
-            StmtKind::Binding(_ident("test"), None, ExprKind::IntLiteral(123).nowhere()).nowhere();
+            Statement::Binding(_ident("test"), None, Expression::IntLiteral(123).nowhere())
+                .nowhere();
         check_parse!("let test = 123;", binding, Ok(Some(expected)));
     }
 
-    /*
     #[test]
     fn bindings_with_types_work() {
         let expected = Statement::Binding(
-            Identifier::Str("test".to_string()),
-            Some(Type::Named(Identifier::Str("bool".to_string()))),
-            Expression::IntLiteral(123),
-        );
+            Identifier("test".to_string()).nowhere(),
+            Some(Type::Named(Identifier("bool".to_string()).nowhere()).nowhere()),
+            Expression::IntLiteral(123).nowhere(),
+        )
+        .nowhere();
         check_parse!("let test: bool = 123;", statement, Ok(Some(expected)));
     }
 
@@ -683,23 +687,27 @@ mod tests {
     fn entity_without_inputs() {
         let code = include_str!("../parser_test_code/entity_without_inputs.sp");
         let expected = Entity {
-            name: "no_inputs".to_string(),
+            name: Identifier("no_inputs".to_string()).nowhere(),
             inputs: vec![],
             statements: vec![
                 Statement::Binding(
-                    Identifier::Str("test".to_string()),
+                    Identifier("test".to_string()).nowhere(),
                     None,
-                    Expression::IntLiteral(123),
-                ),
+                    Expression::IntLiteral(123).nowhere(),
+                )
+                .nowhere(),
                 Statement::Binding(
-                    Identifier::Str("test2".to_string()),
+                    Identifier("test2".to_string()).nowhere(),
                     None,
-                    Expression::IntLiteral(123),
-                ),
+                    Expression::IntLiteral(123).nowhere(),
+                )
+                .nowhere(),
             ],
-            output_type: Type::UnitType,
-            output_value: Expression::Identifier(Identifier::Str("test".to_string())),
-        };
+            output_type: Type::UnitType.nowhere(),
+            output_value: Expression::Identifier(Identifier("test".to_string()).nowhere())
+                .nowhere(),
+        }
+        .nowhere();
 
         check_parse!(code, entity, Ok(expected));
     }
@@ -708,21 +716,22 @@ mod tests {
     fn entity_with_inputs() {
         let code = include_str!("../parser_test_code/entity_with_inputs.sp");
         let expected = Entity {
-            name: "with_inputs".to_string(),
+            name: Identifier("with_inputs".to_string()).nowhere(),
             inputs: vec![
                 (
-                    Identifier::Str("clk".to_string()),
-                    Type::Named(Identifier::Str("bool".to_string())),
+                    Identifier("clk".to_string()).nowhere(),
+                    Type::Named(Identifier("bool".to_string()).nowhere()).nowhere(),
                 ),
                 (
-                    Identifier::Str("rst".to_string()),
-                    Type::Named(Identifier::Str("bool".to_string())),
+                    Identifier("rst".to_string()).nowhere(),
+                    Type::Named(Identifier("bool".to_string()).nowhere()).nowhere(),
                 ),
             ],
             statements: vec![],
-            output_type: Type::Named(Identifier::Str("bool".to_string())),
-            output_value: Expression::Identifier(Identifier::Str("clk".to_string())),
-        };
+            output_type: Type::Named(Identifier("bool".to_string()).nowhere()).nowhere(),
+            output_value: Expression::Identifier(Identifier("clk".to_string()).nowhere()).nowhere(),
+        }
+        .nowhere();
 
         check_parse!(code, entity, Ok(expected));
     }
@@ -731,13 +740,17 @@ mod tests {
     fn parsing_register_without_reset_works() {
         let code = "reg(clk) name = 1;";
 
-        let expected = Statement::Register(Register {
-            name: Identifier::Str("name".to_string()),
-            clock: Identifier::Str("clk".to_string()),
-            reset: None,
-            value: Expression::IntLiteral(1),
-            value_type: None,
-        });
+        let expected = Statement::Register(
+            Register {
+                name: Identifier("name".to_string()).nowhere(),
+                clock: Identifier("clk".to_string()).nowhere(),
+                reset: None,
+                value: Expression::IntLiteral(1).nowhere(),
+                value_type: None,
+            }
+            .nowhere(),
+        )
+        .nowhere();
 
         check_parse!(code, statement, Ok(Some(expected)));
     }
@@ -746,16 +759,20 @@ mod tests {
     fn parsing_register_with_reset_works() {
         let code = "reg(clk) name reset (rst: 0) = 1;";
 
-        let expected = Statement::Register(Register {
-            name: Identifier::Str("name".to_string()),
-            clock: Identifier::Str("clk".to_string()),
-            reset: Some((
-                Expression::Identifier(Identifier::Str("rst".to_string())),
-                Expression::IntLiteral(0),
-            )),
-            value: Expression::IntLiteral(1),
-            value_type: None,
-        });
+        let expected = Statement::Register(
+            Register {
+                name: Identifier("name".to_string()).nowhere(),
+                clock: Identifier("clk".to_string()).nowhere(),
+                reset: Some((
+                    Expression::Identifier(Identifier("rst".to_string()).nowhere()).nowhere(),
+                    Expression::IntLiteral(0).nowhere(),
+                )),
+                value: Expression::IntLiteral(1).nowhere(),
+                value_type: None,
+            }
+            .nowhere(),
+        )
+        .nowhere();
 
         check_parse!(code, statement, Ok(Some(expected)));
     }
@@ -764,18 +781,21 @@ mod tests {
     fn parsing_register_with_reset_and_clock() {
         let code = "reg(clk) name: Type reset (rst: 0) = 1;";
 
-        let expected = Statement::Register(Register {
-            name: Identifier::Str("name".to_string()),
-            clock: Identifier::Str("clk".to_string()),
-            reset: Some((
-                Expression::Identifier(Identifier::Str("rst".to_string())),
-                Expression::IntLiteral(0),
-            )),
-            value: Expression::IntLiteral(1),
-            value_type: Some(Type::Named(Identifier::Str("Type".to_string()))),
-        });
+        let expected = Statement::Register(
+            Register {
+                name: Identifier("name".to_string()).nowhere(),
+                clock: Identifier("clk".to_string()).nowhere(),
+                reset: Some((
+                    Expression::Identifier(Identifier("rst".to_string()).nowhere()).nowhere(),
+                    Expression::IntLiteral(0).nowhere(),
+                )),
+                value: Expression::IntLiteral(1).nowhere(),
+                value_type: Some(Type::Named(Identifier("Type".to_string()).nowhere()).nowhere()),
+            }
+            .nowhere(),
+        )
+        .nowhere();
 
         check_parse!(code, statement, Ok(Some(expected)));
     }
-    */
 }

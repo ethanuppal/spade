@@ -8,3 +8,29 @@ pub fn lspan(s: logos::Span) -> Span {
 pub fn dummy() -> Span {
     Span::new(0, 0)
 }
+
+#[derive(Clone, Debug)]
+pub struct Loc<T> {
+    pub inner: T,
+    pub span: Span,
+}
+
+impl<T> Loc<T> {
+    pub fn new(inner: T, span: Span) -> Self {
+        Self { inner, span }
+    }
+
+    pub fn separate(self) -> (Self, Span) {
+        let span = self.span;
+        (self, span)
+    }
+}
+
+impl<T> PartialEq for Loc<T>
+where
+    T: PartialEq,
+{
+    fn eq(&self, other: &Self) -> bool {
+        self.inner == other.inner
+    }
+}

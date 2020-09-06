@@ -2,10 +2,17 @@ use codespan::Span;
 use derivative::Derivative;
 
 use crate::lexer::TokenKind;
+use crate::location_info::Loc;
 
-pub trait KindWithLocation<FullStruct> {
-    fn at(self, span: Span) -> FullStruct;
-    fn nowhere(self) -> FullStruct
+pub trait WithLocation {
+    fn at(self, span: Span) -> Loc<Self>
+    where
+        Self: Sized,
+    {
+        Loc::new(self, span)
+    }
+
+    fn nowhere(self) -> Loc<Self>
     where
         Self: Sized,
     {
@@ -13,159 +20,50 @@ pub trait KindWithLocation<FullStruct> {
     }
 }
 
-pub trait HasSpan {
-    fn span(&self) -> Span;
-    fn sep_span(self) -> (Self, Span)
-    where
-        Self: Sized,
-    {
-        let span = self.span();
-        (self, span)
-    }
-}
+#[derive(PartialEq, Debug, Clone)]
+pub struct Identifier(pub String);
 
-#[derive(Derivative)]
-#[derivative(PartialEq)]
-#[derive(Debug, Clone)]
-pub struct Identifier {
-    pub name: String,
-    #[derivative(PartialEq = "ignore")]
-    pub span: Span,
-}
-impl Identifier {
-    pub fn new(name: String, span: Span) -> Self {
-        Self { name, span }
-    }
-}
-impl HasSpan for Identifier {
-    fn span(&self) -> Span {
-        self.span
-    }
-}
+impl WithLocation for Identifier {}
 
 #[derive(PartialEq, Debug, Clone)]
-pub enum TypeKind {
-    Named(Identifier),
+pub enum Type {
+    Named(Loc<Identifier>),
     UnitType,
 }
-impl KindWithLocation<Type> for TypeKind {
-    fn at(self, span: Span) -> Type {
-        Type::new(self, span)
-    }
-}
-#[derive(Derivative)]
-#[derivative(PartialEq)]
-#[derive(Debug, Clone)]
-pub struct Type {
-    pub kind: TypeKind,
-    #[derivative(PartialEq = "ignore")]
-    pub span: Span,
-}
-impl Type {
-    pub fn new(kind: TypeKind, span: Span) -> Self {
-        Self {
-            kind,
-            span: span.clone(),
-        }
-    }
-}
-impl HasSpan for Type {
-    fn span(&self) -> Span {
-        self.span
-    }
-}
+impl WithLocation for Type {}
 
 #[derive(PartialEq, Debug, Clone)]
-pub enum ExprKind {
-    Identifier(Identifier),
+pub enum Expression {
+    Identifier(Loc<Identifier>),
     IntLiteral(u128),
-    BinaryOperator(Box<Expression>, TokenKind, Box<Expression>),
-    Parenthisised(Box<Expression>),
+    BinaryOperator(Box<Loc<Expression>>, TokenKind, Box<Loc<Expression>>),
+    Parenthisised(Box<Loc<Expression>>),
 }
+impl WithLocation for Expression {}
 
-#[derive(Derivative)]
-#[derivative(PartialEq)]
-#[derive(Debug, Clone)]
-pub struct Expression {
-    pub kind: ExprKind,
-    #[derivative(PartialEq = "ignore")]
-    pub span: Span,
+#[derive(PartialEq, Debug, Clone)]
+pub enum Statement {
+    Binding(Loc<Identifier>, Option<Loc<Type>>, Loc<Expression>),
+    Register(Loc<Register>),
 }
-impl KindWithLocation<Expression> for ExprKind {
-    fn at(self, span: Span) -> Expression {
-        Expression::new(self, span)
-    }
-}
-impl Expression {
-    pub fn new(kind: ExprKind, span: Span) -> Self {
-        Self {
-            kind,
-            span: span.clone(),
-        }
-    }
-}
-impl HasSpan for Expression {
-    fn span(&self) -> Span {
-        self.span
-    }
-}
+impl WithLocation for Statement {}
 
-#[derive(Derivative)]
-#[derivative(PartialEq)]
-#[derive(Debug, Clone)]
-pub enum StmtKind {
-    Binding(Identifier, Option<Type>, Expression),
-    Register(Register),
-}
-impl KindWithLocation<Statement> for StmtKind {
-    fn at(self, span: Span) -> Statement {
-        Statement::new(self, span)
-    }
-}
-#[derive(Derivative)]
-#[derivative(PartialEq)]
-#[derive(Debug, Clone)]
-pub struct Statement {
-    pub kind: StmtKind,
-    #[derivative(PartialEq = "ignore")]
-    pub span: Span,
-}
-impl Statement {
-    pub fn new(kind: StmtKind, span: Span) -> Self {
-        Self {
-            kind,
-            span: span.clone(),
-        }
-    }
-}
-impl HasSpan for Statement {
-    fn span(&self) -> Span {
-        self.span
-    }
-}
-
-#[derive(Derivative)]
-#[derivative(PartialEq)]
-#[derive(Debug, Clone)]
+#[derive(PartialEq, Debug, Clone)]
 pub struct Entity {
-    pub name: String,
-    pub inputs: Vec<(Identifier, Type)>,
-    pub statements: Vec<Statement>,
-    pub output_type: Type,
-    pub output_value: Expression,
-    #[derivative(PartialEq = "ignore")]
-    pub span: Span,
+    pub name: Loc<Identifier>,
+    pub inputs: Vec<(Loc<Identifier>, Loc<Type>)>,
+    pub statements: Vec<Loc<Statement>>,
+    pub output_type: Loc<Type>,
+    pub output_value: Loc<Expression>,
 }
+impl WithLocation for Entity {}
 
-#[derive(Derivative)]
-#[derivative(PartialEq)]
-#[derive(Debug, Clone)]
+#[derive(PartialEq, Debug, Clone)]
 pub struct Register {
-    pub name: Identifier,
-    pub clock: Identifier,
-    pub reset: Option<(Expression, Expression)>,
-    pub value: Expression,
-    pub value_type: Option<Type>,
-    #[derivative(PartialEq = "ignore")]
-    pub span: Span,
+    pub name: Loc<Identifier>,
+    pub clock: Loc<Identifier>,
+    pub reset: Option<(Loc<Expression>, Loc<Expression>)>,
+    pub value: Loc<Expression>,
+    pub value_type: Option<Loc<Type>>,
 }
+impl WithLocation for Register {}
