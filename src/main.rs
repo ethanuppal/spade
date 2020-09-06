@@ -3,7 +3,7 @@ pub mod codegen;
 pub mod constant;
 pub mod error;
 pub mod expression;
-pub mod grammar;
+pub mod ast;
 pub mod identifier;
 pub mod lexer;
 pub mod parser;
