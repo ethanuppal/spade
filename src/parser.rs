@@ -1,13 +1,12 @@
 use logos::Lexer;
 use thiserror::Error;
-use log::trace;
 use colored::*;
 
 use parse_tree_macros::trace_parser;
 
 use crate::lexer::TokenKind;
 use crate::identifier::Identifier;
-use crate::grammar::Expression;
+use crate::grammar::{Statement, Expression, Type};
 
 
 /// A token with location info
@@ -119,6 +118,33 @@ impl<'a> Parser<'a> {
                 .map(Expression::Identifier)
         }
     }
+
+    // Types
+    #[trace_parser]
+    fn parse_type(&mut self) -> Result<Type> {
+        Ok(Type::Named(self.identifier()?))
+    }
+
+    // Statemenets
+    #[trace_parser]
+    fn statement(&mut self) -> Result<Statement> {
+        self.eat(TokenKind::Let)?;
+        let ident = self.identifier()?;
+
+        let t = if self.peek_kind(&TokenKind::Colon)? {
+            self.eat_unconditional()?;
+            Some(self.parse_type()?)
+        }
+        else {
+            None
+        };
+
+        self.eat(TokenKind::Assignment)?;
+        let value = self.expression()?;
+        self.eat(TokenKind::Semi)?;
+
+        Ok(Statement::Binding(ident, t, value))
+    }
 }
 
 // Helper functions for checking the type of tokens
@@ -139,7 +165,7 @@ impl<'a> Parser<'a> {
     }
 }
 
-// Helper functions
+// Helper functions for advancing the token stream
 impl<'a> Parser<'a> {
     fn eat(&mut self, expected: TokenKind) -> Result<Token> {
         self.eat_cond(|k| k == &expected, expected.as_str())
@@ -242,7 +268,6 @@ pub fn format_parse_stack(stack: &[ParseStackEntry]) -> String {
     let mut indent_amount = 0;
 
     for entry in stack {
-        let mut is_exit = false;
         let mut next_indent_amount = indent_amount;
         let message = match entry {
             ParseStackEntry::Enter(function) => {
@@ -273,7 +298,6 @@ pub fn format_parse_stack(stack: &[ParseStackEntry]) -> String {
                 )
             }
             ParseStackEntry::Exit => {
-                is_exit = true;
                 next_indent_amount -= 1;
                 format!("")
             }
@@ -302,13 +326,14 @@ mod tests {
     use logos::Logos;
 
     macro_rules! check_parse {
-        ($parser:ident . $method:ident, $expected:expr) => {
-            let result = $parser.$method();
+        ($string:expr , $method:ident, $expected:expr) => {
+            let mut parser = Parser::new(TokenKind::lexer($string));
+            let result = parser.$method();
             // This is needed because type inference fails for some unexpected reason
             let expected: Result<_> = $expected;
 
-            if result != $expected {
-                println!("Parser state:\n{}", format_parse_stack(&$parser.parse_stack));
+            if result != expected {
+                println!("Parser state:\n{}", format_parse_stack(&parser.parse_stack));
                 panic!(
                     "\n\n     {}: {:?}\n{}: {:?}",
                     "Got".red(),
@@ -322,47 +347,33 @@ mod tests {
 
     #[test]
     fn parsing_identifier_works() {
-        let mut parser = Parser::new(TokenKind::lexer("abc123_"));
-
-        assert_eq!(parser.identifier(), Ok("abc123_".into()));
+        check_parse!("abc123_", identifier, Ok("abc123_".into()));
     }
 
     #[test]
     fn addition_operatoins_are_expressions() {
-        let mut a = Parser::new(TokenKind::lexer(" a + b"));
-        let mut b = Parser::new(TokenKind::lexer("a +b"));
-        let mut c = Parser::new(TokenKind::lexer("a+b"));
-        let mut d = Parser::new(TokenKind::lexer("a +b"));
-
         let expected_value = Expression::BinaryOperator(
             Box::new(Expression::Identifier("a".into())),
             TokenKind::Plus,
             Box::new(Expression::Identifier("b".into())),
         );
 
-        check_parse!(a.expression, Ok(expected_value.clone()));
-        check_parse!(b.expression, Ok(expected_value.clone()));
-        check_parse!(c.expression, Ok(expected_value.clone()));
-        check_parse!(d.expression, Ok(expected_value.clone()));
+        check_parse!("a + b", expression, Ok(expected_value.clone()));
     }
 
     #[test]
     fn multiplications_are_expressions() {
-        let mut a = Parser::new(TokenKind::lexer("a * b"));
-
         let expected_value = Expression::BinaryOperator(
             Box::new(Expression::Identifier("a".into())),
             TokenKind::Multiplication,
             Box::new(Expression::Identifier("b".into())),
         );
 
-        check_parse!(a.expression, Ok(expected_value.clone()));
+        check_parse!("a * b", expression, Ok(expected_value.clone()));
     }
 
     #[test]
     fn multiplication_before_addition() {
-        let mut a = Parser::new(TokenKind::lexer("a*b + c"));
-
         let expected_value = Expression::BinaryOperator(
             Box::new(Expression::BinaryOperator(
                 Box::new(Expression::Identifier("a".into())),
@@ -373,12 +384,11 @@ mod tests {
             Box::new(Expression::Identifier("c".into())),
         );
 
-        check_parse!(a.expression, Ok(expected_value.clone()));
+        check_parse!("a*b + c", expression, Ok(expected_value.clone()));
     }
 
     #[test]
     fn bracketed_expressions_are_expressions() {
-        let mut a = Parser::new(TokenKind::lexer("a * (b + c)"));
 
         let expected_value = Expression::BinaryOperator(
             Box::new(Expression::Identifier("a".into())),
@@ -390,11 +400,10 @@ mod tests {
             )),
         );
 
-        check_parse!(a.expression, Ok(expected_value.clone()));
+        check_parse!("a * (b + c)", expression, Ok(expected_value.clone()));
     }
     #[test]
     fn repeated_bracketed_expressions_work() {
-        let mut a = Parser::new(TokenKind::lexer("((b + c) * a)"));
 
         let expected_value = Expression::BinaryOperator(
             Box::new(Expression::BinaryOperator(
@@ -406,19 +415,32 @@ mod tests {
             Box::new(Expression::Identifier("a".into())),
         );
 
-        check_parse!(a.expression, Ok(expected_value.clone()));
+        check_parse!("((b + c) * a)", expression, Ok(expected_value.clone()));
     }
 
     #[test]
     fn literals_are_expressions() {
-        let mut a = Parser::new(TokenKind::lexer("123"));
-
-        check_parse!(a.expression, Ok(Expression::IntLiteral(123)));
+        check_parse!("123", expression, Ok(Expression::IntLiteral(123)));
     }
 
 
     #[test]
-    fn signals_can_be_defined() {
-        
+    fn bindings_work() {
+        let expected = Statement::Binding(
+            Identifier::Str("test".to_string()),
+            None,
+            Expression::IntLiteral(123)
+        );
+        check_parse!("let test = 123;", statement, Ok(expected));
+    }
+
+    #[test]
+    fn bindings_with_types_work() {
+        let expected = Statement::Binding(
+            Identifier::Str("test".to_string()),
+            Some(Type::Named(Identifier::Str("bool".to_string()))),
+            Expression::IntLiteral(123)
+        );
+        check_parse!("let test: bool = 123;", statement, Ok(expected));
     }
 }

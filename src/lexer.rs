@@ -13,6 +13,10 @@ pub enum TokenKind {
     #[regex(r"\d+", |lex| lex.slice().parse())]
     Integer(u128),
 
+    // Keywords
+    #[token("let")]
+    Let,
+
     // Math operators
     #[token("+")]
     Plus,
@@ -23,10 +27,20 @@ pub enum TokenKind {
     #[token("/")]
     Division,
 
+    // Other operators
+    #[token("=")]
+    Assignment,
+
+
     #[token("(")]
     OpenParen,
     #[token(")")]
     CloseParen,
+
+    #[token(";")]
+    Semi,
+    #[token(":")]
+    Colon,
 
     #[regex("[ \t\n\r]", logos::skip)]
     Whitespace,
@@ -41,12 +55,16 @@ impl TokenKind {
         match self {
             TokenKind::Identifier(_) => "identifier",
             TokenKind::Integer(_) => "integer",
+            TokenKind::Let => "let",
+            TokenKind::Assignment => "=",
             TokenKind::Plus => "+",
             TokenKind::Minus => "-",
             TokenKind::Multiplication => "*",
             TokenKind::Division => "/",
             TokenKind::OpenParen => "(",
             TokenKind::CloseParen => ")",
+            TokenKind::Semi => ";",
+            TokenKind::Colon => ":",
             TokenKind::Whitespace => "whitespace",
             TokenKind::Error => "error",
         }
