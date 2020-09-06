@@ -36,4 +36,5 @@ pub struct Register {
     pub clock: Identifier,
     pub reset: Option<(Expression, Expression)>,
     pub value: Expression,
+    pub value_type: Option<Type>,
 }

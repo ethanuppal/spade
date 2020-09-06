@@ -192,6 +192,17 @@ impl<'a> Parser<'a> {
                 // unwrap is safe
                 .unwrap();
 
+            // Name
+            let name = self.identifier()?;
+
+            // Optional type
+            let value_type = if self.peek_and_eat_kind(&TokenKind::Colon)? {
+                Some(self.parse_type()?)
+            } else {
+                None
+            };
+
+            // Optional reset
             let reset = if self.peek_and_eat_kind(&TokenKind::Reset)? {
                 self.surrounded(
                     &TokenKind::OpenParen,
@@ -202,9 +213,6 @@ impl<'a> Parser<'a> {
                 None
             };
 
-            // Name
-            let name = self.identifier()?;
-
             // Value
             self.eat(&TokenKind::Assignment)?;
             let value = self.expression()?;
@@ -214,6 +222,7 @@ impl<'a> Parser<'a> {
                 clock,
                 reset,
                 value,
+                value_type,
             })))
         } else {
             Ok(None)
@@ -705,6 +714,7 @@ mod tests {
             clock: Identifier::Str("clk".to_string()),
             reset: None,
             value: Expression::IntLiteral(1),
+            value_type: None,
         });
 
         check_parse!(code, statement, Ok(Some(expected)));
@@ -712,7 +722,7 @@ mod tests {
 
     #[test]
     fn parsing_register_with_reset_works() {
-        let code = "reg(clk) reset(rst: 0) name = 1;";
+        let code = "reg(clk) name reset (rst: 0) = 1;";
 
         let expected = Statement::Register(Register {
             name: Identifier::Str("name".to_string()),
@@ -722,6 +732,25 @@ mod tests {
                 Expression::IntLiteral(0),
             )),
             value: Expression::IntLiteral(1),
+            value_type: None,
+        });
+
+        check_parse!(code, statement, Ok(Some(expected)));
+    }
+
+    #[test]
+    fn parsing_register_with_reset_and_clock() {
+        let code = "reg(clk) name: Type reset (rst: 0) = 1;";
+
+        let expected = Statement::Register(Register {
+            name: Identifier::Str("name".to_string()),
+            clock: Identifier::Str("clk".to_string()),
+            reset: Some((
+                Expression::Identifier(Identifier::Str("rst".to_string())),
+                Expression::IntLiteral(0),
+            )),
+            value: Expression::IntLiteral(1),
+            value_type: Some(Type::Named(Identifier::Str("Type".to_string()))),
         });
 
         check_parse!(code, statement, Ok(Some(expected)));
