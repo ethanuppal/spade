@@ -47,6 +47,11 @@ pub enum TokenKind {
     #[token("}")]
     CloseBrace,
 
+    #[token("[")]
+    OpenBracket,
+    #[token("]")]
+    CloseBracket,
+
     #[token("->")]
     SlimArrow,
     #[token(",")]
@@ -85,6 +90,8 @@ impl TokenKind {
             TokenKind::CloseParen => ")",
             TokenKind::OpenBrace => "{",
             TokenKind::CloseBrace => "}",
+            TokenKind::OpenBracket => "[",
+            TokenKind::CloseBracket => "]",
 
             TokenKind::SlimArrow => "->",
             TokenKind::Semi => ";",

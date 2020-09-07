@@ -41,6 +41,9 @@ pub enum Error {
     // Non general errors
     #[error("A register clock must be specified")]
     RegisterClockMissing,
+
+    #[error("Missing type size inside []")]
+    MissingTypeSize(Loc<()>),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
@@ -112,12 +115,8 @@ impl<'a> Parser<'a> {
             let inner = self.expression()?;
             self.eat(&TokenKind::CloseParen)?;
             Ok(inner)
-        } else if self.peek_cond(TokenKind::is_integer, "integer")? {
-            let token = self.eat_unconditional()?;
-            match token.kind {
-                TokenKind::Integer(val) => Ok(Expression::IntLiteral(val).at(lspan(token.span))),
-                _ => unreachable!(),
-            }
+        } else if let Some(val) = self.int_literal()? {
+            Ok(val.map(Expression::IntLiteral))
         } else {
             let ident = self.identifier()?;
             let span = ident.span;
@@ -125,11 +124,39 @@ impl<'a> Parser<'a> {
         }
     }
 
+    #[trace_parser]
+    pub fn int_literal(&mut self) -> Result<Option<Loc<u128>>> {
+        if self.peek_cond(TokenKind::is_integer, "integer")? {
+            let token = self.eat_unconditional()?;
+            match token.kind {
+                TokenKind::Integer(val) => Ok(Some(Loc::new(val, lspan(token.span)))),
+                _ => unreachable!(),
+            }
+        } else {
+            Ok(None)
+        }
+    }
+
     // Types
     #[trace_parser]
     fn parse_type(&mut self) -> Result<Loc<Type>> {
         let (ident, span) = self.identifier()?.separate();
-        Ok(Type::Named(ident).at(span))
+
+        // Check if it is a sized type
+        if self.peek_kind(&TokenKind::OpenBracket)? {
+            let (size, bracket_span) = self.surrounded(
+                &TokenKind::OpenBracket,
+                |s| s.expression().map(Some),
+                &TokenKind::CloseBracket,
+            )?;
+
+            let size = size.ok_or_else(|| Error::MissingTypeSize(bracket_span))?;
+
+            Ok(Type::WithSize(Box::new(Type::Named(ident).at(span)), size)
+                .at(span.merge(bracket_span.span)))
+        } else {
+            Ok(Type::Named(ident).at(span))
+        }
     }
 
     /// A name with an associated type, as used in argument definitions as well
@@ -140,7 +167,7 @@ impl<'a> Parser<'a> {
     #[trace_parser]
     fn name_and_type(&mut self) -> Result<(Loc<Identifier>, Loc<Type>)> {
         let name = self.identifier()?;
-        self.eat(&TokenKind::Colon);
+        self.eat(&TokenKind::Colon)?;
         let t = self.parse_type()?;
         Ok((name, t))
     }
@@ -183,16 +210,17 @@ impl<'a> Parser<'a> {
     fn register(&mut self) -> Result<Option<Loc<Statement>>> {
         if let Some(start_token) = self.peek_and_eat_kind(&TokenKind::Reg)? {
             // Clock selection
-            let clock = self
+            let (clock, _clock_paren_span) = self
                 .surrounded(
                     &TokenKind::OpenParen,
                     |s| s.identifier().map(Some),
                     &TokenKind::CloseParen,
                 )
-                .map_err(|_| Error::RegisterClockMissing)?
-                // Identifier parsing can not fail since we map it into a Some. Therefore,
-                // unwrap is safe
-                .unwrap();
+                .map_err(|_| Error::RegisterClockMissing)?;
+
+            // Identifier parsing can not fail since we map it into a Some. Therefore,
+            // unwrap is safe
+            let clock = clock.unwrap();
 
             // Name
             let name = self.identifier()?;
@@ -206,11 +234,12 @@ impl<'a> Parser<'a> {
 
             // Optional reset
             let reset = if self.peek_and_eat_kind(&TokenKind::Reset)?.is_some() {
-                self.surrounded(
+                let (reset, _) = self.surrounded(
                     &TokenKind::OpenParen,
                     |s| s.register_reset_definition().map(Some),
                     &TokenKind::CloseParen,
-                )?
+                )?;
+                reset
             } else {
                 None
             };
@@ -365,15 +394,19 @@ impl<'a> Parser<'a> {
         start: &TokenKind,
         inner: impl Fn(&mut Self) -> Result<Option<T>>,
         end: &TokenKind,
-    ) -> Result<Option<T>> {
+    ) -> Result<(Option<T>, Loc<()>)> {
         let opener = self.eat(start)?;
         let result = inner(self)?;
         // TODO: Better error handling here. We are throwing away potential EOFs
-        self.eat(end).map_err(|_| Error::UnmatchedPair {
-            friend: opener,
+        let end = self.eat(end).map_err(|_| Error::UnmatchedPair {
+            friend: opener.clone(),
             expected: end.clone(),
         })?;
-        Ok(result)
+
+        Ok((
+            result,
+            Loc::new((), lspan(opener.span).merge(lspan(end.span))),
+        ))
     }
 }
 
@@ -547,7 +580,6 @@ pub fn format_parse_stack(stack: &[ParseStackEntry]) -> String {
 mod tests {
     use super::*;
 
-    use crate::location_info::dummy;
     use logos::Logos;
 
     pub fn _ident(name: &str) -> Loc<Identifier> {
@@ -797,5 +829,15 @@ mod tests {
         .nowhere();
 
         check_parse!(code, statement, Ok(Some(expected)));
+    }
+
+    #[test]
+    fn size_types_work() {
+        let expected = Type::WithSize(
+            Box::new(Type::Named(Identifier("uint".to_string()).nowhere()).nowhere()),
+            Expression::IntLiteral(10).nowhere(),
+        )
+        .nowhere();
+        check_parse!("uint[10]", parse_type, Ok(expected));
     }
 }

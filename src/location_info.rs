@@ -9,7 +9,7 @@ pub fn dummy() -> Span {
     Span::new(0, 0)
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Copy)]
 pub struct Loc<T> {
     pub inner: T,
     pub span: Span,
@@ -23,6 +23,13 @@ impl<T> Loc<T> {
     pub fn separate(self) -> (Self, Span) {
         let span = self.span;
         (self, span)
+    }
+
+    pub fn map<Y>(self, op: impl Fn(T) -> Y) -> Loc<Y> {
+        Loc {
+            inner: op(self.inner),
+            span: self.span,
+        }
     }
 }
 

@@ -1,8 +1,6 @@
-use codespan::Span;
-use derivative::Derivative;
-
 use crate::lexer::TokenKind;
 use crate::location_info::Loc;
+use codespan::Span;
 
 pub trait WithLocation {
     fn at(self, span: Span) -> Loc<Self>
@@ -28,6 +26,7 @@ impl WithLocation for Identifier {}
 #[derive(PartialEq, Debug, Clone)]
 pub enum Type {
     Named(Loc<Identifier>),
+    WithSize(Box<Loc<Type>>, Loc<Expression>),
     UnitType,
 }
 impl WithLocation for Type {}
