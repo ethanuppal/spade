@@ -26,6 +26,8 @@ pub enum Type {
 
 impl WithLocation for Type {}
 
+// NOTE: These enums do not carry location info if it affects the whole type,
+// that task is defered to type consumers as they would otherwise duplicate the info.
 #[derive(Debug, Error, PartialEq)]
 pub enum Error {
     #[error("Unknown type name {}", 0.0)]

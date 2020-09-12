@@ -13,7 +13,7 @@ pub enum Error {
     #[error("Undefined identifier {}", 0.0)]
     UndefinedIdentifier(Loc<ast::Identifier>),
     #[error("Type error")]
-    TypeError(#[source] TypeError, Loc<()>),
+    InvalidType(#[source] TypeError, Loc<()>),
 
     #[error("Type inference not yet supported")]
     UntypedBinding(Loc<()>),
@@ -33,7 +33,7 @@ pub fn visit_entity(item: ast::Entity, symtab: &mut SymbolTable) -> Result<hir::
 
         let t = input_type
             .map(Type::convert_from_ast)
-            .map_err(Error::TypeError)?;
+            .map_err(Error::InvalidType)?;
 
         inputs.push((name.map(visit_identifier), t));
     }
@@ -41,7 +41,7 @@ pub fn visit_entity(item: ast::Entity, symtab: &mut SymbolTable) -> Result<hir::
     let output_type = item
         .output_type
         .map(Type::convert_from_ast)
-        .map_err(Error::TypeError)?;
+        .map_err(Error::InvalidType)?;
 
     let mut statements = vec![];
     for statement in item.statements {
@@ -74,7 +74,7 @@ pub fn visit_statement(
             symtab.add_symbol(ident.map_ref(|x| x.0.clone()));
             if let Some(t) = t {
                 let name = ident.map(visit_identifier);
-                let hir_type = t.map(Type::convert_from_ast).map_err(Error::TypeError)?;
+                let hir_type = t.map(Type::convert_from_ast).map_err(Error::InvalidType)?;
 
                 let expr = expr
                     .map(|e| visit_expression(e, symtab))

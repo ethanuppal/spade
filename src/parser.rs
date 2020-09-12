@@ -11,8 +11,8 @@ use crate::location_info::{lspan, Loc, WithLocation};
 /// A token with location info
 #[derive(Clone, Debug, PartialEq)]
 pub struct Token {
-    kind: TokenKind,
-    span: logos::Span,
+    pub kind: TokenKind,
+    pub span: logos::Span,
 }
 
 impl Token {
@@ -28,22 +28,18 @@ impl Token {
 pub enum Error {
     #[error("End of file")]
     Eof,
-    #[error("Lexer error")]
-    LexerError,
-    #[error("Unexpected token. got {}, expected {expected:?}", got.as_str())]
+    #[error("Lexer error at {}", 0.0)]
+    LexerError(codespan::Span),
+    #[error("Unexpected token. got {:?}, expected {expected:?}")]
     UnexpectedToken {
-        got: TokenKind,
+        got: Token,
         expected: Vec<&'static str>,
     },
     #[error("Expected to find a {} to match {friend:?}", expected.as_str())]
     UnmatchedPair { friend: Token, expected: TokenKind },
 
-    // Non general errors
-    #[error("A register clock must be specified")]
-    RegisterClockMissing,
-
-    #[error("Missing type size inside []")]
-    MissingTypeSize(Loc<()>),
+    #[error("Expected expression, got {got:?}")]
+    ExpectedExpression { got: Token },
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
@@ -118,9 +114,14 @@ impl<'a> Parser<'a> {
         } else if let Some(val) = self.int_literal()? {
             Ok(val.map(Expression::IntLiteral))
         } else {
-            let ident = self.identifier()?;
-            let span = ident.span;
-            Ok(Expression::Identifier(ident).at(span))
+            match self.identifier() {
+                Ok(ident) => {
+                    let span = ident.span;
+                    Ok(Expression::Identifier(ident).at(span))
+                }
+                Err(Error::UnexpectedToken { got, .. }) => Err(Error::ExpectedExpression { got }),
+                Err(e) => Err(e),
+            }
         }
     }
 
@@ -150,7 +151,9 @@ impl<'a> Parser<'a> {
                 &TokenKind::CloseBracket,
             )?;
 
-            let size = size.ok_or_else(|| Error::MissingTypeSize(bracket_span))?;
+            // Note: safe unwrap, if we got here, the expression must have matched
+            // and so the size is present, otherwise we'd return early above
+            let size = size.unwrap();
 
             Ok(
                 Type::WithSize(Box::new(Type::Named(ident.strip()).at(span)), size)
@@ -212,13 +215,11 @@ impl<'a> Parser<'a> {
     fn register(&mut self) -> Result<Option<Loc<Statement>>> {
         if let Some(start_token) = self.peek_and_eat_kind(&TokenKind::Reg)? {
             // Clock selection
-            let (clock, _clock_paren_span) = self
-                .surrounded(
-                    &TokenKind::OpenParen,
-                    |s| s.identifier().map(Some),
-                    &TokenKind::CloseParen,
-                )
-                .map_err(|_| Error::RegisterClockMissing)?;
+            let (clock, _clock_paren_span) = self.surrounded(
+                &TokenKind::OpenParen,
+                |s| s.identifier().map(Some),
+                &TokenKind::CloseParen,
+            )?;
 
             // Identifier parsing can not fail since we map it into a Some. Therefore,
             // unwrap is safe
@@ -286,7 +287,7 @@ impl<'a> Parser<'a> {
 
     // Entities
     #[trace_parser]
-    fn entity(&mut self) -> Result<Loc<Entity>> {
+    pub fn entity(&mut self) -> Result<Loc<Entity>> {
         let start_token = self.eat(&TokenKind::Entity)?;
         let name = self.identifier()?;
 
@@ -317,36 +318,6 @@ impl<'a> Parser<'a> {
             output_value,
         }
         .at(lspan(start_token.span).merge(lspan(end_token.span))))
-    }
-
-    // Helpers
-    #[trace_parser]
-    fn comma_separated<T>(
-        &mut self,
-        inner: impl Fn(&mut Self) -> Result<T>,
-        // This end marker is used for allowing trailing commas. It should
-        // be whatever ends the collection that is searched. I.e. (a,b,c,) should have
-        // `)`, and {} should have `}`
-        end_marker: &TokenKind,
-    ) -> Result<Vec<T>> {
-        let mut result = vec![];
-
-        loop {
-            // The list might be empty
-            if self.peek_kind(end_marker)? {
-                break;
-            }
-            result.push(inner(self)?);
-
-            // Now we expect to either find a comma, in which case we resume the
-            // search, or an end marker, in which case we abort
-            if self.peek_kind(end_marker)? {
-                break;
-            } else {
-                self.eat(&TokenKind::Comma)?;
-            }
-        }
-        Ok(result)
     }
 }
 
@@ -410,6 +381,35 @@ impl<'a> Parser<'a> {
             Loc::new((), lspan(opener.span).merge(lspan(end.span))),
         ))
     }
+
+    #[trace_parser]
+    fn comma_separated<T>(
+        &mut self,
+        inner: impl Fn(&mut Self) -> Result<T>,
+        // This end marker is used for allowing trailing commas. It should
+        // be whatever ends the collection that is searched. I.e. (a,b,c,) should have
+        // `)`, and {} should have `}`
+        end_marker: &TokenKind,
+    ) -> Result<Vec<T>> {
+        let mut result = vec![];
+
+        loop {
+            // The list might be empty
+            if self.peek_kind(end_marker)? {
+                break;
+            }
+            result.push(inner(self)?);
+
+            // Now we expect to either find a comma, in which case we resume the
+            // search, or an end marker, in which case we abort
+            if self.peek_kind(end_marker)? {
+                break;
+            } else {
+                self.eat(&TokenKind::Comma)?;
+            }
+        }
+        Ok(result)
+    }
 }
 
 // Helper functions for advancing the token stream
@@ -429,7 +429,7 @@ impl<'a> Parser<'a> {
         // Make sure we ate the correct token
         if !condition(&next.kind) {
             Err(Error::UnexpectedToken {
-                got: next.kind,
+                got: next,
                 expected: vec![expected_description],
             })
         } else {
@@ -505,7 +505,7 @@ impl<'a> Parser<'a> {
         let kind = self.lex.next().ok_or(Error::Eof)?;
 
         if let TokenKind::Error = kind {
-            Err(Error::LexerError)?
+            Err(Error::LexerError(lspan(self.lex.span())))?
         };
 
         Ok(Token::new(kind, &self.lex))
