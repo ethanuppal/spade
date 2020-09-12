@@ -4,9 +4,9 @@ use thiserror::Error;
 
 use parse_tree_macros::trace_parser;
 
-use crate::ast::{Entity, Expression, Identifier, Register, Statement, Type, WithLocation};
+use crate::ast::{Entity, Expression, Identifier, Register, Statement, Type};
 use crate::lexer::TokenKind;
-use crate::location_info::{lspan, Loc};
+use crate::location_info::{lspan, Loc, WithLocation};
 
 /// A token with location info
 #[derive(Clone, Debug, PartialEq)]
@@ -152,10 +152,12 @@ impl<'a> Parser<'a> {
 
             let size = size.ok_or_else(|| Error::MissingTypeSize(bracket_span))?;
 
-            Ok(Type::WithSize(Box::new(Type::Named(ident).at(span)), size)
-                .at(span.merge(bracket_span.span)))
+            Ok(
+                Type::WithSize(Box::new(Type::Named(ident.strip()).at(span)), size)
+                    .at(span.merge(bracket_span.span)),
+            )
         } else {
-            Ok(Type::Named(ident).at(span))
+            Ok(Type::Named(ident.strip()).at(span))
         }
     }
 
@@ -359,8 +361,8 @@ impl<'a> Parser<'a> {
     }
     fn is_next_multiplication_operator(&mut self) -> Result<bool> {
         Ok(match self.peek()?.map(|token| token.kind) {
-            Some(TokenKind::Multiplication) => true,
-            Some(TokenKind::Division) => true,
+            Some(TokenKind::Asterisk) => true,
+            Some(TokenKind::Slash) => true,
             _ => false,
         })
     }
@@ -627,7 +629,7 @@ mod tests {
     fn multiplications_are_expressions() {
         let expected_value = Expression::BinaryOperator(
             Box::new(Expression::Identifier(_ident("a")).nowhere()),
-            TokenKind::Multiplication,
+            TokenKind::Asterisk,
             Box::new(Expression::Identifier(_ident("b")).nowhere()),
         )
         .nowhere();
@@ -641,7 +643,7 @@ mod tests {
             Box::new(
                 Expression::BinaryOperator(
                     Box::new(Expression::Identifier(_ident("a")).nowhere()),
-                    TokenKind::Multiplication,
+                    TokenKind::Asterisk,
                     Box::new(Expression::Identifier(_ident("b")).nowhere()),
                 )
                 .nowhere(),
@@ -658,7 +660,7 @@ mod tests {
     fn bracketed_expressions_are_expressions() {
         let expected_value = Expression::BinaryOperator(
             Box::new(Expression::Identifier(_ident("a")).nowhere()),
-            TokenKind::Multiplication,
+            TokenKind::Asterisk,
             Box::new(
                 Expression::BinaryOperator(
                     Box::new(Expression::Identifier(_ident("b")).nowhere()),
@@ -683,7 +685,7 @@ mod tests {
                 )
                 .nowhere(),
             ),
-            TokenKind::Multiplication,
+            TokenKind::Asterisk,
             Box::new(Expression::Identifier(_ident("a")).nowhere()),
         )
         .nowhere();
@@ -708,7 +710,7 @@ mod tests {
     fn bindings_with_types_work() {
         let expected = Statement::Binding(
             Identifier("test".to_string()).nowhere(),
-            Some(Type::Named(Identifier("bool".to_string()).nowhere()).nowhere()),
+            Some(Type::Named(Identifier("bool".to_string())).nowhere()),
             Expression::IntLiteral(123).nowhere(),
         )
         .nowhere();
@@ -752,15 +754,15 @@ mod tests {
             inputs: vec![
                 (
                     Identifier("clk".to_string()).nowhere(),
-                    Type::Named(Identifier("bool".to_string()).nowhere()).nowhere(),
+                    Type::Named(Identifier("bool".to_string())).nowhere(),
                 ),
                 (
                     Identifier("rst".to_string()).nowhere(),
-                    Type::Named(Identifier("bool".to_string()).nowhere()).nowhere(),
+                    Type::Named(Identifier("bool".to_string())).nowhere(),
                 ),
             ],
             statements: vec![],
-            output_type: Type::Named(Identifier("bool".to_string()).nowhere()).nowhere(),
+            output_type: Type::Named(Identifier("bool".to_string())).nowhere(),
             output_value: Expression::Identifier(Identifier("clk".to_string()).nowhere()).nowhere(),
         }
         .nowhere();
@@ -822,7 +824,7 @@ mod tests {
                     Expression::IntLiteral(0).nowhere(),
                 )),
                 value: Expression::IntLiteral(1).nowhere(),
-                value_type: Some(Type::Named(Identifier("Type".to_string()).nowhere()).nowhere()),
+                value_type: Some(Type::Named(Identifier("Type".to_string())).nowhere()),
             }
             .nowhere(),
         )
@@ -834,7 +836,7 @@ mod tests {
     #[test]
     fn size_types_work() {
         let expected = Type::WithSize(
-            Box::new(Type::Named(Identifier("uint".to_string()).nowhere()).nowhere()),
+            Box::new(Type::Named(Identifier("uint".to_string())).nowhere()),
             Expression::IntLiteral(10).nowhere(),
         )
         .nowhere();

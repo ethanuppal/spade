@@ -1,16 +1,12 @@
 pub mod ast;
-pub mod binding;
-pub mod codegen;
 pub mod constant;
-pub mod error;
-pub mod expression;
-pub mod identifier;
+pub mod hir;
 pub mod lexer;
 pub mod location_info;
 pub mod parser;
+pub mod semantic_analysis;
+pub mod symbol_table;
 pub mod types;
-
-mod testcode;
 
 fn main() {
     println!("Hello, world!");

@@ -1,30 +1,33 @@
-use crate::lexer::TokenKind;
+/**
+  Representation of the language with most language constructs still present, with
+  more correctness guaranatees than the AST, such as types actually existing.
+*/
 use crate::location_info::{Loc, WithLocation};
+use crate::types::Type;
 
 #[derive(PartialEq, Debug, Clone)]
-pub struct Identifier(pub String);
+pub enum Identifier {
+    Named(String),
+    Anonymous(u64),
+}
 
 impl WithLocation for Identifier {}
-
-#[derive(PartialEq, Debug, Clone)]
-pub enum Type {
-    Named(Identifier),
-    WithSize(Box<Loc<Type>>, Loc<Expression>),
-    UnitType,
-}
-impl WithLocation for Type {}
 
 #[derive(PartialEq, Debug, Clone)]
 pub enum Expression {
     Identifier(Loc<Identifier>),
     IntLiteral(u128),
-    BinaryOperator(Box<Loc<Expression>>, TokenKind, Box<Loc<Expression>>),
+    Add(Box<Loc<Expression>>, Box<Loc<Expression>>),
+    Sub(Box<Loc<Expression>>, Box<Loc<Expression>>),
+    Mul(Box<Loc<Expression>>, Box<Loc<Expression>>),
+    Div(Box<Loc<Expression>>, Box<Loc<Expression>>),
+    Parenthisised(Box<Loc<Expression>>),
 }
 impl WithLocation for Expression {}
 
 #[derive(PartialEq, Debug, Clone)]
 pub enum Statement {
-    Binding(Loc<Identifier>, Option<Loc<Type>>, Loc<Expression>),
+    Binding(Loc<Identifier>, Loc<Type>, Loc<Expression>),
     Register(Loc<Register>),
 }
 impl WithLocation for Statement {}
@@ -47,4 +50,3 @@ pub struct Register {
     pub value: Loc<Expression>,
     pub value_type: Option<Loc<Type>>,
 }
-impl WithLocation for Register {}

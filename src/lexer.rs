@@ -29,9 +29,9 @@ pub enum TokenKind {
     #[token("-")]
     Minus,
     #[token("*")]
-    Multiplication,
+    Asterisk,
     #[token("/")]
-    Division,
+    Slash,
 
     // Other operators
     #[token("=")]
@@ -83,8 +83,8 @@ impl TokenKind {
             TokenKind::Assignment => "=",
             TokenKind::Plus => "+",
             TokenKind::Minus => "-",
-            TokenKind::Multiplication => "*",
-            TokenKind::Division => "/",
+            TokenKind::Asterisk => "*",
+            TokenKind::Slash => "/",
 
             TokenKind::OpenParen => "(",
             TokenKind::CloseParen => ")",
