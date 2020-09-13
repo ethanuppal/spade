@@ -329,8 +329,8 @@ impl<'a> Parser<'a> {
         };
 
         // Body (TODO: might want to make this a separate structure like a block)
-        let block = if let Some(block) = self.block()? {
-            block
+        let (block, block_span) = if let Some(block) = self.block()? {
+            block.separate()
         } else {
             // The end of the entity definition depends on wether or not
             // a type is present.
@@ -349,11 +349,10 @@ impl<'a> Parser<'a> {
         Ok(Entity {
             name,
             inputs,
-            statements: block.inner.statements,
             output_type: output_type.unwrap_or(Type::UnitType.nowhere()),
-            output_value: block.inner.result,
+            block,
         }
-        .at(lspan(start_token.span).merge(block.span)))
+        .at(lspan(start_token.span).merge(block_span)))
     }
 }
 
@@ -806,23 +805,25 @@ mod tests {
         let expected = Entity {
             name: Identifier("no_inputs".to_string()).nowhere(),
             inputs: vec![],
-            statements: vec![
-                Statement::Binding(
-                    Identifier("test".to_string()).nowhere(),
-                    None,
-                    Expression::IntLiteral(123).nowhere(),
-                )
-                .nowhere(),
-                Statement::Binding(
-                    Identifier("test2".to_string()).nowhere(),
-                    None,
-                    Expression::IntLiteral(123).nowhere(),
-                )
-                .nowhere(),
-            ],
             output_type: Type::UnitType.nowhere(),
-            output_value: Expression::Identifier(Identifier("test".to_string()).nowhere())
-                .nowhere(),
+            block: Block {
+                statements: vec![
+                    Statement::Binding(
+                        Identifier("test".to_string()).nowhere(),
+                        None,
+                        Expression::IntLiteral(123).nowhere(),
+                    )
+                    .nowhere(),
+                    Statement::Binding(
+                        Identifier("test2".to_string()).nowhere(),
+                        None,
+                        Expression::IntLiteral(123).nowhere(),
+                    )
+                    .nowhere(),
+                ],
+                result: Expression::Identifier(Identifier("test".to_string()).nowhere()).nowhere(),
+            }
+            .nowhere(),
         }
         .nowhere();
 
@@ -844,9 +845,12 @@ mod tests {
                     Type::Named(Identifier("bool".to_string())).nowhere(),
                 ),
             ],
-            statements: vec![],
             output_type: Type::Named(Identifier("bool".to_string())).nowhere(),
-            output_value: Expression::Identifier(Identifier("clk".to_string()).nowhere()).nowhere(),
+            block: Block {
+                statements: vec![],
+                result: Expression::Identifier(Identifier("clk".to_string()).nowhere()).nowhere(),
+            }
+            .nowhere(),
         }
         .nowhere();
 

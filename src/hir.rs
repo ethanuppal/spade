@@ -40,16 +40,6 @@ pub enum Statement {
 impl WithLocation for Statement {}
 
 #[derive(PartialEq, Debug, Clone)]
-pub struct Entity {
-    pub name: Loc<Identifier>,
-    pub inputs: Vec<(Loc<Identifier>, Loc<Type>)>,
-    pub statements: Vec<Loc<Statement>>,
-    pub output_type: Loc<Type>,
-    pub output_value: Loc<Expression>,
-}
-impl WithLocation for Entity {}
-
-#[derive(PartialEq, Debug, Clone)]
 pub struct Register {
     pub name: Loc<Identifier>,
     pub clock: Loc<Identifier>,
@@ -58,3 +48,12 @@ pub struct Register {
     pub value_type: Option<Loc<Type>>,
 }
 impl WithLocation for Register {}
+
+#[derive(PartialEq, Debug, Clone)]
+pub struct Entity {
+    pub name: Loc<Identifier>,
+    pub inputs: Vec<(Loc<Identifier>, Loc<Type>)>,
+    pub output_type: Loc<Type>,
+    pub block: Loc<Block>,
+}
+impl WithLocation for Entity {}

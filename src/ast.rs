@@ -41,9 +41,8 @@ impl WithLocation for Statement {}
 pub struct Entity {
     pub name: Loc<Identifier>,
     pub inputs: Vec<(Loc<Identifier>, Loc<Type>)>,
-    pub statements: Vec<Loc<Statement>>,
     pub output_type: Loc<Type>,
-    pub output_value: Loc<Expression>,
+    pub block: Loc<Block>,
 }
 impl WithLocation for Entity {}
 

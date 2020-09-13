@@ -40,14 +40,9 @@ pub fn visit_entity(item: ast::Entity, symtab: &mut SymbolTable) -> Result<hir::
         .map(Type::convert_from_ast)
         .map_err(Error::InvalidType)?;
 
-    let mut statements = vec![];
-    for statement in item.statements {
-        statements.push(visit_statement(statement, symtab)?)
-    }
-
-    let output_value = item
-        .output_value
-        .map(|e| visit_expression(e, symtab))
+    let block = item
+        .block
+        .map(|block| visit_block(block, symtab))
         .map_err(|e, _| e)?;
 
     symtab.close_scope();
@@ -55,9 +50,8 @@ pub fn visit_entity(item: ast::Entity, symtab: &mut SymbolTable) -> Result<hir::
     Ok(hir::Entity {
         name,
         inputs,
-        statements,
         output_type,
-        output_value,
+        block,
     })
 }
 
@@ -206,14 +200,17 @@ mod entity_visiting {
                 ast::Identifier("a".to_string()).nowhere(),
                 ast::Type::UnitType.nowhere(),
             )],
-            statements: vec![ast::Statement::Binding(
-                ast::Identifier("var".to_string()).nowhere(),
-                Some(ast::Type::UnitType.nowhere()),
-                ast::Expression::IntLiteral(0).nowhere(),
-            )
-            .nowhere()],
             output_type: ast::Type::UnitType.nowhere(),
-            output_value: ast::Expression::IntLiteral(0).nowhere(),
+            block: ast::Block {
+                statements: vec![ast::Statement::Binding(
+                    ast::Identifier("var".to_string()).nowhere(),
+                    Some(ast::Type::UnitType.nowhere()),
+                    ast::Expression::IntLiteral(0).nowhere(),
+                )
+                .nowhere()],
+                result: ast::Expression::IntLiteral(0).nowhere(),
+            }
+            .nowhere(),
         };
 
         let expected = hir::Entity {
@@ -224,14 +221,17 @@ mod entity_visiting {
                     Type::Unit.nowhere(),
                 )),
             ],
-            statements: vec![hir::Statement::Binding(
-                hir::Identifier::Named("var".to_string()).nowhere(),
-                Some(Type::Unit.nowhere()),
-                hir::Expression::IntLiteral(0).nowhere(),
-            )
-            .nowhere()],
             output_type: Type::Unit.nowhere(),
-            output_value: hir::Expression::IntLiteral(0).nowhere(),
+            block: hir::Block {
+                statements: vec![hir::Statement::Binding(
+                    hir::Identifier::Named("var".to_string()).nowhere(),
+                    Some(Type::Unit.nowhere()),
+                    hir::Expression::IntLiteral(0).nowhere(),
+                )
+                .nowhere()],
+                result: hir::Expression::IntLiteral(0).nowhere(),
+            }
+            .nowhere(),
         };
 
         let mut symtab = SymbolTable::new();
