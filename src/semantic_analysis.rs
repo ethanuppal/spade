@@ -120,6 +120,57 @@ pub fn visit_identifier(id: ast::Identifier) -> hir::Identifier {
     hir::Identifier::Named(id.0)
 }
 
+pub fn visit_register(
+    reg: Loc<ast::Register>,
+    symtab: &mut SymbolTable,
+) -> Result<Loc<hir::Register>> {
+    let (reg, loc) = reg.split();
+
+    symtab.add_symbol(reg.name.map_ref(|x| x.0.clone()));
+    let name = reg.name.map(visit_identifier);
+
+    if !symtab.has_symbol(&reg.clock.inner.0) {
+        return Err(Error::UndefinedIdentifier(reg.clock));
+    }
+    let clock = reg.clock.map(visit_identifier);
+
+    let reset = if let Some((trig, value)) = reg.reset {
+        Some((
+            trig.map(|e| visit_expression(e, symtab))
+                .map_err(|e, _| e)?,
+            value
+                .map(|e| visit_expression(e, symtab))
+                .map_err(|e, _| e)?,
+        ))
+    } else {
+        None
+    };
+
+    let value = reg
+        .value
+        .map(|e| visit_expression(e, symtab))
+        .map_err(|e, _| e)?;
+
+    let value_type = if let Some(value_type) = reg.value_type {
+        value_type
+            .map(Type::convert_from_ast)
+            .map_err(Error::InvalidType)?
+    } else {
+        return Err(Error::UntypedBinding(Loc::new((), loc)));
+    };
+
+    Ok(Loc::new(
+        hir::Register {
+            name,
+            clock,
+            reset,
+            value,
+            value_type,
+        },
+        loc,
+    ))
+}
+
 #[cfg(test)]
 mod entity_visiting {
     use super::*;
@@ -269,5 +320,44 @@ mod expression_visiting {
                 ast::Identifier("test".to_string()).nowhere()
             ))
         );
+    }
+}
+
+mod register_visiting {
+    use super::*;
+
+    use crate::location_info::WithLocation;
+
+    #[test]
+    fn register_visiting_works() {
+        let input = ast::Register {
+            name: ast::Identifier("test".to_string()).nowhere(),
+            clock: ast::Identifier("clk".to_string()).nowhere(),
+            reset: Some((
+                ast::Expression::Identifier(ast::Identifier("rst".to_string()).nowhere()).nowhere(),
+                ast::Expression::IntLiteral(0).nowhere(),
+            )),
+            value: ast::Expression::IntLiteral(1).nowhere(),
+            value_type: Some(ast::Type::UnitType.nowhere()),
+        }
+        .nowhere();
+
+        let expected = hir::Register {
+            name: hir::Identifier::Named("test".to_string()).nowhere(),
+            clock: hir::Identifier::Named("clk".to_string()).nowhere(),
+            reset: Some((
+                hir::Expression::Identifier(hir::Identifier::Named("rst".to_string()).nowhere())
+                    .nowhere(),
+                hir::Expression::IntLiteral(0).nowhere(),
+            )),
+            value: hir::Expression::IntLiteral(1).nowhere(),
+            value_type: Type::Unit.nowhere(),
+        }
+        .nowhere();
+
+        let mut symtab = SymbolTable::new();
+        symtab.add_symbol(Loc::nowhere("clk".to_string()));
+        symtab.add_symbol(Loc::nowhere("rst".to_string()));
+        assert_eq!(visit_register(input, &mut symtab), Ok(expected));
     }
 }

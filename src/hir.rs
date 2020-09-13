@@ -48,5 +48,6 @@ pub struct Register {
     pub clock: Loc<Identifier>,
     pub reset: Option<(Loc<Expression>, Loc<Expression>)>,
     pub value: Loc<Expression>,
-    pub value_type: Option<Loc<Type>>,
+    pub value_type: Loc<Type>,
 }
+impl WithLocation for Register {}
