@@ -30,7 +30,7 @@ pub enum Error {
     Eof,
     #[error("Lexer error at {}", 0.0)]
     LexerError(codespan::Span),
-    #[error("Unexpected token. got {:?}, expected {expected:?}")]
+    #[error("Unexpected token. got {}, expected {expected:?}", got.kind.as_str())]
     UnexpectedToken {
         got: Token,
         expected: Vec<&'static str>,
@@ -80,14 +80,17 @@ impl<'a> Parser<'a> {
         }
     }
 
-    // Expression parsing
-    #[trace_parser]
-    fn expression(&mut self) -> Result<Loc<Expression>> {
-        let start = self.multiplicative_expression()?;
+    fn binary_operator(
+        &mut self,
+        lhs: impl Fn(&mut Self) -> Result<Loc<Expression>>,
+        condition: impl Fn(&mut Self) -> Result<bool>,
+        rhs: impl Fn(&mut Self) -> Result<Loc<Expression>>,
+    ) -> Result<Loc<Expression>> {
+        let start = lhs(self)?;
 
-        if self.is_next_addition_operator()? {
+        if condition(self)? {
             let operator = self.eat_unconditional()?;
-            let rest = self.expression()?;
+            let rest = rhs(self)?;
 
             let span = start.span.merge(rest.span);
             Ok(Expression::BinaryOperator(Box::new(start), operator.kind, Box::new(rest)).at(span))
@@ -96,20 +99,32 @@ impl<'a> Parser<'a> {
         }
     }
 
+    // Expression parsing
+    #[trace_parser]
+    fn expression(&mut self) -> Result<Loc<Expression>> {
+        self.binary_operator(
+            Self::additive_expression,
+            Self::is_next_comparison_operator,
+            Self::expression,
+        )
+    }
+
+    #[trace_parser]
+    fn additive_expression(&mut self) -> Result<Loc<Expression>> {
+        self.binary_operator(
+            Self::multiplicative_expression,
+            Self::is_next_addition_operator,
+            Self::additive_expression,
+        )
+    }
+
     #[trace_parser]
     fn multiplicative_expression(&mut self) -> Result<Loc<Expression>> {
-        let (start, start_span) = self.base_expression()?.separate();
-        if self.is_next_multiplication_operator()? {
-            let operator = self.eat_unconditional()?;
-            let (rest, end_span) = self.base_expression()?.separate();
-            // TODO: Do not use a string here
-            Ok(
-                Expression::BinaryOperator(Box::new(start), operator.kind, Box::new(rest))
-                    .at(start_span.merge(end_span)),
-            )
-        } else {
-            Ok(start)
-        }
+        self.binary_operator(
+            Self::base_expression,
+            Self::is_next_multiplication_operator,
+            Self::base_expression,
+        )
     }
 
     #[trace_parser]
@@ -409,6 +424,12 @@ impl<'a> Parser<'a> {
         Ok(match self.peek()?.map(|token| token.kind) {
             Some(TokenKind::Asterisk) => true,
             Some(TokenKind::Slash) => true,
+            _ => false,
+        })
+    }
+    fn is_next_comparison_operator(&mut self) -> Result<bool> {
+        Ok(match self.peek()?.map(|token| token.kind) {
+            Some(TokenKind::Equals) => true,
             _ => false,
         })
     }
@@ -729,6 +750,25 @@ mod tests {
         .nowhere();
 
         check_parse!("a*b + c", expression, Ok(expected_value.clone()));
+    }
+
+    #[test]
+    fn equals_after_addition() {
+        let expected_value = Expression::BinaryOperator(
+            Box::new(
+                Expression::BinaryOperator(
+                    Box::new(Expression::Identifier(_ident("a")).nowhere()),
+                    TokenKind::Plus,
+                    Box::new(Expression::Identifier(_ident("b")).nowhere()),
+                )
+                .nowhere(),
+            ),
+            TokenKind::Equals,
+            Box::new(Expression::Identifier(_ident("c")).nowhere()),
+        )
+        .nowhere();
+
+        check_parse!("a+b == c", expression, Ok(expected_value.clone()));
     }
 
     #[test]

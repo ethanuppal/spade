@@ -94,6 +94,7 @@ pub fn visit_expression(e: ast::Expression, symtab: &mut SymbolTable) -> Result<
                 TokenKind::Minus => Ok(hir::Expression::Sub(Box::new(lhs), Box::new(rhs))),
                 TokenKind::Asterisk => Ok(hir::Expression::Mul(Box::new(lhs), Box::new(rhs))),
                 TokenKind::Slash => Ok(hir::Expression::Div(Box::new(lhs), Box::new(rhs))),
+                TokenKind::Equals => Ok(hir::Expression::Equals(Box::new(lhs), Box::new(rhs))),
                 _ => unreachable! {},
             }
         }
@@ -329,6 +330,7 @@ mod expression_visiting {
     binop_test!(subtractions, Minus, Sub);
     binop_test!(multiplication, Asterisk, Mul);
     binop_test!(division, Slash, Div);
+    binop_test!(equals, Equals, Equals);
 
     #[test]
     fn identifiers_work() {

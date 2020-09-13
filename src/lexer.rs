@@ -36,6 +36,8 @@ pub enum TokenKind {
     Asterisk,
     #[token("/")]
     Slash,
+    #[token("==")]
+    Equals,
 
     // Other operators
     #[token("=")]
@@ -91,6 +93,7 @@ impl TokenKind {
             TokenKind::Minus => "-",
             TokenKind::Asterisk => "*",
             TokenKind::Slash => "/",
+            TokenKind::Equals => "==",
 
             TokenKind::OpenParen => "(",
             TokenKind::CloseParen => ")",
