@@ -99,12 +99,6 @@ pub fn report_semantic_error(filename: &Path, file_content: &str, err: SemanticE
             TypeError::NonLiteralTypeSize(_) => unimplemented!(),
             TypeError::CompoundArrayUnsupported => unimplemented!(),
         },
-        SemanticError::UntypedBinding(loc) => Diagnostic::error()
-            .with_message("Binding without a type")
-            .with_labels(vec![
-                Label::primary(file_id, loc.span).with_message("expected type for this binding")
-            ])
-            .with_notes(vec![format!("Type inference is currently unimplemented")]),
     };
 
     let writer = StandardStream::stderr(ColorChoice::Always);

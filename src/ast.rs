@@ -19,6 +19,7 @@ pub enum Expression {
     Identifier(Loc<Identifier>),
     IntLiteral(u128),
     BinaryOperator(Box<Loc<Expression>>, TokenKind, Box<Loc<Expression>>),
+    Block(Box<Block>),
 }
 impl WithLocation for Expression {}
 

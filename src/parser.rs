@@ -116,6 +116,8 @@ impl<'a> Parser<'a> {
             Ok(inner)
         } else if let Some(val) = self.int_literal()? {
             Ok(val.map(Expression::IntLiteral))
+        } else if let Some(block) = self.block()? {
+            Ok(block.map(Box::new).map(Expression::Block))
         } else {
             match self.identifier() {
                 Ok(ident) => {
@@ -754,6 +756,29 @@ mod tests {
         .nowhere();
 
         check_parse!(code, block, Ok(Some(expected)));
+    }
+
+    #[test]
+    fn blocks_are_expressions() {
+        let code = r#"
+            {
+                let a = 0;
+                1
+            }
+            "#;
+
+        let expected = Expression::Block(Box::new(Block {
+            statements: vec![Statement::Binding(
+                Identifier("a".to_string()).nowhere(),
+                None,
+                Expression::IntLiteral(0).nowhere(),
+            )
+            .nowhere()],
+            result: Expression::IntLiteral(1).nowhere(),
+        }))
+        .nowhere();
+
+        check_parse!(code, expression, Ok(expected));
     }
 
     #[test]

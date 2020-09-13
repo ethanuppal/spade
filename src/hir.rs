@@ -21,13 +21,20 @@ pub enum Expression {
     Sub(Box<Loc<Expression>>, Box<Loc<Expression>>),
     Mul(Box<Loc<Expression>>, Box<Loc<Expression>>),
     Div(Box<Loc<Expression>>, Box<Loc<Expression>>),
-    Parenthisised(Box<Loc<Expression>>),
+    Block(Box<Block>),
 }
 impl WithLocation for Expression {}
 
 #[derive(PartialEq, Debug, Clone)]
+pub struct Block {
+    pub statements: Vec<Loc<Statement>>,
+    pub result: Loc<Expression>,
+}
+impl WithLocation for Block {}
+
+#[derive(PartialEq, Debug, Clone)]
 pub enum Statement {
-    Binding(Loc<Identifier>, Loc<Type>, Loc<Expression>),
+    Binding(Loc<Identifier>, Option<Loc<Type>>, Loc<Expression>),
     Register(Loc<Register>),
 }
 impl WithLocation for Statement {}
@@ -48,6 +55,6 @@ pub struct Register {
     pub clock: Loc<Identifier>,
     pub reset: Option<(Loc<Expression>, Loc<Expression>)>,
     pub value: Loc<Expression>,
-    pub value_type: Loc<Type>,
+    pub value_type: Option<Loc<Type>>,
 }
 impl WithLocation for Register {}

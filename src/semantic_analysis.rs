@@ -14,9 +14,6 @@ pub enum Error {
     UndefinedIdentifier(Loc<ast::Identifier>),
     #[error("Type error")]
     InvalidType(#[source] TypeError, Loc<()>),
-
-    #[error("Type inference not yet supported")]
-    UntypedBinding(Loc<()>),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
@@ -72,21 +69,21 @@ pub fn visit_statement(
     match s {
         ast::Statement::Binding(ident, t, expr) => {
             symtab.add_symbol(ident.map_ref(|x| x.0.clone()));
-            if let Some(t) = t {
-                let name = ident.map(visit_identifier);
-                let hir_type = t.map(Type::convert_from_ast).map_err(Error::InvalidType)?;
-
-                let expr = expr
-                    .map(|e| visit_expression(e, symtab))
-                    .map_err(|e, _| e)?;
-
-                Ok(Loc::new(
-                    hir::Statement::Binding(name, hir_type, expr),
-                    span,
-                ))
+            let hir_type = if let Some(t) = t {
+                Some(t.map(Type::convert_from_ast).map_err(Error::InvalidType)?)
             } else {
-                Err(Error::UntypedBinding(Loc::new((), span)))
-            }
+                None
+            };
+            let name = ident.map(visit_identifier);
+
+            let expr = expr
+                .map(|e| visit_expression(e, symtab))
+                .map_err(|e, _| e)?;
+
+            Ok(Loc::new(
+                hir::Statement::Binding(name, hir_type, expr),
+                span,
+            ))
         }
         _ => unimplemented!(),
     }
@@ -106,6 +103,9 @@ pub fn visit_expression(e: ast::Expression, symtab: &mut SymbolTable) -> Result<
                 _ => unreachable! {},
             }
         }
+        ast::Expression::Block(block) => Ok(hir::Expression::Block(Box::new(visit_block(
+            *block, symtab,
+        )?))),
         ast::Expression::Identifier(id) => {
             if symtab.has_symbol(&id.inner.0) {
                 Ok(hir::Expression::Identifier(id.map(visit_identifier)))
@@ -114,6 +114,23 @@ pub fn visit_expression(e: ast::Expression, symtab: &mut SymbolTable) -> Result<
             }
         }
     }
+}
+
+pub fn visit_block(b: ast::Block, symtab: &mut SymbolTable) -> Result<hir::Block> {
+    symtab.new_scope();
+    let mut statements = vec![];
+    for statement in b.statements {
+        statements.push(visit_statement(statement, symtab)?)
+    }
+
+    let result = b
+        .result
+        .map(|e| visit_expression(e, symtab))
+        .map_err(|e, _| e)?;
+
+    symtab.close_scope();
+
+    Ok(hir::Block { statements, result })
 }
 
 pub fn visit_identifier(id: ast::Identifier) -> hir::Identifier {
@@ -152,11 +169,13 @@ pub fn visit_register(
         .map_err(|e, _| e)?;
 
     let value_type = if let Some(value_type) = reg.value_type {
-        value_type
-            .map(Type::convert_from_ast)
-            .map_err(Error::InvalidType)?
+        Some(
+            value_type
+                .map(Type::convert_from_ast)
+                .map_err(Error::InvalidType)?,
+        )
     } else {
-        return Err(Error::UntypedBinding(Loc::new((), loc)));
+        None
     };
 
     Ok(Loc::new(
@@ -207,7 +226,7 @@ mod entity_visiting {
             ],
             statements: vec![hir::Statement::Binding(
                 hir::Identifier::Named("var".to_string()).nowhere(),
-                Type::Unit.nowhere(),
+                Some(Type::Unit.nowhere()),
                 hir::Expression::IntLiteral(0).nowhere(),
             )
             .nowhere()],
@@ -248,7 +267,7 @@ mod statement_visiting {
 
         let expected = hir::Statement::Binding(
             hir::Identifier::Named("a".to_string()).nowhere(),
-            Type::Unit.nowhere(),
+            Some(Type::Unit.nowhere()),
             hir::Expression::IntLiteral(0).nowhere(),
         )
         .nowhere();
@@ -321,6 +340,32 @@ mod expression_visiting {
             ))
         );
     }
+
+    #[test]
+    fn blocks_work() {
+        let input = ast::Expression::Block(Box::new(ast::Block {
+            statements: vec![ast::Statement::Binding(
+                ast::Identifier("a".to_string()).nowhere(),
+                None,
+                ast::Expression::IntLiteral(0).nowhere(),
+            )
+            .nowhere()],
+            result: ast::Expression::IntLiteral(0).nowhere(),
+        }));
+        let expected = hir::Expression::Block(Box::new(hir::Block {
+            statements: vec![hir::Statement::Binding(
+                hir::Identifier::Named("a".to_string()).nowhere(),
+                None,
+                hir::Expression::IntLiteral(0).nowhere(),
+            )
+            .nowhere()],
+            result: hir::Expression::IntLiteral(0).nowhere(),
+        }));
+
+        let mut symtab = SymbolTable::new();
+        assert_eq!(visit_expression(input, &mut symtab), Ok(expected));
+        assert!(!symtab.has_symbol(&"a".to_string()));
+    }
 }
 
 mod register_visiting {
@@ -351,7 +396,7 @@ mod register_visiting {
                 hir::Expression::IntLiteral(0).nowhere(),
             )),
             value: hir::Expression::IntLiteral(1).nowhere(),
-            value_type: Type::Unit.nowhere(),
+            value_type: Some(Type::Unit.nowhere()),
         }
         .nowhere();
 
