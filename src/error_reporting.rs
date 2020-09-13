@@ -1,5 +1,6 @@
 use std::path::Path;
 
+use codespan::Span;
 use codespan_reporting::diagnostic::{Diagnostic, Label};
 use codespan_reporting::files::SimpleFiles;
 use codespan_reporting::term::{
@@ -58,8 +59,10 @@ pub fn report_parse_error(filename: &Path, file_content: &str, err: ParseError) 
         ParseError::ExpectedBlock { for_what, got, loc } => {
             let message = format!("Expected a block for {}", for_what);
 
+            let expected_loc = Span::new(loc.span.end(), loc.span.end());
             Diagnostic::error().with_message(message).with_labels(vec![
-                Label::primary(file_id, got.span).with_message("expected block"),
+                Label::primary(file_id, expected_loc).with_message("expected block here"),
+                Label::primary(file_id, got.span).with_message("found this instead"),
                 Label::secondary(file_id, loc.span).with_message(format!("for this {}", for_what)),
             ])
         }
