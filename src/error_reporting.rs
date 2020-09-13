@@ -55,12 +55,12 @@ pub fn report_parse_error(filename: &Path, file_content: &str, err: ParseError) 
                 .with_labels(vec![Label::primary(file_id, got.span)
                     .with_message(format!("expected expression here"))])
         }
-        ParseError::ExpectedBlockForEntity { got, loc } => {
-            let message = format!("Expected a block for entity");
+        ParseError::ExpectedBlock { for_what, got, loc } => {
+            let message = format!("Expected a block for {}", for_what);
 
             Diagnostic::error().with_message(message).with_labels(vec![
                 Label::primary(file_id, got.span).with_message("expected block"),
-                Label::secondary(file_id, loc.span).with_message("for this entity"),
+                Label::secondary(file_id, loc.span).with_message(format!("for this {}", for_what)),
             ])
         }
     };

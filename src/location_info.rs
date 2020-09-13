@@ -27,7 +27,7 @@ pub fn dummy() -> Span {
     Span::new(0, 0)
 }
 
-#[derive(Clone, Debug, Copy)]
+#[derive(Clone, Copy)]
 pub struct Loc<T> {
     pub inner: T,
     pub span: Span,
@@ -96,5 +96,20 @@ where
 {
     fn eq(&self, other: &Self) -> bool {
         self.inner == other.inner
+    }
+}
+
+impl<T> std::fmt::Debug for Loc<T>
+where
+    T: std::fmt::Debug,
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "l({:3}..{:3})[{:?}]",
+            self.span.start(),
+            self.span.end(),
+            self.inner
+        )
     }
 }

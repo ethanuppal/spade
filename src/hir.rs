@@ -22,6 +22,7 @@ pub enum Expression {
     Mul(Box<Loc<Expression>>, Box<Loc<Expression>>),
     Div(Box<Loc<Expression>>, Box<Loc<Expression>>),
     Block(Box<Block>),
+    If(Box<Loc<Expression>>, Box<Loc<Block>>, Box<Loc<Block>>),
 }
 impl WithLocation for Expression {}
 

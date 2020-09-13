@@ -97,6 +97,19 @@ pub fn visit_expression(e: ast::Expression, symtab: &mut SymbolTable) -> Result<
                 _ => unreachable! {},
             }
         }
+        ast::Expression::If(cond, ontrue, onfalse) => {
+            let cond = cond
+                .map(|x| visit_expression(x, symtab))
+                .map_err(|e, _| e)?;
+            let ontrue = ontrue.map(|x| visit_block(x, symtab)).map_err(|e, _| e)?;
+            let onfalse = onfalse.map(|x| visit_block(x, symtab)).map_err(|e, _| e)?;
+
+            Ok(hir::Expression::If(
+                Box::new(cond),
+                Box::new(ontrue),
+                Box::new(onfalse),
+            ))
+        }
         ast::Expression::Block(block) => Ok(hir::Expression::Block(Box::new(visit_block(
             *block, symtab,
         )?))),
@@ -365,6 +378,47 @@ mod expression_visiting {
         let mut symtab = SymbolTable::new();
         assert_eq!(visit_expression(input, &mut symtab), Ok(expected));
         assert!(!symtab.has_symbol(&"a".to_string()));
+    }
+
+    #[test]
+    fn if_expressions_work() {
+        let input = ast::Expression::If(
+            Box::new(ast::Expression::IntLiteral(0).nowhere()),
+            Box::new(
+                ast::Block {
+                    statements: vec![],
+                    result: ast::Expression::IntLiteral(1).nowhere(),
+                }
+                .nowhere(),
+            ),
+            Box::new(
+                ast::Block {
+                    statements: vec![],
+                    result: ast::Expression::IntLiteral(2).nowhere(),
+                }
+                .nowhere(),
+            ),
+        );
+        let expected = hir::Expression::If(
+            Box::new(hir::Expression::IntLiteral(0).nowhere()),
+            Box::new(
+                hir::Block {
+                    statements: vec![],
+                    result: hir::Expression::IntLiteral(1).nowhere(),
+                }
+                .nowhere(),
+            ),
+            Box::new(
+                hir::Block {
+                    statements: vec![],
+                    result: hir::Expression::IntLiteral(2).nowhere(),
+                }
+                .nowhere(),
+            ),
+        );
+
+        let mut symtab = SymbolTable::new();
+        assert_eq!(visit_expression(input, &mut symtab), Ok(expected));
     }
 }
 

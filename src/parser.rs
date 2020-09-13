@@ -41,8 +41,12 @@ pub enum Error {
     #[error("Expected expression, got {got:?}")]
     ExpectedExpression { got: Token },
 
-    #[error("Entity missing block")]
-    ExpectedBlockForEntity { got: Token, loc: Loc<()> },
+    #[error("Entity missing block for {for_what}")]
+    ExpectedBlock {
+        for_what: String,
+        got: Token,
+        loc: Loc<()>,
+    },
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
@@ -118,6 +122,8 @@ impl<'a> Parser<'a> {
             Ok(val.map(Expression::IntLiteral))
         } else if let Some(block) = self.block()? {
             Ok(block.map(Box::new).map(Expression::Block))
+        } else if let Some(if_expr) = self.if_expression()? {
+            Ok(if_expr)
         } else {
             match self.identifier() {
                 Ok(ident) => {
@@ -127,6 +133,39 @@ impl<'a> Parser<'a> {
                 Err(Error::UnexpectedToken { got, .. }) => Err(Error::ExpectedExpression { got }),
                 Err(e) => Err(e),
             }
+        }
+    }
+
+    #[trace_parser]
+    pub fn if_expression(&mut self) -> Result<Option<Loc<Expression>>> {
+        if let Some(start) = self.peek_and_eat_kind(&TokenKind::If)? {
+            let cond = self.expression()?;
+            let on_true = if let Some(block) = self.block()? {
+                block
+            } else {
+                return Err(Error::ExpectedBlock {
+                    for_what: "if".to_string(),
+                    got: self.peek()?.unwrap(),
+                    loc: Loc::new((), lspan(start.span).merge(cond.span)),
+                });
+            };
+            let else_tok = self.eat(&TokenKind::Else)?;
+            let (on_false, end_span) = if let Some(block) = self.block()? {
+                block.separate()
+            } else {
+                return Err(Error::ExpectedBlock {
+                    for_what: "else".to_string(),
+                    got: self.peek()?.unwrap(),
+                    loc: Loc::new((), lspan(else_tok.span)),
+                });
+            };
+
+            Ok(Some(
+                Expression::If(Box::new(cond), Box::new(on_true), Box::new(on_false))
+                    .at(lspan(start.span).merge(end_span)),
+            ))
+        } else {
+            Ok(None)
         }
     }
 
@@ -338,9 +377,10 @@ impl<'a> Parser<'a> {
                 .map(|t| t.loc().span)
                 .unwrap_or_else(|| lspan(close_paren.span));
 
-            return Err(Error::ExpectedBlockForEntity {
+            return Err(Error::ExpectedBlock {
                 // NOTE: Unwrap should be safe becase we have already checked
                 // if this is a { or not
+                for_what: "entity".to_string(),
                 got: self.peek()?.unwrap(),
                 loc: Loc::new((), lspan(start_token.span).merge(end_loc)),
             });
@@ -732,6 +772,34 @@ mod tests {
     #[test]
     fn literals_are_expressions() {
         check_parse!("123", expression, Ok(Expression::IntLiteral(123).nowhere()));
+    }
+
+    #[test]
+    fn if_expressions_work() {
+        let code = r#"
+        if a {b} else {c}
+        "#;
+
+        let expected = Expression::If(
+            Box::new(Expression::Identifier(Identifier("a".to_string()).nowhere()).nowhere()),
+            Box::new(
+                Block {
+                    statements: vec![],
+                    result: Expression::Identifier(Identifier("b".to_string()).nowhere()).nowhere(),
+                }
+                .nowhere(),
+            ),
+            Box::new(
+                Block {
+                    statements: vec![],
+                    result: Expression::Identifier(Identifier("c".to_string()).nowhere()).nowhere(),
+                }
+                .nowhere(),
+            ),
+        )
+        .nowhere();
+
+        check_parse!(code, expression, Ok(expected));
     }
 
     #[test]

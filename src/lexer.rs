@@ -22,6 +22,10 @@ pub enum TokenKind {
     Entity,
     #[token("reset")]
     Reset,
+    #[token("if")]
+    If,
+    #[token("else")]
+    Else,
 
     // Math operators
     #[token("+")]
@@ -79,6 +83,8 @@ impl TokenKind {
             TokenKind::Reg => "reg",
             TokenKind::Entity => "entity",
             TokenKind::Reset => "reset",
+            TokenKind::If => "if",
+            TokenKind::Else => "else",
 
             TokenKind::Assignment => "=",
             TokenKind::Plus => "+",
