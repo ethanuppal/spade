@@ -4,7 +4,7 @@ use thiserror::Error;
 
 use parse_tree_macros::trace_parser;
 
-use crate::ast::{Entity, Expression, Identifier, Register, Statement, Type};
+use crate::ast::{Block, Entity, Expression, Identifier, Register, Statement, Type};
 use crate::lexer::TokenKind;
 use crate::location_info::{lspan, Loc, WithLocation};
 
@@ -40,6 +40,9 @@ pub enum Error {
 
     #[error("Expected expression, got {got:?}")]
     ExpectedExpression { got: Token },
+
+    #[error("Entity missing block")]
+    ExpectedBlockForEntity { got: Token, loc: Loc<()> },
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
@@ -136,6 +139,26 @@ impl<'a> Parser<'a> {
         } else {
             Ok(None)
         }
+    }
+
+    #[trace_parser]
+    pub fn block(&mut self) -> Result<Option<Loc<Block>>> {
+        let start = if let Some(start) = self.peek_and_eat_kind(&TokenKind::OpenBrace)? {
+            start
+        } else {
+            return Ok(None);
+        };
+        let statements = self.statements()?;
+        let output_value = self.expression()?;
+        let end_token = self.eat(&TokenKind::CloseBrace)?;
+
+        Ok(Some(
+            Block {
+                statements,
+                result: output_value,
+            }
+            .at(lspan(start.span).merge(lspan(end_token.span))),
+        ))
     }
 
     // Types
@@ -294,30 +317,41 @@ impl<'a> Parser<'a> {
         // Input types
         self.eat(&TokenKind::OpenParen)?;
         let inputs = self.comma_separated(Self::name_and_type, &TokenKind::CloseParen)?;
-        self.eat(&TokenKind::CloseParen)?;
+        let close_paren = self.eat(&TokenKind::CloseParen)?;
 
         // Return type
         let output_type = if self.peek_and_eat_kind(&TokenKind::SlimArrow)?.is_some() {
             Some(self.parse_type()?)
         } else {
             None
-        }
-        .unwrap_or(Type::UnitType.nowhere());
+        };
 
         // Body (TODO: might want to make this a separate structure like a block)
-        self.eat(&TokenKind::OpenBrace)?;
-        let statements = self.statements()?;
-        let output_value = self.expression()?;
-        let end_token = self.eat(&TokenKind::CloseBrace)?;
+        let block = if let Some(block) = self.block()? {
+            block
+        } else {
+            // The end of the entity definition depends on wether or not
+            // a type is present.
+            let end_loc = output_type
+                .map(|t| t.loc().span)
+                .unwrap_or_else(|| lspan(close_paren.span));
+
+            return Err(Error::ExpectedBlockForEntity {
+                // NOTE: Unwrap should be safe becase we have already checked
+                // if this is a { or not
+                got: self.peek()?.unwrap(),
+                loc: Loc::new((), lspan(start_token.span).merge(end_loc)),
+            });
+        };
 
         Ok(Entity {
             name,
             inputs,
-            statements,
-            output_type,
-            output_value,
+            statements: block.inner.statements,
+            output_type: output_type.unwrap_or(Type::UnitType.nowhere()),
+            output_value: block.inner.result,
         }
-        .at(lspan(start_token.span).merge(lspan(end_token.span))))
+        .at(lspan(start_token.span).merge(block.span)))
     }
 }
 
@@ -674,6 +708,7 @@ mod tests {
 
         check_parse!("a * (b + c)", expression, Ok(expected_value.clone()));
     }
+
     #[test]
     fn repeated_bracketed_expressions_work() {
         let expected_value = Expression::BinaryOperator(
@@ -696,6 +731,29 @@ mod tests {
     #[test]
     fn literals_are_expressions() {
         check_parse!("123", expression, Ok(Expression::IntLiteral(123).nowhere()));
+    }
+
+    #[test]
+    fn blocks_work() {
+        let code = r#"
+            {
+                let a = 0;
+                1
+            }
+            "#;
+
+        let expected = Block {
+            statements: vec![Statement::Binding(
+                Identifier("a".to_string()).nowhere(),
+                None,
+                Expression::IntLiteral(0).nowhere(),
+            )
+            .nowhere()],
+            result: Expression::IntLiteral(1).nowhere(),
+        }
+        .nowhere();
+
+        check_parse!(code, block, Ok(Some(expected)));
     }
 
     #[test]

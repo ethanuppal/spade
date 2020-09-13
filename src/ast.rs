@@ -23,6 +23,13 @@ pub enum Expression {
 impl WithLocation for Expression {}
 
 #[derive(PartialEq, Debug, Clone)]
+pub struct Block {
+    pub statements: Vec<Loc<Statement>>,
+    pub result: Loc<Expression>,
+}
+impl WithLocation for Block {}
+
+#[derive(PartialEq, Debug, Clone)]
 pub enum Statement {
     Binding(Loc<Identifier>, Option<Loc<Type>>, Loc<Expression>),
     Register(Loc<Register>),
