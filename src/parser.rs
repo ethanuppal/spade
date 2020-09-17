@@ -680,9 +680,7 @@ mod tests {
 
     use logos::Logos;
 
-    pub fn _ident(name: &str) -> Loc<Identifier> {
-        Identifier(name.to_string()).nowhere()
-    }
+    use crate::testutil::ast_ident as _ident;
 
     macro_rules! check_parse {
         ($string:expr , $method:ident, $expected:expr) => {

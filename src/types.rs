@@ -8,6 +8,7 @@ use crate::location_info::WithLocation;
 #[derive(Debug, PartialEq, Clone)]
 pub enum Type {
     Unit,
+    Bit,
     // Primitive types
     /// Fixed length bit vector
     BitVector(u128),
@@ -15,6 +16,8 @@ pub enum Type {
     UInt(u128),
     /// Fixed length int
     Int(u128),
+
+    Clock,
 
     // Compound types
     Array(u128, Box<Type>),
@@ -49,6 +52,8 @@ impl Type {
     pub fn convert_from_ast(value: AstType) -> Result<Self, Error> {
         match value {
             AstType::Named(name) => match name.0.as_str() {
+                "bit" => Ok(Type::Bit),
+                "clk" => Ok(Type::Clock),
                 "uint" | "int" | "bits" => Err(Error::BitWidthRequired(name.0.to_string())),
                 _ => Err(Error::NamedTypesUnsupported),
             },

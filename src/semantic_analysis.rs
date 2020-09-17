@@ -79,7 +79,10 @@ pub fn visit_statement(
                 span,
             ))
         }
-        _ => unimplemented!(),
+        ast::Statement::Register(inner) => {
+            let (result, span) = visit_register(inner, symtab)?.separate();
+            Ok(Loc::new(hir::Statement::Register(result), span))
+        }
     }
 }
 
@@ -268,6 +271,8 @@ mod statement_visiting {
 
     use crate::location_info::WithLocation;
 
+    use crate::testutil::{ast_ident, hir_ident};
+
     #[test]
     fn bindings_convert_correctly() {
         let mut symtab = SymbolTable::new();
@@ -288,6 +293,38 @@ mod statement_visiting {
 
         assert_eq!(visit_statement(input, &mut symtab), Ok(expected));
         assert_eq!(symtab.has_symbol(&"a".to_string()), true);
+    }
+
+    #[test]
+    fn registers_are_statements() {
+        let input = ast::Statement::Register(
+            ast::Register {
+                name: ast_ident("regname"),
+                clock: ast_ident("clk"),
+                reset: None,
+                value: ast::Expression::IntLiteral(0).nowhere(),
+                value_type: None,
+            }
+            .nowhere(),
+        )
+        .nowhere();
+
+        let expected = hir::Statement::Register(
+            hir::Register {
+                name: hir_ident("regname"),
+                clock: hir_ident("clk"),
+                reset: None,
+                value: hir::Expression::IntLiteral(0).nowhere(),
+                value_type: None,
+            }
+            .nowhere(),
+        )
+        .nowhere();
+
+        let mut symtab = SymbolTable::new();
+        symtab.add_symbol(Loc::nowhere("clk".to_string()));
+        assert_eq!(visit_statement(input, &mut symtab), Ok(expected));
+        assert_eq!(symtab.has_symbol(&"regname".to_string()), true);
     }
 }
 

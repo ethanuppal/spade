@@ -17,6 +17,9 @@ pub mod semantic_analysis;
 pub mod symbol_table;
 pub mod types;
 
+#[cfg(test)]
+pub mod testutil;
+
 #[derive(StructOpt)]
 #[structopt(name = "spade", about = "Compiler for the spade language")]
 struct Opt {
