@@ -15,16 +15,24 @@ impl WithLocation for Identifier {}
 #[derive(PartialEq, Debug, Clone)]
 pub struct Path(pub Vec<Loc<Identifier>>);
 impl WithLocation for Path {}
+impl Path {
+    pub fn from_strs(names: &[&str]) -> Self {
+        Self(
+            names
+                .iter()
+                .map(|s| s.to_string())
+                .map(Identifier::Named)
+                .map(Loc::nowhere)
+                .collect(),
+        )
+    }
+}
 
 #[derive(PartialEq, Debug, Clone)]
 pub enum Expression {
     Identifier(Loc<Path>),
     IntLiteral(u128),
-    Add(Box<Loc<Expression>>, Box<Loc<Expression>>),
-    Sub(Box<Loc<Expression>>, Box<Loc<Expression>>),
-    Mul(Box<Loc<Expression>>, Box<Loc<Expression>>),
-    Div(Box<Loc<Expression>>, Box<Loc<Expression>>),
-    Equals(Box<Loc<Expression>>, Box<Loc<Expression>>),
+    FnCall(Loc<Path>, Vec<Loc<Expression>>),
     Block(Box<Block>),
     If(Box<Loc<Expression>>, Box<Loc<Block>>, Box<Loc<Block>>),
 }

@@ -3,7 +3,7 @@ use thiserror::Error;
 use crate::ast;
 use crate::hir;
 use crate::lexer::TokenKind;
-use crate::location_info::Loc;
+use crate::location_info::{Loc, WithLocation};
 use crate::symbol_table::SymbolTable;
 use crate::types::Error as TypeError;
 use crate::types::Type;
@@ -92,12 +92,20 @@ pub fn visit_expression(e: ast::Expression, symtab: &mut SymbolTable) -> Result<
         ast::Expression::BinaryOperator(lhs, tok, rhs) => {
             let lhs = lhs.map(|x| visit_expression(x, symtab)).map_err(|e, _| e)?;
             let rhs = rhs.map(|x| visit_expression(x, symtab)).map_err(|e, _| e)?;
+
+            let intrinsic = |name| {
+                hir::Expression::FnCall(
+                    hir::Path::from_strs(&["intrinsics", name]).nowhere(),
+                    vec![lhs, rhs],
+                )
+            };
+
             match tok {
-                TokenKind::Plus => Ok(hir::Expression::Add(Box::new(lhs), Box::new(rhs))),
-                TokenKind::Minus => Ok(hir::Expression::Sub(Box::new(lhs), Box::new(rhs))),
-                TokenKind::Asterisk => Ok(hir::Expression::Mul(Box::new(lhs), Box::new(rhs))),
-                TokenKind::Slash => Ok(hir::Expression::Div(Box::new(lhs), Box::new(rhs))),
-                TokenKind::Equals => Ok(hir::Expression::Equals(Box::new(lhs), Box::new(rhs))),
+                TokenKind::Plus => Ok(intrinsic("add")),
+                TokenKind::Minus => Ok(intrinsic("sub")),
+                TokenKind::Asterisk => Ok(intrinsic("mul")),
+                TokenKind::Slash => Ok(intrinsic("div")),
+                TokenKind::Equals => Ok(intrinsic("eq")),
                 _ => unreachable! {},
             }
         }
@@ -340,7 +348,7 @@ mod expression_visiting {
     use super::*;
 
     use crate::location_info::WithLocation;
-    use crate::testutil::{ast_ident, ast_path, hir_ident, hir_path};
+    use crate::testutil::{ast_ident, ast_path, hir_path};
 
     #[test]
     fn int_literals_work() {
@@ -352,7 +360,7 @@ mod expression_visiting {
     }
 
     macro_rules! binop_test {
-        ($test_name:ident, $token:ident, $kind:ident) => {
+        ($test_name:ident, $token:ident, $kind:expr) => {
             #[test]
             fn $test_name() {
                 let mut symtab = SymbolTable::new();
@@ -361,9 +369,12 @@ mod expression_visiting {
                     crate::lexer::TokenKind::$token,
                     Box::new(ast::Expression::IntLiteral(456).nowhere()),
                 );
-                let expected = hir::Expression::$kind(
-                    Box::new(hir::Expression::IntLiteral(123).nowhere()),
-                    Box::new(hir::Expression::IntLiteral(456).nowhere()),
+                let expected = hir::Expression::FnCall(
+                    hir::Path::from_strs(&["intrinsics", $kind]).nowhere(),
+                    vec![
+                        hir::Expression::IntLiteral(123).nowhere(),
+                        hir::Expression::IntLiteral(456).nowhere(),
+                    ],
                 );
 
                 assert_eq!(visit_expression(input, &mut symtab), Ok(expected));
@@ -371,11 +382,11 @@ mod expression_visiting {
         };
     }
 
-    binop_test!(additions, Plus, Add);
-    binop_test!(subtractions, Minus, Sub);
-    binop_test!(multiplication, Asterisk, Mul);
-    binop_test!(division, Slash, Div);
-    binop_test!(equals, Equals, Equals);
+    binop_test!(additions, Plus, "add");
+    binop_test!(subtractions, Minus, "sub");
+    binop_test!(multiplication, Asterisk, "mul");
+    binop_test!(division, Slash, "div");
+    binop_test!(equals, Equals, "eq");
 
     #[test]
     fn identifiers_work() {

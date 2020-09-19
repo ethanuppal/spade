@@ -697,7 +697,6 @@ mod tests {
 
     use logos::Logos;
 
-    use crate::testutil::ast_ident as _ident;
     use crate::testutil::{ast_ident, ast_path};
 
     macro_rules! check_parse {
