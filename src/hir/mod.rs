@@ -1,5 +1,5 @@
 pub mod expression;
-pub use expression::{Expression, ExprKind};
+pub use expression::{ExprKind, Expression};
 
 /**
   Representation of the language with most language constructs still present, with

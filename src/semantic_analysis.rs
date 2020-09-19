@@ -18,13 +18,12 @@ pub enum Error {
 
 pub type Result<T> = std::result::Result<T, Error>;
 
-
 pub struct IdTracker {
     id: u64,
 }
 impl IdTracker {
     pub fn new() -> Self {
-        Self {id: 0}
+        Self { id: 0 }
     }
 
     fn next(&mut self) -> u64 {
@@ -37,7 +36,7 @@ impl IdTracker {
 pub fn visit_entity(
     item: ast::Entity,
     symtab: &mut SymbolTable,
-    idtracker: &mut IdTracker
+    idtracker: &mut IdTracker,
 ) -> Result<hir::Entity> {
     symtab.add_ident(&item.name);
     symtab.new_scope();
@@ -110,13 +109,17 @@ pub fn visit_statement(
 pub fn visit_expression(
     e: ast::Expression,
     symtab: &mut SymbolTable,
-    idtracker: &mut IdTracker
+    idtracker: &mut IdTracker,
 ) -> Result<hir::Expression> {
     match e {
         ast::Expression::IntLiteral(val) => Ok(hir::ExprKind::IntLiteral(val)),
         ast::Expression::BinaryOperator(lhs, tok, rhs) => {
-            let lhs = lhs.map(|x| visit_expression(x, symtab, idtracker)).map_err(|e, _| e)?;
-            let rhs = rhs.map(|x| visit_expression(x, symtab, idtracker)).map_err(|e, _| e)?;
+            let lhs = lhs
+                .map(|x| visit_expression(x, symtab, idtracker))
+                .map_err(|e, _| e)?;
+            let rhs = rhs
+                .map(|x| visit_expression(x, symtab, idtracker))
+                .map_err(|e, _| e)?;
 
             let intrinsic = |name| {
                 hir::ExprKind::FnCall(
@@ -138,8 +141,12 @@ pub fn visit_expression(
             let cond = cond
                 .map(|x| visit_expression(x, symtab, idtracker))
                 .map_err(|e, _| e)?;
-            let ontrue = ontrue.map(|x| visit_block(x, symtab, idtracker)).map_err(|e, _| e)?;
-            let onfalse = onfalse.map(|x| visit_block(x, symtab, idtracker)).map_err(|e, _| e)?;
+            let ontrue = ontrue
+                .map(|x| visit_block(x, symtab, idtracker))
+                .map_err(|e, _| e)?;
+            let onfalse = onfalse
+                .map(|x| visit_block(x, symtab, idtracker))
+                .map_err(|e, _| e)?;
 
             Ok(hir::ExprKind::If(
                 Box::new(cond),
@@ -148,7 +155,7 @@ pub fn visit_expression(
             ))
         }
         ast::Expression::Block(block) => Ok(hir::ExprKind::Block(Box::new(visit_block(
-            *block, symtab, idtracker
+            *block, symtab, idtracker,
         )?))),
         ast::Expression::Identifier(path) => {
             if symtab.has_path(&path.inner) {
@@ -157,13 +164,14 @@ pub fn visit_expression(
                 Err(Error::UndefinedPath(path))
             }
         }
-    }.map(|kind| kind.with_id(idtracker.next()))
+    }
+    .map(|kind| kind.with_id(idtracker.next()))
 }
 
 pub fn visit_block(
     b: ast::Block,
     symtab: &mut SymbolTable,
-    idtracker: &mut IdTracker
+    idtracker: &mut IdTracker,
 ) -> Result<hir::Block> {
     symtab.new_scope();
     let mut statements = vec![];
@@ -338,7 +346,10 @@ mod statement_visiting {
         )
         .nowhere();
 
-        assert_eq!(visit_statement(input, &mut symtab, &mut idtracker), Ok(expected));
+        assert_eq!(
+            visit_statement(input, &mut symtab, &mut idtracker),
+            Ok(expected)
+        );
         assert_eq!(symtab.has_path(&ast_path("a").inner), true);
     }
 
@@ -371,7 +382,10 @@ mod statement_visiting {
         let mut symtab = SymbolTable::new();
         let mut idtracker = IdTracker::new();
         symtab.add_ident(&ast_ident("clk"));
-        assert_eq!(visit_statement(input, &mut symtab, &mut idtracker), Ok(expected));
+        assert_eq!(
+            visit_statement(input, &mut symtab, &mut idtracker),
+            Ok(expected)
+        );
         assert_eq!(symtab.has_path(&ast_path("regname").inner), true);
     }
 }
@@ -390,7 +404,10 @@ mod expression_visiting {
         let input = ast::Expression::IntLiteral(123);
         let expected = hir::ExprKind::IntLiteral(123).idless();
 
-        assert_eq!(visit_expression(input, &mut symtab, &mut idtracker), Ok(expected));
+        assert_eq!(
+            visit_expression(input, &mut symtab, &mut idtracker),
+            Ok(expected)
+        );
     }
 
     macro_rules! binop_test {
@@ -410,9 +427,13 @@ mod expression_visiting {
                         hir::ExprKind::IntLiteral(123).idless().nowhere(),
                         hir::ExprKind::IntLiteral(456).idless().nowhere(),
                     ],
-                ).idless();
+                )
+                .idless();
 
-                assert_eq!(visit_expression(input, &mut symtab, &mut idtracker), Ok(expected));
+                assert_eq!(
+                    visit_expression(input, &mut symtab, &mut idtracker),
+                    Ok(expected)
+                );
             }
         };
     }
@@ -431,7 +452,10 @@ mod expression_visiting {
         let input = ast::Expression::Identifier(ast_path("test"));
         let expected = hir::ExprKind::Identifier(hir_path("test")).idless();
 
-        assert_eq!(visit_expression(input, &mut symtab, &mut idtracker), Ok(expected));
+        assert_eq!(
+            visit_expression(input, &mut symtab, &mut idtracker),
+            Ok(expected)
+        );
     }
 
     #[test]
@@ -465,11 +489,15 @@ mod expression_visiting {
             )
             .nowhere()],
             result: hir::ExprKind::IntLiteral(0).idless().nowhere(),
-        })).idless();
+        }))
+        .idless();
 
         let mut symtab = SymbolTable::new();
         let mut idtracker = IdTracker::new();
-        assert_eq!(visit_expression(input, &mut symtab, &mut idtracker), Ok(expected));
+        assert_eq!(
+            visit_expression(input, &mut symtab, &mut idtracker),
+            Ok(expected)
+        );
         assert!(!symtab.has_path(&ast_path("a").inner));
     }
 
@@ -508,11 +536,15 @@ mod expression_visiting {
                 }
                 .nowhere(),
             ),
-        ).idless();
+        )
+        .idless();
 
         let mut symtab = SymbolTable::new();
         let mut idtracker = IdTracker::new();
-        assert_eq!(visit_expression(input, &mut symtab, &mut idtracker), Ok(expected));
+        assert_eq!(
+            visit_expression(input, &mut symtab, &mut idtracker),
+            Ok(expected)
+        );
     }
 }
 
@@ -541,7 +573,9 @@ mod register_visiting {
             name: hir_ident("test"),
             clock: hir_path("clk"),
             reset: Some((
-                hir::ExprKind::Identifier(hir_path("rst")).idless().nowhere(),
+                hir::ExprKind::Identifier(hir_path("rst"))
+                    .idless()
+                    .nowhere(),
                 hir::ExprKind::IntLiteral(0).idless().nowhere(),
             )),
             value: hir::ExprKind::IntLiteral(1).idless().nowhere(),
@@ -553,6 +587,9 @@ mod register_visiting {
         let mut idtracker = IdTracker::new();
         symtab.add_ident(&ast_ident("clk"));
         symtab.add_ident(&ast_ident("rst"));
-        assert_eq!(visit_register(input, &mut symtab, &mut idtracker), Ok(expected));
+        assert_eq!(
+            visit_register(input, &mut symtab, &mut idtracker),
+            Ok(expected)
+        );
     }
 }
