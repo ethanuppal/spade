@@ -51,10 +51,12 @@ pub enum Error {
 impl Type {
     pub fn convert_from_ast(value: AstType) -> Result<Self, Error> {
         match value {
-            AstType::Named(name) => match name.0.as_str() {
-                "bit" => Ok(Type::Bit),
-                "clk" => Ok(Type::Clock),
-                "uint" | "int" | "bits" => Err(Error::BitWidthRequired(name.0.to_string())),
+            AstType::Named(name) => match name.as_strs().as_slice() {
+                ["bit"] => Ok(Type::Bit),
+                ["clk"] => Ok(Type::Clock),
+                ["uint"] | ["int"] | ["bits"] => {
+                    Err(Error::BitWidthRequired(name.as_strings()[0].to_string()))
+                }
                 _ => Err(Error::NamedTypesUnsupported),
             },
             AstType::UnitType => Ok(Type::Unit),
@@ -64,10 +66,10 @@ impl Type {
                     _ => Err(Error::NonLiteralTypeSize(size.loc()))?,
                 };
                 match inner.inner {
-                    AstType::Named(name) => match name.0.as_str() {
-                        "uint" => Ok(Type::UInt(size)),
-                        "int" => Ok(Type::Int(size)),
-                        "bits" => Ok(Type::BitVector(size)),
+                    AstType::Named(name) => match name.as_strs().as_slice() {
+                        ["uint"] => Ok(Type::UInt(size)),
+                        ["int"] => Ok(Type::Int(size)),
+                        ["bits"] => Ok(Type::BitVector(size)),
                         _ => Err(Error::CompoundArrayUnsupported),
                     },
                     _ => Err(Error::CompoundArrayUnsupported),
@@ -81,13 +83,13 @@ impl Type {
 mod tests {
     use super::*;
 
-    use crate::ast::Identifier;
+    use crate::testutil::ast_path;
 
     #[test]
     fn primitive_type_arrays_work() {
         {
             let input = AstType::WithSize(
-                Box::new(AstType::Named(Identifier("uint".into())).nowhere()),
+                Box::new(AstType::Named(ast_path("uint").strip()).nowhere()),
                 AstExpr::IntLiteral(10).nowhere(),
             );
 
@@ -96,7 +98,7 @@ mod tests {
 
         {
             let input = AstType::WithSize(
-                Box::new(AstType::Named(Identifier("int".into())).nowhere()),
+                Box::new(AstType::Named(ast_path("int").strip()).nowhere()),
                 AstExpr::IntLiteral(10).nowhere(),
             );
 
@@ -105,7 +107,7 @@ mod tests {
 
         {
             let input = AstType::WithSize(
-                Box::new(AstType::Named(Identifier("bits".into())).nowhere()),
+                Box::new(AstType::Named(ast_path("bits").strip()).nowhere()),
                 AstExpr::IntLiteral(10).nowhere(),
             );
 

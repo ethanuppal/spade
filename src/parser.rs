@@ -4,7 +4,7 @@ use thiserror::Error;
 
 use parse_tree_macros::trace_parser;
 
-use crate::ast::{Block, Entity, Expression, Identifier, Register, Statement, Type};
+use crate::ast::{Block, Entity, Expression, Identifier, Path, Register, Statement, Type};
 use crate::lexer::TokenKind;
 use crate::location_info::{lspan, Loc, WithLocation};
 
@@ -80,6 +80,23 @@ impl<'a> Parser<'a> {
         }
     }
 
+    #[trace_parser]
+    fn path(&mut self) -> Result<Loc<Path>> {
+        let mut result = vec![];
+        loop {
+            result.push(self.identifier()?);
+
+            if let None = self.peek_and_eat_kind(&TokenKind::PathSeparator)? {
+                break;
+            }
+        }
+        // NOTE: (safe unwrap) The vec will have at least one element because the first thing
+        // in the loop must pus an identifier.
+        let start = result.first().unwrap().span;
+        let end = result.last().unwrap().span;
+        Ok(Path(result).at(start.merge(end)))
+    }
+
     fn binary_operator(
         &mut self,
         lhs: impl Fn(&mut Self) -> Result<Loc<Expression>>,
@@ -140,10 +157,10 @@ impl<'a> Parser<'a> {
         } else if let Some(if_expr) = self.if_expression()? {
             Ok(if_expr)
         } else {
-            match self.identifier() {
-                Ok(ident) => {
-                    let span = ident.span;
-                    Ok(Expression::Identifier(ident).at(span))
+            match self.path() {
+                Ok(path) => {
+                    let span = path.span;
+                    Ok(Expression::Identifier(path).at(span))
                 }
                 Err(Error::UnexpectedToken { got, .. }) => Err(Error::ExpectedExpression { got }),
                 Err(e) => Err(e),
@@ -220,7 +237,7 @@ impl<'a> Parser<'a> {
     // Types
     #[trace_parser]
     fn parse_type(&mut self) -> Result<Loc<Type>> {
-        let (ident, span) = self.identifier()?.separate();
+        let (path, span) = self.path()?.separate();
 
         // Check if it is a sized type
         if self.peek_kind(&TokenKind::OpenBracket)? {
@@ -235,11 +252,11 @@ impl<'a> Parser<'a> {
             let size = size.unwrap();
 
             Ok(
-                Type::WithSize(Box::new(Type::Named(ident.strip()).at(span)), size)
+                Type::WithSize(Box::new(Type::Named(path.strip()).at(span)), size)
                     .at(span.merge(bracket_span.span)),
             )
         } else {
-            Ok(Type::Named(ident.strip()).at(span))
+            Ok(Type::Named(path.strip()).at(span))
         }
     }
 
@@ -296,7 +313,7 @@ impl<'a> Parser<'a> {
             // Clock selection
             let (clock, _clock_paren_span) = self.surrounded(
                 &TokenKind::OpenParen,
-                |s| s.identifier().map(Some),
+                |s| s.path().map(Some),
                 &TokenKind::CloseParen,
             )?;
 
@@ -681,6 +698,7 @@ mod tests {
     use logos::Logos;
 
     use crate::testutil::ast_ident as _ident;
+    use crate::testutil::{ast_ident, ast_path};
 
     macro_rules! check_parse {
         ($string:expr , $method:ident, $expected:expr) => {
@@ -704,15 +722,21 @@ mod tests {
 
     #[test]
     fn parsing_identifier_works() {
-        check_parse!("abc123_", identifier, Ok(_ident("abc123_")));
+        check_parse!("abc123_", identifier, Ok(ast_ident("abc123_")));
+    }
+
+    #[test]
+    fn parsing_paths_works() {
+        let expected = Path(vec![ast_ident("path"), ast_ident("to"), ast_ident("thing")]).nowhere();
+        check_parse!("path::to::thing", path, Ok(expected));
     }
 
     #[test]
     fn addition_operatoins_are_expressions() {
         let expected_value = Expression::BinaryOperator(
-            Box::new(Expression::Identifier(_ident("a")).nowhere()),
+            Box::new(Expression::Identifier(ast_path("a")).nowhere()),
             TokenKind::Plus,
-            Box::new(Expression::Identifier(_ident("b")).nowhere()),
+            Box::new(Expression::Identifier(ast_path("b")).nowhere()),
         )
         .nowhere();
 
@@ -722,9 +746,9 @@ mod tests {
     #[test]
     fn multiplications_are_expressions() {
         let expected_value = Expression::BinaryOperator(
-            Box::new(Expression::Identifier(_ident("a")).nowhere()),
+            Box::new(Expression::Identifier(ast_path("a")).nowhere()),
             TokenKind::Asterisk,
-            Box::new(Expression::Identifier(_ident("b")).nowhere()),
+            Box::new(Expression::Identifier(ast_path("b")).nowhere()),
         )
         .nowhere();
 
@@ -736,14 +760,14 @@ mod tests {
         let expected_value = Expression::BinaryOperator(
             Box::new(
                 Expression::BinaryOperator(
-                    Box::new(Expression::Identifier(_ident("a")).nowhere()),
+                    Box::new(Expression::Identifier(ast_path("a")).nowhere()),
                     TokenKind::Asterisk,
-                    Box::new(Expression::Identifier(_ident("b")).nowhere()),
+                    Box::new(Expression::Identifier(ast_path("b")).nowhere()),
                 )
                 .nowhere(),
             ),
             TokenKind::Plus,
-            Box::new(Expression::Identifier(_ident("c")).nowhere()),
+            Box::new(Expression::Identifier(ast_path("c")).nowhere()),
         )
         .nowhere();
 
@@ -755,14 +779,14 @@ mod tests {
         let expected_value = Expression::BinaryOperator(
             Box::new(
                 Expression::BinaryOperator(
-                    Box::new(Expression::Identifier(_ident("a")).nowhere()),
+                    Box::new(Expression::Identifier(ast_path("a")).nowhere()),
                     TokenKind::Plus,
-                    Box::new(Expression::Identifier(_ident("b")).nowhere()),
+                    Box::new(Expression::Identifier(ast_path("b")).nowhere()),
                 )
                 .nowhere(),
             ),
             TokenKind::Equals,
-            Box::new(Expression::Identifier(_ident("c")).nowhere()),
+            Box::new(Expression::Identifier(ast_path("c")).nowhere()),
         )
         .nowhere();
 
@@ -772,13 +796,13 @@ mod tests {
     #[test]
     fn bracketed_expressions_are_expressions() {
         let expected_value = Expression::BinaryOperator(
-            Box::new(Expression::Identifier(_ident("a")).nowhere()),
+            Box::new(Expression::Identifier(ast_path("a")).nowhere()),
             TokenKind::Asterisk,
             Box::new(
                 Expression::BinaryOperator(
-                    Box::new(Expression::Identifier(_ident("b")).nowhere()),
+                    Box::new(Expression::Identifier(ast_path("b")).nowhere()),
                     TokenKind::Plus,
-                    Box::new(Expression::Identifier(_ident("c")).nowhere()),
+                    Box::new(Expression::Identifier(ast_path("c")).nowhere()),
                 )
                 .nowhere(),
             ),
@@ -793,14 +817,14 @@ mod tests {
         let expected_value = Expression::BinaryOperator(
             Box::new(
                 Expression::BinaryOperator(
-                    Box::new(Expression::Identifier(_ident("b")).nowhere()),
+                    Box::new(Expression::Identifier(ast_path("b")).nowhere()),
                     TokenKind::Plus,
-                    Box::new(Expression::Identifier(_ident("c")).nowhere()),
+                    Box::new(Expression::Identifier(ast_path("c")).nowhere()),
                 )
                 .nowhere(),
             ),
             TokenKind::Asterisk,
-            Box::new(Expression::Identifier(_ident("a")).nowhere()),
+            Box::new(Expression::Identifier(ast_path("a")).nowhere()),
         )
         .nowhere();
 
@@ -819,18 +843,18 @@ mod tests {
         "#;
 
         let expected = Expression::If(
-            Box::new(Expression::Identifier(Identifier("a".to_string()).nowhere()).nowhere()),
+            Box::new(Expression::Identifier(ast_path("a")).nowhere()),
             Box::new(
                 Block {
                     statements: vec![],
-                    result: Expression::Identifier(Identifier("b".to_string()).nowhere()).nowhere(),
+                    result: Expression::Identifier(ast_path("b")).nowhere(),
                 }
                 .nowhere(),
             ),
             Box::new(
                 Block {
                     statements: vec![],
-                    result: Expression::Identifier(Identifier("c".to_string()).nowhere()).nowhere(),
+                    result: Expression::Identifier(ast_path("c")).nowhere(),
                 }
                 .nowhere(),
             ),
@@ -851,7 +875,7 @@ mod tests {
 
         let expected = Block {
             statements: vec![Statement::Binding(
-                Identifier("a".to_string()).nowhere(),
+                ast_ident("a"),
                 None,
                 Expression::IntLiteral(0).nowhere(),
             )
@@ -874,7 +898,7 @@ mod tests {
 
         let expected = Expression::Block(Box::new(Block {
             statements: vec![Statement::Binding(
-                Identifier("a".to_string()).nowhere(),
+                ast_ident("a"),
                 None,
                 Expression::IntLiteral(0).nowhere(),
             )
@@ -888,17 +912,20 @@ mod tests {
 
     #[test]
     fn bindings_work() {
-        let expected =
-            Statement::Binding(_ident("test"), None, Expression::IntLiteral(123).nowhere())
-                .nowhere();
+        let expected = Statement::Binding(
+            ast_ident("test"),
+            None,
+            Expression::IntLiteral(123).nowhere(),
+        )
+        .nowhere();
         check_parse!("let test = 123;", binding, Ok(Some(expected)));
     }
 
     #[test]
     fn bindings_with_types_work() {
         let expected = Statement::Binding(
-            Identifier("test".to_string()).nowhere(),
-            Some(Type::Named(Identifier("bool".to_string())).nowhere()),
+            ast_ident("test"),
+            Some(Type::Named(ast_path("bool").inner).nowhere()),
             Expression::IntLiteral(123).nowhere(),
         )
         .nowhere();
@@ -915,19 +942,19 @@ mod tests {
             block: Block {
                 statements: vec![
                     Statement::Binding(
-                        Identifier("test".to_string()).nowhere(),
+                        ast_ident("test"),
                         None,
                         Expression::IntLiteral(123).nowhere(),
                     )
                     .nowhere(),
                     Statement::Binding(
-                        Identifier("test2".to_string()).nowhere(),
+                        ast_ident("test2"),
                         None,
                         Expression::IntLiteral(123).nowhere(),
                     )
                     .nowhere(),
                 ],
-                result: Expression::Identifier(Identifier("test".to_string()).nowhere()).nowhere(),
+                result: Expression::Identifier(ast_path("test")).nowhere(),
             }
             .nowhere(),
         }
@@ -940,21 +967,21 @@ mod tests {
     fn entity_with_inputs() {
         let code = include_str!("../parser_test_code/entity_with_inputs.sp");
         let expected = Entity {
-            name: Identifier("with_inputs".to_string()).nowhere(),
+            name: ast_ident("with_inputs"),
             inputs: vec![
                 (
                     Identifier("clk".to_string()).nowhere(),
-                    Type::Named(Identifier("bool".to_string())).nowhere(),
+                    Type::Named(ast_path("bool").inner).nowhere(),
                 ),
                 (
                     Identifier("rst".to_string()).nowhere(),
-                    Type::Named(Identifier("bool".to_string())).nowhere(),
+                    Type::Named(ast_path("bool").inner).nowhere(),
                 ),
             ],
-            output_type: Type::Named(Identifier("bool".to_string())).nowhere(),
+            output_type: Type::Named(ast_path("bool").inner).nowhere(),
             block: Block {
                 statements: vec![],
-                result: Expression::Identifier(Identifier("clk".to_string()).nowhere()).nowhere(),
+                result: Expression::Identifier(ast_path("clk")).nowhere(),
             }
             .nowhere(),
         }
@@ -969,8 +996,8 @@ mod tests {
 
         let expected = Statement::Register(
             Register {
-                name: Identifier("name".to_string()).nowhere(),
-                clock: Identifier("clk".to_string()).nowhere(),
+                name: ast_ident("name"),
+                clock: ast_path("clk"),
                 reset: None,
                 value: Expression::IntLiteral(1).nowhere(),
                 value_type: None,
@@ -988,10 +1015,10 @@ mod tests {
 
         let expected = Statement::Register(
             Register {
-                name: Identifier("name".to_string()).nowhere(),
-                clock: Identifier("clk".to_string()).nowhere(),
+                name: ast_ident("name"),
+                clock: ast_path("clk"),
                 reset: Some((
-                    Expression::Identifier(Identifier("rst".to_string()).nowhere()).nowhere(),
+                    Expression::Identifier(ast_path("rst")).nowhere(),
                     Expression::IntLiteral(0).nowhere(),
                 )),
                 value: Expression::IntLiteral(1).nowhere(),
@@ -1011,13 +1038,13 @@ mod tests {
         let expected = Statement::Register(
             Register {
                 name: Identifier("name".to_string()).nowhere(),
-                clock: Identifier("clk".to_string()).nowhere(),
+                clock: ast_path("clk"),
                 reset: Some((
-                    Expression::Identifier(Identifier("rst".to_string()).nowhere()).nowhere(),
+                    Expression::Identifier(ast_path("rst")).nowhere(),
                     Expression::IntLiteral(0).nowhere(),
                 )),
                 value: Expression::IntLiteral(1).nowhere(),
-                value_type: Some(Type::Named(Identifier("Type".to_string())).nowhere()),
+                value_type: Some(Type::Named(ast_path("Type").inner).nowhere()),
             }
             .nowhere(),
         )
@@ -1029,7 +1056,7 @@ mod tests {
     #[test]
     fn size_types_work() {
         let expected = Type::WithSize(
-            Box::new(Type::Named(Identifier("uint".to_string())).nowhere()),
+            Box::new(Type::Named(ast_path("uint").inner).nowhere()),
             Expression::IntLiteral(10).nowhere(),
         )
         .nowhere();

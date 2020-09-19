@@ -7,8 +7,27 @@ pub struct Identifier(pub String);
 impl WithLocation for Identifier {}
 
 #[derive(PartialEq, Debug, Clone)]
+pub struct Path(pub Vec<Loc<Identifier>>);
+impl WithLocation for Path {}
+
+impl Path {
+    pub fn as_strs(&self) -> Vec<&str> {
+        self.0.iter().map(|id| id.inner.0.as_ref()).collect()
+    }
+    pub fn as_strings(&self) -> Vec<String> {
+        self.0.iter().map(|id| id.inner.0.clone()).collect()
+    }
+}
+
+impl std::fmt::Display for Path {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.as_strs().join("::"))
+    }
+}
+
+#[derive(PartialEq, Debug, Clone)]
 pub enum Type {
-    Named(Identifier),
+    Named(Path),
     WithSize(Box<Loc<Type>>, Loc<Expression>),
     UnitType,
 }
@@ -16,7 +35,7 @@ impl WithLocation for Type {}
 
 #[derive(PartialEq, Debug, Clone)]
 pub enum Expression {
-    Identifier(Loc<Identifier>),
+    Identifier(Loc<Path>),
     IntLiteral(u128),
     If(Box<Loc<Expression>>, Box<Loc<Block>>, Box<Loc<Block>>),
     BinaryOperator(Box<Loc<Expression>>, TokenKind, Box<Loc<Expression>>),
@@ -50,7 +69,7 @@ impl WithLocation for Entity {}
 #[derive(PartialEq, Debug, Clone)]
 pub struct Register {
     pub name: Loc<Identifier>,
-    pub clock: Loc<Identifier>,
+    pub clock: Loc<Path>,
     pub reset: Option<(Loc<Expression>, Loc<Expression>)>,
     pub value: Loc<Expression>,
     pub value_type: Option<Loc<Type>>,

@@ -78,10 +78,10 @@ pub fn report_semantic_error(filename: &Path, file_content: &str, err: SemanticE
     let mut files = SimpleFiles::new();
     let file_id = files.add(filename.to_string_lossy(), file_content);
     let diag = match err {
-        SemanticError::UndefinedIdentifier(ident) => {
-            let (ident, span) = ident.split();
+        SemanticError::UndefinedPath(path) => {
+            let (path, span) = path.split();
             Diagnostic::error()
-                .with_message(format!("Use of undeclared identifier `{}`", ident.0))
+                .with_message(format!("Use of undeclared name `{}`", path))
                 .with_labels(vec![Label::primary(file_id, span)])
         }
         SemanticError::InvalidType(err, loc) => match err {

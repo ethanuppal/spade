@@ -66,6 +66,8 @@ pub enum TokenKind {
     Semi,
     #[token(":")]
     Colon,
+    #[token("::")]
+    PathSeparator,
 
     #[regex("[ \t\n\r]", logos::skip)]
     Whitespace,
@@ -106,6 +108,7 @@ impl TokenKind {
             TokenKind::Semi => ";",
             TokenKind::Colon => ":",
             TokenKind::Comma => ",",
+            TokenKind::PathSeparator => "::",
 
             TokenKind::Whitespace => "whitespace",
             TokenKind::Error => "error",

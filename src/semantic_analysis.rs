@@ -10,8 +10,8 @@ use crate::types::Type;
 
 #[derive(Error, Debug, PartialEq)]
 pub enum Error {
-    #[error("Undefined identifier {}", 0.0)]
-    UndefinedIdentifier(Loc<ast::Identifier>),
+    #[error("Undefined path {}", 0.0)]
+    UndefinedPath(Loc<ast::Path>),
     #[error("Type error")]
     InvalidType(#[source] TypeError, Loc<()>),
 }
@@ -19,14 +19,14 @@ pub enum Error {
 pub type Result<T> = std::result::Result<T, Error>;
 
 pub fn visit_entity(item: ast::Entity, symtab: &mut SymbolTable) -> Result<hir::Entity> {
-    symtab.add_symbol(item.name.map_ref(|x| x.0.clone()));
+    symtab.add_ident(&item.name);
     symtab.new_scope();
 
     let name = item.name.map(visit_identifier);
 
     let mut inputs = vec![];
     for (name, input_type) in item.inputs {
-        symtab.add_symbol(name.map_ref(|x| x.0.clone()));
+        symtab.add_ident(&name);
 
         let t = input_type
             .map(Type::convert_from_ast)
@@ -62,7 +62,7 @@ pub fn visit_statement(
     let (s, span) = s.split();
     match s {
         ast::Statement::Binding(ident, t, expr) => {
-            symtab.add_symbol(ident.map_ref(|x| x.0.clone()));
+            symtab.add_ident(&ident);
             let hir_type = if let Some(t) = t {
                 Some(t.map(Type::convert_from_ast).map_err(Error::InvalidType)?)
             } else {
@@ -117,11 +117,11 @@ pub fn visit_expression(e: ast::Expression, symtab: &mut SymbolTable) -> Result<
         ast::Expression::Block(block) => Ok(hir::Expression::Block(Box::new(visit_block(
             *block, symtab,
         )?))),
-        ast::Expression::Identifier(id) => {
-            if symtab.has_symbol(&id.inner.0) {
-                Ok(hir::Expression::Identifier(id.map(visit_identifier)))
+        ast::Expression::Identifier(path) => {
+            if symtab.has_path(&path.inner) {
+                Ok(hir::Expression::Identifier(path.map(visit_path)))
             } else {
-                Err(Error::UndefinedIdentifier(id))
+                Err(Error::UndefinedPath(path))
             }
         }
     }
@@ -147,6 +147,15 @@ pub fn visit_block(b: ast::Block, symtab: &mut SymbolTable) -> Result<hir::Block
 pub fn visit_identifier(id: ast::Identifier) -> hir::Identifier {
     hir::Identifier::Named(id.0)
 }
+pub fn visit_path(path: ast::Path) -> hir::Path {
+    let result = path
+        .0
+        .iter()
+        .cloned()
+        .map(|p| p.map(visit_identifier))
+        .collect();
+    hir::Path(result)
+}
 
 pub fn visit_register(
     reg: Loc<ast::Register>,
@@ -154,13 +163,13 @@ pub fn visit_register(
 ) -> Result<Loc<hir::Register>> {
     let (reg, loc) = reg.split();
 
-    symtab.add_symbol(reg.name.map_ref(|x| x.0.clone()));
+    symtab.add_ident(&reg.name);
     let name = reg.name.map(visit_identifier);
 
-    if !symtab.has_symbol(&reg.clock.inner.0) {
-        return Err(Error::UndefinedIdentifier(reg.clock));
+    if !symtab.has_path(&reg.clock.inner) {
+        return Err(Error::UndefinedPath(reg.clock));
     }
-    let clock = reg.clock.map(visit_identifier);
+    let clock = reg.clock.map(visit_path);
 
     let reset = if let Some((trig, value)) = reg.reset {
         Some((
@@ -206,6 +215,7 @@ mod entity_visiting {
     use super::*;
 
     use crate::location_info::WithLocation;
+    use crate::testutil::{ast_ident, ast_path, hir_ident};
 
     use pretty_assertions::assert_eq;
 
@@ -213,14 +223,11 @@ mod entity_visiting {
     fn entity_visits_work() {
         let input = ast::Entity {
             name: ast::Identifier("test".to_string()).nowhere(),
-            inputs: vec![(
-                ast::Identifier("a".to_string()).nowhere(),
-                ast::Type::UnitType.nowhere(),
-            )],
+            inputs: vec![(ast_ident("a"), ast::Type::UnitType.nowhere())],
             output_type: ast::Type::UnitType.nowhere(),
             block: ast::Block {
                 statements: vec![ast::Statement::Binding(
-                    ast::Identifier("var".to_string()).nowhere(),
+                    ast_ident("var"),
                     Some(ast::Type::UnitType.nowhere()),
                     ast::Expression::IntLiteral(0).nowhere(),
                 )
@@ -231,7 +238,7 @@ mod entity_visiting {
         };
 
         let expected = hir::Entity {
-            name: hir::Identifier::Named("test".to_string()).nowhere(),
+            name: hir_ident("test"),
             inputs: vec![
                 ((
                     hir::Identifier::Named("a".to_string()).nowhere(),
@@ -241,7 +248,7 @@ mod entity_visiting {
             output_type: Type::Unit.nowhere(),
             block: hir::Block {
                 statements: vec![hir::Statement::Binding(
-                    hir::Identifier::Named("var".to_string()).nowhere(),
+                    hir_ident("var"),
                     Some(Type::Unit.nowhere()),
                     hir::Expression::IntLiteral(0).nowhere(),
                 )
@@ -258,10 +265,10 @@ mod entity_visiting {
         assert_eq!(result, Ok(expected));
 
         // The entity symbol should be defined
-        assert!(symtab.has_symbol(&"test".to_string()));
+        assert!(symtab.has_path(&ast_path("test").inner));
         // But the local variables should not
-        assert!(!symtab.has_symbol(&"a".to_string()));
-        assert!(!symtab.has_symbol(&"var".to_string()));
+        assert!(!symtab.has_path(&ast_path("a").inner));
+        assert!(!symtab.has_path(&ast_path("var").inner));
     }
 }
 
@@ -271,28 +278,28 @@ mod statement_visiting {
 
     use crate::location_info::WithLocation;
 
-    use crate::testutil::{ast_ident, hir_ident};
+    use crate::testutil::{ast_ident, ast_path, hir_ident, hir_path};
 
     #[test]
     fn bindings_convert_correctly() {
         let mut symtab = SymbolTable::new();
 
         let input = ast::Statement::Binding(
-            ast::Identifier("a".to_string()).nowhere(),
+            ast_ident("a"),
             Some(ast::Type::UnitType.nowhere()),
             ast::Expression::IntLiteral(0).nowhere(),
         )
         .nowhere();
 
         let expected = hir::Statement::Binding(
-            hir::Identifier::Named("a".to_string()).nowhere(),
+            hir_ident("a"),
             Some(Type::Unit.nowhere()),
             hir::Expression::IntLiteral(0).nowhere(),
         )
         .nowhere();
 
         assert_eq!(visit_statement(input, &mut symtab), Ok(expected));
-        assert_eq!(symtab.has_symbol(&"a".to_string()), true);
+        assert_eq!(symtab.has_path(&ast_path("a").inner), true);
     }
 
     #[test]
@@ -300,7 +307,7 @@ mod statement_visiting {
         let input = ast::Statement::Register(
             ast::Register {
                 name: ast_ident("regname"),
-                clock: ast_ident("clk"),
+                clock: ast_path("clk"),
                 reset: None,
                 value: ast::Expression::IntLiteral(0).nowhere(),
                 value_type: None,
@@ -312,7 +319,7 @@ mod statement_visiting {
         let expected = hir::Statement::Register(
             hir::Register {
                 name: hir_ident("regname"),
-                clock: hir_ident("clk"),
+                clock: hir_path("clk"),
                 reset: None,
                 value: hir::Expression::IntLiteral(0).nowhere(),
                 value_type: None,
@@ -322,9 +329,9 @@ mod statement_visiting {
         .nowhere();
 
         let mut symtab = SymbolTable::new();
-        symtab.add_symbol(Loc::nowhere("clk".to_string()));
+        symtab.add_ident(&ast_ident("clk"));
         assert_eq!(visit_statement(input, &mut symtab), Ok(expected));
-        assert_eq!(symtab.has_symbol(&"regname".to_string()), true);
+        assert_eq!(symtab.has_path(&ast_path("regname").inner), true);
     }
 }
 
@@ -333,6 +340,7 @@ mod expression_visiting {
     use super::*;
 
     use crate::location_info::WithLocation;
+    use crate::testutil::{ast_ident, ast_path, hir_ident, hir_path};
 
     #[test]
     fn int_literals_work() {
@@ -372,10 +380,9 @@ mod expression_visiting {
     #[test]
     fn identifiers_work() {
         let mut symtab = SymbolTable::new();
-        symtab.add_symbol(Loc::nowhere("test".to_string()));
-        let input = ast::Expression::Identifier(ast::Identifier("test".to_string()).nowhere());
-        let expected =
-            hir::Expression::Identifier(hir::Identifier::Named("test".to_string()).nowhere());
+        symtab.add_ident(&ast_ident("test"));
+        let input = ast::Expression::Identifier(ast_path("test"));
+        let expected = hir::Expression::Identifier(hir_path("test"));
 
         assert_eq!(visit_expression(input, &mut symtab), Ok(expected));
     }
@@ -383,13 +390,11 @@ mod expression_visiting {
     #[test]
     fn identifiers_cause_error_if_undefined() {
         let mut symtab = SymbolTable::new();
-        let input = ast::Expression::Identifier(ast::Identifier("test".to_string()).nowhere());
+        let input = ast::Expression::Identifier(ast_path("test"));
 
         assert_eq!(
             visit_expression(input, &mut symtab),
-            Err(Error::UndefinedIdentifier(
-                ast::Identifier("test".to_string()).nowhere()
-            ))
+            Err(Error::UndefinedPath(ast_path("test")))
         );
     }
 
@@ -416,7 +421,7 @@ mod expression_visiting {
 
         let mut symtab = SymbolTable::new();
         assert_eq!(visit_expression(input, &mut symtab), Ok(expected));
-        assert!(!symtab.has_symbol(&"a".to_string()));
+        assert!(!symtab.has_path(&ast_path("a").inner));
     }
 
     #[test]
@@ -461,18 +466,20 @@ mod expression_visiting {
     }
 }
 
+#[cfg(test)]
 mod register_visiting {
     use super::*;
 
     use crate::location_info::WithLocation;
+    use crate::testutil::{ast_ident, ast_path, hir_ident, hir_path};
 
     #[test]
     fn register_visiting_works() {
         let input = ast::Register {
             name: ast::Identifier("test".to_string()).nowhere(),
-            clock: ast::Identifier("clk".to_string()).nowhere(),
+            clock: ast_path("clk"),
             reset: Some((
-                ast::Expression::Identifier(ast::Identifier("rst".to_string()).nowhere()).nowhere(),
+                ast::Expression::Identifier(ast_path("rst")).nowhere(),
                 ast::Expression::IntLiteral(0).nowhere(),
             )),
             value: ast::Expression::IntLiteral(1).nowhere(),
@@ -481,11 +488,10 @@ mod register_visiting {
         .nowhere();
 
         let expected = hir::Register {
-            name: hir::Identifier::Named("test".to_string()).nowhere(),
-            clock: hir::Identifier::Named("clk".to_string()).nowhere(),
+            name: hir_ident("test"),
+            clock: hir_path("clk"),
             reset: Some((
-                hir::Expression::Identifier(hir::Identifier::Named("rst".to_string()).nowhere())
-                    .nowhere(),
+                hir::Expression::Identifier(hir_path("rst")).nowhere(),
                 hir::Expression::IntLiteral(0).nowhere(),
             )),
             value: hir::Expression::IntLiteral(1).nowhere(),
@@ -494,8 +500,8 @@ mod register_visiting {
         .nowhere();
 
         let mut symtab = SymbolTable::new();
-        symtab.add_symbol(Loc::nowhere("clk".to_string()));
-        symtab.add_symbol(Loc::nowhere("rst".to_string()));
+        symtab.add_ident(&ast_ident("clk"));
+        symtab.add_ident(&ast_ident("rst"));
         assert_eq!(visit_register(input, &mut symtab), Ok(expected));
     }
 }

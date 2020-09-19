@@ -10,12 +10,15 @@ pub enum Identifier {
     Named(String),
     Anonymous(u64),
 }
-
 impl WithLocation for Identifier {}
 
 #[derive(PartialEq, Debug, Clone)]
+pub struct Path(pub Vec<Loc<Identifier>>);
+impl WithLocation for Path {}
+
+#[derive(PartialEq, Debug, Clone)]
 pub enum Expression {
-    Identifier(Loc<Identifier>),
+    Identifier(Loc<Path>),
     IntLiteral(u128),
     Add(Box<Loc<Expression>>, Box<Loc<Expression>>),
     Sub(Box<Loc<Expression>>, Box<Loc<Expression>>),
@@ -44,7 +47,7 @@ impl WithLocation for Statement {}
 #[derive(PartialEq, Debug, Clone)]
 pub struct Register {
     pub name: Loc<Identifier>,
-    pub clock: Loc<Identifier>,
+    pub clock: Loc<Path>,
     pub reset: Option<(Loc<Expression>, Loc<Expression>)>,
     pub value: Loc<Expression>,
     pub value_type: Option<Loc<Type>>,
