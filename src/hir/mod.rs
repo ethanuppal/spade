@@ -1,3 +1,6 @@
+pub mod expression;
+pub use expression::{Expression, ExprKind};
+
 /**
   Representation of the language with most language constructs still present, with
   more correctness guaranatees than the AST, such as types actually existing.
@@ -27,16 +30,6 @@ impl Path {
         )
     }
 }
-
-#[derive(PartialEq, Debug, Clone)]
-pub enum Expression {
-    Identifier(Loc<Path>),
-    IntLiteral(u128),
-    FnCall(Loc<Path>, Vec<Loc<Expression>>),
-    Block(Box<Block>),
-    If(Box<Loc<Expression>>, Box<Loc<Block>>, Box<Loc<Block>>),
-}
-impl WithLocation for Expression {}
 
 #[derive(PartialEq, Debug, Clone)]
 pub struct Block {

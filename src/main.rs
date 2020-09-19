@@ -20,6 +20,8 @@ pub mod types;
 #[cfg(test)]
 pub mod testutil;
 
+use semantic_analysis::visit_entity;
+
 #[derive(StructOpt)]
 #[structopt(name = "spade", about = "Compiler for the spade language")]
 struct Opt {
@@ -46,7 +48,8 @@ fn main() -> Result<()> {
     };
 
     let mut symtab = symbol_table::SymbolTable::new();
-    let hir = match semantic_analysis::visit_entity(entity_ast.inner, &mut symtab) {
+    let mut idtracker = semantic_analysis::IdTracker::new();
+    let hir = match visit_entity(entity_ast.inner, &mut symtab, &mut idtracker) {
         Ok(v) => v,
         Err(e) => {
             error_reporting::report_semantic_error(&opts.infile, &file_content, e);
