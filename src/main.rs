@@ -9,12 +9,14 @@ use structopt::StructOpt;
 pub mod ast;
 pub mod constant;
 pub mod error_reporting;
+pub mod global_symbols;
 pub mod hir;
 pub mod lexer;
 pub mod location_info;
 pub mod parser;
 pub mod semantic_analysis;
 pub mod symbol_table;
+pub mod typeinference;
 pub mod types;
 
 #[cfg(test)]
@@ -49,13 +51,14 @@ fn main() -> Result<()> {
 
     let mut symtab = symbol_table::SymbolTable::new();
     let mut idtracker = semantic_analysis::IdTracker::new();
-    let hir = match visit_entity(entity_ast.inner, &mut symtab, &mut idtracker) {
-        Ok(v) => v,
-        Err(e) => {
-            error_reporting::report_semantic_error(&opts.infile, &file_content, e);
-            return Err(anyhow!("aborting due to previous error"));
-        }
-    };
+    unimplemented!();
+    // let hir = match visit_entity(entity_ast.inner, &mut symtab, &mut idtracker) {
+    //     Ok(v) => v,
+    //     Err(e) => {
+    //         error_reporting::report_semantic_error(&opts.infile, &file_content, e);
+    //         return Err(anyhow!("aborting due to previous error"));
+    //     }
+    // };
 
     Ok(())
 }

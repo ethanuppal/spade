@@ -75,3 +75,16 @@ pub struct Register {
     pub value_type: Option<Loc<Type>>,
 }
 impl WithLocation for Register {}
+
+/// Items are things typically present at the top level of a module such as
+/// entities, pipelines, submodules etc.
+#[derive(PartialEq, Debug, Clone)]
+pub enum Item {
+    Entity(Loc<Entity>),
+}
+impl WithLocation for Item {}
+
+#[derive(PartialEq, Debug, Clone)]
+pub struct ModuleBody {
+    pub members: Vec<Item>,
+}

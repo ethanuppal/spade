@@ -4,7 +4,9 @@ use thiserror::Error;
 
 use parse_tree_macros::trace_parser;
 
-use crate::ast::{Block, Entity, Expression, Identifier, Path, Register, Statement, Type};
+use crate::ast::{
+    Block, Entity, Expression, Identifier, Item, ModuleBody, Path, Register, Statement, Type,
+};
 use crate::lexer::TokenKind;
 use crate::location_info::{lspan, Loc, WithLocation};
 
@@ -383,8 +385,13 @@ impl<'a> Parser<'a> {
 
     // Entities
     #[trace_parser]
-    pub fn entity(&mut self) -> Result<Loc<Entity>> {
-        let start_token = self.eat(&TokenKind::Entity)?;
+    pub fn entity(&mut self) -> Result<Option<Loc<Entity>>> {
+        let start_token = if let Some(t) = self.peek_and_eat_kind(&TokenKind::Entity)? {
+            t
+        } else {
+            return Ok(None);
+        };
+
         let name = self.identifier()?;
 
         // Input types
@@ -418,13 +425,29 @@ impl<'a> Parser<'a> {
             });
         };
 
-        Ok(Entity {
-            name,
-            inputs,
-            output_type: output_type.unwrap_or(Type::UnitType.nowhere()),
-            block,
+        Ok(Some(
+            Entity {
+                name,
+                inputs,
+                output_type: output_type.unwrap_or(Type::UnitType.nowhere()),
+                block,
+            }
+            .at(lspan(start_token.span).merge(block_span)),
+        ))
+    }
+
+    #[trace_parser]
+    pub fn item(&mut self) -> Result<Option<Item>> {
+        self.entity().map(|x| x.map(Item::Entity))
+    }
+
+    #[trace_parser]
+    pub fn module_body(&mut self) -> Result<ModuleBody> {
+        let mut members = vec![];
+        while let Some(item) = self.item()? {
+            members.push(item)
         }
-        .at(lspan(start_token.span).merge(block_span)))
+        Ok(ModuleBody { members })
     }
 }
 
@@ -959,7 +982,7 @@ mod tests {
         }
         .nowhere();
 
-        check_parse!(code, entity, Ok(expected));
+        check_parse!(code, entity, Ok(Some(expected)));
     }
 
     #[test]
@@ -986,7 +1009,7 @@ mod tests {
         }
         .nowhere();
 
-        check_parse!(code, entity, Ok(expected));
+        check_parse!(code, entity, Ok(Some(expected)));
     }
 
     #[test]
@@ -1060,5 +1083,40 @@ mod tests {
         )
         .nowhere();
         check_parse!("uint[10]", parse_type, Ok(expected));
+    }
+
+    #[test]
+    fn module_body_parsing_works() {
+        let code = include_str!("../parser_test_code/multiple_entities.sp");
+
+        let e1 = Entity {
+            name: Identifier("e1".to_string()).nowhere(),
+            inputs: vec![],
+            output_type: Type::UnitType.nowhere(),
+            block: Block {
+                statements: vec![],
+                result: Expression::IntLiteral(0).nowhere(),
+            }
+            .nowhere(),
+        }
+        .nowhere();
+
+        let e2 = Entity {
+            name: Identifier("e2".to_string()).nowhere(),
+            inputs: vec![],
+            output_type: Type::UnitType.nowhere(),
+            block: Block {
+                statements: vec![],
+                result: Expression::IntLiteral(1).nowhere(),
+            }
+            .nowhere(),
+        }
+        .nowhere();
+
+        let expected = ModuleBody {
+            members: vec![Item::Entity(e1), Item::Entity(e2)],
+        };
+
+        check_parse!(code, module_body, Ok(expected));
     }
 }

@@ -27,7 +27,7 @@ pub fn dummy() -> Span {
     Span::new(0, 0)
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Eq)]
 pub struct Loc<T> {
     pub inner: T,
     pub span: Span,
@@ -43,6 +43,10 @@ impl<T> Loc<T> {
 
     pub fn strip(self) -> T {
         self.inner
+    }
+
+    pub fn strip_ref(&self) -> &T {
+        &self.inner
     }
 
     pub fn separate(self) -> (Self, Span) {
@@ -96,6 +100,15 @@ where
 {
     fn eq(&self, other: &Self) -> bool {
         self.inner == other.inner
+    }
+}
+
+impl<T> std::hash::Hash for Loc<T>
+where
+    T: std::hash::Hash,
+{
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.inner.hash(state)
     }
 }
 

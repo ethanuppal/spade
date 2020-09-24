@@ -1,5 +1,10 @@
 pub mod expression;
+pub mod identifier;
+pub mod path;
+
 pub use expression::{ExprKind, Expression};
+pub use identifier::Identifier;
+pub use path::Path;
 
 /**
   Representation of the language with most language constructs still present, with
@@ -7,29 +12,6 @@ pub use expression::{ExprKind, Expression};
 */
 use crate::location_info::{Loc, WithLocation};
 use crate::types::Type;
-
-#[derive(PartialEq, Debug, Clone)]
-pub enum Identifier {
-    Named(String),
-    Anonymous(u64),
-}
-impl WithLocation for Identifier {}
-
-#[derive(PartialEq, Debug, Clone)]
-pub struct Path(pub Vec<Loc<Identifier>>);
-impl WithLocation for Path {}
-impl Path {
-    pub fn from_strs(names: &[&str]) -> Self {
-        Self(
-            names
-                .iter()
-                .map(|s| s.to_string())
-                .map(Identifier::Named)
-                .map(Loc::nowhere)
-                .collect(),
-        )
-    }
-}
 
 #[derive(PartialEq, Debug, Clone)]
 pub struct Block {
