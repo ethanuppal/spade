@@ -8,6 +8,21 @@ use crate::symbol_table::SymbolTable;
 use crate::types::Error as TypeError;
 use crate::types::Type;
 
+impl<T> Loc<T> {
+    fn try_visit<V, U>(
+        self,
+        visitor: V,
+        symtab: &mut SymbolTable,
+        idtracker: &mut IdTracker,
+    ) -> Result<Loc<U>>
+    where
+        V: Fn(T, &mut SymbolTable, &mut IdTracker) -> Result<U>,
+    {
+        self.map(|t| visitor(t, symtab, idtracker))
+            .map_err(|e, _| e)
+    }
+}
+
 #[derive(Error, Debug, PartialEq)]
 pub enum Error {
     #[error("Undefined path {}", 0.0)]
@@ -59,10 +74,7 @@ pub fn visit_entity(
         .map(Type::convert_from_ast)
         .map_err(Error::InvalidType)?;
 
-    let block = item
-        .block
-        .map(|block| visit_block(block, symtab, idtracker))
-        .map_err(|e, _| e)?;
+    let block = item.block.try_visit(visit_block, symtab, idtracker)?;
 
     symtab.close_scope();
 
@@ -80,10 +92,11 @@ pub fn visit_item(
     idtracker: &mut IdTracker,
 ) -> Result<hir::Item> {
     match item {
-        ast::Item::Entity(e) => Ok(hir::Item::Entity(
-            e.map(|e| visit_entity(e, symtab, idtracker))
-                .map_err(|e, _| e)?,
-        )),
+        ast::Item::Entity(e) => Ok(hir::Item::Entity(e.try_visit(
+            visit_entity,
+            symtab,
+            idtracker,
+        )?)),
     }
 }
 
@@ -103,9 +116,7 @@ pub fn visit_statement(
             };
             let name = ident.map(visit_identifier);
 
-            let expr = expr
-                .map(|e| visit_expression(e, symtab, idtracker))
-                .map_err(|e, _| e)?;
+            let expr = expr.try_visit(visit_expression, symtab, idtracker)?;
 
             Ok(Loc::new(
                 hir::Statement::Binding(name, hir_type, expr),
@@ -127,12 +138,8 @@ pub fn visit_expression(
     match e {
         ast::Expression::IntLiteral(val) => Ok(hir::ExprKind::IntLiteral(val)),
         ast::Expression::BinaryOperator(lhs, tok, rhs) => {
-            let lhs = lhs
-                .map(|x| visit_expression(x, symtab, idtracker))
-                .map_err(|e, _| e)?;
-            let rhs = rhs
-                .map(|x| visit_expression(x, symtab, idtracker))
-                .map_err(|e, _| e)?;
+            let lhs = lhs.try_visit(visit_expression, symtab, idtracker)?;
+            let rhs = rhs.try_visit(visit_expression, symtab, idtracker)?;
 
             let intrinsic = |name| {
                 hir::ExprKind::FnCall(
@@ -151,15 +158,9 @@ pub fn visit_expression(
             }
         }
         ast::Expression::If(cond, ontrue, onfalse) => {
-            let cond = cond
-                .map(|x| visit_expression(x, symtab, idtracker))
-                .map_err(|e, _| e)?;
-            let ontrue = ontrue
-                .map(|x| visit_block(x, symtab, idtracker))
-                .map_err(|e, _| e)?;
-            let onfalse = onfalse
-                .map(|x| visit_block(x, symtab, idtracker))
-                .map_err(|e, _| e)?;
+            let cond = cond.try_visit(visit_expression, symtab, idtracker)?;
+            let ontrue = ontrue.try_visit(visit_block, symtab, idtracker)?;
+            let onfalse = onfalse.try_visit(visit_block, symtab, idtracker)?;
 
             Ok(hir::ExprKind::If(
                 Box::new(cond),
@@ -192,10 +193,7 @@ pub fn visit_block(
         statements.push(visit_statement(statement, symtab, idtracker)?)
     }
 
-    let result = b
-        .result
-        .map(|e| visit_expression(e, symtab, idtracker))
-        .map_err(|e, _| e)?;
+    let result = b.result.try_visit(visit_expression, symtab, idtracker)?;
 
     symtab.close_scope();
 
@@ -232,20 +230,14 @@ pub fn visit_register(
 
     let reset = if let Some((trig, value)) = reg.reset {
         Some((
-            trig.map(|e| visit_expression(e, symtab, idtracker))
-                .map_err(|e, _| e)?,
-            value
-                .map(|e| visit_expression(e, symtab, idtracker))
-                .map_err(|e, _| e)?,
+            trig.try_visit(visit_expression, symtab, idtracker)?,
+            value.try_visit(visit_expression, symtab, idtracker)?,
         ))
     } else {
         None
     };
 
-    let value = reg
-        .value
-        .map(|e| visit_expression(e, symtab, idtracker))
-        .map_err(|e, _| e)?;
+    let value = reg.value.try_visit(visit_expression, symtab, idtracker)?;
 
     let value_type = if let Some(value_type) = reg.value_type {
         Some(
