@@ -100,6 +100,20 @@ pub fn visit_item(
     }
 }
 
+pub fn visit_module_body(
+    module: ast::ModuleBody,
+    symtab: &mut SymbolTable,
+    idtracker: &mut IdTracker,
+) -> Result<hir::ModuleBody> {
+    Ok(hir::ModuleBody {
+        members: module
+            .members
+            .into_iter()
+            .map(|i| visit_item(i, symtab, idtracker))
+            .collect::<Result<Vec<_>>>()?,
+    })
+}
+
 pub fn visit_statement(
     s: Loc<ast::Statement>,
     symtab: &mut SymbolTable,
@@ -640,5 +654,57 @@ mod item_visiting {
         let mut symtab = SymbolTable::new();
         let mut idtracker = IdTracker::new();
         assert_eq!(visit_item(input, &mut symtab, &mut idtracker), Ok(expected));
+    }
+}
+
+#[cfg(test)]
+mod module_visiting {
+    use super::*;
+
+    use crate::location_info::WithLocation;
+    use crate::testutil::{ast_ident, ast_path, hir_ident};
+
+    use pretty_assertions::assert_eq;
+
+    #[test]
+    fn visiting_module_with_one_entity_works() {
+        let input = ast::ModuleBody {
+            members: vec![ast::Item::Entity(
+                ast::Entity {
+                    name: ast_ident("test"),
+                    output_type: ast::Type::UnitType.nowhere(),
+                    inputs: vec![],
+                    block: ast::Block {
+                        statements: vec![],
+                        result: ast::Expression::IntLiteral(0).nowhere(),
+                    }
+                    .nowhere(),
+                }
+                .nowhere(),
+            )],
+        };
+
+        let expected = hir::ModuleBody {
+            members: vec![hir::Item::Entity(
+                hir::Entity {
+                    name: hir_ident("test"),
+                    output_type: Type::Unit.nowhere(),
+                    inputs: vec![],
+                    block: hir::Block {
+                        statements: vec![],
+                        result: hir::ExprKind::IntLiteral(0).idless().nowhere(),
+                    }
+                    .nowhere(),
+                }
+                .nowhere(),
+            )],
+        };
+
+        let mut symtab = SymbolTable::new();
+        let mut idtracker = IdTracker::new();
+        assert_eq!(
+            visit_module_body(input, &mut symtab, &mut idtracker),
+            Ok(expected)
+        );
     }
 }
