@@ -8,11 +8,14 @@ pub enum TypeKind {
     Unknown(u64),
 }
 
-enum Thing {
+enum TypedExpression {
     Id(u64),
     Name(Path),
 }
 
 pub struct TypeMap {
-    inner: HashMap<u64, TypeKind>,
+    // Map between a subexpression or identifier and a type variable
+    inner: HashMap<TypedExpression, u64>,
 }
+
+// https://eli.thegreenplace.net/2018/type-inference/

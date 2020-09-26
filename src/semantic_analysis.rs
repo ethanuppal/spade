@@ -74,6 +74,19 @@ pub fn visit_entity(
     })
 }
 
+pub fn visit_item(
+    item: ast::Item,
+    symtab: &mut SymbolTable,
+    idtracker: &mut IdTracker,
+) -> Result<hir::Item> {
+    match item {
+        ast::Item::Entity(e) => Ok(hir::Item::Entity(
+            e.map(|e| visit_entity(e, symtab, idtracker))
+                .map_err(|e, _| e)?,
+        )),
+    }
+}
+
 pub fn visit_statement(
     s: Loc<ast::Statement>,
     symtab: &mut SymbolTable,
@@ -591,5 +604,49 @@ mod register_visiting {
             visit_register(input, &mut symtab, &mut idtracker),
             Ok(expected)
         );
+    }
+}
+
+#[cfg(test)]
+mod item_visiting {
+    use super::*;
+
+    use crate::location_info::WithLocation;
+    use crate::testutil::{ast_ident, ast_path, hir_ident};
+
+    use pretty_assertions::assert_eq;
+
+    pub fn item_entity_visiting_works() {
+        let input = ast::Item::Entity(
+            ast::Entity {
+                name: ast_ident("test"),
+                output_type: ast::Type::UnitType.nowhere(),
+                inputs: vec![],
+                block: ast::Block {
+                    statements: vec![],
+                    result: ast::Expression::IntLiteral(0).nowhere(),
+                }
+                .nowhere(),
+            }
+            .nowhere(),
+        );
+
+        let expected = hir::Item::Entity(
+            hir::Entity {
+                name: hir_ident("test"),
+                output_type: Type::Unit.nowhere(),
+                inputs: vec![],
+                block: hir::Block {
+                    statements: vec![],
+                    result: hir::ExprKind::IntLiteral(0).idless().nowhere(),
+                }
+                .nowhere(),
+            }
+            .nowhere(),
+        );
+
+        let mut symtab = SymbolTable::new();
+        let mut idtracker = IdTracker::new();
+        assert_eq!(visit_item(input, &mut symtab, &mut idtracker), Ok(expected));
     }
 }
