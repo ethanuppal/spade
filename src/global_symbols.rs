@@ -19,7 +19,7 @@ pub enum Error {
     TypeError(#[from] types::Error),
 }
 
-struct GlobalSymbols {
+pub struct GlobalSymbols {
     inner: HashMap<Path, (Loc<()>, Type)>,
 }
 

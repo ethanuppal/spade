@@ -1,9 +1,16 @@
-use crate::location_info::WithLocation;
+use crate::hir::Path;
+use crate::location_info::{Loc, WithLocation};
 
 #[derive(PartialEq, Debug, Clone, Eq, Hash)]
 pub enum Identifier {
     Named(String),
     Anonymous(u64),
+}
+
+impl Loc<Identifier> {
+    pub fn to_path(self) -> Path {
+        Path(vec![self])
+    }
 }
 
 impl WithLocation for Identifier {}
