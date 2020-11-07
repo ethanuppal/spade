@@ -74,7 +74,7 @@ pub fn visit_entity(
         .map(Type::convert_from_ast)
         .map_err(Error::InvalidType)?;
 
-    let block = item.block.try_visit(visit_block, symtab, idtracker)?;
+    let body = item.body.try_visit(visit_expression, symtab, idtracker)?;
 
     symtab.close_scope();
 
@@ -82,7 +82,7 @@ pub fn visit_entity(
         name,
         inputs,
         output_type,
-        block,
+        body,
     })
 }
 
@@ -290,7 +290,7 @@ mod entity_visiting {
             name: ast::Identifier("test".to_string()).nowhere(),
             inputs: vec![(ast_ident("a"), ast::Type::UnitType.nowhere())],
             output_type: ast::Type::UnitType.nowhere(),
-            block: ast::Block {
+            body: ast::Expression::Block(Box::new(ast::Block {
                 statements: vec![ast::Statement::Binding(
                     ast_ident("var"),
                     Some(ast::Type::UnitType.nowhere()),
@@ -298,7 +298,7 @@ mod entity_visiting {
                 )
                 .nowhere()],
                 result: ast::Expression::IntLiteral(0).nowhere(),
-            }
+            }))
             .nowhere(),
         };
 
@@ -311,7 +311,7 @@ mod entity_visiting {
                 )),
             ],
             output_type: Type::Unit.nowhere(),
-            block: hir::Block {
+            body: hir::ExprKind::Block(Box::new(hir::Block {
                 statements: vec![hir::Statement::Binding(
                     hir_ident("var"),
                     Some(Type::Unit.nowhere()),
@@ -319,7 +319,8 @@ mod entity_visiting {
                 )
                 .nowhere()],
                 result: hir::ExprKind::IntLiteral(0).idless().nowhere(),
-            }
+            }))
+            .idless()
             .nowhere(),
         };
 
@@ -628,10 +629,10 @@ mod item_visiting {
                 name: ast_ident("test"),
                 output_type: ast::Type::UnitType.nowhere(),
                 inputs: vec![],
-                block: ast::Block {
+                body: ast::Expression::Block(Box::new(ast::Block {
                     statements: vec![],
                     result: ast::Expression::IntLiteral(0).nowhere(),
-                }
+                }))
                 .nowhere(),
             }
             .nowhere(),
@@ -642,10 +643,11 @@ mod item_visiting {
                 name: hir_ident("test"),
                 output_type: Type::Unit.nowhere(),
                 inputs: vec![],
-                block: hir::Block {
+                body: hir::ExprKind::Block(Box::new(hir::Block {
                     statements: vec![],
                     result: hir::ExprKind::IntLiteral(0).idless().nowhere(),
-                }
+                }))
+                .idless()
                 .nowhere(),
             }
             .nowhere(),
@@ -674,10 +676,10 @@ mod module_visiting {
                     name: ast_ident("test"),
                     output_type: ast::Type::UnitType.nowhere(),
                     inputs: vec![],
-                    block: ast::Block {
+                    body: ast::Expression::Block(Box::new(ast::Block {
                         statements: vec![],
                         result: ast::Expression::IntLiteral(0).nowhere(),
-                    }
+                    }))
                     .nowhere(),
                 }
                 .nowhere(),
@@ -690,10 +692,11 @@ mod module_visiting {
                     name: hir_ident("test"),
                     output_type: Type::Unit.nowhere(),
                     inputs: vec![],
-                    block: hir::Block {
+                    body: hir::ExprKind::Block(Box::new(hir::Block {
                         statements: vec![],
                         result: hir::ExprKind::IntLiteral(0).idless().nowhere(),
-                    }
+                    }))
+                    .idless()
                     .nowhere(),
                 }
                 .nowhere(),

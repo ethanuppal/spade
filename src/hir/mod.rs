@@ -42,7 +42,7 @@ pub struct Entity {
     pub name: Loc<Identifier>,
     pub inputs: Vec<(Loc<Identifier>, Loc<Type>)>,
     pub output_type: Loc<Type>,
-    pub block: Loc<Block>,
+    pub body: Loc<Expression>,
 }
 impl WithLocation for Entity {}
 

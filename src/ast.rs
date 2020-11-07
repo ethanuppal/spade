@@ -62,7 +62,9 @@ pub struct Entity {
     pub name: Loc<Identifier>,
     pub inputs: Vec<(Loc<Identifier>, Loc<Type>)>,
     pub output_type: Loc<Type>,
-    pub block: Loc<Block>,
+    /// The body is an expression for ID assignment purposes, but semantic analysis
+    /// ensures that it is always a block.
+    pub body: Loc<Expression>,
 }
 impl WithLocation for Entity {}
 

@@ -430,7 +430,7 @@ impl<'a> Parser<'a> {
                 name,
                 inputs,
                 output_type: output_type.unwrap_or(Type::UnitType.nowhere()),
-                block,
+                body: block.map(|inner| Expression::Block(Box::new(inner))),
             }
             .at(lspan(start_token.span).merge(block_span)),
         ))
@@ -961,7 +961,7 @@ mod tests {
             name: Identifier("no_inputs".to_string()).nowhere(),
             inputs: vec![],
             output_type: Type::UnitType.nowhere(),
-            block: Block {
+            body: Expression::Block(Box::new(Block {
                 statements: vec![
                     Statement::Binding(
                         ast_ident("test"),
@@ -977,7 +977,7 @@ mod tests {
                     .nowhere(),
                 ],
                 result: Expression::Identifier(ast_path("test")).nowhere(),
-            }
+            }))
             .nowhere(),
         }
         .nowhere();
@@ -1001,10 +1001,10 @@ mod tests {
                 ),
             ],
             output_type: Type::Named(ast_path("bool").inner).nowhere(),
-            block: Block {
+            body: Expression::Block(Box::new(Block {
                 statements: vec![],
                 result: Expression::Identifier(ast_path("clk")).nowhere(),
-            }
+            }))
             .nowhere(),
         }
         .nowhere();
@@ -1093,10 +1093,10 @@ mod tests {
             name: Identifier("e1".to_string()).nowhere(),
             inputs: vec![],
             output_type: Type::UnitType.nowhere(),
-            block: Block {
+            body: Expression::Block(Box::new(Block {
                 statements: vec![],
                 result: Expression::IntLiteral(0).nowhere(),
-            }
+            }))
             .nowhere(),
         }
         .nowhere();
@@ -1105,10 +1105,10 @@ mod tests {
             name: Identifier("e2".to_string()).nowhere(),
             inputs: vec![],
             output_type: Type::UnitType.nowhere(),
-            block: Block {
+            body: Expression::Block(Box::new(Block {
                 statements: vec![],
                 result: Expression::IntLiteral(1).nowhere(),
-            }
+            }))
             .nowhere(),
         }
         .nowhere();
