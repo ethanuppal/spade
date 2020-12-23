@@ -6,12 +6,13 @@ pub use expression::{ExprKind, Expression};
 pub use identifier::Identifier;
 pub use path::Path;
 
+use crate::location_info::{Loc, WithLocation};
+use crate::types::Type;
+
 /**
   Representation of the language with most language constructs still present, with
   more correctness guaranatees than the AST, such as types actually existing.
 */
-use crate::location_info::{Loc, WithLocation};
-use crate::types::Type;
 
 #[derive(PartialEq, Debug, Clone)]
 pub struct Block {
