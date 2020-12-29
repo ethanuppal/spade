@@ -9,6 +9,7 @@ use crate::location_info::WithLocation;
 pub enum Type {
     Unit,
     Bit,
+    Bool,
     // Primitive types
     /// Fixed length bit vector
     BitVector(u128),

@@ -40,3 +40,22 @@ pub fn trace_parser (attrs: TokenStream, input: TokenStream) -> TokenStream {
     });
     input.into_token_stream().into()
 }
+
+
+
+#[proc_macro_attribute]
+pub fn trace_typechecker (attrs: TokenStream, input: TokenStream) -> TokenStream {
+    parse_macro_input!(attrs as parse::Nothing);
+    let mut input = parse_macro_input!(input as ImplItemMethod);
+    let block = &mut input.block;
+
+    let function_name = format!("{}", input.sig.ident);
+
+    *block = parse_quote!({
+        self.trace_stack.push(TraceStack::Enter(#function_name.to_string()));
+        let ret: Result<_> = (|| #block)();
+        self.trace_stack.push(TraceStack::Exit);
+        ret
+    });
+    input.into_token_stream().into()
+}

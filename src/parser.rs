@@ -175,7 +175,7 @@ impl<'a> Parser<'a> {
         if let Some(start) = self.peek_and_eat_kind(&TokenKind::If)? {
             let cond = self.expression()?;
             let on_true = self.expression()?;
-            let else_tok = self.eat(&TokenKind::Else)?;
+            self.eat(&TokenKind::Else)?;
             let (on_false, end_span) = self.expression()?.separate();
 
             Ok(Some(

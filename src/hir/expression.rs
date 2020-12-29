@@ -45,6 +45,6 @@ impl PartialEq for Expression {
 #[cfg(test)]
 impl Expression {
     pub fn ident(id: u64, name: &str) -> Expression {
-        ExprKind::Identifier(Path::from_strs(&[name]).nowhere()).with_id(0)
+        ExprKind::Identifier(Path::from_strs(&[name]).nowhere()).with_id(id)
     }
 }

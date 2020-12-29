@@ -4,7 +4,7 @@ use thiserror::Error;
 
 use crate::ast::Entity;
 use crate::hir::Path;
-use crate::location_info::{Loc, WithLocation};
+use crate::location_info::Loc;
 use crate::types::{self, Type};
 
 #[derive(Error, Debug, Clone, PartialEq)]

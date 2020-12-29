@@ -31,6 +31,7 @@ struct Opt {
     pub infile: PathBuf,
 }
 
+#[allow(dead_code, unused_variables, unused_mut)]
 fn main() -> Result<()> {
     let opts = Opt::from_args();
 
@@ -60,5 +61,5 @@ fn main() -> Result<()> {
     //     }
     // };
 
-    Ok(())
+    // Ok(())
 }
