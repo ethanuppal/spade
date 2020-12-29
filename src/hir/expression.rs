@@ -5,6 +5,7 @@ use crate::location_info::{Loc, WithLocation};
 pub enum ExprKind {
     Identifier(Loc<Path>),
     IntLiteral(u128),
+    BoolLiteral(bool),
     FnCall(Loc<Path>, Vec<Loc<Expression>>),
     Block(Box<Block>),
     If(
@@ -37,5 +38,13 @@ impl WithLocation for Expression {}
 impl PartialEq for Expression {
     fn eq(&self, other: &Self) -> bool {
         self.kind == other.kind
+    }
+}
+
+// Helper constructors used in tests
+#[cfg(test)]
+impl Expression {
+    pub fn ident(id: u64, name: &str) -> Expression {
+        ExprKind::Identifier(Path::from_strs(&[name]).nowhere()).with_id(0)
     }
 }

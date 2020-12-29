@@ -1,5 +1,7 @@
 use std::collections::HashMap;
 
+use thiserror::Error;
+
 use crate::hir::Block;
 use crate::hir::Path;
 use crate::hir::{Entity, Item};
@@ -8,19 +10,31 @@ use crate::location_info::Loc;
 use crate::types::Type;
 use crate::{global_symbols::GlobalSymbols, hir::Statement};
 
-#[derive(PartialEq, Debug)]
+#[derive(Debug, Error, PartialEq, Clone)]
+pub enum Error {
+    #[error("The specified expression has no type information {}", 0.0)]
+    UnknownType(TypedExpression),
+}
+pub type Result<T> = std::result::Result<T, Error>;
+
+pub type TypeEquations = HashMap<TypedExpression, TypeVar>;
+
+#[derive(PartialEq, Debug, Clone)]
 pub enum TypeVar {
-    /// The type is fully known and is the specified type
-    Known(Loc<Type>),
+    /// The type is known and specified by the user
+    Specified(Loc<Type>),
+    /// The type is known from the expression
+    Known(Type),
     /// The type is completely unknown
-    Unknown,
-    /// The type is compatible with another typed expression
-    Compatible(TypedExpression),
-    /// The types are exactly identical
-    Equal(TypedExpression),
+    Generic,
 }
 
-#[derive(Eq, PartialEq, Hash, Debug)]
+pub enum Term {
+    Variable,
+    Function { t: TypeVar, args: Vec<Term> },
+}
+
+#[derive(Eq, PartialEq, Hash, Debug, Clone)]
 pub enum TypedExpression {
     Id(u64),
     Name(Path),
@@ -28,7 +42,7 @@ pub enum TypedExpression {
 
 pub struct TypeState<'a> {
     next_type_id: u64,
-    equations: HashMap<TypedExpression, TypeVar>,
+    equations: TypeEquations,
     global_symbols: &'a GlobalSymbols,
     next_typeid: u64,
 }
@@ -43,6 +57,16 @@ impl<'a> TypeState<'a> {
         }
     }
 
+    /// Returns the type of the expression with the specified id. Error if unknown
+    pub fn type_of(&self, expr: TypedExpression) -> Result<TypeVar> {
+        for (e, t) in &self.equations {
+            if e == &expr {
+                return Ok(t.clone());
+            }
+        }
+        Err(Error::UnknownType(expr).into())
+    }
+
     /// Visit an item to assign type variables and equations to every subexpression
     /// in the item
     pub fn visit_item(&mut self, item: &Item) {
@@ -52,44 +76,20 @@ impl<'a> TypeState<'a> {
     }
 
     pub fn visit_entity(&mut self, entity: &Entity) {
-        // Create equations for all inputs
-        for (name, t) in &entity.inputs {
-            self.add_equation(
-                TypedExpression::Name(name.clone().to_path()),
-                TypeVar::Known(t.clone()),
-            );
-        }
-
-        // Equate the type of the block with the return type of the entity
-        self.add_equation(
-            TypedExpression::Id(entity.body.inner.id),
-            TypeVar::Known(entity.output_type.clone()),
-        );
+        unimplemented! {}
     }
 
     pub fn visit_expression(&mut self, expression: &Expression) {
-        // Add an equation for the value itself
-        self.add_unknown(TypedExpression::Id(expression.id));
-
         // Recurse down the expression
         match &expression.kind {
             ExprKind::Identifier(ident) => {
-                let as_type_expr = TypedExpression::Name(ident.inner.clone());
-                // Look up the type of the identifier as a sanity check
-                if let None = self.equations.get(&as_type_expr) {
-                    panic!(
-                        "Type variable for {} has not been added but is referenced by expression {:?}",
-                        ident.inner,
-                        expression
-                    );
-                }
-
-                self.add_equation(
-                    TypedExpression::Id(expression.id),
-                    TypeVar::Compatible(as_type_expr),
-                );
+                unimplemented! {}
             }
-            ExprKind::IntLiteral(_) => {
+            ExprKind::IntLiteral(_) => self.add_equation(
+                TypedExpression::Id(expression.id),
+                TypeVar::Known(Type::KnownInt),
+            ),
+            ExprKind::BoolLiteral(_) => {
                 unimplemented! {}
             }
             ExprKind::FnCall(_, _) => {
@@ -109,31 +109,7 @@ impl<'a> TypeState<'a> {
     }
 
     pub fn visit_statement(&mut self, statement: &Statement) {
-        match statement {
-            Statement::Binding(name, None, expr) => {
-                self.add_equation(
-                    TypedExpression::Name(name.clone().to_path()),
-                    TypeVar::Equal(TypedExpression::Id(expr.inner.id)),
-                );
-
-                self.visit_expression(&expr.inner);
-            }
-            Statement::Binding(name, Some(t), expr) => {
-                self.add_equation(
-                    TypedExpression::Name(name.clone().to_path()),
-                    TypeVar::Known(t.clone()),
-                );
-                self.add_equation(
-                    TypedExpression::Id(expr.inner.id),
-                    TypeVar::Equal(TypedExpression::Name(name.clone().to_path())),
-                );
-
-                self.visit_expression(&expr.inner)
-            }
-            Statement::Register(_) => {
-                todo! {}
-            }
-        }
+        unimplemented!()
     }
 }
 
@@ -148,12 +124,6 @@ impl<'a> TypeState<'a> {
     fn add_equation(&mut self, expression: TypedExpression, var: TypeVar) {
         self.equations.insert(expression, var);
     }
-
-    /// Adds an equation for `expression` having an unknown type
-    fn add_unknown(&mut self, expression: TypedExpression) {
-        let id = self.new_typeid();
-        self.equations.insert(expression, TypeVar::Unknown);
-    }
 }
 
 #[cfg(test)]
@@ -163,6 +133,7 @@ impl<'a> TypeState<'a> {
     }
 }
 
+// https://www.youtube.com/watch?v=xJXcZp2vgLs
 // https://eli.thegreenplace.net/2018/type-inference/
 
 #[cfg(test)]
@@ -178,95 +149,162 @@ mod type_equation_generation {
         testutil::{hir_ident, hir_path},
     };
 
-    macro_rules! type_eqs {
-        ($($eq:expr),*$(,)?) => {
-            vec![$($eq),*].into_iter().collect::<HashMap<_, _>>()
-        }
-    }
-
     #[test]
-    fn identifier_expression_gets_correct_type_equation() {
+    fn int_literals_have_type_known_int() {
         let symtab = GlobalSymbols::new();
         let mut state = TypeState::new(&symtab);
 
-        let ident = Path::from_strs(&["a"]);
-        // Pre-add a varialbe for the identifier
-        state.add_unknown(TypedExpression::Name(ident.clone()));
+        let input = ExprKind::IntLiteral(0).with_id(0);
 
-        let input = ExprKind::Identifier(ident.clone().nowhere()).with_id(0);
         state.visit_expression(&input);
 
-        let expected = type_eqs![
-            (
-                TExpr::Id(0),
-                TVar::Compatible(TypedExpression::Name(ident.clone()))
-            ),
-            (TExpr::Name(ident), TVar::Unknown),
-        ];
-
-        assert_eq!(state.get_equations(), &expected);
+        assert_eq!(state.type_of(TExpr::Id(0)), Ok(TVar::Known(Type::KnownInt)));
     }
 
     #[test]
-    fn visiting_untyped_bindings_works() {
-        let symtab = GlobalSymbols::new();
-        let mut state = TypeState::new(&symtab);
+    fn if_statements_have_correctly_infered_types() {
+        // let symtab = GlobalSymbols::new();
+        // let mut state = TypeState::new(&symtab);
 
-        let lhs = hir_path("a");
-        let rhs = hir_path("b");
+        // let input = ExprKind::If(
+        //     Box::new(Expression::ident(0, "a").nowhere()),
+        //     Box::new(Expression::ident(1, "b").nowhere()),
+        //     Box::new(Expression::ident(2, "c").nowhere())
+        // );
+        // let input = ExprKind::IntLiteral(0).with_id(0);
 
-        state.add_unknown(TypedExpression::Name(rhs.inner.clone()));
-
-        let stmt = Statement::Binding(
-            Identifier::Named("a".to_string()).nowhere(),
-            None,
-            ExprKind::Identifier(rhs.clone()).with_id(0).nowhere(),
-        );
-
-        state.visit_statement(&stmt);
-
-        let expected = type_eqs![
-            (TExpr::Name(lhs.inner), TVar::Equal(TExpr::Id(0))),
-            (
-                TExpr::Id(0),
-                TypeVar::Compatible(TExpr::Name(rhs.inner.clone()))
-            ),
-            (TExpr::Name(rhs.inner), TVar::Unknown)
-        ];
-
-        assert_eq!(state.get_equations(), &expected);
+        // state.visit_expression(&input);
+        //         result: Expression::ident(1, "b").nowhere()
+        // assert_eq!(state.type_of(TExpr::Id(0)), Ok(TVar::Known(Type::KnownInt)));
     }
 
+    // #[test]
+    // fn identifier_expression_gets_correct_type_equation() {
+    //     let symtab = GlobalSymbols::new();
+    //     let mut state = TypeState::new(&symtab);
+
+    //     let ident = Path::from_strs(&["a"]);
+    //     // Pre-add a varialbe for the identifier
+    //     state.add_unknown(TypedExpression::Name(ident.clone()));
+
+    //     let input = ExprKind::Identifier(ident.clone().nowhere()).with_id(0);
+    //     state.visit_expression(&input);
+
+    //     let expected = type_eqs![
+    //         (
+    //             TExpr::Id(0),
+    //             TVar::Compatible(TypedExpression::Name(ident.clone()))
+    //         ),
+    //         (TExpr::Name(ident), TVar::Unknown),
+    //     ];
+
+    //     assert_eq!(state.get_equations(), &expected);
+    // }
+
+    // #[test]
+    // fn visiting_untyped_bindings_works() {
+    //     let symtab = GlobalSymbols::new();
+    //     let mut state = TypeState::new(&symtab);
+
+    //     let lhs = hir_path("a");
+    //     let rhs = hir_path("b");
+
+    //     state.add_unknown(TypedExpression::Name(rhs.inner.clone()));
+
+    //     let stmt = Statement::Binding(
+    //         Identifier::Named("a".to_string()).nowhere(),
+    //         None,
+    //         ExprKind::Identifier(rhs.clone()).with_id(0).nowhere(),
+    //     );
+
+    //     state.visit_statement(&stmt);
+
+    //     let expected = type_eqs![
+    //         (TExpr::Name(lhs.inner), TVar::Equal(TExpr::Id(0))),
+    //         (
+    //             TExpr::Id(0),
+    //             TypeVar::Compatible(TExpr::Name(rhs.inner.clone()))
+    //         ),
+    //         (TExpr::Name(rhs.inner), TVar::Unknown)
+    //     ];
+
+    //     assert_eq!(state.get_equations(), &expected);
+    // }
+
+    // #[test]
+    // fn visiting_typed_bindings_works() {
+    //     let symtab = GlobalSymbols::new();
+    //     let mut state = TypeState::new(&symtab);
+
+    //     let lhs = hir_path("a");
+    //     let rhs = hir_path("b");
+
+    //     state.add_unknown(TypedExpression::Name(rhs.inner.clone()));
+
+    //     let t = Type::Int(16).nowhere();
+
+    //     let stmt = Statement::Binding(
+    //         Identifier::Named("a".to_string()).nowhere(),
+    //         Some(t.clone()),
+    //         ExprKind::Identifier(rhs.clone()).with_id(0).nowhere(),
+    //     );
+
+    //     state.visit_statement(&stmt);
+
+    //     let expected = type_eqs![
+    //         (TExpr::Name(lhs.inner.clone()), TVar::Known(t)),
+    //         (TExpr::Id(0), TVar::Equal(TExpr::Name(lhs.inner))),
+    //         (
+    //             TExpr::Id(0),
+    //             TypeVar::Compatible(TExpr::Name(rhs.inner.clone()))
+    //         ),
+    //         (TExpr::Name(rhs.inner), TVar::Unknown)
+    //     ];
+
+    //     assert_eq!(state.get_equations(), &expected);
+    // }
+
+    // #[test]
+    // fn visiting_register_defintions_works() {
+    //     unimplemented! {}
+    // }
+}
+
+/*
+#[cfg(test)]
+mod type_equation_solution {
+    use super::*;
+
+    use crate::{location_info::WithLocation, testutil::hir_path};
+
+    use super::TypeVar as TVar;
+    use super::TypedExpression as TExpr;
+
     #[test]
-    fn visiting_typed_bindings_works() {
-        let symtab = GlobalSymbols::new();
-        let mut state = TypeState::new(&symtab);
-
-        let lhs = hir_path("a");
-        let rhs = hir_path("b");
-
-        state.add_unknown(TypedExpression::Name(rhs.inner.clone()));
-
+    fn binding_with_known_types() {
         let t = Type::Int(16).nowhere();
 
-        let stmt = Statement::Binding(
-            Identifier::Named("a".to_string()).nowhere(),
-            Some(t.clone()),
-            ExprKind::Identifier(rhs.clone()).with_id(0).nowhere(),
-        );
+        let lhs = hir_path("a");
+        let rhs = hir_path("b");
 
-        state.visit_statement(&stmt);
-
-        let expected = type_eqs![
+        let equations = type_eqs![
             (TExpr::Name(lhs.inner.clone()), TVar::Known(t)),
-            (TExpr::Id(0), TVar::Equal(TExpr::Name(lhs.inner))),
+            (TExpr::Id(0), TVar::Equal(TExpr::Name(lhs.inner.clone()))),
             (
                 TExpr::Id(0),
                 TypeVar::Compatible(TExpr::Name(rhs.inner.clone()))
             ),
-            (TExpr::Name(rhs.inner), TVar::Unknown)
+            (TExpr::Name(rhs.inner.clone()), TVar::Unknown)
         ];
 
-        assert_eq!(state.get_equations(), &expected);
+        let expected = vec![
+            (TExpr::Name(lhs.inner), Type::Int(16)),
+            (TExpr::Name(rhs.inner), Type::Int(16))
+        ].into_iter().collect::<HashMap<_, _>>();
+
+        let result = solve_type_equations(&equations);
+
+        assert_eq!(result, expected);
     }
 }
+*/

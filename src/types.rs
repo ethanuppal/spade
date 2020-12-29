@@ -5,7 +5,7 @@ use crate::ast::Type as AstType;
 use crate::location_info::Loc;
 use crate::location_info::WithLocation;
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Clone, Eq)]
 pub enum Type {
     Unit,
     Bit,
@@ -16,6 +16,8 @@ pub enum Type {
     UInt(u128),
     /// Fixed length int
     Int(u128),
+
+    KnownInt,
 
     Clock,
 
