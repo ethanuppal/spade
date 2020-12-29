@@ -173,8 +173,8 @@ pub fn visit_expression(
         }
         ast::Expression::If(cond, ontrue, onfalse) => {
             let cond = cond.try_visit(visit_expression, symtab, idtracker)?;
-            let ontrue = ontrue.try_visit(visit_block, symtab, idtracker)?;
-            let onfalse = onfalse.try_visit(visit_block, symtab, idtracker)?;
+            let ontrue = ontrue.try_visit(visit_expression, symtab, idtracker)?;
+            let onfalse = onfalse.try_visit(visit_expression, symtab, idtracker)?;
 
             Ok(hir::ExprKind::If(
                 Box::new(cond),
@@ -526,34 +526,36 @@ mod expression_visiting {
         let input = ast::Expression::If(
             Box::new(ast::Expression::IntLiteral(0).nowhere()),
             Box::new(
-                ast::Block {
+                ast::Expression::Block(Box::new(ast::Block {
                     statements: vec![],
                     result: ast::Expression::IntLiteral(1).nowhere(),
-                }
+                }))
                 .nowhere(),
             ),
             Box::new(
-                ast::Block {
+                ast::Expression::Block(Box::new(ast::Block {
                     statements: vec![],
                     result: ast::Expression::IntLiteral(2).nowhere(),
-                }
+                }))
                 .nowhere(),
             ),
         );
         let expected = hir::ExprKind::If(
             Box::new(hir::ExprKind::IntLiteral(0).idless().nowhere()),
             Box::new(
-                hir::Block {
+                hir::ExprKind::Block(Box::new(hir::Block {
                     statements: vec![],
                     result: hir::ExprKind::IntLiteral(1).idless().nowhere(),
-                }
+                }))
+                .idless()
                 .nowhere(),
             ),
             Box::new(
-                hir::Block {
+                hir::ExprKind::Block(Box::new(hir::Block {
                     statements: vec![],
                     result: hir::ExprKind::IntLiteral(2).idless().nowhere(),
-                }
+                }))
+                .idless()
                 .nowhere(),
             ),
         )

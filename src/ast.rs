@@ -37,7 +37,11 @@ impl WithLocation for Type {}
 pub enum Expression {
     Identifier(Loc<Path>),
     IntLiteral(u128),
-    If(Box<Loc<Expression>>, Box<Loc<Block>>, Box<Loc<Block>>),
+    If(
+        Box<Loc<Expression>>,
+        Box<Loc<Expression>>,
+        Box<Loc<Expression>>,
+    ),
     BinaryOperator(Box<Loc<Expression>>, TokenKind, Box<Loc<Expression>>),
     Block(Box<Block>),
 }

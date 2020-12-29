@@ -7,7 +7,11 @@ pub enum ExprKind {
     IntLiteral(u128),
     FnCall(Loc<Path>, Vec<Loc<Expression>>),
     Block(Box<Block>),
-    If(Box<Loc<Expression>>, Box<Loc<Block>>, Box<Loc<Block>>),
+    If(
+        Box<Loc<Expression>>,
+        Box<Loc<Expression>>,
+        Box<Loc<Expression>>,
+    ),
 }
 impl WithLocation for ExprKind {}
 

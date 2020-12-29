@@ -174,25 +174,9 @@ impl<'a> Parser<'a> {
     pub fn if_expression(&mut self) -> Result<Option<Loc<Expression>>> {
         if let Some(start) = self.peek_and_eat_kind(&TokenKind::If)? {
             let cond = self.expression()?;
-            let on_true = if let Some(block) = self.block()? {
-                block
-            } else {
-                return Err(Error::ExpectedBlock {
-                    for_what: "if".to_string(),
-                    got: self.peek()?.unwrap(),
-                    loc: Loc::new((), lspan(start.span).merge(cond.span)),
-                });
-            };
+            let on_true = self.expression()?;
             let else_tok = self.eat(&TokenKind::Else)?;
-            let (on_false, end_span) = if let Some(block) = self.block()? {
-                block.separate()
-            } else {
-                return Err(Error::ExpectedBlock {
-                    for_what: "else".to_string(),
-                    got: self.peek()?.unwrap(),
-                    loc: Loc::new((), lspan(else_tok.span)),
-                });
-            };
+            let (on_false, end_span) = self.expression()?.separate();
 
             Ok(Some(
                 Expression::If(Box::new(cond), Box::new(on_true), Box::new(on_false))
@@ -867,17 +851,17 @@ mod tests {
         let expected = Expression::If(
             Box::new(Expression::Identifier(ast_path("a")).nowhere()),
             Box::new(
-                Block {
+                Expression::Block(Box::new(Block {
                     statements: vec![],
                     result: Expression::Identifier(ast_path("b")).nowhere(),
-                }
+                }))
                 .nowhere(),
             ),
             Box::new(
-                Block {
+                Expression::Block(Box::new(Block {
                     statements: vec![],
                     result: Expression::Identifier(ast_path("c")).nowhere(),
-                }
+                }))
                 .nowhere(),
             ),
         )
