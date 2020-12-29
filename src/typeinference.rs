@@ -345,6 +345,72 @@ mod type_equation_generation {
         ensure_same_type!(state, t2, tc);
     }
 
+    #[test]
+    fn if_statements_get_correct_type_when_branches_are_of_known_type() {
+        let symtab = GlobalSymbols::new();
+        let mut state = TypeState::new(&symtab);
+
+        let input = ExprKind::If(
+            Box::new(Expression::ident(0, "a").nowhere()),
+            Box::new(Expression::ident(1, "b").nowhere()),
+            Box::new(Expression::ident(2, "c").nowhere()),
+        )
+        .with_id(3);
+
+        // Add eqs for the literals
+        let expr_a = TExpr::Name(Path::from_strs(&["a"]));
+        let expr_b = TExpr::Name(Path::from_strs(&["b"]));
+        let expr_c = TExpr::Name(Path::from_strs(&["c"]));
+        state.add_equation(expr_a.clone(), TVar::Generic(100));
+        state.add_equation(expr_b.clone(), TVar::Known(Type::KnownInt, None));
+        state.add_equation(expr_c.clone(), TVar::Generic(102));
+
+        state.visit_expression(&input).unwrap();
+
+        let t0 = get_type!(state, &TExpr::Id(0));
+        let t1 = get_type!(state, &TExpr::Id(1));
+        let t2 = get_type!(state, &TExpr::Id(2));
+        let t3 = get_type!(state, &TExpr::Id(3));
+
+        let ta = get_type!(state, &expr_a);
+        let tb = get_type!(state, &expr_b);
+        let tc = get_type!(state, &expr_c);
+
+        // Check the generic type variables
+        ensure_same_type!(state, t0, TVar::Known(Type::Bool, None));
+        ensure_same_type!(state, t1, TVar::Known(Type::KnownInt, None));
+        ensure_same_type!(state, t2, TVar::Known(Type::KnownInt, None));
+        ensure_same_type!(state, t3, TVar::Known(Type::KnownInt, None));
+
+        // Check the constraints added to the literals
+        ensure_same_type!(state, t0, ta);
+        ensure_same_type!(state, t1, tb);
+        ensure_same_type!(state, t2, tc);
+    }
+
+    #[test]
+    fn type_inference_fails_if_if_branches_have_incompatible_types() {
+        let symtab = GlobalSymbols::new();
+        let mut state = TypeState::new(&symtab);
+
+        let input = ExprKind::If(
+            Box::new(Expression::ident(0, "a").nowhere()),
+            Box::new(Expression::ident(1, "b").nowhere()),
+            Box::new(Expression::ident(2, "c").nowhere()),
+        )
+        .with_id(3);
+
+        // Add eqs for the literals
+        let expr_a = TExpr::Name(Path::from_strs(&["a"]));
+        let expr_b = TExpr::Name(Path::from_strs(&["b"]));
+        let expr_c = TExpr::Name(Path::from_strs(&["c"]));
+        state.add_equation(expr_a.clone(), TVar::Generic(100));
+        state.add_equation(expr_b.clone(), TVar::Known(Type::KnownInt, None));
+        state.add_equation(expr_c.clone(), TVar::Known(Type::Clock, None));
+
+        assert_ne!(state.visit_expression(&input), Ok(()));
+    }
+
     // #[test]
     // fn identifier_expression_gets_correct_type_equation() {
     //     let symtab = GlobalSymbols::new();
