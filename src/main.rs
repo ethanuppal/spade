@@ -52,14 +52,13 @@ fn main() -> Result<()> {
 
     let mut symtab = symbol_table::SymbolTable::new();
     let mut idtracker = semantic_analysis::IdTracker::new();
-    unimplemented!();
-    // let hir = match visit_entity(entity_ast.inner, &mut symtab, &mut idtracker) {
-    //     Ok(v) => v,
-    //     Err(e) => {
-    //         error_reporting::report_semantic_error(&opts.infile, &file_content, e);
-    //         return Err(anyhow!("aborting due to previous error"));
-    //     }
-    // };
+    let hir = match visit_entity(entity_ast.unwrap().inner, &mut symtab, &mut idtracker) {
+        Ok(v) => v,
+        Err(e) => {
+            error_reporting::report_semantic_error(&opts.infile, &file_content, e);
+            return Err(anyhow!("aborting due to previous error"));
+        }
+    };
 
-    // Ok(())
+    Ok(())
 }
