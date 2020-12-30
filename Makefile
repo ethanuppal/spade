@@ -1,4 +1,4 @@
-FILES_WITH_ERRORS=$(wildcard testcode/invalid/*)
+FILES_WITH_ERRORS=$(wildcard testcode/invalid/**/*)
 
 all_invalid: $(patsubst %, %_built, $(FILES_WITH_ERRORS)) .PHONY
 
