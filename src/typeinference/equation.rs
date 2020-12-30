@@ -6,13 +6,24 @@ use crate::types::Type;
 
 pub type TypeEquations = HashMap<TypedExpression, TypeVar>;
 
-#[derive(PartialEq, Debug, Clone)]
+#[derive(Debug, Clone)]
 pub enum TypeVar {
     /// The type is known. If the type is known through a type signature specified by
     /// the user, that signature is the second argument, otherwise None
-    Known(Type, Option<Loc<Type>>),
+    Known(Type, Option<Loc<()>>),
     /// The type is completely unknown
     Generic(u64),
+}
+
+impl PartialEq for TypeVar {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (TypeVar::Known(t1, _), TypeVar::Known(t2, _)) => t1 == t2,
+            (TypeVar::Known(_, _), TypeVar::Generic(_)) => false,
+            (TypeVar::Generic(_), TypeVar::Known(_, _)) => false,
+            (TypeVar::Generic(t1), TypeVar::Generic(t2)) => t1 == t2,
+        }
+    }
 }
 
 #[derive(Eq, PartialEq, Hash, Debug, Clone)]

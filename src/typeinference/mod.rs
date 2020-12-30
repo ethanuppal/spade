@@ -3,11 +3,11 @@ use std::collections::HashMap;
 use colored::*;
 use parse_tree_macros::trace_typechecker;
 
-use crate::hir::Block;
-use crate::hir::{Entity, Item};
+use crate::hir::Entity;
 use crate::hir::{ExprKind, Expression};
 use crate::types::Type;
 use crate::{global_symbols::GlobalSymbols, hir::Statement};
+use crate::{hir::Block, location_info::Loc};
 
 pub mod equation;
 pub mod result;
@@ -43,16 +43,32 @@ impl<'a> TypeState<'a> {
         Err(Error::UnknownType(expr.clone()).into())
     }
 
-    /// Visit an item to assign type variables and equations to every subexpression
-    /// in the item
-    pub fn visit_item(&mut self, item: &Item) {
-        match item {
-            Item::Entity(e) => self.visit_entity(&e.inner),
-        }
-    }
+    // /// Visit an item to assign type variables and equations to every subexpression
+    // /// in the item
+    // pub fn visit_item(&mut self, item: &Item) {
+    //     match item {
+    //         Item::Entity(e) => self.visit_entity(&e.inner),
+    //     }
+    // }
 
-    pub fn visit_entity(&mut self, _entity: &Entity) {
-        unimplemented! {}
+    #[trace_typechecker]
+    pub fn visit_entity(&mut self, entity: &Entity) -> Result<()> {
+        // Add equations for the inputs
+        for (name, t) in &entity.inputs {
+            self.add_equation(
+                TypedExpression::Name(name.clone().to_path()),
+                TypeVar::Known(t.inner.clone(), Some(t.loc())),
+            );
+        }
+
+        self.visit_expression(&entity.body.inner)?;
+
+        // Ensure that the output type matches what the user specified
+        self.unify_types(
+            &TypedExpression::Id(entity.body.inner.id),
+            &entity.output_type.inner,
+        )?;
+        Ok(())
     }
 
     #[trace_typechecker]
@@ -180,6 +196,11 @@ impl HasType for Type {
         Ok(TypeVar::Known(self.clone(), None))
     }
 }
+impl HasType for Loc<Type> {
+    fn get_type<'a>(&self, _: &TypeState<'a>) -> Result<TypeVar> {
+        Ok(TypeVar::Known(self.inner.clone(), Some(self.loc())))
+    }
+}
 
 pub enum TraceStack {
     /// Entering the specified visitor
@@ -236,7 +257,7 @@ mod tests {
     use super::TypeVar as TVar;
     use super::TypedExpression as TExpr;
 
-    use crate::hir::Path;
+    use crate::hir::{Identifier, Path};
 
     use crate::location_info::WithLocation;
 
@@ -382,5 +403,48 @@ mod tests {
         state.add_equation(expr_c.clone(), TVar::Known(Type::Clock, None));
 
         assert_ne!(state.visit_expression(&input), Ok(()));
+    }
+
+    #[test]
+    fn type_inference_for_entities_works() {
+        let input = Entity {
+            name: Identifier::Named("test".to_string()).nowhere(),
+            inputs: vec![(
+                Identifier::Named("input".to_string()).nowhere(),
+                Type::Int(5).nowhere(),
+            )],
+            output_type: Type::Int(5).nowhere(),
+            body: ExprKind::Identifier(Path::from_strs(&["input"]).nowhere())
+                .with_id(0)
+                .nowhere(),
+        };
+
+        let symtab = GlobalSymbols::new();
+        let mut state = TypeState::new(&symtab);
+
+        state.visit_entity(&input).unwrap();
+
+        let t0 = get_type!(state, &TExpr::Id(0));
+        ensure_same_type!(state, t0, TypeVar::Known(Type::Int(5), None));
+    }
+
+    #[test]
+    fn entity_return_types_must_match() {
+        let input = Entity {
+            name: Identifier::Named("test".to_string()).nowhere(),
+            inputs: vec![(
+                Identifier::Named("input".to_string()).nowhere(),
+                Type::Int(5).nowhere(),
+            )],
+            output_type: Type::Bool.nowhere(),
+            body: ExprKind::Identifier(Path::from_strs(&["input"]).nowhere())
+                .with_id(0)
+                .nowhere(),
+        };
+
+        let symtab = GlobalSymbols::new();
+        let mut state = TypeState::new(&symtab);
+
+        assert_ne!(state.visit_entity(&input), Ok(()));
     }
 }
