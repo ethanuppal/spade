@@ -10,6 +10,7 @@ use codespan_reporting::term::{
 
 use crate::parser::Error as ParseError;
 use crate::semantic_analysis::Error as SemanticError;
+use crate::typeinference::result::Error as InferenceError;
 use crate::types::Error as TypeError;
 
 pub fn report_parse_error(filename: &Path, file_content: &str, err: ParseError) {
@@ -102,6 +103,30 @@ pub fn report_semantic_error(filename: &Path, file_content: &str, err: SemanticE
             TypeError::NonLiteralTypeSize(_) => unimplemented!(),
             TypeError::CompoundArrayUnsupported => unimplemented!(),
         },
+    };
+
+    let writer = StandardStream::stderr(ColorChoice::Always);
+    let config = codespan_reporting::term::Config::default();
+
+    term::emit(&mut writer.lock(), &config, &files, &diag).unwrap();
+}
+
+pub fn report_typeinference_error(filename: &Path, file_content: &str, err: InferenceError) {
+    let mut files = SimpleFiles::new();
+    let file_id = files.add(filename.to_string_lossy(), file_content);
+    let diag = match err {
+        InferenceError::UnknownType(expr) => Diagnostic::error()
+            .with_message(format!(
+                "Tried looking up the type of {:?} but it was not found",
+                expr
+            ))
+            .with_notes(vec!["This is an internal compiler error".to_string()]),
+        InferenceError::TypeMissmatch(lhs, rhs) => Diagnostic::error()
+            .with_message(format!(
+                "Type missmatch. {} is incompatible with {}",
+                lhs, rhs
+            ))
+            .with_notes(vec!["This is an internal compiler error".to_string()]),
     };
 
     let writer = StandardStream::stderr(ColorChoice::Always);

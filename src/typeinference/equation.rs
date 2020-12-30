@@ -15,6 +15,15 @@ pub enum TypeVar {
     Generic(u64),
 }
 
+impl std::fmt::Display for TypeVar {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            TypeVar::Known(t, _) => write!(f, "{}", t),
+            TypeVar::Generic(id) => write!(f, "<{}>", id),
+        }
+    }
+}
+
 impl PartialEq for TypeVar {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {

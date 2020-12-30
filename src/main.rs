@@ -3,6 +3,7 @@ use std::io::prelude::*;
 use std::path::PathBuf;
 
 use anyhow::{anyhow, Result};
+use global_symbols::GlobalSymbols;
 use logos::Logos;
 use structopt::StructOpt;
 
@@ -59,6 +60,17 @@ fn main() -> Result<()> {
             return Err(anyhow!("aborting due to previous error"));
         }
     };
+
+    let global_symbols = GlobalSymbols::new();
+    let mut type_state = typeinference::TypeState::new(&global_symbols);
+
+    match type_state.visit_entity(&hir) {
+        Ok(()) => {}
+        Err(e) => {
+            error_reporting::report_typeinference_error(&opts.infile, &file_content, e);
+            return Err(anyhow!("aborting due to previous error"));
+        }
+    }
 
     Ok(())
 }

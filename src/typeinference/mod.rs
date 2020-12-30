@@ -1,3 +1,6 @@
+// This algorithm is based off the excelent lecture here
+// https://www.youtube.com/watch?v=xJXcZp2vgLs
+
 use std::collections::HashMap;
 
 use colored::*;
@@ -91,8 +94,11 @@ impl<'a> TypeState<'a> {
             ExprKind::FnCall(_, _) => {
                 unimplemented! {}
             }
-            ExprKind::Block(_) => {
-                unimplemented! {}
+            ExprKind::Block(block) => {
+                self.visit_block(block)?;
+
+                // Unify the return type of the block with the type of this expression
+                self.unify_types(&this_expr, &block.result.inner)?;
             }
             ExprKind::If(cond, on_true, on_false) => {
                 self.visit_expression(&cond.inner)?;
@@ -107,8 +113,12 @@ impl<'a> TypeState<'a> {
         Ok(())
     }
 
-    pub fn visit_block(&mut self, _block: &Block) {
-        unimplemented!()
+    #[trace_typechecker]
+    pub fn visit_block(&mut self, block: &Block) -> Result<()> {
+        if !block.statements.is_empty() {
+            todo!("Blocks with statements are currently not type checked")
+        }
+        self.visit_expression(&block.result.inner)
     }
 
     pub fn visit_statement(&mut self, _statement: &Statement) {
@@ -156,7 +166,6 @@ impl<'a> TypeState<'a> {
         if let Some(replaced_type) = replaced_type {
             for (_, rhs) in &mut self.equations {
                 if *rhs == replaced_type {
-                    println!("Replaced {:?} with {:?}", replaced_type, new_type);
                     *rhs = new_type.clone()
                 }
             }
@@ -181,6 +190,11 @@ pub trait HasType {
     fn get_type<'a>(&self, state: &TypeState<'a>) -> Result<TypeVar>;
 }
 
+impl HasType for TypeVar {
+    fn get_type<'a>(&self, _: &TypeState<'a>) -> Result<TypeVar> {
+        Ok(self.clone())
+    }
+}
 impl HasType for TypedExpression {
     fn get_type<'a>(&self, state: &TypeState<'a>) -> Result<TypeVar> {
         state.type_of(self)
@@ -247,9 +261,6 @@ pub fn format_trace_stack(stack: &[TraceStack]) -> String {
     result
 }
 
-// https://www.youtube.com/watch?v=xJXcZp2vgLs
-// https://eli.thegreenplace.net/2018/type-inference/
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -257,7 +268,7 @@ mod tests {
     use super::TypeVar as TVar;
     use super::TypedExpression as TExpr;
 
-    use crate::hir::{Identifier, Path};
+    use crate::hir::{Block, Identifier, Path};
 
     use crate::location_info::WithLocation;
 
@@ -274,7 +285,7 @@ mod tests {
 
     macro_rules! ensure_same_type {
         ($state:ident, $t1:expr, $t2:expr) => {
-            if $t1 != $t2 {
+            if $t1.get_type(&$state) != $t2.get_type(&$state) {
                 println!("{}", format_trace_stack(&$state.trace_stack));
                 $state.print_equations();
                 panic!("Types are not the same")
@@ -446,5 +457,23 @@ mod tests {
         let mut state = TypeState::new(&symtab);
 
         assert_ne!(state.visit_entity(&input), Ok(()));
+    }
+
+    #[test]
+    fn block_visiting_without_definitions_works() {
+        let input = ExprKind::Block(Box::new(Block {
+            statements: vec![],
+            result: ExprKind::IntLiteral(5).with_id(0).nowhere(),
+        }))
+        .with_id(1)
+        .nowhere();
+
+        let symtab = GlobalSymbols::new();
+        let mut state = TypeState::new(&symtab);
+
+        state.visit_expression(&input.inner).unwrap();
+
+        ensure_same_type!(state, TExpr::Id(0), TVar::Known(Type::KnownInt, None));
+        ensure_same_type!(state, TExpr::Id(1), TVar::Known(Type::KnownInt, None));
     }
 }

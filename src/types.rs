@@ -35,6 +35,43 @@ pub enum Type {
 
 impl WithLocation for Type {}
 
+impl std::fmt::Display for Type {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Type::Unit => write!(f, "()"),
+            Type::Bit => write!(f, "bit"),
+            Type::Bool => write!(f, "bool"),
+            Type::BitVector(size) => write!(f, "bits[{}]", size),
+            Type::UInt(size) => write!(f, "uint[{}]", size),
+            Type::Int(size) => write!(f, "int[{}]", size),
+            Type::KnownInt => write!(f, "KnownInt"),
+            Type::Clock => write!(f, "clock"),
+            Type::Array(length, inner) => write!(f, "{}[{}]", length, inner),
+            Type::Struct(members) => {
+                write!(f, "{{")?;
+                for (name, t) in members {
+                    write!(f, "{}: {}, ", name, t)?;
+                }
+                write!(f, "}}")
+            }
+            Type::SumType(options) => {
+                write!(f, "{{")?;
+                for (name, t) in options {
+                    write!(f, "{}({}), ", name, t)?;
+                }
+                write!(f, "}}")
+            }
+            Type::Alias(name, _) => write!(f, "{}", name),
+            Type::Function(_, _) => {
+                unimplemented! {}
+            }
+            Type::Entity(_, _) => {
+                unimplemented! {}
+            }
+        }
+    }
+}
+
 // NOTE: These enums do not carry location info if it affects the whole type,
 // that task is defered to type consumers as they would otherwise duplicate the info.
 #[derive(Debug, Error, PartialEq, Clone)]
