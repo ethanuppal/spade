@@ -1,48 +1,19 @@
 use std::collections::HashMap;
 
-use thiserror::Error;
-
 use colored::*;
 use parse_tree_macros::trace_typechecker;
 
 use crate::hir::Block;
-use crate::hir::Path;
 use crate::hir::{Entity, Item};
 use crate::hir::{ExprKind, Expression};
-use crate::location_info::Loc;
 use crate::types::Type;
 use crate::{global_symbols::GlobalSymbols, hir::Statement};
 
-#[derive(Debug, Error, PartialEq, Clone)]
-pub enum Error {
-    #[error("The specified expression has no type information {}", 0.0)]
-    UnknownType(TypedExpression),
-    #[error("Type missmatch between {0:?} and {1:?}")]
-    TypeMissmatch(TypeVar, TypeVar),
-}
-pub type Result<T> = std::result::Result<T, Error>;
+pub mod equation;
+pub mod result;
 
-pub type TypeEquations = HashMap<TypedExpression, TypeVar>;
-
-#[derive(PartialEq, Debug, Clone)]
-pub enum TypeVar {
-    /// The type is known. If the type is known through a type signature specified by
-    /// the user, that signature is the second argument, otherwise None
-    Known(Type, Option<Loc<Type>>),
-    /// The type is completely unknown
-    Generic(u64),
-}
-
-pub enum Term {
-    Variable,
-    Function { t: TypeVar, args: Vec<Term> },
-}
-
-#[derive(Eq, PartialEq, Hash, Debug, Clone)]
-pub enum TypedExpression {
-    Id(u64),
-    Name(Path),
-}
+use equation::{TypeEquations, TypeVar, TypedExpression};
+use result::{Error, Result};
 
 pub struct TypeState<'a> {
     equations: TypeEquations,
@@ -264,6 +235,8 @@ mod tests {
 
     use super::TypeVar as TVar;
     use super::TypedExpression as TExpr;
+
+    use crate::hir::Path;
 
     use crate::location_info::WithLocation;
 
