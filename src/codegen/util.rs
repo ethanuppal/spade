@@ -18,5 +18,9 @@ pub fn verilog_assign(target: &str, value: &str) -> String {
 }
 
 pub fn verilog_wire(name: &str, size: u128) -> String {
-    format!("wire[{}:0] {};", size - 1, name)
+    if size == 1 {
+        format!("wire {};", name)
+    } else {
+        format!("wire[{}:0] {};", size - 1, name)
+    }
 }
