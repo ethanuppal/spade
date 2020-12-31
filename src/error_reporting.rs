@@ -1,17 +1,36 @@
 use std::path::Path;
 
 use codespan::Span;
-use codespan_reporting::diagnostic::{Diagnostic, Label};
 use codespan_reporting::files::SimpleFiles;
 use codespan_reporting::term::{
     self,
     termcolor::{ColorChoice, StandardStream},
+};
+use codespan_reporting::{
+    diagnostic::{Diagnostic, Label},
+    term::termcolor::{Color, ColorSpec},
 };
 
 use crate::parser::Error as ParseError;
 use crate::semantic_analysis::Error as SemanticError;
 use crate::typeinference::result::Error as InferenceError;
 use crate::types::Error as TypeError;
+
+pub fn codespan_config() -> codespan_reporting::term::Config {
+    let mut primary_label_error = ColorSpec::new();
+    primary_label_error
+        .set_fg(Some(Color::Red))
+        .set_intense(true);
+
+    let style = codespan_reporting::term::Styles {
+        primary_label_error,
+        ..Default::default()
+    };
+    codespan_reporting::term::Config {
+        styles: style,
+        ..Default::default()
+    }
+}
 
 pub fn report_parse_error(filename: &Path, file_content: &str, err: ParseError) {
     let mut files = SimpleFiles::new();
@@ -70,9 +89,8 @@ pub fn report_parse_error(filename: &Path, file_content: &str, err: ParseError) 
     };
 
     let writer = StandardStream::stderr(ColorChoice::Always);
-    let config = codespan_reporting::term::Config::default();
 
-    term::emit(&mut writer.lock(), &config, &files, &diag).unwrap();
+    term::emit(&mut writer.lock(), &codespan_config(), &files, &diag).unwrap();
 }
 
 pub fn report_semantic_error(filename: &Path, file_content: &str, err: SemanticError) {
@@ -106,9 +124,8 @@ pub fn report_semantic_error(filename: &Path, file_content: &str, err: SemanticE
     };
 
     let writer = StandardStream::stderr(ColorChoice::Always);
-    let config = codespan_reporting::term::Config::default();
 
-    term::emit(&mut writer.lock(), &config, &files, &diag).unwrap();
+    term::emit(&mut writer.lock(), &codespan_config(), &files, &diag).unwrap();
 }
 
 pub fn report_typeinference_error(filename: &Path, file_content: &str, err: InferenceError) {
@@ -133,12 +150,16 @@ pub fn report_typeinference_error(filename: &Path, file_content: &str, err: Infe
             type_spec,
             output_expr,
         } => Diagnostic::error()
-            .with_message(format!("Expected {}, got {}", expected, got))
+            .with_message(format!("Type error"))
             .with_labels(vec![
                 Label::primary(file_id, output_expr.loc().span)
                     .with_message(format!("Found type {}", got)),
                 Label::secondary(file_id, type_spec.loc().span)
                     .with_message(format!("{} type specified here", expected)),
+            ])
+            .with_notes(vec![
+                format!("Expected: {}", expected),
+                format!("     Got: {}", got),
             ]),
         InferenceError::UnspecifiedTypeError { .. } => {
             // Diagnostic::error()
@@ -152,6 +173,10 @@ pub fn report_typeinference_error(filename: &Path, file_content: &str, err: Infe
             .with_message(format!("If condition must be a bool, got {}", got))
             .with_labels(vec![
                 Label::primary(file_id, loc.loc().span).with_message("Expected boolean")
+            ])
+            .with_notes(vec![
+                format!("Expected: {}", crate::types::Type::Bool),
+                format!("     Got: {}", got),
             ]),
         InferenceError::IfConditionMissmatch {
             expected,
@@ -165,11 +190,14 @@ pub fn report_typeinference_error(filename: &Path, file_content: &str, err: Infe
                     .with_message(format!("This branch has type {}", expected)),
                 Label::primary(file_id, incorrect_branch.loc().span)
                     .with_message(format!("But this one has type {}", got)),
+            ])
+            .with_notes(vec![
+                format!("Expected: {}", expected),
+                format!("     Got: {}", got),
             ]),
     };
 
     let writer = StandardStream::stderr(ColorChoice::Always);
-    let config = codespan_reporting::term::Config::default();
 
-    term::emit(&mut writer.lock(), &config, &files, &diag).unwrap();
+    term::emit(&mut writer.lock(), &codespan_config(), &files, &diag).unwrap();
 }

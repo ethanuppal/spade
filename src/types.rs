@@ -33,6 +33,71 @@ pub enum Type {
     Entity(Vec<Type>, Box<Type>),
 }
 
+impl Type {
+    pub fn convert_from_ast(value: AstType) -> Result<Self, Error> {
+        match value {
+            AstType::Named(name) => match name.as_strs().as_slice() {
+                ["bit"] => Ok(Type::Bit),
+                ["clk"] => Ok(Type::Clock),
+                ["bool"] => Ok(Type::Bool),
+                ["uint"] | ["int"] | ["bits"] => {
+                    Err(Error::BitWidthRequired(name.as_strings()[0].to_string()))
+                }
+                _ => Err(Error::NamedTypesUnsupported),
+            },
+            AstType::UnitType => Ok(Type::Unit),
+            AstType::WithSize(inner, size) => {
+                let size = match size.inner {
+                    AstExpr::IntLiteral(size) => size,
+                    _ => Err(Error::NonLiteralTypeSize(size.loc()))?,
+                };
+                match inner.inner {
+                    AstType::Named(name) => match name.as_strs().as_slice() {
+                        ["uint"] => Ok(Type::UInt(size)),
+                        ["int"] => Ok(Type::Int(size)),
+                        ["bits"] => Ok(Type::BitVector(size)),
+                        _ => Err(Error::CompoundArrayUnsupported),
+                    },
+                    _ => Err(Error::CompoundArrayUnsupported),
+                }
+            }
+        }
+    }
+
+    // returns the amount of bits of this type
+    pub fn size(&self) -> u128 {
+        match self {
+            Type::Unit => todo!("Size of the unit type is kind of hard to define in a useful way"),
+            Type::Bit => 1,
+            Type::Bool => 1,
+            Type::BitVector(len) => *len,
+            Type::UInt(len) => *len,
+            Type::Int(len) => *len,
+            Type::KnownInt => {
+                panic!("attempting to get the size of knownint which can not be synthesised")
+            }
+            Type::Clock => 1,
+            Type::Array(len, inner) => len * inner.size(),
+            Type::Struct(inner) => inner.iter().map(|(_, t)| t.size()).sum(),
+            Type::SumType(inner) => {
+                todo!("Size of sum types is not computed right now")
+                // inner.iter().map(|(_, t)| t.size()).max()
+            }
+            Type::Alias(_, target) => target.size(),
+            Type::Function(_, _) => {
+                panic!(
+                    "Trying to get the size of a function type which should never be synthesised"
+                );
+            }
+            Type::Entity(_, _) => {
+                panic!(
+                    "Trying to get the size of an entity type which should never be synthesised"
+                );
+            }
+        }
+    }
+}
+
 impl WithLocation for Type {}
 
 impl std::fmt::Display for Type {
@@ -89,38 +154,6 @@ pub enum Error {
 
     #[error("Compound array types are not supported")]
     CompoundArrayUnsupported,
-}
-
-impl Type {
-    pub fn convert_from_ast(value: AstType) -> Result<Self, Error> {
-        match value {
-            AstType::Named(name) => match name.as_strs().as_slice() {
-                ["bit"] => Ok(Type::Bit),
-                ["clk"] => Ok(Type::Clock),
-                ["bool"] => Ok(Type::Bool),
-                ["uint"] | ["int"] | ["bits"] => {
-                    Err(Error::BitWidthRequired(name.as_strings()[0].to_string()))
-                }
-                _ => Err(Error::NamedTypesUnsupported),
-            },
-            AstType::UnitType => Ok(Type::Unit),
-            AstType::WithSize(inner, size) => {
-                let size = match size.inner {
-                    AstExpr::IntLiteral(size) => size,
-                    _ => Err(Error::NonLiteralTypeSize(size.loc()))?,
-                };
-                match inner.inner {
-                    AstType::Named(name) => match name.as_strs().as_slice() {
-                        ["uint"] => Ok(Type::UInt(size)),
-                        ["int"] => Ok(Type::Int(size)),
-                        ["bits"] => Ok(Type::BitVector(size)),
-                        _ => Err(Error::CompoundArrayUnsupported),
-                    },
-                    _ => Err(Error::CompoundArrayUnsupported),
-                }
-            }
-        }
-    }
 }
 
 #[cfg(test)]

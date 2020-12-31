@@ -20,19 +20,17 @@ use result::{Error, Result};
 
 use self::result::UnificationError;
 
-pub struct TypeState<'a> {
+pub struct TypeState {
     equations: TypeEquations,
-    _global_symbols: &'a GlobalSymbols,
     next_typeid: u64,
 
     pub trace_stack: Vec<TraceStack>,
 }
 
-impl<'a> TypeState<'a> {
-    pub fn new(global_symbols: &'a GlobalSymbols) -> Self {
+impl TypeState {
+    pub fn new() -> Self {
         Self {
             equations: HashMap::new(),
-            _global_symbols: global_symbols,
             next_typeid: 0,
             trace_stack: vec![],
         }
@@ -46,6 +44,21 @@ impl<'a> TypeState<'a> {
             }
         }
         Err(Error::UnknownType(expr.clone()).into())
+    }
+
+    /// Returns the type of the expression as a concrete type. If the type is not known,
+    /// or tye type is Generic, panics
+    pub fn expr_type(&self, expr: &Expression) -> Type {
+        match self
+            .type_of(&TypedExpression::Id(expr.id))
+            .expect("Expression had no specified type")
+        {
+            TypeVar::Known(t, _) => t,
+            TypeVar::Generic(_) => panic!(
+                "{} had generic type which is not allowed right now",
+                expr.id
+            ),
+        }
     }
 
     // /// Visit an item to assign type variables and equations to every subexpression
@@ -167,7 +180,7 @@ impl<'a> TypeState<'a> {
 }
 
 // Private helper functions
-impl<'a> TypeState<'a> {
+impl<'a> TypeState {
     fn new_typeid(&mut self) -> u64 {
         let result = self.next_typeid;
         self.next_typeid += 1;
@@ -239,7 +252,7 @@ impl<'a> TypeState<'a> {
 }
 
 #[cfg(test)]
-impl<'a> TypeState<'a> {
+impl TypeState {
     pub fn print_equations(&self) {
         for (lhs, rhs) in &self.equations {
             println!("{:?}: {:?}", lhs, rhs);
@@ -248,36 +261,36 @@ impl<'a> TypeState<'a> {
 }
 
 pub trait HasType {
-    fn get_type<'a>(&self, state: &TypeState<'a>) -> Result<TypeVar>;
+    fn get_type<'a>(&self, state: &TypeState) -> Result<TypeVar>;
 }
 
 impl HasType for TypeVar {
-    fn get_type<'a>(&self, _: &TypeState<'a>) -> Result<TypeVar> {
+    fn get_type<'a>(&self, _: &TypeState) -> Result<TypeVar> {
         Ok(self.clone())
     }
 }
 impl HasType for TypedExpression {
-    fn get_type<'a>(&self, state: &TypeState<'a>) -> Result<TypeVar> {
+    fn get_type<'a>(&self, state: &TypeState) -> Result<TypeVar> {
         state.type_of(self)
     }
 }
 impl HasType for Expression {
-    fn get_type<'a>(&self, state: &TypeState<'a>) -> Result<TypeVar> {
+    fn get_type<'a>(&self, state: &TypeState) -> Result<TypeVar> {
         state.type_of(&TypedExpression::Id(self.id))
     }
 }
 impl HasType for Loc<Expression> {
-    fn get_type<'a>(&self, state: &TypeState<'a>) -> Result<TypeVar> {
+    fn get_type<'a>(&self, state: &TypeState) -> Result<TypeVar> {
         state.type_of(&TypedExpression::Id(self.inner.id))
     }
 }
 impl HasType for Type {
-    fn get_type<'a>(&self, _: &TypeState<'a>) -> Result<TypeVar> {
+    fn get_type<'a>(&self, _: &TypeState) -> Result<TypeVar> {
         Ok(TypeVar::Known(self.clone(), None))
     }
 }
 impl HasType for Loc<Type> {
-    fn get_type<'a>(&self, _: &TypeState<'a>) -> Result<TypeVar> {
+    fn get_type<'a>(&self, _: &TypeState) -> Result<TypeVar> {
         Ok(TypeVar::Known(self.inner.clone(), Some(self.loc())))
     }
 }
@@ -363,8 +376,7 @@ mod tests {
 
     #[test]
     fn int_literals_have_type_known_int() {
-        let symtab = GlobalSymbols::new();
-        let mut state = TypeState::new(&symtab);
+        let mut state = TypeState::new();
 
         let input = ExprKind::IntLiteral(0).with_id(0).nowhere();
 
@@ -378,8 +390,7 @@ mod tests {
 
     #[test]
     fn if_statements_have_correctly_infered_types() {
-        let symtab = GlobalSymbols::new();
-        let mut state = TypeState::new(&symtab);
+        let mut state = TypeState::new();
 
         let input = ExprKind::If(
             Box::new(Expression::ident(0, "a").nowhere()),
@@ -421,8 +432,7 @@ mod tests {
 
     #[test]
     fn if_statements_get_correct_type_when_branches_are_of_known_type() {
-        let symtab = GlobalSymbols::new();
-        let mut state = TypeState::new(&symtab);
+        let mut state = TypeState::new();
 
         let input = ExprKind::If(
             Box::new(Expression::ident(0, "a").nowhere()),
@@ -465,8 +475,7 @@ mod tests {
 
     #[test]
     fn type_inference_fails_if_if_branches_have_incompatible_types() {
-        let symtab = GlobalSymbols::new();
-        let mut state = TypeState::new(&symtab);
+        let mut state = TypeState::new();
 
         let input = ExprKind::If(
             Box::new(Expression::ident(0, "a").nowhere()),
@@ -501,8 +510,7 @@ mod tests {
                 .nowhere(),
         };
 
-        let symtab = GlobalSymbols::new();
-        let mut state = TypeState::new(&symtab);
+        let mut state = TypeState::new();
 
         state.visit_entity(&input).unwrap();
 
@@ -524,8 +532,7 @@ mod tests {
                 .nowhere(),
         };
 
-        let symtab = GlobalSymbols::new();
-        let mut state = TypeState::new(&symtab);
+        let mut state = TypeState::new();
 
         assert_matches!(
             state.visit_entity(&input),
@@ -542,8 +549,7 @@ mod tests {
         .with_id(1)
         .nowhere();
 
-        let symtab = GlobalSymbols::new();
-        let mut state = TypeState::new(&symtab);
+        let mut state = TypeState::new();
 
         state.visit_expression(&input).unwrap();
 

@@ -17,6 +17,17 @@ impl Path {
                 .collect(),
         )
     }
+
+    pub fn mangle(&self) -> String {
+        format!(
+            "_m_{}",
+            self.0
+                .iter()
+                .map(|i| format!("{}", i.inner))
+                .collect::<Vec<_>>()
+                .join("_")
+        )
+    }
 }
 
 impl std::fmt::Display for Path {

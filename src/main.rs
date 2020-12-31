@@ -8,6 +8,7 @@ use logos::Logos;
 use structopt::StructOpt;
 
 pub mod ast;
+pub mod codegen;
 pub mod constant;
 pub mod error_reporting;
 pub mod global_symbols;
@@ -62,8 +63,7 @@ fn main() -> Result<()> {
         }
     };
 
-    let global_symbols = GlobalSymbols::new();
-    let mut type_state = typeinference::TypeState::new(&global_symbols);
+    let mut type_state = typeinference::TypeState::new();
 
     match type_state.visit_entity(&hir) {
         Ok(()) => {}
