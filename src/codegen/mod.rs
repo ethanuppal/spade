@@ -9,7 +9,7 @@ mod util;
 
 use util::{verilog_assign, Indentable};
 
-use self::util::verilog_wire;
+use self::util::{verilog_size, verilog_wire};
 
 fn expr_variable(expr: &Expression) -> String {
     if let ExprKind::Identifier(name) = &expr.kind {
@@ -46,7 +46,38 @@ pub fn generate_expression<'a>(expr: &Expression, types: &TypeState) -> String {
             let input_var = expr_variable(&block.result.inner);
             result.push(verilog_assign(&result_var, &input_var))
         }
-        ExprKind::If(_, _, _) => todo!("codegen for ifs is unimplemented"),
+        ExprKind::If(cond, on_true, on_false) => {
+            // TODO: Add a code struct that handles all this bullshit
+            let sub = generate_expression(&cond.inner, types);
+            if !sub.is_empty() {
+                result.push(sub);
+            }
+            let sub = generate_expression(&on_true.inner, types);
+            if !sub.is_empty() {
+                result.push(sub);
+            }
+            let sub = generate_expression(&on_false.inner, types);
+            if !sub.is_empty() {
+                result.push(sub);
+            }
+
+            let code = formatdoc! {r#"
+                always @* begin
+                    if ({}) begin
+                        {} <= {};
+                    end
+                    else begin
+                        {} <= {};
+                    end
+                end"#,
+                expr_variable(&cond.inner),
+                result_var,
+                expr_variable(&on_true.inner),
+                result_var,
+                expr_variable(&on_false.inner),
+            };
+            result.push(code)
+        }
     }
     result.join("\n")
 }
@@ -55,11 +86,14 @@ pub fn generate_entity<'a>(entity: &Entity, types: &TypeState) -> String {
     let inputs = entity
         .inputs
         .iter()
-        .map(|(name, t)| format!("input[{}:0] {},", t.inner.size() - 1, name.inner))
+        .map(|(name, t)| format!("input{} {},", verilog_size(t.inner.size()), name.inner))
         .collect::<Vec<_>>()
         .join("\n");
 
-    let output = format!("output[{}:0] __output", entity.output_type.inner.size() - 1);
+    let output = format!(
+        "output{} __output",
+        verilog_size(entity.output_type.inner.size())
+    );
 
     let args = format!("{}\n{}", inputs, output);
 
@@ -120,17 +154,14 @@ mod tests {
         assert_same_code!(&result, expected);
     }
 
-    #[ignore]
     #[test]
     fn if_expressions_have_correct_codegen() {
         let code = r#"
         entity name(c: bool, a: int[16], b: int[16]) -> int[16] {
-            if c {
+            if c
                 a
-            }
-            else {
+            else
                 b
-            }
         }
         "#;
 
@@ -143,10 +174,18 @@ mod tests {
                 output[15:0] __output
             )
         begin
-            wire[15:0] __expr__2;
-            wire[15:0] __expr__1;
-            assign __expr__1 = __expr__0;
-            assign __output = __expr__1;
+            wire[15:0] __expr__4;
+            wire[15:0] __expr__3;
+            always @* begin
+                if (_m_c) begin
+                    __expr__3 <= _m_a;
+                end
+                else begin
+                    __expr__3 <= _m_b;
+                end
+            end
+            assign __expr__4 = __expr__3;
+            assign __output = __expr__4;
         end
         "#
         );

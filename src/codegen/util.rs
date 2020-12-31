@@ -17,10 +17,13 @@ pub fn verilog_assign(target: &str, value: &str) -> String {
     format!("assign {} = {};", target, value)
 }
 
-pub fn verilog_wire(name: &str, size: u128) -> String {
+pub fn verilog_size(size: u128) -> String {
     if size == 1 {
-        format!("wire {};", name)
+        format!("")
     } else {
-        format!("wire[{}:0] {};", size - 1, name)
+        format!("[{}:0]", size - 1)
     }
+}
+pub fn verilog_wire(name: &str, size: u128) -> String {
+    format!("wire{} {};", verilog_size(size), name)
 }
