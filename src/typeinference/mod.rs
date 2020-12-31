@@ -18,6 +18,8 @@ pub mod result;
 use equation::{TypeEquations, TypeVar, TypedExpression};
 use result::{Error, Result};
 
+use self::result::UnificationError;
+
 pub struct TypeState<'a> {
     equations: TypeEquations,
     _global_symbols: &'a GlobalSymbols,
@@ -64,29 +66,44 @@ impl<'a> TypeState<'a> {
             );
         }
 
-        self.visit_expression(&entity.body.inner)?;
+        self.visit_expression(&entity.body)?;
 
         // Ensure that the output type matches what the user specified
         self.unify_types(
             &TypedExpression::Id(entity.body.inner.id),
             &entity.output_type.inner,
-        )?;
+        )
+        .map_err(|(got, expected)| Error::EntityOutputTypeMissmatch {
+            expected,
+            got,
+            type_spec: entity.output_type.loc(),
+            output_expr: entity.body.loc(),
+        })?;
         Ok(())
     }
 
     #[trace_typechecker]
-    pub fn visit_expression(&mut self, expression: &Expression) -> Result<()> {
-        let this_expr = TypedExpression::Id(expression.id);
+    pub fn visit_expression(&mut self, expression: &Loc<Expression>) -> Result<()> {
         let new_id = self.new_typeid();
-        self.add_equation(TypedExpression::Id(expression.id), TypeVar::Generic(new_id));
+        self.add_equation(
+            TypedExpression::Id(expression.inner.id),
+            TypeVar::Generic(new_id),
+        );
         // Recurse down the expression
-        match &expression.kind {
+        match &expression.inner.kind {
             ExprKind::Identifier(ident) => {
                 // Add an equation for the anonymous id
-                self.unify_types(&this_expr, &TypedExpression::Name(ident.inner.clone()))?;
+                self.unify_expression_generic_error(
+                    &expression,
+                    &TypedExpression::Name(ident.inner.clone()),
+                )?;
             }
             ExprKind::IntLiteral(_) => {
-                self.unify_types(&Type::KnownInt, &this_expr)?;
+                self.unify_types(&Type::KnownInt, &expression.inner)
+                    .map_err(|(_, got)| Error::IntLiteralIncompatible {
+                        got,
+                        loc: expression.loc(),
+                    })?;
             }
             ExprKind::BoolLiteral(_) => {
                 unimplemented! {}
@@ -98,16 +115,39 @@ impl<'a> TypeState<'a> {
                 self.visit_block(block)?;
 
                 // Unify the return type of the block with the type of this expression
-                self.unify_types(&this_expr, &block.result.inner)?;
+                self.unify_types(&expression.inner, &block.result.inner)
+                    // NOTE: We could be more specific about this error specifying
+                    // that the type of the block must match the return type, though
+                    // that might just be spammy.
+                    .map_err(|(expected, got)| Error::UnspecifiedTypeError {
+                        expected,
+                        got,
+                        loc: block.result.loc(),
+                    })?;
             }
             ExprKind::If(cond, on_true, on_false) => {
-                self.visit_expression(&cond.inner)?;
-                self.visit_expression(&on_true.inner)?;
-                self.visit_expression(&on_false.inner)?;
+                self.visit_expression(&cond)?;
+                self.visit_expression(&on_true)?;
+                self.visit_expression(&on_false)?;
 
-                self.unify_types(&cond.inner, &Type::Bool)?;
-                self.unify_types(&on_true.inner, &on_false.inner)?;
-                self.unify_types(&this_expr, &on_false.inner)?;
+                self.unify_types(&cond.inner, &Type::Bool)
+                    .map_err(|(got, _)| Error::NonBooleanCondition {
+                        got,
+                        loc: cond.loc(),
+                    })?;
+                self.unify_types(&on_true.inner, &on_false.inner)
+                    .map_err(|(expected, got)| Error::IfConditionMissmatch {
+                        expected,
+                        got,
+                        first_branch: on_true.loc(),
+                        incorrect_branch: on_false.loc(),
+                    })?;
+                self.unify_types(expression, &on_false.inner)
+                    .map_err(|(got, expected)| Error::UnspecifiedTypeError {
+                        expected,
+                        got,
+                        loc: expression.loc(),
+                    })?;
             }
         }
         Ok(())
@@ -118,7 +158,7 @@ impl<'a> TypeState<'a> {
         if !block.statements.is_empty() {
             todo!("Blocks with statements are currently not type checked")
         }
-        self.visit_expression(&block.result.inner)
+        self.visit_expression(&block.result)
     }
 
     pub fn visit_statement(&mut self, _statement: &Statement) {
@@ -140,9 +180,17 @@ impl<'a> TypeState<'a> {
         self.equations.insert(expression, var);
     }
 
-    fn unify_types(&mut self, e1: &impl HasType, e2: &impl HasType) -> Result<TypeVar> {
-        let v1 = e1.get_type(self)?;
-        let v2 = e2.get_type(self)?;
+    fn unify_types(
+        &mut self,
+        e1: &impl HasType,
+        e2: &impl HasType,
+    ) -> std::result::Result<(), UnificationError> {
+        let v1 = e1
+            .get_type(self)
+            .expect("Tried to unify types but the lhs was not found");
+        let v2 = e2
+            .get_type(self)
+            .expect("Tried to unify types but the rhs was not found");
 
         // Used because we want to avoid borrowchecker errors when we add stuff to the
         // trace
@@ -155,7 +203,7 @@ impl<'a> TypeState<'a> {
                 if t1 == t2 {
                     Ok((v1, None))
                 } else {
-                    Err(Error::TypeMissmatch(v1.clone(), v2.clone()))
+                    Err((v1.clone(), v2.clone()))
                 }
             }
             (TypeVar::Known(_, _), TypeVar::Generic(_)) => Ok((v1, Some(v2))),
@@ -173,7 +221,20 @@ impl<'a> TypeState<'a> {
 
         self.trace_stack
             .push(TraceStack::Unified(v1cpy, v2cpy, new_type.clone()));
-        Ok(new_type.clone())
+        Ok(())
+    }
+
+    fn unify_expression_generic_error(
+        &mut self,
+        expr: &Loc<Expression>,
+        other: &impl HasType,
+    ) -> Result<()> {
+        self.unify_types(&expr.inner, other)
+            .map_err(|(got, expected)| Error::UnspecifiedTypeError {
+                got,
+                expected,
+                loc: expr.loc(),
+            })
     }
 }
 
@@ -203,6 +264,11 @@ impl HasType for TypedExpression {
 impl HasType for Expression {
     fn get_type<'a>(&self, state: &TypeState<'a>) -> Result<TypeVar> {
         state.type_of(&TypedExpression::Id(self.id))
+    }
+}
+impl HasType for Loc<Expression> {
+    fn get_type<'a>(&self, state: &TypeState<'a>) -> Result<TypeVar> {
+        state.type_of(&TypedExpression::Id(self.inner.id))
     }
 }
 impl HasType for Type {
@@ -268,9 +334,11 @@ mod tests {
     use super::TypeVar as TVar;
     use super::TypedExpression as TExpr;
 
-    use crate::hir::{Block, Identifier, Path};
-
     use crate::location_info::WithLocation;
+    use crate::{
+        assert_matches,
+        hir::{Block, Identifier, Path},
+    };
 
     macro_rules! get_type {
         ($state:ident, $e:expr) => {
@@ -298,7 +366,7 @@ mod tests {
         let symtab = GlobalSymbols::new();
         let mut state = TypeState::new(&symtab);
 
-        let input = ExprKind::IntLiteral(0).with_id(0);
+        let input = ExprKind::IntLiteral(0).with_id(0).nowhere();
 
         state.visit_expression(&input).expect("Type error");
 
@@ -318,7 +386,8 @@ mod tests {
             Box::new(Expression::ident(1, "b").nowhere()),
             Box::new(Expression::ident(2, "c").nowhere()),
         )
-        .with_id(3);
+        .with_id(3)
+        .nowhere();
 
         // Add eqs for the literals
         let expr_a = TExpr::Name(Path::from_strs(&["a"]));
@@ -360,7 +429,8 @@ mod tests {
             Box::new(Expression::ident(1, "b").nowhere()),
             Box::new(Expression::ident(2, "c").nowhere()),
         )
-        .with_id(3);
+        .with_id(3)
+        .nowhere();
 
         // Add eqs for the literals
         let expr_a = TExpr::Name(Path::from_strs(&["a"]));
@@ -403,7 +473,8 @@ mod tests {
             Box::new(Expression::ident(1, "b").nowhere()),
             Box::new(Expression::ident(2, "c").nowhere()),
         )
-        .with_id(3);
+        .with_id(3)
+        .nowhere();
 
         // Add eqs for the literals
         let expr_a = TExpr::Name(Path::from_strs(&["a"]));
@@ -456,7 +527,10 @@ mod tests {
         let symtab = GlobalSymbols::new();
         let mut state = TypeState::new(&symtab);
 
-        assert_ne!(state.visit_entity(&input), Ok(()));
+        assert_matches!(
+            state.visit_entity(&input),
+            Err(Error::EntityOutputTypeMissmatch { .. })
+        );
     }
 
     #[test]
@@ -471,7 +545,7 @@ mod tests {
         let symtab = GlobalSymbols::new();
         let mut state = TypeState::new(&symtab);
 
-        state.visit_expression(&input.inner).unwrap();
+        state.visit_expression(&input).unwrap();
 
         ensure_same_type!(state, TExpr::Id(0), TVar::Known(Type::KnownInt, None));
         ensure_same_type!(state, TExpr::Id(1), TVar::Known(Type::KnownInt, None));

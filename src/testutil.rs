@@ -16,3 +16,13 @@ pub fn ast_path(name: &str) -> Loc<ast::Path> {
 pub fn hir_path(name: &str) -> Loc<hir::Path> {
     hir::Path(vec![hir_ident(name)]).nowhere()
 }
+
+#[macro_export]
+macro_rules! assert_matches {
+    ($lhs:expr, $pattern:pat) => {
+        if let $pattern = $lhs {
+        } else {
+            panic!("{:?} does not match the specified pattern", $lhs)
+        }
+    };
+}

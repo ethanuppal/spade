@@ -127,6 +127,45 @@ pub fn report_typeinference_error(filename: &Path, file_content: &str, err: Infe
                 lhs, rhs
             ))
             .with_notes(vec!["This is an internal compiler error".to_string()]),
+        InferenceError::EntityOutputTypeMissmatch {
+            expected,
+            got,
+            type_spec,
+            output_expr,
+        } => Diagnostic::error()
+            .with_message(format!("Expected {}, got {}", expected, got))
+            .with_labels(vec![
+                Label::primary(file_id, output_expr.loc().span)
+                    .with_message(format!("Found type {}", got)),
+                Label::secondary(file_id, type_spec.loc().span)
+                    .with_message(format!("{} type specified here", expected)),
+            ]),
+        InferenceError::UnspecifiedTypeError { .. } => {
+            // Diagnostic::error()
+            //     .with_message(format!("Expected type {}, "))
+            todo! {}
+        }
+        InferenceError::IntLiteralIncompatible { .. } => {
+            todo! {}
+        }
+        InferenceError::NonBooleanCondition { got, loc } => Diagnostic::error()
+            .with_message(format!("If condition must be a bool, got {}", got))
+            .with_labels(vec![
+                Label::primary(file_id, loc.loc().span).with_message("Expected boolean")
+            ]),
+        InferenceError::IfConditionMissmatch {
+            expected,
+            got,
+            first_branch,
+            incorrect_branch,
+        } => Diagnostic::error()
+            .with_message(format!("If branches have incompatible type"))
+            .with_labels(vec![
+                Label::primary(file_id, first_branch.loc().span)
+                    .with_message(format!("This branch has type {}", expected)),
+                Label::primary(file_id, incorrect_branch.loc().span)
+                    .with_message(format!("But this one has type {}", got)),
+            ]),
     };
 
     let writer = StandardStream::stderr(ColorChoice::Always);

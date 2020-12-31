@@ -97,6 +97,7 @@ impl Type {
             AstType::Named(name) => match name.as_strs().as_slice() {
                 ["bit"] => Ok(Type::Bit),
                 ["clk"] => Ok(Type::Clock),
+                ["bool"] => Ok(Type::Bool),
                 ["uint"] | ["int"] | ["bits"] => {
                     Err(Error::BitWidthRequired(name.as_strings()[0].to_string()))
                 }

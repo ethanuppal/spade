@@ -60,6 +60,10 @@ impl<T> Loc<T> {
     pub fn split_ref(&self) -> (&T, Span) {
         (&self.inner, self.span)
     }
+    pub fn split_loc(self) -> (T, Loc<()>) {
+        let loc = self.loc();
+        (self.inner, loc)
+    }
 
     pub fn map<Y>(self, mut op: impl FnMut(T) -> Y) -> Loc<Y> {
         Loc {

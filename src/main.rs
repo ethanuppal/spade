@@ -20,6 +20,7 @@ pub mod symbol_table;
 pub mod typeinference;
 pub mod types;
 
+#[macro_use]
 #[cfg(test)]
 pub mod testutil;
 
