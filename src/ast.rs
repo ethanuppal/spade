@@ -82,6 +82,24 @@ pub struct Register {
 }
 impl WithLocation for Register {}
 
+/// A definition of a function without a body. Primarily used in traits
+#[derive(PartialEq, Debug, Clone)]
+pub struct FunctionDecl {
+    pub name: Loc<Identifier>,
+    pub self_arg: Option<Loc<()>>,
+    pub inputs: Vec<(Loc<Identifier>, Loc<Type>)>,
+    pub return_type: Option<Loc<Type>>,
+}
+impl WithLocation for FunctionDecl {}
+
+/// A definition of a trait
+#[derive(PartialEq, Debug, Clone)]
+pub struct TraitDef {
+    pub name: Loc<Identifier>,
+    pub functions: Vec<Loc<FunctionDecl>>,
+}
+impl WithLocation for TraitDef {}
+
 /// Items are things typically present at the top level of a module such as
 /// entities, pipelines, submodules etc.
 #[derive(PartialEq, Debug, Clone)]

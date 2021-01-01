@@ -5,7 +5,8 @@ use thiserror::Error;
 use parse_tree_macros::trace_parser;
 
 use crate::ast::{
-    Block, Entity, Expression, Identifier, Item, ModuleBody, Path, Register, Statement, Type,
+    Block, Entity, Expression, FunctionDecl, Identifier, Item, ModuleBody, Path, Register,
+    Statement, TraitDef, Type,
 };
 use crate::lexer::TokenKind;
 use crate::location_info::{lspan, Loc, WithLocation};
@@ -367,6 +368,19 @@ impl<'a> Parser<'a> {
         Ok(result)
     }
 
+    #[trace_parser]
+    pub fn self_arg(&mut self) -> Result<Option<Loc<()>>> {
+        if self.peek_cond(
+            |t| t == &TokenKind::Identifier("self".to_string()),
+            "looking for self",
+        )? {
+            let tok = self.eat_unconditional()?;
+            Ok(Some(().at(lspan(tok.span))))
+        } else {
+            Ok(None)
+        }
+    }
+
     // Entities
     #[trace_parser]
     pub fn entity(&mut self) -> Result<Option<Loc<Entity>>> {
@@ -417,6 +431,90 @@ impl<'a> Parser<'a> {
                 body: block.map(|inner| Expression::Block(Box::new(inner))),
             }
             .at(lspan(start_token.span).merge(block_span)),
+        ))
+    }
+
+    // Traits
+    #[trace_parser]
+    pub fn function_decl(&mut self) -> Result<Option<Loc<FunctionDecl>>> {
+        let start_token = if let Some(t) = self.peek_and_eat_kind(&TokenKind::Function)? {
+            t
+        } else {
+            return Ok(None);
+        };
+
+        let name = self.identifier()?;
+
+        // Input types
+        self.eat(&TokenKind::OpenParen)?;
+        let (self_arg, more_args) = if let Some(arg) = self.self_arg()? {
+            if let Some(_) = self.peek_and_eat_kind(&TokenKind::Comma)? {
+                (Some(arg), true)
+            } else if let Some(_) = self.peek_and_eat_kind(&TokenKind::CloseParen)? {
+                (Some(arg), false)
+            } else {
+                let next = self.eat_unconditional()?;
+                return Err(Error::UnexpectedToken {
+                    got: next,
+                    expected: vec![TokenKind::Comma.as_str(), TokenKind::CloseParen.as_str()],
+                });
+            }
+        } else {
+            (None, true)
+        };
+
+        let inputs = if more_args {
+            let inputs = self.comma_separated(Self::name_and_type, &TokenKind::CloseParen)?;
+            self.eat(&TokenKind::CloseParen)?;
+            inputs
+        } else {
+            vec![]
+        };
+
+        // Return type
+        let return_type = if self.peek_and_eat_kind(&TokenKind::SlimArrow)?.is_some() {
+            Some(self.parse_type()?)
+        } else {
+            None
+        };
+
+        let end_token = self.eat(&TokenKind::Semi)?;
+
+        Ok(Some(
+            FunctionDecl {
+                name,
+                self_arg,
+                inputs,
+                return_type,
+            }
+            .at(lspan(start_token.span).merge(lspan(end_token.span))),
+        ))
+    }
+
+    #[trace_parser]
+    pub fn trait_def(&mut self) -> Result<Option<Loc<TraitDef>>> {
+        let start_token = if let Some(start) = self.peek_and_eat_kind(&TokenKind::Trait)? {
+            start
+        } else {
+            return Ok(None);
+        };
+
+        let name = self.identifier()?;
+
+        let mut result = TraitDef {
+            name,
+            functions: vec![],
+        };
+
+        self.eat(&TokenKind::OpenBrace)?;
+
+        while let Some(decl) = self.function_decl()? {
+            result.functions.push(decl);
+        }
+        let end_token = self.eat(&TokenKind::CloseBrace)?;
+
+        Ok(Some(
+            result.at(lspan(start_token.span).merge(lspan(end_token.span))),
         ))
     }
 
@@ -704,7 +802,10 @@ mod tests {
 
     use logos::Logos;
 
-    use crate::testutil::{ast_ident, ast_path};
+    use crate::{
+        ast::FunctionDecl,
+        testutil::{ast_ident, ast_path},
+    };
 
     macro_rules! check_parse {
         ($string:expr , $method:ident, $expected:expr) => {
@@ -1102,5 +1203,68 @@ mod tests {
         };
 
         check_parse!(code, module_body, Ok(expected));
+    }
+
+    #[test]
+    fn function_declarations_work() {
+        let code = "fn some_fn(self, a: bit) -> bit;";
+
+        let expected = FunctionDecl {
+            name: ast_ident("some_fn"),
+            self_arg: Some(().nowhere()),
+            inputs: vec![(ast_ident("a"), Type::Named(ast_path("bit").inner).nowhere())],
+            return_type: Some(Type::Named(ast_path("bit").inner).nowhere()),
+        }
+        .nowhere();
+
+        check_parse!(code, function_decl, Ok(Some(expected)));
+    }
+
+    #[test]
+    fn function_declarations_with_only_self_arg_work() {
+        let code = "fn some_fn(self) -> bit;";
+
+        let expected = FunctionDecl {
+            name: ast_ident("some_fn"),
+            self_arg: Some(().nowhere()),
+            inputs: vec![],
+            return_type: Some(Type::Named(ast_path("bit").inner).nowhere()),
+        }
+        .nowhere();
+
+        check_parse!(code, function_decl, Ok(Some(expected)));
+    }
+
+    #[test]
+    fn trait_definitions_work() {
+        let code = r#"
+        trait SomeTrait {
+            fn some_fn(self, a: bit) -> bit;
+            fn another_fn(self) -> bit;
+        }
+        "#;
+
+        let fn1 = FunctionDecl {
+            name: ast_ident("some_fn"),
+            self_arg: Some(().nowhere()),
+            inputs: vec![(ast_ident("a"), Type::Named(ast_path("bit").inner).nowhere())],
+            return_type: Some(Type::Named(ast_path("bit").inner).nowhere()),
+        }
+        .nowhere();
+        let fn2 = FunctionDecl {
+            name: ast_ident("another_fn"),
+            self_arg: Some(().nowhere()),
+            inputs: vec![],
+            return_type: Some(Type::Named(ast_path("bit").inner).nowhere()),
+        }
+        .nowhere();
+
+        let expected = TraitDef {
+            name: ast_ident("SomeTrait"),
+            functions: vec![fn1, fn2],
+        }
+        .nowhere();
+
+        check_parse!(code, trait_def, Ok(Some(expected)));
     }
 }
