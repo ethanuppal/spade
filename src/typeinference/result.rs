@@ -1,7 +1,7 @@
 use thiserror::Error;
 
 use super::equation::{TypeVar, TypedExpression};
-use crate::{hir::Expression, location_info::Loc};
+use crate::location_info::Loc;
 
 pub type UnificationError = (TypeVar, TypeVar);
 

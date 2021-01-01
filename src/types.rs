@@ -79,7 +79,7 @@ impl Type {
             Type::Clock => 1,
             Type::Array(len, inner) => len * inner.size(),
             Type::Struct(inner) => inner.iter().map(|(_, t)| t.size()).sum(),
-            Type::SumType(inner) => {
+            Type::SumType(_inner) => {
                 todo!("Size of sum types is not computed right now")
                 // inner.iter().map(|(_, t)| t.size()).max()
             }

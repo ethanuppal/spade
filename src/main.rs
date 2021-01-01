@@ -3,7 +3,6 @@ use std::io::prelude::*;
 use std::path::PathBuf;
 
 use anyhow::{anyhow, Result};
-use global_symbols::GlobalSymbols;
 use logos::Logos;
 use structopt::StructOpt;
 
@@ -72,6 +71,8 @@ fn main() -> Result<()> {
             return Err(anyhow!("aborting due to previous error"));
         }
     }
+
+    println!("{}", codegen::generate_entity(&hir, &type_state));
 
     Ok(())
 }

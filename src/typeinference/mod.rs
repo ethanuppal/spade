@@ -7,9 +7,9 @@ use colored::*;
 use parse_tree_macros::trace_typechecker;
 
 use crate::hir::Entity;
+use crate::hir::Statement;
 use crate::hir::{ExprKind, Expression};
 use crate::types::Type;
-use crate::{global_symbols::GlobalSymbols, hir::Statement};
 use crate::{hir::Block, location_info::Loc};
 
 pub mod equation;
