@@ -6,117 +6,110 @@ use crate::{
 };
 
 mod util;
+mod verilog;
 
-use util::{verilog_assign, Indentable};
+use self::{
+    util::Code,
+    verilog::{assign, size_spec, wire},
+};
 
-use self::util::{verilog_size, verilog_wire};
+use crate::code;
 
-fn expr_variable(expr: &Expression) -> String {
-    if let ExprKind::Identifier(name) = &expr.kind {
-        name.inner.mangle()
-    } else {
-        format!("__expr__{}", expr.id)
+impl Expression {
+    /// If the verilog code for this expression is just an alias for another variable
+    /// that is returned here. This allows us to skip generating wires that we don't
+    /// really need
+    pub fn alias(&self) -> Option<String> {
+        match &self.kind {
+            ExprKind::Identifier(ident) => Some(ident.inner.mangle()),
+            ExprKind::IntLiteral(_) => todo!(),
+            ExprKind::BoolLiteral(_) => todo!(),
+            ExprKind::FnCall(_, _) => None,
+            ExprKind::Block(block) => Some(block.result.inner.variable()),
+            ExprKind::If(_, _, _) => None,
+        }
+    }
+    pub fn variable(&self) -> String {
+        // If this expressions should not use the standard __expr__{} variable,
+        // that is specified here
+
+        self.alias()
+            .unwrap_or_else(|| format!("__expr__{}", self.id))
+    }
+
+    pub fn code(&self, types: &TypeState) -> Code {
+        let mut code = Code::new();
+
+        // Define the wire if it is needed
+        if self.alias().is_none() {
+            code.join(&wire(&self.variable(), types.expr_type(self).size()))
+        }
+
+        match &self.kind {
+            ExprKind::Identifier(_) => {
+                // Empty. The identifier will be defined elsewhere
+            }
+            ExprKind::IntLiteral(_) => todo!("codegen for int literals"),
+            ExprKind::BoolLiteral(_) => todo!("codegen for bool literals"),
+            ExprKind::FnCall(_, _) => todo!("codegen for function calls is unimplemented"),
+            ExprKind::Block(block) => {
+                if !block.statements.is_empty() {
+                    todo!("Blocks with statements are unimplemented");
+                }
+                code.join(&block.result.inner.code(types))
+                // Empty. The block result will always be the last expression
+            }
+            ExprKind::If(cond, on_true, on_false) => {
+                // TODO: Add a code struct that handles all this bullshit
+                code.join(&cond.inner.code(types));
+                code.join(&on_true.inner.code(types));
+                code.join(&on_false.inner.code(types));
+
+                let self_var = self.variable();
+                let this_code = formatdoc! {r#"
+                    always @* begin
+                        if ({}) begin
+                            {} <= {};
+                        end
+                        else begin
+                            {} <= {};
+                        end
+                    end"#,
+                    cond.inner.variable(),
+                    self_var,
+                    on_true.inner.variable(),
+                    self_var,
+                    on_false.inner.variable()
+                };
+                code.join(&this_code)
+            }
+        }
+        code
     }
 }
 
-pub fn generate_expression<'a>(expr: &Expression, types: &TypeState) -> String {
-    let result_var = format!("__expr__{}", expr.id);
-    // Generate a wire for the variable if it is needed
-    let mut result = if let ExprKind::Identifier(_) = &expr.kind {
-        vec![]
-    } else {
-        vec![verilog_wire(&result_var, types.expr_type(expr).size())]
-    };
-
-    match &expr.kind {
-        ExprKind::Identifier(_) => {
-            // Empty. The identifier will be defined elsewhere
-        }
-        ExprKind::IntLiteral(_) => todo!("codegen for int literals"),
-        ExprKind::BoolLiteral(_) => todo!("codegen for bool literals"),
-        ExprKind::FnCall(_, _) => todo!("codegen for function calls is unimplemented"),
-        ExprKind::Block(block) => {
-            if !block.statements.is_empty() {
-                todo!("Blocks with statements are unimplemented");
-            }
-            let sub = generate_expression(&block.result.inner, types);
-            if !sub.is_empty() {
-                result.push(sub);
-            }
-            let input_var = expr_variable(&block.result.inner);
-            result.push(verilog_assign(&result_var, &input_var))
-        }
-        ExprKind::If(cond, on_true, on_false) => {
-            // TODO: Add a code struct that handles all this bullshit
-            let sub = generate_expression(&cond.inner, types);
-            if !sub.is_empty() {
-                result.push(sub);
-            }
-            let sub = generate_expression(&on_true.inner, types);
-            if !sub.is_empty() {
-                result.push(sub);
-            }
-            let sub = generate_expression(&on_false.inner, types);
-            if !sub.is_empty() {
-                result.push(sub);
-            }
-
-            let code = formatdoc! {r#"
-                always @* begin
-                    if ({}) begin
-                        {} <= {};
-                    end
-                    else begin
-                        {} <= {};
-                    end
-                end"#,
-                expr_variable(&cond.inner),
-                result_var,
-                expr_variable(&on_true.inner),
-                result_var,
-                expr_variable(&on_false.inner),
-            };
-            result.push(code)
-        }
-    }
-    result.join("\n")
-}
-
-pub fn generate_entity<'a>(entity: &Entity, types: &TypeState) -> String {
+pub fn generate_entity<'a>(entity: &Entity, types: &TypeState) -> Code {
     let inputs = entity
         .inputs
         .iter()
-        .map(|(name, t)| format!("input{} {},", verilog_size(t.inner.size()), name.inner))
-        .collect::<Vec<_>>()
-        .join("\n");
-
-    let output = format!(
+        .map(|(name, t)| format!("input{} {},", size_spec(t.inner.size()), name.inner));
+    let output_definition = format!(
         "output{} __output",
-        verilog_size(entity.output_type.inner.size())
+        size_spec(entity.output_type.inner.size())
     );
 
-    let args = format!("{}\n{}", inputs, output);
+    let output_assignment = assign("__output", &entity.body.inner.variable());
 
-    let output_assignment = verilog_assign("__output", &expr_variable(&entity.body.inner));
-    let inner = formatdoc!(
-        "{}\n{}",
-        generate_expression(&entity.body.inner, types),
-        output_assignment
-    );
-
-    formatdoc!(
-        r#"
-        module {} (
-        {}
-            )
-        begin
-        {}
-        end
-    "#,
-        entity.name.inner,
-        args.indent(2),
-        inner.indent(1)
-    )
+    code! {
+        [0] &format!("module {} (", entity.name.inner);
+                [2] &inputs.collect::<Vec<_>>();
+                [2] &output_definition;
+            [1] &")";
+        [0] &"begin";
+            [1] &entity.body.inner.code(types);
+            [1] &output_assignment;
+        [0] &"end"
+    }
 }
 
 #[cfg(test)]
@@ -141,16 +134,13 @@ mod tests {
                 output[15:0] __output
             )
         begin
-            wire[15:0] __expr__1;
-            assign __expr__1 = _m_a;
-            assign __output = __expr__1;
-        end
-        "#
+            assign __output = _m_a;
+        end"#
         );
 
         let processed = parse_typecheck_entity(code);
 
-        let result = generate_entity(&processed.entity, &processed.type_state);
+        let result = generate_entity(&processed.entity, &processed.type_state).to_string();
         assert_same_code!(&result, expected);
     }
 
@@ -174,7 +164,6 @@ mod tests {
                 output[15:0] __output
             )
         begin
-            wire[15:0] __expr__4;
             wire[15:0] __expr__3;
             always @* begin
                 if (_m_c) begin
@@ -184,15 +173,13 @@ mod tests {
                     __expr__3 <= _m_b;
                 end
             end
-            assign __expr__4 = __expr__3;
-            assign __output = __expr__4;
-        end
-        "#
+            assign __output = __expr__3;
+        end"#
         );
 
         let processed = parse_typecheck_entity(code);
 
-        let result = generate_entity(&processed.entity, &processed.type_state);
+        let result = generate_entity(&processed.entity, &processed.type_state).to_string();
         assert_same_code!(&result, expected);
     }
 }

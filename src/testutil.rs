@@ -5,8 +5,8 @@ use logos::Logos;
 use crate::hir;
 use crate::location_info::{Loc, WithLocation};
 use crate::{
-    ast, global_symbols::GlobalSymbols, semantic_analysis, semantic_analysis::visit_entity,
-    typeinference, typeinference::TypeState,
+    ast, semantic_analysis, semantic_analysis::visit_entity, typeinference,
+    typeinference::TypeState,
 };
 
 use crate::error_reporting;

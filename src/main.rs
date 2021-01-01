@@ -72,7 +72,10 @@ fn main() -> Result<()> {
         }
     }
 
-    println!("{}", codegen::generate_entity(&hir, &type_state));
+    println!(
+        "{}",
+        codegen::generate_entity(&hir, &type_state).to_string()
+    );
 
     Ok(())
 }
