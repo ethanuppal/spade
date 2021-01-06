@@ -105,6 +105,7 @@ impl WithLocation for TraitDef {}
 #[derive(PartialEq, Debug, Clone)]
 pub enum Item {
     Entity(Loc<Entity>),
+    TraitDef(Loc<TraitDef>),
 }
 impl WithLocation for Item {}
 
@@ -112,3 +113,4 @@ impl WithLocation for Item {}
 pub struct ModuleBody {
     pub members: Vec<Item>,
 }
+impl WithLocation for ModuleBody {}

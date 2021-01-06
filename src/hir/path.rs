@@ -17,6 +17,12 @@ impl Path {
         )
     }
 
+    pub fn with_ident(&self, new: Identifier) -> Self {
+        let mut result = self.0.clone();
+        result.push(new);
+        Self(result)
+    }
+
     pub fn mangle(&self) -> String {
         format!(
             "_m_{}",

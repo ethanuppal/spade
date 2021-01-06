@@ -2,10 +2,16 @@ use std::collections::HashMap;
 
 use thiserror::Error;
 
-use crate::ast::Entity;
 use crate::hir::Path;
 use crate::location_info::Loc;
 use crate::types::{self, Type};
+use crate::{
+    ast::Item,
+    ast::ModuleBody,
+    hir::{EntityHead, Identifier},
+    location_info::WithLocation,
+    semantic_analysis::{entity_head, visit_identifier},
+};
 
 #[derive(Error, Debug, Clone, PartialEq)]
 pub enum Error {
@@ -17,43 +23,124 @@ pub enum Error {
     },
     #[error("Type error")]
     TypeError(#[from] types::Error),
+    #[error("Semantic error")]
+    HirError(#[from] crate::semantic_analysis::Error),
 }
 
-pub struct GlobalSymbols {
-    inner: HashMap<Path, (Loc<()>, Type)>,
+pub type Result<T> = std::result::Result<T, Error>;
+
+#[derive(PartialEq, Debug, Clone)]
+pub struct FunctionDecl {
+    pub name: Loc<Identifier>,
+    pub self_arg: Option<Loc<()>>,
+    pub inputs: Vec<(Loc<Identifier>, Loc<Type>)>,
+    pub output_type: Loc<Type>,
+}
+impl WithLocation for FunctionDecl {}
+
+#[derive(PartialEq, Debug, Clone)]
+pub struct TraitDef {
+    pub functions: Vec<Loc<FunctionDecl>>,
+}
+impl WithLocation for TraitDef {}
+
+#[derive(PartialEq, Debug, Clone)]
+pub struct Module {
+    items: Vec<GlobalItem>,
 }
 
-impl GlobalSymbols {
+#[derive(PartialEq, Debug, Clone)]
+pub enum GlobalItem {
+    /// Defintion of a named type
+    Type(Loc<Type>),
+    TraitDef(Loc<TraitDef>),
+    Entity(Loc<EntityHead>),
+    Module(Loc<Module>),
+}
+
+pub struct Symbols {
+    pub symbols: HashMap<Path, GlobalItem>,
+}
+
+impl Symbols {
     pub fn new() -> Self {
         Self {
-            inner: HashMap::new(),
+            symbols: HashMap::new(),
         }
     }
 
-    pub fn add_entity(&mut self, path: Path, e: Loc<Entity>) -> Result<(), Error> {
-        let loc = e.loc();
-        // Figure out the type of the entity
-        let params = e
-            .inner
-            .inputs
-            .iter()
-            .map(|i| Type::convert_from_ast(&i.1.inner))
-            .collect::<Result<Vec<_>, _>>()?;
+    pub fn lookup(&self, needle: Path) -> Option<&GlobalItem> {
+        self.symbols.get(&needle)
+    }
 
-        let return_type = Type::convert_from_ast(&e.inner.output_type.inner)?;
+    pub fn visit_module(&mut self, path: Path, body: &Loc<ModuleBody>) -> Result<()> {
+        for item in &body.inner.members {
+            self.visit_item(&path, item)?;
+        }
+        Ok(())
+    }
 
-        let prev = self.inner.insert(
-            path.clone(),
-            (loc, Type::Entity(params, Box::new(return_type))),
+    pub fn visit_item(&mut self, mod_path: &Path, item: &Item) -> Result<()> {
+        match item {
+            Item::Entity(entity) => {
+                let name = visit_identifier(&entity.name);
+
+                let head = entity.map_ref(|t| entity_head(t)).map_err(|e, _| e)?;
+
+                self.symbols
+                    .insert(mod_path.with_ident(name), GlobalItem::Entity(head));
+
+                Ok(())
+            }
+            Item::TraitDef(_) => unimplemented![],
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use crate::{
+        ast::{self, Entity, Item},
+        testutil::{ast_ident, ast_path, hir_ident},
+    };
+
+    #[test]
+    fn entity_defintions_are_found() {
+        let module = ModuleBody {
+            members: vec![Item::Entity(
+                Entity {
+                    name: ast_ident("test"),
+                    inputs: vec![
+                        (ast_ident("a"), ast::Type::UnitType.nowhere()),
+                        (ast_ident("b"), ast::Type::UnitType.nowhere()),
+                    ],
+                    output_type: ast::Type::UnitType.nowhere(),
+                    body: ast::Expression::Identifier(ast_path("ignored")).nowhere(),
+                }
+                .nowhere(),
+            )],
+        }
+        .nowhere();
+
+        let mut symbols = Symbols::new();
+
+        symbols
+            .visit_module(Path::from_strs(&[]), &module)
+            .expect("Failed to visit module");
+
+        let expected = GlobalItem::Entity(
+            EntityHead {
+                inputs: vec![
+                    (hir_ident("a"), types::Type::Unit.nowhere()),
+                    (hir_ident("b"), types::Type::Unit.nowhere()),
+                ],
+                output_type: types::Type::Unit.nowhere(),
+            }
+            .nowhere(),
         );
 
-        match prev {
-            Some(prev) => Err(Error::DuplicateName {
-                name: path,
-                prev: prev.0,
-                now: loc,
-            }),
-            None => Ok(()),
-        }
+        assert_eq!(symbols.lookup(Path::from_strs(&["test"])), Some(&expected));
     }
 }

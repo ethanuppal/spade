@@ -520,7 +520,10 @@ impl<'a> Parser<'a> {
 
     #[trace_parser]
     pub fn item(&mut self) -> Result<Option<Item>> {
-        self.entity().map(|x| x.map(Item::Entity))
+        self.first_successful(vec![
+            &|s: &mut Self| s.entity().map(|e| e.map(Item::Entity)),
+            &|s: &mut Self| s.trait_def().map(|e| e.map(Item::TraitDef)),
+        ])
     }
 
     #[trace_parser]

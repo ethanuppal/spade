@@ -90,12 +90,13 @@ impl Expression {
 
 pub fn generate_entity<'a>(entity: &Entity, types: &TypeState) -> Code {
     let inputs = entity
+        .head
         .inputs
         .iter()
         .map(|(name, t)| format!("input{} {},", size_spec(t.inner.size()), name.inner));
     let output_definition = format!(
         "output{} __output",
-        size_spec(entity.output_type.inner.size())
+        size_spec(entity.head.output_type.inner.size())
     );
 
     let output_assignment = assign("__output", &entity.body.inner.variable());

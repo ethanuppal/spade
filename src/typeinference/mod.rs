@@ -72,7 +72,7 @@ impl TypeState {
     #[trace_typechecker]
     pub fn visit_entity(&mut self, entity: &Entity) -> Result<()> {
         // Add equations for the inputs
-        for (name, t) in &entity.inputs {
+        for (name, t) in &entity.head.inputs {
             self.add_equation(
                 TypedExpression::Name(name.clone().to_path()),
                 TypeVar::Known(t.inner.clone(), Some(t.loc())),
@@ -84,12 +84,12 @@ impl TypeState {
         // Ensure that the output type matches what the user specified
         self.unify_types(
             &TypedExpression::Id(entity.body.inner.id),
-            &entity.output_type.inner,
+            &entity.head.output_type.inner,
         )
         .map_err(|(got, expected)| Error::EntityOutputTypeMissmatch {
             expected,
             got,
-            type_spec: entity.output_type.loc(),
+            type_spec: entity.head.output_type.loc(),
             output_expr: entity.body.loc(),
         })?;
         Ok(())
@@ -347,11 +347,11 @@ mod tests {
     use super::TypeVar as TVar;
     use super::TypedExpression as TExpr;
 
-    use crate::location_info::WithLocation;
     use crate::{
         assert_matches,
         hir::{Block, Identifier, Path},
     };
+    use crate::{hir::EntityHead, location_info::WithLocation};
 
     macro_rules! get_type {
         ($state:ident, $e:expr) => {
@@ -500,11 +500,13 @@ mod tests {
     fn type_inference_for_entities_works() {
         let input = Entity {
             name: Identifier::Named("test".to_string()).nowhere(),
-            inputs: vec![(
-                Identifier::Named("input".to_string()).nowhere(),
-                Type::Int(5).nowhere(),
-            )],
-            output_type: Type::Int(5).nowhere(),
+            head: EntityHead {
+                inputs: vec![(
+                    Identifier::Named("input".to_string()).nowhere(),
+                    Type::Int(5).nowhere(),
+                )],
+                output_type: Type::Int(5).nowhere(),
+            },
             body: ExprKind::Identifier(Path::from_strs(&["input"]).nowhere())
                 .with_id(0)
                 .nowhere(),
@@ -522,11 +524,13 @@ mod tests {
     fn entity_return_types_must_match() {
         let input = Entity {
             name: Identifier::Named("test".to_string()).nowhere(),
-            inputs: vec![(
-                Identifier::Named("input".to_string()).nowhere(),
-                Type::Int(5).nowhere(),
-            )],
-            output_type: Type::Bool.nowhere(),
+            head: EntityHead {
+                inputs: vec![(
+                    Identifier::Named("input".to_string()).nowhere(),
+                    Type::Int(5).nowhere(),
+                )],
+                output_type: Type::Bool.nowhere(),
+            },
             body: ExprKind::Identifier(Path::from_strs(&["input"]).nowhere())
                 .with_id(0)
                 .nowhere(),

@@ -41,11 +41,17 @@ impl WithLocation for Register {}
 #[derive(PartialEq, Debug, Clone)]
 pub struct Entity {
     pub name: Loc<Identifier>,
-    pub inputs: Vec<(Loc<Identifier>, Loc<Type>)>,
-    pub output_type: Loc<Type>,
+    pub head: EntityHead,
     pub body: Loc<Expression>,
 }
 impl WithLocation for Entity {}
+
+#[derive(PartialEq, Debug, Clone)]
+pub struct EntityHead {
+    pub inputs: Vec<(Loc<Identifier>, Loc<Type>)>,
+    pub output_type: Loc<Type>,
+}
+impl WithLocation for EntityHead {}
 
 /// Items are things typically present at the top level of a module such as
 /// entities, pipelines, submodules etc.
