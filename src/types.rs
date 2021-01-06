@@ -34,7 +34,7 @@ pub enum Type {
 }
 
 impl Type {
-    pub fn convert_from_ast(value: AstType) -> Result<Self, Error> {
+    pub fn convert_from_ast(value: &AstType) -> Result<Self, Error> {
         match value {
             AstType::Named(name) => match name.as_strs().as_slice() {
                 ["bit"] => Ok(Type::Bit),
@@ -51,7 +51,7 @@ impl Type {
                     AstExpr::IntLiteral(size) => size,
                     _ => Err(Error::NonLiteralTypeSize(size.loc()))?,
                 };
-                match inner.inner {
+                match &inner.inner {
                     AstType::Named(name) => match name.as_strs().as_slice() {
                         ["uint"] => Ok(Type::UInt(size)),
                         ["int"] => Ok(Type::Int(size)),
@@ -170,7 +170,7 @@ mod tests {
                 AstExpr::IntLiteral(10).nowhere(),
             );
 
-            assert_eq!(Type::convert_from_ast(input), Ok(Type::UInt(10)));
+            assert_eq!(Type::convert_from_ast(&input), Ok(Type::UInt(10)));
         }
 
         {
@@ -179,7 +179,7 @@ mod tests {
                 AstExpr::IntLiteral(10).nowhere(),
             );
 
-            assert_eq!(Type::convert_from_ast(input), Ok(Type::Int(10)));
+            assert_eq!(Type::convert_from_ast(&input), Ok(Type::Int(10)));
         }
 
         {
@@ -188,7 +188,7 @@ mod tests {
                 AstExpr::IntLiteral(10).nowhere(),
             );
 
-            assert_eq!(Type::convert_from_ast(input), Ok(Type::BitVector(10)));
+            assert_eq!(Type::convert_from_ast(&input), Ok(Type::BitVector(10)));
         }
     }
 }

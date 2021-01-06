@@ -10,15 +10,15 @@ use crate::types::Type;
 
 impl<T> Loc<T> {
     fn try_visit<V, U>(
-        self,
+        &self,
         visitor: V,
         symtab: &mut SymbolTable,
         idtracker: &mut IdTracker,
     ) -> Result<Loc<U>>
     where
-        V: Fn(T, &mut SymbolTable, &mut IdTracker) -> Result<U>,
+        V: Fn(&T, &mut SymbolTable, &mut IdTracker) -> Result<U>,
     {
-        self.map(|t| visitor(t, symtab, idtracker))
+        self.map_ref(|t| visitor(&t, symtab, idtracker))
             .map_err(|e, _| e)
     }
 }
@@ -49,21 +49,21 @@ impl IdTracker {
 }
 
 pub fn visit_entity(
-    item: ast::Entity,
+    item: &ast::Entity,
     symtab: &mut SymbolTable,
     idtracker: &mut IdTracker,
 ) -> Result<hir::Entity> {
     symtab.new_scope();
 
-    let name = item.name.map(visit_identifier);
+    let name = item.name.map_ref(visit_identifier);
 
     let mut inputs = vec![];
-    for (name, input_type) in item.inputs {
-        let n = name.map(visit_identifier);
+    for (name, input_type) in &item.inputs {
+        let n = name.map_ref(visit_identifier);
         symtab.add_ident(&n);
 
         let t = input_type
-            .map(Type::convert_from_ast)
+            .map_ref(Type::convert_from_ast)
             .map_err(Error::InvalidType)?;
 
         inputs.push((n, t));
@@ -71,7 +71,7 @@ pub fn visit_entity(
 
     let output_type = item
         .output_type
-        .map(Type::convert_from_ast)
+        .map_ref(Type::convert_from_ast)
         .map_err(Error::InvalidType)?;
 
     let body = item.body.try_visit(visit_expression, symtab, idtracker)?;
@@ -87,7 +87,7 @@ pub fn visit_entity(
 }
 
 pub fn visit_item(
-    item: ast::Item,
+    item: &ast::Item,
     symtab: &mut SymbolTable,
     idtracker: &mut IdTracker,
 ) -> Result<hir::Item> {
@@ -101,33 +101,36 @@ pub fn visit_item(
 }
 
 pub fn visit_module_body(
-    module: ast::ModuleBody,
+    module: &ast::ModuleBody,
     symtab: &mut SymbolTable,
     idtracker: &mut IdTracker,
 ) -> Result<hir::ModuleBody> {
     Ok(hir::ModuleBody {
         members: module
             .members
-            .into_iter()
+            .iter()
             .map(|i| visit_item(i, symtab, idtracker))
             .collect::<Result<Vec<_>>>()?,
     })
 }
 
 pub fn visit_statement(
-    s: Loc<ast::Statement>,
+    s: &Loc<ast::Statement>,
     symtab: &mut SymbolTable,
     idtracker: &mut IdTracker,
 ) -> Result<Loc<hir::Statement>> {
-    let (s, span) = s.split();
+    let (s, span) = s.split_ref();
     match s {
         ast::Statement::Binding(ident, t, expr) => {
             let hir_type = if let Some(t) = t {
-                Some(t.map(Type::convert_from_ast).map_err(Error::InvalidType)?)
+                Some(
+                    t.map_ref(Type::convert_from_ast)
+                        .map_err(Error::InvalidType)?,
+                )
             } else {
                 None
             };
-            let name = ident.map(visit_identifier);
+            let name = ident.map_ref(visit_identifier);
             symtab.add_ident(&name);
 
             let expr = expr.try_visit(visit_expression, symtab, idtracker)?;
@@ -138,19 +141,19 @@ pub fn visit_statement(
             ))
         }
         ast::Statement::Register(inner) => {
-            let (result, span) = visit_register(inner, symtab, idtracker)?.separate();
+            let (result, span) = visit_register(&inner, symtab, idtracker)?.separate();
             Ok(Loc::new(hir::Statement::Register(result), span))
         }
     }
 }
 
 pub fn visit_expression(
-    e: ast::Expression,
+    e: &ast::Expression,
     symtab: &mut SymbolTable,
     idtracker: &mut IdTracker,
 ) -> Result<hir::Expression> {
     match e {
-        ast::Expression::IntLiteral(val) => Ok(hir::ExprKind::IntLiteral(val)),
+        ast::Expression::IntLiteral(val) => Ok(hir::ExprKind::IntLiteral(val.clone())),
         ast::Expression::BinaryOperator(lhs, tok, rhs) => {
             let lhs = lhs.try_visit(visit_expression, symtab, idtracker)?;
             let rhs = rhs.try_visit(visit_expression, symtab, idtracker)?;
@@ -183,19 +186,19 @@ pub fn visit_expression(
             ))
         }
         ast::Expression::Block(block) => Ok(hir::ExprKind::Block(Box::new(visit_block(
-            *block, symtab, idtracker,
+            block, symtab, idtracker,
         )?))),
         ast::Expression::Identifier(path) => {
-            let hir_path = path.clone().map(visit_path);
+            let hir_path = path.clone().map_ref(visit_path);
             if let Some(id) = hir_path.maybe_identifier() {
                 if symtab.has_symbol(id) {
                     Ok(hir::ExprKind::Identifier(hir_path))
                 } else {
-                    Err(Error::UndefinedPath(path))
+                    Err(Error::UndefinedPath(path.clone()))
                 }
             } else {
                 println!("NOTE: global symbols are currently unsupported");
-                Err(Error::UndefinedPath(path))
+                Err(Error::UndefinedPath(path.clone()))
             }
         }
     }
@@ -203,14 +206,14 @@ pub fn visit_expression(
 }
 
 pub fn visit_block(
-    b: ast::Block,
+    b: &ast::Block,
     symtab: &mut SymbolTable,
     idtracker: &mut IdTracker,
 ) -> Result<hir::Block> {
     symtab.new_scope();
     let mut statements = vec![];
-    for statement in b.statements {
-        statements.push(visit_statement(statement, symtab, idtracker)?)
+    for statement in &b.statements {
+        statements.push(visit_statement(&statement, symtab, idtracker)?)
     }
 
     let result = b.result.try_visit(visit_expression, symtab, idtracker)?;
@@ -220,39 +223,34 @@ pub fn visit_block(
     Ok(hir::Block { statements, result })
 }
 
-pub fn visit_identifier(id: ast::Identifier) -> hir::Identifier {
-    hir::Identifier::Named(id.0)
+pub fn visit_identifier(id: &ast::Identifier) -> hir::Identifier {
+    hir::Identifier::Named(id.0.clone())
 }
-pub fn visit_path(path: ast::Path) -> hir::Path {
-    let result = path
-        .0
-        .iter()
-        .cloned()
-        .map(|p| visit_identifier(p.inner))
-        .collect();
+pub fn visit_path(path: &ast::Path) -> hir::Path {
+    let result = path.0.iter().map(|p| visit_identifier(&p)).collect();
     hir::Path(result)
 }
 
 pub fn visit_register(
-    reg: Loc<ast::Register>,
+    reg: &Loc<ast::Register>,
     symtab: &mut SymbolTable,
     idtracker: &mut IdTracker,
 ) -> Result<Loc<hir::Register>> {
-    let (reg, loc) = reg.split();
+    let (reg, loc) = reg.split_ref();
 
-    let name = reg.name.map(visit_identifier);
+    let name = reg.name.map_ref(visit_identifier);
     symtab.add_ident(&name);
 
-    let clock = reg.clock.clone().map(visit_path);
+    let clock = reg.clock.clone().map_ref(visit_path);
     if let Some(id) = clock.maybe_identifier() {
         if !symtab.has_symbol(id) {
-            return Err(Error::UndefinedPath(reg.clock));
+            return Err(Error::UndefinedPath(reg.clock.clone()));
         }
     } else {
         unimplemented!("Global clocks are unsupported")
     }
 
-    let reset = if let Some((trig, value)) = reg.reset {
+    let reset = if let Some((trig, value)) = &reg.reset {
         Some((
             trig.try_visit(visit_expression, symtab, idtracker)?,
             value.try_visit(visit_expression, symtab, idtracker)?,
@@ -263,10 +261,10 @@ pub fn visit_register(
 
     let value = reg.value.try_visit(visit_expression, symtab, idtracker)?;
 
-    let value_type = if let Some(value_type) = reg.value_type {
+    let value_type = if let Some(value_type) = &reg.value_type {
         Some(
             value_type
-                .map(Type::convert_from_ast)
+                .map_ref(Type::convert_from_ast)
                 .map_err(Error::InvalidType)?,
         )
     } else {
@@ -337,7 +335,7 @@ mod entity_visiting {
         let mut symtab = SymbolTable::new();
         let mut idtracker = IdTracker::new();
 
-        let result = visit_entity(input, &mut symtab, &mut idtracker);
+        let result = visit_entity(&input, &mut symtab, &mut idtracker);
 
         assert_eq!(result, Ok(expected));
 
@@ -375,7 +373,7 @@ mod statement_visiting {
         .nowhere();
 
         assert_eq!(
-            visit_statement(input, &mut symtab, &mut idtracker),
+            visit_statement(&input, &mut symtab, &mut idtracker),
             Ok(expected)
         );
         assert_eq!(symtab.has_symbol(&hir_ident("a").inner), true);
@@ -411,7 +409,7 @@ mod statement_visiting {
         let mut idtracker = IdTracker::new();
         symtab.add_ident(&hir_ident("clk"));
         assert_eq!(
-            visit_statement(input, &mut symtab, &mut idtracker),
+            visit_statement(&input, &mut symtab, &mut idtracker),
             Ok(expected)
         );
         assert_eq!(symtab.has_symbol(&hir_ident("regname").inner), true);
@@ -433,7 +431,7 @@ mod expression_visiting {
         let expected = hir::ExprKind::IntLiteral(123).idless();
 
         assert_eq!(
-            visit_expression(input, &mut symtab, &mut idtracker),
+            visit_expression(&input, &mut symtab, &mut idtracker),
             Ok(expected)
         );
     }
@@ -459,7 +457,7 @@ mod expression_visiting {
                 .idless();
 
                 assert_eq!(
-                    visit_expression(input, &mut symtab, &mut idtracker),
+                    visit_expression(&input, &mut symtab, &mut idtracker),
                     Ok(expected)
                 );
             }
@@ -481,7 +479,7 @@ mod expression_visiting {
         let expected = hir::ExprKind::Identifier(hir_path("test")).idless();
 
         assert_eq!(
-            visit_expression(input, &mut symtab, &mut idtracker),
+            visit_expression(&input, &mut symtab, &mut idtracker),
             Ok(expected)
         );
     }
@@ -493,7 +491,7 @@ mod expression_visiting {
         let input = ast::Expression::Identifier(ast_path("test"));
 
         assert_eq!(
-            visit_expression(input, &mut symtab, &mut idtracker),
+            visit_expression(&input, &mut symtab, &mut idtracker),
             Err(Error::UndefinedPath(ast_path("test")))
         );
     }
@@ -523,7 +521,7 @@ mod expression_visiting {
         let mut symtab = SymbolTable::new();
         let mut idtracker = IdTracker::new();
         assert_eq!(
-            visit_expression(input, &mut symtab, &mut idtracker),
+            visit_expression(&input, &mut symtab, &mut idtracker),
             Ok(expected)
         );
         assert!(!symtab.has_symbol(&hir_ident("a").inner));
@@ -572,7 +570,7 @@ mod expression_visiting {
         let mut symtab = SymbolTable::new();
         let mut idtracker = IdTracker::new();
         assert_eq!(
-            visit_expression(input, &mut symtab, &mut idtracker),
+            visit_expression(&input, &mut symtab, &mut idtracker),
             Ok(expected)
         );
     }
@@ -618,7 +616,7 @@ mod register_visiting {
         symtab.add_ident(&hir_ident("clk"));
         symtab.add_ident(&hir_ident("rst"));
         assert_eq!(
-            visit_register(input, &mut symtab, &mut idtracker),
+            visit_register(&input, &mut symtab, &mut idtracker),
             Ok(expected)
         );
     }
@@ -666,7 +664,10 @@ mod item_visiting {
 
         let mut symtab = SymbolTable::new();
         let mut idtracker = IdTracker::new();
-        assert_eq!(visit_item(input, &mut symtab, &mut idtracker), Ok(expected));
+        assert_eq!(
+            visit_item(&input, &mut symtab, &mut idtracker),
+            Ok(expected)
+        );
     }
 }
 
@@ -717,7 +718,7 @@ mod module_visiting {
         let mut symtab = SymbolTable::new();
         let mut idtracker = IdTracker::new();
         assert_eq!(
-            visit_module_body(input, &mut symtab, &mut idtracker),
+            visit_module_body(&input, &mut symtab, &mut idtracker),
             Ok(expected)
         );
     }

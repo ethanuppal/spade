@@ -37,11 +37,10 @@ impl GlobalSymbols {
             .inner
             .inputs
             .iter()
-            .map(|i| i.1.inner.clone())
-            .map(Type::convert_from_ast)
+            .map(|i| Type::convert_from_ast(&i.1.inner))
             .collect::<Result<Vec<_>, _>>()?;
 
-        let return_type = Type::convert_from_ast(e.inner.output_type.inner)?;
+        let return_type = Type::convert_from_ast(&e.inner.output_type.inner)?;
 
         let prev = self.inner.insert(
             path.clone(),
