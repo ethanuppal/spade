@@ -1,8 +1,8 @@
 use super::Identifier;
-use crate::location_info::{Loc, WithLocation};
+use crate::location_info::WithLocation;
 
 #[derive(PartialEq, Debug, Clone, Eq, Hash)]
-pub struct Path(pub Vec<Loc<Identifier>>);
+pub struct Path(pub Vec<Identifier>);
 
 impl WithLocation for Path {}
 
@@ -13,7 +13,6 @@ impl Path {
                 .iter()
                 .map(|s| s.to_string())
                 .map(Identifier::Named)
-                .map(Loc::nowhere)
                 .collect(),
         )
     }
@@ -23,10 +22,18 @@ impl Path {
             "_m_{}",
             self.0
                 .iter()
-                .map(|i| format!("{}", i.inner))
+                .map(|l| format!("{}", l))
                 .collect::<Vec<_>>()
                 .join("_")
         )
+    }
+
+    pub fn maybe_identifier(&self) -> Option<&Identifier> {
+        if self.0.len() == 1 {
+            Some(&self.0[0])
+        } else {
+            None
+        }
     }
 }
 
@@ -35,7 +42,6 @@ impl std::fmt::Display for Path {
         let result = self
             .0
             .iter()
-            .map(Loc::strip_ref)
             .map(|id| format!("{}", id))
             .collect::<Vec<_>>()
             .join("::");

@@ -9,7 +9,7 @@ pub enum Identifier {
 
 impl Loc<Identifier> {
     pub fn to_path(self) -> Path {
-        Path(vec![self])
+        Path(vec![self.inner])
     }
 }
 

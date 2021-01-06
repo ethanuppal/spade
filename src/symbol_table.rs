@@ -1,10 +1,12 @@
-use crate::ast::{Identifier, Path};
+use crate::hir::Identifier;
 use crate::location_info::Loc;
 use std::collections::HashMap;
 
+/// A table of scoped symbols defined locally. Global symbols, i.e. paths are
+/// tracked by the [crate::global_symbols::GlobalSymbols] struct
 pub struct SymbolTable {
     /// Each outer vec is a scope, inner vecs are symbols in that scope
-    symbols: Vec<HashMap<Vec<String>, Loc<()>>>,
+    symbols: Vec<HashMap<Identifier, Loc<()>>>,
 }
 
 impl SymbolTable {
@@ -22,20 +24,17 @@ impl SymbolTable {
     }
 
     pub fn add_ident(&mut self, name: &Loc<Identifier>) {
-        self.add_symbol(name.clone().map(|id| vec![id.0]))
+        self.add_symbol(name)
     }
 
-    pub fn add_symbol(&mut self, name: Loc<Vec<String>>) {
+    pub fn add_symbol(&mut self, name: &Loc<Identifier>) {
         self.symbols
             .last_mut()
-            .expect("At least one scope must be present to add a scope")
+            .expect("At least one scope must be present to add a symbol")
             .insert(name.inner.clone(), name.loc());
     }
 
-    pub fn has_symbol(&self, name: &[String]) -> bool {
+    pub fn has_symbol(&self, name: &Identifier) -> bool {
         self.symbols.iter().any(|i| i.contains_key(name))
-    }
-    pub fn has_path(&self, name: &Path) -> bool {
-        self.has_symbol(&name.as_strings())
     }
 }

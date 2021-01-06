@@ -53,20 +53,20 @@ pub fn visit_entity(
     symtab: &mut SymbolTable,
     idtracker: &mut IdTracker,
 ) -> Result<hir::Entity> {
-    symtab.add_ident(&item.name);
     symtab.new_scope();
 
     let name = item.name.map(visit_identifier);
 
     let mut inputs = vec![];
     for (name, input_type) in item.inputs {
-        symtab.add_ident(&name);
+        let n = name.map(visit_identifier);
+        symtab.add_ident(&n);
 
         let t = input_type
             .map(Type::convert_from_ast)
             .map_err(Error::InvalidType)?;
 
-        inputs.push((name.map(visit_identifier), t));
+        inputs.push((n, t));
     }
 
     let output_type = item
@@ -122,13 +122,13 @@ pub fn visit_statement(
     let (s, span) = s.split();
     match s {
         ast::Statement::Binding(ident, t, expr) => {
-            symtab.add_ident(&ident);
             let hir_type = if let Some(t) = t {
                 Some(t.map(Type::convert_from_ast).map_err(Error::InvalidType)?)
             } else {
                 None
             };
             let name = ident.map(visit_identifier);
+            symtab.add_ident(&name);
 
             let expr = expr.try_visit(visit_expression, symtab, idtracker)?;
 
@@ -186,9 +186,15 @@ pub fn visit_expression(
             *block, symtab, idtracker,
         )?))),
         ast::Expression::Identifier(path) => {
-            if symtab.has_path(&path.inner) {
-                Ok(hir::ExprKind::Identifier(path.map(visit_path)))
+            let hir_path = path.clone().map(visit_path);
+            if let Some(id) = hir_path.maybe_identifier() {
+                if symtab.has_symbol(id) {
+                    Ok(hir::ExprKind::Identifier(hir_path))
+                } else {
+                    Err(Error::UndefinedPath(path))
+                }
             } else {
+                println!("NOTE: global symbols are currently unsupported");
                 Err(Error::UndefinedPath(path))
             }
         }
@@ -222,7 +228,7 @@ pub fn visit_path(path: ast::Path) -> hir::Path {
         .0
         .iter()
         .cloned()
-        .map(|p| p.map(visit_identifier))
+        .map(|p| visit_identifier(p.inner))
         .collect();
     hir::Path(result)
 }
@@ -234,13 +240,17 @@ pub fn visit_register(
 ) -> Result<Loc<hir::Register>> {
     let (reg, loc) = reg.split();
 
-    symtab.add_ident(&reg.name);
     let name = reg.name.map(visit_identifier);
+    symtab.add_ident(&name);
 
-    if !symtab.has_path(&reg.clock.inner) {
-        return Err(Error::UndefinedPath(reg.clock));
+    let clock = reg.clock.clone().map(visit_path);
+    if let Some(id) = clock.maybe_identifier() {
+        if !symtab.has_symbol(id) {
+            return Err(Error::UndefinedPath(reg.clock));
+        }
+    } else {
+        unimplemented!("Global clocks are unsupported")
     }
-    let clock = reg.clock.map(visit_path);
 
     let reset = if let Some((trig, value)) = reg.reset {
         Some((
@@ -280,7 +290,7 @@ mod entity_visiting {
     use super::*;
 
     use crate::location_info::WithLocation;
-    use crate::testutil::{ast_ident, ast_path, hir_ident};
+    use crate::testutil::{ast_ident, hir_ident};
 
     use pretty_assertions::assert_eq;
 
@@ -331,11 +341,9 @@ mod entity_visiting {
 
         assert_eq!(result, Ok(expected));
 
-        // The entity symbol should be defined
-        assert!(symtab.has_path(&ast_path("test").inner));
         // But the local variables should not
-        assert!(!symtab.has_path(&ast_path("a").inner));
-        assert!(!symtab.has_path(&ast_path("var").inner));
+        assert!(!symtab.has_symbol(&hir_ident("a").inner));
+        assert!(!symtab.has_symbol(&hir_ident("var").inner));
     }
 }
 
@@ -370,7 +378,7 @@ mod statement_visiting {
             visit_statement(input, &mut symtab, &mut idtracker),
             Ok(expected)
         );
-        assert_eq!(symtab.has_path(&ast_path("a").inner), true);
+        assert_eq!(symtab.has_symbol(&hir_ident("a").inner), true);
     }
 
     #[test]
@@ -401,12 +409,12 @@ mod statement_visiting {
 
         let mut symtab = SymbolTable::new();
         let mut idtracker = IdTracker::new();
-        symtab.add_ident(&ast_ident("clk"));
+        symtab.add_ident(&hir_ident("clk"));
         assert_eq!(
             visit_statement(input, &mut symtab, &mut idtracker),
             Ok(expected)
         );
-        assert_eq!(symtab.has_path(&ast_path("regname").inner), true);
+        assert_eq!(symtab.has_symbol(&hir_ident("regname").inner), true);
     }
 }
 
@@ -414,8 +422,8 @@ mod statement_visiting {
 mod expression_visiting {
     use super::*;
 
-    use crate::location_info::WithLocation;
-    use crate::testutil::{ast_ident, ast_path, hir_path};
+    use crate::testutil::{ast_path, hir_path};
+    use crate::{location_info::WithLocation, testutil::hir_ident};
 
     #[test]
     fn int_literals_work() {
@@ -468,7 +476,7 @@ mod expression_visiting {
     fn identifiers_work() {
         let mut symtab = SymbolTable::new();
         let mut idtracker = IdTracker::new();
-        symtab.add_ident(&ast_ident("test"));
+        symtab.add_ident(&hir_ident("test"));
         let input = ast::Expression::Identifier(ast_path("test"));
         let expected = hir::ExprKind::Identifier(hir_path("test")).idless();
 
@@ -518,7 +526,7 @@ mod expression_visiting {
             visit_expression(input, &mut symtab, &mut idtracker),
             Ok(expected)
         );
-        assert!(!symtab.has_path(&ast_path("a").inner));
+        assert!(!symtab.has_symbol(&hir_ident("a").inner));
     }
 
     #[test]
@@ -575,7 +583,7 @@ mod register_visiting {
     use super::*;
 
     use crate::location_info::WithLocation;
-    use crate::testutil::{ast_ident, ast_path, hir_ident, hir_path};
+    use crate::testutil::{ast_path, hir_ident, hir_path};
 
     #[test]
     fn register_visiting_works() {
@@ -607,8 +615,8 @@ mod register_visiting {
 
         let mut symtab = SymbolTable::new();
         let mut idtracker = IdTracker::new();
-        symtab.add_ident(&ast_ident("clk"));
-        symtab.add_ident(&ast_ident("rst"));
+        symtab.add_ident(&hir_ident("clk"));
+        symtab.add_ident(&hir_ident("rst"));
         assert_eq!(
             visit_register(input, &mut symtab, &mut idtracker),
             Ok(expected)

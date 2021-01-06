@@ -69,7 +69,7 @@ pub fn ast_path(name: &str) -> Loc<ast::Path> {
     ast::Path(vec![ast_ident(name)]).nowhere()
 }
 pub fn hir_path(name: &str) -> Loc<hir::Path> {
-    hir::Path(vec![hir_ident(name)]).nowhere()
+    hir::Path(vec![hir_ident(name).inner]).nowhere()
 }
 
 #[macro_export]
