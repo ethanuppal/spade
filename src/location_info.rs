@@ -130,3 +130,16 @@ where
         )
     }
 }
+
+impl<T> std::ops::Deref for Loc<T> {
+    type Target = T;
+
+    fn deref(&self) -> &Self::Target {
+        &self.inner
+    }
+}
+impl<T> std::ops::DerefMut for Loc<T> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.inner
+    }
+}
