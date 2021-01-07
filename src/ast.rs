@@ -88,7 +88,7 @@ pub struct FunctionDecl {
     pub name: Loc<Identifier>,
     pub self_arg: Option<Loc<()>>,
     pub inputs: Vec<(Loc<Identifier>, Loc<Type>)>,
-    pub return_type: Option<Loc<Type>>,
+    pub return_type: Loc<Type>,
 }
 impl WithLocation for FunctionDecl {}
 

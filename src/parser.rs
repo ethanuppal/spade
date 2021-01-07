@@ -473,9 +473,9 @@ impl<'a> Parser<'a> {
 
         // Return type
         let return_type = if self.peek_and_eat_kind(&TokenKind::SlimArrow)?.is_some() {
-            Some(self.parse_type()?)
+            self.parse_type()?
         } else {
-            None
+            Type::UnitType.nowhere()
         };
 
         let end_token = self.eat(&TokenKind::Semi)?;
@@ -1216,7 +1216,7 @@ mod tests {
             name: ast_ident("some_fn"),
             self_arg: Some(().nowhere()),
             inputs: vec![(ast_ident("a"), Type::Named(ast_path("bit").inner).nowhere())],
-            return_type: Some(Type::Named(ast_path("bit").inner).nowhere()),
+            return_type: Type::Named(ast_path("bit").inner).nowhere(),
         }
         .nowhere();
 
@@ -1231,7 +1231,22 @@ mod tests {
             name: ast_ident("some_fn"),
             self_arg: Some(().nowhere()),
             inputs: vec![],
-            return_type: Some(Type::Named(ast_path("bit").inner).nowhere()),
+            return_type: Type::Named(ast_path("bit").inner).nowhere(),
+        }
+        .nowhere();
+
+        check_parse!(code, function_decl, Ok(Some(expected)));
+    }
+
+    #[test]
+    fn function_declarations_with_no_type_have_unit_type() {
+        let code = "fn some_fn(self);";
+
+        let expected = FunctionDecl {
+            name: ast_ident("some_fn"),
+            self_arg: Some(().nowhere()),
+            inputs: vec![],
+            return_type: Type::UnitType.nowhere(),
         }
         .nowhere();
 
@@ -1251,14 +1266,14 @@ mod tests {
             name: ast_ident("some_fn"),
             self_arg: Some(().nowhere()),
             inputs: vec![(ast_ident("a"), Type::Named(ast_path("bit").inner).nowhere())],
-            return_type: Some(Type::Named(ast_path("bit").inner).nowhere()),
+            return_type: Type::Named(ast_path("bit").inner).nowhere(),
         }
         .nowhere();
         let fn2 = FunctionDecl {
             name: ast_ident("another_fn"),
             self_arg: Some(().nowhere()),
             inputs: vec![],
-            return_type: Some(Type::Named(ast_path("bit").inner).nowhere()),
+            return_type: Type::Named(ast_path("bit").inner).nowhere(),
         }
         .nowhere();
 

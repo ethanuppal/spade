@@ -77,6 +77,12 @@ impl<T> Loc<T> {
             span: self.span,
         }
     }
+    pub fn try_map_ref<Y, E>(&self, mut op: impl FnMut(&T) -> Result<Y, E>) -> Result<Loc<Y>, E> {
+        Ok(Loc {
+            inner: op(&self.inner)?,
+            span: self.span,
+        })
+    }
 
     pub fn loc(&self) -> Loc<()> {
         Loc {

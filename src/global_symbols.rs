@@ -2,9 +2,9 @@ use std::collections::HashMap;
 
 use thiserror::Error;
 
-use crate::hir::Path;
 use crate::location_info::Loc;
 use crate::types::{self, Type};
+use crate::{ast, hir::Path};
 use crate::{
     ast::Item,
     ast::ModuleBody,
@@ -81,19 +81,56 @@ impl Symbols {
     }
 
     pub fn visit_item(&mut self, mod_path: &Path, item: &Item) -> Result<()> {
-        match item {
+        let (name, item) = match item {
             Item::Entity(entity) => {
                 let name = visit_identifier(&entity.name);
 
-                let head = entity.map_ref(|t| entity_head(t)).map_err(|e, _| e)?;
+                let head = entity.try_map_ref(entity_head)?;
 
-                self.symbols
-                    .insert(mod_path.with_ident(name), GlobalItem::Entity(head));
-
-                Ok(())
+                (name, GlobalItem::Entity(head))
             }
-            Item::TraitDef(_) => unimplemented![],
-        }
+            Item::TraitDef(def) => {
+                let trait_name = visit_identifier(&def.name);
+                (
+                    trait_name,
+                    GlobalItem::TraitDef(def.try_map_ref(Self::visit_trait_def)?),
+                )
+            }
+        };
+
+        let new_path = mod_path.with_ident(name);
+        self.symbols.insert(new_path, item);
+
+        Ok(())
+    }
+
+    pub fn visit_trait_def(def: &ast::TraitDef) -> Result<TraitDef> {
+        let functions = def
+            .functions
+            .iter()
+            .map(|func_loc| {
+                func_loc.try_map_ref(|func| {
+                    let inputs = func
+                        .inputs
+                        .iter()
+                        .map(|(n, t)| {
+                            Ok((
+                                n.map_ref(visit_identifier),
+                                t.try_map_ref(Type::convert_from_ast)?,
+                            ))
+                        })
+                        .collect::<Result<Vec<_>>>()?;
+                    Ok(FunctionDecl {
+                        name: func.name.map_ref(visit_identifier),
+                        self_arg: func.self_arg,
+                        inputs,
+                        output_type: func.return_type.try_map_ref(Type::convert_from_ast)?,
+                    })
+                })
+            })
+            .collect::<Result<Vec<_>>>()?;
+
+        Ok(TraitDef { functions })
     }
 }
 
@@ -142,5 +179,55 @@ mod tests {
         );
 
         assert_eq!(symbols.lookup(Path::from_strs(&["test"])), Some(&expected));
+    }
+
+    #[test]
+    fn trait_defintions_are_found() {
+        let module = ModuleBody {
+            members: vec![Item::TraitDef(
+                ast::TraitDef {
+                    name: ast_ident("TestTrait"),
+                    functions: vec![ast::FunctionDecl {
+                        name: ast_ident("fn1"),
+                        self_arg: Some(Loc::nowhere(())),
+                        inputs: vec![
+                            (ast_ident("a"), ast::Type::UnitType.nowhere()),
+                            (ast_ident("b"), ast::Type::UnitType.nowhere()),
+                        ],
+                        return_type: ast::Type::UnitType.nowhere(),
+                    }
+                    .nowhere()],
+                }
+                .nowhere(),
+            )],
+        }
+        .nowhere();
+
+        let mut symbols = Symbols::new();
+
+        symbols
+            .visit_module(Path::from_strs(&[]), &module)
+            .expect("failed to visit module");
+
+        let expected = GlobalItem::TraitDef(
+            TraitDef {
+                functions: vec![FunctionDecl {
+                    name: hir_ident("fn1"),
+                    self_arg: Some(Loc::nowhere(())),
+                    inputs: vec![
+                        (hir_ident("a"), types::Type::Unit.nowhere()),
+                        (hir_ident("b"), types::Type::Unit.nowhere()),
+                    ],
+                    output_type: types::Type::Unit.nowhere(),
+                }
+                .nowhere()],
+            }
+            .nowhere(),
+        );
+
+        assert_eq!(
+            symbols.lookup(Path::from_strs(&["TestTrait"])),
+            Some(&expected)
+        );
     }
 }
