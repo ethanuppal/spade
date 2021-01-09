@@ -82,13 +82,22 @@ pub struct Register {
 }
 impl WithLocation for Register {}
 
-/// A definition of a function without a body. Primarily used in traits
+/// A generic type parameter
+#[derive(PartialEq, Debug, Clone)]
+pub enum TypeParam {
+    TypeName(Identifier),
+    Integer(Loc<Identifier>),
+}
+impl WithLocation for TypeParam {}
+
+/// A definition of a function without a body.
 #[derive(PartialEq, Debug, Clone)]
 pub struct FunctionDecl {
     pub name: Loc<Identifier>,
     pub self_arg: Option<Loc<()>>,
     pub inputs: Vec<(Loc<Identifier>, Loc<Type>)>,
     pub return_type: Loc<Type>,
+    pub type_params: Vec<Loc<TypeParam>>,
 }
 impl WithLocation for FunctionDecl {}
 

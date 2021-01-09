@@ -43,6 +43,10 @@ pub enum TokenKind {
     Slash,
     #[token("==")]
     Equals,
+    #[token("<")]
+    Lt,
+    #[token(">")]
+    Gt,
 
     // Other operators
     #[token("=")]
@@ -73,6 +77,8 @@ pub enum TokenKind {
     Colon,
     #[token("::")]
     PathSeparator,
+    #[token("#")]
+    Hash,
 
     #[regex("[ \t\n\r]", logos::skip)]
     Whitespace,
@@ -103,6 +109,8 @@ impl TokenKind {
             TokenKind::Asterisk => "*",
             TokenKind::Slash => "/",
             TokenKind::Equals => "==",
+            TokenKind::Lt => "<",
+            TokenKind::Gt => ">",
 
             TokenKind::OpenParen => "(",
             TokenKind::CloseParen => ")",
@@ -116,6 +124,8 @@ impl TokenKind {
             TokenKind::Colon => ":",
             TokenKind::Comma => ",",
             TokenKind::PathSeparator => "::",
+
+            TokenKind::Hash => "#",
 
             TokenKind::Whitespace => "whitespace",
             TokenKind::Error => "error",

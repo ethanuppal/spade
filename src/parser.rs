@@ -6,7 +6,7 @@ use parse_tree_macros::trace_parser;
 
 use crate::ast::{
     Block, Entity, Expression, FunctionDecl, Identifier, Item, ModuleBody, Path, Register,
-    Statement, TraitDef, Type,
+    Statement, TraitDef, Type, TypeParam,
 };
 use crate::lexer::TokenKind;
 use crate::location_info::{lspan, Loc, WithLocation};
@@ -434,6 +434,17 @@ impl<'a> Parser<'a> {
         ))
     }
 
+    #[trace_parser]
+    pub fn type_param(&mut self) -> Result<Loc<TypeParam>> {
+        // If this is a type level integer
+        if let Some(hash) = self.peek_and_eat_kind(&TokenKind::Hash)? {
+            let (id, loc) = self.identifier()?.separate();
+            Ok(TypeParam::Integer(id).at(lspan(hash.span).merge(loc)))
+        } else {
+            Ok(self.identifier()?.map(TypeParam::TypeName))
+        }
+    }
+
     // Traits
     #[trace_parser]
     pub fn function_decl(&mut self) -> Result<Option<Loc<FunctionDecl>>> {
@@ -444,6 +455,17 @@ impl<'a> Parser<'a> {
         };
 
         let name = self.identifier()?;
+
+        let type_params = if let Some(lt) = self.peek_and_eat_kind(&TokenKind::Lt)? {
+            let params = self.comma_separated(Self::type_param, &TokenKind::Gt)?;
+            self.eat(&TokenKind::Gt).map_err(|_| Error::UnmatchedPair {
+                friend: lt,
+                expected: TokenKind::Gt,
+            })?;
+            params
+        } else {
+            vec![]
+        };
 
         // Input types
         self.eat(&TokenKind::OpenParen)?;
@@ -486,6 +508,7 @@ impl<'a> Parser<'a> {
                 self_arg,
                 inputs,
                 return_type,
+                type_params,
             }
             .at(lspan(start_token.span).merge(lspan(end_token.span))),
         ))
@@ -1217,6 +1240,7 @@ mod tests {
             self_arg: Some(().nowhere()),
             inputs: vec![(ast_ident("a"), Type::Named(ast_path("bit").inner).nowhere())],
             return_type: Type::Named(ast_path("bit").inner).nowhere(),
+            type_params: vec![],
         }
         .nowhere();
 
@@ -1232,6 +1256,7 @@ mod tests {
             self_arg: Some(().nowhere()),
             inputs: vec![],
             return_type: Type::Named(ast_path("bit").inner).nowhere(),
+            type_params: vec![],
         }
         .nowhere();
 
@@ -1247,6 +1272,23 @@ mod tests {
             self_arg: Some(().nowhere()),
             inputs: vec![],
             return_type: Type::UnitType.nowhere(),
+            type_params: vec![],
+        }
+        .nowhere();
+
+        check_parse!(code, function_decl, Ok(Some(expected)));
+    }
+
+    #[test]
+    fn function_decls_with_generic_type_works() {
+        let code = "fn some_fn<X>(self);";
+
+        let expected = FunctionDecl {
+            name: ast_ident("some_fn"),
+            self_arg: Some(().nowhere()),
+            inputs: vec![],
+            return_type: Type::UnitType.nowhere(),
+            type_params: vec![TypeParam::TypeName(ast_ident("X").inner).nowhere()],
         }
         .nowhere();
 
@@ -1267,6 +1309,7 @@ mod tests {
             self_arg: Some(().nowhere()),
             inputs: vec![(ast_ident("a"), Type::Named(ast_path("bit").inner).nowhere())],
             return_type: Type::Named(ast_path("bit").inner).nowhere(),
+            type_params: vec![],
         }
         .nowhere();
         let fn2 = FunctionDecl {
@@ -1274,6 +1317,7 @@ mod tests {
             self_arg: Some(().nowhere()),
             inputs: vec![],
             return_type: Type::Named(ast_path("bit").inner).nowhere(),
+            type_params: vec![],
         }
         .nowhere();
 
@@ -1284,5 +1328,23 @@ mod tests {
         .nowhere();
 
         check_parse!(code, trait_def, Ok(Some(expected)));
+    }
+
+    #[test]
+    fn typenames_parse() {
+        let code = "X";
+
+        let expected = TypeParam::TypeName(ast_ident("X").inner).nowhere();
+
+        check_parse!(code, type_param, Ok(expected));
+    }
+
+    #[test]
+    fn typeints_parse() {
+        let code = "#X";
+
+        let expected = TypeParam::Integer(ast_ident("X")).nowhere();
+
+        check_parse!(code, type_param, Ok(expected));
     }
 }

@@ -195,6 +195,7 @@ mod tests {
                             (ast_ident("b"), ast::Type::UnitType.nowhere()),
                         ],
                         return_type: ast::Type::UnitType.nowhere(),
+                        type_params: vec![],
                     }
                     .nowhere()],
                 }
