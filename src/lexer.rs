@@ -80,10 +80,10 @@ pub enum TokenKind {
     #[token("#")]
     Hash,
 
+    /// Ignoring whitespace
     #[regex("[ \t\n\r]", logos::skip)]
     Whitespace,
 
-    // Ignoring whitespace
     #[error]
     Error,
 }
