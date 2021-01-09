@@ -61,6 +61,14 @@ pub enum Statement {
 }
 impl WithLocation for Statement {}
 
+/// A generic type parameter
+#[derive(PartialEq, Debug, Clone)]
+pub enum TypeParam {
+    TypeName(Identifier),
+    Integer(Loc<Identifier>),
+}
+impl WithLocation for TypeParam {}
+
 #[derive(PartialEq, Debug, Clone)]
 pub struct Entity {
     pub name: Loc<Identifier>,
@@ -69,6 +77,7 @@ pub struct Entity {
     /// The body is an expression for ID assignment purposes, but semantic analysis
     /// ensures that it is always a block.
     pub body: Loc<Expression>,
+    pub type_params: Vec<Loc<TypeParam>>,
 }
 impl WithLocation for Entity {}
 
@@ -81,14 +90,6 @@ pub struct Register {
     pub value_type: Option<Loc<Type>>,
 }
 impl WithLocation for Register {}
-
-/// A generic type parameter
-#[derive(PartialEq, Debug, Clone)]
-pub enum TypeParam {
-    TypeName(Identifier),
-    Integer(Loc<Identifier>),
-}
-impl WithLocation for TypeParam {}
 
 /// A definition of a function without a body.
 #[derive(PartialEq, Debug, Clone)]

@@ -327,6 +327,7 @@ mod entity_visiting {
                 result: ast::Expression::IntLiteral(0).nowhere(),
             }))
             .nowhere(),
+            type_params: vec![],
         };
 
         let expected = hir::Entity {
@@ -664,6 +665,7 @@ mod item_visiting {
                     result: ast::Expression::IntLiteral(0).nowhere(),
                 }))
                 .nowhere(),
+                type_params: vec![],
             }
             .nowhere(),
         );
@@ -716,6 +718,7 @@ mod module_visiting {
                         result: ast::Expression::IntLiteral(0).nowhere(),
                     }))
                     .nowhere(),
+                    type_params: vec![],
                 }
                 .nowhere(),
             )],

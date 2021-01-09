@@ -155,6 +155,7 @@ mod tests {
                     ],
                     output_type: ast::Type::UnitType.nowhere(),
                     body: ast::Expression::Identifier(ast_path("ignored")).nowhere(),
+                    type_params: vec![],
                 }
                 .nowhere(),
             )],

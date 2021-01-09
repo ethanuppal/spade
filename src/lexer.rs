@@ -10,7 +10,7 @@ pub enum TokenKind {
     )"#, |lex| lex.slice().to_string())]
     Identifier(String),
 
-    #[regex(r"[0-9][0-9_]*", |lex| lex.slice().parse())]
+    #[regex(r"[0-9][0-9_]*", |lex| lex.slice().replace("_", "").parse())]
     Integer(u128),
 
     // Keywords

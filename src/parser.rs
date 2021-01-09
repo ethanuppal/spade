@@ -392,6 +392,8 @@ impl<'a> Parser<'a> {
 
         let name = self.identifier()?;
 
+        let type_params = self.generics_list()?;
+
         // Input types
         self.eat(&TokenKind::OpenParen)?;
         let inputs = self.comma_separated(Self::name_and_type, &TokenKind::CloseParen)?;
@@ -429,6 +431,7 @@ impl<'a> Parser<'a> {
                 inputs,
                 output_type: output_type.unwrap_or(Type::UnitType.nowhere()),
                 body: block.map(|inner| Expression::Block(Box::new(inner))),
+                type_params,
             }
             .at(lspan(start_token.span).merge(block_span)),
         ))
@@ -445,6 +448,20 @@ impl<'a> Parser<'a> {
         }
     }
 
+    #[trace_parser]
+    pub fn generics_list(&mut self) -> Result<Vec<Loc<TypeParam>>> {
+        if let Some(lt) = self.peek_and_eat_kind(&TokenKind::Lt)? {
+            let params = self.comma_separated(Self::type_param, &TokenKind::Gt)?;
+            self.eat(&TokenKind::Gt).map_err(|_| Error::UnmatchedPair {
+                friend: lt,
+                expected: TokenKind::Gt,
+            })?;
+            Ok(params)
+        } else {
+            Ok(vec![])
+        }
+    }
+
     // Traits
     #[trace_parser]
     pub fn function_decl(&mut self) -> Result<Option<Loc<FunctionDecl>>> {
@@ -456,16 +473,7 @@ impl<'a> Parser<'a> {
 
         let name = self.identifier()?;
 
-        let type_params = if let Some(lt) = self.peek_and_eat_kind(&TokenKind::Lt)? {
-            let params = self.comma_separated(Self::type_param, &TokenKind::Gt)?;
-            self.eat(&TokenKind::Gt).map_err(|_| Error::UnmatchedPair {
-                friend: lt,
-                expected: TokenKind::Gt,
-            })?;
-            params
-        } else {
-            vec![]
-        };
+        let type_params = self.generics_list()?;
 
         // Input types
         self.eat(&TokenKind::OpenParen)?;
@@ -1090,6 +1098,7 @@ mod tests {
                 result: Expression::Identifier(ast_path("test")).nowhere(),
             }))
             .nowhere(),
+            type_params: vec![],
         }
         .nowhere();
 
@@ -1117,6 +1126,29 @@ mod tests {
                 result: Expression::Identifier(ast_path("clk")).nowhere(),
             }))
             .nowhere(),
+            type_params: vec![],
+        }
+        .nowhere();
+
+        check_parse!(code, entity, Ok(Some(expected)));
+    }
+
+    #[test]
+    fn entity_with_generics() {
+        let code = include_str!("../parser_test_code/entity_with_generics.sp");
+        let expected = Entity {
+            name: ast_ident("with_generics"),
+            inputs: vec![],
+            output_type: Type::UnitType.nowhere(),
+            body: Expression::Block(Box::new(Block {
+                statements: vec![],
+                result: Expression::Identifier(ast_path("clk")).nowhere(),
+            }))
+            .nowhere(),
+            type_params: vec![
+                TypeParam::TypeName(ast_ident("X").inner).nowhere(),
+                TypeParam::Integer(ast_ident("Y")).nowhere(),
+            ],
         }
         .nowhere();
 
@@ -1209,6 +1241,7 @@ mod tests {
                 result: Expression::IntLiteral(0).nowhere(),
             }))
             .nowhere(),
+            type_params: vec![],
         }
         .nowhere();
 
@@ -1221,6 +1254,7 @@ mod tests {
                 result: Expression::IntLiteral(1).nowhere(),
             }))
             .nowhere(),
+            type_params: vec![],
         }
         .nowhere();
 
