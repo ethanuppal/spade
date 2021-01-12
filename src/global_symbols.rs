@@ -175,6 +175,7 @@ mod tests {
                     (hir_ident("b"), types::Type::Unit.nowhere()),
                 ],
                 output_type: types::Type::Unit.nowhere(),
+                type_params: vec![],
             }
             .nowhere(),
         );

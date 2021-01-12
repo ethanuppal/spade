@@ -27,6 +27,11 @@ impl<T> Loc<T> {
 pub enum Error {
     #[error("Undefined path {}", 0.0)]
     UndefinedPath(Loc<ast::Path>),
+    #[error("Duplicate type variable")]
+    DuplicateTypeVariable {
+        found: Loc<hir::Identifier>,
+        previously: Loc<hir::Identifier>,
+    },
     #[error("Type error")]
     InvalidType(#[source] TypeError, Loc<()>),
 }
@@ -48,6 +53,13 @@ impl IdTracker {
     }
 }
 
+pub fn visit_type_param(param: &ast::TypeParam) -> hir::TypeParam {
+    match param {
+        ast::TypeParam::TypeName(name) => hir::TypeParam::TypeName(visit_identifier(name)),
+        ast::TypeParam::Integer(name) => hir::TypeParam::Integer(name.map_ref(visit_identifier)),
+    }
+}
+
 pub fn entity_head(item: &ast::Entity) -> Result<EntityHead> {
     let mut inputs = vec![];
     for (name, input_type) in &item.inputs {
@@ -63,9 +75,26 @@ pub fn entity_head(item: &ast::Entity) -> Result<EntityHead> {
         .map_ref(Type::convert_from_ast)
         .map_err(Error::InvalidType)?;
 
+    let mut type_params: Vec<Loc<hir::TypeParam>> = vec![];
+    for param in &item.type_params {
+        let param = param.map_ref(visit_type_param);
+        if let Some(prev) = type_params
+            .iter()
+            .filter(|prev| prev.name() == param.name())
+            .next()
+        {
+            return Err(Error::DuplicateTypeVariable {
+                found: param.name().clone().at(param.span),
+                previously: prev.map_ref(|p| p.name().clone()),
+            });
+        }
+        type_params.push(param.clone());
+    }
+
     Ok(EntityHead {
         inputs,
         output_type,
+        type_params,
     })
 }
 
@@ -340,6 +369,69 @@ mod entity_visiting {
                     )),
                 ],
                 output_type: Type::Unit.nowhere(),
+                type_params: vec![],
+            },
+            body: hir::ExprKind::Block(Box::new(hir::Block {
+                statements: vec![hir::Statement::Binding(
+                    hir_ident("var"),
+                    Some(Type::Unit.nowhere()),
+                    hir::ExprKind::IntLiteral(0).idless().nowhere(),
+                )
+                .nowhere()],
+                result: hir::ExprKind::IntLiteral(0).idless().nowhere(),
+            }))
+            .idless()
+            .nowhere(),
+        };
+
+        let mut symtab = SymbolTable::new();
+        let mut idtracker = IdTracker::new();
+
+        let result = visit_entity(&input, &mut symtab, &mut idtracker);
+
+        assert_eq!(result, Ok(expected));
+
+        // But the local variables should not
+        assert!(!symtab.has_symbol(&hir_ident("a").inner));
+        assert!(!symtab.has_symbol(&hir_ident("var").inner));
+    }
+
+    #[test]
+    fn entity_with_generics_works() {
+        let input = ast::Entity {
+            name: ast::Identifier("test".to_string()).nowhere(),
+            inputs: vec![(ast_ident("a"), ast::Type::UnitType.nowhere())],
+            output_type: ast::Type::UnitType.nowhere(),
+            body: ast::Expression::Block(Box::new(ast::Block {
+                statements: vec![ast::Statement::Binding(
+                    ast_ident("var"),
+                    Some(ast::Type::UnitType.nowhere()),
+                    ast::Expression::IntLiteral(0).nowhere(),
+                )
+                .nowhere()],
+                result: ast::Expression::IntLiteral(0).nowhere(),
+            }))
+            .nowhere(),
+            type_params: vec![
+                ast::TypeParam::TypeName(ast_ident("a").inner).nowhere(),
+                ast::TypeParam::Integer(ast_ident("b")).nowhere(),
+            ],
+        };
+
+        let expected = hir::Entity {
+            name: hir_ident("test"),
+            head: hir::EntityHead {
+                inputs: vec![
+                    ((
+                        hir::Identifier::Named("a".to_string()).nowhere(),
+                        Type::Unit.nowhere(),
+                    )),
+                ],
+                output_type: Type::Unit.nowhere(),
+                type_params: vec![
+                    hir::TypeParam::TypeName(hir_ident("a").inner).nowhere(),
+                    hir::TypeParam::Integer(hir_ident("b")).nowhere(),
+                ],
             },
             body: hir::ExprKind::Block(Box::new(hir::Block {
                 statements: vec![hir::Statement::Binding(
@@ -676,6 +768,7 @@ mod item_visiting {
                 head: EntityHead {
                     output_type: Type::Unit.nowhere(),
                     inputs: vec![],
+                    type_params: vec![],
                 },
                 body: hir::ExprKind::Block(Box::new(hir::Block {
                     statements: vec![],
@@ -731,6 +824,7 @@ mod module_visiting {
                     head: EntityHead {
                         output_type: Type::Unit.nowhere(),
                         inputs: vec![],
+                        type_params: vec![],
                     },
                     body: hir::ExprKind::Block(Box::new(hir::Block {
                         statements: vec![],

@@ -506,6 +506,7 @@ mod tests {
                     Type::Int(5).nowhere(),
                 )],
                 output_type: Type::Int(5).nowhere(),
+                type_params: vec![],
             },
             body: ExprKind::Identifier(Path::from_strs(&["input"]).nowhere())
                 .with_id(0)
@@ -530,6 +531,7 @@ mod tests {
                     Type::Int(5).nowhere(),
                 )],
                 output_type: Type::Bool.nowhere(),
+                type_params: vec![],
             },
             body: ExprKind::Identifier(Path::from_strs(&["input"]).nowhere())
                 .with_id(0)

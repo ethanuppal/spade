@@ -103,6 +103,12 @@ pub fn report_semantic_error(filename: &Path, file_content: &str, err: SemanticE
                 .with_message(format!("Use of undeclared name `{}`", path))
                 .with_labels(vec![Label::primary(file_id, span)])
         }
+        SemanticError::DuplicateTypeVariable { found, previously } => Diagnostic::error()
+            .with_message(format!("Duplicate typename: `{}`", found.inner))
+            .with_labels(vec![
+                Label::primary(file_id, found.span).with_message("Duplicate typename"),
+                Label::secondary(file_id, previously.span).with_message("Previously used here"),
+            ]),
         SemanticError::InvalidType(err, loc) => match err {
             TypeError::UnknownTypeName(name) => {
                 let (name, span) = name.split();

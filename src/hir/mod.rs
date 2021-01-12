@@ -39,6 +39,21 @@ pub struct Register {
 impl WithLocation for Register {}
 
 #[derive(PartialEq, Debug, Clone)]
+pub enum TypeParam {
+    TypeName(Identifier),
+    Integer(Loc<Identifier>),
+}
+impl TypeParam {
+    pub fn name(&self) -> &Identifier {
+        match self {
+            TypeParam::TypeName(name) => name,
+            TypeParam::Integer(name_loc) => &name_loc.inner,
+        }
+    }
+}
+impl WithLocation for TypeParam {}
+
+#[derive(PartialEq, Debug, Clone)]
 pub struct Entity {
     pub name: Loc<Identifier>,
     pub head: EntityHead,
@@ -50,6 +65,7 @@ impl WithLocation for Entity {}
 pub struct EntityHead {
     pub inputs: Vec<(Loc<Identifier>, Loc<Type>)>,
     pub output_type: Loc<Type>,
+    pub type_params: Vec<Loc<TypeParam>>,
 }
 impl WithLocation for EntityHead {}
 
