@@ -124,8 +124,12 @@ pub fn report_semantic_error(filename: &Path, file_content: &str, err: SemanticE
                 .with_message("Types with arbitrary names are unsupported")
                 .with_labels(vec![Label::primary(file_id, loc.span)
                     .with_message("Types with arbitrary names are unsupported")]),
-            TypeError::NonLiteralTypeSize(_) => unimplemented!(),
-            TypeError::CompoundArrayUnsupported => unimplemented!(),
+            TypeError::NonLiteralTypeSize(loc) => Diagnostic::error()
+                .with_message("Types with non-literals generic parameters are unsupported")
+                .with_labels(vec![Label::primary(file_id, loc.span)]),
+            TypeError::GenericNonIntegersUnsupported(loc) => Diagnostic::error()
+                .with_message("Arbitrary generics are unsupported")
+                .with_labels(vec![Label::primary(file_id, loc.span)]),
         },
     };
 

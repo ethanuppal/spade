@@ -2,16 +2,15 @@ use std::collections::HashMap;
 
 use thiserror::Error;
 
-use crate::location_info::Loc;
-use crate::types::{self, Type};
 use crate::{ast, hir::Path};
 use crate::{
     ast::Item,
     ast::ModuleBody,
-    hir::{EntityHead, Identifier},
+    hir::{EntityHead, Identifier, Type},
     location_info::WithLocation,
     semantic_analysis::{entity_head, visit_identifier},
 };
+use crate::{location_info::Loc, semantic_analysis::visit_type};
 
 #[derive(Error, Debug, Clone, PartialEq)]
 pub enum Error {
@@ -21,8 +20,6 @@ pub enum Error {
         prev: Loc<()>,
         now: Loc<()>,
     },
-    #[error("Type error")]
-    TypeError(#[from] types::Error),
     #[error("Semantic error")]
     HirError(#[from] crate::semantic_analysis::Error),
 }
@@ -113,18 +110,13 @@ impl Symbols {
                     let inputs = func
                         .inputs
                         .iter()
-                        .map(|(n, t)| {
-                            Ok((
-                                n.map_ref(visit_identifier),
-                                t.try_map_ref(Type::convert_from_ast)?,
-                            ))
-                        })
+                        .map(|(n, t)| Ok((n.map_ref(visit_identifier), t.map_ref(visit_type))))
                         .collect::<Result<Vec<_>>>()?;
                     Ok(FunctionDecl {
                         name: func.name.map_ref(visit_identifier),
                         self_arg: func.self_arg,
                         inputs,
-                        output_type: func.return_type.try_map_ref(Type::convert_from_ast)?,
+                        output_type: func.return_type.map_ref(visit_type),
                     })
                 })
             })
@@ -140,6 +132,7 @@ mod tests {
 
     use crate::{
         ast::{self, Entity, Item},
+        hir,
         testutil::{ast_ident, ast_path, hir_ident},
     };
 
@@ -171,10 +164,10 @@ mod tests {
         let expected = GlobalItem::Entity(
             EntityHead {
                 inputs: vec![
-                    (hir_ident("a"), types::Type::Unit.nowhere()),
-                    (hir_ident("b"), types::Type::Unit.nowhere()),
+                    (hir_ident("a"), hir::Type::Unit.nowhere()),
+                    (hir_ident("b"), hir::Type::Unit.nowhere()),
                 ],
-                output_type: types::Type::Unit.nowhere(),
+                output_type: hir::Type::Unit.nowhere(),
                 type_params: vec![],
             }
             .nowhere(),
@@ -218,10 +211,10 @@ mod tests {
                     name: hir_ident("fn1"),
                     self_arg: Some(Loc::nowhere(())),
                     inputs: vec![
-                        (hir_ident("a"), types::Type::Unit.nowhere()),
-                        (hir_ident("b"), types::Type::Unit.nowhere()),
+                        (hir_ident("a"), hir::Type::Unit.nowhere()),
+                        (hir_ident("b"), hir::Type::Unit.nowhere()),
                     ],
-                    output_type: types::Type::Unit.nowhere(),
+                    output_type: hir::Type::Unit.nowhere(),
                 }
                 .nowhere()],
             }

@@ -1,7 +1,7 @@
 use thiserror::Error;
 
-use crate::ast::Expression as AstExpr;
 use crate::ast::Type as AstType;
+use crate::ast::TypeExpression;
 use crate::location_info::Loc;
 use crate::location_info::WithLocation;
 
@@ -46,21 +46,17 @@ impl Type {
                 _ => Err(Error::NamedTypesUnsupported),
             },
             AstType::UnitType => Ok(Type::Unit),
-            AstType::WithSize(inner, size) => {
-                let size = match size.inner {
-                    AstExpr::IntLiteral(size) => size,
-                    _ => Err(Error::NonLiteralTypeSize(size.loc()))?,
-                };
-                match &inner.inner {
-                    AstType::Named(name) => match name.as_strs().as_slice() {
-                        ["uint"] => Ok(Type::UInt(size)),
-                        ["int"] => Ok(Type::Int(size)),
-                        ["bits"] => Ok(Type::BitVector(size)),
-                        _ => Err(Error::CompoundArrayUnsupported),
-                    },
-                    _ => Err(Error::CompoundArrayUnsupported),
-                }
-            }
+            AstType::Generic(base, param) => match base.as_strs().as_slice() {
+                ["int"] => match param.inner {
+                    TypeExpression::Ident(_) => Err(Error::NonLiteralTypeSize(param.loc())),
+                    TypeExpression::Integer(size) => Ok(Type::Int(size)),
+                },
+                ["uint"] => match param.inner {
+                    TypeExpression::Ident(_) => Err(Error::NonLiteralTypeSize(param.loc())),
+                    TypeExpression::Integer(size) => Ok(Type::Int(size)),
+                },
+                _ => Err(Error::GenericNonIntegersUnsupported(base.loc())),
+            },
         }
     }
 
@@ -152,43 +148,43 @@ pub enum Error {
     #[error("Non literal type sizes are unsupported")]
     NonLiteralTypeSize(Loc<()>),
 
-    #[error("Compound array types are not supported")]
-    CompoundArrayUnsupported,
+    #[error("Generic non-integers are unsupported")]
+    GenericNonIntegersUnsupported(Loc<()>),
 }
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    // use super::*;
 
-    use crate::testutil::ast_path;
+    // use crate::testutil::ast_path;
 
-    #[test]
-    fn primitive_type_arrays_work() {
-        {
-            let input = AstType::WithSize(
-                Box::new(AstType::Named(ast_path("uint").strip()).nowhere()),
-                AstExpr::IntLiteral(10).nowhere(),
-            );
+    // #[test]
+    // fn primitive_type_arrays_work() {
+    //     {
+    //         let input = AstType::WithSize(
+    //             Box::new(AstType::Named(ast_path("uint").strip()).nowhere()),
+    //             AstExpr::IntLiteral(10).nowhere(),
+    //         );
 
-            assert_eq!(Type::convert_from_ast(&input), Ok(Type::UInt(10)));
-        }
+    //         assert_eq!(Type::convert_from_ast(&input), Ok(Type::UInt(10)));
+    //     }
 
-        {
-            let input = AstType::WithSize(
-                Box::new(AstType::Named(ast_path("int").strip()).nowhere()),
-                AstExpr::IntLiteral(10).nowhere(),
-            );
+    //     {
+    //         let input = AstType::WithSize(
+    //             Box::new(AstType::Named(ast_path("int").strip()).nowhere()),
+    //             AstExpr::IntLiteral(10).nowhere(),
+    //         );
 
-            assert_eq!(Type::convert_from_ast(&input), Ok(Type::Int(10)));
-        }
+    //         assert_eq!(Type::convert_from_ast(&input), Ok(Type::Int(10)));
+    //     }
 
-        {
-            let input = AstType::WithSize(
-                Box::new(AstType::Named(ast_path("bits").strip()).nowhere()),
-                AstExpr::IntLiteral(10).nowhere(),
-            );
+    //     {
+    //         let input = AstType::WithSize(
+    //             Box::new(AstType::Named(ast_path("bits").strip()).nowhere()),
+    //             AstExpr::IntLiteral(10).nowhere(),
+    //         );
 
-            assert_eq!(Type::convert_from_ast(&input), Ok(Type::BitVector(10)));
-        }
-    }
+    //         assert_eq!(Type::convert_from_ast(&input), Ok(Type::BitVector(10)));
+    //     }
+    // }
 }

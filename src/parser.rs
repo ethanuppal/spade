@@ -6,7 +6,7 @@ use parse_tree_macros::trace_parser;
 
 use crate::ast::{
     Block, Entity, Expression, FunctionDecl, Identifier, Item, ModuleBody, Path, Register,
-    Statement, TraitDef, Type, TypeParam,
+    Statement, TraitDef, Type, TypeExpression, TypeParam,
 };
 use crate::lexer::TokenKind;
 use crate::location_info::{lspan, Loc, WithLocation};
@@ -221,27 +221,33 @@ impl<'a> Parser<'a> {
         ))
     }
 
+    #[trace_parser]
+    fn type_expression(&mut self) -> Result<Loc<TypeExpression>> {
+        if let Some(val) = self.int_literal()? {
+            Ok(val.map(TypeExpression::Integer))
+        } else {
+            Ok(self.path()?.map(TypeExpression::Ident))
+        }
+    }
+
     // Types
     #[trace_parser]
     fn parse_type(&mut self) -> Result<Loc<Type>> {
         let (path, span) = self.path()?.separate();
 
         // Check if it is a sized type
-        if self.peek_kind(&TokenKind::OpenBracket)? {
-            let (size, bracket_span) = self.surrounded(
-                &TokenKind::OpenBracket,
-                |s| s.expression().map(Some),
-                &TokenKind::CloseBracket,
+        if self.peek_kind(&TokenKind::Lt)? {
+            let (type_expr, generic_span) = self.surrounded(
+                &TokenKind::Lt,
+                |s| s.type_expression().map(Some),
+                &TokenKind::Gt,
             )?;
 
             // Note: safe unwrap, if we got here, the expression must have matched
             // and so the size is present, otherwise we'd return early above
-            let size = size.unwrap();
+            let type_expr = type_expr.unwrap();
 
-            Ok(
-                Type::WithSize(Box::new(Type::Named(path.strip()).at(span)), size)
-                    .at(span.merge(bracket_span.span)),
-            )
+            Ok(Type::Generic(path, type_expr).at(span.merge(generic_span.span)))
         } else {
             Ok(Type::Named(path.strip()).at(span))
         }
@@ -1220,12 +1226,9 @@ mod tests {
 
     #[test]
     fn size_types_work() {
-        let expected = Type::WithSize(
-            Box::new(Type::Named(ast_path("uint").inner).nowhere()),
-            Expression::IntLiteral(10).nowhere(),
-        )
-        .nowhere();
-        check_parse!("uint[10]", parse_type, Ok(expected));
+        let expected =
+            Type::Generic(ast_path("uint"), TypeExpression::Integer(10).nowhere()).nowhere();
+        check_parse!("uint<10>", parse_type, Ok(expected));
     }
 
     #[test]

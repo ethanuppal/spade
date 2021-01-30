@@ -89,28 +89,29 @@ impl Expression {
 }
 
 pub fn generate_entity<'a>(entity: &Entity, types: &TypeState) -> Code {
-    let inputs = entity
-        .head
-        .inputs
-        .iter()
-        .map(|(name, t)| format!("input{} {},", size_spec(t.inner.size()), name.inner));
-    let output_definition = format!(
-        "output{} __output",
-        size_spec(entity.head.output_type.inner.size())
-    );
+    panic!("codegen is currently unimplemented");
+    // let inputs = entity
+    //     .head
+    //     .inputs
+    //     .iter()
+    //     .map(|(name, t)| format!("input{} {},", size_spec(t.inner.size()), name.inner));
+    // let output_definition = format!(
+    //     "output{} __output",
+    //     size_spec(entity.head.output_type.inner.size())
+    // );
 
-    let output_assignment = assign("__output", &entity.body.inner.variable());
+    // let output_assignment = assign("__output", &entity.body.inner.variable());
 
-    code! {
-        [0] &format!("module {} (", entity.name.inner);
-                [2] &inputs.collect::<Vec<_>>();
-                [2] &output_definition;
-            [1] &")";
-        [0] &"begin";
-            [1] &entity.body.inner.code(types);
-            [1] &output_assignment;
-        [0] &"end"
-    }
+    // code! {
+    //     [0] &format!("module {} (", entity.name.inner);
+    //             [2] &inputs.collect::<Vec<_>>();
+    //             [2] &output_definition;
+    //         [1] &")";
+    //     [0] &"begin";
+    //         [1] &entity.body.inner.code(types);
+    //         [1] &output_assignment;
+    //     [0] &"end"
+    // }
 }
 
 #[cfg(test)]

@@ -7,9 +7,10 @@ use logos::Logos;
 use structopt::StructOpt;
 
 pub mod ast;
-pub mod codegen;
+// pub mod codegen;
 pub mod constant;
 pub mod error_reporting;
+pub mod fixed_types;
 pub mod global_symbols;
 pub mod hir;
 pub mod lexer;
@@ -71,11 +72,6 @@ fn main() -> Result<()> {
             return Err(anyhow!("aborting due to previous error"));
         }
     }
-
-    println!(
-        "{}",
-        codegen::generate_entity(&hir, &type_state).to_string()
-    );
 
     Ok(())
 }

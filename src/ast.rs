@@ -26,9 +26,15 @@ impl std::fmt::Display for Path {
 }
 
 #[derive(PartialEq, Debug, Clone)]
+pub enum TypeExpression {
+    Ident(Path),
+    Integer(u128),
+}
+impl WithLocation for TypeExpression {}
+#[derive(PartialEq, Debug, Clone)]
 pub enum Type {
     Named(Path),
-    WithSize(Box<Loc<Type>>, Loc<Expression>),
+    Generic(Loc<Path>, Loc<TypeExpression>),
     UnitType,
 }
 impl WithLocation for Type {}

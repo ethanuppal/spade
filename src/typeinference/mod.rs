@@ -6,11 +6,17 @@ use std::collections::HashMap;
 use colored::*;
 use parse_tree_macros::trace_typechecker;
 
-use crate::hir::Entity;
 use crate::hir::Statement;
 use crate::hir::{ExprKind, Expression};
 use crate::types::Type;
-use crate::{hir::Block, location_info::Loc};
+use crate::{
+    fixed_types::{t_bool, t_int, t_int_literal},
+    hir::{Entity, TypeExpression},
+};
+use crate::{
+    hir::{self, Block},
+    location_info::Loc,
+};
 
 pub mod equation;
 pub mod result;
@@ -18,7 +24,7 @@ pub mod result;
 use equation::{TypeEquations, TypeVar, TypedExpression};
 use result::{Error, Result};
 
-use self::result::UnificationError;
+use self::{equation::KnownType, result::UnificationError};
 
 pub struct TypeState {
     equations: TypeEquations,
@@ -36,6 +42,32 @@ impl TypeState {
         }
     }
 
+    pub fn type_var_from_hir(hir_type: &Loc<crate::hir::Type>) -> TypeVar {
+        let (hir_type, loc) = hir_type.clone().split_loc();
+        match hir_type {
+            hir::Type::Concrete(t) => TypeVar::Known(KnownType::Path(t), vec![], Some(loc)),
+            hir::Type::Generic(t, params) => {
+                let params = params
+                    .iter()
+                    .map(|expr| {
+                        let (expr, loc) = expr.clone().split_loc();
+                        match expr {
+                            TypeExpression::Integer(i) => {
+                                TypeVar::Known(KnownType::Integer(i), vec![], Some(loc))
+                            }
+                            TypeExpression::Ident(t) => {
+                                TypeVar::Known(KnownType::Path(t), vec![], Some(loc))
+                            }
+                        }
+                    })
+                    .collect();
+
+                TypeVar::Known(KnownType::Path(t.inner), params, Some(loc))
+            }
+            hir::Type::Unit => TypeVar::Known(KnownType::Unit, vec![], Some(loc)),
+        }
+    }
+
     /// Returns the type of the expression with the specified id. Error if unknown
     pub fn type_of(&self, expr: &TypedExpression) -> Result<TypeVar> {
         for (e, t) in &self.equations {
@@ -48,17 +80,8 @@ impl TypeState {
 
     /// Returns the type of the expression as a concrete type. If the type is not known,
     /// or tye type is Generic, panics
-    pub fn expr_type(&self, expr: &Expression) -> Type {
-        match self
-            .type_of(&TypedExpression::Id(expr.id))
-            .expect("Expression had no specified type")
-        {
-            TypeVar::Known(t, _) => t,
-            TypeVar::Generic(_) => panic!(
-                "{} had generic type which is not allowed right now",
-                expr.id
-            ),
-        }
+    pub fn expr_type(&self, _expr: &Expression) -> Type {
+        unimplemented![]
     }
 
     // /// Visit an item to assign type variables and equations to every subexpression
@@ -75,7 +98,7 @@ impl TypeState {
         for (name, t) in &entity.head.inputs {
             self.add_equation(
                 TypedExpression::Name(name.clone().to_path()),
-                TypeVar::Known(t.inner.clone(), Some(t.loc())),
+                Self::type_var_from_hir(t),
             );
         }
 
@@ -84,7 +107,7 @@ impl TypeState {
         // Ensure that the output type matches what the user specified
         self.unify_types(
             &TypedExpression::Id(entity.body.inner.id),
-            &entity.head.output_type.inner,
+            &Self::type_var_from_hir(&entity.head.output_type),
         )
         .map_err(|(got, expected)| Error::EntityOutputTypeMissmatch {
             expected,
@@ -112,7 +135,7 @@ impl TypeState {
                 )?;
             }
             ExprKind::IntLiteral(_) => {
-                self.unify_types(&Type::KnownInt, &expression.inner)
+                self.unify_types(&t_int_literal(), &expression.inner)
                     .map_err(|(_, got)| Error::IntLiteralIncompatible {
                         got,
                         loc: expression.loc(),
@@ -143,7 +166,7 @@ impl TypeState {
                 self.visit_expression(&on_true)?;
                 self.visit_expression(&on_false)?;
 
-                self.unify_types(&cond.inner, &Type::Bool)
+                self.unify_types(&cond.inner, &t_bool())
                     .map_err(|(got, _)| Error::NonBooleanCondition {
                         got,
                         loc: cond.loc(),
@@ -212,15 +235,23 @@ impl<'a> TypeState {
         // Figure out the most general type, and take note if we need to
         // do any replacement of the types in the rest of the state
         let (new_type, replaced_type) = match (&v1, &v2) {
-            (TypeVar::Known(t1, _), TypeVar::Known(t2, _)) => {
+            (TypeVar::Known(t1, p1, _), TypeVar::Known(t2, p2, _)) => {
+                if p1.len() != p2.len() {
+                    return Err((v1.clone(), v2.clone()));
+                }
+
+                for (t1, t2) in p1.iter().zip(p2.iter()) {
+                    self.unify_types(t1, t2)?
+                }
+
                 if t1 == t2 {
                     Ok((v1, None))
                 } else {
                     Err((v1.clone(), v2.clone()))
                 }
             }
-            (TypeVar::Known(_, _), TypeVar::Generic(_)) => Ok((v1, Some(v2))),
-            (TypeVar::Generic(_), TypeVar::Known(_, _)) => Ok((v2, Some(v1))),
+            (TypeVar::Known(_, _, _), TypeVar::Generic(_)) => Ok((v1, Some(v2))),
+            (TypeVar::Generic(_), TypeVar::Known(_, _, _)) => Ok((v2, Some(v1))),
             (TypeVar::Generic(_), TypeVar::Generic(_)) => Ok((v1, Some(v2))),
         }?;
 
@@ -255,7 +286,7 @@ impl<'a> TypeState {
 impl TypeState {
     pub fn print_equations(&self) {
         for (lhs, rhs) in &self.equations {
-            println!("{:?}: {:?}", lhs, rhs);
+            println!("{}: {}", lhs, rhs);
         }
     }
 }
@@ -267,6 +298,11 @@ pub trait HasType {
 impl HasType for TypeVar {
     fn get_type<'a>(&self, _: &TypeState) -> Result<TypeVar> {
         Ok(self.clone())
+    }
+}
+impl HasType for Loc<TypeVar> {
+    fn get_type<'a>(&self, _: &TypeState) -> Result<TypeVar> {
+        Ok(self.inner.clone())
     }
 }
 impl HasType for TypedExpression {
@@ -284,16 +320,21 @@ impl HasType for Loc<Expression> {
         state.type_of(&TypedExpression::Id(self.inner.id))
     }
 }
-impl HasType for Type {
-    fn get_type<'a>(&self, _: &TypeState) -> Result<TypeVar> {
-        Ok(TypeVar::Known(self.clone(), None))
+impl HasType for KnownType {
+    fn get_type<'a>(&self, _state: &TypeState) -> Result<TypeVar> {
+        Ok(TypeVar::Known(self.clone(), vec![], None))
     }
 }
-impl HasType for Loc<Type> {
-    fn get_type<'a>(&self, _: &TypeState) -> Result<TypeVar> {
-        Ok(TypeVar::Known(self.inner.clone(), Some(self.loc())))
-    }
-}
+// impl HasType for Type {
+//     fn get_type<'a>(&self, _: &TypeState) -> Result<TypeVar> {
+//         Ok(TypeVar::Known(self.clone(), None))
+//     }
+// }
+// impl HasType for Loc<Type> {
+//     fn get_type<'a>(&self, _: &TypeState) -> Result<TypeVar> {
+//         Ok(TypeVar::Known(self.inner.clone(), Some(self.loc())))
+//     }
+// }
 
 pub enum TraceStack {
     /// Entering the specified visitor
@@ -320,7 +361,7 @@ pub fn format_trace_stack(stack: &[TraceStack]) -> String {
                 format!("{} {:?} <- {:?}", "eq".yellow(), expr, t)
             }
             TraceStack::Unified(lhs, rhs, result) => {
-                format!("{} {:?}, {:?} -> {:?}", "unified".green(), lhs, rhs, result)
+                format!("{} {}, {} -> {}", "unified".green(), lhs, rhs, result)
             }
             TraceStack::Exit => {
                 next_indent_amount -= 1;
@@ -349,6 +390,7 @@ mod tests {
 
     use crate::{
         assert_matches,
+        fixed_types::t_clock,
         hir::{Block, Identifier, Path},
     };
     use crate::{hir::EntityHead, location_info::WithLocation};
@@ -366,9 +408,15 @@ mod tests {
 
     macro_rules! ensure_same_type {
         ($state:ident, $t1:expr, $t2:expr) => {
-            if $t1.get_type(&$state) != $t2.get_type(&$state) {
+            let _t1 = $t1.get_type(&$state);
+            let _t2 = $t2.get_type(&$state);
+            if _t1 != _t2 {
                 println!("{}", format_trace_stack(&$state.trace_stack));
                 $state.print_equations();
+
+                if let (Ok(t1), Ok(t2)) = (_t1, _t2) {
+                    println!("Types were OK and have values {}, {}", t1, t2)
+                }
                 panic!("Types are not the same")
             }
         };
@@ -384,7 +432,7 @@ mod tests {
 
         assert_eq!(
             state.type_of(&TExpr::Id(0)),
-            Ok(TVar::Known(Type::KnownInt, None))
+            Ok(TVar::Known(t_int_literal(), vec![], None))
         );
     }
 
@@ -420,7 +468,7 @@ mod tests {
         let tc = get_type!(state, &expr_c);
 
         // Check the generic type variables
-        ensure_same_type!(state, t0, TVar::Known(Type::Bool, None));
+        ensure_same_type!(state, t0, TVar::Known(t_bool(), vec![], None));
         ensure_same_type!(state, t1, t2);
         ensure_same_type!(state, t1, t3);
 
@@ -447,7 +495,7 @@ mod tests {
         let expr_b = TExpr::Name(Path::from_strs(&["b"]));
         let expr_c = TExpr::Name(Path::from_strs(&["c"]));
         state.add_equation(expr_a.clone(), TVar::Generic(100));
-        state.add_equation(expr_b.clone(), TVar::Known(Type::KnownInt, None));
+        state.add_equation(expr_b.clone(), TVar::Known(t_int_literal(), vec![], None));
         state.add_equation(expr_c.clone(), TVar::Generic(102));
 
         state.visit_expression(&input).unwrap();
@@ -462,10 +510,10 @@ mod tests {
         let tc = get_type!(state, &expr_c);
 
         // Check the generic type variables
-        ensure_same_type!(state, t0, TVar::Known(Type::Bool, None));
-        ensure_same_type!(state, t1, TVar::Known(Type::KnownInt, None));
-        ensure_same_type!(state, t2, TVar::Known(Type::KnownInt, None));
-        ensure_same_type!(state, t3, TVar::Known(Type::KnownInt, None));
+        ensure_same_type!(state, t0, TVar::Known(t_bool(), vec![], None));
+        ensure_same_type!(state, t1, TVar::Known(t_int_literal(), vec![], None));
+        ensure_same_type!(state, t2, TVar::Known(t_int_literal(), vec![], None));
+        ensure_same_type!(state, t3, TVar::Known(t_int_literal(), vec![], None));
 
         // Check the constraints added to the literals
         ensure_same_type!(state, t0, ta);
@@ -490,8 +538,8 @@ mod tests {
         let expr_b = TExpr::Name(Path::from_strs(&["b"]));
         let expr_c = TExpr::Name(Path::from_strs(&["c"]));
         state.add_equation(expr_a.clone(), TVar::Generic(100));
-        state.add_equation(expr_b.clone(), TVar::Known(Type::KnownInt, None));
-        state.add_equation(expr_c.clone(), TVar::Known(Type::Clock, None));
+        state.add_equation(expr_b.clone(), TVar::Known(t_int_literal(), vec![], None));
+        state.add_equation(expr_c.clone(), TVar::Known(t_clock(), vec![], None));
 
         assert_ne!(state.visit_expression(&input), Ok(()));
     }
@@ -503,9 +551,17 @@ mod tests {
             head: EntityHead {
                 inputs: vec![(
                     Identifier::Named("input".to_string()).nowhere(),
-                    Type::Int(5).nowhere(),
+                    hir::Type::Generic(
+                        Path::from_strs(&["builtin", "int"]).nowhere(),
+                        vec![hir::TypeExpression::Integer(5).nowhere()],
+                    )
+                    .nowhere(),
                 )],
-                output_type: Type::Int(5).nowhere(),
+                output_type: hir::Type::Generic(
+                    Path::from_strs(&["builtin", "int"]).nowhere(),
+                    vec![hir::TypeExpression::Integer(5).nowhere()],
+                )
+                .nowhere(),
                 type_params: vec![],
             },
             body: ExprKind::Identifier(Path::from_strs(&["input"]).nowhere())
@@ -518,7 +574,15 @@ mod tests {
         state.visit_entity(&input).unwrap();
 
         let t0 = get_type!(state, &TExpr::Id(0));
-        ensure_same_type!(state, t0, TypeVar::Known(Type::Int(5), None));
+        ensure_same_type!(
+            state,
+            t0,
+            TypeVar::Known(
+                t_int(),
+                vec![TypeVar::Known(KnownType::Integer(5), vec![], None)],
+                None
+            )
+        );
     }
 
     #[test]
@@ -528,9 +592,13 @@ mod tests {
             head: EntityHead {
                 inputs: vec![(
                     Identifier::Named("input".to_string()).nowhere(),
-                    Type::Int(5).nowhere(),
+                    hir::Type::Generic(
+                        Path::from_strs(&["int"]).nowhere(),
+                        vec![hir::TypeExpression::Integer(5).nowhere()],
+                    )
+                    .nowhere(),
                 )],
-                output_type: Type::Bool.nowhere(),
+                output_type: hir::Type::Concrete(Path::from_strs(&["bool"])).nowhere(),
                 type_params: vec![],
             },
             body: ExprKind::Identifier(Path::from_strs(&["input"]).nowhere())
@@ -559,7 +627,15 @@ mod tests {
 
         state.visit_expression(&input).unwrap();
 
-        ensure_same_type!(state, TExpr::Id(0), TVar::Known(Type::KnownInt, None));
-        ensure_same_type!(state, TExpr::Id(1), TVar::Known(Type::KnownInt, None));
+        ensure_same_type!(
+            state,
+            TExpr::Id(0),
+            TVar::Known(t_int_literal(), vec![], None)
+        );
+        ensure_same_type!(
+            state,
+            TExpr::Id(1),
+            TVar::Known(t_int_literal(), vec![], None)
+        );
     }
 }

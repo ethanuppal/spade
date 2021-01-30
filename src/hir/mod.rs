@@ -7,7 +7,6 @@ pub use identifier::Identifier;
 pub use path::Path;
 
 use crate::location_info::{Loc, WithLocation};
-use crate::types::Type;
 
 /**
   Representation of the language with most language constructs still present, with
@@ -52,6 +51,21 @@ impl TypeParam {
     }
 }
 impl WithLocation for TypeParam {}
+
+#[derive(PartialEq, Debug, Clone)]
+pub enum TypeExpression {
+    Integer(u128),
+    Ident(Path),
+}
+impl WithLocation for TypeExpression {}
+
+#[derive(PartialEq, Debug, Clone)]
+pub enum Type {
+    Concrete(Path),
+    Generic(Loc<Path>, Vec<Loc<TypeExpression>>),
+    Unit,
+}
+impl WithLocation for Type {}
 
 #[derive(PartialEq, Debug, Clone)]
 pub struct Entity {
