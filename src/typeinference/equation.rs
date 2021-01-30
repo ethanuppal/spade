@@ -35,18 +35,21 @@ impl std::fmt::Display for TypeVar {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             TypeVar::Known(t, params, _) => {
-                write!(
-                    f,
-                    "{}<{}>",
-                    t,
-                    params
-                        .iter()
-                        .map(|p| format!("{}", p))
-                        .collect::<Vec<_>>()
-                        .join(", ")
-                )
+                let generics = if params.is_empty() {
+                    format!("")
+                } else {
+                    format!(
+                        "<{}>",
+                        params
+                            .iter()
+                            .map(|p| format!("{}", p))
+                            .collect::<Vec<_>>()
+                            .join(", ")
+                    )
+                };
+                write!(f, "{}{}", t, generics)
             }
-            TypeVar::Generic(id) => write!(f, "<{}>", id),
+            TypeVar::Generic(id) => write!(f, "t{}", id),
         }
     }
 }

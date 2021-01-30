@@ -10,7 +10,7 @@ use crate::hir::Statement;
 use crate::hir::{ExprKind, Expression};
 use crate::types::Type;
 use crate::{
-    fixed_types::{t_bool, t_int, t_int_literal},
+    fixed_types::{t_bool, t_int},
     hir::{Entity, TypeExpression},
 };
 use crate::{
@@ -135,7 +135,8 @@ impl TypeState {
                 )?;
             }
             ExprKind::IntLiteral(_) => {
-                self.unify_types(&t_int_literal(), &expression.inner)
+                let t = TypeVar::Known(t_int(), vec![TypeVar::Generic(self.new_typeid())], None);
+                self.unify_types(&t, &expression.inner)
                     .map_err(|(_, got)| Error::IntLiteralIncompatible {
                         got,
                         loc: expression.loc(),
@@ -260,6 +261,18 @@ impl<'a> TypeState {
                 if *rhs == replaced_type {
                     *rhs = new_type.clone()
                 }
+
+                // If there are type parameters, replace things there too
+                match rhs {
+                    TypeVar::Known(_, params, _) => {
+                        params.iter_mut().for_each(|p| {
+                            if *p == replaced_type {
+                                *p = new_type.clone()
+                            }
+                        });
+                    }
+                    TypeVar::Generic(_) => {}
+                }
             }
         }
 
@@ -325,16 +338,6 @@ impl HasType for KnownType {
         Ok(TypeVar::Known(self.clone(), vec![], None))
     }
 }
-// impl HasType for Type {
-//     fn get_type<'a>(&self, _: &TypeState) -> Result<TypeVar> {
-//         Ok(TypeVar::Known(self.clone(), None))
-//     }
-// }
-// impl HasType for Loc<Type> {
-//     fn get_type<'a>(&self, _: &TypeState) -> Result<TypeVar> {
-//         Ok(TypeVar::Known(self.inner.clone(), Some(self.loc())))
-//     }
-// }
 
 pub enum TraceStack {
     /// Entering the specified visitor
@@ -395,6 +398,18 @@ mod tests {
     };
     use crate::{hir::EntityHead, location_info::WithLocation};
 
+    fn sized_int(size: u128) -> TVar {
+        TVar::Known(
+            t_int(),
+            vec![TVar::Known(KnownType::Integer(size), vec![], None)],
+            None,
+        )
+    }
+
+    fn unsized_int(id: u64) -> TVar {
+        TVar::Known(t_int(), vec![TVar::Generic(id)], None)
+    }
+
     macro_rules! get_type {
         ($state:ident, $e:expr) => {
             if let Ok(t) = $state.type_of($e) {
@@ -414,8 +429,11 @@ mod tests {
                 println!("{}", format_trace_stack(&$state.trace_stack));
                 $state.print_equations();
 
-                if let (Ok(t1), Ok(t2)) = (_t1, _t2) {
-                    println!("Types were OK and have values {}, {}", t1, t2)
+                if let (Ok(t1), Ok(t2)) = (&_t1, &_t2) {
+                    println!("Types were OK and have values {}, {}", t1, t2);
+                    println!("Raw: {:?}, {:?}", t1, t2);
+                } else {
+                    println!("{:?}\n!=\n{:?}", _t1, _t2);
                 }
                 panic!("Types are not the same")
             }
@@ -430,10 +448,7 @@ mod tests {
 
         state.visit_expression(&input).expect("Type error");
 
-        assert_eq!(
-            state.type_of(&TExpr::Id(0)),
-            Ok(TVar::Known(t_int_literal(), vec![], None))
-        );
+        assert_eq!(state.type_of(&TExpr::Id(0)), Ok(unsized_int(1)));
     }
 
     #[test]
@@ -495,7 +510,7 @@ mod tests {
         let expr_b = TExpr::Name(Path::from_strs(&["b"]));
         let expr_c = TExpr::Name(Path::from_strs(&["c"]));
         state.add_equation(expr_a.clone(), TVar::Generic(100));
-        state.add_equation(expr_b.clone(), TVar::Known(t_int_literal(), vec![], None));
+        state.add_equation(expr_b.clone(), unsized_int(101));
         state.add_equation(expr_c.clone(), TVar::Generic(102));
 
         state.visit_expression(&input).unwrap();
@@ -511,9 +526,9 @@ mod tests {
 
         // Check the generic type variables
         ensure_same_type!(state, t0, TVar::Known(t_bool(), vec![], None));
-        ensure_same_type!(state, t1, TVar::Known(t_int_literal(), vec![], None));
-        ensure_same_type!(state, t2, TVar::Known(t_int_literal(), vec![], None));
-        ensure_same_type!(state, t3, TVar::Known(t_int_literal(), vec![], None));
+        ensure_same_type!(state, t1, unsized_int(101));
+        ensure_same_type!(state, t2, unsized_int(101));
+        ensure_same_type!(state, t3, unsized_int(101));
 
         // Check the constraints added to the literals
         ensure_same_type!(state, t0, ta);
@@ -538,7 +553,7 @@ mod tests {
         let expr_b = TExpr::Name(Path::from_strs(&["b"]));
         let expr_c = TExpr::Name(Path::from_strs(&["c"]));
         state.add_equation(expr_a.clone(), TVar::Generic(100));
-        state.add_equation(expr_b.clone(), TVar::Known(t_int_literal(), vec![], None));
+        state.add_equation(expr_b.clone(), unsized_int(101));
         state.add_equation(expr_c.clone(), TVar::Known(t_clock(), vec![], None));
 
         assert_ne!(state.visit_expression(&input), Ok(()));
@@ -627,15 +642,50 @@ mod tests {
 
         state.visit_expression(&input).unwrap();
 
-        ensure_same_type!(
-            state,
-            TExpr::Id(0),
-            TVar::Known(t_int_literal(), vec![], None)
-        );
-        ensure_same_type!(
-            state,
-            TExpr::Id(1),
-            TVar::Known(t_int_literal(), vec![], None)
-        );
+        ensure_same_type!(state, TExpr::Id(0), unsized_int(2));
+        ensure_same_type!(state, TExpr::Id(1), unsized_int(2));
+    }
+
+    #[test]
+    fn integer_literals_are_compatible_with_fixed_size_ints() {
+        let mut state = TypeState::new();
+
+        let input = ExprKind::If(
+            Box::new(Expression::ident(0, "a").nowhere()),
+            Box::new(Expression::ident(1, "b").nowhere()),
+            Box::new(Expression::ident(2, "c").nowhere()),
+        )
+        .with_id(3)
+        .nowhere();
+
+        // Add eqs for the literals
+        let expr_a = TExpr::Name(Path::from_strs(&["a"]));
+        let expr_b = TExpr::Name(Path::from_strs(&["b"]));
+        let expr_c = TExpr::Name(Path::from_strs(&["c"]));
+        state.add_equation(expr_a.clone(), TVar::Generic(100));
+        state.add_equation(expr_b.clone(), unsized_int(101));
+        state.add_equation(expr_c.clone(), sized_int(5));
+
+        state.visit_expression(&input).unwrap();
+
+        let t0 = get_type!(state, &TExpr::Id(0));
+        let t1 = get_type!(state, &TExpr::Id(1));
+        let t2 = get_type!(state, &TExpr::Id(2));
+        let t3 = get_type!(state, &TExpr::Id(3));
+
+        let ta = get_type!(state, &expr_a);
+        let tb = get_type!(state, &expr_b);
+        let tc = get_type!(state, &expr_c);
+
+        // Check the generic type variables
+        ensure_same_type!(state, t0, TVar::Known(t_bool(), vec![], None));
+        ensure_same_type!(state, t1, sized_int(5));
+        ensure_same_type!(state, t2, sized_int(5));
+        ensure_same_type!(state, t3, sized_int(5));
+
+        // Check the constraints added to the literals
+        ensure_same_type!(state, t0, ta);
+        ensure_same_type!(state, t1, tb);
+        ensure_same_type!(state, t2, tc);
     }
 }
