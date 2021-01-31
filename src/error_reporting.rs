@@ -205,6 +205,9 @@ pub fn report_typeinference_error(filename: &Path, file_content: &str, err: Infe
                 format!("Expected: {}", expected),
                 format!("     Got: {}", got),
             ]),
+        InferenceError::NonClockClock { .. } => {
+            todo!()
+        }
     };
 
     let writer = StandardStream::stderr(ColorChoice::Always);

@@ -6,8 +6,11 @@ use std::collections::HashMap;
 use colored::*;
 use parse_tree_macros::trace_typechecker;
 
-use crate::hir::Statement;
 use crate::hir::{ExprKind, Expression};
+use crate::{
+    fixed_types::t_clock,
+    hir::{Register, Statement},
+};
 use crate::{
     fixed_types::{t_bool, t_int},
     hir::{Entity, TypeExpression},
@@ -122,7 +125,12 @@ impl TypeState {
     }
 
     pub fn new_generic_int(&mut self) -> TypeVar {
-        TypeVar::Known(t_int(), vec![TypeVar::Generic(self.new_typeid())], None)
+        TypeVar::Known(t_int(), vec![self.new_generic()], None)
+    }
+
+    fn new_generic(&mut self) -> TypeVar {
+        let id = self.new_typeid();
+        TypeVar::Generic(id)
     }
 
     #[trace_typechecker]
@@ -153,11 +161,8 @@ impl TypeState {
 
     #[trace_typechecker]
     pub fn visit_expression(&mut self, expression: &Loc<Expression>) -> Result<()> {
-        let new_id = self.new_typeid();
-        self.add_equation(
-            TypedExpression::Id(expression.inner.id),
-            TypeVar::Generic(new_id),
-        );
+        let new_type = self.new_generic();
+        self.add_equation(TypedExpression::Id(expression.inner.id), new_type);
         // Recurse down the expression
         match &expression.inner.kind {
             ExprKind::Identifier(ident) => {
@@ -255,14 +260,45 @@ impl TypeState {
 
     #[trace_typechecker]
     pub fn visit_block(&mut self, block: &Block) -> Result<()> {
-        if !block.statements.is_empty() {
-            todo!("Blocks with statements are currently not type checked")
+        for statement in &block.statements {
+            self.visit_statement(statement)?
         }
         self.visit_expression(&block.result)
     }
 
-    pub fn visit_statement(&mut self, _statement: &Statement) {
-        unimplemented!()
+    #[trace_typechecker]
+    pub fn visit_statement(&mut self, stmt: &Loc<Statement>) -> Result<()> {
+        match &stmt.inner {
+            Statement::Binding(_, _, _) => {
+                todo! {"Implement type checking for let bindings"}
+            }
+            Statement::Register(reg) => self.visit_register(reg),
+        }
+    }
+
+    #[trace_typechecker]
+    pub fn visit_register(&mut self, reg: &Register) -> Result<()> {
+        self.visit_expression(&reg.value)?;
+        if reg.value_type.is_some() {
+            todo!("Typechecker should take type specification on registers into account");
+        }
+
+        self.unify_types(&TypedExpression::Name(reg.clock.inner.clone()), &t_clock())
+            .map_err(|(got, expected)| Error::NonClockClock {
+                expected,
+                got,
+                loc: reg.clock.loc(),
+            })?;
+
+        let new_type = self.new_generic();
+        self.add_equation(TypedExpression::Name(reg.name.clone().to_path()), new_type);
+
+        self.unify_expression_generic_error(
+            &reg.value,
+            &TypedExpression::Name(reg.name.clone().to_path()),
+        )?;
+
+        Ok(())
     }
 }
 
@@ -750,5 +786,30 @@ mod tests {
         ensure_same_type!(state, t0, ta);
         ensure_same_type!(state, t1, tb);
         ensure_same_type!(state, t2, tc);
+    }
+
+    #[test]
+    fn registers_typecheck_correctly() {
+        let input = hir::Register {
+            name: hir::Identifier::Named("a".to_string()).nowhere(),
+            clock: Path::from_strs(&["clk"]).nowhere(),
+            reset: None,
+            value: ExprKind::IntLiteral(0).with_id(0).nowhere(),
+            value_type: None,
+        };
+
+        let mut state = TypeState::new();
+
+        let expr_clk = TExpr::Name(Path::from_strs(&["clk"]));
+        state.add_equation(expr_clk.clone(), TVar::Generic(100));
+
+        state.visit_register(&input).unwrap();
+
+        let t0 = get_type!(state, &TExpr::Id(0));
+        let ta = get_type!(state, &TExpr::Name(Path::from_strs(&["a"])));
+        let tclk = get_type!(state, &TExpr::Name(Path::from_strs(&["clk"])));
+        ensure_same_type!(state, t0, unsized_int(1));
+        ensure_same_type!(state, ta, unsized_int(1));
+        ensure_same_type!(state, tclk, t_clock());
     }
 }

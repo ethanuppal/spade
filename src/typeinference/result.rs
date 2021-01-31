@@ -38,6 +38,12 @@ pub enum Error {
         first_branch: Loc<()>,
         incorrect_branch: Loc<()>,
     },
+    #[error("Non clock used as register clock")]
+    NonClockClock {
+        expected: TypeVar,
+        got: TypeVar,
+        loc: Loc<()>,
+    },
 
     #[error("Attempting to instanciate generic type")]
     GenericTypeInstanciation,

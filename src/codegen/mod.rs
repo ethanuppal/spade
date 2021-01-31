@@ -1,8 +1,8 @@
 use indoc::formatdoc;
 
 use crate::{
-    fixed_types::{t_bool, t_int},
-    hir::{Entity, ExprKind, Expression, Path},
+    fixed_types::{t_bool, t_clock, t_int},
+    hir::{Entity, ExprKind, Expression, Path, Statement},
     typeinference::{
         equation::{ConcreteType, KnownType},
         TypeState,
@@ -33,6 +33,11 @@ fn size_of_type(t: ConcreteType) -> u128 {
 
             1
         }
+        _t if _t == t_clock() => {
+            assert!(t.params.is_empty(), "Clock type got generics");
+
+            1
+        }
         KnownType::Integer(_) => {
             panic!("A type level integer has no size")
         }
@@ -48,7 +53,7 @@ impl Expression {
     pub fn alias(&self) -> Option<String> {
         match &self.kind {
             ExprKind::Identifier(ident) => Some(ident.inner.mangle()),
-            ExprKind::IntLiteral(_) => todo!(),
+            ExprKind::IntLiteral(_) => None,
             ExprKind::BoolLiteral(_) => todo!(),
             ExprKind::FnCall(_, _) => None,
             ExprKind::Block(block) => Some(block.result.inner.variable()),
@@ -91,7 +96,10 @@ impl Expression {
             ExprKind::Identifier(_) => {
                 // Empty. The identifier will be defined elsewhere
             }
-            ExprKind::IntLiteral(_) => todo!("codegen for int literals"),
+            ExprKind::IntLiteral(value) => {
+                let this_code = assign(&self.variable(), &format!("{}", value));
+                code.join(&this_code);
+            }
             ExprKind::BoolLiteral(_) => todo!("codegen for bool literals"),
             ExprKind::FnCall(name, params) => {
                 let mut binop_builder = |op| {
@@ -129,8 +137,36 @@ impl Expression {
                 }
             }
             ExprKind::Block(block) => {
-                if !block.statements.is_empty() {
-                    todo!("Blocks with statements are unimplemented");
+                for statement in &block.statements {
+                    match &statement.inner {
+                        Statement::Binding(_, _, _) => {
+                            todo!("Implement codegen for let bindings")
+                        }
+                        Statement::Register(register) => {
+                            // Generate the code for the expression
+                            code.join(&register.value.code(types));
+
+                            if register.clock.inner != Path::from_strs(&["clk"]) {
+                                todo!("All registers must be called clk for now")
+                            }
+
+                            let this_var = format!("_m_{}", register.name.inner);
+                            let this_type = types.type_of_name(&register.name.clone().to_path());
+
+                            // Declare the register
+                            code.join(&reg(&this_var, size_of_type(this_type)));
+
+                            let this_code = formatdoc! {r#"
+                            always @posedge(clk) begin
+                                {} <= {};
+                            end"#,
+                            this_var,
+                            register.inner.value.variable()
+                            };
+
+                            code.join(&this_code)
+                        }
+                    }
                 }
                 code.join(&block.result.inner.code(types))
                 // Empty. The block result will always be the last expression
@@ -300,6 +336,36 @@ mod tests {
             wire __expr__2;
             assign __expr__2 = _m_a < _m_b;
             assign __output = __expr__2;
+        endmodule"#
+        );
+
+        let processed = parse_typecheck_entity(code);
+
+        let result = generate_entity(&processed.entity, &processed.type_state).to_string();
+        assert_same_code!(&result, expected);
+    }
+
+    #[test]
+    fn registers_work() {
+        let code = r#"
+        entity name(clk: clk, a: int<16>) -> int<16> {
+            reg(clk) res = a;
+            res
+        }
+        "#;
+
+        let expected = indoc!(
+            r#"
+        module name (
+                input _m_clk,
+                input[15:0] _m_a,
+                output[15:0] __output
+            );
+            reg[15:0] _m_res;
+            always @posedge(clk) begin
+                _m_res <= _m_a;
+            end
+            assign __output = _m_res;
         endmodule"#
         );
 
