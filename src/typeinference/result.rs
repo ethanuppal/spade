@@ -38,5 +38,8 @@ pub enum Error {
         first_branch: Loc<()>,
         incorrect_branch: Loc<()>,
     },
+
+    #[error("Attempting to instanciate generic type")]
+    GenericTypeInstanciation,
 }
 pub type Result<T> = std::result::Result<T, Error>;

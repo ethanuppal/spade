@@ -142,6 +142,7 @@ pub fn report_typeinference_error(filename: &Path, file_content: &str, err: Infe
     let mut files = SimpleFiles::new();
     let file_id = files.add(filename.to_string_lossy(), file_content);
     let diag = match err {
+        InferenceError::GenericTypeInstanciation => todo![],
         InferenceError::UnknownType(expr) => Diagnostic::error()
             .with_message(format!(
                 "Tried looking up the type of {:?} but it was not found",

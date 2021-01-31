@@ -24,7 +24,10 @@ pub mod result;
 use equation::{TypeEquations, TypeVar, TypedExpression};
 use result::{Error, Result};
 
-use self::{equation::KnownType, result::UnificationError};
+use self::{
+    equation::{ConcreteType, KnownType},
+    result::UnificationError,
+};
 
 pub struct TypeState {
     equations: TypeEquations,
@@ -78,10 +81,29 @@ impl TypeState {
         Err(Error::UnknownType(expr.clone()).into())
     }
 
+    pub fn ungenerify_type(var: &TypeVar) -> Result<ConcreteType> {
+        unimplemented![]
+        // match var {
+        //     TypeVar::Known(t, params, _) => {
+        //         let params = params.iter()
+        //             .map(Self::ungenerify_type)
+        //             .collect::<Result<Vec<_>>>()?;
+
+        //         Ok((t, params))
+        //     },
+        //     TypeVar::Generic(_) => {Err(Error::GenericTypeInstanciation)}
+        // }
+    }
+
     /// Returns the type of the expression as a concrete type. If the type is not known,
     /// or tye type is Generic, panics
-    pub fn expr_type(&self, _expr: &Expression) -> Type {
+    pub fn expr_type(&self, expr: &Expression) -> (KnownType, Vec<KnownType>) {
         unimplemented![]
+        // Self::ungenerify_type(
+        //     &self
+        //         .type_of(&TypedExpression::Id(expr.id))
+        //         .expect("Expression had no specified type")
+        // ).expect("Expr had generic type")
     }
 
     // /// Visit an item to assign type variables and equations to every subexpression
@@ -393,7 +415,7 @@ mod tests {
 
     use crate::{
         assert_matches,
-        fixed_types::t_clock,
+        fixed_types::{t_clock, INT_PATH},
         hir::{Block, Identifier, Path},
     };
     use crate::{hir::EntityHead, location_info::WithLocation};
@@ -567,13 +589,13 @@ mod tests {
                 inputs: vec![(
                     Identifier::Named("input".to_string()).nowhere(),
                     hir::Type::Generic(
-                        Path::from_strs(&["builtin", "int"]).nowhere(),
+                        Path::from_strs(INT_PATH).nowhere(),
                         vec![hir::TypeExpression::Integer(5).nowhere()],
                     )
                     .nowhere(),
                 )],
                 output_type: hir::Type::Generic(
-                    Path::from_strs(&["builtin", "int"]).nowhere(),
+                    Path::from_strs(INT_PATH).nowhere(),
                     vec![hir::TypeExpression::Integer(5).nowhere()],
                 )
                 .nowhere(),

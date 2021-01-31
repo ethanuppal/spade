@@ -38,63 +38,67 @@ impl Expression {
     }
 
     pub fn code(&self, types: &TypeState) -> Code {
-        let mut code = Code::new();
+        Code::new()
+        // let mut code = Code::new();
 
-        // Define the wire if it is needed
-        if self.alias().is_none() {
-            code.join(&wire(&self.variable(), types.expr_type(self).size()))
-        }
+        // // Define the wire if it is needed
+        // if self.alias().is_none() {
+        //     code.join(&wire(&self.variable(), types.expr_type(self).size()))
+        // }
 
-        match &self.kind {
-            ExprKind::Identifier(_) => {
-                // Empty. The identifier will be defined elsewhere
-            }
-            ExprKind::IntLiteral(_) => todo!("codegen for int literals"),
-            ExprKind::BoolLiteral(_) => todo!("codegen for bool literals"),
-            ExprKind::FnCall(_, _) => todo!("codegen for function calls is unimplemented"),
-            ExprKind::Block(block) => {
-                if !block.statements.is_empty() {
-                    todo!("Blocks with statements are unimplemented");
-                }
-                code.join(&block.result.inner.code(types))
-                // Empty. The block result will always be the last expression
-            }
-            ExprKind::If(cond, on_true, on_false) => {
-                // TODO: Add a code struct that handles all this bullshit
-                code.join(&cond.inner.code(types));
-                code.join(&on_true.inner.code(types));
-                code.join(&on_false.inner.code(types));
+        // match &self.kind {
+        //     ExprKind::Identifier(_) => {
+        //         // Empty. The identifier will be defined elsewhere
+        //     }
+        //     ExprKind::IntLiteral(_) => todo!("codegen for int literals"),
+        //     ExprKind::BoolLiteral(_) => todo!("codegen for bool literals"),
+        //     ExprKind::FnCall(_, _) => todo!("codegen for function calls is unimplemented"),
+        //     ExprKind::Block(block) => {
+        //         if !block.statements.is_empty() {
+        //             todo!("Blocks with statements are unimplemented");
+        //         }
+        //         code.join(&block.result.inner.code(types))
+        //         // Empty. The block result will always be the last expression
+        //     }
+        //     ExprKind::If(cond, on_true, on_false) => {
+        //         // TODO: Add a code struct that handles all this bullshit
+        //         code.join(&cond.inner.code(types));
+        //         code.join(&on_true.inner.code(types));
+        //         code.join(&on_false.inner.code(types));
 
-                let self_var = self.variable();
-                let this_code = formatdoc! {r#"
-                    always @* begin
-                        if ({}) begin
-                            {} <= {};
-                        end
-                        else begin
-                            {} <= {};
-                        end
-                    end"#,
-                    cond.inner.variable(),
-                    self_var,
-                    on_true.inner.variable(),
-                    self_var,
-                    on_false.inner.variable()
-                };
-                code.join(&this_code)
-            }
-        }
-        code
+        //         let self_var = self.variable();
+        //         let this_code = formatdoc! {r#"
+        //             always @* begin
+        //                 if ({}) begin
+        //                     {} <= {};
+        //                 end
+        //                 else begin
+        //                     {} <= {};
+        //                 end
+        //             end"#,
+        //             cond.inner.variable(),
+        //             self_var,
+        //             on_true.inner.variable(),
+        //             self_var,
+        //             on_false.inner.variable()
+        //         };
+        //         code.join(&this_code)
+        //     }
+        // }
+        // code
     }
 }
 
 pub fn generate_entity<'a>(entity: &Entity, types: &TypeState) -> Code {
-    panic!("codegen is currently unimplemented");
+    unimplemented![]
     // let inputs = entity
     //     .head
     //     .inputs
     //     .iter()
-    //     .map(|(name, t)| format!("input{} {},", size_spec(t.inner.size()), name.inner));
+    //     .map(|(name, t)| {
+    //         format!("input{} {},", size_spec(t.inner.size()), name.inner)
+    //     });
+
     // let output_definition = format!(
     //     "output{} __output",
     //     size_spec(entity.head.output_type.inner.size())
@@ -123,7 +127,7 @@ mod tests {
     #[test]
     fn entity_defintions_are_correct() {
         let code = r#"
-        entity name(a: int[16], b: int[16]) -> int[16] {
+        entity name(a: int<16>, b: int<16>) -> int<16> {
             a
         }
         "#;
@@ -149,7 +153,7 @@ mod tests {
     #[test]
     fn if_expressions_have_correct_codegen() {
         let code = r#"
-        entity name(c: bool, a: int[16], b: int[16]) -> int[16] {
+        entity name(c: bool, a: int<16>, b: int<16>) -> int<16> {
             if c
                 a
             else

@@ -7,7 +7,7 @@ use logos::Logos;
 use structopt::StructOpt;
 
 pub mod ast;
-// pub mod codegen;
+pub mod codegen;
 pub mod constant;
 pub mod error_reporting;
 pub mod fixed_types;

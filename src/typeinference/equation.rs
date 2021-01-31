@@ -83,3 +83,28 @@ impl std::fmt::Display for TypedExpression {
         }
     }
 }
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ConcreteType {
+    pub base: KnownType,
+    pub params: Vec<KnownType>,
+}
+
+impl std::fmt::Display for ConcreteType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let params_str = if self.params.is_empty() {
+            format!("")
+        } else {
+            format!(
+                "{}",
+                self.params
+                    .iter()
+                    .map(|p| format!("{}", p))
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            )
+        };
+
+        write!(f, "{}{}", self.base, params_str)
+    }
+}
