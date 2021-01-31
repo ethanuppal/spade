@@ -281,7 +281,6 @@ impl<'a> Parser<'a> {
 
             self.eat(&TokenKind::Assignment)?;
             let (value, end_span) = self.expression()?.separate();
-            self.eat(&TokenKind::Semi)?;
 
             Ok(Some(
                 Statement::Binding(ident, t, value).at(start_span.merge(end_span)),
@@ -362,7 +361,11 @@ impl<'a> Parser<'a> {
     /// otherwise None
     #[trace_parser]
     fn statement(&mut self) -> Result<Option<Loc<Statement>>> {
-        self.first_successful(vec![&Self::binding, &Self::register])
+        let result = self.first_successful(vec![&Self::binding, &Self::register])?;
+        if result.is_some() {
+            self.eat(&TokenKind::Semi)?;
+        }
+        Ok(result)
     }
 
     #[trace_parser]
