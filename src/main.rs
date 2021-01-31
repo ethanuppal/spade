@@ -7,6 +7,7 @@ use logos::Logos;
 use structopt::StructOpt;
 
 pub mod ast;
+pub mod builtins;
 pub mod codegen;
 pub mod constant;
 pub mod error_reporting;
@@ -20,7 +21,6 @@ pub mod semantic_analysis;
 pub mod symbol_table;
 pub mod typeinference;
 pub mod types;
-pub mod builtins;
 
 #[macro_use]
 #[cfg(test)]

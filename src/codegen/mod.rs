@@ -1,9 +1,13 @@
 use indoc::formatdoc;
 
-use crate::{fixed_types::{t_bool, t_int}, hir::{self, Entity, ExprKind, Expression, Path}, typeinference::{
-        equation::{ConcreteType, KnownType, TypedExpression},
+use crate::{
+    fixed_types::{t_bool, t_int},
+    hir::{self, Entity, ExprKind, Expression, Path},
+    typeinference::{
+        equation::{ConcreteType, KnownType},
         TypeState,
-    }};
+    },
+};
 
 mod util;
 mod verilog;
@@ -86,12 +90,10 @@ impl Expression {
                             rhs.inner.variable(),
                         };
                         code.join(&this_code)
-                    }
-                    else {
+                    } else {
                         panic!("intrinsics::add called with more than 2 arguments")
                     }
-                }
-                else {
+                } else {
                     panic!("Unrecognised function {}", name.inner)
                 }
             }
@@ -134,7 +136,7 @@ impl Expression {
 pub fn generate_entity<'a>(entity: &Entity, types: &TypeState) -> Code {
     let inputs = entity.head.inputs.iter().map(|(name, _)| {
         let t = types.type_of_name(&Path(vec![name.inner.clone()]));
-        format!("input{} {},", size_spec(size_of_type(t)), name.inner)
+        format!("input{} _m_{},", size_spec(size_of_type(t)), name.inner)
     });
 
     let output_t = types.expr_type(&entity.body);
@@ -171,8 +173,8 @@ mod tests {
         let expected = indoc!(
             r#"
         module name (
-                input[15:0] a,
-                input[15:0] b,
+                input[15:0] _m_a,
+                input[15:0] _m_b,
                 output[15:0] __output
             )
         begin
@@ -200,9 +202,9 @@ mod tests {
         let expected = indoc!(
             r#"
         module name (
-                input c,
-                input[15:0] a,
-                input[15:0] b,
+                input _m_c,
+                input[15:0] _m_a,
+                input[15:0] _m_b,
                 output[15:0] __output
             )
         begin
@@ -236,8 +238,8 @@ mod tests {
         let expected = indoc!(
             r#"
         module name (
-                input[15:0] a,
-                input[15:0] b,
+                input[15:0] _m_a,
+                input[15:0] _m_b,
                 output[15:0] __output
             )
         begin

@@ -8,7 +8,6 @@ use parse_tree_macros::trace_typechecker;
 
 use crate::hir::Statement;
 use crate::hir::{ExprKind, Expression};
-use crate::types::Type;
 use crate::{
     fixed_types::{t_bool, t_int},
     hir::{Entity, TypeExpression},
@@ -191,12 +190,10 @@ impl TypeState {
                         self.unify_expression_generic_error(&lhs, &rhs.inner)?;
 
                         self.unify_expression_generic_error(expression, &rhs.inner)?
-                    }
-                    else {
+                    } else {
                         panic!("intrinsics::add called with more than 2 arguments")
                     }
-                }
-                else {
+                } else {
                     panic!("Unrecognised function {}", name.inner)
                 }
             }
