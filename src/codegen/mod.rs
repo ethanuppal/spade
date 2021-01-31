@@ -1,8 +1,12 @@
 use indoc::formatdoc;
 
 use crate::{
-    hir::{Entity, ExprKind, Expression},
-    typeinference::TypeState,
+    fixed_types::{t_bool, t_int},
+    hir::{Entity, ExprKind, Expression, Path},
+    typeinference::{
+        equation::{ConcreteType, KnownType, TypedExpression},
+        TypeState,
+    },
 };
 
 mod util;
@@ -14,6 +18,28 @@ use self::{
 };
 
 use crate::code;
+
+fn size_of_type(t: ConcreteType) -> u128 {
+    match t.base {
+        _t if _t == t_int() => match t.params.as_slice() {
+            [ConcreteType {
+                base: KnownType::Integer(size),
+                ..
+            }] => *size,
+            other => panic!("Expected integer to have size, got {:?}", other),
+        },
+        _t if _t == t_bool() => {
+            assert!(t.params.is_empty(), "Bool type got generics");
+
+            1
+        }
+        KnownType::Integer(_) => {
+            panic!("A type level integer has no size")
+        }
+        KnownType::Unit => 0,
+        other => panic!("{:?} has no size right now", other),
+    }
+}
 
 impl Expression {
     /// If the verilog code for this expression is just an alias for another variable
@@ -38,84 +64,77 @@ impl Expression {
     }
 
     pub fn code(&self, types: &TypeState) -> Code {
-        Code::new()
-        // let mut code = Code::new();
+        let mut code = Code::new();
 
-        // // Define the wire if it is needed
-        // if self.alias().is_none() {
-        //     code.join(&wire(&self.variable(), types.expr_type(self).size()))
-        // }
+        // Define the wire if it is needed
+        if self.alias().is_none() {
+            code.join(&wire(&self.variable(), size_of_type(types.expr_type(self))))
+        }
 
-        // match &self.kind {
-        //     ExprKind::Identifier(_) => {
-        //         // Empty. The identifier will be defined elsewhere
-        //     }
-        //     ExprKind::IntLiteral(_) => todo!("codegen for int literals"),
-        //     ExprKind::BoolLiteral(_) => todo!("codegen for bool literals"),
-        //     ExprKind::FnCall(_, _) => todo!("codegen for function calls is unimplemented"),
-        //     ExprKind::Block(block) => {
-        //         if !block.statements.is_empty() {
-        //             todo!("Blocks with statements are unimplemented");
-        //         }
-        //         code.join(&block.result.inner.code(types))
-        //         // Empty. The block result will always be the last expression
-        //     }
-        //     ExprKind::If(cond, on_true, on_false) => {
-        //         // TODO: Add a code struct that handles all this bullshit
-        //         code.join(&cond.inner.code(types));
-        //         code.join(&on_true.inner.code(types));
-        //         code.join(&on_false.inner.code(types));
+        match &self.kind {
+            ExprKind::Identifier(_) => {
+                // Empty. The identifier will be defined elsewhere
+            }
+            ExprKind::IntLiteral(_) => todo!("codegen for int literals"),
+            ExprKind::BoolLiteral(_) => todo!("codegen for bool literals"),
+            ExprKind::FnCall(_, _) => todo!("codegen for function calls is unimplemented"),
+            ExprKind::Block(block) => {
+                if !block.statements.is_empty() {
+                    todo!("Blocks with statements are unimplemented");
+                }
+                code.join(&block.result.inner.code(types))
+                // Empty. The block result will always be the last expression
+            }
+            ExprKind::If(cond, on_true, on_false) => {
+                // TODO: Add a code struct that handles all this bullshit
+                code.join(&cond.inner.code(types));
+                code.join(&on_true.inner.code(types));
+                code.join(&on_false.inner.code(types));
 
-        //         let self_var = self.variable();
-        //         let this_code = formatdoc! {r#"
-        //             always @* begin
-        //                 if ({}) begin
-        //                     {} <= {};
-        //                 end
-        //                 else begin
-        //                     {} <= {};
-        //                 end
-        //             end"#,
-        //             cond.inner.variable(),
-        //             self_var,
-        //             on_true.inner.variable(),
-        //             self_var,
-        //             on_false.inner.variable()
-        //         };
-        //         code.join(&this_code)
-        //     }
-        // }
-        // code
+                let self_var = self.variable();
+                let this_code = formatdoc! {r#"
+                    always @* begin
+                        if ({}) begin
+                            {} <= {};
+                        end
+                        else begin
+                            {} <= {};
+                        end
+                    end"#,
+                    cond.inner.variable(),
+                    self_var,
+                    on_true.inner.variable(),
+                    self_var,
+                    on_false.inner.variable()
+                };
+                code.join(&this_code)
+            }
+        }
+        code
     }
 }
 
 pub fn generate_entity<'a>(entity: &Entity, types: &TypeState) -> Code {
-    unimplemented![]
-    // let inputs = entity
-    //     .head
-    //     .inputs
-    //     .iter()
-    //     .map(|(name, t)| {
-    //         format!("input{} {},", size_spec(t.inner.size()), name.inner)
-    //     });
+    let inputs = entity.head.inputs.iter().map(|(name, _)| {
+        let t = types.type_of_name(&Path(vec![name.inner.clone()]));
+        format!("input{} {},", size_spec(size_of_type(t)), name.inner)
+    });
 
-    // let output_definition = format!(
-    //     "output{} __output",
-    //     size_spec(entity.head.output_type.inner.size())
-    // );
+    let output_t = types.expr_type(&entity.body);
+    let output_definition = format!("output{} __output", size_spec(size_of_type(output_t)));
 
-    // let output_assignment = assign("__output", &entity.body.inner.variable());
+    let output_assignment = assign("__output", &entity.body.inner.variable());
 
-    // code! {
-    //     [0] &format!("module {} (", entity.name.inner);
-    //             [2] &inputs.collect::<Vec<_>>();
-    //             [2] &output_definition;
-    //         [1] &")";
-    //     [0] &"begin";
-    //         [1] &entity.body.inner.code(types);
-    //         [1] &output_assignment;
-    //     [0] &"end"
-    // }
+    code! {
+        [0] &format!("module {} (", entity.name.inner);
+                [2] &inputs.collect::<Vec<_>>();
+                [2] &output_definition;
+            [1] &")";
+        [0] &"begin";
+            [1] &entity.body.inner.code(types);
+            [1] &output_assignment;
+        [0] &"end"
+    }
 }
 
 #[cfg(test)]

@@ -87,7 +87,7 @@ impl std::fmt::Display for TypedExpression {
 #[derive(Debug, Clone, PartialEq)]
 pub struct ConcreteType {
     pub base: KnownType,
-    pub params: Vec<KnownType>,
+    pub params: Vec<ConcreteType>,
 }
 
 impl std::fmt::Display for ConcreteType {

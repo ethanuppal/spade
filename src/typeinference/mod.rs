@@ -82,28 +82,40 @@ impl TypeState {
     }
 
     pub fn ungenerify_type(var: &TypeVar) -> Result<ConcreteType> {
-        unimplemented![]
-        // match var {
-        //     TypeVar::Known(t, params, _) => {
-        //         let params = params.iter()
-        //             .map(Self::ungenerify_type)
-        //             .collect::<Result<Vec<_>>>()?;
+        match var {
+            TypeVar::Known(t, params, _) => {
+                let params = params
+                    .iter()
+                    .map(Self::ungenerify_type)
+                    .collect::<Result<Vec<_>>>()?;
 
-        //         Ok((t, params))
-        //     },
-        //     TypeVar::Generic(_) => {Err(Error::GenericTypeInstanciation)}
-        // }
+                Ok(ConcreteType {
+                    base: t.clone(),
+                    params,
+                })
+            }
+            TypeVar::Generic(_) => Err(Error::GenericTypeInstanciation),
+        }
     }
 
     /// Returns the type of the expression as a concrete type. If the type is not known,
     /// or tye type is Generic, panics
-    pub fn expr_type(&self, expr: &Expression) -> (KnownType, Vec<KnownType>) {
-        unimplemented![]
-        // Self::ungenerify_type(
-        //     &self
-        //         .type_of(&TypedExpression::Id(expr.id))
-        //         .expect("Expression had no specified type")
-        // ).expect("Expr had generic type")
+    pub fn expr_type(&self, expr: &Expression) -> ConcreteType {
+        Self::ungenerify_type(
+            &self
+                .type_of(&TypedExpression::Id(expr.id))
+                .expect("Expression had no specified type"),
+        )
+        .expect("Expr had generic type")
+    }
+
+    pub fn type_of_name(&self, name: &hir::Path) -> ConcreteType {
+        Self::ungenerify_type(
+            &self
+                .type_of(&TypedExpression::Name(name.clone()))
+                .expect("Expression had no specified type"),
+        )
+        .expect("Expr had generic type")
     }
 
     // /// Visit an item to assign type variables and equations to every subexpression
