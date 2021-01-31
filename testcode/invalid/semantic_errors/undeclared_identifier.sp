@@ -1,3 +1,3 @@
-entity test () -> uint[5] {
+entity test () -> uint<5> {
     a+b
 }

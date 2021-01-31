@@ -1,1 +1,1 @@
-entity test() -> uint[10] ;
+entity test() -> uint<10> ;

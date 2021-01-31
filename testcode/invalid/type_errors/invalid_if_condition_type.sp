@@ -1,4 +1,4 @@
-entity test(a: int[5]) -> bit {
+entity test(a: int<5>) -> bit {
     if a {
         a
     }

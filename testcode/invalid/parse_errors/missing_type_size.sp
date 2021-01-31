@@ -1,1 +1,1 @@
-entity name () -> uint[]
+entity name () -> uint<>
