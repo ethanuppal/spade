@@ -81,6 +81,8 @@ impl TypeState {
         Err(Error::UnknownType(expr.clone()).into())
     }
 
+    /// Converts the specified type to a concrete type, returning an error
+    /// if it fails
     pub fn ungenerify_type(var: &TypeVar) -> Result<ConcreteType> {
         match var {
             TypeVar::Known(t, params, _) => {
@@ -109,6 +111,8 @@ impl TypeState {
         .expect("Expr had generic type")
     }
 
+    /// Returns the type of the specified name as a concrete type. If the type is not known,
+    /// or tye type is Generic, panics
     pub fn type_of_name(&self, name: &hir::Path) -> ConcreteType {
         Self::ungenerify_type(
             &self
@@ -118,13 +122,9 @@ impl TypeState {
         .expect("Expr had generic type")
     }
 
-    // /// Visit an item to assign type variables and equations to every subexpression
-    // /// in the item
-    // pub fn visit_item(&mut self, item: &Item) {
-    //     match item {
-    //         Item::Entity(e) => self.visit_entity(&e.inner),
-    //     }
-    // }
+    pub fn new_generic_int(&mut self) -> TypeVar {
+        TypeVar::Known(t_int(), vec![TypeVar::Generic(self.new_typeid())], None)
+    }
 
     #[trace_typechecker]
     pub fn visit_entity(&mut self, entity: &Entity) -> Result<()> {
@@ -169,7 +169,7 @@ impl TypeState {
                 )?;
             }
             ExprKind::IntLiteral(_) => {
-                let t = TypeVar::Known(t_int(), vec![TypeVar::Generic(self.new_typeid())], None);
+                let t = self.new_generic_int();
                 self.unify_types(&t, &expression.inner)
                     .map_err(|(_, got)| Error::IntLiteralIncompatible {
                         got,
@@ -179,8 +179,26 @@ impl TypeState {
             ExprKind::BoolLiteral(_) => {
                 unimplemented! {}
             }
-            ExprKind::FnCall(_, _) => {
-                unimplemented! {}
+            ExprKind::FnCall(name, params) => {
+                if name.inner == hir::Path::from_strs(&["intrinsics", "add"]) {
+                    if let [lhs, rhs] = params.as_slice() {
+                        self.visit_expression(&lhs)?;
+                        self.visit_expression(&rhs)?;
+
+                        let int_type = self.new_generic_int();
+                        // TODO: Make generic over types that can be added
+                        self.unify_expression_generic_error(&lhs, &int_type)?;
+                        self.unify_expression_generic_error(&lhs, &rhs.inner)?;
+
+                        self.unify_expression_generic_error(expression, &rhs.inner)?
+                    }
+                    else {
+                        panic!("intrinsics::add called with more than 2 arguments")
+                    }
+                }
+                else {
+                    panic!("Unrecognised function {}", name.inner)
+                }
             }
             ExprKind::Block(block) => {
                 self.visit_block(block)?;

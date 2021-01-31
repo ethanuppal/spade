@@ -172,10 +172,13 @@ pub fn report_typeinference_error(filename: &Path, file_content: &str, err: Infe
                 format!("Expected: {}", expected),
                 format!("     Got: {}", got),
             ]),
-        InferenceError::UnspecifiedTypeError { .. } => {
-            // Diagnostic::error()
-            //     .with_message(format!("Expected type {}, "))
-            todo! {}
+        InferenceError::UnspecifiedTypeError { expected, got, loc } => {
+            Diagnostic::error()
+                .with_message(format!("Expected type {}, got {}", expected, got))
+                .with_labels(vec![
+                    Label::primary(file_id, loc.loc().span)
+                        .with_message(format!("Expected {}", expected))
+                ])
         }
         InferenceError::IntLiteralIncompatible { .. } => {
             todo! {}

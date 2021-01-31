@@ -1,13 +1,9 @@
 use indoc::formatdoc;
 
-use crate::{
-    fixed_types::{t_bool, t_int},
-    hir::{Entity, ExprKind, Expression, Path},
-    typeinference::{
+use crate::{fixed_types::{t_bool, t_int}, hir::{self, Entity, ExprKind, Expression, Path}, typeinference::{
         equation::{ConcreteType, KnownType, TypedExpression},
         TypeState,
-    },
-};
+    }};
 
 mod util;
 mod verilog;
@@ -77,7 +73,28 @@ impl Expression {
             }
             ExprKind::IntLiteral(_) => todo!("codegen for int literals"),
             ExprKind::BoolLiteral(_) => todo!("codegen for bool literals"),
-            ExprKind::FnCall(_, _) => todo!("codegen for function calls is unimplemented"),
+            ExprKind::FnCall(name, params) => {
+                if name.inner == hir::Path::from_strs(&["intrinsics", "add"]) {
+                    if let [lhs, rhs] = params.as_slice() {
+                        code.join(&lhs.inner.code(types));
+                        code.join(&rhs.inner.code(types));
+
+                        let this_code = formatdoc! {r#"
+                            assign {} = {} + {};"#,
+                            self.variable(),
+                            lhs.inner.variable(),
+                            rhs.inner.variable(),
+                        };
+                        code.join(&this_code)
+                    }
+                    else {
+                        panic!("intrinsics::add called with more than 2 arguments")
+                    }
+                }
+                else {
+                    panic!("Unrecognised function {}", name.inner)
+                }
+            }
             ExprKind::Block(block) => {
                 if !block.statements.is_empty() {
                     todo!("Blocks with statements are unimplemented");
@@ -199,6 +216,34 @@ mod tests {
                 end
             end
             assign __output = __expr__3;
+        end"#
+        );
+
+        let processed = parse_typecheck_entity(code);
+
+        let result = generate_entity(&processed.entity, &processed.type_state).to_string();
+        assert_same_code!(&result, expected);
+    }
+
+    #[test]
+    fn an_adder_is_buildable() {
+        let code = r#"
+        entity name(a: int<16>, b: int<16>) -> int<16> {
+            a + b
+        }
+        "#;
+
+        let expected = indoc!(
+            r#"
+        module name (
+                input[15:0] a,
+                input[15:0] b,
+                output[15:0] __output
+            )
+        begin
+            wire[15:0] __expr__2;
+            assign __expr__2 = _m_a + _m_b;
+            assign __output = __expr__2;
         end"#
         );
 
