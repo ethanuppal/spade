@@ -1,0 +1,3 @@
+[submodule "output_test/vatch"]
+	path = output_test/vatch
+	url = git@gitlab.com:TheZoq2/vatch.git

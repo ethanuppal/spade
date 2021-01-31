@@ -179,19 +179,33 @@ impl TypeState {
                 unimplemented! {}
             }
             ExprKind::FnCall(name, params) => {
-                if name.inner == hir::Path::from_strs(&["intrinsics", "add"]) {
-                    if let [lhs, rhs] = params.as_slice() {
-                        self.visit_expression(&lhs)?;
-                        self.visit_expression(&rhs)?;
-
-                        let int_type = self.new_generic_int();
-                        // TODO: Make generic over types that can be added
-                        self.unify_expression_generic_error(&lhs, &int_type)?;
-                        self.unify_expression_generic_error(&lhs, &rhs.inner)?;
-
-                        self.unify_expression_generic_error(expression, &rhs.inner)?
+                // TODO: Propper error handling
+                if let ["intrinsics", operator] = name
+                    .inner
+                    .maybe_slices()
+                    .expect("Anonymous paths are unsupported as functions")
+                    .as_slice()
+                {
+                    let (lhs, rhs) = if let [lhs, rhs] = params.as_slice() {
+                        (lhs, rhs)
                     } else {
-                        panic!("intrinsics::add called with more than 2 arguments")
+                        panic!("intrinsics::{} called with more than 2 arguments", operator)
+                    };
+
+                    self.visit_expression(&lhs)?;
+                    self.visit_expression(&rhs)?;
+                    let int_type = self.new_generic_int();
+                    // TODO: Make generic over types that can be added
+                    self.unify_expression_generic_error(&lhs, &int_type)?;
+                    self.unify_expression_generic_error(&lhs, &rhs.inner)?;
+                    match *operator {
+                        "add" | "sub" => {
+                            self.unify_expression_generic_error(expression, &rhs.inner)?
+                        }
+                        "eq" | "gt" | "lt" => {
+                            self.unify_expression_generic_error(expression, &t_bool())?
+                        }
+                        other => panic!("unrecognised intrinsic {:?}", other),
                     }
                 } else {
                     panic!("Unrecognised function {}", name.inner)

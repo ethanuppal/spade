@@ -41,6 +41,19 @@ impl Path {
             None
         }
     }
+
+    pub fn maybe_slices(&self) -> Option<Vec<&str>> {
+        self.0
+            .iter()
+            .map(|id| {
+                if let Identifier::Named(name) = id {
+                    Some(name.as_str())
+                } else {
+                    None
+                }
+            })
+            .collect::<Option<Vec<_>>>()
+    }
 }
 
 impl std::fmt::Display for Path {

@@ -13,3 +13,6 @@ pub fn size_spec(size: u128) -> String {
 pub fn wire(name: &str, size: u128) -> String {
     format!("wire{} {};", size_spec(size), name)
 }
+pub fn reg(name: &str, size: u128) -> String {
+    format!("reg{} {};", size_spec(size), name)
+}

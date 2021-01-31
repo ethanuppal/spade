@@ -33,6 +33,8 @@ use semantic_analysis::visit_entity;
 struct Opt {
     #[structopt(name = "INPUT_FILE")]
     pub infile: PathBuf,
+    #[structopt(short = "o")]
+    pub outfile: PathBuf,
 }
 
 #[allow(dead_code, unused_variables, unused_mut)]
@@ -73,6 +75,10 @@ fn main() -> Result<()> {
             return Err(anyhow!("aborting due to previous error"));
         }
     }
+
+    let code = codegen::generate_entity(&hir, &type_state);
+
+    std::fs::write(opts.outfile, code.to_string())?;
 
     Ok(())
 }

@@ -592,6 +592,8 @@ impl<'a> Parser<'a> {
     fn is_next_comparison_operator(&mut self) -> Result<bool> {
         Ok(match self.peek()?.map(|token| token.kind) {
             Some(TokenKind::Equals) => true,
+            Some(TokenKind::Gt) => true,
+            Some(TokenKind::Lt) => true,
             _ => false,
         })
     }

@@ -228,6 +228,8 @@ pub fn visit_expression(
                 TokenKind::Asterisk => Ok(intrinsic("mul")),
                 TokenKind::Slash => Ok(intrinsic("div")),
                 TokenKind::Equals => Ok(intrinsic("eq")),
+                TokenKind::Gt => Ok(intrinsic("gt")),
+                TokenKind::Lt => Ok(intrinsic("lt")),
                 _ => unreachable! {},
             }
         }

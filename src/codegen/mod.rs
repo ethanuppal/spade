@@ -2,7 +2,7 @@ use indoc::formatdoc;
 
 use crate::{
     fixed_types::{t_bool, t_int},
-    hir::{self, Entity, ExprKind, Expression, Path},
+    hir::{Entity, ExprKind, Expression, Path},
     typeinference::{
         equation::{ConcreteType, KnownType},
         TypeState,
@@ -14,7 +14,7 @@ mod verilog;
 
 use self::{
     util::Code,
-    verilog::{assign, size_spec, wire},
+    verilog::{assign, reg, size_spec, wire},
 };
 
 use crate::code;
@@ -55,6 +55,18 @@ impl Expression {
             ExprKind::If(_, _, _) => None,
         }
     }
+
+    pub fn requires_reg(&self) -> bool {
+        match &self.kind {
+            ExprKind::Identifier(_) => false,
+            ExprKind::IntLiteral(_) => false,
+            ExprKind::BoolLiteral(_) => false,
+            ExprKind::FnCall(_, _) => false,
+            ExprKind::Block(_) => false,
+            ExprKind::If(_, _, _) => true,
+        }
+    }
+
     pub fn variable(&self) -> String {
         // If this expressions should not use the standard __expr__{} variable,
         // that is specified here
@@ -68,7 +80,11 @@ impl Expression {
 
         // Define the wire if it is needed
         if self.alias().is_none() {
-            code.join(&wire(&self.variable(), size_of_type(types.expr_type(self))))
+            if self.requires_reg() {
+                code.join(&reg(&self.variable(), size_of_type(types.expr_type(self))))
+            } else {
+                code.join(&wire(&self.variable(), size_of_type(types.expr_type(self))))
+            }
         }
 
         match &self.kind {
@@ -78,23 +94,38 @@ impl Expression {
             ExprKind::IntLiteral(_) => todo!("codegen for int literals"),
             ExprKind::BoolLiteral(_) => todo!("codegen for bool literals"),
             ExprKind::FnCall(name, params) => {
-                if name.inner == hir::Path::from_strs(&["intrinsics", "add"]) {
+                let mut binop_builder = |op| {
                     if let [lhs, rhs] = params.as_slice() {
                         code.join(&lhs.inner.code(types));
                         code.join(&rhs.inner.code(types));
 
                         let this_code = formatdoc! {r#"
-                            assign {} = {} + {};"#,
+                            assign {} = {} {} {};"#,
                             self.variable(),
                             lhs.inner.variable(),
+                            op,
                             rhs.inner.variable(),
                         };
                         code.join(&this_code)
                     } else {
-                        panic!("intrinsics::add called with more than 2 arguments")
+                        panic!("Binary operation called with more than 2 arguments")
                     }
-                } else {
-                    panic!("Unrecognised function {}", name.inner)
+                };
+
+                // TODO: Propper error handling
+                match name
+                    .inner
+                    .maybe_slices()
+                    .expect("Anonymous functions can not be codegened right now")
+                    .as_slice()
+                {
+                    ["intrinsics", "add"] => binop_builder("+"),
+                    ["intrinsics", "sub"] => binop_builder("-"),
+                    ["intrinsics", "mul"] => binop_builder("*"),
+                    ["intrinsics", "eq"] => binop_builder("=="),
+                    ["intrinsics", "lt"] => binop_builder("<"),
+                    ["intrinsics", "gt"] => binop_builder(">"),
+                    _ => panic!("Unrecognised function {}", name.inner),
                 }
             }
             ExprKind::Block(block) => {
@@ -148,11 +179,10 @@ pub fn generate_entity<'a>(entity: &Entity, types: &TypeState) -> Code {
         [0] &format!("module {} (", entity.name.inner);
                 [2] &inputs.collect::<Vec<_>>();
                 [2] &output_definition;
-            [1] &")";
-        [0] &"begin";
+            [1] &");";
             [1] &entity.body.inner.code(types);
             [1] &output_assignment;
-        [0] &"end"
+        [0] &"endmodule"
     }
 }
 
@@ -176,10 +206,9 @@ mod tests {
                 input[15:0] _m_a,
                 input[15:0] _m_b,
                 output[15:0] __output
-            )
-        begin
+            );
             assign __output = _m_a;
-        end"#
+        endmodule"#
         );
 
         let processed = parse_typecheck_entity(code);
@@ -206,9 +235,8 @@ mod tests {
                 input[15:0] _m_a,
                 input[15:0] _m_b,
                 output[15:0] __output
-            )
-        begin
-            wire[15:0] __expr__3;
+            );
+            reg[15:0] __expr__3;
             always @* begin
                 if (_m_c) begin
                     __expr__3 <= _m_a;
@@ -218,7 +246,7 @@ mod tests {
                 end
             end
             assign __output = __expr__3;
-        end"#
+        endmodule"#
         );
 
         let processed = parse_typecheck_entity(code);
@@ -241,12 +269,38 @@ mod tests {
                 input[15:0] _m_a,
                 input[15:0] _m_b,
                 output[15:0] __output
-            )
-        begin
+            );
             wire[15:0] __expr__2;
             assign __expr__2 = _m_a + _m_b;
             assign __output = __expr__2;
-        end"#
+        endmodule"#
+        );
+
+        let processed = parse_typecheck_entity(code);
+
+        let result = generate_entity(&processed.entity, &processed.type_state).to_string();
+        assert_same_code!(&result, expected);
+    }
+
+    #[test]
+    fn a_comparator_is_buildable() {
+        let code = r#"
+        entity name(a: int<16>, b: int<16>) -> bool {
+            a < b
+        }
+        "#;
+
+        let expected = indoc!(
+            r#"
+        module name (
+                input[15:0] _m_a,
+                input[15:0] _m_b,
+                output __output
+            );
+            wire __expr__2;
+            assign __expr__2 = _m_a < _m_b;
+            assign __output = __expr__2;
+        endmodule"#
         );
 
         let processed = parse_typecheck_entity(code);
