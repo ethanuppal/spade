@@ -278,20 +278,41 @@ impl TypeState {
 
     #[trace_typechecker]
     pub fn visit_register(&mut self, reg: &Register) -> Result<()> {
+        let new_type = self.new_generic();
+        self.add_equation(TypedExpression::Name(reg.name.clone().to_path()), new_type);
+
         self.visit_expression(&reg.value)?;
+        self.visit_expression(&reg.clock)?;
         if reg.value_type.is_some() {
             todo!("Typechecker should take type specification on registers into account");
         }
 
-        self.unify_types(&TypedExpression::Name(reg.clock.inner.clone()), &t_clock())
+        if let Some((rst_cond, rst_value)) = &reg.reset {
+            self.visit_expression(&rst_cond)?;
+            self.visit_expression(&rst_value)?;
+            // Ensure cond is a boolean
+            self.unify_types(&rst_cond.inner, &t_bool())
+                .map_err(|(got, expected)| Error::NonBoolReset {
+                    expected,
+                    got,
+                    loc: rst_cond.loc(),
+                })?;
+
+            // Ensure the reset value has the same type as the register itself
+            self.unify_types(&rst_value.inner, &reg.value.inner)
+                .map_err(|(got, expected)| Error::RegisterResetMissmatch {
+                    expected,
+                    got,
+                    loc: rst_cond.loc(),
+                })?;
+        }
+
+        self.unify_types(&reg.clock, &t_clock())
             .map_err(|(got, expected)| Error::NonClockClock {
                 expected,
                 got,
                 loc: reg.clock.loc(),
             })?;
-
-        let new_type = self.new_generic();
-        self.add_equation(TypedExpression::Name(reg.name.clone().to_path()), new_type);
 
         self.unify_expression_generic_error(
             &reg.value,
@@ -494,6 +515,7 @@ mod tests {
         assert_matches,
         fixed_types::{t_clock, INT_PATH},
         hir::{Block, Identifier, Path},
+        testutil::hir_path,
     };
     use crate::{hir::EntityHead, location_info::WithLocation};
 
@@ -792,7 +814,9 @@ mod tests {
     fn registers_typecheck_correctly() {
         let input = hir::Register {
             name: hir::Identifier::Named("a".to_string()).nowhere(),
-            clock: Path::from_strs(&["clk"]).nowhere(),
+            clock: ExprKind::Identifier(Path::from_strs(&["clk"]).nowhere())
+                .with_id(3)
+                .nowhere(),
             reset: None,
             value: ExprKind::IntLiteral(0).with_id(0).nowhere(),
             value_type: None,
@@ -808,8 +832,73 @@ mod tests {
         let t0 = get_type!(state, &TExpr::Id(0));
         let ta = get_type!(state, &TExpr::Name(Path::from_strs(&["a"])));
         let tclk = get_type!(state, &TExpr::Name(Path::from_strs(&["clk"])));
-        ensure_same_type!(state, t0, unsized_int(1));
-        ensure_same_type!(state, ta, unsized_int(1));
+        ensure_same_type!(state, t0, unsized_int(2));
+        ensure_same_type!(state, ta, unsized_int(2));
         ensure_same_type!(state, tclk, t_clock());
+    }
+
+    #[test]
+    fn self_referential_registers_typepcheck_correctly() {
+        let input = hir::Register {
+            name: hir::Identifier::Named("a".to_string()).nowhere(),
+            clock: ExprKind::Identifier(Path::from_strs(&["clk"]).nowhere())
+                .with_id(3)
+                .nowhere(),
+            reset: None,
+            value: ExprKind::Identifier(hir_path("a")).with_id(0).nowhere(),
+            value_type: None,
+        };
+
+        let mut state = TypeState::new();
+
+        let expr_clk = TExpr::Name(Path::from_strs(&["clk"]));
+        state.add_equation(expr_clk.clone(), TVar::Generic(100));
+
+        state.visit_register(&input).unwrap();
+
+        let ta = get_type!(state, &TExpr::Name(Path::from_strs(&["a"])));
+        let tclk = get_type!(state, &TExpr::Name(Path::from_strs(&["clk"])));
+        ensure_same_type!(state, ta, TVar::Generic(1));
+        ensure_same_type!(state, tclk, t_clock());
+    }
+
+    #[test]
+    fn registers_with_resets_typecheck_correctly() {
+        let rst_cond = Path::from_strs(&["rst"]).nowhere();
+        let rst_value = Path::from_strs(&["rst_value"]).nowhere();
+        let input = hir::Register {
+            name: hir::Identifier::Named("a".to_string()).nowhere(),
+            clock: ExprKind::Identifier(Path::from_strs(&["clk"]).nowhere())
+                .with_id(3)
+                .nowhere(),
+            reset: Some((
+                ExprKind::Identifier(rst_cond.clone()).with_id(1).nowhere(),
+                ExprKind::Identifier(rst_value.clone()).with_id(2).nowhere(),
+            )),
+            value: ExprKind::IntLiteral(0).with_id(0).nowhere(),
+            value_type: None,
+        };
+
+        let mut state = TypeState::new();
+
+        let expr_clk = TExpr::Name(Path::from_strs(&["clk"]));
+        let expr_rst_cond = TExpr::Name(Path::from_strs(&["rst"]));
+        let expr_rst_value = TExpr::Name(Path::from_strs(&["rst_value"]));
+        state.add_equation(expr_clk.clone(), TVar::Generic(100));
+        state.add_equation(expr_rst_cond.clone(), TVar::Generic(101));
+        state.add_equation(expr_rst_value.clone(), TVar::Generic(102));
+
+        state.visit_register(&input).unwrap();
+
+        let t0 = get_type!(state, &TExpr::Id(0));
+        let ta = get_type!(state, &TExpr::Name(Path::from_strs(&["a"])));
+        let tclk = get_type!(state, &TExpr::Name(Path::from_strs(&["clk"])));
+        let trst_cond = get_type!(state, &TExpr::Name(rst_cond.inner.clone()));
+        let trst_val = get_type!(state, &TExpr::Name(rst_value.inner.clone()));
+        ensure_same_type!(state, t0, unsized_int(2));
+        ensure_same_type!(state, ta, unsized_int(2));
+        ensure_same_type!(state, tclk, t_clock());
+        ensure_same_type!(state, trst_cond, t_bool());
+        ensure_same_type!(state, trst_val, unsized_int(2));
     }
 }

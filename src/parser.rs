@@ -305,7 +305,7 @@ impl<'a> Parser<'a> {
             // Clock selection
             let (clock, _clock_paren_span) = self.surrounded(
                 &TokenKind::OpenParen,
-                |s| s.path().map(Some),
+                |s| s.expression().map(Some),
                 &TokenKind::CloseParen,
             )?;
 
@@ -1173,7 +1173,7 @@ mod tests {
         let expected = Statement::Register(
             Register {
                 name: ast_ident("name"),
-                clock: ast_path("clk"),
+                clock: Expression::Identifier(ast_path("clk")).nowhere(),
                 reset: None,
                 value: Expression::IntLiteral(1).nowhere(),
                 value_type: None,
@@ -1192,7 +1192,7 @@ mod tests {
         let expected = Statement::Register(
             Register {
                 name: ast_ident("name"),
-                clock: ast_path("clk"),
+                clock: Expression::Identifier(ast_path("clk")).nowhere(),
                 reset: Some((
                     Expression::Identifier(ast_path("rst")).nowhere(),
                     Expression::IntLiteral(0).nowhere(),
@@ -1214,7 +1214,7 @@ mod tests {
         let expected = Statement::Register(
             Register {
                 name: Identifier("name".to_string()).nowhere(),
-                clock: ast_path("clk"),
+                clock: Expression::Identifier(ast_path("clk")).nowhere(),
                 reset: Some((
                     Expression::Identifier(ast_path("rst")).nowhere(),
                     Expression::IntLiteral(0).nowhere(),

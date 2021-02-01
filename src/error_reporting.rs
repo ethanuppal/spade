@@ -205,9 +205,33 @@ pub fn report_typeinference_error(filename: &Path, file_content: &str, err: Infe
                 format!("Expected: {}", expected),
                 format!("     Got: {}", got),
             ]),
-        InferenceError::NonClockClock { .. } => {
-            todo!()
-        }
+        InferenceError::NonClockClock { expected, got, loc } => Diagnostic::error()
+            .with_message("Register clock must be a type clock")
+            .with_labels(vec![
+                Label::primary(file_id, loc.span).with_message(format!("Found type {}", got))
+            ])
+            .with_notes(vec![
+                format!("Expected: {}", expected),
+                format!("     Got: {}", got),
+            ]),
+        InferenceError::NonBoolReset { expected, got, loc } => Diagnostic::error()
+            .with_message("Register reset must be a bool")
+            .with_labels(vec![
+                Label::primary(file_id, loc.span).with_message(format!("Found type {}", got))
+            ])
+            .with_notes(vec![
+                format!("Expected: {}", expected),
+                format!("     Got: {}", got),
+            ]),
+        InferenceError::RegisterResetMissmatch { expected, got, loc } => Diagnostic::error()
+            .with_message("Register reset value missmatch")
+            .with_labels(vec![
+                Label::primary(file_id, loc.span).with_message(format!("Found type {}", got))
+            ])
+            .with_notes(vec![
+                format!("Expected: {}", expected),
+                format!("     Got: {}", got),
+            ]),
     };
 
     let writer = StandardStream::stderr(ColorChoice::Always);

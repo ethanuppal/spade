@@ -2,7 +2,7 @@ use indoc::formatdoc;
 
 use crate::{
     fixed_types::{t_bool, t_clock, t_int},
-    hir::{Entity, ExprKind, Expression, Path, Statement},
+    hir::{Entity, ExprKind, Expression, Path, Register, Statement},
     typeinference::{
         equation::{ConcreteType, KnownType},
         TypeState,
@@ -43,6 +43,58 @@ fn size_of_type(t: ConcreteType) -> u128 {
         }
         KnownType::Unit => 0,
         other => panic!("{:?} has no size right now", other),
+    }
+}
+
+// Consider rewriting this to be functions on the code struct
+
+impl Register {
+    pub fn code(&self, types: &TypeState, code: &mut Code) {
+        // Generate the code for the expression
+        code.join(&self.value.code(types));
+        code.join(&self.clock.code(types));
+
+        let this_var = format!("_m_{}", self.name.inner);
+        let this_type = types.type_of_name(&self.name.clone().to_path());
+
+        // Declare the register
+        code.join(&reg(&this_var, size_of_type(this_type)));
+
+        // The codegen depends quite a bit on wether or not
+        // a reset is present, so we'll do those completely
+        // separately for now
+        let this_code = if let Some((rst_cond, rst_value)) = &self.reset {
+            code.join(&rst_cond.code(types));
+            code.join(&rst_value.code(types));
+            formatdoc! {r#"
+                always @(posedge {}, posedge {}) begin
+                    if ({}) begin
+                        {} <= {};
+                    end
+                    else begin
+                        {} <= {};
+                    end
+                end"#,
+                self.clock.variable(),
+                rst_cond.variable(),
+                rst_cond.variable(),
+                this_var,
+                rst_value.variable(),
+                this_var,
+                self.value.variable()
+            }
+        } else {
+            formatdoc! {r#"
+                always @(posedge {}) begin
+                    {} <= {};
+                end"#,
+                self.clock.variable(),
+                this_var,
+                self.value.variable()
+            }
+        };
+
+        code.join(&this_code)
     }
 }
 
@@ -143,28 +195,7 @@ impl Expression {
                             todo!("Implement codegen for let bindings")
                         }
                         Statement::Register(register) => {
-                            // Generate the code for the expression
-                            code.join(&register.value.code(types));
-
-                            if register.clock.inner != Path::from_strs(&["clk"]) {
-                                todo!("All registers must be called clk for now")
-                            }
-
-                            let this_var = format!("_m_{}", register.name.inner);
-                            let this_type = types.type_of_name(&register.name.clone().to_path());
-
-                            // Declare the register
-                            code.join(&reg(&this_var, size_of_type(this_type)));
-
-                            let this_code = formatdoc! {r#"
-                            always @posedge(clk) begin
-                                {} <= {};
-                            end"#,
-                            this_var,
-                            register.inner.value.variable()
-                            };
-
-                            code.join(&this_code)
+                            register.code(types, &mut code);
                         }
                     }
                 }
@@ -362,8 +393,46 @@ mod tests {
                 output[15:0] __output
             );
             reg[15:0] _m_res;
-            always @posedge(clk) begin
+            always @(posedge _m_clk) begin
                 _m_res <= _m_a;
+            end
+            assign __output = _m_res;
+        endmodule"#
+        );
+
+        let processed = parse_typecheck_entity(code);
+
+        let result = generate_entity(&processed.entity, &processed.type_state).to_string();
+        assert_same_code!(&result, expected);
+    }
+
+    #[test]
+    fn registers_with_reset_work() {
+        let code = r#"
+        entity name(clk: clk, rst: bool, a: int<16>) -> int<16> {
+            reg(clk) res reset (rst: 0) = a;
+            res
+        }
+        "#;
+
+        let expected = indoc!(
+            r#"
+        module name (
+                input _m_clk,
+                input _m_rst,
+                input[15:0] _m_a,
+                output[15:0] __output
+            );
+            reg[15:0] _m_res;
+            wire[15:0] __expr__2;
+            assign __expr__2 = 0;
+            always @(posedge _m_clk, posedge _m_rst) begin
+                if (_m_rst) begin
+                    _m_res <= __expr__2;
+                end
+                else begin
+                    _m_res <= _m_a;
+                end
             end
             assign __output = _m_res;
         endmodule"#

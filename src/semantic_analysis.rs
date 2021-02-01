@@ -300,14 +300,7 @@ pub fn visit_register(
     let name = reg.name.map_ref(visit_identifier);
     symtab.add_ident(&name);
 
-    let clock = reg.clock.clone().map_ref(visit_path);
-    if let Some(id) = clock.maybe_identifier() {
-        if !symtab.has_symbol(id) {
-            return Err(Error::UndefinedPath(reg.clock.clone()));
-        }
-    } else {
-        unimplemented!("Global clocks are unsupported")
-    }
+    let clock = reg.clock.try_visit(visit_expression, symtab, idtracker)?;
 
     let reset = if let Some((trig, value)) = &reg.reset {
         Some((
@@ -505,7 +498,7 @@ mod statement_visiting {
         let input = ast::Statement::Register(
             ast::Register {
                 name: ast_ident("regname"),
-                clock: ast_path("clk"),
+                clock: ast::Expression::Identifier(ast_path("clk")).nowhere(),
                 reset: None,
                 value: ast::Expression::IntLiteral(0).nowhere(),
                 value_type: None,
@@ -517,7 +510,9 @@ mod statement_visiting {
         let expected = hir::Statement::Register(
             hir::Register {
                 name: hir_ident("regname"),
-                clock: hir_path("clk"),
+                clock: hir::ExprKind::Identifier(hir_path("clk"))
+                    .with_id(0)
+                    .nowhere(),
                 reset: None,
                 value: hir::ExprKind::IntLiteral(0).idless().nowhere(),
                 value_type: None,
@@ -708,7 +703,7 @@ mod register_visiting {
     fn register_visiting_works() {
         let input = ast::Register {
             name: ast::Identifier("test".to_string()).nowhere(),
-            clock: ast_path("clk"),
+            clock: ast::Expression::Identifier(ast_path("clk")).nowhere(),
             reset: Some((
                 ast::Expression::Identifier(ast_path("rst")).nowhere(),
                 ast::Expression::IntLiteral(0).nowhere(),
@@ -720,7 +715,9 @@ mod register_visiting {
 
         let expected = hir::Register {
             name: hir_ident("test"),
-            clock: hir_path("clk"),
+            clock: hir::ExprKind::Identifier(hir_path("clk"))
+                .with_id(0)
+                .nowhere(),
             reset: Some((
                 hir::ExprKind::Identifier(hir_path("rst"))
                     .idless()

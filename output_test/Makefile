@@ -10,9 +10,10 @@ TEST_DIRS=$(wildcard test/*)
 all: ${TEST_DIRS} .PHONY
 
 test/saturating_adder: test/saturating_adder/build/code.v.vcd .PHONY
+test/counter: test/counter/build/code.v.vcd .PHONY
 
 # Build verilog from the spade code
-test/%/build/code.v: test/%/code.sp $(SPADEC) | build_compiler
+test/%/build/code.v: test/%/code.spade $(SPADEC) | build_compiler
 	@mkdir -p ${@D}
 	@echo -e "[\033[0;34m${SPADEC}\033[0m] building $@"
 	@${SPADEC} $< -o $@
@@ -23,39 +24,19 @@ test/%/build/code.v.out: test/%/build/code.v
 	@iverilog \
 		-o ${@} \
 		${IVERILOG_FLAGS} \
-		-DVCD_OUTPUT=\"output/${<F}.vcd\" \
+		-DVCD_OUTPUT=\"test/$*/build/${<F}.vcd\" \
 		$< ${@D}/../testbench.v
 
 # Simulate the test binary
 test/%/build/code.v.vcd: test/%/build/code.v.out .PHONY
 	@mkdir -p output
-	@echo -e "[\033[0;34mvvp\033[0m] simulating $<"
+	@echo -e "[\033[0;34mvvp\033[0m] simulating $@"
 	@vvp $< | grep -v dumpfile
 
 
 build_compiler:
 	cd .. && cargo build
 
-
-# Simulate the design
-sim: build_hs $(vcds)
-
-# Simulation executables
-bin/%.v.out: test/%.v $(hs_targets) $(non_test_verilogs) $(test_only_hdl)
-	echo $(hdl)
-	@echo -e "[\033[0;34miverilog\033[0m] building $@"
-	@mkdir -p bin
-	@iverilog \
-		-o ${@} \
-		${IVERILOG_FLAGS} \
-		-DVCD_OUTPUT=\"output/${<F}.vcd\" \
-		${test_only_hdl} ${non_test_verilogs} $<
-
-# Simulation results
-output/%.v.vcd: bin/%.v.out .PHONY
-	@mkdir -p output
-	@echo -e "[\033[0;34mvvp\033[0m] simulating $<"
-	@vvp $< | grep -v dumpfile
 
 
 clean:

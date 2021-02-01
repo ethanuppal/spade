@@ -90,7 +90,7 @@ impl WithLocation for Entity {}
 #[derive(PartialEq, Debug, Clone)]
 pub struct Register {
     pub name: Loc<Identifier>,
-    pub clock: Loc<Path>,
+    pub clock: Loc<Expression>,
     pub reset: Option<(Loc<Expression>, Loc<Expression>)>,
     pub value: Loc<Expression>,
     pub value_type: Option<Loc<Type>>,

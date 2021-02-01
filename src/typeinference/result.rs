@@ -44,6 +44,18 @@ pub enum Error {
         got: TypeVar,
         loc: Loc<()>,
     },
+    #[error("Reset condition must be a bool")]
+    NonBoolReset {
+        expected: TypeVar,
+        got: TypeVar,
+        loc: Loc<()>,
+    },
+    #[error("Reset value must match register type")]
+    RegisterResetMissmatch {
+        expected: TypeVar,
+        got: TypeVar,
+        loc: Loc<()>,
+    },
 
     #[error("Attempting to instanciate generic type")]
     GenericTypeInstanciation,
