@@ -98,6 +98,34 @@ impl Register {
     }
 }
 
+impl Statement {
+    pub fn code(&self, types: &TypeState, code: &mut Code) {
+        match &self {
+            Statement::Binding(name, _t, value) => {
+                code.join(&value.code(types));
+
+                let this_var = format!("_m_{}", name.inner);
+                let this_type = types.type_of_name(&name.clone().to_path());
+
+                // Declare the register
+                code.join(&wire(&this_var, size_of_type(this_type)));
+
+                // Define the wire containing the value
+                let this_code = formatdoc! {r#"
+                    assign {} = {};"#,
+                    this_var,
+                    value.variable()
+                };
+
+                code.join(&this_code)
+            }
+            Statement::Register(register) => {
+                register.code(types, code);
+            }
+        }
+    }
+}
+
 impl Expression {
     /// If the verilog code for this expression is just an alias for another variable
     /// that is returned here. This allows us to skip generating wires that we don't
@@ -190,14 +218,7 @@ impl Expression {
             }
             ExprKind::Block(block) => {
                 for statement in &block.statements {
-                    match &statement.inner {
-                        Statement::Binding(_, _, _) => {
-                            todo!("Implement codegen for let bindings")
-                        }
-                        Statement::Register(register) => {
-                            register.code(types, &mut code);
-                        }
-                    }
+                    statement.code(types, &mut code);
                 }
                 code.join(&block.result.inner.code(types))
                 // Empty. The block result will always be the last expression
@@ -434,6 +455,34 @@ mod tests {
                     _m_res <= _m_a;
                 end
             end
+            assign __output = _m_res;
+        endmodule"#
+        );
+
+        let processed = parse_typecheck_entity(code);
+
+        let result = generate_entity(&processed.entity, &processed.type_state).to_string();
+        assert_same_code!(&result, expected);
+    }
+
+    #[test]
+    fn untyped_let_bindings_work() {
+        let code = r#"
+        entity name(clk: clk, a: int<16>) -> int<16> {
+            let res = a;
+            res
+        }
+        "#;
+
+        let expected = indoc!(
+            r#"
+        module name (
+                input _m_clk,
+                input[15:0] _m_a,
+                output[15:0] __output
+            );
+            wire[15:0] _m_res;
+            assign _m_res = _m_a;
             assign __output = _m_res;
         endmodule"#
         );

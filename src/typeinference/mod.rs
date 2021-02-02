@@ -269,8 +269,22 @@ impl TypeState {
     #[trace_typechecker]
     pub fn visit_statement(&mut self, stmt: &Loc<Statement>) -> Result<()> {
         match &stmt.inner {
-            Statement::Binding(_, _, _) => {
-                todo! {"Implement type checking for let bindings"}
+            Statement::Binding(name, t, value) => {
+                self.visit_expression(value)?;
+
+                if t.is_some() {
+                    todo!("Let bindings with fixed types are unsupported")
+                }
+
+                let new_type = self.new_generic();
+                self.add_equation(TypedExpression::Name(name.clone().to_path()), new_type);
+
+                self.unify_expression_generic_error(
+                    &value,
+                    &TypedExpression::Name(name.clone().to_path()),
+                )?;
+
+                Ok(())
             }
             Statement::Register(reg) => self.visit_register(reg),
         }
@@ -900,5 +914,22 @@ mod tests {
         ensure_same_type!(state, tclk, t_clock());
         ensure_same_type!(state, trst_cond, t_bool());
         ensure_same_type!(state, trst_val, unsized_int(2));
+    }
+
+    #[test]
+    fn untyped_let_bindings_typecheck_correctly() {
+        let input = hir::Statement::Binding(
+            hir::Identifier::Named("a".to_string()).nowhere(),
+            None,
+            ExprKind::IntLiteral(0).with_id(0).nowhere(),
+        )
+        .nowhere();
+
+        let mut state = TypeState::new();
+
+        state.visit_statement(&input).unwrap();
+
+        let ta = get_type!(state, &TExpr::Name(Path::from_strs(&["a"])));
+        ensure_same_type!(state, ta, unsized_int(1));
     }
 }
