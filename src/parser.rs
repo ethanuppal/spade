@@ -70,6 +70,14 @@ impl<'a> Parser<'a> {
     }
 }
 
+macro_rules! operator_expr {
+    ($this_operator:ident, $condition:ident, $next:ident) => {
+        fn $this_operator(&mut self) -> Result<Loc<Expression>> {
+            self.binary_operator(Self::$next, Self::$condition, Self::$this_operator)
+        }
+    };
+}
+
 // Actual parsing functions
 impl<'a> Parser<'a> {
     #[trace_parser]
@@ -122,30 +130,39 @@ impl<'a> Parser<'a> {
     // Expression parsing
     #[trace_parser]
     fn expression(&mut self) -> Result<Loc<Expression>> {
-        self.binary_operator(
-            Self::additive_expression,
-            Self::is_next_comparison_operator,
-            Self::expression,
-        )
+        self.logical_or_expression()
     }
 
-    #[trace_parser]
-    fn additive_expression(&mut self) -> Result<Loc<Expression>> {
-        self.binary_operator(
-            Self::multiplicative_expression,
-            Self::is_next_addition_operator,
-            Self::additive_expression,
-        )
-    }
-
-    #[trace_parser]
-    fn multiplicative_expression(&mut self) -> Result<Loc<Expression>> {
-        self.binary_operator(
-            Self::base_expression,
-            Self::is_next_multiplication_operator,
-            Self::base_expression,
-        )
-    }
+    operator_expr!(
+        logical_or_expression,
+        is_next_logical_or,
+        logical_and_expression
+    );
+    operator_expr!(
+        logical_and_expression,
+        is_next_logical_and,
+        comparison_operator
+    );
+    operator_expr!(
+        comparison_operator,
+        is_next_comparison_operator,
+        shift_expression
+    );
+    operator_expr!(
+        shift_expression,
+        is_next_shift_operator,
+        additive_expression
+    );
+    operator_expr!(
+        additive_expression,
+        is_next_addition_operator,
+        multiplicative_expression
+    );
+    operator_expr!(
+        multiplicative_expression,
+        is_next_multiplication_operator,
+        base_expression
+    );
 
     #[trace_parser]
     fn base_expression(&mut self) -> Result<Loc<Expression>> {
@@ -582,6 +599,11 @@ impl<'a> Parser<'a> {
         Ok(match self.peek()?.map(|token| token.kind) {
             Some(TokenKind::Plus) => true,
             Some(TokenKind::Minus) => true,
+            _ => false,
+        })
+    }
+    fn is_next_shift_operator(&mut self) -> Result<bool> {
+        Ok(match self.peek()?.map(|token| token.kind) {
             Some(TokenKind::LeftShift) => true,
             Some(TokenKind::RightShift) => true,
             _ => false,
@@ -599,6 +621,18 @@ impl<'a> Parser<'a> {
             Some(TokenKind::Equals) => true,
             Some(TokenKind::Gt) => true,
             Some(TokenKind::Lt) => true,
+            _ => false,
+        })
+    }
+    fn is_next_logical_and(&mut self) -> Result<bool> {
+        Ok(match self.peek()?.map(|token| token.kind) {
+            Some(TokenKind::LogicalAnd) => true,
+            _ => false,
+        })
+    }
+    fn is_next_logical_or(&mut self) -> Result<bool> {
+        Ok(match self.peek()?.map(|token| token.kind) {
+            Some(TokenKind::LogicalOr) => true,
             _ => false,
         })
     }
@@ -945,6 +979,44 @@ mod tests {
         .nowhere();
 
         check_parse!("a+b == c", expression, Ok(expected_value.clone()));
+    }
+
+    #[test]
+    fn and_after_equals() {
+        {
+            let expected_value = Expression::BinaryOperator(
+                Box::new(
+                    Expression::BinaryOperator(
+                        Box::new(Expression::Identifier(ast_path("a")).nowhere()),
+                        TokenKind::Equals,
+                        Box::new(Expression::Identifier(ast_path("b")).nowhere()),
+                    )
+                    .nowhere(),
+                ),
+                TokenKind::LogicalAnd,
+                Box::new(Expression::Identifier(ast_path("c")).nowhere()),
+            )
+            .nowhere();
+
+            check_parse!("a == b && c", expression, Ok(expected_value.clone()));
+        }
+        {
+            let expected_value = Expression::BinaryOperator(
+                Box::new(Expression::Identifier(ast_path("a")).nowhere()),
+                TokenKind::LogicalAnd,
+                Box::new(
+                    Expression::BinaryOperator(
+                        Box::new(Expression::Identifier(ast_path("b")).nowhere()),
+                        TokenKind::Equals,
+                        Box::new(Expression::Identifier(ast_path("c")).nowhere()),
+                    )
+                    .nowhere(),
+                ),
+            )
+            .nowhere();
+
+            check_parse!("a && b == c", expression, Ok(expected_value.clone()));
+        }
     }
 
     #[test]

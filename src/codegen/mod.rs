@@ -215,6 +215,8 @@ impl Expression {
                     ["intrinsics", "gt"] => binop_builder(">"),
                     ["intrinsics", "left_shift"] => binop_builder("<<"),
                     ["intrinsics", "right_shift"] => binop_builder(">>"),
+                    ["intrinsics", "logical_and"] => binop_builder("&&"),
+                    ["intrinsics", "logical_or"] => binop_builder("||"),
                     _ => panic!("Unrecognised function {}", name.inner),
                 }
             }
@@ -416,6 +418,87 @@ mod tests {
             );
             wire[15:0] __expr__2;
             assign __expr__2 = _m_a >> _m_b;
+            assign __output = __expr__2;
+        endmodule"#
+        );
+
+        let processed = parse_typecheck_entity(code);
+
+        let result = generate_entity(&processed.entity, &processed.type_state).to_string();
+        assert_same_code!(&result, expected);
+    }
+
+    #[test]
+    fn equals_operator_codegens_correctly() {
+        let code = r#"
+        entity name(a: bool, b: bool) -> bool {
+            a == b
+        }
+        "#;
+
+        let expected = indoc!(
+            r#"
+        module name (
+                input _m_a,
+                input _m_b,
+                output __output
+            );
+            wire __expr__2;
+            assign __expr__2 = _m_a == _m_b;
+            assign __output = __expr__2;
+        endmodule"#
+        );
+
+        let processed = parse_typecheck_entity(code);
+
+        let result = generate_entity(&processed.entity, &processed.type_state).to_string();
+        assert_same_code!(&result, expected);
+    }
+
+    #[test]
+    fn logical_and_operator_codegens_correctly() {
+        let code = r#"
+        entity name(a: bool, b: bool) -> bool {
+            a && b
+        }
+        "#;
+
+        let expected = indoc!(
+            r#"
+        module name (
+                input _m_a,
+                input _m_b,
+                output __output
+            );
+            wire __expr__2;
+            assign __expr__2 = _m_a && _m_b;
+            assign __output = __expr__2;
+        endmodule"#
+        );
+
+        let processed = parse_typecheck_entity(code);
+
+        let result = generate_entity(&processed.entity, &processed.type_state).to_string();
+        assert_same_code!(&result, expected);
+    }
+
+    #[test]
+    fn logical_or_operator_codegens_correctly() {
+        let code = r#"
+        entity name(a: bool, b: bool) -> bool {
+            a || b
+        }
+        "#;
+
+        let expected = indoc!(
+            r#"
+        module name (
+                input _m_a,
+                input _m_b,
+                output __output
+            );
+            wire __expr__2;
+            assign __expr__2 = _m_a || _m_b;
             assign __output = __expr__2;
         endmodule"#
         );

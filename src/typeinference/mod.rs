@@ -199,15 +199,22 @@ impl TypeState {
 
                     self.visit_expression(&lhs)?;
                     self.visit_expression(&rhs)?;
-                    let int_type = self.new_generic_int();
-                    // TODO: Make generic over types that can be added
-                    self.unify_expression_generic_error(&lhs, &int_type)?;
-                    self.unify_expression_generic_error(&lhs, &rhs.inner)?;
                     match *operator {
                         "add" | "sub" | "left_shift" | "right_shift" => {
+                            let int_type = self.new_generic_int();
+                            // TODO: Make generic over types that can be added
+                            self.unify_expression_generic_error(&lhs, &int_type)?;
+                            self.unify_expression_generic_error(&lhs, &rhs.inner)?;
                             self.unify_expression_generic_error(expression, &rhs.inner)?
                         }
                         "eq" | "gt" | "lt" => {
+                            self.unify_expression_generic_error(expression, &t_bool())?
+                        }
+                        "logical_or" | "logical_and" => {
+                            // TODO: Make generic over types that can be ored
+                            self.unify_expression_generic_error(&lhs, &t_bool())?;
+                            self.unify_expression_generic_error(&lhs, &rhs.inner)?;
+
                             self.unify_expression_generic_error(expression, &t_bool())?
                         }
                         other => panic!("unrecognised intrinsic {:?}", other),

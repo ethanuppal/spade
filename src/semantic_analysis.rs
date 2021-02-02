@@ -232,6 +232,8 @@ pub fn visit_expression(
                 TokenKind::Lt => Ok(intrinsic("lt")),
                 TokenKind::LeftShift => Ok(intrinsic("left_shift")),
                 TokenKind::RightShift => Ok(intrinsic("right_shift")),
+                TokenKind::LogicalAnd => Ok(intrinsic("logical_and")),
+                TokenKind::LogicalOr => Ok(intrinsic("logical_or")),
                 _ => unreachable! {},
             }
         }

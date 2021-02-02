@@ -51,6 +51,10 @@ pub enum TokenKind {
     RightShift,
     #[token("<<")]
     LeftShift,
+    #[token("||")]
+    LogicalOr,
+    #[token("&&")]
+    LogicalAnd,
 
     // Other operators
     #[token("=")]
@@ -117,6 +121,8 @@ impl TokenKind {
             TokenKind::Gt => ">",
             TokenKind::LeftShift => "<<",
             TokenKind::RightShift => ">>",
+            TokenKind::LogicalOr => "||",
+            TokenKind::LogicalAnd => "&&",
 
             TokenKind::OpenParen => "(",
             TokenKind::CloseParen => ")",
