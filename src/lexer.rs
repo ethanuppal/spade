@@ -10,7 +10,16 @@ pub enum TokenKind {
     )"#, |lex| lex.slice().to_string())]
     Identifier(String),
 
-    #[regex(r"[0-9][0-9_]*", |lex| lex.slice().replace("_", "").parse())]
+    #[regex(r"(0x)?[0-9][0-9_]*", |lex| {
+        let without_under = lex.slice().replace("_", "");
+
+        if without_under.starts_with("0x") {
+            u128::from_str_radix(&without_under[2..], 16)
+        }
+        else {
+            u128::from_str_radix(&without_under, 10)
+        }
+    })]
     Integer(u128),
 
     // Keywords
@@ -92,6 +101,9 @@ pub enum TokenKind {
     #[regex("[ \t\n\r]", logos::skip)]
     Whitespace,
 
+    #[regex("//[^\n]*\n", logos::skip)]
+    Comment,
+
     #[error]
     Error,
 }
@@ -140,6 +152,7 @@ impl TokenKind {
             TokenKind::Hash => "#",
 
             TokenKind::Whitespace => "whitespace",
+            TokenKind::Comment => "comment",
             TokenKind::Error => "error",
         }
     }

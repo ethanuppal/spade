@@ -110,7 +110,7 @@ impl TypeState {
                 .type_of(&TypedExpression::Id(expr.id))
                 .expect("Expression had no specified type"),
         )
-        .expect("Expr had generic type")
+        .expect(&format!("Expr {:?} had generic type", expr))
     }
 
     /// Returns the type of the specified name as a concrete type. If the type is not known,
