@@ -460,7 +460,7 @@ mod tests {
     #[test]
     fn equals_operator_codegens_correctly() {
         let code = r#"
-        entity name(a: bool, b: bool) -> bool {
+        entity name(a: int<16>, b: int<16>) -> bool {
             a == b
         }
         "#;
@@ -468,8 +468,8 @@ mod tests {
         let expected = indoc!(
             r#"
         module name (
-                input _m_a,
-                input _m_b,
+                input[15:0] _m_a,
+                input[15:0] _m_b,
                 output __output
             );
             wire __expr__2;

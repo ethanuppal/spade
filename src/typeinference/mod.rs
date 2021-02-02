@@ -110,7 +110,7 @@ impl TypeState {
                 .type_of(&TypedExpression::Id(expr.id))
                 .expect("Expression had no specified type"),
         )
-        .expect(&format!("Expr {:?} had generic type", expr))
+        .expect(&format!("Expr {:#?} had generic type", expr))
     }
 
     /// Returns the type of the specified name as a concrete type. If the type is not known,
@@ -208,6 +208,10 @@ impl TypeState {
                             self.unify_expression_generic_error(expression, &rhs.inner)?
                         }
                         "eq" | "gt" | "lt" => {
+                            let int_type = self.new_generic_int();
+                            // TODO: Make generic over types that can be added
+                            self.unify_expression_generic_error(&lhs, &int_type)?;
+                            self.unify_expression_generic_error(&lhs, &rhs.inner)?;
                             self.unify_expression_generic_error(expression, &t_bool())?
                         }
                         "logical_or" | "logical_and" => {
