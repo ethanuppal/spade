@@ -582,6 +582,8 @@ impl<'a> Parser<'a> {
         Ok(match self.peek()?.map(|token| token.kind) {
             Some(TokenKind::Plus) => true,
             Some(TokenKind::Minus) => true,
+            Some(TokenKind::LeftShift) => true,
+            Some(TokenKind::RightShift) => true,
             _ => false,
         })
     }

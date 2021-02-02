@@ -204,7 +204,7 @@ impl TypeState {
                     self.unify_expression_generic_error(&lhs, &int_type)?;
                     self.unify_expression_generic_error(&lhs, &rhs.inner)?;
                     match *operator {
-                        "add" | "sub" => {
+                        "add" | "sub" | "left_shift" | "right_shift" => {
                             self.unify_expression_generic_error(expression, &rhs.inner)?
                         }
                         "eq" | "gt" | "lt" => {

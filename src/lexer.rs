@@ -47,6 +47,10 @@ pub enum TokenKind {
     Lt,
     #[token(">")]
     Gt,
+    #[token(">>")]
+    RightShift,
+    #[token("<<")]
+    LeftShift,
 
     // Other operators
     #[token("=")]
@@ -111,6 +115,8 @@ impl TokenKind {
             TokenKind::Equals => "==",
             TokenKind::Lt => "<",
             TokenKind::Gt => ">",
+            TokenKind::LeftShift => "<<",
+            TokenKind::RightShift => ">>",
 
             TokenKind::OpenParen => "(",
             TokenKind::CloseParen => ")",

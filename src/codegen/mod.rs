@@ -213,6 +213,8 @@ impl Expression {
                     ["intrinsics", "eq"] => binop_builder("=="),
                     ["intrinsics", "lt"] => binop_builder("<"),
                     ["intrinsics", "gt"] => binop_builder(">"),
+                    ["intrinsics", "left_shift"] => binop_builder("<<"),
+                    ["intrinsics", "right_shift"] => binop_builder(">>"),
                     _ => panic!("Unrecognised function {}", name.inner),
                 }
             }
@@ -360,6 +362,60 @@ mod tests {
             );
             wire[15:0] __expr__2;
             assign __expr__2 = _m_a + _m_b;
+            assign __output = __expr__2;
+        endmodule"#
+        );
+
+        let processed = parse_typecheck_entity(code);
+
+        let result = generate_entity(&processed.entity, &processed.type_state).to_string();
+        assert_same_code!(&result, expected);
+    }
+
+    #[test]
+    fn a_left_shifter_is_buildable() {
+        let code = r#"
+        entity name(a: int<16>, b: int<16>) -> int<16> {
+            a << b
+        }
+        "#;
+
+        let expected = indoc!(
+            r#"
+        module name (
+                input[15:0] _m_a,
+                input[15:0] _m_b,
+                output[15:0] __output
+            );
+            wire[15:0] __expr__2;
+            assign __expr__2 = _m_a << _m_b;
+            assign __output = __expr__2;
+        endmodule"#
+        );
+
+        let processed = parse_typecheck_entity(code);
+
+        let result = generate_entity(&processed.entity, &processed.type_state).to_string();
+        assert_same_code!(&result, expected);
+    }
+
+    #[test]
+    fn a_right_shifter_is_buildable() {
+        let code = r#"
+        entity name(a: int<16>, b: int<16>) -> int<16> {
+            a >> b
+        }
+        "#;
+
+        let expected = indoc!(
+            r#"
+        module name (
+                input[15:0] _m_a,
+                input[15:0] _m_b,
+                output[15:0] __output
+            );
+            wire[15:0] __expr__2;
+            assign __expr__2 = _m_a >> _m_b;
             assign __output = __expr__2;
         endmodule"#
         );
