@@ -22,6 +22,11 @@ pub enum TokenKind {
     })]
     Integer(u128),
 
+    #[token("true")]
+    True,
+    #[token("false")]
+    False,
+
     // Keywords
     #[token("reg")]
     Reg,
@@ -113,6 +118,8 @@ impl TokenKind {
         match self {
             TokenKind::Identifier(_) => "identifier",
             TokenKind::Integer(_) => "integer",
+            TokenKind::True => "true",
+            TokenKind::False => "false",
 
             TokenKind::Let => "let",
             TokenKind::Reg => "reg",

@@ -211,6 +211,7 @@ pub fn visit_expression(
 ) -> Result<hir::Expression> {
     match e {
         ast::Expression::IntLiteral(val) => Ok(hir::ExprKind::IntLiteral(val.clone())),
+        ast::Expression::BoolLiteral(val) => Ok(hir::ExprKind::BoolLiteral(*val)),
         ast::Expression::BinaryOperator(lhs, tok, rhs) => {
             let lhs = lhs.try_visit(visit_expression, symtab, idtracker)?;
             let rhs = rhs.try_visit(visit_expression, symtab, idtracker)?;

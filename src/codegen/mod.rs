@@ -134,7 +134,7 @@ impl Expression {
         match &self.kind {
             ExprKind::Identifier(ident) => Some(ident.inner.mangle()),
             ExprKind::IntLiteral(_) => None,
-            ExprKind::BoolLiteral(_) => todo!(),
+            ExprKind::BoolLiteral(_) => None,
             ExprKind::FnCall(_, _) => None,
             ExprKind::Block(block) => Some(block.result.inner.variable()),
             ExprKind::If(_, _, _) => None,
@@ -180,7 +180,11 @@ impl Expression {
                 let this_code = assign(&self.variable(), &format!("{}", value));
                 code.join(&this_code);
             }
-            ExprKind::BoolLiteral(_) => todo!("codegen for bool literals"),
+            ExprKind::BoolLiteral(value) => {
+                let this_code =
+                    assign(&self.variable(), &format!("{}", if *value { 1 } else { 0 }));
+                code.join(&this_code);
+            }
             ExprKind::FnCall(name, params) => {
                 let mut binop_builder = |op| {
                     if let [lhs, rhs] = params.as_slice() {
@@ -338,6 +342,31 @@ mod tests {
                 end
             end
             assign __output = __expr__3;
+        endmodule"#
+        );
+
+        let processed = parse_typecheck_entity(code);
+
+        let result = generate_entity(&processed.entity, &processed.type_state).to_string();
+        assert_same_code!(&result, expected);
+    }
+
+    #[test]
+    fn bool_literals_codegen() {
+        let code = r#"
+        entity always_true() -> bool {
+            true
+        }
+        "#;
+
+        let expected = indoc!(
+            r#"
+        module always_true (
+                output __output
+            );
+            wire __expr__0;
+            assign __expr__0 = 1;
+            assign __output = __expr__0;
         endmodule"#
         );
 

@@ -181,7 +181,7 @@ impl TypeState {
                     })?;
             }
             ExprKind::BoolLiteral(_) => {
-                unimplemented! {}
+                self.unify_expression_generic_error(&expression, &t_bool())?;
             }
             ExprKind::FnCall(name, params) => {
                 // TODO: Propper error handling

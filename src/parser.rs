@@ -170,6 +170,10 @@ impl<'a> Parser<'a> {
             let inner = self.expression()?;
             self.eat(&TokenKind::CloseParen)?;
             Ok(inner)
+        } else if let Some(tok) = self.peek_and_eat_kind(&TokenKind::True)? {
+            Ok(Expression::BoolLiteral(true).at(lspan(tok.span)))
+        } else if let Some(tok) = self.peek_and_eat_kind(&TokenKind::False)? {
+            Ok(Expression::BoolLiteral(false).at(lspan(tok.span)))
         } else if let Some(val) = self.int_literal()? {
             Ok(val.map(Expression::IntLiteral))
         } else if let Some(block) = self.block()? {

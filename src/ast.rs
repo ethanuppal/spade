@@ -43,6 +43,7 @@ impl WithLocation for Type {}
 pub enum Expression {
     Identifier(Loc<Path>),
     IntLiteral(u128),
+    BoolLiteral(bool),
     If(
         Box<Loc<Expression>>,
         Box<Loc<Expression>>,
