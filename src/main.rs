@@ -20,7 +20,6 @@ pub mod parser;
 pub mod semantic_analysis;
 pub mod symbol_table;
 pub mod typeinference;
-pub mod types;
 
 #[macro_use]
 #[cfg(test)]

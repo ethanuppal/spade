@@ -4,7 +4,6 @@ use crate::hir;
 use crate::lexer::TokenKind;
 use crate::location_info::{Loc, WithLocation};
 use crate::symbol_table::SymbolTable;
-use crate::types::Error as TypeError;
 use crate::{ast, hir::EntityHead};
 
 impl<T> Loc<T> {
@@ -31,8 +30,6 @@ pub enum Error {
         found: Loc<hir::Identifier>,
         previously: Loc<hir::Identifier>,
     },
-    #[error("Type error")]
-    InvalidType(#[source] TypeError, Loc<()>),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;

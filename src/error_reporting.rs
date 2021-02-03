@@ -14,7 +14,6 @@ use codespan_reporting::{
 use crate::parser::Error as ParseError;
 use crate::semantic_analysis::Error as SemanticError;
 use crate::typeinference::result::Error as InferenceError;
-use crate::types::Error as TypeError;
 
 pub fn codespan_config() -> codespan_reporting::term::Config {
     let mut primary_label_error = ColorSpec::new();
@@ -109,28 +108,6 @@ pub fn report_semantic_error(filename: &Path, file_content: &str, err: SemanticE
                 Label::primary(file_id, found.span).with_message("Duplicate typename"),
                 Label::secondary(file_id, previously.span).with_message("Previously used here"),
             ]),
-        SemanticError::InvalidType(err, loc) => match err {
-            TypeError::UnknownTypeName(name) => {
-                let (name, span) = name.split();
-                Diagnostic::error()
-                    .with_message(format!("Unknown type name `{}`", name))
-                    .with_labels(vec![Label::primary(file_id, span)])
-            }
-            TypeError::BitWidthRequired(name) => Diagnostic::error()
-                .with_message(format!("{} requires a bit width", name))
-                .with_labels(vec![Label::primary(file_id, loc.span)])
-                .with_notes(vec![format!("Try using `{}[<width>]`", name)]),
-            TypeError::NamedTypesUnsupported => Diagnostic::error()
-                .with_message("Types with arbitrary names are unsupported")
-                .with_labels(vec![Label::primary(file_id, loc.span)
-                    .with_message("Types with arbitrary names are unsupported")]),
-            TypeError::NonLiteralTypeSize(loc) => Diagnostic::error()
-                .with_message("Types with non-literals generic parameters are unsupported")
-                .with_labels(vec![Label::primary(file_id, loc.span)]),
-            TypeError::GenericNonIntegersUnsupported(loc) => Diagnostic::error()
-                .with_message("Arbitrary generics are unsupported")
-                .with_labels(vec![Label::primary(file_id, loc.span)]),
-        },
     };
 
     let writer = StandardStream::stderr(ColorChoice::Always);
@@ -185,7 +162,7 @@ pub fn report_typeinference_error(filename: &Path, file_content: &str, err: Infe
                 Label::primary(file_id, loc.loc().span).with_message("Expected boolean")
             ])
             .with_notes(vec![
-                format!("Expected: {}", crate::types::Type::Bool),
+                format!("Expected: {}", "bool"), // TODO: Specify full path to the type
                 format!("     Got: {}", got),
             ]),
         InferenceError::IfConditionMissmatch {
