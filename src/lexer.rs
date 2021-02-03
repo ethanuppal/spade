@@ -10,11 +10,14 @@ pub enum TokenKind {
     )"#, |lex| lex.slice().to_string())]
     Identifier(String),
 
-    #[regex(r"(0x)?[0-9][0-9_]*", |lex| {
+    #[regex(r"(0x|0b)?[0-9][0-9_]*", |lex| {
         let without_under = lex.slice().replace("_", "");
 
         if without_under.starts_with("0x") {
             u128::from_str_radix(&without_under[2..], 16)
+        }
+        else if without_under.starts_with("0b") {
+            u128::from_str_radix(&without_under[2..], 2)
         }
         else {
             u128::from_str_radix(&without_under, 10)
