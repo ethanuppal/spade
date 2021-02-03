@@ -241,10 +241,10 @@ impl Expression {
                 let this_code = formatdoc! {r#"
                     always @* begin
                         if ({}) begin
-                            {} <= {};
+                            {} = {};
                         end
                         else begin
-                            {} <= {};
+                            {} = {};
                         end
                     end"#,
                     cond.inner.variable(),
@@ -335,10 +335,10 @@ mod tests {
             reg[15:0] __expr__3;
             always @* begin
                 if (_m_c) begin
-                    __expr__3 <= _m_a;
+                    __expr__3 = _m_a;
                 end
                 else begin
-                    __expr__3 <= _m_b;
+                    __expr__3 = _m_b;
                 end
             end
             assign __output = __expr__3;
