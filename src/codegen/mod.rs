@@ -2,9 +2,9 @@ use indoc::formatdoc;
 
 use crate::{
     fixed_types::{t_bool, t_clock, t_int},
-    hir::{Entity, ExprKind, Expression, Path, Register, Statement},
+    hir::{Entity, ExprKind, Expression, Register, Statement},
+    types::{ConcreteType, KnownType},
     typeinference::{
-        equation::{ConcreteType, KnownType},
         TypeState,
     },
 };

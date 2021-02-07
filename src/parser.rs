@@ -270,7 +270,7 @@ impl<'a> Parser<'a> {
 
             Ok(Type::Generic(path, type_expr).at(span.merge(generic_span.span)))
         } else {
-            Ok(Type::Named(path.strip()).at(span))
+            Ok(Type::Named(path).at(span))
         }
     }
 

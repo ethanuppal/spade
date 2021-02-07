@@ -1,11 +1,16 @@
 use codespan::Span;
 
-pub trait WithLocation {
+pub trait WithLocation: Sized {
     fn at(self, span: Span) -> Loc<Self>
     where
         Self: Sized,
     {
         Loc::new(self, span)
+    }
+
+    /// Creates a new Loc from another Loc
+    fn at_loc<T: Sized>(self, loc: &Loc<T>) -> Loc<Self> {
+        Loc::new(self, loc.span)
     }
 
     fn nowhere(self) -> Loc<Self>
@@ -110,6 +115,15 @@ where
 {
     fn eq(&self, other: &Self) -> bool {
         self.inner == other.inner
+    }
+}
+
+impl<T> std::fmt::Display for Loc<T>
+where
+    T: std::fmt::Display,
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.inner)
     }
 }
 

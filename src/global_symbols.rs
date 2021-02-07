@@ -2,11 +2,11 @@ use std::collections::HashMap;
 
 use thiserror::Error;
 
-use crate::{ast, hir::Path};
+use crate::{ast, hir::NameID};
 use crate::{
     ast::Item,
     ast::ModuleBody,
-    hir::{EntityHead, Identifier, Type},
+    hir::{EntityHead, Type},
     location_info::WithLocation,
     semantic_analysis::{entity_head, visit_identifier},
 };
@@ -16,7 +16,7 @@ use crate::{location_info::Loc, semantic_analysis::visit_type};
 pub enum Error {
     #[error("Duplicate name {name}. Previously defined at {prev:?}")]
     DuplicateName {
-        name: Path,
+        name: ast::Path,
         prev: Loc<()>,
         now: Loc<()>,
     },
@@ -25,26 +25,6 @@ pub enum Error {
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
-
-#[derive(PartialEq, Debug, Clone)]
-pub struct FunctionDecl {
-    pub name: Loc<Identifier>,
-    pub self_arg: Option<Loc<()>>,
-    pub inputs: Vec<(Loc<Identifier>, Loc<Type>)>,
-    pub output_type: Loc<Type>,
-}
-impl WithLocation for FunctionDecl {}
-
-#[derive(PartialEq, Debug, Clone)]
-pub struct TraitDef {
-    pub functions: Vec<Loc<FunctionDecl>>,
-}
-impl WithLocation for TraitDef {}
-
-#[derive(PartialEq, Debug, Clone)]
-pub struct Module {
-    items: Vec<GlobalItem>,
-}
 
 #[derive(PartialEq, Debug, Clone)]
 pub enum GlobalItem {
@@ -56,7 +36,7 @@ pub enum GlobalItem {
 }
 
 pub struct Symbols {
-    pub symbols: HashMap<Path, GlobalItem>,
+    pub symbols: HashMap<NameID, GlobalItem>,
 }
 
 impl Symbols {

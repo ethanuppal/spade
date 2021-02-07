@@ -1,12 +1,27 @@
-use super::{Block, Path};
+use super::{Block, NameID};
 use crate::location_info::{Loc, WithLocation};
+
+#[derive(Clone, Copy, PartialEq, Debug)]
+pub enum BinaryOperator {
+    Add,
+    Sub,
+    Mul,
+    Eq,
+    Gt,
+    Lt,
+    LeftShift,
+    RightShift,
+    LogicalAnd,
+    LogicalOr,
+}
 
 #[derive(PartialEq, Debug, Clone)]
 pub enum ExprKind {
-    Identifier(Loc<Path>),
+    Identifier(NameID),
     IntLiteral(u128),
     BoolLiteral(bool),
-    FnCall(Loc<Path>, Vec<Loc<Expression>>),
+    FnCall(Loc<NameID>, Vec<Loc<Expression>>),
+    BinaryOperator(Box<Loc<Expression>>, BinaryOperator, Box<Loc<Expression>>),
     Block(Box<Block>),
     If(
         Box<Loc<Expression>>,

@@ -1,26 +1,9 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, path::Path};
 
-use crate::hir::Path;
-use crate::location_info::Loc;
+use crate::types::KnownType;
+use crate::{hir::NameID, location_info::Loc};
 
 pub type TypeEquations = HashMap<TypedExpression, TypeVar>;
-
-#[derive(Clone, Debug, PartialEq)]
-pub enum KnownType {
-    Path(Path),
-    Integer(u128),
-    Unit,
-}
-
-impl std::fmt::Display for KnownType {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            KnownType::Path(p) => write!(f, "{}", p),
-            KnownType::Integer(i) => write!(f, "{}", i),
-            KnownType::Unit => write!(f, "()"),
-        }
-    }
-}
 
 #[derive(Debug, Clone)]
 pub enum TypeVar {
@@ -68,7 +51,7 @@ impl PartialEq for TypeVar {
 #[derive(Eq, PartialEq, Hash, Debug, Clone)]
 pub enum TypedExpression {
     Id(u64),
-    Name(Path),
+    Name(NameID),
 }
 
 impl std::fmt::Display for TypedExpression {
@@ -81,30 +64,5 @@ impl std::fmt::Display for TypedExpression {
                 write!(f, "{}", p)
             }
         }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct ConcreteType {
-    pub base: KnownType,
-    pub params: Vec<ConcreteType>,
-}
-
-impl std::fmt::Display for ConcreteType {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let params_str = if self.params.is_empty() {
-            format!("")
-        } else {
-            format!(
-                "{}",
-                self.params
-                    .iter()
-                    .map(|p| format!("{}", p))
-                    .collect::<Vec<_>>()
-                    .join(", ")
-            )
-        };
-
-        write!(f, "{}{}", self.base, params_str)
     }
 }

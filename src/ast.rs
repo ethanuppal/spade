@@ -1,12 +1,24 @@
 use crate::lexer::TokenKind;
 use crate::location_info::{Loc, WithLocation};
 
-#[derive(PartialEq, Debug, Clone)]
+#[derive(PartialEq, Debug, Clone, Eq, Hash)]
 pub struct Identifier(pub String);
+
+impl std::fmt::Display for Identifier {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
 
 impl WithLocation for Identifier {}
 
-#[derive(PartialEq, Debug, Clone)]
+impl Loc<Identifier> {
+    pub fn to_path(self) -> Path {
+        Path(vec![self])
+    }
+}
+
+#[derive(PartialEq, Debug, Clone, Eq, Hash)]
 pub struct Path(pub Vec<Loc<Identifier>>);
 impl WithLocation for Path {}
 
@@ -33,7 +45,7 @@ pub enum TypeExpression {
 impl WithLocation for TypeExpression {}
 #[derive(PartialEq, Debug, Clone)]
 pub enum Type {
-    Named(Path),
+    Named(Loc<Path>),
     Generic(Loc<Path>, Loc<TypeExpression>),
     UnitType,
 }

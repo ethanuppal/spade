@@ -1,16 +1,11 @@
-use crate::hir::Path;
-use crate::typeinference::equation::KnownType;
-
-pub const INT_PATH: &[&str] = &["int"];
-pub const BOOL_PATH: &[&str] = &["bool"];
-pub const CLK_PATH: &[&str] = &["clk"];
+use crate::types::{KnownType, Type};
 
 pub fn t_int() -> KnownType {
-    KnownType::Path(Path::from_strs(INT_PATH))
+    KnownType::Type(Type::Int)
 }
 pub fn t_bool() -> KnownType {
-    KnownType::Path(Path::from_strs(BOOL_PATH))
+    KnownType::Type(Type::Bool)
 }
 pub fn t_clock() -> KnownType {
-    KnownType::Path(Path::from_strs(CLK_PATH))
+    KnownType::Type(Type::Clock)
 }

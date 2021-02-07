@@ -6,18 +6,16 @@ use std::collections::HashMap;
 use colored::*;
 use parse_tree_macros::trace_typechecker;
 
-use crate::hir::{ExprKind, Expression};
+use crate::{
+    ast,
+    hir::{ExprKind, Expression, NameID},
+};
 use crate::{
     fixed_types::t_clock,
-    hir::{Register, Statement},
-};
-use crate::{
     fixed_types::{t_bool, t_int},
-    hir::{Entity, TypeExpression},
-};
-use crate::{
-    hir::{self, Block},
+    hir::{self, Block, Entity, Register, Statement, TypeExpression},
     location_info::Loc,
+    types::{ConcreteType, KnownType},
 };
 
 pub mod equation;
@@ -26,10 +24,7 @@ pub mod result;
 use equation::{TypeEquations, TypeVar, TypedExpression};
 use result::{Error, Result};
 
-use self::{
-    equation::{ConcreteType, KnownType},
-    result::UnificationError,
-};
+use self::result::UnificationError;
 
 pub struct TypeState {
     equations: TypeEquations,
@@ -48,29 +43,30 @@ impl TypeState {
     }
 
     pub fn type_var_from_hir(hir_type: &Loc<crate::hir::Type>) -> TypeVar {
-        let (hir_type, loc) = hir_type.clone().split_loc();
-        match hir_type {
-            hir::Type::Concrete(t) => TypeVar::Known(KnownType::Path(t), vec![], Some(loc)),
-            hir::Type::Generic(t, params) => {
-                let params = params
-                    .iter()
-                    .map(|expr| {
-                        let (expr, loc) = expr.clone().split_loc();
-                        match expr {
-                            TypeExpression::Integer(i) => {
-                                TypeVar::Known(KnownType::Integer(i), vec![], Some(loc))
-                            }
-                            TypeExpression::Ident(t) => {
-                                TypeVar::Known(KnownType::Path(t), vec![], Some(loc))
-                            }
-                        }
-                    })
-                    .collect();
+        todo!("re-implement typ_var_from_hir")
+        // let (hir_type, loc) = hir_type.clone().split_loc();
+        // match hir_type {
+        //     hir::Type::Concrete(t) => TypeVar::Known(KnownType::Path(t), vec![], Some(loc)),
+        //     hir::Type::Generic(t, params) => {
+        //         let params = params
+        //             .iter()
+        //             .map(|expr| {
+        //                 let (expr, loc) = expr.clone().split_loc();
+        //                 match expr {
+        //                     TypeExpression::Integer(i) => {
+        //                         TypeVar::Known(KnownType::Integer(i), vec![], Some(loc))
+        //                     }
+        //                     TypeExpression::Ident(t) => {
+        //                         TypeVar::Known(KnownType::Path(t), vec![], Some(loc))
+        //                     }
+        //                 }
+        //             })
+        //             .collect();
 
-                TypeVar::Known(KnownType::Path(t.inner), params, Some(loc))
-            }
-            hir::Type::Unit => TypeVar::Known(KnownType::Unit, vec![], Some(loc)),
-        }
+        //         TypeVar::Known(KnownType::Path(t.inner), params, Some(loc))
+        //     }
+        //     hir::Type::Unit => TypeVar::Known(KnownType::Unit, vec![], Some(loc)),
+        // }
     }
 
     /// Returns the type of the expression with the specified id. Error if unknown
@@ -115,7 +111,7 @@ impl TypeState {
 
     /// Returns the type of the specified name as a concrete type. If the type is not known,
     /// or tye type is Generic, panics
-    pub fn type_of_name(&self, name: &hir::Path) -> ConcreteType {
+    pub fn type_of_name(&self, name: &NameID) -> ConcreteType {
         Self::ungenerify_type(
             &self
                 .type_of(&TypedExpression::Name(name.clone()))
@@ -138,7 +134,7 @@ impl TypeState {
         // Add equations for the inputs
         for (name, t) in &entity.head.inputs {
             self.add_equation(
-                TypedExpression::Name(name.clone().to_path()),
+                TypedExpression::Name(name.clone()),
                 Self::type_var_from_hir(t),
             );
         }
@@ -169,7 +165,7 @@ impl TypeState {
                 // Add an equation for the anonymous id
                 self.unify_expression_generic_error(
                     &expression,
-                    &TypedExpression::Name(ident.inner.clone()),
+                    &TypedExpression::Name(ident.clone()),
                 )?;
             }
             ExprKind::IntLiteral(_) => {
@@ -185,47 +181,48 @@ impl TypeState {
             }
             ExprKind::FnCall(name, params) => {
                 // TODO: Propper error handling
-                if let ["intrinsics", operator] = name
-                    .inner
-                    .maybe_slices()
-                    .expect("Anonymous paths are unsupported as functions")
-                    .as_slice()
-                {
-                    let (lhs, rhs) = if let [lhs, rhs] = params.as_slice() {
-                        (lhs, rhs)
-                    } else {
-                        panic!("intrinsics::{} called with more than 2 arguments", operator)
-                    };
+                todo!("Type check function calls")
+                // if let ["intrinsics", operator] = name
+                //     .inner
+                //     .maybe_slices()
+                //     .expect("Anonymous paths are unsupported as functions")
+                //     .as_slice()
+                // {
+                //     let (lhs, rhs) = if let [lhs, rhs] = params.as_slice() {
+                //         (lhs, rhs)
+                //     } else {
+                //         panic!("intrinsics::{} called with more than 2 arguments", operator)
+                //     };
 
-                    self.visit_expression(&lhs)?;
-                    self.visit_expression(&rhs)?;
-                    match *operator {
-                        "add" | "sub" | "left_shift" | "right_shift" => {
-                            let int_type = self.new_generic_int();
-                            // TODO: Make generic over types that can be added
-                            self.unify_expression_generic_error(&lhs, &int_type)?;
-                            self.unify_expression_generic_error(&lhs, &rhs.inner)?;
-                            self.unify_expression_generic_error(expression, &rhs.inner)?
-                        }
-                        "eq" | "gt" | "lt" => {
-                            let int_type = self.new_generic_int();
-                            // TODO: Make generic over types that can be added
-                            self.unify_expression_generic_error(&lhs, &int_type)?;
-                            self.unify_expression_generic_error(&lhs, &rhs.inner)?;
-                            self.unify_expression_generic_error(expression, &t_bool())?
-                        }
-                        "logical_or" | "logical_and" => {
-                            // TODO: Make generic over types that can be ored
-                            self.unify_expression_generic_error(&lhs, &t_bool())?;
-                            self.unify_expression_generic_error(&lhs, &rhs.inner)?;
+                //     self.visit_expression(&lhs)?;
+                //     self.visit_expression(&rhs)?;
+                //     match *operator {
+                //         "add" | "sub" | "left_shift" | "right_shift" => {
+                //             let int_type = self.new_generic_int();
+                //             // TODO: Make generic over types that can be added
+                //             self.unify_expression_generic_error(&lhs, &int_type)?;
+                //             self.unify_expression_generic_error(&lhs, &rhs.inner)?;
+                //             self.unify_expression_generic_error(expression, &rhs.inner)?
+                //         }
+                //         "eq" | "gt" | "lt" => {
+                //             let int_type = self.new_generic_int();
+                //             // TODO: Make generic over types that can be added
+                //             self.unify_expression_generic_error(&lhs, &int_type)?;
+                //             self.unify_expression_generic_error(&lhs, &rhs.inner)?;
+                //             self.unify_expression_generic_error(expression, &t_bool())?
+                //         }
+                //         "logical_or" | "logical_and" => {
+                //             // TODO: Make generic over types that can be ored
+                //             self.unify_expression_generic_error(&lhs, &t_bool())?;
+                //             self.unify_expression_generic_error(&lhs, &rhs.inner)?;
 
-                            self.unify_expression_generic_error(expression, &t_bool())?
-                        }
-                        other => panic!("unrecognised intrinsic {:?}", other),
-                    }
-                } else {
-                    panic!("Unrecognised function {}", name.inner)
-                }
+                //             self.unify_expression_generic_error(expression, &t_bool())?
+                //         }
+                //         other => panic!("unrecognised intrinsic {:?}", other),
+                //     }
+                // } else {
+                //     panic!("Unrecognised function {}", name.inner)
+                // }
             }
             ExprKind::Block(block) => {
                 self.visit_block(block)?;
@@ -265,6 +262,9 @@ impl TypeState {
                         loc: expression.loc(),
                     })?;
             }
+            ExprKind::BinaryOperator(_, _, _) => {
+                todo!("typecheck binary operators")
+            }
         }
         Ok(())
     }
@@ -288,11 +288,11 @@ impl TypeState {
                 }
 
                 let new_type = self.new_generic();
-                self.add_equation(TypedExpression::Name(name.clone().to_path()), new_type);
+                self.add_equation(TypedExpression::Name(name.clone().inner), new_type);
 
                 self.unify_expression_generic_error(
                     &value,
-                    &TypedExpression::Name(name.clone().to_path()),
+                    &TypedExpression::Name(name.clone().inner),
                 )?;
 
                 Ok(())
@@ -304,7 +304,7 @@ impl TypeState {
     #[trace_typechecker]
     pub fn visit_register(&mut self, reg: &Register) -> Result<()> {
         let new_type = self.new_generic();
-        self.add_equation(TypedExpression::Name(reg.name.clone().to_path()), new_type);
+        self.add_equation(TypedExpression::Name(reg.name.clone()), new_type);
 
         self.visit_expression(&reg.value)?;
         self.visit_expression(&reg.clock)?;
@@ -339,10 +339,7 @@ impl TypeState {
                 loc: reg.clock.loc(),
             })?;
 
-        self.unify_expression_generic_error(
-            &reg.value,
-            &TypedExpression::Name(reg.name.clone().to_path()),
-        )?;
+        self.unify_expression_generic_error(&reg.value, &TypedExpression::Name(reg.name.clone()))?;
 
         Ok(())
     }
@@ -538,7 +535,7 @@ mod tests {
 
     use crate::{
         assert_matches,
-        fixed_types::{t_clock, INT_PATH},
+        fixed_types::t_clock,
         hir::{Block, Identifier, Path},
         testutil::hir_path,
     };
@@ -713,13 +710,13 @@ mod tests {
                 inputs: vec![(
                     Identifier::Named("input".to_string()).nowhere(),
                     hir::Type::Generic(
-                        Path::from_strs(INT_PATH).nowhere(),
+                        Path::from_strs(&["int"]).nowhere(),
                         vec![hir::TypeExpression::Integer(5).nowhere()],
                     )
                     .nowhere(),
                 )],
                 output_type: hir::Type::Generic(
-                    Path::from_strs(INT_PATH).nowhere(),
+                    Path::from_strs(&["int"]).nowhere(),
                     vec![hir::TypeExpression::Integer(5).nowhere()],
                 )
                 .nowhere(),

@@ -8,18 +8,20 @@ use structopt::StructOpt;
 
 pub mod ast;
 pub mod builtins;
-pub mod codegen;
+// pub mod codegen;
 pub mod constant;
 pub mod error_reporting;
 pub mod fixed_types;
-pub mod global_symbols;
+// pub mod global_symbols;
 pub mod hir;
+pub mod id_tracker;
 pub mod lexer;
 pub mod location_info;
 pub mod parser;
 pub mod semantic_analysis;
 pub mod symbol_table;
 pub mod typeinference;
+pub mod types;
 
 #[macro_use]
 #[cfg(test)]
@@ -56,7 +58,7 @@ fn main() -> Result<()> {
     };
 
     let mut symtab = symbol_table::SymbolTable::new();
-    let mut idtracker = semantic_analysis::IdTracker::new();
+    let mut idtracker = id_tracker::IdTracker::new();
     let hir = match visit_entity(&entity_ast.unwrap().inner, &mut symtab, &mut idtracker) {
         Ok(v) => v,
         Err(e) => {
@@ -75,9 +77,9 @@ fn main() -> Result<()> {
         }
     }
 
-    let code = codegen::generate_entity(&hir, &type_state);
+    // let code = codegen::generate_entity(&hir, &type_state);
 
-    std::fs::write(opts.outfile, code.to_string())?;
+    // std::fs::write(opts.outfile, code.to_string())?;
 
     Ok(())
 }

@@ -1,10 +1,16 @@
+use std::collections::HashMap;
+
 use thiserror::Error;
 
-use crate::hir;
 use crate::lexer::TokenKind;
 use crate::location_info::{Loc, WithLocation};
 use crate::symbol_table::SymbolTable;
 use crate::{ast, hir::EntityHead};
+use crate::{
+    hir::{self, expression::BinaryOperator, NameID},
+    id_tracker::IdTracker,
+    symbol_table::Thing,
+};
 
 impl<T> Loc<T> {
     pub fn try_visit<V, U>(
@@ -23,81 +29,84 @@ impl<T> Loc<T> {
 
 #[derive(Error, Debug, PartialEq, Clone)]
 pub enum Error {
-    #[error("Undefined path {}", 0.0)]
-    UndefinedPath(Loc<ast::Path>),
+    #[error("Type lookup error")]
+    TypeLookupError(#[from] crate::symbol_table::Error),
     #[error("Duplicate type variable")]
     DuplicateTypeVariable {
-        found: Loc<hir::Identifier>,
-        previously: Loc<hir::Identifier>,
+        found: Loc<ast::Identifier>,
+        previously: Loc<ast::Identifier>,
     },
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
 
-pub struct IdTracker {
-    id: u64,
-}
-impl IdTracker {
-    pub fn new() -> Self {
-        Self { id: 0 }
-    }
-
-    fn next(&mut self) -> u64 {
-        let result = self.id;
-        self.id += 1;
-        result
-    }
-}
-
-pub fn visit_type_param(param: &ast::TypeParam) -> hir::TypeParam {
-    match param {
-        ast::TypeParam::TypeName(name) => hir::TypeParam::TypeName(visit_identifier(name)),
-        ast::TypeParam::Integer(name) => hir::TypeParam::Integer(name.map_ref(visit_identifier)),
-    }
+pub fn visit_type_param(param: &Loc<ast::TypeParam>, symtab: &mut SymbolTable) -> NameID {
+    // let (name, kind) = match param {
+    //     ast::TypeParam::TypeName(name) => (param.map(|_| name), hir::TypeParam::TypeName),
+    //     ast::TypeParam::Integer(name) => (name, hir::TypeParam::Integer),
+    // };
+    // symtab.add_item(name, param.map(|_| kind))
+    todo!("Implement visiting type parameters")
 }
 
 pub fn visit_type_expression(expr: &ast::TypeExpression) -> hir::TypeExpression {
-    match expr {
-        ast::TypeExpression::Ident(name) => hir::TypeExpression::Ident(visit_path(name)),
-        ast::TypeExpression::Integer(val) => hir::TypeExpression::Integer(*val),
-    }
+    todo!("Implement visiting type expressions")
+    // match expr {
+    //     ast::TypeExpression::Ident(name) => hir::TypeExpression::Ident(visit_path(name)),
+    //     ast::TypeExpression::Integer(val) => hir::TypeExpression::Integer(*val),
+    // }
 }
 
-pub fn visit_type(t: &ast::Type) -> hir::Type {
+pub fn visit_type(t: &ast::Type, symtab: &mut SymbolTable) -> Result<hir::Type> {
     match t {
-        ast::Type::Named(name) => hir::Type::Concrete(visit_path(name)),
-        ast::Type::Generic(name, param) => hir::Type::Generic(
-            name.map_ref(visit_path),
-            vec![param.map_ref(visit_type_expression)],
-        ),
-        ast::Type::UnitType => hir::Type::Unit,
+        ast::Type::Named(name) => {
+            let (id, t) = symtab.lookyp_type_symbol(name)?;
+            // Look up the underlying type
+            Ok(hir::Type::Concrete(id))
+        }
+        ast::Type::Generic(name, param) => {
+            let (id, t) = symtab.lookyp_type_symbol(name)?;
+            Ok(hir::Type::Generic(
+                id.at_loc(name),
+                vec![param.map_ref(visit_type_expression)],
+            ))
+        }
+        ast::Type::UnitType => Ok(hir::Type::Unit),
     }
 }
 
-pub fn entity_head(item: &ast::Entity) -> Result<EntityHead> {
+/// Visit an entity to generate an entity head. The symtab gets populated with the name of the
+/// entity and its definition, but not with the inputs and type parameteres
+///
+/// The `add_local_symbols` parameter determines wether or not symbols should be added to the
+/// current scope or not. If false, a new throw-away scope will be created.
+///
+/// This is kind of an ugly hack to enable code re-use. We should get rid of it eventually
+pub fn entity_head(
+    item: &ast::Entity,
+    symtab: &mut SymbolTable,
+    add_local_symbols: bool,
+) -> Result<EntityHead> {
+    if !add_local_symbols {
+        symtab.new_scope();
+    }
+    let type_params = vec![];
+    if !item.type_params.is_empty() {
+        todo!("Handle generic type parameters in entities");
+    }
+
     let mut inputs = vec![];
     for (name, input_type) in &item.inputs {
-        let t = input_type.map_ref(visit_type);
+        let t = input_type.try_map_ref(|t| visit_type(t, symtab))?;
 
-        inputs.push((name.map_ref(visit_identifier), t));
+        let id = symtab.add_thing(name.clone().to_path(), Thing::Variable(name.clone()));
+        inputs.push((id, t));
     }
 
-    let output_type = item.output_type.map_ref(visit_type);
+    let output_type = item.output_type.try_map_ref(|t| visit_type(t, symtab))?;
 
-    let mut type_params: Vec<Loc<hir::TypeParam>> = vec![];
-    for param in &item.type_params {
-        let param = param.map_ref(visit_type_param);
-        if let Some(prev) = type_params
-            .iter()
-            .filter(|prev| prev.name() == param.name())
-            .next()
-        {
-            return Err(Error::DuplicateTypeVariable {
-                found: param.name().clone().at(param.span),
-                previously: prev.map_ref(|p| p.name().clone()),
-            });
-        }
-        type_params.push(param.clone());
+    if !add_local_symbols {
+        symtab.close_scope()
     }
 
     Ok(EntityHead {
@@ -114,18 +123,13 @@ pub fn visit_entity(
 ) -> Result<hir::Entity> {
     symtab.new_scope();
 
-    let name = item.name.map_ref(visit_identifier);
-
-    let head = entity_head(item)?;
-    for (name, _) in &head.inputs {
-        symtab.add_ident(name);
-    }
+    let head = entity_head(item, symtab, true)?;
 
     let body = item.body.try_visit(visit_expression, symtab, idtracker)?;
 
     symtab.close_scope();
 
-    Ok(hir::Entity { name, head, body })
+    Ok(hir::Entity { head, body })
 }
 
 // pub fn visit_trait_def(
@@ -180,17 +184,16 @@ pub fn visit_statement(
     match s {
         ast::Statement::Binding(ident, t, expr) => {
             let hir_type = if let Some(t) = t {
-                Some(t.map_ref(visit_type))
+                Some(t.try_map_ref(|t| visit_type(t, symtab))?)
             } else {
                 None
             };
-            let name = ident.map_ref(visit_identifier);
-            symtab.add_ident(&name);
+            let name_id = symtab.add_thing(ident.clone().to_path(), Thing::Variable(ident.clone()));
 
             let expr = expr.try_visit(visit_expression, symtab, idtracker)?;
 
             Ok(Loc::new(
-                hir::Statement::Binding(name, hir_type, expr),
+                hir::Statement::Binding(name_id.at_loc(ident), hir_type, expr),
                 span,
             ))
         }
@@ -213,25 +216,20 @@ pub fn visit_expression(
             let lhs = lhs.try_visit(visit_expression, symtab, idtracker)?;
             let rhs = rhs.try_visit(visit_expression, symtab, idtracker)?;
 
-            let intrinsic = |name| {
-                hir::ExprKind::FnCall(
-                    hir::Path::from_strs(&["intrinsics", name]).nowhere(),
-                    vec![lhs, rhs],
-                )
-            };
+            let operator = |op| hir::ExprKind::BinaryOperator(Box::new(lhs), op, Box::new(rhs));
 
             match tok {
-                TokenKind::Plus => Ok(intrinsic("add")),
-                TokenKind::Minus => Ok(intrinsic("sub")),
-                TokenKind::Asterisk => Ok(intrinsic("mul")),
-                TokenKind::Slash => Ok(intrinsic("div")),
-                TokenKind::Equals => Ok(intrinsic("eq")),
-                TokenKind::Gt => Ok(intrinsic("gt")),
-                TokenKind::Lt => Ok(intrinsic("lt")),
-                TokenKind::LeftShift => Ok(intrinsic("left_shift")),
-                TokenKind::RightShift => Ok(intrinsic("right_shift")),
-                TokenKind::LogicalAnd => Ok(intrinsic("logical_and")),
-                TokenKind::LogicalOr => Ok(intrinsic("logical_or")),
+                TokenKind::Plus => Ok(operator(BinaryOperator::Add)),
+                TokenKind::Minus => Ok(operator(BinaryOperator::Sub)),
+                TokenKind::Asterisk => Ok(operator(BinaryOperator::Mul)),
+                TokenKind::Slash => panic!("division is unsupported"),
+                TokenKind::Equals => Ok(operator(BinaryOperator::Eq)),
+                TokenKind::Gt => Ok(operator(BinaryOperator::Gt)),
+                TokenKind::Lt => Ok(operator(BinaryOperator::Lt)),
+                TokenKind::LeftShift => Ok(operator(BinaryOperator::LeftShift)),
+                TokenKind::RightShift => Ok(operator(BinaryOperator::RightShift)),
+                TokenKind::LogicalAnd => Ok(operator(BinaryOperator::LogicalAnd)),
+                TokenKind::LogicalOr => Ok(operator(BinaryOperator::LogicalOr)),
                 _ => unreachable! {},
             }
         }
@@ -250,17 +248,9 @@ pub fn visit_expression(
             block, symtab, idtracker,
         )?))),
         ast::Expression::Identifier(path) => {
-            let hir_path = path.clone().map_ref(visit_path);
-            if let Some(id) = hir_path.maybe_identifier() {
-                if symtab.has_symbol(id) {
-                    Ok(hir::ExprKind::Identifier(hir_path))
-                } else {
-                    Err(Error::UndefinedPath(path.clone()))
-                }
-            } else {
-                println!("NOTE: global symbols are currently unsupported");
-                Err(Error::UndefinedPath(path.clone()))
-            }
+            let id = symtab.lookup_id(path)?;
+
+            Ok(hir::ExprKind::Identifier(id))
         }
     }
     .map(|kind| kind.with_id(idtracker.next()))
@@ -284,14 +274,6 @@ pub fn visit_block(
     Ok(hir::Block { statements, result })
 }
 
-pub fn visit_identifier(id: &ast::Identifier) -> hir::Identifier {
-    hir::Identifier::Named(id.0.clone())
-}
-pub fn visit_path(path: &ast::Path) -> hir::Path {
-    let result = path.0.iter().map(|p| visit_identifier(&p)).collect();
-    hir::Path(result)
-}
-
 pub fn visit_register(
     reg: &Loc<ast::Register>,
     symtab: &mut SymbolTable,
@@ -299,8 +281,10 @@ pub fn visit_register(
 ) -> Result<Loc<hir::Register>> {
     let (reg, loc) = reg.split_ref();
 
-    let name = reg.name.map_ref(visit_identifier);
-    symtab.add_ident(&name);
+    let name_id = symtab.add_thing(
+        reg.clone().name.to_path(),
+        Thing::Variable(reg.name.clone()),
+    );
 
     let clock = reg.clock.try_visit(visit_expression, symtab, idtracker)?;
 
@@ -316,14 +300,14 @@ pub fn visit_register(
     let value = reg.value.try_visit(visit_expression, symtab, idtracker)?;
 
     let value_type = if let Some(value_type) = &reg.value_type {
-        Some(value_type.map_ref(visit_type))
+        Some(value_type.try_map_ref(|t| visit_type(t, symtab))?)
     } else {
         None
     };
 
     Ok(Loc::new(
         hir::Register {
-            name,
+            name: name_id,
             clock,
             reset,
             value,
