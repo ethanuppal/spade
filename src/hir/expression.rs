@@ -50,16 +50,17 @@ pub struct Expression {
 }
 impl WithLocation for Expression {}
 
-impl PartialEq for Expression {
-    fn eq(&self, other: &Self) -> bool {
-        self.kind == other.kind
+impl Expression {
+    /// Create a new expression referencing an identifier with the specified
+    /// id and name
+    #[cfg(test)]
+    pub fn ident(expr_id: u64, name_id: u64, name: &str) -> Expression {
+        ExprKind::Identifier(NameID(name_id, crate::ast::Path::from_strs(&[name]))).with_id(expr_id)
     }
 }
 
-// Helper constructors used in tests
-#[cfg(test)]
-impl Expression {
-    pub fn ident(id: u64, name: &str) -> Expression {
-        ExprKind::Identifier(Path::from_strs(&[name]).nowhere()).with_id(id)
+impl PartialEq for Expression {
+    fn eq(&self, other: &Self) -> bool {
+        self.kind == other.kind
     }
 }

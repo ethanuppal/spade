@@ -2,11 +2,11 @@ use std::path::PathBuf;
 
 use logos::Logos;
 
-use crate::hir;
 use crate::location_info::{Loc, WithLocation};
+use crate::{ast, semantic_analysis::visit_entity, typeinference, typeinference::TypeState};
 use crate::{
-    ast, semantic_analysis, semantic_analysis::visit_entity, typeinference,
-    typeinference::TypeState,
+    hir::{self, NameID},
+    id_tracker::IdTracker,
 };
 
 use crate::error_reporting;
@@ -32,7 +32,7 @@ pub fn parse_typecheck_entity<'a>(input: &str) -> ProcessedEntity {
     };
 
     let mut symtab = symbol_table::SymbolTable::new();
-    let mut idtracker = semantic_analysis::IdTracker::new();
+    let mut idtracker = IdTracker::new();
     let hir = match visit_entity(&entity_ast.inner, &mut symtab, &mut idtracker) {
         Ok(v) => v,
         Err(e) => {
@@ -61,15 +61,12 @@ pub fn ast_ident(name: &str) -> Loc<ast::Identifier> {
     ast::Identifier(name.to_string()).nowhere()
 }
 
-pub fn hir_ident(name: &str) -> Loc<hir::Identifier> {
-    hir::Identifier::Named(name.to_string()).nowhere()
-}
-
 pub fn ast_path(name: &str) -> Loc<ast::Path> {
     ast::Path(vec![ast_ident(name)]).nowhere()
 }
-pub fn hir_path(name: &str) -> Loc<hir::Path> {
-    hir::Path(vec![hir_ident(name).inner]).nowhere()
+
+pub fn name_id(id: u64, name: &str) -> Loc<NameID> {
+    NameID(id, ast::Path::from_strs(&[name])).nowhere()
 }
 
 #[macro_export]

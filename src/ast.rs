@@ -13,8 +13,8 @@ impl std::fmt::Display for Identifier {
 impl WithLocation for Identifier {}
 
 impl Loc<Identifier> {
-    pub fn to_path(self) -> Path {
-        Path(vec![self])
+    pub fn to_path(self) -> Loc<Path> {
+        self.map_ref(|_| Path(vec![self.clone()]))
     }
 }
 
@@ -28,6 +28,17 @@ impl Path {
     }
     pub fn as_strings(&self) -> Vec<String> {
         self.0.iter().map(|id| id.inner.0.clone()).collect()
+    }
+    /// Generate a path from a list of strings. Because Loc is required, this is
+    /// only allowed in tests where .nowhere is used
+    #[cfg(test)]
+    pub fn from_strs(elems: &[&str]) -> Self {
+        Path(
+            elems
+                .iter()
+                .map(|x| Identifier(x.to_string()).nowhere())
+                .collect(),
+        )
     }
 }
 

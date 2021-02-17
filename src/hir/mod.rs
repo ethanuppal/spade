@@ -63,7 +63,7 @@ impl WithLocation for Statement {}
 
 #[derive(PartialEq, Debug, Clone)]
 pub struct Register {
-    pub name: NameID,
+    pub name: Loc<NameID>,
     pub clock: Loc<Expression>,
     pub reset: Option<(Loc<Expression>, Loc<Expression>)>,
     pub value: Loc<Expression>,

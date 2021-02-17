@@ -103,24 +103,22 @@ pub fn report_semantic_error(filename: &Path, file_content: &str, err: SemanticE
                 Label::primary(file_id, found.span).with_message("Duplicate typename"),
                 Label::secondary(file_id, previously.span).with_message("Previously used here"),
             ]),
-        SemanticError::TypeLookupError(LookupError::NoSuchSymbol(path)) => Diagnostic::error()
+        SemanticError::LookupError(LookupError::NoSuchSymbol(path)) => Diagnostic::error()
             .with_message(format!("Use of undeclared name {}", path))
             .with_labels(vec![
                 Label::primary(file_id, path.span).with_message("Undeclared name")
             ]),
-        SemanticError::TypeLookupError(LookupError::NotATypeSymbol(path, got)) => {
-            Diagnostic::error()
-                .with_message(format!("Expected {} to be a type", path))
-                .with_labels(vec![
-                    Label::primary(file_id, path.span).with_message(format!("Expected type")),
-                    Label::secondary(file_id, got.loc().span).with_message(format!(
-                        "{} is a {}",
-                        path,
-                        got.kind_string()
-                    )),
-                ])
-        }
-        SemanticError::TypeLookupError(LookupError::NotAVariable(path, got)) => Diagnostic::error()
+        SemanticError::LookupError(LookupError::NotATypeSymbol(path, got)) => Diagnostic::error()
+            .with_message(format!("Expected {} to be a type", path))
+            .with_labels(vec![
+                Label::primary(file_id, path.span).with_message(format!("Expected type")),
+                Label::secondary(file_id, got.loc().span).with_message(format!(
+                    "{} is a {}",
+                    path,
+                    got.kind_string()
+                )),
+            ]),
+        SemanticError::LookupError(LookupError::NotAVariable(path, got)) => Diagnostic::error()
             .with_message(format!("Expected {} to be a variable", path))
             .with_labels(vec![
                 Label::primary(file_id, path.span).with_message(format!("Expected variable")),

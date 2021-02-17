@@ -1155,7 +1155,7 @@ mod tests {
     fn bindings_with_types_work() {
         let expected = Statement::Binding(
             ast_ident("test"),
-            Some(Type::Named(ast_path("bool").inner).nowhere()),
+            Some(Type::Named(ast_path("bool")).nowhere()),
             Expression::IntLiteral(123).nowhere(),
         )
         .nowhere();
@@ -1202,14 +1202,14 @@ mod tests {
             inputs: vec![
                 (
                     Identifier("clk".to_string()).nowhere(),
-                    Type::Named(ast_path("bool").inner).nowhere(),
+                    Type::Named(ast_path("bool")).nowhere(),
                 ),
                 (
                     Identifier("rst".to_string()).nowhere(),
-                    Type::Named(ast_path("bool").inner).nowhere(),
+                    Type::Named(ast_path("bool")).nowhere(),
                 ),
             ],
-            output_type: Type::Named(ast_path("bool").inner).nowhere(),
+            output_type: Type::Named(ast_path("bool")).nowhere(),
             body: Expression::Block(Box::new(Block {
                 statements: vec![],
                 result: Expression::Identifier(ast_path("clk")).nowhere(),
@@ -1298,7 +1298,7 @@ mod tests {
                     Expression::IntLiteral(0).nowhere(),
                 )),
                 value: Expression::IntLiteral(1).nowhere(),
-                value_type: Some(Type::Named(ast_path("Type").inner).nowhere()),
+                value_type: Some(Type::Named(ast_path("Type")).nowhere()),
             }
             .nowhere(),
         )
@@ -1358,8 +1358,8 @@ mod tests {
         let expected = FunctionDecl {
             name: ast_ident("some_fn"),
             self_arg: Some(().nowhere()),
-            inputs: vec![(ast_ident("a"), Type::Named(ast_path("bit").inner).nowhere())],
-            return_type: Type::Named(ast_path("bit").inner).nowhere(),
+            inputs: vec![(ast_ident("a"), Type::Named(ast_path("bit")).nowhere())],
+            return_type: Type::Named(ast_path("bit")).nowhere(),
             type_params: vec![],
         }
         .nowhere();
@@ -1375,7 +1375,7 @@ mod tests {
             name: ast_ident("some_fn"),
             self_arg: Some(().nowhere()),
             inputs: vec![],
-            return_type: Type::Named(ast_path("bit").inner).nowhere(),
+            return_type: Type::Named(ast_path("bit")).nowhere(),
             type_params: vec![],
         }
         .nowhere();
@@ -1427,8 +1427,8 @@ mod tests {
         let fn1 = FunctionDecl {
             name: ast_ident("some_fn"),
             self_arg: Some(().nowhere()),
-            inputs: vec![(ast_ident("a"), Type::Named(ast_path("bit").inner).nowhere())],
-            return_type: Type::Named(ast_path("bit").inner).nowhere(),
+            inputs: vec![(ast_ident("a"), Type::Named(ast_path("bit")).nowhere())],
+            return_type: Type::Named(ast_path("bit")).nowhere(),
             type_params: vec![],
         }
         .nowhere();
@@ -1436,7 +1436,7 @@ mod tests {
             name: ast_ident("another_fn"),
             self_arg: Some(().nowhere()),
             inputs: vec![],
-            return_type: Type::Named(ast_path("bit").inner).nowhere(),
+            return_type: Type::Named(ast_path("bit")).nowhere(),
             type_params: vec![],
         }
         .nowhere();

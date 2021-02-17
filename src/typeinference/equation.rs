@@ -1,4 +1,4 @@
-use std::{collections::HashMap, path::Path};
+use std::collections::HashMap;
 
 use crate::types::KnownType;
 use crate::{hir::NameID, location_info::Loc};

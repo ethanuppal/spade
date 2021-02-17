@@ -111,6 +111,10 @@ impl SymbolTable {
         name_id
     }
 
+    pub fn add_local_variable(&mut self, name: Loc<Identifier>) -> NameID {
+        self.add_thing(name.clone().to_path().inner, Thing::Variable(name))
+    }
+
     pub fn lookup_id(&self, name: &Loc<Path>) -> Result<NameID, Error> {
         for tab in self.symbols.iter().rev() {
             if let Some(id) = tab.get(&name) {
@@ -118,6 +122,15 @@ impl SymbolTable {
             }
         }
         Err(Error::NoSuchSymbol(name.clone()))
+    }
+
+    pub fn has_symbol(&self, name: Path) -> bool {
+        match self.lookup_id(&name.nowhere()) {
+            Ok(_) => true,
+            Err(Error::NoSuchSymbol(_)) => false,
+            Err(Error::NotATypeSymbol(_, _)) => unreachable!(),
+            Err(Error::NotAVariable(_, _)) => unreachable!(),
+        }
     }
 
     pub fn lookyp_type_symbol(&self, name: &Loc<Path>) -> Result<(NameID, &TypeSymbol), Error> {
@@ -133,7 +146,7 @@ impl SymbolTable {
         let id = self.lookup_id(name)?;
 
         match self.items.get(&id).unwrap() {
-            Thing::Variable(t) => Ok(id),
+            Thing::Variable(_) => Ok(id),
             other => Err(Error::NotAVariable(name.clone(), other.clone())),
         }
     }
