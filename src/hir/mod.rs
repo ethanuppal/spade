@@ -95,6 +95,7 @@ impl WithLocation for Type {}
 
 #[derive(PartialEq, Debug, Clone)]
 pub struct Entity {
+    pub name: Loc<NameID>,
     pub head: EntityHead,
     pub body: Loc<Expression>,
 }

@@ -2,11 +2,9 @@ use indoc::formatdoc;
 
 use crate::{
     fixed_types::{t_bool, t_clock, t_int},
-    hir::{Entity, ExprKind, Expression, Register, Statement},
+    hir::{expression::BinaryOperator, Entity, ExprKind, Expression, NameID, Register, Statement},
+    typeinference::TypeState,
     types::{ConcreteType, KnownType},
-    typeinference::{
-        TypeState,
-    },
 };
 
 mod util;
@@ -18,6 +16,12 @@ use self::{
 };
 
 use crate::code;
+
+impl NameID {
+    fn mangled(&self) -> String {
+        format!("_m{}_{}", self.0, self.1)
+    }
+}
 
 fn size_of_type(t: ConcreteType) -> u128 {
     match t.base {
@@ -41,7 +45,6 @@ fn size_of_type(t: ConcreteType) -> u128 {
         KnownType::Integer(_) => {
             panic!("A type level integer has no size")
         }
-        KnownType::Unit => 0,
         other => panic!("{:?} has no size right now", other),
     }
 }
@@ -54,8 +57,8 @@ impl Register {
         code.join(&self.value.code(types));
         code.join(&self.clock.code(types));
 
-        let this_var = format!("_m_{}", self.name.inner);
-        let this_type = types.type_of_name(&self.name.clone().to_path());
+        let this_var = self.name.mangled();
+        let this_type = types.type_of_name(&self.name.clone());
 
         // Declare the register
         code.join(&reg(&this_var, size_of_type(this_type)));
@@ -105,7 +108,7 @@ impl Statement {
                 code.join(&value.code(types));
 
                 let this_var = format!("_m_{}", name.inner);
-                let this_type = types.type_of_name(&name.clone().to_path());
+                let this_type = types.type_of_name(&name);
 
                 // Declare the register
                 code.join(&wire(&this_var, size_of_type(this_type)));
@@ -132,15 +135,18 @@ impl Expression {
     /// really need
     pub fn alias(&self) -> Option<String> {
         match &self.kind {
-            ExprKind::Identifier(ident) => Some(ident.inner.mangle()),
+            ExprKind::Identifier(ident) => Some(ident.mangled()),
             ExprKind::IntLiteral(_) => None,
             ExprKind::BoolLiteral(_) => None,
             ExprKind::FnCall(_, _) => None,
             ExprKind::Block(block) => Some(block.result.inner.variable()),
             ExprKind::If(_, _, _) => None,
+            ExprKind::BinaryOperator(_, _, _) => None,
         }
     }
 
+    // True if a verilog register has to be created for the value instead of a
+    // wire. This is required if the processing is in an always block
     pub fn requires_reg(&self) -> bool {
         match &self.kind {
             ExprKind::Identifier(_) => false,
@@ -149,6 +155,7 @@ impl Expression {
             ExprKind::FnCall(_, _) => false,
             ExprKind::Block(_) => false,
             ExprKind::If(_, _, _) => true,
+            ExprKind::BinaryOperator(_, _, _) => false,
         }
     }
 
@@ -185,43 +192,72 @@ impl Expression {
                     assign(&self.variable(), &format!("{}", if *value { 1 } else { 0 }));
                 code.join(&this_code);
             }
-            ExprKind::FnCall(name, params) => {
-                let mut binop_builder = |op| {
-                    if let [lhs, rhs] = params.as_slice() {
-                        code.join(&lhs.inner.code(types));
-                        code.join(&rhs.inner.code(types));
+            ExprKind::FnCall(_name, _params) => {
+                todo!("Support codegen for function calls")
+                // let mut binop_builder = |op| {
+                //     if let [lhs, rhs] = params.as_slice() {
+                //         code.join(&lhs.inner.code(types));
+                //         code.join(&rhs.inner.code(types));
 
-                        let this_code = formatdoc! {r#"
-                            assign {} = {} {} {};"#,
-                            self.variable(),
-                            lhs.inner.variable(),
-                            op,
-                            rhs.inner.variable(),
-                        };
-                        code.join(&this_code)
-                    } else {
-                        panic!("Binary operation called with more than 2 arguments")
-                    }
+                //         let this_code = formatdoc! {r#"
+                //             assign {} = {} {} {};"#,
+                //             self.variable(),
+                //             lhs.inner.variable(),
+                //             op,
+                //             rhs.inner.variable(),
+                //         };
+                //         code.join(&this_code)
+                //     } else {
+                //         panic!("Binary operation called with more than 2 arguments")
+                //     }
+                // };
+
+                // // TODO: Propper error handling
+                // match name
+                //     .inner
+                //     .maybe_slices()
+                //     .expect("Anonymous functions can not be codegened right now")
+                //     .as_slice()
+                // {
+                //     ["intrinsics", "add"] => binop_builder("+"),
+                //     ["intrinsics", "sub"] => binop_builder("-"),
+                //     ["intrinsics", "mul"] => binop_builder("*"),
+                //     ["intrinsics", "eq"] => binop_builder("=="),
+                //     ["intrinsics", "lt"] => binop_builder("<"),
+                //     ["intrinsics", "gt"] => binop_builder(">"),
+                //     ["intrinsics", "left_shift"] => binop_builder("<<"),
+                //     ["intrinsics", "right_shift"] => binop_builder(">>"),
+                //     ["intrinsics", "logical_and"] => binop_builder("&&"),
+                //     ["intrinsics", "logical_or"] => binop_builder("||"),
+                //     _ => panic!("Unrecognised function {}", name.inner),
+                // }
+            }
+            ExprKind::BinaryOperator(lhs, op, rhs) => {
+                let mut binop_builder = |op| {
+                    code.join(&lhs.inner.code(types));
+                    code.join(&rhs.inner.code(types));
+
+                    let this_code = formatdoc! {r#"
+                        assign {} = {} {} {};"#,
+                        self.variable(),
+                        lhs.inner.variable(),
+                        op,
+                        rhs.inner.variable(),
+                    };
+                    code.join(&this_code)
                 };
 
-                // TODO: Propper error handling
-                match name
-                    .inner
-                    .maybe_slices()
-                    .expect("Anonymous functions can not be codegened right now")
-                    .as_slice()
-                {
-                    ["intrinsics", "add"] => binop_builder("+"),
-                    ["intrinsics", "sub"] => binop_builder("-"),
-                    ["intrinsics", "mul"] => binop_builder("*"),
-                    ["intrinsics", "eq"] => binop_builder("=="),
-                    ["intrinsics", "lt"] => binop_builder("<"),
-                    ["intrinsics", "gt"] => binop_builder(">"),
-                    ["intrinsics", "left_shift"] => binop_builder("<<"),
-                    ["intrinsics", "right_shift"] => binop_builder(">>"),
-                    ["intrinsics", "logical_and"] => binop_builder("&&"),
-                    ["intrinsics", "logical_or"] => binop_builder("||"),
-                    _ => panic!("Unrecognised function {}", name.inner),
+                match op {
+                    BinaryOperator::Add => binop_builder("+"),
+                    BinaryOperator::Sub => binop_builder("-"),
+                    BinaryOperator::Mul => binop_builder("*"),
+                    BinaryOperator::Eq => binop_builder("=="),
+                    BinaryOperator::Gt => binop_builder(">"),
+                    BinaryOperator::Lt => binop_builder("<"),
+                    BinaryOperator::LeftShift => binop_builder(">>"),
+                    BinaryOperator::RightShift => binop_builder("<<"),
+                    BinaryOperator::LogicalAnd => binop_builder("&&"),
+                    BinaryOperator::LogicalOr => binop_builder("||"),
                 }
             }
             ExprKind::Block(block) => {
@@ -262,8 +298,8 @@ impl Expression {
 
 pub fn generate_entity<'a>(entity: &Entity, types: &TypeState) -> Code {
     let inputs = entity.head.inputs.iter().map(|(name, _)| {
-        let t = types.type_of_name(&Path(vec![name.inner.clone()]));
-        format!("input{} _m_{},", size_spec(size_of_type(t)), name.inner)
+        let t = types.type_of_name(name);
+        format!("input{} _m_{},", size_spec(size_of_type(t)), name.1)
     });
 
     let output_t = types.expr_type(&entity.body);
@@ -272,7 +308,7 @@ pub fn generate_entity<'a>(entity: &Entity, types: &TypeState) -> Code {
     let output_assignment = assign("__output", &entity.body.inner.variable());
 
     code! {
-        [0] &format!("module {} (", entity.name.inner);
+        [0] &format!("module {} (", entity.name.1);
                 [2] &inputs.collect::<Vec<_>>();
                 [2] &output_definition;
             [1] &");";

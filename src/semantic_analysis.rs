@@ -115,10 +115,10 @@ pub fn entity_head(
 }
 
 pub fn visit_entity(
-    item: &ast::Entity,
+    item: &Loc<ast::Entity>,
     symtab: &mut SymbolTable,
     idtracker: &mut IdTracker,
-) -> Result<hir::Entity> {
+) -> Result<Loc<hir::Entity>> {
     symtab.new_scope();
 
     let head = entity_head(item, symtab, true)?;
@@ -127,7 +127,17 @@ pub fn visit_entity(
 
     symtab.close_scope();
 
-    Ok(hir::Entity { head, body })
+    let name = symtab.add_thing(
+        item.name.clone().to_path().inner,
+        Thing::Entity(head.clone().at_loc(item)),
+    );
+
+    Ok(hir::Entity {
+        name: name.at_loc(&item.name),
+        head,
+        body,
+    }
+    .at_loc(item))
 }
 
 // pub fn visit_trait_def(
@@ -144,11 +154,7 @@ pub fn visit_item(
     idtracker: &mut IdTracker,
 ) -> Result<Option<hir::Item>> {
     match item {
-        ast::Item::Entity(e) => Ok(Some(hir::Item::Entity(e.try_visit(
-            &visit_entity,
-            symtab,
-            idtracker,
-        )?))),
+        ast::Item::Entity(e) => Ok(Some(hir::Item::Entity(visit_entity(e, symtab, idtracker)?))),
         ast::Item::TraitDef(_) => {
             // NOTE: Traits are invisible at the HIR stage, so we just ignore them
             Ok(None)
@@ -349,17 +355,19 @@ mod entity_visiting {
             }))
             .nowhere(),
             type_params: vec![],
-        };
+        }
+        .nowhere();
 
         let expected = hir::Entity {
+            name: name_id(0, "test"),
             head: hir::EntityHead {
-                inputs: vec![((name_id(0, "a").inner, hir::Type::Unit.nowhere()))],
+                inputs: vec![((name_id(1, "a").inner, hir::Type::Unit.nowhere()))],
                 output_type: hir::Type::Unit.nowhere(),
                 type_params: vec![],
             },
             body: hir::ExprKind::Block(Box::new(hir::Block {
                 statements: vec![hir::Statement::Binding(
-                    name_id(1, "var"),
+                    name_id(2, "var"),
                     Some(hir::Type::Unit.nowhere()),
                     hir::ExprKind::IntLiteral(0).idless().nowhere(),
                 )
@@ -368,7 +376,8 @@ mod entity_visiting {
             }))
             .idless()
             .nowhere(),
-        };
+        }
+        .nowhere();
 
         let mut symtab = SymbolTable::new();
         let mut idtracker = IdTracker::new();
@@ -722,8 +731,8 @@ mod register_visiting {
 mod item_visiting {
     use super::*;
 
-    use crate::location_info::WithLocation;
     use crate::testutil::ast_ident;
+    use crate::{location_info::WithLocation, testutil::name_id};
 
     use pretty_assertions::assert_eq;
 
@@ -746,6 +755,7 @@ mod item_visiting {
 
         let expected = hir::Item::Entity(
             hir::Entity {
+                name: name_id(0, "test"),
                 head: EntityHead {
                     output_type: hir::Type::Unit.nowhere(),
                     inputs: vec![],
@@ -774,8 +784,8 @@ mod item_visiting {
 mod module_visiting {
     use super::*;
 
-    use crate::location_info::WithLocation;
     use crate::testutil::ast_ident;
+    use crate::{location_info::WithLocation, testutil::name_id};
 
     use pretty_assertions::assert_eq;
 
@@ -801,6 +811,7 @@ mod module_visiting {
         let expected = hir::ModuleBody {
             members: vec![hir::Item::Entity(
                 hir::Entity {
+                    name: name_id(0, "test"),
                     head: EntityHead {
                         output_type: hir::Type::Unit.nowhere(),
                         inputs: vec![],

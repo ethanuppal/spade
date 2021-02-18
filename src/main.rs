@@ -8,7 +8,7 @@ use structopt::StructOpt;
 
 pub mod ast;
 pub mod builtins;
-// pub mod codegen;
+pub mod codegen;
 pub mod constant;
 pub mod error_reporting;
 pub mod fixed_types;
@@ -59,7 +59,7 @@ fn main() -> Result<()> {
 
     let mut symtab = symbol_table::SymbolTable::new();
     let mut idtracker = id_tracker::IdTracker::new();
-    let hir = match visit_entity(&entity_ast.unwrap().inner, &mut symtab, &mut idtracker) {
+    let hir = match visit_entity(&entity_ast.unwrap(), &mut symtab, &mut idtracker) {
         Ok(v) => v,
         Err(e) => {
             error_reporting::report_semantic_error(&opts.infile, &file_content, e);
@@ -77,9 +77,9 @@ fn main() -> Result<()> {
         }
     }
 
-    // let code = codegen::generate_entity(&hir, &type_state);
+    let code = codegen::generate_entity(&hir, &type_state);
 
-    // std::fs::write(opts.outfile, code.to_string())?;
+    std::fs::write(opts.outfile, code.to_string())?;
 
     Ok(())
 }
