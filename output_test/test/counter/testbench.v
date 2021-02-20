@@ -42,9 +42,9 @@ module counter_tb();
     end
 
     counter counter
-        ( ._m_clk(clk)
-        , ._m_rst(rst)
-        , ._m_max(max)
+        ( ._i_clk(clk)
+        , ._i_rst(rst)
+        , ._i_max(max)
         , .__output(result)
         );
 endmodule

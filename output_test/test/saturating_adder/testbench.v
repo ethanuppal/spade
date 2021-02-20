@@ -30,9 +30,9 @@ module saturating_adder_tb();
     end
 
     saturating_adder uut
-        ( ._m_a(a)
-        , ._m_b(b)
-        , ._m_max(max)
+        ( ._i_a(a)
+        , ._i_b(b)
+        , ._i_max(max)
         , .__output(result)
         );
 endmodule

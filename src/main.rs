@@ -58,6 +58,7 @@ fn main() -> Result<()> {
     };
 
     let mut symtab = symbol_table::SymbolTable::new();
+    builtins::populate_symtab(&mut symtab);
     let mut idtracker = id_tracker::IdTracker::new();
     let hir = match visit_entity(&entity_ast.unwrap(), &mut symtab, &mut idtracker) {
         Ok(v) => v,
