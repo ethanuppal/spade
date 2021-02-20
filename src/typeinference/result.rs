@@ -21,6 +21,15 @@ pub enum Error {
         // The location of the output expression with the offending type
         output_expr: Loc<()>,
     },
+    // An entity output missmatch where the output type was unspecified and defaulted
+    // to unit
+    #[error("Entity output type missmatch without spec")]
+    UnspecedEntityOutputTypeMissmatch {
+        expected: TypeVar,
+        got: TypeVar,
+        // The location of the output expression with the offending type
+        output_expr: Loc<()>,
+    },
     #[error("Type error: expected {expected}, got: {got}")]
     UnspecifiedTypeError {
         expected: TypeVar,

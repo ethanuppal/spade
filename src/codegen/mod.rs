@@ -107,7 +107,7 @@ impl Statement {
             Statement::Binding(name, _t, value) => {
                 code.join(&value.code(types));
 
-                let this_var = format!("_m_{}", name.inner);
+                let this_var = name.mangled();
                 let this_type = types.type_of_name(&name);
 
                 // Declare the register
@@ -254,8 +254,8 @@ impl Expression {
                     BinaryOperator::Eq => binop_builder("=="),
                     BinaryOperator::Gt => binop_builder(">"),
                     BinaryOperator::Lt => binop_builder("<"),
-                    BinaryOperator::LeftShift => binop_builder(">>"),
-                    BinaryOperator::RightShift => binop_builder("<<"),
+                    BinaryOperator::LeftShift => binop_builder("<<"),
+                    BinaryOperator::RightShift => binop_builder(">>"),
                     BinaryOperator::LogicalAnd => binop_builder("&&"),
                     BinaryOperator::LogicalOr => binop_builder("||"),
                 }
@@ -297,10 +297,21 @@ impl Expression {
 }
 
 pub fn generate_entity<'a>(entity: &Entity, types: &TypeState) -> Code {
+    // Inputs are named _i_{name} and then translated to the name_id name for later use
     let inputs = entity.head.inputs.iter().map(|(name, _)| {
+        let input_name = format!("_i_{}", name.1);
         let t = types.type_of_name(name);
-        format!("input{} _m_{},", size_spec(size_of_type(t)), name.1)
+        let size = size_of_type(t);
+        (
+            format!("input{} {},", size_spec(size), input_name),
+            code! {
+                [0] &wire(&name.mangled(), size);
+                [0] &assign(&name.mangled(), &input_name)
+            },
+        )
     });
+
+    let (inputs, input_assignments): (Vec<_>, Vec<_>) = inputs.unzip();
 
     let output_t = types.expr_type(&entity.body);
     let output_definition = format!("output{} __output", size_spec(size_of_type(output_t)));
@@ -309,9 +320,10 @@ pub fn generate_entity<'a>(entity: &Entity, types: &TypeState) -> Code {
 
     code! {
         [0] &format!("module {} (", entity.name.1);
-                [2] &inputs.collect::<Vec<_>>();
+                [2] &inputs;
                 [2] &output_definition;
             [1] &");";
+            [1] &input_assignments;
             [1] &entity.body.inner.code(types);
             [1] &output_assignment;
         [0] &"endmodule"
@@ -322,6 +334,7 @@ pub fn generate_entity<'a>(entity: &Entity, types: &TypeState) -> Code {
 mod tests {
     use super::*;
     use crate::{assert_same_code, testutil::parse_typecheck_entity};
+    use colored::Colorize;
     use indoc::indoc;
 
     #[test]
@@ -335,11 +348,15 @@ mod tests {
         let expected = indoc!(
             r#"
         module name (
-                input[15:0] _m_a,
-                input[15:0] _m_b,
+                input[15:0] _i_a,
+                input[15:0] _i_b,
                 output[15:0] __output
             );
-            assign __output = _m_a;
+            wire[15:0] _m0_a;
+            assign _m0_a = _i_a;
+            wire[15:0] _m1_b;
+            assign _m1_b = _i_b;
+            assign __output = _m0_a;
         endmodule"#
         );
 
@@ -363,18 +380,24 @@ mod tests {
         let expected = indoc!(
             r#"
         module name (
-                input _m_c,
-                input[15:0] _m_a,
-                input[15:0] _m_b,
+                input _i_c,
+                input[15:0] _i_a,
+                input[15:0] _i_b,
                 output[15:0] __output
             );
+            wire _m0_c;
+            assign _m0_c = _i_c;
+            wire[15:0] _m1_a;
+            assign _m1_a = _i_a;
+            wire[15:0] _m2_b;
+            assign _m2_b = _i_b;
             reg[15:0] __expr__3;
             always @* begin
-                if (_m_c) begin
-                    __expr__3 = _m_a;
+                if (_m0_c) begin
+                    __expr__3 = _m1_a;
                 end
                 else begin
-                    __expr__3 = _m_b;
+                    __expr__3 = _m2_b;
                 end
             end
             assign __output = __expr__3;
@@ -423,12 +446,16 @@ mod tests {
         let expected = indoc!(
             r#"
         module name (
-                input[15:0] _m_a,
-                input[15:0] _m_b,
+                input[15:0] _i_a,
+                input[15:0] _i_b,
                 output[15:0] __output
             );
+            wire[15:0] _m0_a;
+            assign _m0_a = _i_a;
+            wire[15:0] _m1_b;
+            assign _m1_b = _i_b;
             wire[15:0] __expr__2;
-            assign __expr__2 = _m_a + _m_b;
+            assign __expr__2 = _m0_a + _m1_b;
             assign __output = __expr__2;
         endmodule"#
         );
@@ -450,12 +477,16 @@ mod tests {
         let expected = indoc!(
             r#"
         module name (
-                input[15:0] _m_a,
-                input[15:0] _m_b,
+                input[15:0] _i_a,
+                input[15:0] _i_b,
                 output[15:0] __output
             );
+            wire[15:0] _m0_a;
+            assign _m0_a = _i_a;
+            wire[15:0] _m1_b;
+            assign _m1_b = _i_b;
             wire[15:0] __expr__2;
-            assign __expr__2 = _m_a << _m_b;
+            assign __expr__2 = _m0_a << _m1_b;
             assign __output = __expr__2;
         endmodule"#
         );
@@ -477,12 +508,16 @@ mod tests {
         let expected = indoc!(
             r#"
         module name (
-                input[15:0] _m_a,
-                input[15:0] _m_b,
+                input[15:0] _i_a,
+                input[15:0] _i_b,
                 output[15:0] __output
             );
+            wire[15:0] _m0_a;
+            assign _m0_a = _i_a;
+            wire[15:0] _m1_b;
+            assign _m1_b = _i_b;
             wire[15:0] __expr__2;
-            assign __expr__2 = _m_a >> _m_b;
+            assign __expr__2 = _m0_a >> _m1_b;
             assign __output = __expr__2;
         endmodule"#
         );
@@ -504,12 +539,16 @@ mod tests {
         let expected = indoc!(
             r#"
         module name (
-                input[15:0] _m_a,
-                input[15:0] _m_b,
+                input[15:0] _i_a,
+                input[15:0] _i_b,
                 output __output
             );
+            wire[15:0] _m0_a;
+            assign _m0_a = _i_a;
+            wire[15:0] _m1_b;
+            assign _m1_b = _i_b;
             wire __expr__2;
-            assign __expr__2 = _m_a == _m_b;
+            assign __expr__2 = _m0_a == _m1_b;
             assign __output = __expr__2;
         endmodule"#
         );
@@ -531,12 +570,16 @@ mod tests {
         let expected = indoc!(
             r#"
         module name (
-                input _m_a,
-                input _m_b,
+                input _i_a,
+                input _i_b,
                 output __output
             );
+            wire _m0_a;
+            assign _m0_a = _i_a;
+            wire _m1_b;
+            assign _m1_b = _i_b;
             wire __expr__2;
-            assign __expr__2 = _m_a && _m_b;
+            assign __expr__2 = _m0_a && _m1_b;
             assign __output = __expr__2;
         endmodule"#
         );
@@ -558,12 +601,16 @@ mod tests {
         let expected = indoc!(
             r#"
         module name (
-                input _m_a,
-                input _m_b,
+                input _i_a,
+                input _i_b,
                 output __output
             );
+            wire _m0_a;
+            assign _m0_a = _i_a;
+            wire _m1_b;
+            assign _m1_b = _i_b;
             wire __expr__2;
-            assign __expr__2 = _m_a || _m_b;
+            assign __expr__2 = _m0_a || _m1_b;
             assign __output = __expr__2;
         endmodule"#
         );
@@ -585,12 +632,16 @@ mod tests {
         let expected = indoc!(
             r#"
         module name (
-                input[15:0] _m_a,
-                input[15:0] _m_b,
+                input[15:0] _i_a,
+                input[15:0] _i_b,
                 output __output
             );
+            wire[15:0] _m0_a;
+            assign _m0_a = _i_a;
+            wire[15:0] _m1_b;
+            assign _m1_b = _i_b;
             wire __expr__2;
-            assign __expr__2 = _m_a < _m_b;
+            assign __expr__2 = _m0_a < _m1_b;
             assign __output = __expr__2;
         endmodule"#
         );
@@ -613,15 +664,19 @@ mod tests {
         let expected = indoc!(
             r#"
         module name (
-                input _m_clk,
-                input[15:0] _m_a,
+                input _i_clk,
+                input[15:0] _i_a,
                 output[15:0] __output
             );
-            reg[15:0] _m_res;
-            always @(posedge _m_clk) begin
-                _m_res <= _m_a;
+            wire _m0_clk;
+            assign _m0_clk = _i_clk;
+            wire[15:0] _m1_a;
+            assign _m1_a = _i_a;
+            reg[15:0] _m2_res;
+            always @(posedge _m0_clk) begin
+                _m2_res <= _m1_a;
             end
-            assign __output = _m_res;
+            assign __output = _m2_res;
         endmodule"#
         );
 
@@ -643,23 +698,29 @@ mod tests {
         let expected = indoc!(
             r#"
         module name (
-                input _m_clk,
-                input _m_rst,
-                input[15:0] _m_a,
+                input _i_clk,
+                input _i_rst,
+                input[15:0] _i_a,
                 output[15:0] __output
             );
-            reg[15:0] _m_res;
+            wire _m0_clk;
+            assign _m0_clk = _i_clk;
+            wire _m1_rst;
+            assign _m1_rst = _i_rst;
+            wire[15:0] _m2_a;
+            assign _m2_a = _i_a;
+            reg[15:0] _m3_res;
             wire[15:0] __expr__2;
             assign __expr__2 = 0;
-            always @(posedge _m_clk, posedge _m_rst) begin
-                if (_m_rst) begin
-                    _m_res <= __expr__2;
+            always @(posedge _m0_clk, posedge _m1_rst) begin
+                if (_m1_rst) begin
+                    _m3_res <= __expr__2;
                 end
                 else begin
-                    _m_res <= _m_a;
+                    _m3_res <= _m2_a;
                 end
             end
-            assign __output = _m_res;
+            assign __output = _m3_res;
         endmodule"#
         );
 
@@ -681,13 +742,17 @@ mod tests {
         let expected = indoc!(
             r#"
         module name (
-                input _m_clk,
-                input[15:0] _m_a,
+                input _i_clk,
+                input[15:0] _i_a,
                 output[15:0] __output
             );
-            wire[15:0] _m_res;
-            assign _m_res = _m_a;
-            assign __output = _m_res;
+            wire _m0_clk;
+            assign _m0_clk = _i_clk;
+            wire[15:0] _m1_a;
+            assign _m1_a = _i_a;
+            wire[15:0] _m2_res;
+            assign _m2_res = _m1_a;
+            assign __output = _m2_res;
         endmodule"#
         );
 

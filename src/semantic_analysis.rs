@@ -1,6 +1,5 @@
 use thiserror::Error;
 
-use crate::lexer::TokenKind;
 use crate::location_info::{Loc, WithLocation};
 use crate::symbol_table::SymbolTable;
 use crate::{ast, hir::EntityHead};
@@ -9,6 +8,7 @@ use crate::{
     id_tracker::IdTracker,
     symbol_table::Thing,
 };
+use crate::{lexer::TokenKind, symbol_table::TypeSymbol};
 
 impl<T> Loc<T> {
     pub fn try_visit<V, U>(
@@ -47,29 +47,47 @@ pub fn visit_type_param(_param: &Loc<ast::TypeParam>, _symtab: &mut SymbolTable)
     todo!("Implement visiting type parameters")
 }
 
-pub fn visit_type_expression(_expr: &ast::TypeExpression) -> hir::TypeExpression {
-    todo!("Implement visiting type expressions")
-    // match expr {
-    //     ast::TypeExpression::Ident(name) => hir::TypeExpression::Ident(visit_path(name)),
-    //     ast::TypeExpression::Integer(val) => hir::TypeExpression::Integer(*val),
-    // }
+pub fn visit_type_expression(
+    expr: &ast::TypeExpression,
+    symtab: &mut SymbolTable,
+) -> Result<hir::TypeExpression> {
+    // todo!("Implement visiting type expressions")
+    match expr {
+        ast::TypeExpression::TypeSpec(spec) => {
+            let inner = visit_type_spec(spec, symtab)?;
+            // Look up the type. For now, we'll panic if we don't find a concrete type
+            Ok(hir::TypeExpression::TypeSpec(inner))
+        }
+        ast::TypeExpression::Integer(val) => Ok(hir::TypeExpression::Integer(*val)),
+    }
 }
 
-pub fn visit_type(t: &ast::Type, symtab: &mut SymbolTable) -> Result<hir::Type> {
+pub fn visit_type_spec(t: &ast::TypeSpec, symtab: &mut SymbolTable) -> Result<hir::TypeSpec> {
     match t {
-        ast::Type::Named(name) => {
-            let (id, _) = symtab.lookyp_type_symbol(name)?;
-            // Look up the underlying type
-            Ok(hir::Type::Concrete(id))
+        ast::TypeSpec::Named(name, params) => {
+            // NOTE: this weird scope is required because the borrow of t lasts
+            // until the end of the outer scope even if we clone here.
+            let t = {
+                let (_, t) = symtab.lookyp_type_symbol(name)?;
+                t.clone()
+            };
+
+            let base = match t {
+                TypeSymbol::Alias(t) => t.clone(),
+                _ => todo!("Implement support for generic type parameters"),
+            };
+
+            let params = params
+                .iter()
+                .map(|p| p.try_map_ref(|p| visit_type_expression(p, symtab)))
+                .collect::<Result<Vec<_>>>()?;
+
+            Ok(hir::TypeSpec::Concrete(base, params))
         }
-        ast::Type::Generic(name, param) => {
-            let (id, _) = symtab.lookyp_type_symbol(name)?;
-            Ok(hir::Type::Generic(
-                id.at_loc(name),
-                vec![param.map_ref(visit_type_expression)],
-            ))
-        }
-        ast::Type::UnitType => Ok(hir::Type::Unit),
+        ast::TypeSpec::Unit(w) => Ok(hir::TypeSpec::Concrete(
+            w.map(|_| crate::types::Type::Unit),
+            vec![],
+        )),
     }
 }
 
@@ -95,13 +113,17 @@ pub fn entity_head(
 
     let mut inputs = vec![];
     for (name, input_type) in &item.inputs {
-        let t = input_type.try_map_ref(|t| visit_type(t, symtab))?;
+        let t = input_type.try_map_ref(|t| visit_type_spec(t, symtab))?;
 
         let id = symtab.add_thing(name.clone().to_path().inner, Thing::Variable(name.clone()));
         inputs.push((id, t));
     }
 
-    let output_type = item.output_type.try_map_ref(|t| visit_type(t, symtab))?;
+    let output_type = if let Some(output_type) = &item.output_type {
+        Some(output_type.try_map_ref(|t| visit_type_spec(t, symtab))?)
+    } else {
+        None
+    };
 
     if !add_local_symbols {
         symtab.close_scope()
@@ -188,7 +210,7 @@ pub fn visit_statement(
     match s {
         ast::Statement::Binding(ident, t, expr) => {
             let hir_type = if let Some(t) = t {
-                Some(t.try_map_ref(|t| visit_type(t, symtab))?)
+                Some(t.try_map_ref(|t| visit_type_spec(t, symtab))?)
             } else {
                 None
             };
@@ -309,7 +331,7 @@ pub fn visit_register(
     let value = reg.value.try_visit(visit_expression, symtab, idtracker)?;
 
     let value_type = if let Some(value_type) = &reg.value_type {
-        Some(value_type.try_map_ref(|t| visit_type(t, symtab))?)
+        Some(value_type.try_map_ref(|t| visit_type_spec(t, symtab))?)
     } else {
         None
     };
@@ -342,12 +364,12 @@ mod entity_visiting {
     fn entity_visits_work() {
         let input = ast::Entity {
             name: ast::Identifier("test".to_string()).nowhere(),
-            inputs: vec![(ast_ident("a"), ast::Type::UnitType.nowhere())],
-            output_type: ast::Type::UnitType.nowhere(),
+            inputs: vec![(ast_ident("a"), ast::TypeSpec::Unit(().nowhere()).nowhere())],
+            output_type: None,
             body: ast::Expression::Block(Box::new(ast::Block {
                 statements: vec![ast::Statement::Binding(
                     ast_ident("var"),
-                    Some(ast::Type::UnitType.nowhere()),
+                    Some(ast::TypeSpec::Unit(().nowhere()).nowhere()),
                     ast::Expression::IntLiteral(0).nowhere(),
                 )
                 .nowhere()],
@@ -359,16 +381,16 @@ mod entity_visiting {
         .nowhere();
 
         let expected = hir::Entity {
-            name: name_id(0, "test"),
+            name: name_id(2, "test"),
             head: hir::EntityHead {
-                inputs: vec![((name_id(1, "a").inner, hir::Type::Unit.nowhere()))],
-                output_type: hir::Type::Unit.nowhere(),
+                inputs: vec![((name_id(0, "a").inner, hir::TypeSpec::unit().nowhere()))],
+                output_type: None,
                 type_params: vec![],
             },
             body: hir::ExprKind::Block(Box::new(hir::Block {
                 statements: vec![hir::Statement::Binding(
-                    name_id(2, "var"),
-                    Some(hir::Type::Unit.nowhere()),
+                    name_id(1, "var"),
+                    Some(hir::TypeSpec::unit().nowhere()),
                     hir::ExprKind::IntLiteral(0).idless().nowhere(),
                 )
                 .nowhere()],
@@ -470,14 +492,14 @@ mod statement_visiting {
 
         let input = ast::Statement::Binding(
             ast_ident("a"),
-            Some(ast::Type::UnitType.nowhere()),
+            Some(ast::TypeSpec::Unit(().nowhere()).nowhere()),
             ast::Expression::IntLiteral(0).nowhere(),
         )
         .nowhere();
 
         let expected = hir::Statement::Binding(
             name_id(0, "a"),
-            Some(hir::Type::Unit.nowhere()),
+            Some(hir::TypeSpec::unit().nowhere()),
             hir::ExprKind::IntLiteral(0).idless().nowhere(),
         )
         .nowhere();
@@ -694,7 +716,7 @@ mod register_visiting {
                 ast::Expression::IntLiteral(0).nowhere(),
             )),
             value: ast::Expression::IntLiteral(1).nowhere(),
-            value_type: Some(ast::Type::UnitType.nowhere()),
+            value_type: Some(ast::TypeSpec::Unit(().nowhere()).nowhere()),
         }
         .nowhere();
 
@@ -710,7 +732,7 @@ mod register_visiting {
                 hir::ExprKind::IntLiteral(0).idless().nowhere(),
             )),
             value: hir::ExprKind::IntLiteral(1).idless().nowhere(),
-            value_type: Some(hir::Type::Unit.nowhere()),
+            value_type: Some(hir::TypeSpec::unit().nowhere()),
         }
         .nowhere();
 
@@ -741,7 +763,7 @@ mod item_visiting {
         let input = ast::Item::Entity(
             ast::Entity {
                 name: ast_ident("test"),
-                output_type: ast::Type::UnitType.nowhere(),
+                output_type: None,
                 inputs: vec![],
                 body: ast::Expression::Block(Box::new(ast::Block {
                     statements: vec![],
@@ -757,7 +779,7 @@ mod item_visiting {
             hir::Entity {
                 name: name_id(0, "test"),
                 head: EntityHead {
-                    output_type: hir::Type::Unit.nowhere(),
+                    output_type: None,
                     inputs: vec![],
                     type_params: vec![],
                 },
@@ -795,7 +817,7 @@ mod module_visiting {
             members: vec![ast::Item::Entity(
                 ast::Entity {
                     name: ast_ident("test"),
-                    output_type: ast::Type::UnitType.nowhere(),
+                    output_type: None,
                     inputs: vec![],
                     body: ast::Expression::Block(Box::new(ast::Block {
                         statements: vec![],
@@ -813,7 +835,7 @@ mod module_visiting {
                 hir::Entity {
                     name: name_id(0, "test"),
                     head: EntityHead {
-                        output_type: hir::Type::Unit.nowhere(),
+                        output_type: None,
                         inputs: vec![],
                         type_params: vec![],
                     },

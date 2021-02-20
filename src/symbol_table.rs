@@ -70,6 +70,7 @@ pub enum TypeSymbol {
     Alias(Loc<Type>),
     Param(Loc<TypeParam>),
 }
+impl WithLocation for TypeSymbol {}
 
 /// A table of the symbols known to the program in the current scope. Names
 /// are mapped to IDs which are then mapped to the actual things
@@ -96,11 +97,11 @@ impl SymbolTable {
         self.symbols.pop();
     }
 
-    pub fn add_thing(&mut self, name: Path, item: Thing) -> NameID {
-        let id = self.id_tracker.next();
-        // TODO (performance): we might want to not make this a hash map since it will require
-        // a whole bunch of hashing
+    pub fn add_thing_with_id(&mut self, id: u64, name: Path, item: Thing) -> NameID {
         let name_id = NameID(id, name.clone());
+        if self.items.contains_key(&name_id) {
+            panic!("Duplicate nameID inserted, {}", id);
+        }
         self.items.insert(name_id.clone(), item);
 
         self.symbols
@@ -109,6 +110,11 @@ impl SymbolTable {
             .insert(name, name_id.clone());
 
         name_id
+    }
+
+    pub fn add_thing(&mut self, name: Path, item: Thing) -> NameID {
+        let id = self.id_tracker.next();
+        self.add_thing_with_id(id, name, item)
     }
 
     pub fn add_local_variable(&mut self, name: Loc<Identifier>) -> NameID {

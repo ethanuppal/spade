@@ -6,13 +6,16 @@ use std::collections::HashMap;
 use colored::*;
 use parse_tree_macros::trace_typechecker;
 
-use crate::hir::{ExprKind, Expression, NameID};
 use crate::{
     fixed_types::t_clock,
     fixed_types::{t_bool, t_int},
     hir::{Block, Entity, Register, Statement},
     location_info::Loc,
     types::{ConcreteType, KnownType},
+};
+use crate::{
+    hir::{self, expression::BinaryOperator, ExprKind, Expression, NameID},
+    types::Type,
 };
 
 pub mod equation;
@@ -39,31 +42,27 @@ impl TypeState {
         }
     }
 
-    pub fn type_var_from_hir(_hir_type: &Loc<crate::hir::Type>) -> TypeVar {
-        todo!("re-implement typ_var_from_hir")
-        // let (hir_type, loc) = hir_type.clone().split_loc();
-        // match hir_type {
-        //     hir::Type::Concrete(t) => TypeVar::Known(KnownType::Path(t), vec![], Some(loc)),
-        //     hir::Type::Generic(t, params) => {
-        //         let params = params
-        //             .iter()
-        //             .map(|expr| {
-        //                 let (expr, loc) = expr.clone().split_loc();
-        //                 match expr {
-        //                     TypeExpression::Integer(i) => {
-        //                         TypeVar::Known(KnownType::Integer(i), vec![], Some(loc))
-        //                     }
-        //                     TypeExpression::Ident(t) => {
-        //                         TypeVar::Known(KnownType::Path(t), vec![], Some(loc))
-        //                     }
-        //                 }
-        //             })
-        //             .collect();
+    pub fn hir_type_expr_to_var(e: &hir::TypeExpression) -> TypeVar {
+        match e {
+            hir::TypeExpression::Integer(i) => TypeVar::Known(KnownType::Integer(*i), vec![], None),
+            hir::TypeExpression::TypeSpec(spec) => Self::type_var_from_hir(spec),
+        }
+    }
 
-        //         TypeVar::Known(KnownType::Path(t.inner), params, Some(loc))
-        //     }
-        //     hir::Type::Unit => TypeVar::Known(KnownType::Unit, vec![], Some(loc)),
-        // }
+    pub fn type_var_from_hir(hir_type: &crate::hir::TypeSpec) -> TypeVar {
+        match hir_type {
+            hir::TypeSpec::Concrete(base, params) => {
+                let params = params
+                    .into_iter()
+                    .map(|e| Self::hir_type_expr_to_var(e))
+                    .collect();
+
+                TypeVar::Known(KnownType::Type(base.inner.clone()), params, None)
+            }
+            hir::TypeSpec::Generic(_) => {
+                todo!("Support generic parameters")
+            }
+        }
     }
 
     /// Returns the type of the expression with the specified id. Error if unknown
@@ -138,17 +137,29 @@ impl TypeState {
 
         self.visit_expression(&entity.body)?;
 
-        // Ensure that the output type matches what the user specified
-        self.unify_types(
-            &TypedExpression::Id(entity.body.inner.id),
-            &Self::type_var_from_hir(&entity.head.output_type),
-        )
-        .map_err(|(got, expected)| Error::EntityOutputTypeMissmatch {
-            expected,
-            got,
-            type_spec: entity.head.output_type.loc(),
-            output_expr: entity.body.loc(),
-        })?;
+        // Ensure that the output type matches what the user specified, and unit otherwise
+        if let Some(output_type) = &entity.head.output_type {
+            self.unify_types(
+                &TypedExpression::Id(entity.body.inner.id),
+                &Self::type_var_from_hir(&output_type),
+            )
+            .map_err(|(got, expected)| Error::EntityOutputTypeMissmatch {
+                expected,
+                got,
+                type_spec: output_type.loc(),
+                output_expr: entity.body.loc(),
+            })?;
+        } else {
+            self.unify_types(
+                &TypedExpression::Id(entity.body.inner.id),
+                &TypeVar::Known(KnownType::Type(Type::Unit), vec![], None),
+            )
+            .map_err(|(got, expected)| Error::UnspecedEntityOutputTypeMissmatch {
+                expected,
+                got,
+                output_expr: entity.body.loc(),
+            })?;
+        }
         Ok(())
     }
 
@@ -259,8 +270,36 @@ impl TypeState {
                         loc: expression.loc(),
                     })?;
             }
-            ExprKind::BinaryOperator(_, _, _) => {
-                todo!("typecheck binary operators")
+            ExprKind::BinaryOperator(lhs, op, rhs) => {
+                self.visit_expression(&lhs)?;
+                self.visit_expression(&rhs)?;
+                match *op {
+                    BinaryOperator::Add
+                    | BinaryOperator::Sub
+                    | BinaryOperator::LeftShift
+                    | BinaryOperator::RightShift => {
+                        let int_type = self.new_generic_int();
+                        // TODO: Make generic over types that can be added
+                        self.unify_expression_generic_error(&lhs, &int_type)?;
+                        self.unify_expression_generic_error(&lhs, &rhs.inner)?;
+                        self.unify_expression_generic_error(expression, &rhs.inner)?
+                    }
+                    BinaryOperator::Eq | BinaryOperator::Gt | BinaryOperator::Lt => {
+                        let int_type = self.new_generic_int();
+                        // TODO: Make generic over types that can be added
+                        self.unify_expression_generic_error(&lhs, &int_type)?;
+                        self.unify_expression_generic_error(&lhs, &rhs.inner)?;
+                        self.unify_expression_generic_error(expression, &t_bool())?
+                    }
+                    BinaryOperator::LogicalAnd | BinaryOperator::LogicalOr => {
+                        // TODO: Make generic over types that can be ored
+                        self.unify_expression_generic_error(&lhs, &t_bool())?;
+                        self.unify_expression_generic_error(&lhs, &rhs.inner)?;
+
+                        self.unify_expression_generic_error(expression, &t_bool())?
+                    }
+                    other => panic!("unrecognised intrinsic {:?}", other),
+                }
             }
         }
         Ok(())

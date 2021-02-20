@@ -1,3 +1,25 @@
-use crate::symbol_table::SymbolTable;
+use crate::{
+    ast::Path,
+    location_info::WithLocation,
+    symbol_table::{SymbolTable, Thing, TypeSymbol},
+    types::Type,
+};
 
-fn populate_symtab(symtab: &mut SymbolTable) {}
+/// Add built in symbols like types to the symtab. The symbols are added with very high NameIDs to
+/// not interfere with tests with hardcoded NameIDs
+pub fn populate_symtab(symtab: &mut SymbolTable) {
+    // Add primitive data types
+    let mut id = std::u64::MAX;
+
+    let mut add_type = |path: &str, t: Type| {
+        symtab.add_thing_with_id(
+            id,
+            Path::from_strs(&[path]),
+            Thing::Type(TypeSymbol::Alias(t.nowhere())),
+        );
+        id -= 1;
+    };
+    add_type("int", Type::Int);
+    add_type("clk", Type::Clock);
+    add_type("bool", Type::Bool);
+}

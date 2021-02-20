@@ -5,6 +5,7 @@ pub use expression::{ExprKind, Expression};
 use crate::{
     ast,
     location_info::{Loc, WithLocation},
+    types,
 };
 
 /// Anything named will get assigned a unique name ID in order to avoid caring
@@ -56,7 +57,7 @@ impl WithLocation for Block {}
 
 #[derive(PartialEq, Debug, Clone)]
 pub enum Statement {
-    Binding(Loc<NameID>, Option<Loc<Type>>, Loc<Expression>),
+    Binding(Loc<NameID>, Option<Loc<TypeSpec>>, Loc<Expression>),
     Register(Loc<Register>),
 }
 impl WithLocation for Statement {}
@@ -67,7 +68,7 @@ pub struct Register {
     pub clock: Loc<Expression>,
     pub reset: Option<(Loc<Expression>, Loc<Expression>)>,
     pub value: Loc<Expression>,
-    pub value_type: Option<Loc<Type>>,
+    pub value_type: Option<Loc<TypeSpec>>,
 }
 impl WithLocation for Register {}
 
@@ -80,18 +81,31 @@ impl WithLocation for TypeParam {}
 
 #[derive(PartialEq, Debug, Clone)]
 pub enum TypeExpression {
+    /// An integer value
     Integer(u128),
-    Ident(NameID),
+    /// Another type
+    TypeSpec(TypeSpec),
 }
 impl WithLocation for TypeExpression {}
 
 #[derive(PartialEq, Debug, Clone)]
-pub enum Type {
-    Concrete(NameID),
-    Generic(Loc<NameID>, Vec<Loc<TypeExpression>>),
-    Unit,
+/// The type is not unit with 0 or more type parameters. The amount of type parameters is
+/// checked by the type checker.
+pub enum TypeSpec {
+    /// The type is a fixed known type with 0 or more type parameters
+    Concrete(Loc<types::Type>, Vec<Loc<TypeExpression>>),
+    /// The type is a generic type parameter visible in the current scope
+    Generic(NameID),
 }
-impl WithLocation for Type {}
+impl WithLocation for TypeSpec {}
+
+// Quick functions for creating types wihtout typing so much
+#[cfg(test)]
+impl TypeSpec {
+    pub fn unit() -> Self {
+        TypeSpec::Concrete(types::Type::Unit.nowhere(), vec![])
+    }
+}
 
 #[derive(PartialEq, Debug, Clone)]
 pub struct Entity {
@@ -103,8 +117,8 @@ impl WithLocation for Entity {}
 
 #[derive(PartialEq, Debug, Clone)]
 pub struct EntityHead {
-    pub inputs: Vec<(NameID, Loc<Type>)>,
-    pub output_type: Loc<Type>,
+    pub inputs: Vec<(NameID, Loc<TypeSpec>)>,
+    pub output_type: Option<Loc<TypeSpec>>,
     pub type_params: Vec<ast::Identifier>,
 }
 impl WithLocation for EntityHead {}

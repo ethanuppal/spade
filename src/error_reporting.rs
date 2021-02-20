@@ -229,6 +229,18 @@ pub fn report_typeinference_error(filename: &Path, file_content: &str, err: Infe
                 format!("Expected: {}", expected),
                 format!("     Got: {}", got),
             ]),
+        InferenceError::UnspecedEntityOutputTypeMissmatch {
+            expected,
+            got,
+            output_expr,
+        } => Diagnostic::error()
+            .with_message(format!("Output type missmatch"))
+            .with_labels(vec![Label::primary(file_id, output_expr.loc().span)
+                .with_message(format!("Found type {}", got))])
+            .with_notes(vec![
+                format!("Expected: {}", expected),
+                format!("     Got: {}", got),
+            ]),
     };
 
     let writer = StandardStream::stderr(ColorChoice::Always);

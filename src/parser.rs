@@ -6,7 +6,7 @@ use parse_tree_macros::trace_parser;
 
 use crate::ast::{
     Block, Entity, Expression, FunctionDecl, Identifier, Item, ModuleBody, Path, Register,
-    Statement, TraitDef, Type, TypeExpression, TypeParam,
+    Statement, TraitDef, TypeExpression, TypeParam, TypeSpec,
 };
 use crate::lexer::TokenKind;
 use crate::location_info::{lspan, Loc, WithLocation};
@@ -247,17 +247,19 @@ impl<'a> Parser<'a> {
         if let Some(val) = self.int_literal()? {
             Ok(val.map(TypeExpression::Integer))
         } else {
-            Ok(self.path()?.map(TypeExpression::Ident))
+            let inner = self.type_spec()?;
+
+            Ok(TypeExpression::TypeSpec(Box::new(inner.clone())).at_loc(&inner))
         }
     }
 
     // Types
     #[trace_parser]
-    fn parse_type(&mut self) -> Result<Loc<Type>> {
+    fn type_spec(&mut self) -> Result<Loc<TypeSpec>> {
         let (path, span) = self.path()?.separate();
 
-        // Check if it is a sized type
-        if self.peek_kind(&TokenKind::Lt)? {
+        // Check if this type has generic params
+        let (params, generic_span) = if self.peek_kind(&TokenKind::Lt)? {
             let (type_expr, generic_span) = self.surrounded(
                 &TokenKind::Lt,
                 |s| s.type_expression().map(Some),
@@ -267,11 +269,12 @@ impl<'a> Parser<'a> {
             // Note: safe unwrap, if we got here, the expression must have matched
             // and so the size is present, otherwise we'd return early above
             let type_expr = type_expr.unwrap();
-
-            Ok(Type::Generic(path, type_expr).at(span.merge(generic_span.span)))
+            (vec![type_expr], generic_span.span)
         } else {
-            Ok(Type::Named(path).at(span))
-        }
+            (vec![], span)
+        };
+
+        Ok(TypeSpec::Named(path, params).at(span.merge(generic_span)))
     }
 
     /// A name with an associated type, as used in argument definitions as well
@@ -280,10 +283,10 @@ impl<'a> Parser<'a> {
     /// name: Type
     // TODO: Use this for let bindings
     #[trace_parser]
-    fn name_and_type(&mut self) -> Result<(Loc<Identifier>, Loc<Type>)> {
+    fn name_and_type(&mut self) -> Result<(Loc<Identifier>, Loc<TypeSpec>)> {
         let name = self.identifier()?;
         self.eat(&TokenKind::Colon)?;
-        let t = self.parse_type()?;
+        let t = self.type_spec()?;
         Ok((name, t))
     }
 
@@ -295,7 +298,7 @@ impl<'a> Parser<'a> {
             let (ident, start_span) = self.identifier()?.separate();
 
             let t = if self.peek_and_eat_kind(&TokenKind::Colon)?.is_some() {
-                Some(self.parse_type()?)
+                Some(self.type_spec()?)
             } else {
                 None
             };
@@ -339,7 +342,7 @@ impl<'a> Parser<'a> {
 
             // Optional type
             let value_type = if self.peek_and_eat_kind(&TokenKind::Colon)?.is_some() {
-                Some(self.parse_type()?)
+                Some(self.type_spec()?)
             } else {
                 None
             };
@@ -431,7 +434,7 @@ impl<'a> Parser<'a> {
 
         // Return type
         let output_type = if self.peek_and_eat_kind(&TokenKind::SlimArrow)?.is_some() {
-            Some(self.parse_type()?)
+            Some(self.type_spec()?)
         } else {
             None
         };
@@ -459,7 +462,7 @@ impl<'a> Parser<'a> {
             Entity {
                 name,
                 inputs,
-                output_type: output_type.unwrap_or(Type::UnitType.nowhere()),
+                output_type,
                 body: block.map(|inner| Expression::Block(Box::new(inner))),
                 type_params,
             }
@@ -533,9 +536,9 @@ impl<'a> Parser<'a> {
 
         // Return type
         let return_type = if self.peek_and_eat_kind(&TokenKind::SlimArrow)?.is_some() {
-            self.parse_type()?
+            Some(self.type_spec()?)
         } else {
-            Type::UnitType.nowhere()
+            None
         };
 
         let end_token = self.eat(&TokenKind::Semi)?;
@@ -1155,7 +1158,7 @@ mod tests {
     fn bindings_with_types_work() {
         let expected = Statement::Binding(
             ast_ident("test"),
-            Some(Type::Named(ast_path("bool")).nowhere()),
+            Some(TypeSpec::Named(ast_path("bool"), vec![]).nowhere()),
             Expression::IntLiteral(123).nowhere(),
         )
         .nowhere();
@@ -1168,7 +1171,7 @@ mod tests {
         let expected = Entity {
             name: Identifier("no_inputs".to_string()).nowhere(),
             inputs: vec![],
-            output_type: Type::UnitType.nowhere(),
+            output_type: None,
             body: Expression::Block(Box::new(Block {
                 statements: vec![
                     Statement::Binding(
@@ -1202,14 +1205,14 @@ mod tests {
             inputs: vec![
                 (
                     Identifier("clk".to_string()).nowhere(),
-                    Type::Named(ast_path("bool")).nowhere(),
+                    TypeSpec::Named(ast_path("bool"), vec![]).nowhere(),
                 ),
                 (
                     Identifier("rst".to_string()).nowhere(),
-                    Type::Named(ast_path("bool")).nowhere(),
+                    TypeSpec::Named(ast_path("bool"), vec![]).nowhere(),
                 ),
             ],
-            output_type: Type::Named(ast_path("bool")).nowhere(),
+            output_type: Some(TypeSpec::Named(ast_path("bool"), vec![]).nowhere()),
             body: Expression::Block(Box::new(Block {
                 statements: vec![],
                 result: Expression::Identifier(ast_path("clk")).nowhere(),
@@ -1228,7 +1231,7 @@ mod tests {
         let expected = Entity {
             name: ast_ident("with_generics"),
             inputs: vec![],
-            output_type: Type::UnitType.nowhere(),
+            output_type: None,
             body: Expression::Block(Box::new(Block {
                 statements: vec![],
                 result: Expression::Identifier(ast_path("clk")).nowhere(),
@@ -1298,7 +1301,7 @@ mod tests {
                     Expression::IntLiteral(0).nowhere(),
                 )),
                 value: Expression::IntLiteral(1).nowhere(),
-                value_type: Some(Type::Named(ast_path("Type")).nowhere()),
+                value_type: Some(TypeSpec::Named(ast_path("Type"), vec![]).nowhere()),
             }
             .nowhere(),
         )
@@ -1309,9 +1312,12 @@ mod tests {
 
     #[test]
     fn size_types_work() {
-        let expected =
-            Type::Generic(ast_path("uint"), TypeExpression::Integer(10).nowhere()).nowhere();
-        check_parse!("uint<10>", parse_type, Ok(expected));
+        let expected = TypeSpec::Named(
+            ast_path("uint"),
+            vec![TypeExpression::Integer(10).nowhere()],
+        )
+        .nowhere();
+        check_parse!("uint<10>", type_spec, Ok(expected));
     }
 
     #[test]
@@ -1321,7 +1327,7 @@ mod tests {
         let e1 = Entity {
             name: Identifier("e1".to_string()).nowhere(),
             inputs: vec![],
-            output_type: Type::UnitType.nowhere(),
+            output_type: None,
             body: Expression::Block(Box::new(Block {
                 statements: vec![],
                 result: Expression::IntLiteral(0).nowhere(),
@@ -1334,7 +1340,7 @@ mod tests {
         let e2 = Entity {
             name: Identifier("e2".to_string()).nowhere(),
             inputs: vec![],
-            output_type: Type::UnitType.nowhere(),
+            output_type: None,
             body: Expression::Block(Box::new(Block {
                 statements: vec![],
                 result: Expression::IntLiteral(1).nowhere(),
@@ -1358,8 +1364,11 @@ mod tests {
         let expected = FunctionDecl {
             name: ast_ident("some_fn"),
             self_arg: Some(().nowhere()),
-            inputs: vec![(ast_ident("a"), Type::Named(ast_path("bit")).nowhere())],
-            return_type: Type::Named(ast_path("bit")).nowhere(),
+            inputs: vec![(
+                ast_ident("a"),
+                TypeSpec::Named(ast_path("bit"), vec![]).nowhere(),
+            )],
+            return_type: Some(TypeSpec::Named(ast_path("bit"), vec![]).nowhere()),
             type_params: vec![],
         }
         .nowhere();
@@ -1375,7 +1384,7 @@ mod tests {
             name: ast_ident("some_fn"),
             self_arg: Some(().nowhere()),
             inputs: vec![],
-            return_type: Type::Named(ast_path("bit")).nowhere(),
+            return_type: Some(TypeSpec::Named(ast_path("bit"), vec![]).nowhere()),
             type_params: vec![],
         }
         .nowhere();
@@ -1391,7 +1400,7 @@ mod tests {
             name: ast_ident("some_fn"),
             self_arg: Some(().nowhere()),
             inputs: vec![],
-            return_type: Type::UnitType.nowhere(),
+            return_type: None,
             type_params: vec![],
         }
         .nowhere();
@@ -1407,7 +1416,7 @@ mod tests {
             name: ast_ident("some_fn"),
             self_arg: Some(().nowhere()),
             inputs: vec![],
-            return_type: Type::UnitType.nowhere(),
+            return_type: None,
             type_params: vec![TypeParam::TypeName(ast_ident("X").inner).nowhere()],
         }
         .nowhere();
@@ -1427,8 +1436,11 @@ mod tests {
         let fn1 = FunctionDecl {
             name: ast_ident("some_fn"),
             self_arg: Some(().nowhere()),
-            inputs: vec![(ast_ident("a"), Type::Named(ast_path("bit")).nowhere())],
-            return_type: Type::Named(ast_path("bit")).nowhere(),
+            inputs: vec![(
+                ast_ident("a"),
+                TypeSpec::Named(ast_path("bit"), vec![]).nowhere(),
+            )],
+            return_type: Some(TypeSpec::Named(ast_path("bit"), vec![]).nowhere()),
             type_params: vec![],
         }
         .nowhere();
@@ -1436,7 +1448,7 @@ mod tests {
             name: ast_ident("another_fn"),
             self_arg: Some(().nowhere()),
             inputs: vec![],
-            return_type: Type::Named(ast_path("bit")).nowhere(),
+            return_type: Some(TypeSpec::Named(ast_path("bit"), vec![]).nowhere()),
             type_params: vec![],
         }
         .nowhere();

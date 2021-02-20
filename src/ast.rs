@@ -29,9 +29,7 @@ impl Path {
     pub fn as_strings(&self) -> Vec<String> {
         self.0.iter().map(|id| id.inner.0.clone()).collect()
     }
-    /// Generate a path from a list of strings. Because Loc is required, this is
-    /// only allowed in tests where .nowhere is used
-    #[cfg(test)]
+    /// Generate a path from a list of strings
     pub fn from_strs(elems: &[&str]) -> Self {
         Path(
             elems
@@ -50,17 +48,16 @@ impl std::fmt::Display for Path {
 
 #[derive(PartialEq, Debug, Clone)]
 pub enum TypeExpression {
-    Ident(Path),
+    TypeSpec(Box<Loc<TypeSpec>>),
     Integer(u128),
 }
 impl WithLocation for TypeExpression {}
 #[derive(PartialEq, Debug, Clone)]
-pub enum Type {
-    Named(Loc<Path>),
-    Generic(Loc<Path>, Loc<TypeExpression>),
-    UnitType,
+pub enum TypeSpec {
+    Named(Loc<Path>, Vec<Loc<TypeExpression>>),
+    Unit(Loc<()>),
 }
-impl WithLocation for Type {}
+impl WithLocation for TypeSpec {}
 
 #[derive(PartialEq, Debug, Clone)]
 pub enum Expression {
@@ -86,7 +83,7 @@ impl WithLocation for Block {}
 
 #[derive(PartialEq, Debug, Clone)]
 pub enum Statement {
-    Binding(Loc<Identifier>, Option<Loc<Type>>, Loc<Expression>),
+    Binding(Loc<Identifier>, Option<Loc<TypeSpec>>, Loc<Expression>),
     Register(Loc<Register>),
 }
 impl WithLocation for Statement {}
@@ -102,8 +99,8 @@ impl WithLocation for TypeParam {}
 #[derive(PartialEq, Debug, Clone)]
 pub struct Entity {
     pub name: Loc<Identifier>,
-    pub inputs: Vec<(Loc<Identifier>, Loc<Type>)>,
-    pub output_type: Loc<Type>,
+    pub inputs: Vec<(Loc<Identifier>, Loc<TypeSpec>)>,
+    pub output_type: Option<Loc<TypeSpec>>,
     /// The body is an expression for ID assignment purposes, but semantic analysis
     /// ensures that it is always a block.
     pub body: Loc<Expression>,
@@ -117,7 +114,7 @@ pub struct Register {
     pub clock: Loc<Expression>,
     pub reset: Option<(Loc<Expression>, Loc<Expression>)>,
     pub value: Loc<Expression>,
-    pub value_type: Option<Loc<Type>>,
+    pub value_type: Option<Loc<TypeSpec>>,
 }
 impl WithLocation for Register {}
 
@@ -126,8 +123,8 @@ impl WithLocation for Register {}
 pub struct FunctionDecl {
     pub name: Loc<Identifier>,
     pub self_arg: Option<Loc<()>>,
-    pub inputs: Vec<(Loc<Identifier>, Loc<Type>)>,
-    pub return_type: Loc<Type>,
+    pub inputs: Vec<(Loc<Identifier>, Loc<TypeSpec>)>,
+    pub return_type: Option<Loc<TypeSpec>>,
     pub type_params: Vec<Loc<TypeParam>>,
 }
 impl WithLocation for FunctionDecl {}

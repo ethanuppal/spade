@@ -45,6 +45,15 @@ impl HasLines for Code {
         self.lines.clone()
     }
 }
+impl HasLines for Vec<Code> {
+    fn get_lines(&self) -> Vec<String> {
+        let mut result = Code::new();
+        for code in self {
+            result.join(code)
+        }
+        result.get_lines()
+    }
+}
 
 pub struct Code {
     lines: Vec<String>,

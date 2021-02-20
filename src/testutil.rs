@@ -32,6 +32,7 @@ pub fn parse_typecheck_entity<'a>(input: &str) -> ProcessedEntity {
     };
 
     let mut symtab = symbol_table::SymbolTable::new();
+    crate::builtins::populate_symtab(&mut symtab);
     let mut idtracker = IdTracker::new();
     let hir = match visit_entity(&entity_ast, &mut symtab, &mut idtracker) {
         Ok(v) => v,
@@ -83,11 +84,18 @@ macro_rules! assert_matches {
 macro_rules! assert_same_code {
     ($got:expr, $expected:expr) => {
         if $got != $expected {
-            println!("got:\n{}", $got);
-            println!("==============================================");
-            println!("expected:\n{}", $expected);
-            println!("==============================================");
+            println!("{}:\n{}", "got".red(), $got);
+            println!("{}", "==============================================".red());
+            println!("{}:\n{}", "expected".green(), $expected);
+            println!(
+                "{}",
+                "==============================================".green()
+            );
             println!("{}", prettydiff::diff_chars($got, $expected));
+            println!(
+                "{}",
+                "==============================================".yellow()
+            );
             panic!("Code missmatch")
         }
     };

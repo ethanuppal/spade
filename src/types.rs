@@ -7,6 +7,8 @@ pub enum Type {
     Unit,
 }
 
+impl crate::location_info::WithLocation for Type {}
+
 impl std::fmt::Display for Type {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
