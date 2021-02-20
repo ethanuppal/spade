@@ -1,27 +1,27 @@
 /// Base type without generic parameters
 #[derive(Clone, Debug, PartialEq)]
-pub enum Type {
+pub enum BaseType {
     Int,
     Bool,
     Clock,
     Unit,
 }
 
-impl crate::location_info::WithLocation for Type {}
+impl crate::location_info::WithLocation for BaseType {}
 
-impl std::fmt::Display for Type {
+impl std::fmt::Display for BaseType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Type::Int => {
+            BaseType::Int => {
                 write!(f, "int")
             }
-            Type::Bool => {
+            BaseType::Bool => {
                 write!(f, "bool")
             }
-            Type::Clock => {
+            BaseType::Clock => {
                 write!(f, "Clock")
             }
-            Type::Unit => {
+            BaseType::Unit => {
                 write!(f, "()")
             }
         }
@@ -29,33 +29,50 @@ impl std::fmt::Display for Type {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct ConcreteType {
-    pub base: KnownType,
-    pub params: Vec<ConcreteType>,
+pub enum ConcreteType {
+    Tuple(Vec<ConcreteType>),
+    Single {
+        base: KnownType,
+        params: Vec<ConcreteType>,
+    },
 }
-
 impl std::fmt::Display for ConcreteType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let params_str = if self.params.is_empty() {
-            format!("")
-        } else {
-            format!(
-                "{}",
-                self.params
-                    .iter()
-                    .map(|p| format!("{}", p))
-                    .collect::<Vec<_>>()
-                    .join(", ")
-            )
-        };
+        match self {
+            ConcreteType::Tuple(inner) => {
+                write!(
+                    f,
+                    "({})",
+                    inner
+                        .iter()
+                        .map(|p| format!("{}", p))
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                )
+            }
+            ConcreteType::Single { base, params } => {
+                let params_str = if params.is_empty() {
+                    format!("")
+                } else {
+                    format!(
+                        "{}",
+                        params
+                            .iter()
+                            .map(|p| format!("{}", p))
+                            .collect::<Vec<_>>()
+                            .join(", ")
+                    )
+                };
 
-        write!(f, "{}{}", self.base, params_str)
+                write!(f, "{}{}", base, params_str)
+            }
+        }
     }
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum KnownType {
-    Type(Type),
+    Type(BaseType),
     Integer(u128),
 }
 

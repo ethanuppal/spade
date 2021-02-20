@@ -47,6 +47,10 @@ pub fn parse_typecheck_entity<'a>(input: &str) -> ProcessedEntity {
     match type_state.visit_entity(&hir) {
         Ok(()) => {}
         Err(e) => {
+            println!(
+                "Type check trace:\n{}",
+                typeinference::format_trace_stack(&type_state.trace_stack)
+            );
             error_reporting::report_typeinference_error(&PathBuf::from(""), &input, e);
             panic!("Type error")
         }

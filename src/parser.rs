@@ -50,6 +50,9 @@ pub enum Error {
         got: Token,
         loc: Loc<()>,
     },
+
+    #[error("Missing tuple index")]
+    MissingTupleIndex { hash_loc: Loc<()> },
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
@@ -130,7 +133,20 @@ impl<'a> Parser<'a> {
     // Expression parsing
     #[trace_parser]
     fn expression(&mut self) -> Result<Loc<Expression>> {
-        self.logical_or_expression()
+        let expr = self.logical_or_expression()?;
+
+        if let Some(hash) = self.peek_and_eat_kind(&TokenKind::Hash)? {
+            if let Some(index) = self.int_literal()? {
+                let span = expr.span.merge(lspan(hash.span));
+                Ok(Expression::TupleIndex(Box::new(expr), index).at(span))
+            } else {
+                Err(Error::MissingTupleIndex {
+                    hash_loc: Loc::new((), lspan(hash.span)),
+                })
+            }
+        } else {
+            Ok(expr)
+        }
     }
 
     operator_expr!(
@@ -167,9 +183,22 @@ impl<'a> Parser<'a> {
     #[trace_parser]
     fn base_expression(&mut self) -> Result<Loc<Expression>> {
         if self.peek_and_eat_kind(&TokenKind::OpenParen)?.is_some() {
-            let inner = self.expression()?;
+            let mut inner = self.comma_separated(Self::expression, &TokenKind::CloseParen)?;
+            let result = if inner.is_empty() {
+                todo!("Implement unit literals")
+            } else if inner.len() == 1 {
+                // NOTE: safe unwrap, we know the size of the array
+                Ok(inner.pop().unwrap())
+            } else {
+                let span = inner
+                    .first()
+                    .unwrap()
+                    .span
+                    .merge(inner.last().unwrap().span);
+                Ok(Expression::TupleLiteral(inner).at(span))
+            };
             self.eat(&TokenKind::CloseParen)?;
-            Ok(inner)
+            result
         } else if let Some(tok) = self.peek_and_eat_kind(&TokenKind::True)? {
             Ok(Expression::BoolLiteral(true).at(lspan(tok.span)))
         } else if let Some(tok) = self.peek_and_eat_kind(&TokenKind::False)? {
@@ -1478,5 +1507,31 @@ mod tests {
         let expected = TypeParam::Integer(ast_ident("X")).nowhere();
 
         check_parse!(code, type_param, Ok(expected));
+    }
+
+    #[test]
+    fn tuple_literals_parse() {
+        let code = "(1, true)";
+
+        let expected = Expression::TupleLiteral(vec![
+            Expression::IntLiteral(1).nowhere(),
+            Expression::BoolLiteral(true).nowhere(),
+        ])
+        .nowhere();
+
+        check_parse!(code, expression, Ok(expected));
+    }
+
+    #[test]
+    fn tuple_indexing_parsese() {
+        let code = "a#0";
+
+        let expected = Expression::TupleIndex(
+            Box::new(Expression::Identifier(ast_path("a")).nowhere()),
+            Loc::new(0, ().nowhere().span),
+        )
+        .nowhere();
+
+        check_parse!(code, expression, Ok(expected));
     }
 }

@@ -4,7 +4,7 @@ use crate::{
     hir::{EntityHead, NameID, TypeParam},
     id_tracker::IdTracker,
     location_info::WithLocation,
-    types::Type,
+    types::BaseType,
 };
 use std::collections::HashMap;
 use thiserror::Error;
@@ -23,8 +23,8 @@ pub enum Error {
 pub struct FunctionDecl {
     pub name: Loc<Identifier>,
     pub self_arg: Option<Loc<()>>,
-    pub inputs: Vec<(Loc<Identifier>, Loc<Type>)>,
-    pub output_type: Loc<Type>,
+    pub inputs: Vec<(Loc<Identifier>, Loc<BaseType>)>,
+    pub output_type: Loc<BaseType>,
 }
 impl WithLocation for FunctionDecl {}
 
@@ -67,7 +67,7 @@ impl Thing {
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum TypeSymbol {
-    Alias(Loc<Type>),
+    Alias(Loc<BaseType>),
     Param(Loc<TypeParam>),
 }
 impl WithLocation for TypeSymbol {}

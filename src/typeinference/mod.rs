@@ -15,7 +15,7 @@ use crate::{
 };
 use crate::{
     hir::{self, expression::BinaryOperator, ExprKind, Expression, NameID},
-    types::Type,
+    types::BaseType,
 };
 
 pub mod equation;
@@ -59,6 +59,10 @@ impl TypeState {
 
                 TypeVar::Known(KnownType::Type(base.inner.clone()), params, None)
             }
+            hir::TypeSpec::Tuple(inner) => {
+                let inner = inner.iter().map(|t| Self::type_var_from_hir(t)).collect();
+                TypeVar::Tuple(inner)
+            }
             hir::TypeSpec::Generic(_) => {
                 todo!("Support generic parameters")
             }
@@ -85,10 +89,17 @@ impl TypeState {
                     .map(Self::ungenerify_type)
                     .collect::<Result<Vec<_>>>()?;
 
-                Ok(ConcreteType {
+                Ok(ConcreteType::Single {
                     base: t.clone(),
                     params,
                 })
+            }
+            TypeVar::Tuple(inner) => {
+                let inner = inner
+                    .iter()
+                    .map(Self::ungenerify_type)
+                    .collect::<Result<Vec<_>>>()?;
+                Ok(ConcreteType::Tuple(inner))
             }
             TypeVar::Generic(_) => Err(Error::GenericTypeInstanciation),
         }
@@ -152,7 +163,7 @@ impl TypeState {
         } else {
             self.unify_types(
                 &TypedExpression::Id(entity.body.inner.id),
-                &TypeVar::Known(KnownType::Type(Type::Unit), vec![], None),
+                &TypeVar::Known(KnownType::Type(BaseType::Unit), vec![], None),
             )
             .map_err(|(got, expected)| Error::UnspecedEntityOutputTypeMissmatch {
                 expected,
@@ -190,47 +201,48 @@ impl TypeState {
             ExprKind::FnCall(_name, _params) => {
                 // TODO: Propper error handling
                 todo!("Type check function calls")
-                // if let ["intrinsics", operator] = name
-                //     .inner
-                //     .maybe_slices()
-                //     .expect("Anonymous paths are unsupported as functions")
-                //     .as_slice()
-                // {
-                //     let (lhs, rhs) = if let [lhs, rhs] = params.as_slice() {
-                //         (lhs, rhs)
-                //     } else {
-                //         panic!("intrinsics::{} called with more than 2 arguments", operator)
-                //     };
+            }
+            ExprKind::TupleLiteral(inner) => {
+                let mut inner_types = vec![];
+                for expr in inner {
+                    self.visit_expression(expr)?;
+                    // NOTE: safe unwrap, we know this expr has a type because we just visited
+                    let t = self.type_of(&TypedExpression::Id(expr.id)).unwrap();
 
-                //     self.visit_expression(&lhs)?;
-                //     self.visit_expression(&rhs)?;
-                //     match *operator {
-                //         "add" | "sub" | "left_shift" | "right_shift" => {
-                //             let int_type = self.new_generic_int();
-                //             // TODO: Make generic over types that can be added
-                //             self.unify_expression_generic_error(&lhs, &int_type)?;
-                //             self.unify_expression_generic_error(&lhs, &rhs.inner)?;
-                //             self.unify_expression_generic_error(expression, &rhs.inner)?
-                //         }
-                //         "eq" | "gt" | "lt" => {
-                //             let int_type = self.new_generic_int();
-                //             // TODO: Make generic over types that can be added
-                //             self.unify_expression_generic_error(&lhs, &int_type)?;
-                //             self.unify_expression_generic_error(&lhs, &rhs.inner)?;
-                //             self.unify_expression_generic_error(expression, &t_bool())?
-                //         }
-                //         "logical_or" | "logical_and" => {
-                //             // TODO: Make generic over types that can be ored
-                //             self.unify_expression_generic_error(&lhs, &t_bool())?;
-                //             self.unify_expression_generic_error(&lhs, &rhs.inner)?;
+                    inner_types.push(t);
+                }
 
-                //             self.unify_expression_generic_error(expression, &t_bool())?
-                //         }
-                //         other => panic!("unrecognised intrinsic {:?}", other),
-                //     }
-                // } else {
-                //     panic!("Unrecognised function {}", name.inner)
-                // }
+                self.unify_expression_generic_error(&expression, &TypeVar::Tuple(inner_types))?;
+            }
+            ExprKind::TupleIndex(tup, index) => {
+                self.visit_expression(tup)?;
+                let t = self.type_of(&TypedExpression::Id(tup.id));
+
+                match t {
+                    Ok(TypeVar::Tuple(inner)) => {
+                        if (index.inner as usize) < inner.len() {
+                            self.unify_expression_generic_error(
+                                &expression,
+                                &inner[index.inner as usize],
+                            )?
+                        } else {
+                            return Err(Error::TupleIndexOutOfBounds {
+                                index: index.clone(),
+                                actual_size: inner.len() as u128,
+                            });
+                        }
+                    }
+                    Ok(t @ TypeVar::Known(_, _, _)) => {
+                        return Err(Error::TupleIndexOfNonTuple {
+                            got: t.clone(),
+                            loc: tup.loc(),
+                        })
+                    }
+                    Ok(TypeVar::Generic(_)) => {
+                        return Err(Error::TupleIndexOfGeneric { loc: tup.loc() })
+                    }
+                    Err(e) => return Err(e),
+                }
             }
             ExprKind::Block(block) => {
                 self.visit_block(block)?;
@@ -432,9 +444,22 @@ impl<'a> TypeState {
                     Err((v1.clone(), v2.clone()))
                 }
             }
-            (TypeVar::Known(_, _, _), TypeVar::Generic(_)) => Ok((v1, Some(v2))),
-            (TypeVar::Generic(_), TypeVar::Known(_, _, _)) => Ok((v2, Some(v1))),
+            (TypeVar::Tuple(i1), TypeVar::Tuple(i2)) => {
+                if i1.len() != i2.len() {
+                    return Err((v1.clone(), v2.clone()));
+                }
+
+                for (t1, t2) in i1.iter().zip(i2.iter()) {
+                    self.unify_types(t1, t2)?
+                }
+
+                Ok((v1, None))
+            }
+            (TypeVar::Known(_, _, _), TypeVar::Tuple(_)) => Err((v1.clone(), v2.clone())),
+            (TypeVar::Tuple(_), TypeVar::Known(_, _, _)) => Err((v1.clone(), v2.clone())),
             (TypeVar::Generic(_), TypeVar::Generic(_)) => Ok((v1, Some(v2))),
+            (_other, TypeVar::Generic(_)) => Ok((v1, Some(v2))),
+            (TypeVar::Generic(_), _other) => Ok((v2, Some(v1))),
         }?;
 
         if let Some(replaced_type) = replaced_type {
@@ -449,6 +474,13 @@ impl<'a> TypeState {
                         params.iter_mut().for_each(|p| {
                             if *p == replaced_type {
                                 *p = new_type.clone()
+                            }
+                        });
+                    }
+                    TypeVar::Tuple(inner) => {
+                        inner.iter_mut().for_each(|t| {
+                            if *t == replaced_type {
+                                *t = new_type.clone()
                             }
                         });
                     }

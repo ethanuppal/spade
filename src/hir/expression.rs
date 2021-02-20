@@ -20,6 +20,8 @@ pub enum ExprKind {
     Identifier(NameID),
     IntLiteral(u128),
     BoolLiteral(bool),
+    TupleLiteral(Vec<Loc<Expression>>),
+    TupleIndex(Box<Loc<Expression>>, Loc<u128>),
     FnCall(Loc<NameID>, Vec<Loc<Expression>>),
     BinaryOperator(Box<Loc<Expression>>, BinaryOperator, Box<Loc<Expression>>),
     Block(Box<Block>),

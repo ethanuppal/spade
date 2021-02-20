@@ -85,7 +85,7 @@ pub fn visit_type_spec(t: &ast::TypeSpec, symtab: &mut SymbolTable) -> Result<hi
             Ok(hir::TypeSpec::Concrete(base, params))
         }
         ast::TypeSpec::Unit(w) => Ok(hir::TypeSpec::Concrete(
-            w.map(|_| crate::types::Type::Unit),
+            w.map(|_| crate::types::BaseType::Unit),
             vec![],
         )),
     }
@@ -262,6 +262,17 @@ pub fn visit_expression(
                 _ => unreachable! {},
             }
         }
+        ast::Expression::TupleLiteral(exprs) => {
+            let exprs = exprs
+                .into_iter()
+                .map(|e| e.try_map_ref(|e| visit_expression(e, symtab, idtracker)))
+                .collect::<Result<Vec<_>>>()?;
+            Ok(hir::ExprKind::TupleLiteral(exprs))
+        }
+        ast::Expression::TupleIndex(tuple, index) => Ok(hir::ExprKind::TupleIndex(
+            Box::new(tuple.try_visit(visit_expression, symtab, idtracker)?),
+            index.clone(),
+        )),
         ast::Expression::If(cond, ontrue, onfalse) => {
             let cond = cond.try_visit(visit_expression, symtab, idtracker)?;
             let ontrue = ontrue.try_visit(visit_expression, symtab, idtracker)?;

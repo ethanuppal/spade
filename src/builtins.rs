@@ -2,7 +2,7 @@ use crate::{
     ast::Path,
     location_info::WithLocation,
     symbol_table::{SymbolTable, Thing, TypeSymbol},
-    types::Type,
+    types::BaseType,
 };
 
 /// Add built in symbols like types to the symtab. The symbols are added with very high NameIDs to
@@ -11,7 +11,7 @@ pub fn populate_symtab(symtab: &mut SymbolTable) {
     // Add primitive data types
     let mut id = std::u64::MAX;
 
-    let mut add_type = |path: &str, t: Type| {
+    let mut add_type = |path: &str, t: BaseType| {
         symtab.add_thing_with_id(
             id,
             Path::from_strs(&[path]),
@@ -19,7 +19,7 @@ pub fn populate_symtab(symtab: &mut SymbolTable) {
         );
         id -= 1;
     };
-    add_type("int", Type::Int);
-    add_type("clk", Type::Clock);
-    add_type("bool", Type::Bool);
+    add_type("int", BaseType::Int);
+    add_type("clk", BaseType::Clock);
+    add_type("bool", BaseType::Bool);
 }

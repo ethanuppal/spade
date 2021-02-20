@@ -10,6 +10,7 @@ pub enum TypeVar {
     /// The type is known. If the type is known through a type signature specified by
     /// the user, that signature is the second argument, otherwise None
     Known(KnownType, Vec<TypeVar>, Option<Loc<()>>),
+    Tuple(Vec<TypeVar>),
     /// The type is completely unknown
     Generic(u64),
 }
@@ -32,6 +33,17 @@ impl std::fmt::Display for TypeVar {
                 };
                 write!(f, "{}{}", t, generics)
             }
+            TypeVar::Tuple(inner) => {
+                write!(
+                    f,
+                    "({})",
+                    inner
+                        .iter()
+                        .map(|t| format!("{}", t))
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                )
+            }
             TypeVar::Generic(id) => write!(f, "t{}", id),
         }
     }
@@ -43,6 +55,9 @@ impl PartialEq for TypeVar {
             (TypeVar::Known(t1, p1, _), TypeVar::Known(t2, p2, _)) => t1 == t2 && p1 == p2,
             (TypeVar::Known(_, _, _), TypeVar::Generic(_)) => false,
             (TypeVar::Generic(_), TypeVar::Known(_, _, _)) => false,
+            (TypeVar::Tuple(i1), TypeVar::Tuple(i2)) => i1 == i2,
+            (TypeVar::Tuple(_), _) => false,
+            (_, TypeVar::Tuple(_)) => false,
             (TypeVar::Generic(t1), TypeVar::Generic(t2)) => t1 == t2,
         }
     }

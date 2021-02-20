@@ -93,9 +93,11 @@ impl WithLocation for TypeExpression {}
 /// checked by the type checker.
 pub enum TypeSpec {
     /// The type is a fixed known type with 0 or more type parameters
-    Concrete(Loc<types::Type>, Vec<Loc<TypeExpression>>),
+    Concrete(Loc<types::BaseType>, Vec<Loc<TypeExpression>>),
     /// The type is a generic type parameter visible in the current scope
     Generic(NameID),
+    /// The type is a tuple of other variables
+    Tuple(Vec<TypeSpec>),
 }
 impl WithLocation for TypeSpec {}
 
@@ -103,7 +105,7 @@ impl WithLocation for TypeSpec {}
 #[cfg(test)]
 impl TypeSpec {
     pub fn unit() -> Self {
-        TypeSpec::Concrete(types::Type::Unit.nowhere(), vec![])
+        TypeSpec::Concrete(types::BaseType::Unit.nowhere(), vec![])
     }
 }
 

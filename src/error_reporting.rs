@@ -86,6 +86,15 @@ pub fn report_parse_error(filename: &Path, file_content: &str, err: ParseError) 
                 Label::secondary(file_id, loc.span).with_message(format!("for this {}", for_what)),
             ])
         }
+        ParseError::MissingTupleIndex { hash_loc } => {
+            let message = format!("Expected an index after #");
+
+            Diagnostic::error()
+                .with_message(message)
+                .with_labels(vec![
+                    Label::primary(file_id, hash_loc.span).with_message("expected index")
+                ])
+        }
     };
 
     let writer = StandardStream::stderr(ColorChoice::Always);
@@ -240,6 +249,28 @@ pub fn report_typeinference_error(filename: &Path, file_content: &str, err: Infe
             .with_notes(vec![
                 format!("Expected: {}", expected),
                 format!("     Got: {}", got),
+            ]),
+        InferenceError::TupleIndexOfGeneric { loc } => Diagnostic::error()
+            .with_message(format!("Type of tuple indexee must be known at this point"))
+            .with_labels(vec![
+                Label::primary(file_id, loc.span).with_message("The type of this must be known")
+            ]),
+        InferenceError::TupleIndexOfNonTuple { got, loc } => Diagnostic::error()
+            .with_message(format!("Attempt to use tuple indexing on non-tuple"))
+            .with_labels(vec![
+                Label::primary(file_id, loc.span).with_message(format!("expected tuple"))
+            ])
+            .with_notes(vec![
+                format!("Expected: tuple"),
+                format!("     Got: {}", got),
+            ]),
+        InferenceError::TupleIndexOutOfBounds { index, actual_size } => Diagnostic::error()
+            .with_message(format!("Tuple index out of bounds"))
+            .with_labels(vec![Label::primary(file_id, index.span)
+                .with_message(format!("Tuple only has {} elements", actual_size))])
+            .with_notes(vec![
+                format!("     Index: {}", index),
+                format!("Tuple size: {}", actual_size),
             ]),
     };
 

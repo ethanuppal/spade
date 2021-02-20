@@ -66,6 +66,13 @@ pub enum Error {
         loc: Loc<()>,
     },
 
+    #[error("Tuple index of generic argument")]
+    TupleIndexOfGeneric { loc: Loc<()> },
+    #[error("Tuple index of non-tuple")]
+    TupleIndexOfNonTuple { got: TypeVar, loc: Loc<()> },
+    #[error("Tuple index out of boudns")]
+    TupleIndexOutOfBounds { index: Loc<u128>, actual_size: u128 },
+
     #[error("Attempting to instanciate generic type")]
     GenericTypeInstanciation,
 }

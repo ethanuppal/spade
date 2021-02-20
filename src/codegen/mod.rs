@@ -4,7 +4,7 @@ use crate::{
     fixed_types::{t_bool, t_clock, t_int},
     hir::{expression::BinaryOperator, Entity, ExprKind, Expression, NameID, Register, Statement},
     typeinference::TypeState,
-    types::{ConcreteType, KnownType},
+    types::{BaseType, ConcreteType, KnownType},
 };
 
 mod util;
@@ -23,28 +23,41 @@ impl NameID {
     }
 }
 
-fn size_of_type(t: ConcreteType) -> u128 {
-    match t.base {
-        _t if _t == t_int() => match t.params.as_slice() {
-            [ConcreteType {
+fn size_of_type(t: &ConcreteType) -> u128 {
+    match t {
+        ConcreteType::Single {
+            base: KnownType::Type(BaseType::Int),
+            params,
+        } => match params.as_slice() {
+            [ConcreteType::Single {
                 base: KnownType::Integer(size),
                 ..
             }] => *size,
             other => panic!("Expected integer to have size, got {:?}", other),
         },
-        _t if _t == t_bool() => {
-            assert!(t.params.is_empty(), "Bool type got generics");
+        ConcreteType::Single {
+            base: KnownType::Type(BaseType::Bool),
+            params,
+        } => {
+            assert!(params.is_empty(), "Bool type got generics");
 
             1
         }
-        _t if _t == t_clock() => {
-            assert!(t.params.is_empty(), "Clock type got generics");
+        ConcreteType::Single {
+            base: KnownType::Type(BaseType::Clock),
+            params,
+        } => {
+            assert!(params.is_empty(), "Clock type got generics");
 
             1
         }
-        KnownType::Integer(_) => {
+        ConcreteType::Single {
+            base: KnownType::Integer(_),
+            params,
+        } => {
             panic!("A type level integer has no size")
         }
+        ConcreteType::Tuple(inner) => inner.iter().map(size_of_type).sum(),
         other => panic!("{:?} has no size right now", other),
     }
 }
@@ -61,7 +74,7 @@ impl Register {
         let this_type = types.type_of_name(&self.name.clone());
 
         // Declare the register
-        code.join(&reg(&this_var, size_of_type(this_type)));
+        code.join(&reg(&this_var, size_of_type(&this_type)));
 
         // The codegen depends quite a bit on wether or not
         // a reset is present, so we'll do those completely
@@ -111,7 +124,7 @@ impl Statement {
                 let this_type = types.type_of_name(&name);
 
                 // Declare the register
-                code.join(&wire(&this_var, size_of_type(this_type)));
+                code.join(&wire(&this_var, size_of_type(&this_type)));
 
                 // Define the wire containing the value
                 let this_code = formatdoc! {r#"
@@ -139,6 +152,8 @@ impl Expression {
             ExprKind::IntLiteral(_) => None,
             ExprKind::BoolLiteral(_) => None,
             ExprKind::FnCall(_, _) => None,
+            ExprKind::TupleLiteral(_) => None,
+            ExprKind::TupleIndex(_, _) => None,
             ExprKind::Block(block) => Some(block.result.inner.variable()),
             ExprKind::If(_, _, _) => None,
             ExprKind::BinaryOperator(_, _, _) => None,
@@ -155,6 +170,8 @@ impl Expression {
             ExprKind::FnCall(_, _) => false,
             ExprKind::Block(_) => false,
             ExprKind::If(_, _, _) => true,
+            ExprKind::TupleIndex(_, _) => false,
+            ExprKind::TupleLiteral(_) => false,
             ExprKind::BinaryOperator(_, _, _) => false,
         }
     }
@@ -173,9 +190,12 @@ impl Expression {
         // Define the wire if it is needed
         if self.alias().is_none() {
             if self.requires_reg() {
-                code.join(&reg(&self.variable(), size_of_type(types.expr_type(self))))
+                code.join(&reg(&self.variable(), size_of_type(&types.expr_type(self))))
             } else {
-                code.join(&wire(&self.variable(), size_of_type(types.expr_type(self))))
+                code.join(&wire(
+                    &self.variable(),
+                    size_of_type(&types.expr_type(self)),
+                ))
             }
         }
 
@@ -260,6 +280,36 @@ impl Expression {
                     BinaryOperator::LogicalOr => binop_builder("||"),
                 }
             }
+            ExprKind::TupleLiteral(elems) => {
+                let elem_code = elems
+                    .iter()
+                    // NOTE: we reverse here in order to get the first element in the lsb position
+                    .rev()
+                    .map(|elem| elem.variable())
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                code.join(&assign(&self.variable(), &format!("{{{}}}", elem_code)))
+            }
+            ExprKind::TupleIndex(tup, idx) => {
+                let types = match types.expr_type(tup) {
+                    ConcreteType::Tuple(inner) => inner,
+                    ConcreteType::Single { .. } => {
+                        panic!("Tuple indexing of non-tuple after type check");
+                    }
+                };
+                // Compute the start index of the element we're looking for
+                let mut start_idx = 0;
+                for i in 0..idx.inner {
+                    start_idx += size_of_type(&types[i as usize]);
+                }
+
+                let end = start_idx + size_of_type(&types[idx.inner as usize]) - 1;
+
+                code.join(&assign(
+                    &self.variable(),
+                    &format!("{}[{}:{}]", tup.variable(), end, start_idx),
+                ));
+            }
             ExprKind::Block(block) => {
                 for statement in &block.statements {
                     statement.code(types, &mut code);
@@ -301,7 +351,7 @@ pub fn generate_entity<'a>(entity: &Entity, types: &TypeState) -> Code {
     let inputs = entity.head.inputs.iter().map(|(name, _)| {
         let input_name = format!("_i_{}", name.1);
         let t = types.type_of_name(name);
-        let size = size_of_type(t);
+        let size = size_of_type(&t);
         (
             format!("input{} {},", size_spec(size), input_name),
             code! {
@@ -314,7 +364,7 @@ pub fn generate_entity<'a>(entity: &Entity, types: &TypeState) -> Code {
     let (inputs, input_assignments): (Vec<_>, Vec<_>) = inputs.unzip();
 
     let output_t = types.expr_type(&entity.body);
-    let output_definition = format!("output{} __output", size_spec(size_of_type(output_t)));
+    let output_definition = format!("output{} __output", size_spec(size_of_type(&output_t)));
 
     let output_assignment = assign("__output", &entity.body.inner.variable());
 
@@ -753,6 +803,42 @@ mod tests {
             wire[15:0] _m2_res;
             assign _m2_res = _m1_a;
             assign __output = _m2_res;
+        endmodule"#
+        );
+
+        let processed = parse_typecheck_entity(code);
+
+        let result = generate_entity(&processed.entity, &processed.type_state).to_string();
+        assert_same_code!(&result, expected);
+    }
+
+    #[test]
+    fn tuple_indexing_and_creation_works() {
+        let code = r#"
+        entity name(a: int<16>, b: int<8>) -> int<8> {
+            let compound = (a, b);
+            compound#1
+        }
+        "#;
+
+        let expected = indoc!(
+            r#"
+        module name (
+                input[15:0] _i_a,
+                input[7:0] _i_b,
+                output[7:0] __output
+            );
+            wire[15:0] _m0_a;
+            assign _m0_a = _i_a;
+            wire[7:0] _m1_b;
+            assign _m1_b = _i_b;
+            wire[23:0] __expr__2;
+            assign __expr__2 = {_m1_b, _m0_a};
+            wire[23:0] _m2_compound;
+            assign _m2_compound = __expr__2;
+            wire[7:0] __expr__4;
+            assign __expr__4 = _m2_compound[23:16];
+            assign __output = __expr__4;
         endmodule"#
         );
 

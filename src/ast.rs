@@ -64,6 +64,8 @@ pub enum Expression {
     Identifier(Loc<Path>),
     IntLiteral(u128),
     BoolLiteral(bool),
+    TupleLiteral(Vec<Loc<Expression>>),
+    TupleIndex(Box<Loc<Expression>>, Loc<u128>),
     If(
         Box<Loc<Expression>>,
         Box<Loc<Expression>>,
