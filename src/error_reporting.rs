@@ -16,6 +16,14 @@ use crate::semantic_analysis::Error as SemanticError;
 use crate::symbol_table::Error as LookupError;
 use crate::typeinference::result::Error as InferenceError;
 
+fn color_choice(no_color: bool) -> ColorChoice {
+    if no_color {
+        ColorChoice::Never
+    } else {
+        ColorChoice::Auto
+    }
+}
+
 pub fn codespan_config() -> codespan_reporting::term::Config {
     let mut primary_label_error = ColorSpec::new();
     primary_label_error
@@ -32,7 +40,7 @@ pub fn codespan_config() -> codespan_reporting::term::Config {
     }
 }
 
-pub fn report_parse_error(filename: &Path, file_content: &str, err: ParseError) {
+pub fn report_parse_error(filename: &Path, file_content: &str, err: ParseError, no_color: bool) {
     let mut files = SimpleFiles::new();
     let file_id = files.add(filename.to_string_lossy(), file_content);
     let diag = match err {
@@ -97,12 +105,17 @@ pub fn report_parse_error(filename: &Path, file_content: &str, err: ParseError) 
         }
     };
 
-    let writer = StandardStream::stderr(ColorChoice::Always);
+    let writer = StandardStream::stderr(color_choice(no_color));
 
     term::emit(&mut writer.lock(), &codespan_config(), &files, &diag).unwrap();
 }
 
-pub fn report_semantic_error(filename: &Path, file_content: &str, err: SemanticError) {
+pub fn report_semantic_error(
+    filename: &Path,
+    file_content: &str,
+    err: SemanticError,
+    no_color: bool,
+) {
     let mut files = SimpleFiles::new();
     let file_id = files.add(filename.to_string_lossy(), file_content);
     let diag = match err {
@@ -139,12 +152,17 @@ pub fn report_semantic_error(filename: &Path, file_content: &str, err: SemanticE
             ]),
     };
 
-    let writer = StandardStream::stderr(ColorChoice::Always);
+    let writer = StandardStream::stderr(color_choice(no_color));
 
     term::emit(&mut writer.lock(), &codespan_config(), &files, &diag).unwrap();
 }
 
-pub fn report_typeinference_error(filename: &Path, file_content: &str, err: InferenceError) {
+pub fn report_typeinference_error(
+    filename: &Path,
+    file_content: &str,
+    err: InferenceError,
+    no_color: bool,
+) {
     let mut files = SimpleFiles::new();
     let file_id = files.add(filename.to_string_lossy(), file_content);
     let diag = match err {
@@ -274,7 +292,7 @@ pub fn report_typeinference_error(filename: &Path, file_content: &str, err: Infe
             ]),
     };
 
-    let writer = StandardStream::stderr(ColorChoice::Always);
+    let writer = StandardStream::stderr(color_choice(no_color));
 
     term::emit(&mut writer.lock(), &codespan_config(), &files, &diag).unwrap();
 }

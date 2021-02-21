@@ -26,7 +26,7 @@ pub fn parse_typecheck_entity<'a>(input: &str) -> ProcessedEntity {
         Ok(Some(v)) => v,
         Ok(None) => panic!("No parse error but code contained no entity"),
         Err(e) => {
-            error_reporting::report_parse_error(&PathBuf::from(""), &input, e);
+            error_reporting::report_parse_error(&PathBuf::from(""), &input, e, false);
             panic!("Parse error")
         }
     };
@@ -37,7 +37,7 @@ pub fn parse_typecheck_entity<'a>(input: &str) -> ProcessedEntity {
     let hir = match visit_entity(&entity_ast, &mut symtab, &mut idtracker) {
         Ok(v) => v,
         Err(e) => {
-            error_reporting::report_semantic_error(&PathBuf::from(""), &input, e);
+            error_reporting::report_semantic_error(&PathBuf::from(""), &input, e, false);
             panic!("Semantic error")
         }
     };
@@ -51,7 +51,7 @@ pub fn parse_typecheck_entity<'a>(input: &str) -> ProcessedEntity {
                 "Type check trace:\n{}",
                 typeinference::format_trace_stack(&type_state.trace_stack)
             );
-            error_reporting::report_typeinference_error(&PathBuf::from(""), &input, e);
+            error_reporting::report_typeinference_error(&PathBuf::from(""), &input, e, false);
             panic!("Type error")
         }
     }

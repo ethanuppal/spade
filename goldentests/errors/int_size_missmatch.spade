@@ -1,0 +1,21 @@
+entity wrong_type(a: int<8>) -> int<7> {
+    a
+}
+
+// args: -o /dev/null --no-color
+// expected exit status: 1
+// expected stderr:
+// error: Type error
+//   ┌─ goldentests/errors/int_size_missmatch.spade:1:33
+//   │  
+// 1 │   entity wrong_type(a: int<8>) -> int<7> {
+//   │                                   ------ 7 type specified here
+//   │ ╭────────────────────────────────────────^
+// 2 │ │     a
+// 3 │ │ }
+//   │ ╰─^ Found type 8
+//   │  
+//   = Expected: 7
+//   =      Got: 8
+// 
+// Error: aborting due to previous error

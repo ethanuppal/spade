@@ -36,6 +36,9 @@ struct Opt {
     pub infile: PathBuf,
     #[structopt(short = "o")]
     pub outfile: PathBuf,
+    /// Do not include color in the error report
+    #[structopt(long = "no-color")]
+    pub no_color: bool,
 }
 
 #[allow(dead_code, unused_variables, unused_mut)]
@@ -52,7 +55,7 @@ fn main() -> Result<()> {
     let entity_ast = match parser.entity() {
         Ok(v) => v,
         Err(e) => {
-            error_reporting::report_parse_error(&opts.infile, &file_content, e);
+            error_reporting::report_parse_error(&opts.infile, &file_content, e, opts.no_color);
             return Err(anyhow!("aborting due to previous error"));
         }
     };
@@ -63,7 +66,7 @@ fn main() -> Result<()> {
     let hir = match visit_entity(&entity_ast.unwrap(), &mut symtab, &mut idtracker) {
         Ok(v) => v,
         Err(e) => {
-            error_reporting::report_semantic_error(&opts.infile, &file_content, e);
+            error_reporting::report_semantic_error(&opts.infile, &file_content, e, opts.no_color);
             return Err(anyhow!("aborting due to previous error"));
         }
     };
@@ -73,7 +76,12 @@ fn main() -> Result<()> {
     match type_state.visit_entity(&hir) {
         Ok(()) => {}
         Err(e) => {
-            error_reporting::report_typeinference_error(&opts.infile, &file_content, e);
+            error_reporting::report_typeinference_error(
+                &opts.infile,
+                &file_content,
+                e,
+                opts.no_color,
+            );
             return Err(anyhow!("aborting due to previous error"));
         }
     }
