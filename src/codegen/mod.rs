@@ -1,7 +1,6 @@
 use indoc::formatdoc;
 
 use crate::{
-    fixed_types::{t_bool, t_clock, t_int},
     hir::{expression::BinaryOperator, Entity, ExprKind, Expression, NameID, Register, Statement},
     typeinference::TypeState,
     types::{BaseType, ConcreteType, KnownType},
@@ -53,7 +52,7 @@ fn size_of_type(t: &ConcreteType) -> u128 {
         }
         ConcreteType::Single {
             base: KnownType::Integer(_),
-            params,
+            ..
         } => {
             panic!("A type level integer has no size")
         }
