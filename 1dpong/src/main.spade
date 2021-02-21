@@ -1,0 +1,50 @@
+entity pong(clk: clk, rst: bool, tick_length: int<32>) -> int<8> {
+    // Counter to lower the frequency
+    reg(clk) timer reset (rst: 0) = if timer == tick_length {
+        0
+    } else {
+        timer + 1
+    };
+
+    // Game tick
+    let tick = timer == tick_length;
+
+    let board_end_right = 0b0000_0001;
+    let board_end_left = 0b1000_0000;
+
+    reg(clk) state: (int<8>, bool) reset (rst: (4, false)) = {
+        let ball = state#0;
+        let direction = state#1;
+
+        let is_at_edge = ball == board_end_left || ball == board_end_right;
+
+        let new_direction =
+            if ball == board_end_left {
+                true
+            }
+            else if ball == board_end_right {
+                false
+            }
+            else {
+                direction
+            };
+
+        let new_ball =
+            if tick {
+                if direction {
+                    ball >> 1
+                }
+                else {
+                    ball << 1
+                }
+            }
+            else {
+                ball
+            };
+
+        // Should we be explicit about this last assignment being the actual register part?
+        (new_ball, new_direction)
+    };
+
+    state#0
+}
