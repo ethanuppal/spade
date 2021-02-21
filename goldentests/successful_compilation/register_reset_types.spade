@@ -1,0 +1,10 @@
+// args: -o /dev/null --no-color
+// expected exit status: 0
+// expected stderr:
+
+// Ensures that type specifications, tuples, and reset work together
+entity test(clk: clk, rst: bool) -> int<8> {
+    reg(clk) a: (int<8>, bool) = (5, true);
+
+    5
+}

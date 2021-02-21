@@ -89,12 +89,7 @@ fn main() -> Result<()> {
     let code = match codegen::generate_entity(&hir, &type_state) {
         Ok(val) => val,
         Err(e) => {
-            error_reporting::report_codegen_error(
-                    &opts.infile,
-                    &file_content,
-                    e,
-                    opts.no_color,
-                );
+            error_reporting::report_codegen_error(&opts.infile, &file_content, e, opts.no_color);
             return Err(anyhow!("aborting due to previous error"));
         }
     };

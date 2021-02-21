@@ -1,6 +1,14 @@
 use indoc::formatdoc;
 
-use crate::{hir::{expression::BinaryOperator, Entity, ExprKind, Expression, NameID, Register, Statement}, location_info::Loc, typeinference::{TypeState, equation::{TypeVar, TypedExpression}}, types::{BaseType, ConcreteType, KnownType}};
+use crate::{
+    hir::{expression::BinaryOperator, Entity, ExprKind, Expression, NameID, Register, Statement},
+    location_info::Loc,
+    typeinference::{
+        equation::{TypeVar, TypedExpression},
+        TypeState,
+    },
+    types::{BaseType, ConcreteType, KnownType},
+};
 
 mod util;
 mod verilog;
@@ -12,9 +20,8 @@ use self::{
 
 use crate::code;
 
-
 pub enum Error {
-    UsingGenericType{expr: Loc<Expression>, t: TypeVar}
+    UsingGenericType { expr: Loc<Expression>, t: TypeVar },
 }
 pub type Result<T> = std::result::Result<T, Error>;
 
@@ -68,17 +75,18 @@ impl TypeState {
     /// fully ungenerified, returns the corresponding type var
     pub fn expr_type(&self, expr: &Loc<Expression>) -> Result<ConcreteType> {
         let t = self
-                .type_of(&TypedExpression::Id(expr.id))
-                .expect("Expression had no specified type");
+            .type_of(&TypedExpression::Id(expr.id))
+            .expect("Expression had no specified type");
 
         if let Some(t) = Self::ungenerify_type(&t) {
             Ok(t)
-        }
-        else {
-            Err(Error::UsingGenericType{expr: expr.clone(), t: t.clone()})
+        } else {
+            Err(Error::UsingGenericType {
+                expr: expr.clone(),
+                t: t.clone(),
+            })
         }
     }
-
 }
 
 // Consider rewriting this to be functions on the code struct
@@ -213,7 +221,10 @@ impl Loc<Expression> {
         // Define the wire if it is needed
         if self.alias().is_none() {
             if self.requires_reg() {
-                code.join(&reg(&self.variable(), size_of_type(&types.expr_type(self)?)))
+                code.join(&reg(
+                    &self.variable(),
+                    size_of_type(&types.expr_type(self)?),
+                ))
             } else {
                 code.join(&wire(
                     &self.variable(),
@@ -305,6 +316,9 @@ impl Loc<Expression> {
                 };
             }
             ExprKind::TupleLiteral(elems) => {
+                for elem in elems {
+                    code.join(&elem.code(types)?);
+                }
                 let elem_code = elems
                     .iter()
                     // NOTE: we reverse here in order to get the first element in the lsb position
@@ -315,6 +329,8 @@ impl Loc<Expression> {
                 code.join(&assign(&self.variable(), &format!("{{{}}}", elem_code)))
             }
             ExprKind::TupleIndex(tup, idx) => {
+                code.join(&tup.code(types)?);
+
                 let types = match types.expr_type(tup)? {
                     ConcreteType::Tuple(inner) => inner,
                     ConcreteType::Single { .. } => {
@@ -327,11 +343,17 @@ impl Loc<Expression> {
                     start_idx += size_of_type(&types[i as usize]);
                 }
 
-                let end = start_idx + size_of_type(&types[idx.inner as usize]) - 1;
+                let end_idx = start_idx + size_of_type(&types[idx.inner as usize]) - 1;
+
+                let index = if start_idx == end_idx {
+                    format!("{}", start_idx)
+                } else {
+                    format!("{}:{}", end_idx, start_idx)
+                };
 
                 code.join(&assign(
                     &self.variable(),
-                    &format!("{}[{}:{}]", tup.variable(), end, start_idx),
+                    &format!("{}[{}]", tup.variable(), index),
                 ));
             }
             ExprKind::Block(block) => {
@@ -420,7 +442,7 @@ mod tests {
     impl<T> ResultExt<T> for Result<T> {
         fn report_failure(self) -> T {
             match self {
-                Ok(t) => {t}
+                Ok(t) => t,
                 Err(e) => {
                     error_reporting::report_codegen_error(&PathBuf::from(""), "", e, false);
                     panic!("Compilation error")
@@ -907,6 +929,39 @@ mod tests {
             wire[7:0] __expr__4;
             assign __expr__4 = _m2_compound[23:16];
             assign __output = __expr__4;
+        endmodule"#
+        );
+
+        let processed = parse_typecheck_entity(code);
+
+        let result = generate_entity(&processed.entity, &processed.type_state)
+            .report_failure()
+            .to_string();
+        assert_same_code!(&result, expected);
+    }
+
+    #[test]
+    fn tuple_indexing_of_booleans_works() {
+        let code = r#"
+        entity name() -> bool {
+            (true, true)#1
+        }
+        "#;
+
+        let expected = indoc!(
+            r#"
+        module name (
+                output __output
+            );
+            wire __expr__3;
+            wire[1:0] __expr__2;
+            wire __expr__0;
+            assign __expr__0 = 1;
+            wire __expr__1;
+            assign __expr__1 = 1;
+            assign __expr__2 = {__expr__1, __expr__0};
+            assign __expr__3 = __expr__2[1];
+            assign __output = __expr__3;
         endmodule"#
         );
 

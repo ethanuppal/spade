@@ -1032,26 +1032,29 @@ mod tests {
 
     #[test]
     fn tuple_type_specs_propagate_correctly() {
-        let input = Register{
+        let input = Register {
             name: name_id(0, "test"),
-            clock: ExprKind::Identifier(name_id(1, "clk").inner).with_id(0).nowhere(),
+            clock: ExprKind::Identifier(name_id(1, "clk").inner)
+                .with_id(0)
+                .nowhere(),
             reset: None,
-            value: ExprKind::TupleLiteral(
-                vec![
-                    ExprKind::IntLiteral(5).with_id(1).nowhere(),
-                    ExprKind::BoolLiteral(true).with_id(2).nowhere()
-                ],
-            ).with_id(3).nowhere(),
-            value_type: Some(hir::TypeSpec::Tuple(vec![
+            value: ExprKind::TupleLiteral(vec![
+                ExprKind::IntLiteral(5).with_id(1).nowhere(),
+                ExprKind::BoolLiteral(true).with_id(2).nowhere(),
+            ])
+            .with_id(3)
+            .nowhere(),
+            value_type: Some(
+                hir::TypeSpec::Tuple(vec![
                     hir::TypeSpec::Concrete(
                         BaseType::Int.nowhere(),
-                        vec![hir::TypeExpression::Integer(5).nowhere()]
-                    ).nowhere(),
-                    hir::TypeSpec::Concrete(
-                        BaseType::Bool.nowhere(),
-                        vec![]
-                    ).nowhere()
-                ]).nowhere())
+                        vec![hir::TypeExpression::Integer(5).nowhere()],
+                    )
+                    .nowhere(),
+                    hir::TypeSpec::Concrete(BaseType::Bool.nowhere(), vec![]).nowhere(),
+                ])
+                .nowhere(),
+            ),
         };
 
         let mut state = TypeState::new();
