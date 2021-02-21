@@ -24,7 +24,7 @@ pub mod result;
 use equation::{TypeEquations, TypeVar, TypedExpression};
 use result::{Error, Result};
 
-use self::result::UnificationError;
+use self::result::{UnificationError, UnificationErrorExt, UnificationTrace};
 
 pub struct TypeState {
     equations: TypeEquations,
@@ -431,32 +431,49 @@ impl<'a> TypeState {
         let (new_type, replaced_type) = match (&v1, &v2) {
             (TypeVar::Known(t1, p1, _), TypeVar::Known(t2, p2, _)) => {
                 if p1.len() != p2.len() {
-                    return Err((v1.clone(), v2.clone()));
+                    return Err((
+                        UnificationTrace::new(v1.clone()),
+                        UnificationTrace::new(v2.clone()),
+                    ));
                 }
 
                 for (t1, t2) in p1.iter().zip(p2.iter()) {
-                    self.unify_types(t1, t2)?
+                    self.unify_types(t1, t2)
+                        .add_context(v1.clone(), v2.clone())?
                 }
 
                 if t1 == t2 {
                     Ok((v1, None))
                 } else {
-                    Err((v1.clone(), v2.clone()))
+                    Err((
+                        UnificationTrace::new(v1.clone()),
+                        UnificationTrace::new(v2.clone()),
+                    ))
                 }
             }
             (TypeVar::Tuple(i1), TypeVar::Tuple(i2)) => {
                 if i1.len() != i2.len() {
-                    return Err((v1.clone(), v2.clone()));
+                    return Err((
+                        UnificationTrace::new(v1.clone()),
+                        UnificationTrace::new(v2.clone()),
+                    ));
                 }
 
                 for (t1, t2) in i1.iter().zip(i2.iter()) {
-                    self.unify_types(t1, t2)?
+                    self.unify_types(t1, t2)
+                        .add_context(v1.clone(), v2.clone())?
                 }
 
                 Ok((v1, None))
             }
-            (TypeVar::Known(_, _, _), TypeVar::Tuple(_)) => Err((v1.clone(), v2.clone())),
-            (TypeVar::Tuple(_), TypeVar::Known(_, _, _)) => Err((v1.clone(), v2.clone())),
+            (TypeVar::Known(_, _, _), TypeVar::Tuple(_)) => Err((
+                UnificationTrace::new(v1.clone()),
+                UnificationTrace::new(v2.clone()),
+            )),
+            (TypeVar::Tuple(_), TypeVar::Known(_, _, _)) => Err((
+                UnificationTrace::new(v1.clone()),
+                UnificationTrace::new(v2.clone()),
+            )),
             (TypeVar::Generic(_), TypeVar::Generic(_)) => Ok((v1, Some(v2))),
             (_other, TypeVar::Generic(_)) => Ok((v1, Some(v2))),
             (TypeVar::Generic(_), _other) => Ok((v2, Some(v1))),

@@ -11,10 +11,10 @@ use codespan_reporting::{
     term::termcolor::{Color, ColorSpec},
 };
 
-use crate::parser::Error as ParseError;
 use crate::semantic_analysis::Error as SemanticError;
 use crate::symbol_table::Error as LookupError;
 use crate::typeinference::result::Error as InferenceError;
+use crate::{parser::Error as ParseError, typeinference::result::UnificationTrace};
 
 fn color_choice(no_color: bool) -> ColorChoice {
     if no_color {
@@ -157,6 +157,20 @@ pub fn report_semantic_error(
     term::emit(&mut writer.lock(), &codespan_config(), &files, &diag).unwrap();
 }
 
+pub fn type_missmatch_notes(got: UnificationTrace, expected: UnificationTrace) -> Vec<String> {
+    let mut result = vec![];
+
+    result.push(format!("Expected: {}", expected.failing));
+    if let Some(_) = got.inside {
+        result.push(format!("      in: {}", expected.outer()))
+    }
+    result.push(format!("     Got: {}", got.failing));
+    if let Some(_) = got.inside {
+        result.push(format!("      in: {}", got.outer()))
+    }
+    result
+}
+
 pub fn report_typeinference_error(
     filename: &Path,
     file_content: &str,
@@ -192,10 +206,7 @@ pub fn report_typeinference_error(
                 Label::secondary(file_id, type_spec.loc().span)
                     .with_message(format!("{} type specified here", expected)),
             ])
-            .with_notes(vec![
-                format!("Expected: {}", expected),
-                format!("     Got: {}", got),
-            ]),
+            .with_notes(type_missmatch_notes(got, expected)),
         InferenceError::UnspecifiedTypeError { expected, got, loc } => Diagnostic::error()
             .with_message(format!("Expected type {}, got {}", expected, got))
             .with_labels(vec![Label::primary(file_id, loc.loc().span)
@@ -225,37 +236,25 @@ pub fn report_typeinference_error(
                 Label::primary(file_id, incorrect_branch.loc().span)
                     .with_message(format!("But this one has type {}", got)),
             ])
-            .with_notes(vec![
-                format!("Expected: {}", expected),
-                format!("     Got: {}", got),
-            ]),
+            .with_notes(type_missmatch_notes(got, expected)),
         InferenceError::NonClockClock { expected, got, loc } => Diagnostic::error()
             .with_message("Register clock must be a type clock")
             .with_labels(vec![
                 Label::primary(file_id, loc.span).with_message(format!("Found type {}", got))
             ])
-            .with_notes(vec![
-                format!("Expected: {}", expected),
-                format!("     Got: {}", got),
-            ]),
+            .with_notes(type_missmatch_notes(got, expected)),
         InferenceError::NonBoolReset { expected, got, loc } => Diagnostic::error()
             .with_message("Register reset must be a bool")
             .with_labels(vec![
                 Label::primary(file_id, loc.span).with_message(format!("Found type {}", got))
             ])
-            .with_notes(vec![
-                format!("Expected: {}", expected),
-                format!("     Got: {}", got),
-            ]),
+            .with_notes(type_missmatch_notes(got, expected)),
         InferenceError::RegisterResetMissmatch { expected, got, loc } => Diagnostic::error()
             .with_message("Register reset value missmatch")
             .with_labels(vec![
                 Label::primary(file_id, loc.span).with_message(format!("Found type {}", got))
             ])
-            .with_notes(vec![
-                format!("Expected: {}", expected),
-                format!("     Got: {}", got),
-            ]),
+            .with_notes(type_missmatch_notes(got, expected)),
         InferenceError::UnspecedEntityOutputTypeMissmatch {
             expected,
             got,
@@ -264,10 +263,7 @@ pub fn report_typeinference_error(
             .with_message(format!("Output type missmatch"))
             .with_labels(vec![Label::primary(file_id, output_expr.loc().span)
                 .with_message(format!("Found type {}", got))])
-            .with_notes(vec![
-                format!("Expected: {}", expected),
-                format!("     Got: {}", got),
-            ]),
+            .with_notes(type_missmatch_notes(got, expected)),
         InferenceError::TupleIndexOfGeneric { loc } => Diagnostic::error()
             .with_message(format!("Type of tuple indexee must be known at this point"))
             .with_labels(vec![
