@@ -97,7 +97,7 @@ pub enum TypeSpec {
     /// The type is a generic type parameter visible in the current scope
     Generic(NameID),
     /// The type is a tuple of other variables
-    Tuple(Vec<TypeSpec>),
+    Tuple(Vec<Loc<TypeSpec>>),
 }
 impl WithLocation for TypeSpec {}
 

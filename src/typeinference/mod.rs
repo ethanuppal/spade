@@ -79,17 +79,17 @@ impl TypeState {
         Err(Error::UnknownType(expr.clone()).into())
     }
 
-    /// Converts the specified type to a concrete type, returning an error
+    /// Converts the specified type to a concrete type, returning None
     /// if it fails
-    pub fn ungenerify_type(var: &TypeVar) -> Result<ConcreteType> {
+    pub fn ungenerify_type(var: &TypeVar) -> Option<ConcreteType> {
         match var {
             TypeVar::Known(t, params, _) => {
                 let params = params
                     .iter()
                     .map(Self::ungenerify_type)
-                    .collect::<Result<Vec<_>>>()?;
+                    .collect::<Option<Vec<_>>>()?;
 
-                Ok(ConcreteType::Single {
+                Some(ConcreteType::Single {
                     base: t.clone(),
                     params,
                 })
@@ -98,22 +98,11 @@ impl TypeState {
                 let inner = inner
                     .iter()
                     .map(Self::ungenerify_type)
-                    .collect::<Result<Vec<_>>>()?;
-                Ok(ConcreteType::Tuple(inner))
+                    .collect::<Option<Vec<_>>>()?;
+                Some(ConcreteType::Tuple(inner))
             }
-            TypeVar::Generic(_) => Err(Error::GenericTypeInstanciation),
+            TypeVar::Generic(_) => None,
         }
-    }
-
-    /// Returns the type of the expression as a concrete type. If the type is not known,
-    /// or tye type is Generic, panics
-    pub fn expr_type(&self, expr: &Expression) -> ConcreteType {
-        Self::ungenerify_type(
-            &self
-                .type_of(&TypedExpression::Id(expr.id))
-                .expect("Expression had no specified type"),
-        )
-        .expect(&format!("Expr {:#?} had generic type", expr))
     }
 
     /// Returns the type of the specified name as a concrete type. If the type is not known,
@@ -354,11 +343,20 @@ impl TypeState {
         let new_type = self.new_generic();
         self.add_equation(TypedExpression::Name(reg.name.clone().inner), new_type);
 
-        self.visit_expression(&reg.value)?;
-        self.visit_expression(&reg.clock)?;
-        if reg.value_type.is_some() {
-            todo!("Typechecker should take type specification on registers into account");
+        if let Some(t) = &reg.value_type {
+            self.unify_types(
+                &TypedExpression::Name(reg.name.inner.clone()),
+                &Self::type_var_from_hir(&t),
+            )
+            .map_err(|(got, expected)| Error::UnspecifiedTypeError {
+                expected,
+                got,
+                loc: reg.name.loc(),
+            })?;
         }
+
+        self.visit_expression(&reg.clock)?;
+        self.visit_expression(&reg.value)?;
 
         if let Some((rst_cond, rst_value)) = &reg.reset {
             self.visit_expression(&rst_cond)?;
@@ -481,34 +479,34 @@ impl<'a> TypeState {
 
         if let Some(replaced_type) = replaced_type {
             for (_, rhs) in &mut self.equations {
-                if *rhs == replaced_type {
-                    *rhs = new_type.clone()
-                }
-
-                // If there are type parameters, replace things there too
-                match rhs {
-                    TypeVar::Known(_, params, _) => {
-                        params.iter_mut().for_each(|p| {
-                            if *p == replaced_type {
-                                *p = new_type.clone()
-                            }
-                        });
-                    }
-                    TypeVar::Tuple(inner) => {
-                        inner.iter_mut().for_each(|t| {
-                            if *t == replaced_type {
-                                *t = new_type.clone()
-                            }
-                        });
-                    }
-                    TypeVar::Generic(_) => {}
-                }
+                Self::replace_type_var(rhs, &replaced_type, new_type.clone())
             }
         }
 
         self.trace_stack
             .push(TraceStack::Unified(v1cpy, v2cpy, new_type.clone()));
         Ok(())
+    }
+
+    fn replace_type_var(in_var: &mut TypeVar, from: &TypeVar, replacement: TypeVar) {
+        // First, do recursive replacement
+        match in_var {
+            TypeVar::Known(_, params, _) => {
+                for param in params {
+                    Self::replace_type_var(param, from, replacement.clone())
+                }
+            }
+            TypeVar::Tuple(inner) => {
+                for t in inner {
+                    Self::replace_type_var(t, from, replacement.clone())
+                }
+            }
+            TypeVar::Generic(_) => {}
+        }
+
+        if in_var == from {
+            *in_var = replacement;
+        }
     }
 
     fn unify_expression_generic_error(
@@ -943,8 +941,8 @@ mod tests {
         let t0 = get_type!(state, &TExpr::Id(0));
         let ta = get_type!(state, &TExpr::Name(name_id(0, "a").inner));
         let tclk = get_type!(state, &TExpr::Name(name_id(1, "clk").inner));
-        ensure_same_type!(state, t0, unsized_int(2));
-        ensure_same_type!(state, ta, unsized_int(2));
+        ensure_same_type!(state, t0, unsized_int(3));
+        ensure_same_type!(state, ta, unsized_int(3));
         ensure_same_type!(state, tclk, t_clock());
     }
 
@@ -971,7 +969,7 @@ mod tests {
 
         let ta = get_type!(state, &TExpr::Name(name_id(0, "a").inner));
         let tclk = get_type!(state, &TExpr::Name(name_id(1, "clk").inner));
-        ensure_same_type!(state, ta, TVar::Generic(1));
+        ensure_same_type!(state, ta, TVar::Generic(2));
         ensure_same_type!(state, tclk, t_clock());
     }
 
@@ -1008,11 +1006,11 @@ mod tests {
         let tclk = get_type!(state, &TExpr::Name(name_id(1, "clk").inner));
         let trst_cond = get_type!(state, &TExpr::Name(rst_cond.clone()));
         let trst_val = get_type!(state, &TExpr::Name(rst_value.clone()));
-        ensure_same_type!(state, t0, unsized_int(2));
-        ensure_same_type!(state, ta, unsized_int(2));
+        ensure_same_type!(state, t0, unsized_int(3));
+        ensure_same_type!(state, ta, unsized_int(3));
         ensure_same_type!(state, tclk, t_clock());
         ensure_same_type!(state, trst_cond, t_bool());
-        ensure_same_type!(state, trst_val, unsized_int(2));
+        ensure_same_type!(state, trst_val, unsized_int(3));
     }
 
     #[test]
@@ -1030,5 +1028,43 @@ mod tests {
 
         let ta = get_type!(state, &TExpr::Name(name_id(0, "a").inner));
         ensure_same_type!(state, ta, unsized_int(1));
+    }
+
+    #[test]
+    fn tuple_type_specs_propagate_correctly() {
+        let input = Register{
+            name: name_id(0, "test"),
+            clock: ExprKind::Identifier(name_id(1, "clk").inner).with_id(0).nowhere(),
+            reset: None,
+            value: ExprKind::TupleLiteral(
+                vec![
+                    ExprKind::IntLiteral(5).with_id(1).nowhere(),
+                    ExprKind::BoolLiteral(true).with_id(2).nowhere()
+                ],
+            ).with_id(3).nowhere(),
+            value_type: Some(hir::TypeSpec::Tuple(vec![
+                    hir::TypeSpec::Concrete(
+                        BaseType::Int.nowhere(),
+                        vec![hir::TypeExpression::Integer(5).nowhere()]
+                    ).nowhere(),
+                    hir::TypeSpec::Concrete(
+                        BaseType::Bool.nowhere(),
+                        vec![]
+                    ).nowhere()
+                ]).nowhere())
+        };
+
+        let mut state = TypeState::new();
+
+        let expr_clk = TExpr::Name(name_id(1, "clk").inner);
+        state.add_equation(expr_clk.clone(), TVar::Generic(100));
+
+        state.visit_register(&input).unwrap();
+
+        let ttup = get_type!(state, &TExpr::Id(3));
+        let reg = get_type!(state, &TExpr::Name(name_id(0, "test").inner));
+        let expected = TypeVar::Tuple(vec![sized_int(5), TypeVar::Known(t_bool(), vec![], None)]);
+        ensure_same_type!(state, ttup, expected);
+        ensure_same_type!(state, reg, expected);
     }
 }

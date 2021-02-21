@@ -86,7 +86,18 @@ fn main() -> Result<()> {
         }
     }
 
-    let code = codegen::generate_entity(&hir, &type_state);
+    let code = match codegen::generate_entity(&hir, &type_state) {
+        Ok(val) => val,
+        Err(e) => {
+            error_reporting::report_codegen_error(
+                    &opts.infile,
+                    &file_content,
+                    e,
+                    opts.no_color,
+                );
+            return Err(anyhow!("aborting due to previous error"));
+        }
+    };
 
     std::fs::write(opts.outfile, code.to_string())?;
 

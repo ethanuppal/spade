@@ -84,6 +84,14 @@ pub fn visit_type_spec(t: &ast::TypeSpec, symtab: &mut SymbolTable) -> Result<hi
 
             Ok(hir::TypeSpec::Concrete(base, params))
         }
+        ast::TypeSpec::Tuple(inner) => {
+            let inner = inner
+                .iter()
+                .map(|p| p.try_map_ref(|p| visit_type_spec(p, symtab)))
+                .collect::<Result<Vec<_>>>()?;
+
+            Ok(hir::TypeSpec::Tuple(inner))
+        }
         ast::TypeSpec::Unit(w) => Ok(hir::TypeSpec::Concrete(
             w.map(|_| crate::types::BaseType::Unit),
             vec![],

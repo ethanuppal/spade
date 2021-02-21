@@ -54,6 +54,7 @@ pub enum TypeExpression {
 impl WithLocation for TypeExpression {}
 #[derive(PartialEq, Debug, Clone)]
 pub enum TypeSpec {
+    Tuple(Vec<Loc<TypeSpec>>),
     Named(Loc<Path>, Vec<Loc<TypeExpression>>),
     Unit(Loc<()>),
 }

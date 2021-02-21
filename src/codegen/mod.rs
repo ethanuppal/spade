@@ -1,10 +1,6 @@
 use indoc::formatdoc;
 
-use crate::{
-    hir::{expression::BinaryOperator, Entity, ExprKind, Expression, NameID, Register, Statement},
-    typeinference::TypeState,
-    types::{BaseType, ConcreteType, KnownType},
-};
+use crate::{hir::{expression::BinaryOperator, Entity, ExprKind, Expression, NameID, Register, Statement}, location_info::Loc, typeinference::{TypeState, equation::{TypeVar, TypedExpression}}, types::{BaseType, ConcreteType, KnownType}};
 
 mod util;
 mod verilog;
@@ -15,6 +11,12 @@ use self::{
 };
 
 use crate::code;
+
+
+pub enum Error {
+    UsingGenericType{expr: Loc<Expression>, t: TypeVar}
+}
+pub type Result<T> = std::result::Result<T, Error>;
 
 impl NameID {
     fn mangled(&self) -> String {
@@ -61,13 +63,31 @@ fn size_of_type(t: &ConcreteType) -> u128 {
     }
 }
 
+impl TypeState {
+    /// Returns the type of the expression as a concrete type. If the type is not
+    /// fully ungenerified, returns the corresponding type var
+    pub fn expr_type(&self, expr: &Loc<Expression>) -> Result<ConcreteType> {
+        let t = self
+                .type_of(&TypedExpression::Id(expr.id))
+                .expect("Expression had no specified type");
+
+        if let Some(t) = Self::ungenerify_type(&t) {
+            Ok(t)
+        }
+        else {
+            Err(Error::UsingGenericType{expr: expr.clone(), t: t.clone()})
+        }
+    }
+
+}
+
 // Consider rewriting this to be functions on the code struct
 
 impl Register {
-    pub fn code(&self, types: &TypeState, code: &mut Code) {
+    pub fn code(&self, types: &TypeState, code: &mut Code) -> Result<()> {
         // Generate the code for the expression
-        code.join(&self.value.code(types));
-        code.join(&self.clock.code(types));
+        code.join(&self.value.code(types)?);
+        code.join(&self.clock.code(types)?);
 
         let this_var = self.name.mangled();
         let this_type = types.type_of_name(&self.name.clone());
@@ -79,8 +99,8 @@ impl Register {
         // a reset is present, so we'll do those completely
         // separately for now
         let this_code = if let Some((rst_cond, rst_value)) = &self.reset {
-            code.join(&rst_cond.code(types));
-            code.join(&rst_value.code(types));
+            code.join(&rst_cond.code(types)?);
+            code.join(&rst_value.code(types)?);
             formatdoc! {r#"
                 always @(posedge {}, posedge {}) begin
                     if ({}) begin
@@ -109,15 +129,16 @@ impl Register {
             }
         };
 
-        code.join(&this_code)
+        code.join(&this_code);
+        Ok(())
     }
 }
 
 impl Statement {
-    pub fn code(&self, types: &TypeState, code: &mut Code) {
+    pub fn code(&self, types: &TypeState, code: &mut Code) -> Result<()> {
         match &self {
             Statement::Binding(name, _t, value) => {
-                code.join(&value.code(types));
+                code.join(&value.code(types)?);
 
                 let this_var = name.mangled();
                 let this_type = types.type_of_name(&name);
@@ -135,13 +156,14 @@ impl Statement {
                 code.join(&this_code)
             }
             Statement::Register(register) => {
-                register.code(types, code);
+                register.code(types, code)?;
             }
         }
+        Ok(())
     }
 }
 
-impl Expression {
+impl Loc<Expression> {
     /// If the verilog code for this expression is just an alias for another variable
     /// that is returned here. This allows us to skip generating wires that we don't
     /// really need
@@ -153,7 +175,7 @@ impl Expression {
             ExprKind::FnCall(_, _) => None,
             ExprKind::TupleLiteral(_) => None,
             ExprKind::TupleIndex(_, _) => None,
-            ExprKind::Block(block) => Some(block.result.inner.variable()),
+            ExprKind::Block(block) => Some(block.result.variable()),
             ExprKind::If(_, _, _) => None,
             ExprKind::BinaryOperator(_, _, _) => None,
         }
@@ -175,6 +197,8 @@ impl Expression {
         }
     }
 
+    // NOTE: this impl and a few others could be moved to a impl block that does not have
+    // the Loc requirement if desired
     pub fn variable(&self) -> String {
         // If this expressions should not use the standard __expr__{} variable,
         // that is specified here
@@ -183,17 +207,17 @@ impl Expression {
             .unwrap_or_else(|| format!("__expr__{}", self.id))
     }
 
-    pub fn code(&self, types: &TypeState) -> Code {
+    pub fn code(&self, types: &TypeState) -> Result<Code> {
         let mut code = Code::new();
 
         // Define the wire if it is needed
         if self.alias().is_none() {
             if self.requires_reg() {
-                code.join(&reg(&self.variable(), size_of_type(&types.expr_type(self))))
+                code.join(&reg(&self.variable(), size_of_type(&types.expr_type(self)?)))
             } else {
                 code.join(&wire(
                     &self.variable(),
-                    size_of_type(&types.expr_type(self)),
+                    size_of_type(&types.expr_type(self)?),
                 ))
             }
         }
@@ -253,31 +277,32 @@ impl Expression {
             }
             ExprKind::BinaryOperator(lhs, op, rhs) => {
                 let mut binop_builder = |op| {
-                    code.join(&lhs.inner.code(types));
-                    code.join(&rhs.inner.code(types));
+                    code.join(&lhs.code(types)?);
+                    code.join(&rhs.code(types)?);
 
                     let this_code = formatdoc! {r#"
                         assign {} = {} {} {};"#,
                         self.variable(),
-                        lhs.inner.variable(),
+                        lhs.variable(),
                         op,
-                        rhs.inner.variable(),
+                        rhs.variable(),
                     };
-                    code.join(&this_code)
+                    code.join(&this_code);
+                    Ok(())
                 };
 
                 match op {
-                    BinaryOperator::Add => binop_builder("+"),
-                    BinaryOperator::Sub => binop_builder("-"),
-                    BinaryOperator::Mul => binop_builder("*"),
-                    BinaryOperator::Eq => binop_builder("=="),
-                    BinaryOperator::Gt => binop_builder(">"),
-                    BinaryOperator::Lt => binop_builder("<"),
-                    BinaryOperator::LeftShift => binop_builder("<<"),
-                    BinaryOperator::RightShift => binop_builder(">>"),
-                    BinaryOperator::LogicalAnd => binop_builder("&&"),
-                    BinaryOperator::LogicalOr => binop_builder("||"),
-                }
+                    BinaryOperator::Add => binop_builder("+")?,
+                    BinaryOperator::Sub => binop_builder("-")?,
+                    BinaryOperator::Mul => binop_builder("*")?,
+                    BinaryOperator::Eq => binop_builder("==")?,
+                    BinaryOperator::Gt => binop_builder(">")?,
+                    BinaryOperator::Lt => binop_builder("<")?,
+                    BinaryOperator::LeftShift => binop_builder("<<")?,
+                    BinaryOperator::RightShift => binop_builder(">>")?,
+                    BinaryOperator::LogicalAnd => binop_builder("&&")?,
+                    BinaryOperator::LogicalOr => binop_builder("||")?,
+                };
             }
             ExprKind::TupleLiteral(elems) => {
                 let elem_code = elems
@@ -290,7 +315,7 @@ impl Expression {
                 code.join(&assign(&self.variable(), &format!("{{{}}}", elem_code)))
             }
             ExprKind::TupleIndex(tup, idx) => {
-                let types = match types.expr_type(tup) {
+                let types = match types.expr_type(tup)? {
                     ConcreteType::Tuple(inner) => inner,
                     ConcreteType::Single { .. } => {
                         panic!("Tuple indexing of non-tuple after type check");
@@ -311,16 +336,16 @@ impl Expression {
             }
             ExprKind::Block(block) => {
                 for statement in &block.statements {
-                    statement.code(types, &mut code);
+                    statement.code(types, &mut code)?;
                 }
-                code.join(&block.result.inner.code(types))
+                code.join(&block.result.code(types)?)
                 // Empty. The block result will always be the last expression
             }
             ExprKind::If(cond, on_true, on_false) => {
                 // TODO: Add a code struct that handles all this bullshit
-                code.join(&cond.inner.code(types));
-                code.join(&on_true.inner.code(types));
-                code.join(&on_false.inner.code(types));
+                code.join(&cond.code(types)?);
+                code.join(&on_true.code(types)?);
+                code.join(&on_false.code(types)?);
 
                 let self_var = self.variable();
                 let this_code = formatdoc! {r#"
@@ -332,20 +357,20 @@ impl Expression {
                             {} = {};
                         end
                     end"#,
-                    cond.inner.variable(),
+                    cond.variable(),
                     self_var,
-                    on_true.inner.variable(),
+                    on_true.variable(),
                     self_var,
-                    on_false.inner.variable()
+                    on_false.variable()
                 };
                 code.join(&this_code)
             }
         }
-        code
+        Ok(code)
     }
 }
 
-pub fn generate_entity<'a>(entity: &Entity, types: &TypeState) -> Code {
+pub fn generate_entity<'a>(entity: &Entity, types: &TypeState) -> Result<Code> {
     // Inputs are named _i_{name} and then translated to the name_id name for later use
     let inputs = entity.head.inputs.iter().map(|(name, _)| {
         let input_name = format!("_i_{}", name.1);
@@ -362,29 +387,47 @@ pub fn generate_entity<'a>(entity: &Entity, types: &TypeState) -> Code {
 
     let (inputs, input_assignments): (Vec<_>, Vec<_>) = inputs.unzip();
 
-    let output_t = types.expr_type(&entity.body);
+    let output_t = types.expr_type(&entity.body)?;
+
     let output_definition = format!("output{} __output", size_spec(size_of_type(&output_t)));
 
-    let output_assignment = assign("__output", &entity.body.inner.variable());
+    let output_assignment = assign("__output", &entity.body.variable());
 
-    code! {
+    Ok(code! {
         [0] &format!("module {} (", entity.name.1);
                 [2] &inputs;
                 [2] &output_definition;
             [1] &");";
             [1] &input_assignments;
-            [1] &entity.body.inner.code(types);
+            [1] &entity.body.code(types)?;
             [1] &output_assignment;
         [0] &"endmodule"
-    }
+    })
 }
 
 #[cfg(test)]
 mod tests {
+    use std::path::PathBuf;
+
     use super::*;
-    use crate::{assert_same_code, testutil::parse_typecheck_entity};
+    use crate::{assert_same_code, error_reporting, testutil::parse_typecheck_entity};
     use colored::Colorize;
     use indoc::indoc;
+
+    pub trait ResultExt<T> {
+        fn report_failure(self) -> T;
+    }
+    impl<T> ResultExt<T> for Result<T> {
+        fn report_failure(self) -> T {
+            match self {
+                Ok(t) => {t}
+                Err(e) => {
+                    error_reporting::report_codegen_error(&PathBuf::from(""), "", e, false);
+                    panic!("Compilation error")
+                }
+            }
+        }
+    }
 
     #[test]
     fn entity_defintions_are_correct() {
@@ -411,7 +454,9 @@ mod tests {
 
         let processed = parse_typecheck_entity(code);
 
-        let result = generate_entity(&processed.entity, &processed.type_state).to_string();
+        let result = generate_entity(&processed.entity, &processed.type_state)
+            .report_failure()
+            .to_string();
         assert_same_code!(&result, expected);
     }
 
@@ -455,7 +500,9 @@ mod tests {
 
         let processed = parse_typecheck_entity(code);
 
-        let result = generate_entity(&processed.entity, &processed.type_state).to_string();
+        let result = generate_entity(&processed.entity, &processed.type_state)
+            .report_failure()
+            .to_string();
         assert_same_code!(&result, expected);
     }
 
@@ -480,7 +527,9 @@ mod tests {
 
         let processed = parse_typecheck_entity(code);
 
-        let result = generate_entity(&processed.entity, &processed.type_state).to_string();
+        let result = generate_entity(&processed.entity, &processed.type_state)
+            .report_failure()
+            .to_string();
         assert_same_code!(&result, expected);
     }
 
@@ -511,7 +560,9 @@ mod tests {
 
         let processed = parse_typecheck_entity(code);
 
-        let result = generate_entity(&processed.entity, &processed.type_state).to_string();
+        let result = generate_entity(&processed.entity, &processed.type_state)
+            .report_failure()
+            .to_string();
         assert_same_code!(&result, expected);
     }
 
@@ -542,7 +593,9 @@ mod tests {
 
         let processed = parse_typecheck_entity(code);
 
-        let result = generate_entity(&processed.entity, &processed.type_state).to_string();
+        let result = generate_entity(&processed.entity, &processed.type_state)
+            .report_failure()
+            .to_string();
         assert_same_code!(&result, expected);
     }
 
@@ -573,7 +626,9 @@ mod tests {
 
         let processed = parse_typecheck_entity(code);
 
-        let result = generate_entity(&processed.entity, &processed.type_state).to_string();
+        let result = generate_entity(&processed.entity, &processed.type_state)
+            .report_failure()
+            .to_string();
         assert_same_code!(&result, expected);
     }
 
@@ -604,7 +659,9 @@ mod tests {
 
         let processed = parse_typecheck_entity(code);
 
-        let result = generate_entity(&processed.entity, &processed.type_state).to_string();
+        let result = generate_entity(&processed.entity, &processed.type_state)
+            .report_failure()
+            .to_string();
         assert_same_code!(&result, expected);
     }
 
@@ -635,7 +692,9 @@ mod tests {
 
         let processed = parse_typecheck_entity(code);
 
-        let result = generate_entity(&processed.entity, &processed.type_state).to_string();
+        let result = generate_entity(&processed.entity, &processed.type_state)
+            .report_failure()
+            .to_string();
         assert_same_code!(&result, expected);
     }
 
@@ -666,7 +725,9 @@ mod tests {
 
         let processed = parse_typecheck_entity(code);
 
-        let result = generate_entity(&processed.entity, &processed.type_state).to_string();
+        let result = generate_entity(&processed.entity, &processed.type_state)
+            .report_failure()
+            .to_string();
         assert_same_code!(&result, expected);
     }
 
@@ -697,7 +758,9 @@ mod tests {
 
         let processed = parse_typecheck_entity(code);
 
-        let result = generate_entity(&processed.entity, &processed.type_state).to_string();
+        let result = generate_entity(&processed.entity, &processed.type_state)
+            .report_failure()
+            .to_string();
         assert_same_code!(&result, expected);
     }
 
@@ -731,7 +794,9 @@ mod tests {
 
         let processed = parse_typecheck_entity(code);
 
-        let result = generate_entity(&processed.entity, &processed.type_state).to_string();
+        let result = generate_entity(&processed.entity, &processed.type_state)
+            .report_failure()
+            .to_string();
         assert_same_code!(&result, expected);
     }
 
@@ -775,7 +840,9 @@ mod tests {
 
         let processed = parse_typecheck_entity(code);
 
-        let result = generate_entity(&processed.entity, &processed.type_state).to_string();
+        let result = generate_entity(&processed.entity, &processed.type_state)
+            .report_failure()
+            .to_string();
         assert_same_code!(&result, expected);
     }
 
@@ -807,7 +874,9 @@ mod tests {
 
         let processed = parse_typecheck_entity(code);
 
-        let result = generate_entity(&processed.entity, &processed.type_state).to_string();
+        let result = generate_entity(&processed.entity, &processed.type_state)
+            .report_failure()
+            .to_string();
         assert_same_code!(&result, expected);
     }
 
@@ -843,7 +912,9 @@ mod tests {
 
         let processed = parse_typecheck_entity(code);
 
-        let result = generate_entity(&processed.entity, &processed.type_state).to_string();
+        let result = generate_entity(&processed.entity, &processed.type_state)
+            .report_failure()
+            .to_string();
         assert_same_code!(&result, expected);
     }
 }

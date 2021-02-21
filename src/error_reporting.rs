@@ -14,6 +14,7 @@ use codespan_reporting::{
 use crate::semantic_analysis::Error as SemanticError;
 use crate::symbol_table::Error as LookupError;
 use crate::typeinference::result::Error as InferenceError;
+use crate::codegen::Error as CodegenError;
 use crate::{parser::Error as ParseError, typeinference::result::UnificationTrace};
 
 fn color_choice(no_color: bool) -> ColorChoice {
@@ -291,4 +292,31 @@ pub fn report_typeinference_error(
     let writer = StandardStream::stderr(color_choice(no_color));
 
     term::emit(&mut writer.lock(), &codespan_config(), &files, &diag).unwrap();
+}
+
+pub fn report_codegen_error(
+    filename: &Path,
+    file_content: &str,
+    err: CodegenError,
+    no_color: bool,
+) {
+    let mut files = SimpleFiles::new();
+    let file_id = files.add(filename.to_string_lossy(), file_content);
+    let diag = match err {
+        CodegenError::UsingGenericType { expr, t } => {
+            Diagnostic::error()
+                .with_message(format!("Type of expression is not fully known"))
+                .with_labels(vec![
+                    Label::primary(file_id, expr.span).with_message(format!("Incomplete type")),
+                ])
+                .with_notes(vec![
+                    format!("Found incomplete type: {}", t)
+                ])
+        }
+    };
+
+    let writer = StandardStream::stderr(color_choice(no_color));
+
+    term::emit(&mut writer.lock(), &codespan_config(), &files, &diag).unwrap();
+
 }

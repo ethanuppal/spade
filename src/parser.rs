@@ -285,25 +285,43 @@ impl<'a> Parser<'a> {
     // Types
     #[trace_parser]
     fn type_spec(&mut self) -> Result<Loc<TypeSpec>> {
-        let (path, span) = self.path()?.separate();
-
-        // Check if this type has generic params
-        let (params, generic_span) = if self.peek_kind(&TokenKind::Lt)? {
-            let (type_expr, generic_span) = self.surrounded(
-                &TokenKind::Lt,
-                |s| s.type_expression().map(Some),
-                &TokenKind::Gt,
-            )?;
-
-            // Note: safe unwrap, if we got here, the expression must have matched
-            // and so the size is present, otherwise we'd return early above
-            let type_expr = type_expr.unwrap();
-            (vec![type_expr], generic_span.span)
+        if let Some(tuple) = self.tuple_spec()? {
+            Ok(tuple)
         } else {
-            (vec![], span)
-        };
+            let (path, span) = self.path()?.separate();
 
-        Ok(TypeSpec::Named(path, params).at(span.merge(generic_span)))
+            // Check if this type has generic params
+            let (params, generic_span) = if self.peek_kind(&TokenKind::Lt)? {
+                let (type_expr, generic_span) = self.surrounded(
+                    &TokenKind::Lt,
+                    |s| s.type_expression().map(Some),
+                    &TokenKind::Gt,
+                )?;
+
+                // Note: safe unwrap, if we got here, the expression must have matched
+                // and so the size is present, otherwise we'd return early above
+                let type_expr = type_expr.unwrap();
+                (vec![type_expr], generic_span.span)
+            } else {
+                (vec![], span)
+            };
+
+            Ok(TypeSpec::Named(path, params).at(span.merge(generic_span)))
+        }
+    }
+
+    #[trace_parser]
+    fn tuple_spec(&mut self) -> Result<Option<Loc<TypeSpec>>> {
+        if let Some(start) = self.peek_and_eat_kind(&TokenKind::OpenParen)? {
+            let inner = self.comma_separated(Self::type_spec, &TokenKind::CloseParen)?;
+            let end = self.eat(&TokenKind::CloseParen)?;
+
+            let span = lspan(start.span).merge(lspan(end.span));
+
+            Ok(Some(TypeSpec::Tuple(inner).at(span)))
+        } else {
+            Ok(None)
+        }
     }
 
     /// A name with an associated type, as used in argument definitions as well
@@ -1533,5 +1551,18 @@ mod tests {
         .nowhere();
 
         check_parse!(code, expression, Ok(expected));
+    }
+
+    #[test]
+    fn tuple_type_specs_work() {
+        let code = "(int, bool)";
+
+        let expected = TypeSpec::Tuple(vec![
+            TypeSpec::Named(ast_path("int"), vec![]).nowhere(),
+            TypeSpec::Named(ast_path("bool"), vec![]).nowhere(),
+        ])
+        .nowhere();
+
+        check_parse!(code, type_spec, Ok(expected));
     }
 }
