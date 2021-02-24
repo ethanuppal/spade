@@ -16,8 +16,6 @@ entity pong(clk: clk, rst: bool, tick_length: int<32>) -> int<8> {
         let ball = state#0;
         let direction = state#1;
 
-        let is_at_edge = ball == board_end_left || ball == board_end_right;
-
         let new_direction =
             if ball == board_end_left {
                 true
