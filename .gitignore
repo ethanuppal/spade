@@ -2,3 +2,5 @@ target
 parse_tree_macros/target
 Cargo.lock
 build
+
+.env

@@ -1,27 +1,17 @@
-[package]
-name = "spade"
-version = "0.1.0"
-authors = ["TheZoq2 <frans.skarman@protonmail.com>"]
-edition = "2018"
+[workspace]
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
-[dependencies]
-colored = "2.0"
-logos = "0.11.4"
-codespan = "0.9"
-codespan-reporting = "0.9"
-derivative = "2.1"
-structopt = "0.3"
-
-anyhow = "1.0.32"
-thiserror = "1.0.20"
-
-parse_tree_macros = {path = "parse_tree_macros"}
-indoc = "1.0"
-
-
-[dev-dependencies]
-prettydiff = "0.3.1"
-pretty_assertions = "0.6"
-goldentests = {path = "crates/golden-tests"}
+members = [
+    "spade-compiler",
+    "spade-hir",
+    "spade-types",
+    "spade-common",
+    "spade-parser",
+    "spade-hir-codegen",
+    "spade-typeinference",
+    "spade-error-reporting",
+    "spade-ast-lowering",
+    "spade-builtins",
+    "spade-testutil",
+    "spade-tests",
+    "parse_tree_macros"
+]
