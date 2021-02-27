@@ -1,0 +1,16 @@
+[package]
+name = "spade-mir"
+version = "0.1.0"
+authors = ["TheZoq2 <frans.skarman@protonmail.com>"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+logos = "0.11"
+thiserror = "1.0"
+codespan = "0.9"
+colored = "2.0"
+
+spade-common = {path = "../spade-common"}
+parse_tree_macros = {path = "../parse_tree_macros"}
