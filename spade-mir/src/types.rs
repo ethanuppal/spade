@@ -10,9 +10,7 @@ impl Type {
         match self {
             Type::Int(len) => *len,
             Type::Bool => 1,
-            Type::Tuple(inner) => {
-                inner.iter().map(|i| Type::size(i)).sum::<u64>()
-            }
+            Type::Tuple(inner) => inner.iter().map(|i| Type::size(i)).sum::<u64>(),
         }
     }
 }

@@ -12,6 +12,8 @@ thiserror = "1.0"
 codespan = "0.9"
 colored = "2.0"
 indoc = "1.0.3"
+prettydiff = "0.4"
 
+spade-testutil = {path = "../spade-testutil"}
 spade-common = {path = "../spade-common"}
 parse_tree_macros = {path = "../parse_tree_macros"}
