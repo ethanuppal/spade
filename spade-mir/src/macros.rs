@@ -1,13 +1,13 @@
 /// Macros for writing mir.
-/// Requires the crate to be in scope as `mir`, i.e. `use spade_mir as mir;`
+/// Requires the crate to be in scope, i.e. `use spade_mir;`
 
 #[macro_export]
 macro_rules! value_name {
     (n($id:expr, $debug_name:expr)) => {
-        mir::ValueName::Named($id, $debug_name.to_string())
+        spade_mir::ValueName::Named($id, $debug_name.to_string())
     };
     (e($id:expr)) => {
-        mir::ValueName::Expr($id)
+        spade_mir::ValueName::Expr($id)
     };
 }
 
@@ -20,11 +20,11 @@ macro_rules! statement {
         $operator:ident;
         $($arg_kind:ident $arg_name:tt),*
     ) => {
-        mir::Statement::Binding(mir::Binding {
-            name: mir::value_name!($name_kind($name)),
-            operator: mir::Operator::$operator,
+        spade_mir::Statement::Binding(spade_mir::Binding {
+            name: spade_mir::value_name!($name_kind($name)),
+            operator: spade_mir::Operator::$operator,
             operands: vec![
-                $(mir::value_name!($arg_kind $arg_name)),*
+                $(spade_mir::value_name!($arg_kind $arg_name)),*
             ],
             ty: $type
         })
@@ -37,15 +37,15 @@ macro_rules! statement {
         reset ($rst_trig_kind:ident $rst_trig_name:tt, $rst_val_kind:ident $rst_val_name:tt);
         $val_kind:ident $val_name:tt
     ) => {
-        mir::Statement::Register(mir::Register {
-            name: mir::value_name!($name_kind $name),
+        spade_mir::Statement::Register(spade_mir::Register {
+            name: spade_mir::value_name!($name_kind $name),
             ty: $type,
-            clock: mir::value_name!($clk_name_kind $clk_name),
+            clock: spade_mir::value_name!($clk_name_kind $clk_name),
             reset: Some((
-                mir::value_name!($rst_trig_kind $rst_trig_name),
-                mir::value_name!($rst_val_kind $rst_val_name)
+                spade_mir::value_name!($rst_trig_kind $rst_trig_name),
+                spade_mir::value_name!($rst_val_kind $rst_val_name)
             )),
-            value: mir::value_name!($val_kind $val_name)
+            value: spade_mir::value_name!($val_kind $val_name)
         })
     };
     // Register without reset
@@ -55,12 +55,12 @@ macro_rules! statement {
         clock ($clk_name_kind:ident $clk_name:tt);
         $val_kind:ident $val_name:tt
     ) => {
-        mir::Statement::Register(mir::Register {
-            name: mir::value_name!($name_kind $name),
+        spade_mir::Statement::Register(spade_mir::Register {
+            name: spade_mir::value_name!($name_kind $name),
             ty: $type,
-            clock: mir::value_name!($clk_name_kind $clk_name),
+            clock: spade_mir::value_name!($clk_name_kind $clk_name),
             reset: None,
-            value: mir::value_name!($val_kind $val_name)
+            value: spade_mir::value_name!($val_kind $val_name)
         })
     };
 }
@@ -83,19 +83,19 @@ macro_rules! entity {
             $( $statement:tt );*
         } => $output_name_kind:ident $output_name:tt
     ) => {
-        mir::Entity {
+        spade_mir::Entity {
             name: $name.to_string(),
             inputs: vec![
                 $( (
                     $arg_name.to_string(),
-                    mir::value_name!($arg_intern_kind $arg_intern_name),
+                    spade_mir::value_name!($arg_intern_kind $arg_intern_name),
                     $arg_type
                 )),*
             ],
-            output: mir::value_name!($output_name_kind $output_name),
+            output: spade_mir::value_name!($output_name_kind $output_name),
             output_type: $output_type,
             statements: vec![
-                $( mir::statement! $statement ),*
+                $( spade_mir::statement! $statement ),*
             ],
         }
     }
@@ -103,8 +103,7 @@ macro_rules! entity {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use crate as mir;
+    use crate as spade_mir;
     use crate::{types::Type, Binding, Operator, Register, Statement, ValueName};
 
     #[test]
