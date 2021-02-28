@@ -2,7 +2,7 @@
 pub enum Type {
     Int(u64),
     Bool,
-    Tuple(Vec<Box<Type>>),
+    Tuple(Vec<Type>),
 }
 
 impl Type {

@@ -2,7 +2,7 @@ use crate::{
     code,
     util::Code,
     verilog::{self, assign, size_spec, wire},
-    Entity, Operator, Statement, ValueName,
+    ConstantValue, Entity, Operator, Statement, ValueName,
 };
 
 impl ValueName {
@@ -24,14 +24,28 @@ fn statement_code(statement: &Statement) -> Code {
             let name = binding.name.var_name();
             let declaration = wire(&name, binding.ty.size());
 
-            let ops = &binding.operands;
+            let ops = &binding
+                .operands
+                .iter()
+                .map(ValueName::var_name)
+                .collect::<Vec<_>>();
             let expression = match binding.operator {
                 Operator::Add => {
                     assert!(
                         binding.operands.len() == 2,
                         "expected 2 operands to Add operator"
                     );
-                    format!("{} + {}", ops[0].var_name(), ops[1].var_name())
+                    format!("{} + {}", ops[0], ops[1])
+                }
+                Operator::Select => {
+                    assert!(
+                        binding.operands.len() == 3,
+                        "expected 3 operands to Select operator"
+                    );
+                    format!("{} ? {} : {}", ops[0], ops[1], ops[2])
+                }
+                Operator::ConstructTuple => {
+                    format!("{{{}}}", ops.join(", "))
                 }
             };
 
@@ -68,6 +82,22 @@ fn statement_code(statement: &Statement) -> Code {
                     [1]     &format!("{} <= {};", name, reg.value.var_name());
                     [0] &"end"
                 }
+            }
+        }
+        Statement::Constant(id, ty, value) => {
+            let name = ValueName::Expr(*id).var_name();
+            let declaration = wire(&name, ty.size());
+
+            let expression = match value {
+                ConstantValue::Int(val) => format!("{}", val),
+                ConstantValue::Bool(val) => format!("{}", val),
+            };
+
+            let assignment = format!("assign {} = {};", name, expression);
+
+            code! {
+                [0] &declaration;
+                [0] &assignment
             }
         }
     }
@@ -204,5 +234,57 @@ mod tests {
         );
 
         assert_same_code!(&entity_code(&input).to_string(), expected);
+    }
+
+    #[test]
+    fn constant_codegen_works() {
+        let input = statement!(const 0; Type::Int(10); crate::ConstantValue::Int(6));
+
+        let expected = indoc!(
+            r#"
+            wire[9:0] _e_0;
+            assign _e_0 = 6;"#
+        );
+
+        assert_same_code!(&statement_code(&input).to_string(), expected)
+    }
+}
+
+#[cfg(test)]
+mod expression_tests {
+    use super::*;
+    use colored::Colorize;
+
+    use crate as spade_mir;
+    use crate::{statement, types::Type};
+
+    use indoc::indoc;
+    use spade_testutil::assert_same_code;
+
+    #[test]
+    fn select_operator_works() {
+        let stmt = statement!(e(0); Type::Int(2); Select; e(1), e(2), e(3));
+
+        let expected = indoc!(
+            r#"
+            wire[1:0] _e_0;
+            assign _e_0 = _e_1 ? _e_2 : _e_3;"#
+        );
+
+        assert_same_code!(&statement_code(&stmt).to_string(), expected);
+    }
+
+    #[test]
+    fn tuple_assembly_operator_works() {
+        let ty = Type::Tuple(vec![Type::Int(6), Type::Int(3)]);
+        let stmt = statement!(e(0); ty; ConstructTuple; e(1), e(2));
+
+        let expected = indoc!(
+            r#"
+            wire[8:0] _e_0;
+            assign _e_0 = {_e_1, _e_2};"#
+        );
+
+        assert_same_code!(&statement_code(&stmt).to_string(), expected);
     }
 }

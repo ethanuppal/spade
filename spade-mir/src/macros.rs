@@ -13,6 +13,12 @@ macro_rules! value_name {
 
 #[macro_export]
 macro_rules! statement {
+    // Normal constants
+    (
+        const $id:expr; $ty:expr; $value:expr
+    ) => {
+        spade_mir::Statement::Constant($id, $ty, $value)
+    };
     // Bindings
     (
         $name_kind:ident $name:tt;
@@ -104,7 +110,7 @@ macro_rules! entity {
 #[cfg(test)]
 mod tests {
     use crate as spade_mir;
-    use crate::{types::Type, Binding, Operator, Register, Statement, ValueName};
+    use crate::{types::Type, Binding, ConstantValue, Operator, Register, Statement, ValueName};
 
     #[test]
     fn value_name_parsing_works() {
@@ -183,6 +189,15 @@ mod tests {
                 (e(0); Type::Int(6); Add; n(1, "value"));
                 (reg n(1, "value"); Type::Int(6); clock (n(0, "clk")); e(0))
             } => n(1, "value"));
+
+        assert_eq!(result, expected);
+    }
+
+    #[test]
+    fn constant_parsing_works() {
+        let expected = Statement::Constant(0, Type::Int(10), ConstantValue::Int(6));
+
+        let result = statement!(const 0; Type::Int(10); ConstantValue::Int(6));
 
         assert_eq!(result, expected);
     }

@@ -6,6 +6,12 @@ mod verilog;
 
 use types::Type;
 
+#[derive(Clone, PartialEq, Debug)]
+pub enum ConstantValue {
+    Int(u64),
+    Bool(bool),
+}
+
 /// A name of a value. Can either come from the NameID of the underlying
 /// variable, or the id of the underlying expression
 #[derive(Clone, PartialEq, Debug)]
@@ -19,7 +25,12 @@ pub enum ValueName {
 
 #[derive(Clone, PartialEq, Debug)]
 pub enum Operator {
+    /// Binary arithmetic operators
     Add,
+    /// Select [1] if [0] else [2]
+    Select,
+    /// Construct a tuple from all the operand expressions
+    ConstructTuple,
 }
 
 #[derive(Clone, PartialEq, Debug)]
@@ -43,6 +54,8 @@ pub struct Register {
 pub enum Statement {
     Binding(Binding),
     Register(Register),
+    /// A constant expression with the specified ID and value
+    Constant(u64, Type, ConstantValue),
 }
 
 #[derive(Clone, PartialEq, Debug)]
