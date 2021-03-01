@@ -1,4 +1,5 @@
 pub mod codegen;
+pub mod diff;
 pub mod macros;
 pub mod types;
 mod util;

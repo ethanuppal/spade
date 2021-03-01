@@ -27,7 +27,7 @@ macro_rules! statement {
         $($arg_kind:ident $arg_name:tt),*
     ) => {
         spade_mir::Statement::Binding(spade_mir::Binding {
-            name: spade_mir::value_name!($name_kind($name)),
+            name: spade_mir::value_name!($name_kind $name),
             operator: spade_mir::Operator::$operator,
             operands: vec![
                 $(spade_mir::value_name!($arg_kind $arg_name)),*
@@ -132,6 +132,21 @@ mod tests {
 
         assert_eq!(
             statement!(e(0); Type::Bool; Add; e(1), n(1, "test")),
+            expected
+        );
+    }
+
+    #[test]
+    fn named_parsing_works() {
+        let expected = Statement::Binding(Binding {
+            name: ValueName::Named(0, "string".to_string()),
+            operator: Operator::Add,
+            operands: vec![ValueName::Expr(1), ValueName::Named(1, "test".to_string())],
+            ty: Type::Bool,
+        });
+
+        assert_eq!(
+            statement!(n(0, "string"); Type::Bool; Add; e(1), n(1, "test")),
             expected
         );
     }

@@ -51,6 +51,7 @@ mod tests {
         let result = generate_entity(&processed.entity, &processed.type_state)
             .report_failure()
             .to_string();
+
         assert_same_code!(&result, expected);
     }
 
