@@ -25,8 +25,27 @@ impl VarMap {
         self.name_map.insert(lhs, rhs);
     }
 
-    pub fn compare_name(
-        &mut self,
+    pub fn try_update_name(&mut self, lhs: &ValueName, rhs: &ValueName) -> Result<(), ()> {
+        // Update the name if both are the same kind
+        match (lhs, rhs) {
+            (ValueName::Named(i1, n1), ValueName::Named(i2, n2)) => {
+                if n1 != n2 {
+                    Err(())
+                } else {
+                    self.map_name(*i1, *i2);
+                    Ok(())
+                }
+            }
+            (ValueName::Expr(i1), ValueName::Expr(i2)) => {
+                self.map_expr(*i1, *i2);
+                Ok(())
+            }
+            _ => Err(()),
+        }
+    }
+
+    fn compare_name(
+        &self,
         (lhs_id, lhs_name): (&u64, &str),
         (rhs_id, rhs_name): (&u64, &str),
     ) -> bool {
@@ -40,13 +59,30 @@ impl VarMap {
             .unwrap_or(false)
     }
 
-    pub fn compare_exprs(&mut self, lhs: u64, rhs: u64) -> bool {
+    fn compare_exprs(&self, lhs: u64, rhs: u64) -> bool {
         self.expr_map.get(&lhs).map(|v| v == &rhs).unwrap_or(false)
+    }
+
+    pub fn compare_vals(&self, lhs: &ValueName, rhs: &ValueName) -> bool {
+        match (lhs, rhs) {
+            (ValueName::Named(i1, n1), ValueName::Named(i2, n2)) => {
+                self.compare_name((i1, n1), (i2, n2))
+            }
+            (ValueName::Expr(i1), ValueName::Expr(i2)) => self.compare_exprs(*i1, *i2),
+            _ => return false,
+        }
     }
 }
 
 /// Compare statements, if they match, add the new mapping to the mapping table
 fn compare_statements(s1: &Statement, s2: &Statement, var_map: &mut VarMap) -> bool {
+    macro_rules! check_name {
+        ($lhs:expr, $rhs:expr) => {
+            if !var_map.compare_vals($lhs, $rhs) {
+                return false;
+            }
+        };
+    }
     match (s1, s2) {
         (Statement::Binding(b1), Statement::Binding(b2)) => {
             // Compare the types and operators
@@ -61,35 +97,54 @@ fn compare_statements(s1: &Statement, s2: &Statement, var_map: &mut VarMap) -> b
                 return false;
             }
             // Check the params
-            for pair in b1.operands.iter().zip(b2.operands.iter()) {
-                match pair {
-                    (ValueName::Named(id1, name1), ValueName::Named(id2, name2)) => {
-                        if !var_map.compare_name((id1, name1), (id2, name2)) {
-                            return false;
-                        }
-                    }
-                    (ValueName::Expr(_), ValueName::Expr(_)) => {}
-                    _ => return false,
-                }
+            for (n1, n2) in b1.operands.iter().zip(b2.operands.iter()) {
+                check_name!(n1, n2)
             }
 
-            match (&b1.name, &b2.name) {
-                (ValueName::Named(i1, n1), ValueName::Named(i2, n2)) => {
-                    if n1 != n2 {
-                        return false;
-                    }
-                    var_map.map_name(*i1, *i2)
-                }
-                (ValueName::Expr(i1), ValueName::Expr(i2)) => var_map.map_expr(*i1, *i2),
-                _ => return false,
+            if var_map.try_update_name(&b1.name, &b2.name).is_err() {
+                return false;
             }
+
             true
         }
-        (Statement::Register(_), Statement::Register(_)) => {
-            todo!()
+        (Statement::Register(r1), Statement::Register(r2)) => {
+            if r1.ty != r2.ty {
+                return false;
+            }
+
+            check_name!(&r1.value, &r2.value);
+            check_name!(&r1.clock, &r2.clock);
+
+            match (&r1.reset, &r2.reset) {
+                (Some((t1, v1)), Some((t2, v2))) => {
+                    check_name!(&t1, &t2);
+                    check_name!(&v1, &v2);
+                }
+                (None, None) => {}
+                _ => return false,
+            }
+
+            if var_map.try_update_name(&r1.name, &r2.name).is_err() {
+                return false;
+            }
+
+            return true;
         }
-        (Statement::Constant(_, _, _), Statement::Constant(_, _, _)) => {
-            todo!()
+        (Statement::Constant(e1, t1, v1), Statement::Constant(e2, t2, v2)) => {
+            if t1 != t2 {
+                return false;
+            }
+            if v1 != v2 {
+                return false;
+            }
+
+            if var_map
+                .try_update_name(&ValueName::Expr(*e1), &ValueName::Expr(*e2))
+                .is_err()
+            {
+                return false;
+            }
+            true
         }
         _ => false,
     }
@@ -99,7 +154,7 @@ fn compare_statements(s1: &Statement, s2: &Statement, var_map: &mut VarMap) -> b
 mod tests {
     use super::*;
 
-    use crate::{statement, types::Type};
+    use crate::{statement, types::Type, ConstantValue};
 
     use crate as spade_mir;
 
@@ -168,6 +223,226 @@ mod tests {
 
         let lhs = statement!(e(0); Type::Int(5); Add; e(1), e(2));
         let rhs = statement!(e(3); Type::Int(5); Select; e(1), e(2));
+
+        assert!(!compare_statements(&lhs, &rhs, &mut map));
+    }
+
+    #[test]
+    fn bindings_with_missmatched_operands_are_different() {
+        let mut map = VarMap::new();
+
+        map.map_expr(1, 1);
+        map.map_expr(2, 2);
+
+        let lhs = statement!(e(0); Type::Int(5); Add; e(2), e(1));
+        let rhs = statement!(e(3); Type::Int(5); Add; e(1), e(2));
+
+        assert!(!compare_statements(&lhs, &rhs, &mut map));
+    }
+
+    #[test]
+    fn bindings_with_unmapped_names_are_different() {
+        let mut map = VarMap::new();
+
+        map.map_expr(1, 1);
+        map.map_expr(2, 2);
+
+        let lhs = statement!(e(0); Type::Int(5); Add; e(2), e(1));
+        let rhs = statement!(e(3); Type::Int(5); Add; e(1), e(3));
+
+        assert!(!compare_statements(&lhs, &rhs, &mut map));
+    }
+
+    // Register tests
+    #[test]
+    fn identical_registers_with_reset_do_not_diff() {
+        let mut map = VarMap::new();
+
+        map.map_expr(1, 1);
+        map.map_expr(2, 2);
+        map.map_expr(3, 3);
+        map.map_expr(4, 4);
+
+        let lhs = statement!(reg e(0); Type::Int(5); clock(e(2)); reset(e(3), e(4)); e(1));
+        let rhs = statement!(reg e(5); Type::Int(5); clock(e(2)); reset(e(3), e(4)); e(1));
+
+        assert!(compare_statements(&lhs, &rhs, &mut map));
+    }
+
+    #[test]
+    fn identical_registers_with_reset_do_not_diff_and_update_names() {
+        let mut map = VarMap::new();
+
+        map.map_expr(1, 1);
+        map.map_expr(2, 2);
+        map.map_expr(3, 3);
+        map.map_expr(4, 4);
+
+        let lhs = statement!(reg e(0); Type::Int(5); clock(e(2)); reset(e(3), e(4)); e(1));
+        let rhs = statement!(reg e(5); Type::Int(5); clock(e(2)); reset(e(3), e(4)); e(1));
+
+        assert!(compare_statements(&lhs, &rhs, &mut map));
+
+        assert!(map.compare_exprs(0, 5));
+    }
+
+    #[test]
+    fn identical_registers_update_name_table() {
+        let mut map = VarMap::new();
+
+        map.map_expr(1, 1);
+        map.map_expr(2, 2);
+        map.map_expr(3, 3);
+        map.map_expr(4, 4);
+
+        let lhs = statement!(reg n(0, "test"); Type::Int(5); clock(e(2)); reset(e(3), e(4)); e(1));
+        let rhs = statement!(reg n(5, "test"); Type::Int(5); clock(e(2)); reset(e(3), e(4)); e(1));
+
+        assert!(compare_statements(&lhs, &rhs, &mut map));
+
+        assert!(map.compare_name((&0, "test"), (&5, "test")));
+    }
+
+    #[test]
+    fn missmatched_register_clocks_causes_a_diff() {
+        let mut map = VarMap::new();
+
+        map.map_expr(1, 1);
+        map.map_expr(2, 2);
+        map.map_expr(3, 3);
+        map.map_expr(4, 4);
+
+        let lhs = statement!(reg e(0); Type::Int(5); clock(e(3)); reset(e(3), e(4)); e(1));
+        let rhs = statement!(reg e(0); Type::Int(5); clock(e(2)); reset(e(3), e(4)); e(1));
+
+        assert!(!compare_statements(&lhs, &rhs, &mut map));
+    }
+
+    #[test]
+    fn missmatched_register_reset_trig_causes_a_diff() {
+        let mut map = VarMap::new();
+
+        map.map_expr(1, 1);
+        map.map_expr(2, 2);
+        map.map_expr(3, 3);
+        map.map_expr(4, 4);
+
+        let lhs = statement!(reg e(0); Type::Int(5); clock(e(3)); reset(e(3), e(4)); e(1));
+        let rhs = statement!(reg e(0); Type::Int(5); clock(e(3)); reset(e(2), e(4)); e(1));
+
+        assert!(!compare_statements(&lhs, &rhs, &mut map));
+    }
+
+    #[test]
+    fn missmatched_register_value_causes_diff() {
+        let mut map = VarMap::new();
+
+        map.map_expr(1, 1);
+        map.map_expr(2, 2);
+        map.map_expr(3, 3);
+        map.map_expr(4, 4);
+
+        let lhs = statement!(reg e(0); Type::Int(5); clock(e(2)); reset(e(3), e(4)); e(1));
+        let rhs = statement!(reg e(0); Type::Int(5); clock(e(2)); reset(e(3), e(5)); e(1));
+
+        assert!(!compare_statements(&lhs, &rhs, &mut map));
+    }
+
+    #[test]
+    fn identical_registers_with_missmatched_value_diff() {
+        let mut map = VarMap::new();
+
+        map.map_expr(1, 1);
+        map.map_expr(2, 2);
+        map.map_expr(3, 3);
+        map.map_expr(4, 4);
+
+        let lhs = statement!(reg e(0); Type::Int(5); clock(e(2)); reset(e(3), e(4)); e(1));
+        let rhs = statement!(reg e(0); Type::Int(5); clock(e(2)); reset(e(3), e(4)); e(2));
+
+        assert!(!compare_statements(&lhs, &rhs, &mut map));
+    }
+
+    #[test]
+    fn missing_register_causes_adiff() {
+        let mut map = VarMap::new();
+
+        map.map_expr(1, 1);
+        map.map_expr(2, 2);
+        map.map_expr(3, 3);
+        map.map_expr(4, 4);
+
+        let lhs = statement!(reg e(0); Type::Int(5); clock(e(2)); reset(e(3), e(4)); e(1));
+        let rhs = statement!(reg e(0); Type::Int(5); clock(e(2)); e(1));
+
+        assert!(!compare_statements(&lhs, &rhs, &mut map));
+    }
+
+    #[test]
+    fn missmatched_types_causes_register_diff() {
+        let mut map = VarMap::new();
+
+        map.map_expr(1, 1);
+        map.map_expr(2, 2);
+        map.map_expr(3, 3);
+        map.map_expr(4, 4);
+
+        let lhs = statement!(reg e(0); Type::Int(6); clock(e(2)); reset(e(3), e(4)); e(1));
+        let rhs = statement!(reg e(5); Type::Int(5); clock(e(2)); reset(e(3), e(4)); e(1));
+
+        assert!(!compare_statements(&lhs, &rhs, &mut map));
+    }
+
+    // Constants
+
+    #[test]
+    fn identical_constants_match() {
+        let mut map = VarMap::new();
+
+        let lhs = statement!(const 0; Type::Int(5); ConstantValue::Int(10));
+        let rhs = statement!(const 0; Type::Int(5); ConstantValue::Int(10));
+
+        assert!(compare_statements(&lhs, &rhs, &mut map));
+    }
+
+    #[test]
+    fn identical_constants_update_expressions() {
+        let mut map = VarMap::new();
+
+        let lhs = statement!(const 0; Type::Int(5); ConstantValue::Int(10));
+        let rhs = statement!(const 1; Type::Int(5); ConstantValue::Int(10));
+
+        assert!(compare_statements(&lhs, &rhs, &mut map));
+
+        assert!(map.compare_exprs(0, 1));
+    }
+
+    #[test]
+    fn constant_type_missmatch_diff() {
+        let mut map = VarMap::new();
+
+        let lhs = statement!(const 0; Type::Int(6); ConstantValue::Int(10));
+        let rhs = statement!(const 0; Type::Int(5); ConstantValue::Int(10));
+
+        assert!(!compare_statements(&lhs, &rhs, &mut map));
+    }
+
+    #[test]
+    fn constant_value_missmatch_diff() {
+        let mut map = VarMap::new();
+
+        let lhs = statement!(const 0; Type::Int(5); ConstantValue::Int(11));
+        let rhs = statement!(const 0; Type::Int(5); ConstantValue::Int(10));
+
+        assert!(!compare_statements(&lhs, &rhs, &mut map));
+    }
+
+    #[test]
+    fn constant_value_type_missmatch_diff() {
+        let mut map = VarMap::new();
+
+        let lhs = statement!(const 0; Type::Int(5); ConstantValue::Bool(false));
+        let rhs = statement!(const 0; Type::Int(5); ConstantValue::Int(10));
 
         assert!(!compare_statements(&lhs, &rhs, &mut map));
     }
