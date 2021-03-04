@@ -7,7 +7,7 @@ macro_rules! check {
         if !($cond) {
             return false;
         }
-    }
+    };
 }
 
 /// Functions for diffing and comparing mir code while ignoring exact variable IDs
@@ -158,7 +158,6 @@ fn compare_statements(s1: &Statement, s2: &Statement, var_map: &mut VarMap) -> b
     }
 }
 
-
 pub fn compare_entity(e1: &Entity, e2: &Entity, var_map: &mut VarMap) -> bool {
     check!(e1.name == e2.name);
     check!(e1.output_type == e2.output_type);
@@ -172,6 +171,7 @@ pub fn compare_entity(e1: &Entity, e2: &Entity, var_map: &mut VarMap) -> bool {
     for (s1, s2) in e1.statements.iter().zip(e2.statements.iter()) {
         check!(compare_statements(s1, s2, var_map))
     }
+    check!(e1.statements.len() == e2.statements.len());
 
     check!(var_map.compare_vals(&e1.output, &e2.output));
 
@@ -480,8 +480,8 @@ mod statement_comparison_tests {
 mod entity_comparison_tests {
     use super::*;
 
-    use crate::{Type, entity};
     use crate as spade_mir;
+    use crate::{entity, Type};
 
     #[test]
     fn identical_entities_have_no_diff() {
@@ -588,7 +588,6 @@ mod entity_comparison_tests {
         assert!(!compare_entity(&lhs, &rhs, &mut var_map));
     }
 
-
     #[test]
     fn missmatched_statements_cause_diff() {
         let mut var_map = VarMap::new();
@@ -599,6 +598,22 @@ mod entity_comparison_tests {
         } => n(1, "value"));
         let rhs = entity!("pong"; ("_i_clk", n(0, "clk"), Type::Bool) -> Type::Int(6); {
             (e(0); Type::Int(7); Add; n(1, "value"))
+        } => n(1, "value"));
+
+        assert!(!compare_entity(&lhs, &rhs, &mut var_map));
+    }
+
+    #[test]
+    fn missmatched_statement_counts_diff() {
+        let mut var_map = VarMap::new();
+        var_map.map_name(1, 1);
+
+        let lhs = entity!("pong"; ("_i_clk", n(0, "clk"), Type::Bool) -> Type::Int(6); {
+            (e(0); Type::Int(6); Add; n(1, "value"));
+            (e(0); Type::Int(6); Add; n(1, "value"))
+        } => n(1, "value"));
+        let rhs = entity!("pong"; ("_i_clk", n(0, "clk"), Type::Bool) -> Type::Int(6); {
+            (e(0); Type::Int(6); Add; n(1, "value"))
         } => n(1, "value"));
 
         assert!(!compare_entity(&lhs, &rhs, &mut var_map));
