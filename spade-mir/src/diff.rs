@@ -1,10 +1,18 @@
 use std::collections::HashMap;
 
-use crate::{Statement, ValueName};
+use crate::{Entity, Statement, ValueName};
+
+macro_rules! check {
+    ($cond:expr) => {
+        if !($cond) {
+            return false;
+        }
+    }
+}
 
 /// Functions for diffing and comparing mir code while ignoring exact variable IDs
 
-struct VarMap {
+pub struct VarMap {
     expr_map: HashMap<u64, u64>,
     name_map: HashMap<u64, u64>,
 }
@@ -150,8 +158,28 @@ fn compare_statements(s1: &Statement, s2: &Statement, var_map: &mut VarMap) -> b
     }
 }
 
+
+pub fn compare_entity(e1: &Entity, e2: &Entity, var_map: &mut VarMap) -> bool {
+    check!(e1.name == e2.name);
+    check!(e1.output_type == e2.output_type);
+
+    for ((n1, vn1, t1), (n2, vn2, t2)) in e1.inputs.iter().zip(e2.inputs.iter()) {
+        check!(n1 == n2);
+        check!(var_map.try_update_name(vn1, vn2).is_ok());
+        check!(t1 == t2);
+    }
+
+    for (s1, s2) in e1.statements.iter().zip(e2.statements.iter()) {
+        check!(compare_statements(s1, s2, var_map))
+    }
+
+    check!(var_map.compare_vals(&e1.output, &e2.output));
+
+    return true;
+}
+
 #[cfg(test)]
-mod tests {
+mod statement_comparison_tests {
     use super::*;
 
     use crate::{statement, types::Type, ConstantValue};
@@ -445,5 +473,134 @@ mod tests {
         let rhs = statement!(const 0; Type::Int(5); ConstantValue::Int(10));
 
         assert!(!compare_statements(&lhs, &rhs, &mut map));
+    }
+}
+
+#[cfg(test)]
+mod entity_comparison_tests {
+    use super::*;
+
+    use crate::{Type, entity};
+    use crate as spade_mir;
+
+    #[test]
+    fn identical_entities_have_no_diff() {
+        let mut var_map = VarMap::new();
+        var_map.map_name(1, 1);
+        let lhs = entity!("pong"; ("_i_clk", n(0, "clk"), Type::Bool) -> Type::Int(6); {
+        } => n(1, "value"));
+        let rhs = entity!("pong"; ("_i_clk", n(0, "clk"), Type::Bool) -> Type::Int(6); {
+        } => n(1, "value"));
+
+        assert!(compare_entity(&lhs, &rhs, &mut var_map));
+    }
+
+    #[test]
+    fn names_are_mapped_for_inputs() {
+        let mut var_map = VarMap::new();
+        var_map.map_name(1, 1);
+
+        let lhs = entity!("pong"; ("_i_clk", n(0, "clk"), Type::Bool) -> Type::Int(6); {
+        } => n(1, "value"));
+        let rhs = entity!("pong"; ("_i_clk", n(2, "clk"), Type::Bool) -> Type::Int(6); {
+        } => n(1, "value"));
+
+        assert!(compare_entity(&lhs, &rhs, &mut var_map));
+
+        assert!(var_map.compare_name((&0, "clk"), (&2, "clk")));
+    }
+
+    #[test]
+    fn missmatched_name_causes_diff() {
+        let mut var_map = VarMap::new();
+        var_map.map_name(1, 1);
+
+        let lhs = entity!("pong"; ("_i_clk", n(0, "clk"), Type::Bool) -> Type::Int(6); {
+        } => n(1, "value"));
+        let rhs = entity!("not_pong"; ("_i_clk", n(0, "clk"), Type::Bool) -> Type::Int(6); {
+        } => n(1, "value"));
+
+        assert!(!compare_entity(&lhs, &rhs, &mut var_map));
+    }
+
+    #[test]
+    fn input_types_must_match() {
+        let mut var_map = VarMap::new();
+        var_map.map_name(1, 1);
+
+        let lhs = entity!("pong"; ("_i_clk", n(0, "clk"), Type::Bool) -> Type::Int(6); {
+        } => n(1, "value"));
+        let rhs = entity!("pong"; ("_i_clk", n(0, "clk"), Type::Int(6)) -> Type::Int(6); {
+        } => n(1, "value"));
+
+        assert!(!compare_entity(&lhs, &rhs, &mut var_map));
+    }
+
+    #[test]
+    fn input_name_missmatch() {
+        let mut var_map = VarMap::new();
+        var_map.map_name(1, 1);
+
+        let lhs = entity!("pong"; ("_i_clk", n(0, "clk"), Type::Bool) -> Type::Int(6); {
+        } => n(1, "value"));
+        let rhs = entity!("pong"; ("_i_not_clk", n(0, "clk"), Type::Int(6)) -> Type::Int(6); {
+        } => n(1, "value"));
+
+        assert!(!compare_entity(&lhs, &rhs, &mut var_map));
+    }
+
+    #[test]
+    fn input_value_name_missmatch() {
+        let mut var_map = VarMap::new();
+        var_map.map_name(1, 1);
+
+        let lhs = entity!("pong"; ("_i_clk", n(0, "clk"), Type::Bool) -> Type::Int(6); {
+        } => n(1, "value"));
+        let rhs = entity!("pong"; ("_i_clk", n(0, "not_clk"), Type::Int(6)) -> Type::Int(6); {
+        } => n(1, "value"));
+
+        assert!(!compare_entity(&lhs, &rhs, &mut var_map));
+    }
+
+    #[test]
+    fn output_type_missmatch_causes_diff() {
+        let mut var_map = VarMap::new();
+        var_map.map_name(1, 1);
+
+        let lhs = entity!("pong"; ("_i_clk", n(0, "clk"), Type::Bool) -> Type::Int(7); {
+        } => n(1, "value"));
+        let rhs = entity!("pong"; ("_i_clk", n(0, "clk"), Type::Bool) -> Type::Int(6); {
+        } => n(1, "value"));
+
+        assert!(!compare_entity(&lhs, &rhs, &mut var_map));
+    }
+
+    #[test]
+    fn output_name_missmatches_are_caught() {
+        let mut var_map = VarMap::new();
+        var_map.map_name(1, 1);
+
+        let lhs = entity!("pong"; ("_i_clk", n(0, "clk"), Type::Bool) -> Type::Int(6); {
+        } => e(1));
+        let rhs = entity!("pong"; ("_i_clk", n(0, "clk"), Type::Bool) -> Type::Int(6); {
+        } => e(2));
+
+        assert!(!compare_entity(&lhs, &rhs, &mut var_map));
+    }
+
+
+    #[test]
+    fn missmatched_statements_cause_diff() {
+        let mut var_map = VarMap::new();
+        var_map.map_name(1, 1);
+
+        let lhs = entity!("pong"; ("_i_clk", n(0, "clk"), Type::Bool) -> Type::Int(6); {
+            (e(0); Type::Int(6); Add; n(1, "value"))
+        } => n(1, "value"));
+        let rhs = entity!("pong"; ("_i_clk", n(0, "clk"), Type::Bool) -> Type::Int(6); {
+            (e(0); Type::Int(7); Add; n(1, "value"))
+        } => n(1, "value"));
+
+        assert!(!compare_entity(&lhs, &rhs, &mut var_map));
     }
 }
