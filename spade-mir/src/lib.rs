@@ -1,5 +1,6 @@
 pub mod codegen;
 pub mod diff;
+pub mod diff_printing;
 pub mod macros;
 pub mod types;
 mod util;
@@ -11,6 +12,15 @@ use types::Type;
 pub enum ConstantValue {
     Int(u64),
     Bool(bool),
+}
+
+impl std::fmt::Display for ConstantValue {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ConstantValue::Int(val) => write!(f, "{}", val),
+            ConstantValue::Bool(val) => write!(f, "{}", val),
+        }
+    }
 }
 
 /// A name of a value. Can either come from the NameID of the underlying
@@ -32,6 +42,16 @@ pub enum Operator {
     Select,
     /// Construct a tuple from all the operand expressions
     ConstructTuple,
+}
+
+impl std::fmt::Display for Operator {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Operator::Add => write!(f, "Add"),
+            Operator::Select => write!(f, "Select"),
+            Operator::ConstructTuple => write!(f, "ConstructTuple"),
+        }
+    }
 }
 
 #[derive(Clone, PartialEq, Debug)]

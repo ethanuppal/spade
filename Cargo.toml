@@ -14,5 +14,6 @@ members = [
     "spade-testutil",
     "spade-tests",
     "spade-mir",
+    "spade-hir-lowering",
     "parse_tree_macros"
 ]

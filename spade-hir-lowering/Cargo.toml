@@ -1,5 +1,5 @@
 [package]
-name = "spade-error-reporting"
+name = "spade-hir-lowering"
 version = "0.1.0"
 authors = ["TheZoq2 <frans.skarman@protonmail.com>"]
 edition = "2018"
@@ -7,14 +7,17 @@ edition = "2018"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-codespan = "0.9"
-codespan-reporting = "0.9"
+indoc = "1.0"
 
 spade-common = {path = "../spade-common"}
 spade-types = {path = "../spade-types"}
 spade-hir = {path = "../spade-hir"}
-spade-hir-codegen = {path = "../spade-hir-codegen"}
-spade-hir-lowering = {path = "../spade-hir-lowering"}
+spade-mir = {path = "../spade-mir"}
 spade-typeinference = {path = "../spade-typeinference"}
-spade-parser = {path = "../spade-parser"}
-spade-ast-lowering = {path = "../spade-ast-lowering"}
+
+[dev-dependencies]
+prettydiff = "0.3.1"
+pretty_assertions = "0.6"
+colored = "2.0"
+spade-error-reporting = {path = "../spade-error-reporting"}
+spade-testutil = {path = "../spade-testutil"}

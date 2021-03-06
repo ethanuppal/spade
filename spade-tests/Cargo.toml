@@ -16,7 +16,9 @@ spade-testutil = {path = "../spade-testutil"}
 spade-common = {path = "../spade-common"}
 spade-parser = {path = "../spade-parser"}
 spade-hir = {path = "../spade-hir"}
+spade-mir = {path = "../spade-mir"}
 spade-hir-codegen = {path = "../spade-hir-codegen"}
+spade-hir-lowering = {path = "../spade-hir-lowering"}
 spade-typeinference = {path = "../spade-typeinference"}
 spade-builtins = {path = "../spade-builtins"}
 spade-error-reporting = {path = "../spade-error-reporting"}

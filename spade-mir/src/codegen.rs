@@ -141,6 +141,27 @@ pub fn entity_code(entity: &Entity) -> Code {
     }
 }
 
+#[macro_export]
+macro_rules! assert_same_code {
+    ($got:expr, $expected:expr) => {
+        if $got != $expected {
+            println!("{}:\n{}", "got".red(), $got);
+            println!("{}", "==============================================".red());
+            println!("{}:\n{}", "expected".green(), $expected);
+            println!(
+                "{}",
+                "==============================================".green()
+            );
+            println!("{}", prettydiff::diff_chars($got, $expected));
+            println!(
+                "{}",
+                "==============================================".yellow()
+            );
+            panic!("Code missmatch")
+        }
+    };
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -150,7 +171,6 @@ mod tests {
     use crate::{entity, statement, types::Type};
 
     use indoc::indoc;
-    use spade_testutil::assert_same_code;
 
     #[test]
     fn size_1_wires_have_no_size_spec() {
@@ -259,7 +279,6 @@ mod expression_tests {
     use crate::{statement, types::Type};
 
     use indoc::indoc;
-    use spade_testutil::assert_same_code;
 
     #[test]
     fn select_operator_works() {

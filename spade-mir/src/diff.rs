@@ -13,24 +13,30 @@ macro_rules! check {
 /// Functions for diffing and comparing mir code while ignoring exact variable IDs
 
 pub struct VarMap {
-    expr_map: HashMap<u64, u64>,
-    name_map: HashMap<u64, u64>,
+    pub expr_map: HashMap<u64, u64>,
+    pub expr_map_rev: HashMap<u64, u64>,
+    pub name_map: HashMap<u64, u64>,
+    pub name_map_rev: HashMap<u64, u64>,
 }
 
 impl VarMap {
     pub fn new() -> Self {
         Self {
             expr_map: HashMap::new(),
+            expr_map_rev: HashMap::new(),
             name_map: HashMap::new(),
+            name_map_rev: HashMap::new(),
         }
     }
 
     pub fn map_expr(&mut self, lhs: u64, rhs: u64) {
         self.expr_map.insert(lhs, rhs);
+        self.expr_map_rev.insert(rhs, lhs);
     }
 
     pub fn map_name(&mut self, lhs: u64, rhs: u64) {
         self.name_map.insert(lhs, rhs);
+        self.name_map_rev.insert(rhs, lhs);
     }
 
     pub fn try_update_name(&mut self, lhs: &ValueName, rhs: &ValueName) -> Result<(), ()> {
