@@ -24,7 +24,6 @@ struct Opt {
     pub no_color: bool,
 }
 
-#[allow(dead_code, unused_variables, unused_mut)]
 fn main() -> Result<()> {
     let opts = Opt::from_args();
 
