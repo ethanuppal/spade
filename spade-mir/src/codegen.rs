@@ -72,7 +72,7 @@ fn statement_code(statement: &Statement) -> Code {
 
                     // Check if this is a single bit, if so, index using just it
                     let index = if target_width == 1 {
-                        format!("{}", total_width - start_bit)
+                        format!("{}", total_width - start_bit - 1)
                     } else {
                         format!("{}:{}", total_width - start_bit - 1, total_width - end_bit)
                     };
@@ -130,7 +130,7 @@ fn statement_code(statement: &Statement) -> Code {
 
             let expression = match value {
                 ConstantValue::Int(val) => format!("{}", val),
-                ConstantValue::Bool(val) => format!("{}", val),
+                ConstantValue::Bool(val) => format!("{}", if *val { 1 } else { 0 }),
             };
 
             let assignment = format!("assign {} = {};", name, expression);
@@ -374,6 +374,19 @@ mod expression_tests {
     }
 
     #[test]
+    fn boolean_constants_are_1_and_0() {
+        let stmt = statement!(const 0; Type::Bool; ConstantValue::Bool(true));
+
+        let expected = indoc!(
+            r#"
+            wire _e_0;
+            assign _e_0 = 1;"#
+        );
+
+        assert_same_code!(&statement_code(&stmt).to_string(), expected);
+    }
+
+    #[test]
     fn tuple_assembly_operator_works() {
         let ty = Type::Tuple(vec![Type::Int(6), Type::Int(3)]);
         let stmt = statement!(e(0); ty; ConstructTuple; e(1), e(2));
@@ -387,38 +400,6 @@ mod expression_tests {
         assert_same_code!(&statement_code(&stmt).to_string(), expected);
     }
 
-    // #[test]
-    // fn tuple_indexing_of_booleans_works() {
-    //     let code = r#"
-    //     entity name() -> bool {
-    //         (true, true)#1
-    //     }
-    //     "#;
-
-    //     let expected = indoc!(
-    //         r#"
-    //     module name (
-    //             output __output
-    //         );
-    //         wire __expr__3;
-    //         wire[1:0] __expr__2;
-    //         wire __expr__0;
-    //         assign __expr__0 = 1;
-    //         wire __expr__1;
-    //         assign __expr__1 = 1;
-    //         assign __expr__2 = {__expr__1, __expr__0};
-    //         assign __expr__3 = __expr__2[1];
-    //         assign __output = __expr__3;
-    //     endmodule"#
-    //     );
-
-    //     let processed = parse_typecheck_entity(code);
-
-    //     let result = generate_entity(&processed.entity, &processed.type_state)
-    //         .report_failure()
-    //         .to_string();
-    //     assert_same_code!(&result, expected);
-    // }
     #[test]
     fn tuple_indexing_works_for_first_value() {
         let ty = vec![Type::Int(6), Type::Int(3)];
@@ -454,7 +435,7 @@ mod expression_tests {
         let expected = indoc!(
             r#"
             wire _e_0;
-            assign _e_0 = _e_1[4];"#
+            assign _e_0 = _e_1[3];"#
         );
 
         assert_same_code!(&statement_code(&stmt).to_string(), expected);
