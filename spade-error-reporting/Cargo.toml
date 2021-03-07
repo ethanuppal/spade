@@ -13,7 +13,6 @@ codespan-reporting = "0.9"
 spade-common = {path = "../spade-common"}
 spade-types = {path = "../spade-types"}
 spade-hir = {path = "../spade-hir"}
-spade-hir-codegen = {path = "../spade-hir-codegen"}
 spade-hir-lowering = {path = "../spade-hir-lowering"}
 spade-typeinference = {path = "../spade-typeinference"}
 spade-parser = {path = "../spade-parser"}

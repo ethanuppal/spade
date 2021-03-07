@@ -6,7 +6,6 @@ members = [
     "spade-types",
     "spade-common",
     "spade-parser",
-    "spade-hir-codegen",
     "spade-typeinference",
     "spade-error-reporting",
     "spade-ast-lowering",

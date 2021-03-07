@@ -12,7 +12,6 @@ use codespan_reporting::{
 };
 
 use spade_ast_lowering::{symbol_table::Error as LookupError, Error as SemanticError};
-use spade_hir_codegen::Error as CodegenError;
 use spade_hir_lowering::Error as HirLoweringError;
 use spade_parser::Error as ParseError;
 use spade_typeinference::result::Error as InferenceError;
@@ -288,29 +287,6 @@ pub fn report_typeinference_error(
                 format!("     Index: {}", index),
                 format!("Tuple size: {}", actual_size),
             ]),
-    };
-
-    let writer = StandardStream::stderr(color_choice(no_color));
-
-    term::emit(&mut writer.lock(), &codespan_config(), &files, &diag).unwrap();
-}
-
-// TODO: Remove once hir codegen is no longer performed
-pub fn report_codegen_error(
-    filename: &Path,
-    file_content: &str,
-    err: CodegenError,
-    no_color: bool,
-) {
-    let mut files = SimpleFiles::new();
-    let file_id = files.add(filename.to_string_lossy(), file_content);
-    let diag = match err {
-        CodegenError::UsingGenericType { expr, t } => Diagnostic::error()
-            .with_message(format!("Type of expression is not fully known"))
-            .with_labels(vec![
-                Label::primary(file_id, expr.span).with_message(format!("Incomplete type"))
-            ])
-            .with_notes(vec![format!("Found incomplete type: {}", t)]),
     };
 
     let writer = StandardStream::stderr(color_choice(no_color));
