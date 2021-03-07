@@ -69,13 +69,20 @@ fn main() -> Result<()> {
         }
     }
 
-    let code = match spade_hir_codegen::generate_entity(&hir, &type_state) {
+    let mir = match spade_hir_lowering::generate_entity(&hir, &type_state) {
         Ok(val) => val,
         Err(e) => {
-            error_reporting::report_codegen_error(&opts.infile, &file_content, e, opts.no_color);
+            error_reporting::report_hir_lowering_error(
+                &opts.infile,
+                &file_content,
+                e,
+                opts.no_color,
+            );
             return Err(anyhow!("aborting due to previous error"));
         }
     };
+
+    let code = spade_mir::codegen::entity_code(&mir);
 
     std::fs::write(opts.outfile, code.to_string())?;
 
