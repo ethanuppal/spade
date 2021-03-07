@@ -23,12 +23,12 @@ macro_rules! statement {
     (
         $name_kind:ident $name:tt;
         $type:expr;
-        $operator:ident;
+        $operator:ident $(($operator_args:tt))?;
         $($arg_kind:ident $arg_name:tt),*
     ) => {
         spade_mir::Statement::Binding(spade_mir::Binding {
             name: spade_mir::value_name!($name_kind $name),
-            operator: spade_mir::Operator::$operator,
+            operator: spade_mir::Operator::$operator$($operator_args)?,
             operands: vec![
                 $(spade_mir::value_name!($arg_kind $arg_name)),*
             ],
@@ -84,9 +84,10 @@ macro_rules! statement {
 #[macro_export]
 macro_rules! entity {
     ($name:expr; (
-            $( $arg_name:expr, $arg_intern_kind:ident $arg_intern_name:tt, $arg_type:expr ),*
+            $( $arg_name:expr, $arg_intern_kind:ident $arg_intern_name:tt, $arg_type:expr ),* $(,)?
         ) -> $output_type:expr; {
             $( $statement:tt );*
+            $(;)?
         } => $output_name_kind:ident $output_name:tt
     ) => {
         spade_mir::Entity {

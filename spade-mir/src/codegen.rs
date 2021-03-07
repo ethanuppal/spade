@@ -29,14 +29,28 @@ fn statement_code(statement: &Statement) -> Code {
                 .iter()
                 .map(ValueName::var_name)
                 .collect::<Vec<_>>();
-            let expression = match binding.operator {
-                Operator::Add => {
+
+            macro_rules! binop {
+                ($verilog:expr) => {{
                     assert!(
                         binding.operands.len() == 2,
-                        "expected 2 operands to Add operator"
+                        "expected 2 operands to binary operator"
                     );
-                    format!("{} + {}", ops[0], ops[1])
-                }
+                    format!("{} {} {}", ops[0], $verilog, ops[1])
+                }};
+            }
+
+            let expression = match binding.operator {
+                Operator::Add => binop!("+"),
+                Operator::Sub => binop!("-"),
+                Operator::Mul => binop!("*"),
+                Operator::Eq => binop!("=="),
+                Operator::Gt => binop!(">"),
+                Operator::Lt => binop!("<"),
+                Operator::LeftShift => binop!("<<"),
+                Operator::RightShift => binop!(">>"),
+                Operator::LogicalAnd => binop!("&&"),
+                Operator::LogicalOr => binop!("||"),
                 Operator::Select => {
                     assert!(
                         binding.operands.len() == 3,
@@ -44,8 +58,34 @@ fn statement_code(statement: &Statement) -> Code {
                     );
                     format!("{} ? {} : {}", ops[0], ops[1], ops[2])
                 }
+                Operator::IndexTuple(idx, ref types) => {
+                    // Compute the start index of the element we're looking for
+                    let mut start_bit = 0;
+                    for i in 0..idx {
+                        start_bit += types[i as usize].size();
+                    }
+
+                    let target_width = types[idx as usize].size();
+                    let end_bit = start_bit + target_width;
+
+                    let total_width: u64 = types.iter().map(crate::types::Type::size).sum();
+
+                    // Check if this is a single bit, if so, index using just it
+                    let index = if target_width == 1 {
+                        format!("{}", total_width - start_bit)
+                    } else {
+                        format!("{}:{}", total_width - start_bit - 1, total_width - end_bit)
+                    };
+
+                    format!("{}[{}]", ops[0], index)
+                }
                 Operator::ConstructTuple => {
+                    // To make index calculations easier, we will store tuples in "inverse order".
+                    // i.e. the left-most element is stored to the right in the bit vector.
                     format!("{{{}}}", ops.join(", "))
+                }
+                Operator::Alias => {
+                    format!("{}", ops[0])
                 }
             };
 
@@ -278,7 +318,47 @@ mod expression_tests {
     use crate as spade_mir;
     use crate::{statement, types::Type};
 
-    use indoc::indoc;
+    use indoc::{formatdoc, indoc};
+
+    macro_rules! binop_test {
+        ($name:ident, $ty:expr, $verilog_ty:expr, $op:ident, $verilog_op:expr) => {
+            #[test]
+            fn $name() {
+                let stmt = statement!(e(0); $ty; $op; e(1), e(2));
+
+                let expected = formatdoc!(
+                    r#"
+                    wire{} _e_0;
+                    assign _e_0 = _e_1 {} _e_2;"#, $verilog_ty, $verilog_op
+                );
+
+                assert_same_code!(&statement_code(&stmt).to_string(), &expected)
+            }
+        }
+    }
+
+    binop_test!(binop_add_works, Type::Int(2), "[1:0]", Add, "+");
+    binop_test!(binop_sub_works, Type::Int(2), "[1:0]", Sub, "-");
+    binop_test!(binop_mul_works, Type::Int(2), "[1:0]", Mul, "*");
+    binop_test!(
+        binop_left_shift_works,
+        Type::Int(2),
+        "[1:0]",
+        LeftShift,
+        "<<"
+    );
+    binop_test!(
+        binop_right_shift_works,
+        Type::Int(2),
+        "[1:0]",
+        RightShift,
+        ">>"
+    );
+    binop_test!(binop_eq_works, Type::Bool, "", Eq, "==");
+    binop_test!(binop_gt_works, Type::Bool, "", Gt, ">");
+    binop_test!(binop_lt_works, Type::Bool, "", Lt, "<");
+    binop_test!(binop_logical_and_works, Type::Bool, "", LogicalAnd, "&&");
+    binop_test!(binop_logical_or_works, Type::Bool, "", LogicalOr, "||");
 
     #[test]
     fn select_operator_works() {
@@ -302,6 +382,79 @@ mod expression_tests {
             r#"
             wire[8:0] _e_0;
             assign _e_0 = {_e_1, _e_2};"#
+        );
+
+        assert_same_code!(&statement_code(&stmt).to_string(), expected);
+    }
+
+    // #[test]
+    // fn tuple_indexing_of_booleans_works() {
+    //     let code = r#"
+    //     entity name() -> bool {
+    //         (true, true)#1
+    //     }
+    //     "#;
+
+    //     let expected = indoc!(
+    //         r#"
+    //     module name (
+    //             output __output
+    //         );
+    //         wire __expr__3;
+    //         wire[1:0] __expr__2;
+    //         wire __expr__0;
+    //         assign __expr__0 = 1;
+    //         wire __expr__1;
+    //         assign __expr__1 = 1;
+    //         assign __expr__2 = {__expr__1, __expr__0};
+    //         assign __expr__3 = __expr__2[1];
+    //         assign __output = __expr__3;
+    //     endmodule"#
+    //     );
+
+    //     let processed = parse_typecheck_entity(code);
+
+    //     let result = generate_entity(&processed.entity, &processed.type_state)
+    //         .report_failure()
+    //         .to_string();
+    //     assert_same_code!(&result, expected);
+    // }
+    #[test]
+    fn tuple_indexing_works_for_first_value() {
+        let ty = vec![Type::Int(6), Type::Int(3)];
+        let stmt = statement!(e(0); Type::Int(6); IndexTuple((0, ty)); e(1));
+
+        let expected = indoc!(
+            r#"
+            wire[5:0] _e_0;
+            assign _e_0 = _e_1[8:3];"#
+        );
+
+        assert_same_code!(&statement_code(&stmt).to_string(), expected);
+    }
+    #[test]
+    fn tuple_indexing_works() {
+        let ty = vec![Type::Int(6), Type::Int(3)];
+        let stmt = statement!(e(0); Type::Int(6); IndexTuple((1, ty)); e(1));
+
+        let expected = indoc!(
+            r#"
+            wire[5:0] _e_0;
+            assign _e_0 = _e_1[2:0];"#
+        );
+
+        assert_same_code!(&statement_code(&stmt).to_string(), expected);
+    }
+
+    #[test]
+    fn tuple_indexing_works_for_bools() {
+        let ty = vec![Type::Bool, Type::Int(3)];
+        let stmt = statement!(e(0); Type::Bool; IndexTuple((0, ty)); e(1));
+
+        let expected = indoc!(
+            r#"
+            wire _e_0;
+            assign _e_0 = _e_1[4];"#
         );
 
         assert_same_code!(&statement_code(&stmt).to_string(), expected);

@@ -78,24 +78,3 @@ macro_rules! assert_matches {
         }
     };
 }
-
-#[macro_export]
-macro_rules! assert_same_code {
-    ($got:expr, $expected:expr) => {
-        if $got != $expected {
-            println!("{}:\n{}", "got".red(), $got);
-            println!("{}", "==============================================".red());
-            println!("{}:\n{}", "expected".green(), $expected);
-            println!(
-                "{}",
-                "==============================================".green()
-            );
-            println!("{}", prettydiff::diff_chars($got, $expected));
-            println!(
-                "{}",
-                "==============================================".yellow()
-            );
-            panic!("Code missmatch")
-        }
-    };
-}

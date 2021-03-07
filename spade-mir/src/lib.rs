@@ -38,18 +38,43 @@ pub enum ValueName {
 pub enum Operator {
     /// Binary arithmetic operators
     Add,
+    Sub,
+    Mul,
+    Eq,
+    Gt,
+    Lt,
+    LeftShift,
+    RightShift,
+    LogicalAnd,
+    LogicalOr,
     /// Select [1] if [0] else [2]
     Select,
     /// Construct a tuple from all the operand expressions
     ConstructTuple,
+    /// Get the `.0`th element of a tuple. The types of the elements are specified
+    /// in the second argument
+    IndexTuple(u64, Vec<Type>),
+    /// Alias another named value
+    Alias,
 }
 
 impl std::fmt::Display for Operator {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Operator::Add => write!(f, "Add"),
+            Operator::Sub => write!(f, "Sub"),
+            Operator::Mul => write!(f, "Mul"),
+            Operator::Eq => write!(f, "Eq"),
+            Operator::Gt => write!(f, "Gt"),
+            Operator::Lt => write!(f, "Lt"),
+            Operator::RightShift => write!(f, "RightShift"),
+            Operator::LogicalAnd => write!(f, "LogicalAnd"),
+            Operator::LogicalOr => write!(f, "LogicalOr"),
             Operator::Select => write!(f, "Select"),
+            Operator::LeftShift => write!(f, "LeftShift"),
             Operator::ConstructTuple => write!(f, "ConstructTuple"),
+            Operator::IndexTuple(idx, _) => write!(f, "IndexTuple({})", idx),
+            Operator::Alias => write!(f, "Alias"),
         }
     }
 }
