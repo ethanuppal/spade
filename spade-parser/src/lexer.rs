@@ -35,6 +35,8 @@ pub enum TokenKind {
     Reg,
     #[token("let")]
     Let,
+    #[token("inst")]
+    Instance,
     #[token("reset")]
     Reset,
     #[token("if")]
@@ -96,6 +98,8 @@ pub enum TokenKind {
     SlimArrow,
     #[token(",")]
     Comma,
+    #[token(".")]
+    Dot,
     #[token(";")]
     Semi,
     #[token(":")]
@@ -127,6 +131,7 @@ impl TokenKind {
             TokenKind::Let => "let",
             TokenKind::Reg => "reg",
             TokenKind::Entity => "entity",
+            TokenKind::Instance => "inst",
             TokenKind::Reset => "reset",
             TokenKind::If => "if",
             TokenKind::Else => "else",
@@ -157,6 +162,7 @@ impl TokenKind {
             TokenKind::Semi => ";",
             TokenKind::Colon => ":",
             TokenKind::Comma => ",",
+            TokenKind::Dot => ".",
             TokenKind::PathSeparator => "::",
 
             TokenKind::Hash => "#",

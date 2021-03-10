@@ -32,6 +32,12 @@ impl Path {
                 .collect(),
         )
     }
+
+    pub fn push_ident(&self, ident: Loc<Identifier>) -> Path {
+        let mut result = self.clone();
+        result.0.push(ident);
+        result
+    }
 }
 
 impl std::fmt::Display for Path {
@@ -55,6 +61,21 @@ pub enum TypeSpec {
 impl WithLocation for TypeSpec {}
 
 #[derive(PartialEq, Debug, Clone)]
+pub enum NamedArgument {
+    Full(Loc<Identifier>, Loc<Expression>),
+    /// Binds a local variable to an argument with the same name
+    Short(Loc<Identifier>),
+}
+impl WithLocation for NamedArgument {}
+
+#[derive(PartialEq, Debug, Clone)]
+pub enum ArgumentList {
+    Positional(Vec<Loc<Expression>>),
+    Named(Vec<NamedArgument>),
+}
+impl WithLocation for ArgumentList {}
+
+#[derive(PartialEq, Debug, Clone)]
 pub enum Expression {
     Identifier(Loc<Path>),
     IntLiteral(u128),
@@ -68,6 +89,7 @@ pub enum Expression {
     ),
     BinaryOperator(Box<Loc<Expression>>, TokenKind, Box<Loc<Expression>>),
     Block(Box<Block>),
+    EntityInstance(Loc<Path>, Loc<ArgumentList>),
 }
 impl WithLocation for Expression {}
 

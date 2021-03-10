@@ -128,7 +128,7 @@ impl TypeState {
     #[trace_typechecker]
     pub fn visit_entity(&mut self, entity: &Entity) -> Result<()> {
         // Add equations for the inputs
-        for (name, t) in &entity.head.inputs {
+        for (name, t) in &entity.inputs {
             self.add_equation(
                 TypedExpression::Name(name.clone()),
                 Self::type_var_from_hir(t),
@@ -301,6 +301,9 @@ impl TypeState {
                     }
                     other => panic!("unrecognised intrinsic {:?}", other),
                 }
+            }
+            ExprKind::EntityInstance(name, args) => {
+                todo!("Entity instanciation type checking is unimplemented")
             }
         }
         Ok(())

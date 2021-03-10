@@ -173,6 +173,7 @@ impl ExprLocal for Loc<Expression> {
             ExprKind::Block(block) => Some(block.result.variable()),
             ExprKind::If(_, _, _) => None,
             ExprKind::BinaryOperator(_, _, _) => None,
+            ExprKind::EntityInstance(_, _) => None,
         }
     }
 
@@ -327,6 +328,9 @@ impl ExprLocal for Loc<Expression> {
                     ty: types.expr_type(self)?.to_mir_type(),
                 }));
             }
+            ExprKind::EntityInstance(name, _) => {
+                todo!("Implement mir lowering for entity instanciation")
+            }
         }
         Ok(result)
     }
@@ -334,7 +338,6 @@ impl ExprLocal for Loc<Expression> {
 
 pub fn generate_entity<'a>(entity: &Entity, types: &TypeState) -> Result<mir::Entity> {
     let inputs = entity
-        .head
         .inputs
         .iter()
         .map(|(name_id, _)| {

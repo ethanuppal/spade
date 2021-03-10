@@ -41,6 +41,29 @@ pub fn report_semantic_error(filename: &Path, file_content: &str, err: Error, no
                     got.kind_string()
                 )),
             ]),
+        Error::LookupError(LookupError::NotAnEntity(path, got)) => Diagnostic::error()
+            .with_message(format!("Expected {} to be an enity", path))
+            .with_labels(vec![
+                Label::primary(file_id, path.span).with_message(format!("Expected entity")),
+                Label::secondary(file_id, got.loc().span).with_message(format!(
+                    "{} is a {}",
+                    path,
+                    got.kind_string()
+                )),
+            ]),
+        Error::ArgumentListLenghtMissmatch {
+            expected,
+            got,
+            at,
+            for_entity,
+        } => Diagnostic::error()
+            .with_message(format!("Expected {} arguments, got {}", expected, got))
+            .with_labels(vec![
+                Label::primary(file_id, at.span)
+                    .with_message(format!("Expected {} arguments", expected)),
+                Label::secondary(file_id, for_entity.span)
+                    .with_message(format!("When instanciating this entity",)),
+            ]),
     };
 
     let writer = StandardStream::stderr(color_choice(no_color));

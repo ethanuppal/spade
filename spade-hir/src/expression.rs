@@ -1,5 +1,6 @@
 use super::{Block, NameID};
 use spade_common::location_info::{Loc, WithLocation};
+use spade_parser::ast::Identifier;
 
 #[derive(Clone, Copy, PartialEq, Debug)]
 pub enum BinaryOperator {
@@ -16,6 +17,22 @@ pub enum BinaryOperator {
 }
 
 #[derive(PartialEq, Debug, Clone)]
+pub enum NamedArgument {
+    /// Binds the arguent named LHS in the outer scope to the expression
+    Full(Loc<Identifier>, Loc<Expression>),
+    /// Binds a local variable to an argument with the same name
+    Short(Loc<NameID>),
+}
+impl WithLocation for NamedArgument {}
+
+#[derive(PartialEq, Debug, Clone)]
+pub enum ArgumentList {
+    Positional(Vec<Loc<Expression>>),
+    Named(Vec<NamedArgument>),
+}
+impl WithLocation for ArgumentList {}
+
+#[derive(PartialEq, Debug, Clone)]
 pub enum ExprKind {
     Identifier(NameID),
     IntLiteral(u128),
@@ -25,6 +42,7 @@ pub enum ExprKind {
     FnCall(Loc<NameID>, Vec<Loc<Expression>>),
     BinaryOperator(Box<Loc<Expression>>, BinaryOperator, Box<Loc<Expression>>),
     Block(Box<Block>),
+    EntityInstance(Loc<NameID>, ArgumentList),
     If(
         Box<Loc<Expression>>,
         Box<Loc<Expression>>,

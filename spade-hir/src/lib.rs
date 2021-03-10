@@ -109,13 +109,14 @@ impl TypeSpec {
 pub struct Entity {
     pub name: Loc<NameID>,
     pub head: EntityHead,
+    pub inputs: Vec<(NameID, Loc<TypeSpec>)>,
     pub body: Loc<Expression>,
 }
 impl WithLocation for Entity {}
 
 #[derive(PartialEq, Debug, Clone)]
 pub struct EntityHead {
-    pub inputs: Vec<(NameID, Loc<TypeSpec>)>,
+    pub inputs: Vec<(Loc<ast::Identifier>, Loc<TypeSpec>)>,
     pub output_type: Option<Loc<TypeSpec>>,
     pub type_params: Vec<ast::Identifier>,
 }

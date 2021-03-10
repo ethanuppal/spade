@@ -3,6 +3,7 @@ pub mod error_reporting;
 pub mod lexer;
 pub mod testutil;
 
+use ast::{ArgumentList, NamedArgument};
 use spade_common::location_info::{lspan, Loc, WithLocation};
 
 use colored::*;
@@ -56,6 +57,9 @@ pub enum Error {
         got: Token,
         loc: Loc<()>,
     },
+
+    #[error("Expected argument list for {0}")]
+    ExpectedArgumentList(Loc<Path>),
 
     #[error("Missing tuple index")]
     MissingTupleIndex { hash_loc: Loc<()> },
@@ -205,6 +209,35 @@ impl<'a> Parser<'a> {
             };
             self.eat(&TokenKind::CloseParen)?;
             result
+        } else if let Some(start) = self.peek_and_eat_kind(&TokenKind::Instance)? {
+            let name = self.path()?;
+            if let Some(open_paren) = self.peek_and_eat_kind(&TokenKind::OpenParen)? {
+                let args = self.comma_separated(Self::expression, &TokenKind::CloseParen)?;
+                let end = self.eat(&TokenKind::CloseParen)?;
+
+                let span = lspan(start.span).merge(lspan(end.span.clone()));
+                let list_span = lspan(open_paren.span).merge(lspan(end.span));
+                Ok(
+                    Expression::EntityInstance(name, ArgumentList::Positional(args).at(list_span))
+                        .at(span),
+                )
+            } else if let Some(open_brace) = self.peek_and_eat_kind(&TokenKind::OpenBrace)? {
+                let args = self
+                    .comma_separated(Self::named_argument, &TokenKind::CloseBrace)?
+                    .into_iter()
+                    .map(Loc::strip)
+                    .collect();
+                let end = self.eat(&TokenKind::CloseBrace)?;
+
+                let list_span = lspan(open_brace.span).merge(lspan(end.span.clone()));
+                let span = lspan(start.span).merge(lspan(end.span));
+                Ok(
+                    Expression::EntityInstance(name, ArgumentList::Named(args).at(list_span))
+                        .at(span),
+                )
+            } else {
+                Err(Error::ExpectedArgumentList(name))
+            }
         } else if let Some(tok) = self.peek_and_eat_kind(&TokenKind::True)? {
             Ok(Expression::BoolLiteral(true).at(lspan(tok.span)))
         } else if let Some(tok) = self.peek_and_eat_kind(&TokenKind::False)? {
@@ -224,6 +257,21 @@ impl<'a> Parser<'a> {
                 Err(Error::UnexpectedToken { got, .. }) => Err(Error::ExpectedExpression { got }),
                 Err(e) => Err(e),
             }
+        }
+    }
+
+    #[trace_parser]
+    fn named_argument(&mut self) -> Result<Loc<NamedArgument>> {
+        // This is a named arg
+        let name = self.identifier()?;
+        if self.peek_and_eat_kind(&TokenKind::Assignment)?.is_some() {
+            let value = self.expression()?;
+
+            let span = name.span.merge(value.span);
+
+            Ok(NamedArgument::Full(name, value).at(span))
+        } else {
+            Ok(NamedArgument::Short(name.clone()).at_loc(&name))
         }
     }
 
@@ -1570,5 +1618,61 @@ mod tests {
         .nowhere();
 
         check_parse!(code, type_spec, Ok(expected));
+    }
+
+    #[test]
+    fn entity_instanciation() {
+        let code = "inst some_entity(x, y, z)";
+
+        let expected = Expression::EntityInstance(
+            ast_path("some_entity"),
+            ArgumentList::Positional(vec![
+                Expression::Identifier(ast_path("x")).nowhere(),
+                Expression::Identifier(ast_path("y")).nowhere(),
+                Expression::Identifier(ast_path("z")).nowhere(),
+            ])
+            .nowhere(),
+        )
+        .nowhere();
+
+        check_parse!(code, expression, Ok(expected));
+    }
+
+    #[test]
+    fn entity_instanciation_with_a_named_arg() {
+        let code = "inst some_entity{z=a}";
+
+        let expected = Expression::EntityInstance(
+            ast_path("some_entity"),
+            ArgumentList::Named(vec![NamedArgument::Full(
+                ast_ident("z"),
+                Expression::Identifier(ast_path("a")).nowhere(),
+            )])
+            .nowhere(),
+        )
+        .nowhere();
+
+        check_parse!(code, expression, Ok(expected));
+    }
+    #[test]
+    fn named_args_work() {
+        let code = "x=a";
+
+        let expected = NamedArgument::Full(
+            ast_ident("x"),
+            Expression::Identifier(ast_path("a")).nowhere(),
+        )
+        .nowhere();
+
+        check_parse!(code, named_argument, Ok(expected));
+    }
+
+    #[test]
+    fn named_capture_shorthand_works() {
+        let code = "x";
+
+        let expected = NamedArgument::Short(ast_ident("x")).nowhere();
+
+        check_parse!(code, named_argument, Ok(expected));
     }
 }

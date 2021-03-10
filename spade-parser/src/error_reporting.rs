@@ -70,6 +70,15 @@ pub fn report_parse_error(filename: &Path, file_content: &str, err: Error, no_co
                     Label::primary(file_id, hash_loc.span).with_message("expected index")
                 ])
         }
+        Error::ExpectedArgumentList(for_what) => {
+            let message = format!("Expected arguments for {}", for_what);
+
+            Diagnostic::error()
+                .with_message(message)
+                .with_labels(vec![
+                    Label::primary(file_id, for_what.span).with_message("expected `(` or `{`")
+                ])
+        }
     };
 
     let writer = StandardStream::stderr(color_choice(no_color));

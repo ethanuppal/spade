@@ -1,4 +1,6 @@
+pub mod error;
 pub mod error_reporting;
+pub mod global_symbols;
 pub mod id_tracker;
 pub mod symbol_table;
 
@@ -14,6 +16,8 @@ use spade_hir as hir;
 use spade_hir::{expression::BinaryOperator, EntityHead, NameID};
 use spade_parser::ast;
 use spade_parser::lexer::TokenKind;
+
+pub use error::{Error, Result};
 
 trait LocExt<T> {
     fn try_visit<V, U>(
@@ -40,19 +44,6 @@ impl<T> LocExt<T> for Loc<T> {
             .map_err(|e, _| e)
     }
 }
-
-#[derive(Error, Debug, PartialEq, Clone)]
-pub enum Error {
-    #[error("Lookup error")]
-    LookupError(#[from] crate::symbol_table::Error),
-    #[error("Duplicate type variable")]
-    DuplicateTypeVariable {
-        found: Loc<ast::Identifier>,
-        previously: Loc<ast::Identifier>,
-    },
-}
-
-pub type Result<T> = std::result::Result<T, Error>;
 
 pub fn path_from_ident(ident: Loc<ast::Identifier>) -> Loc<ast::Path> {
     ast::Path(vec![ident.clone()]).at_loc(&ident)
@@ -119,21 +110,8 @@ pub fn visit_type_spec(t: &ast::TypeSpec, symtab: &mut SymbolTable) -> Result<hi
     }
 }
 
-/// Visit an entity to generate an entity head. The symtab gets populated with the name of the
-/// entity and its definition, but not with the inputs and type parameteres
-///
-/// The `add_local_symbols` parameter determines wether or not symbols should be added to the
-/// current scope or not. If false, a new throw-away scope will be created.
-///
-/// This is kind of an ugly hack to enable code re-use. We should get rid of it eventually
-pub fn entity_head(
-    item: &ast::Entity,
-    symtab: &mut SymbolTable,
-    add_local_symbols: bool,
-) -> Result<EntityHead> {
-    if !add_local_symbols {
-        symtab.new_scope();
-    }
+/// Visit the head of an entity to generate an entity head
+pub fn entity_head(item: &ast::Entity, symtab: &mut SymbolTable) -> Result<EntityHead> {
     let type_params = vec![];
     if !item.type_params.is_empty() {
         todo!("Handle generic type parameters in entities");
@@ -143,11 +121,7 @@ pub fn entity_head(
     for (name, input_type) in &item.inputs {
         let t = input_type.try_map_ref(|t| visit_type_spec(t, symtab))?;
 
-        let id = symtab.add_thing(
-            path_from_ident(name.clone()).inner,
-            Thing::Variable(name.clone()),
-        );
-        inputs.push((id, t));
+        inputs.push((name.clone(), t));
     }
 
     let output_type = if let Some(output_type) = &item.output_type {
@@ -155,10 +129,6 @@ pub fn entity_head(
     } else {
         None
     };
-
-    if !add_local_symbols {
-        symtab.close_scope()
-    }
 
     Ok(EntityHead {
         inputs,
@@ -169,25 +139,33 @@ pub fn entity_head(
 
 pub fn visit_entity(
     item: &Loc<ast::Entity>,
+    namespace: &ast::Path,
     symtab: &mut SymbolTable,
     idtracker: &mut IdTracker,
 ) -> Result<Loc<hir::Entity>> {
     symtab.new_scope();
 
-    let head = entity_head(item, symtab, true)?;
+    let path = namespace.push_ident(item.name.clone());
+    let (id, head) = symtab
+        .lookup_entity(&path.at_loc(&item.name))
+        .expect("Attempting to lower an entity that has not been added to the symtab previously");
+    let head = head.clone(); // An offering to the borrow checker. May ferris have mercy on us all
+
+    // Add the inputs to the symtab
+    let inputs = head
+        .inputs
+        .iter()
+        .map(|(ident, ty)| (symtab.add_local_variable(ident.clone()), ty.clone()))
+        .collect();
 
     let body = item.body.try_visit(visit_expression, symtab, idtracker)?;
 
     symtab.close_scope();
 
-    let name = symtab.add_thing(
-        path_from_ident(item.name.clone()).inner,
-        Thing::Entity(head.clone().at_loc(item)),
-    );
-
     Ok(hir::Entity {
-        name: name.at_loc(&item.name),
-        head,
+        name: id.at_loc(&item.name),
+        head: head.clone().inner,
+        inputs,
         body,
     }
     .at_loc(item))
@@ -203,11 +181,14 @@ pub fn visit_entity(
 
 pub fn visit_item(
     item: &ast::Item,
+    namespace: &ast::Path,
     symtab: &mut SymbolTable,
     idtracker: &mut IdTracker,
 ) -> Result<Option<hir::Item>> {
     match item {
-        ast::Item::Entity(e) => Ok(Some(hir::Item::Entity(visit_entity(e, symtab, idtracker)?))),
+        ast::Item::Entity(e) => Ok(Some(hir::Item::Entity(visit_entity(
+            e, namespace, symtab, idtracker,
+        )?))),
         ast::Item::TraitDef(_) => {
             // NOTE: Traits are invisible at the HIR stage, so we just ignore them
             Ok(None)
@@ -217,6 +198,7 @@ pub fn visit_item(
 
 pub fn visit_module_body(
     module: &ast::ModuleBody,
+    namespace: &ast::Path,
     symtab: &mut SymbolTable,
     idtracker: &mut IdTracker,
 ) -> Result<hir::ModuleBody> {
@@ -224,7 +206,7 @@ pub fn visit_module_body(
         members: module
             .members
             .iter()
-            .map(|i| visit_item(i, symtab, idtracker))
+            .map(|i| visit_item(i, namespace, symtab, idtracker))
             .collect::<Result<Vec<_>>>()?
             .into_iter()
             .filter_map(|x| x)
@@ -291,6 +273,34 @@ pub fn visit_expression(
                 TokenKind::LogicalAnd => Ok(operator(BinaryOperator::LogicalAnd)),
                 TokenKind::LogicalOr => Ok(operator(BinaryOperator::LogicalOr)),
                 _ => unreachable! {},
+            }
+        }
+        ast::Expression::EntityInstance(name, arg_list) => {
+            let (name_id, head) = symtab.lookup_entity(name)?;
+
+            match &arg_list.inner {
+                ast::ArgumentList::Positional(args) => {
+                    if args.len() != head.inputs.len() {
+                        return Err(Error::ArgumentListLenghtMissmatch {
+                            got: args.len(),
+                            expected: head.inputs.len(),
+                            at: arg_list.loc(),
+                            for_entity: head.loc(),
+                        });
+                    }
+
+                    let args = args.iter()
+                        .map(|a| a.try_visit(visit_expression, symtab, idtracker))
+                        .collect::<Result<Vec<_>>>()?;
+
+                    Ok(hir::ExprKind::EntityInstance(
+                        name_id.at_loc(name),
+                        hir::expression::ArgumentList::Positional(args)
+                    ))
+                }
+                ast::ArgumentList::Named(_) => {
+                    todo!("Support named arguments")
+                }
             }
         }
         ast::Expression::TupleLiteral(exprs) => {
@@ -421,15 +431,16 @@ mod entity_visiting {
         .nowhere();
 
         let expected = hir::Entity {
-            name: name_id(2, "test"),
+            name: name_id(0, "test"),
             head: hir::EntityHead {
-                inputs: vec![((name_id(0, "a").inner, hir::TypeSpec::unit().nowhere()))],
+                inputs: vec![(ast_ident("a"), hir::TypeSpec::unit().nowhere())],
                 output_type: None,
                 type_params: vec![],
             },
+            inputs: vec![((name_id(1, "a").inner, hir::TypeSpec::unit().nowhere()))],
             body: hir::ExprKind::Block(Box::new(hir::Block {
                 statements: vec![hir::Statement::Binding(
-                    name_id(1, "var"),
+                    name_id(2, "var"),
                     Some(hir::TypeSpec::unit().nowhere()),
                     hir::ExprKind::IntLiteral(0).idless().nowhere(),
                 )
@@ -443,8 +454,10 @@ mod entity_visiting {
 
         let mut symtab = SymbolTable::new();
         let mut idtracker = IdTracker::new();
+        global_symbols::visit_entity(&input, &ast::Path(vec![]), &mut symtab)
+            .expect("Failed to collect global symbols");
 
-        let result = visit_entity(&input, &mut symtab, &mut idtracker);
+        let result = visit_entity(&input, &ast::Path(vec![]), &mut symtab, &mut idtracker);
 
         assert_eq!(result, Ok(expected));
 
@@ -596,7 +609,7 @@ mod expression_visiting {
     use super::*;
 
     use spade_common::location_info::WithLocation;
-    use spade_parser::testutil::ast_path;
+    use spade_parser::testutil::{ast_ident, ast_path};
     use spade_testutil::name_id;
 
     #[test]
@@ -735,6 +748,140 @@ mod expression_visiting {
             Ok(expected)
         );
     }
+
+    #[test]
+    fn entity_instanciation_works() {
+        let input = ast::Expression::EntityInstance(
+                ast_path("test"),
+                ast::ArgumentList::Positional(
+                    vec![
+                        ast::Expression::IntLiteral(1).nowhere(),
+                        ast::Expression::IntLiteral(2).nowhere()
+                    ]
+                ).nowhere()
+            ).nowhere();
+
+        let expected = hir::ExprKind::EntityInstance(
+                name_id(0, "test"),
+                hir::expression::ArgumentList::Positional(
+                    vec! [
+                        hir::ExprKind::IntLiteral(1).idless().nowhere(),
+                        hir::ExprKind::IntLiteral(2).idless().nowhere()
+                    ]
+                )
+            ).idless();
+
+        let mut symtab = SymbolTable::new();
+        let mut idtracker = IdTracker::new();
+
+        symtab.add_thing(ast_path("test").inner, Thing::Entity(EntityHead {
+            inputs: vec! [
+                (ast_ident("a"), hir::TypeSpec::unit().nowhere()),
+                (ast_ident("b"), hir::TypeSpec::unit().nowhere())
+            ],
+            output_type: None,
+            type_params: vec![],
+        }.nowhere()));
+
+        assert_eq!(visit_expression(&input, &mut symtab, &mut idtracker), Ok(expected));
+    }
+
+
+    #[test]
+    fn entity_instanciation_with_named_args_works() {
+        let input = ast::Expression::EntityInstance(
+                ast_path("test"),
+                ast::ArgumentList::Named(
+                    vec![
+                        ast::NamedArgument::Full(
+                            ast_ident("a"), ast::Expression::IntLiteral(1).nowhere(),
+                        ),
+                        ast::NamedArgument::Full(
+                            ast_ident("b"), ast::Expression::IntLiteral(2).nowhere(),
+                        )
+                    ]
+                ).nowhere()
+            ).nowhere();
+
+        let expected = hir::ExprKind::EntityInstance(
+                name_id(0, "test"),
+                hir::expression::ArgumentList::Named(
+                    vec! [
+                        hir::expression::NamedArgument::Full(
+                            ast_ident("a"), hir::ExprKind::IntLiteral(1).idless().nowhere(),
+                        ),
+                        hir::expression::NamedArgument::Full(
+                            ast_ident("b"), hir::ExprKind::IntLiteral(2).idless().nowhere(),
+                        )
+                    ]
+                )
+            ).idless();
+
+        let mut symtab = SymbolTable::new();
+        let mut idtracker = IdTracker::new();
+
+        symtab.add_thing(ast_path("test").inner, Thing::Entity(EntityHead {
+            inputs: vec! [
+                (ast_ident("a"), hir::TypeSpec::unit().nowhere()),
+                (ast_ident("b"), hir::TypeSpec::unit().nowhere())
+            ],
+            output_type: None,
+            type_params: vec![],
+        }.nowhere()));
+
+        assert_eq!(visit_expression(&input, &mut symtab, &mut idtracker), Ok(expected));
+    }
+
+    macro_rules! test_named_argument_error {
+        ($name:ident($($input_arg:expr),*; $($expected_arg:expr),*)) => {
+            #[test]
+            fn $name() {
+                let input = ast::Expression::EntityInstance(
+                        ast_path("test"),
+                        ast::ArgumentList::Named(
+                            vec![
+                                $(
+                                    ast::NamedArgument::Full(
+                                        ast_ident($input_arg), ast::Expression::IntLiteral(1).nowhere(),
+                                    )
+                                ),*
+                            ]
+                        ).nowhere()
+                    ).nowhere();
+
+                let mut symtab = SymbolTable::new();
+                let mut idtracker = IdTracker::new();
+
+                symtab.add_thing(ast_path("test").inner, Thing::Entity(EntityHead {
+                    inputs: vec! [
+                        $(
+                            (ast_ident($expected_arg), hir::TypeSpec::unit().nowhere()),
+                            (ast_ident($expected_arg), hir::TypeSpec::unit().nowhere())
+                        ),*
+                    ],
+                    output_type: None,
+                    type_params: vec![],
+                }.nowhere()));
+
+                matches::assert_matches!(
+                    visit_expression(&input, &mut symtab, &mut idtracker),
+                    Err(_)
+                )
+            }
+        }
+    }
+
+    test_named_argument_error!(missing_arg(
+        "a"; "a", "b"
+    ));
+
+    test_named_argument_error!(too_many_args(
+        "a", "b", "c"; "a", "b"
+    ));
+
+    test_named_argument_error!(duplicate_name_causes_error(
+        "a", "b", "b"; "a", "b"
+    ));
 }
 
 #[cfg(test)]
@@ -823,6 +970,7 @@ mod item_visiting {
                     inputs: vec![],
                     type_params: vec![],
                 },
+                inputs: vec![],
                 body: hir::ExprKind::Block(Box::new(hir::Block {
                     statements: vec![],
                     result: hir::ExprKind::IntLiteral(0).idless().nowhere(),
@@ -835,8 +983,10 @@ mod item_visiting {
 
         let mut symtab = SymbolTable::new();
         let mut idtracker = IdTracker::new();
+        let namespace = ast::Path(vec![]);
+        crate::global_symbols::visit_item(&input, &namespace, &mut symtab).unwrap();
         assert_eq!(
-            visit_item(&input, &mut symtab, &mut idtracker),
+            visit_item(&input, &namespace, &mut symtab, &mut idtracker),
             Ok(Some(expected))
         );
     }
@@ -880,6 +1030,7 @@ mod module_visiting {
                         inputs: vec![],
                         type_params: vec![],
                     },
+                    inputs: vec![],
                     body: hir::ExprKind::Block(Box::new(hir::Block {
                         statements: vec![],
                         result: hir::ExprKind::IntLiteral(0).idless().nowhere(),
@@ -893,8 +1044,10 @@ mod module_visiting {
 
         let mut symtab = SymbolTable::new();
         let mut idtracker = IdTracker::new();
+        global_symbols::gather_symbols(&input, &ast::Path(vec![]), &mut symtab)
+            .expect("failed to collect global symbols");
         assert_eq!(
-            visit_module_body(&input, &mut symtab, &mut idtracker),
+            visit_module_body(&input, &ast::Path(vec![]), &mut symtab, &mut idtracker),
             Ok(expected)
         );
     }

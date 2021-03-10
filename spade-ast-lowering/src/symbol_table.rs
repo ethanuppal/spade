@@ -14,6 +14,8 @@ pub enum Error {
     NotATypeSymbol(Loc<Path>, Thing),
     #[error("Not a variable")]
     NotAVariable(Loc<Path>, Thing),
+    #[error("Not an entity")]
+    NotAnEntity(Loc<Path>, Thing),
 }
 
 #[derive(PartialEq, Debug, Clone)]
@@ -136,6 +138,7 @@ impl SymbolTable {
             Err(Error::NoSuchSymbol(_)) => false,
             Err(Error::NotATypeSymbol(_, _)) => unreachable!(),
             Err(Error::NotAVariable(_, _)) => unreachable!(),
+            Err(Error::NotAnEntity(_, _)) => unreachable!(),
         }
     }
 
@@ -154,6 +157,15 @@ impl SymbolTable {
         match self.items.get(&id).unwrap() {
             Thing::Variable(_) => Ok(id),
             other => Err(Error::NotAVariable(name.clone(), other.clone())),
+        }
+    }
+
+    pub fn lookup_entity(&self, name: &Loc<Path>) -> Result<(NameID, &Loc<EntityHead>), Error> {
+        let id = self.lookup_id(name)?;
+
+        match self.items.get(&id).unwrap() {
+            Thing::Entity(head) => Ok((id, head)),
+            other => Err(Error::NotAnEntity(name.clone(), other.clone())),
         }
     }
 }
