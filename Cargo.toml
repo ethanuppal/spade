@@ -7,7 +7,6 @@ members = [
     "spade-common",
     "spade-parser",
     "spade-typeinference",
-    "spade-error-reporting",
     "spade-ast-lowering",
     "spade-builtins",
     "spade-testutil",

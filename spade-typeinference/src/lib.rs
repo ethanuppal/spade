@@ -14,6 +14,7 @@ use std::collections::HashMap;
 use colored::*;
 
 pub mod equation;
+pub mod error_reporting;
 pub mod fixed_types;
 pub mod result;
 

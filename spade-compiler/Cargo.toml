@@ -28,7 +28,6 @@ spade-typeinference = {path = "../spade-typeinference"}
 spade-builtins = {path = "../spade-builtins"}
 spade-hir-lowering = {path = "../spade-hir-lowering"}
 spade-mir = {path = "../spade-mir"}
-spade-error-reporting = {path = "../spade-error-reporting"}
 spade-ast-lowering = {path = "../spade-ast-lowering"}
 
 

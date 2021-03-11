@@ -14,6 +14,5 @@ spade-parser = {path = "../spade-parser"}
 spade-hir = {path = "../spade-hir"}
 spade-typeinference = {path = "../spade-typeinference"}
 spade-builtins = {path = "../spade-builtins"}
-spade-error-reporting = {path = "../spade-error-reporting"}
 spade-ast-lowering = {path = "../spade-ast-lowering"}
 parse_tree_macros = {path = "../parse_tree_macros"}

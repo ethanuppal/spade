@@ -8,4 +8,5 @@ edition = "2018"
 
 [dependencies]
 codespan = "0.9"
+codespan-reporting = "0.9"
 logos = "0.11.4"

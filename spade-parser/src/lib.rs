@@ -1,4 +1,5 @@
 pub mod ast;
+pub mod error_reporting;
 pub mod lexer;
 
 use spade_common::location_info::{lspan, Loc, WithLocation};

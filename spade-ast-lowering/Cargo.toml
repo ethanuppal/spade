@@ -8,6 +8,8 @@ edition = "2018"
 
 [dependencies]
 thiserror = "1.0"
+codespan = "0.9"
+codespan-reporting = "0.9"
 
 spade-common = {path = "../spade-common"}
 spade-parser = {path = "../spade-parser"}

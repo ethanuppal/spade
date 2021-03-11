@@ -1,3 +1,4 @@
+pub mod error_reporting;
 pub mod id_tracker;
 pub mod symbol_table;
 
