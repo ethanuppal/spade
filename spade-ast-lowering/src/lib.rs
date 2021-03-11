@@ -395,7 +395,8 @@ mod entity_visiting {
     use super::*;
 
     use spade_common::location_info::WithLocation;
-    use spade_testutil::{ast_ident, ast_path, name_id};
+    use spade_parser::testutil::{ast_ident, ast_path};
+    use spade_testutil::name_id;
 
     use pretty_assertions::assert_eq;
 
@@ -521,7 +522,8 @@ mod statement_visiting {
     use super::*;
 
     use spade_common::location_info::WithLocation;
-    use spade_testutil::{ast_ident, ast_path, name_id};
+    use spade_parser::testutil::{ast_ident, ast_path};
+    use spade_testutil::name_id;
 
     #[test]
     fn bindings_convert_correctly() {
@@ -594,7 +596,8 @@ mod expression_visiting {
     use super::*;
 
     use spade_common::location_info::WithLocation;
-    use spade_testutil::{ast_path, name_id};
+    use spade_parser::testutil::ast_path;
+    use spade_testutil::name_id;
 
     #[test]
     fn int_literals_work() {
@@ -739,7 +742,8 @@ mod register_visiting {
     use super::*;
 
     use spade_common::location_info::WithLocation;
-    use spade_testutil::{ast_ident, ast_path, name_id};
+    use spade_parser::testutil::{ast_ident, ast_path};
+    use spade_testutil::name_id;
 
     #[test]
     fn register_visiting_works() {
@@ -789,7 +793,8 @@ mod item_visiting {
     use super::*;
 
     use spade_common::location_info::WithLocation;
-    use spade_testutil::{ast_ident, name_id};
+    use spade_parser::testutil::ast_ident;
+    use spade_testutil::name_id;
 
     use pretty_assertions::assert_eq;
 
@@ -842,7 +847,8 @@ mod module_visiting {
     use super::*;
 
     use spade_common::location_info::WithLocation;
-    use spade_testutil::{ast_ident, name_id};
+    use spade_parser::testutil::ast_ident;
+    use spade_testutil::name_id;
 
     use pretty_assertions::assert_eq;
 

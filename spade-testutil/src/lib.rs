@@ -60,14 +60,6 @@ pub fn parse_typecheck_entity<'a>(input: &str) -> ProcessedEntity {
     }
 }
 
-pub fn ast_ident(name: &str) -> Loc<ast::Identifier> {
-    ast::Identifier(name.to_string()).nowhere()
-}
-
-pub fn ast_path(name: &str) -> Loc<ast::Path> {
-    ast::Path(vec![ast_ident(name)]).nowhere()
-}
-
 pub fn name_id(id: u64, name: &str) -> Loc<NameID> {
     NameID(id, ast::Path::from_strs(&[name])).nowhere()
 }
