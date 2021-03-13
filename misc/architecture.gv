@@ -1,0 +1,61 @@
+digraph G {
+    // General graph stype 
+    rankdir=LR;
+
+    graph [fontname=Sans];
+    node [fontname=Sans, shape=rectangle, style=rounded];
+
+    input [label="input.spade", shape=note];
+
+    // Pre HIR lowering
+    input -> Parser;
+    Parser -> AST;
+    AST->GlobCol;
+    AST -> ASTLower;
+
+    subgraph cluster_1 {
+        {rank=same; ASTLower; Globals}
+
+        GlobCol -> Globals;
+        Globals -> ASTLower;
+
+        GlobCol [label="Global\ncollection"];
+        Globals [label="Global items"]
+        ASTLower[label="AST Lowering"]
+
+        // Subgraph style
+        label = "HIR\nLowering";
+        labeljust = "l"
+        color=lightskyblue;
+        fontcolor=dimgray;
+    }
+    ASTLower -> HIR;
+
+    HIR -> TypeInference;
+    Globals -> TypeInference;
+    TypeInference -> TypeSpec;
+
+    HIR -> HIRLower;
+    TypeSpec -> HIRLower;
+    HIRLower -> MIR;
+
+    TypeInference [label="Type\ninference"];
+    HIRLower [label="HIR\nLowering"]
+
+    MIR -> Codegen;
+    Codegen -> verilog;
+
+    // Shape of artefacts
+    AST         [shape=note, style=filled, color=black, fillcolor=lightcyan];
+    HIR         [shape=note, style=filled, color=black, fillcolor=lightcyan];
+    TypeSpec    [shape=note, style=filled, color=black, fillcolor=lightcyan];
+    MIR         [shape=note, style=filled, color=black, fillcolor=lightcyan];
+    verilog     [shape=note, style=filled, color=black, fillcolor=lightcyan];
+    Globals     [shape=note, style=filled, color=black, fillcolor=lightcyan];
+
+    // Try to force some more compact structure on the graph
+    {rank=same; TypeInference; TypeSpec}
+    {rank=same MIR; Codegen; verilog}
+    {rank=same; input; Parser;AST}
+
+}
