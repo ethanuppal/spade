@@ -132,6 +132,15 @@ impl SymbolTable {
         Err(Error::NoSuchSymbol(name.clone()))
     }
 
+    /// Get the entity with the specified ID. Panics if no such entity is in the symtab
+    pub fn entity_by_id(&self, id: &NameID) -> &Loc<EntityHead> {
+        match self.items.get(&id) {
+            Some(Thing::Entity(head)) => head,
+            Some(other) => panic!("attempted to look up entity {} but it was {:?}", id, other),
+            None => panic!("No thing entry for {:?}", id),
+        }
+    }
+
     pub fn has_symbol(&self, name: Path) -> bool {
         match self.lookup_id(&name.nowhere()) {
             Ok(_) => true,

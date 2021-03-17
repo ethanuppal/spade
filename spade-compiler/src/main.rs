@@ -72,7 +72,7 @@ fn main() -> Result<()> {
 
     let mut type_state = typeinference::TypeState::new();
 
-    match type_state.visit_entity(&hir) {
+    match type_state.visit_entity(&hir, &symtab) {
         Ok(()) => {}
         Err(e) => {
             typeinference::error_reporting::report_typeinference_error(

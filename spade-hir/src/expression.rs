@@ -1,3 +1,5 @@
+use crate::EntityHead;
+
 use super::{Block, NameID};
 use spade_common::location_info::{Loc, WithLocation};
 use spade_parser::ast::Identifier;
@@ -21,16 +23,26 @@ pub enum NamedArgument {
     /// Binds the arguent named LHS in the outer scope to the expression
     Full(Loc<Identifier>, Loc<Expression>),
     /// Binds a local variable to an argument with the same name
-    Short(Loc<NameID>),
+    Short(Loc<Identifier>, Expression),
 }
 impl WithLocation for NamedArgument {}
 
+/// Specifies how an argument is bound. Mainly used for error reporting without
+/// code duplication
 #[derive(PartialEq, Debug, Clone)]
-pub enum ArgumentList {
-    Positional(Vec<Loc<Expression>>),
-    Named(Vec<NamedArgument>),
+pub enum ArgumentKind {
+    Positional,
+    Named,
+    ShortNamed,
 }
-impl WithLocation for ArgumentList {}
+
+#[derive(PartialEq, Debug, Clone)]
+pub struct Argument {
+    pub target: Loc<Identifier>,
+    pub value: Loc<Expression>,
+    pub kind: ArgumentKind,
+}
+impl WithLocation for Argument {}
 
 #[derive(PartialEq, Debug, Clone)]
 pub enum ExprKind {
@@ -42,7 +54,9 @@ pub enum ExprKind {
     FnCall(Loc<NameID>, Vec<Loc<Expression>>),
     BinaryOperator(Box<Loc<Expression>>, BinaryOperator, Box<Loc<Expression>>),
     Block(Box<Block>),
-    EntityInstance(Loc<NameID>, ArgumentList),
+    // NOTE We copy the entity head here. If we, for whatever reason end up changing
+    // the head in another pass, we would need to reflect that here.
+    EntityInstance(Loc<NameID>, Vec<Argument>),
     If(
         Box<Loc<Expression>>,
         Box<Loc<Expression>>,

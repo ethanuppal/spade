@@ -1,3 +1,4 @@
+use spade_hir::ast;
 use thiserror::Error;
 
 use super::equation::{TypeVar, TypedExpression};
@@ -108,6 +109,27 @@ pub enum Error {
         expected: UnificationTrace,
         got: UnificationTrace,
         loc: Loc<()>,
+    },
+
+    #[error("Named argument missmatch")]
+    NamedArgumentMissmatch {
+        name: Loc<ast::Identifier>,
+        expr: Loc<()>,
+        expected: UnificationTrace,
+        got: UnificationTrace,
+    },
+    #[error("Named argument missmatch")]
+    ShortNamedArgumentMissmatch {
+        name: Loc<ast::Identifier>,
+        expected: UnificationTrace,
+        got: UnificationTrace,
+    },
+    #[error("Positional argument missmatch")]
+    PositionalArgumentMissmatch {
+        index: usize,
+        expr: Loc<()>,
+        expected: UnificationTrace,
+        got: UnificationTrace,
     },
 
     #[error("Tuple index of generic argument")]

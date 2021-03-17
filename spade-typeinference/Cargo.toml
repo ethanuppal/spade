@@ -18,7 +18,9 @@ codespan = "0.9"
 spade-common = {path = "../spade-common"}
 spade-types = {path = "../spade-types"}
 spade-hir = {path = "../spade-hir"}
+spade-ast-lowering = {path = "../spade-ast-lowering"}
 parse_tree_macros = {path = "../parse_tree_macros"}
 
 [dev-dependencies]
 spade-testutil = {path = "../spade-testutil"}
+spade-parser = {path = "../spade-parser"}

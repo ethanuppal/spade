@@ -3,7 +3,8 @@ use std::path::PathBuf;
 use logos::Logos;
 
 use spade_ast_lowering::{
-    error_reporting::report_semantic_error, id_tracker::IdTracker, symbol_table, visit_entity,
+    error_reporting::report_semantic_error, global_symbols, id_tracker::IdTracker, symbol_table,
+    visit_entity,
 };
 use spade_common::location_info::{Loc, WithLocation};
 use spade_hir::{self as hir, NameID};
@@ -31,6 +32,13 @@ pub fn parse_typecheck_entity<'a>(input: &str) -> ProcessedEntity {
 
     let mut symtab = symbol_table::SymbolTable::new();
     spade_builtins::populate_symtab(&mut symtab);
+    match global_symbols::visit_entity(&entity_ast, &ast::Path(vec![]), &mut symtab) {
+        Ok(_) => (),
+        Err(e) => {
+            report_semantic_error(&PathBuf::from(""), &input, e, false);
+            panic!("Semantic error")
+        }
+    }
     let mut idtracker = IdTracker::new();
     let hir = match visit_entity(&entity_ast, &ast::Path(vec![]), &mut symtab, &mut idtracker) {
         Ok(v) => v,
@@ -42,7 +50,7 @@ pub fn parse_typecheck_entity<'a>(input: &str) -> ProcessedEntity {
 
     let mut type_state = typeinference::TypeState::new();
 
-    match type_state.visit_entity(&hir) {
+    match type_state.visit_entity(&hir, &symtab) {
         Ok(()) => {}
         Err(e) => {
             println!(

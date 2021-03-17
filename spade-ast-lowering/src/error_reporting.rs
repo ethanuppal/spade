@@ -64,6 +64,44 @@ pub fn report_semantic_error(filename: &Path, file_content: &str, err: Error, no
                 Label::secondary(file_id, for_entity.span)
                     .with_message(format!("When instanciating this entity",)),
             ]),
+        Error::DuplicateNamedBindings { new, prev_loc } => Diagnostic::error()
+            .with_message(format!("Multiple bindings to {}", new))
+            .with_labels(vec![Label::primary(file_id, prev_loc.span)
+                .with_message(format!("previously bound here"))]),
+        Error::NoSuchArgument { name, for_entity } => Diagnostic::error()
+            .with_message(format!("{}: No such argument to", name))
+            .with_labels(vec![
+                Label::primary(file_id, name.span).with_message(format!("No such argument")),
+                Label::secondary(file_id, for_entity.span)
+                    .with_message(format!("Has no argument named {}", name)),
+            ]),
+        Error::MissingArguments {
+            missing,
+            for_entity,
+            at,
+        } => {
+            let plural = if missing.len() == 1 {
+                "argument"
+            } else {
+                "arguments"
+            };
+
+            let arg_list = missing
+                .iter()
+                .map(|i| format!("{}", i))
+                .collect::<Vec<_>>()
+                .join(", ");
+
+            Diagnostic::error()
+                .with_message(format!("Missing {}: {}", plural, arg_list))
+                .with_labels(vec![
+                    Label::primary(file_id, at.span).with_message(format!("Missing {}", plural)),
+                    Label::secondary(file_id, at.span)
+                        .with_message(format!("Missing {}", arg_list)),
+                    Label::secondary(file_id, for_entity.span)
+                        .with_message(format!("Entity defined here")),
+                ])
+        }
     };
 
     let writer = StandardStream::stderr(color_choice(no_color));

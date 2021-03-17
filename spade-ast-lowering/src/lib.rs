@@ -246,6 +246,130 @@ pub fn visit_statement(
     }
 }
 
+fn visit_entity_arguments(
+    arguments: &Loc<ast::ArgumentList>,
+    head: Loc<hir::EntityHead>,
+    symtab: &mut SymbolTable,
+    idtracker: &mut IdTracker,
+) -> Result<Vec<hir::Argument>> {
+    match &arguments.inner {
+        ast::ArgumentList::Positional(args) => {
+            if args.len() != head.inputs.len() {
+                return Err(Error::ArgumentListLenghtMissmatch {
+                    got: args.len(),
+                    expected: head.inputs.len(),
+                    at: arguments.loc(),
+                    for_entity: head.loc(),
+                });
+            }
+
+            let args = args
+                .iter()
+                .map(|a| a.try_visit(visit_expression, symtab, idtracker))
+                .zip(head.inputs.iter())
+                .map(|(arg, target)| {
+                    Ok(hir::Argument {
+                        target: target.0.clone(),
+                        value: arg?,
+                        kind: hir::ArgumentKind::Positional,
+                    })
+                })
+                .collect::<Result<Vec<_>>>()?;
+
+            Ok(args)
+        }
+        ast::ArgumentList::Named(args) => {
+            let mut unbound_args = head
+                .inputs
+                .iter()
+                .map(|(name, _)| name.clone())
+                .collect::<Vec<_>>();
+            let mut bound_args = vec![];
+
+            let mut result_args = vec![];
+            for arg in args {
+                match arg {
+                    ast::NamedArgument::Full(name, value) => {
+                        let value = value.try_visit(visit_expression, symtab, idtracker)?;
+                        // Check if this is a new unbound arg
+                        let unbounded_idx = unbound_args.iter().position(|n| n == name);
+
+                        if let Some(idx) = unbounded_idx {
+                            // Mark it as bound
+                            unbound_args.remove(idx);
+                            bound_args.push(name);
+
+                            result_args.push(hir::Argument {
+                                target: name.clone(),
+                                value: value,
+                                kind: hir::ArgumentKind::Positional,
+                            });
+                        } else {
+                            // Check if we bound it already
+                            let prev_idx = bound_args.iter().position(|n| n == &name);
+                            if let Some(idx) = prev_idx {
+                                return Err(Error::DuplicateNamedBindings {
+                                    new: name.clone(),
+                                    prev_loc: bound_args[idx].loc(),
+                                });
+                            } else {
+                                return Err(Error::NoSuchArgument {
+                                    name: name.clone(),
+                                    for_entity: head.clone(),
+                                });
+                            }
+                        }
+                    }
+                    ast::NamedArgument::Short(name) => {
+                        let expr =
+                            ast::Expression::Identifier(ast::Path(vec![name.clone()]).at_loc(name));
+                        let value = visit_expression(&expr, symtab, idtracker)?;
+
+                        // Check if this is a new unbound arg
+                        let unbounded_idx = unbound_args.iter().position(|n| n == name);
+
+                        if let Some(idx) = unbounded_idx {
+                            // Mark it as bound
+                            unbound_args.remove(idx);
+                            bound_args.push(name);
+
+                            result_args.push(hir::Argument {
+                                target: name.clone(),
+                                value: value.nowhere(),
+                                kind: hir::ArgumentKind::ShortNamed,
+                            });
+                        } else {
+                            // Check if we bound it already
+                            let prev_idx = bound_args.iter().position(|n| n == &name);
+                            if let Some(idx) = prev_idx {
+                                return Err(Error::DuplicateNamedBindings {
+                                    new: name.clone(),
+                                    prev_loc: bound_args[idx].loc(),
+                                });
+                            } else {
+                                return Err(Error::NoSuchArgument {
+                                    name: name.clone(),
+                                    for_entity: head.clone(),
+                                });
+                            }
+                        }
+                    }
+                }
+            }
+
+            if !unbound_args.is_empty() {
+                return Err(Error::MissingArguments {
+                    missing: unbound_args.into_iter().map(|name| name.inner).collect(),
+                    for_entity: head,
+                    at: arguments.loc(),
+                });
+            }
+
+            Ok(result_args)
+        }
+    }
+}
+
 pub fn visit_expression(
     e: &ast::Expression,
     symtab: &mut SymbolTable,
@@ -277,31 +401,10 @@ pub fn visit_expression(
         }
         ast::Expression::EntityInstance(name, arg_list) => {
             let (name_id, head) = symtab.lookup_entity(name)?;
+            let head = head.clone();
 
-            match &arg_list.inner {
-                ast::ArgumentList::Positional(args) => {
-                    if args.len() != head.inputs.len() {
-                        return Err(Error::ArgumentListLenghtMissmatch {
-                            got: args.len(),
-                            expected: head.inputs.len(),
-                            at: arg_list.loc(),
-                            for_entity: head.loc(),
-                        });
-                    }
-
-                    let args = args.iter()
-                        .map(|a| a.try_visit(visit_expression, symtab, idtracker))
-                        .collect::<Result<Vec<_>>>()?;
-
-                    Ok(hir::ExprKind::EntityInstance(
-                        name_id.at_loc(name),
-                        hir::expression::ArgumentList::Positional(args)
-                    ))
-                }
-                ast::ArgumentList::Named(_) => {
-                    todo!("Support named arguments")
-                }
-            }
+            let args = visit_entity_arguments(arg_list, head, symtab, idtracker)?;
+            Ok(hir::ExprKind::EntityInstance(name_id.at_loc(name), args))
         }
         ast::Expression::TupleLiteral(exprs) => {
             let exprs = exprs
@@ -752,88 +855,111 @@ mod expression_visiting {
     #[test]
     fn entity_instanciation_works() {
         let input = ast::Expression::EntityInstance(
-                ast_path("test"),
-                ast::ArgumentList::Positional(
-                    vec![
-                        ast::Expression::IntLiteral(1).nowhere(),
-                        ast::Expression::IntLiteral(2).nowhere()
-                    ]
-                ).nowhere()
-            ).nowhere();
+            ast_path("test"),
+            ast::ArgumentList::Positional(vec![
+                ast::Expression::IntLiteral(1).nowhere(),
+                ast::Expression::IntLiteral(2).nowhere(),
+            ])
+            .nowhere(),
+        )
+        .nowhere();
 
         let expected = hir::ExprKind::EntityInstance(
-                name_id(0, "test"),
-                hir::expression::ArgumentList::Positional(
-                    vec! [
-                        hir::ExprKind::IntLiteral(1).idless().nowhere(),
-                        hir::ExprKind::IntLiteral(2).idless().nowhere()
-                    ]
-                )
-            ).idless();
+            name_id(0, "test"),
+            vec![
+                hir::Argument {
+                    target: ast_ident("a"),
+                    value: hir::ExprKind::IntLiteral(1).idless().nowhere(),
+                    kind: hir::ArgumentKind::Positional,
+                },
+                hir::Argument {
+                    target: ast_ident("b"),
+                    value: hir::ExprKind::IntLiteral(2).idless().nowhere(),
+                    kind: hir::ArgumentKind::Positional,
+                },
+            ],
+        )
+        .idless();
 
         let mut symtab = SymbolTable::new();
         let mut idtracker = IdTracker::new();
 
-        symtab.add_thing(ast_path("test").inner, Thing::Entity(EntityHead {
-            inputs: vec! [
-                (ast_ident("a"), hir::TypeSpec::unit().nowhere()),
-                (ast_ident("b"), hir::TypeSpec::unit().nowhere())
-            ],
-            output_type: None,
-            type_params: vec![],
-        }.nowhere()));
+        symtab.add_thing(
+            ast_path("test").inner,
+            Thing::Entity(
+                EntityHead {
+                    inputs: vec![
+                        (ast_ident("a"), hir::TypeSpec::unit().nowhere()),
+                        (ast_ident("b"), hir::TypeSpec::unit().nowhere()),
+                    ],
+                    output_type: None,
+                    type_params: vec![],
+                }
+                .nowhere(),
+            ),
+        );
 
-        assert_eq!(visit_expression(&input, &mut symtab, &mut idtracker), Ok(expected));
+        assert_eq!(
+            visit_expression(&input, &mut symtab, &mut idtracker),
+            Ok(expected)
+        );
     }
-
 
     #[test]
     fn entity_instanciation_with_named_args_works() {
         let input = ast::Expression::EntityInstance(
-                ast_path("test"),
-                ast::ArgumentList::Named(
-                    vec![
-                        ast::NamedArgument::Full(
-                            ast_ident("a"), ast::Expression::IntLiteral(1).nowhere(),
-                        ),
-                        ast::NamedArgument::Full(
-                            ast_ident("b"), ast::Expression::IntLiteral(2).nowhere(),
-                        )
-                    ]
-                ).nowhere()
-            ).nowhere();
+            ast_path("test"),
+            ast::ArgumentList::Named(vec![
+                ast::NamedArgument::Full(ast_ident("a"), ast::Expression::IntLiteral(1).nowhere()),
+                ast::NamedArgument::Full(ast_ident("b"), ast::Expression::IntLiteral(2).nowhere()),
+            ])
+            .nowhere(),
+        )
+        .nowhere();
 
         let expected = hir::ExprKind::EntityInstance(
-                name_id(0, "test"),
-                hir::expression::ArgumentList::Named(
-                    vec! [
-                        hir::expression::NamedArgument::Full(
-                            ast_ident("a"), hir::ExprKind::IntLiteral(1).idless().nowhere(),
-                        ),
-                        hir::expression::NamedArgument::Full(
-                            ast_ident("b"), hir::ExprKind::IntLiteral(2).idless().nowhere(),
-                        )
-                    ]
-                )
-            ).idless();
+            name_id(0, "test"),
+            vec![
+                hir::Argument {
+                    target: ast_ident("a"),
+                    value: hir::ExprKind::IntLiteral(1).idless().nowhere(),
+                    kind: hir::ArgumentKind::Positional,
+                },
+                hir::Argument {
+                    target: ast_ident("b"),
+                    value: hir::ExprKind::IntLiteral(2).idless().nowhere(),
+                    kind: hir::ArgumentKind::Positional,
+                },
+            ],
+        )
+        .idless();
 
         let mut symtab = SymbolTable::new();
         let mut idtracker = IdTracker::new();
 
-        symtab.add_thing(ast_path("test").inner, Thing::Entity(EntityHead {
-            inputs: vec! [
-                (ast_ident("a"), hir::TypeSpec::unit().nowhere()),
-                (ast_ident("b"), hir::TypeSpec::unit().nowhere())
-            ],
-            output_type: None,
-            type_params: vec![],
-        }.nowhere()));
+        symtab.add_thing(
+            ast_path("test").inner,
+            Thing::Entity(
+                EntityHead {
+                    inputs: vec![
+                        (ast_ident("a"), hir::TypeSpec::unit().nowhere()),
+                        (ast_ident("b"), hir::TypeSpec::unit().nowhere()),
+                    ],
+                    output_type: None,
+                    type_params: vec![],
+                }
+                .nowhere(),
+            ),
+        );
 
-        assert_eq!(visit_expression(&input, &mut symtab, &mut idtracker), Ok(expected));
+        assert_eq!(
+            visit_expression(&input, &mut symtab, &mut idtracker),
+            Ok(expected)
+        );
     }
 
     macro_rules! test_named_argument_error {
-        ($name:ident($($input_arg:expr),*; $($expected_arg:expr),*)) => {
+        ($name:ident($($input_arg:expr),*; $($expected_arg:expr),*; $err:pat)) => {
             #[test]
             fn $name() {
                 let input = ast::Expression::EntityInstance(
@@ -855,7 +981,6 @@ mod expression_visiting {
                 symtab.add_thing(ast_path("test").inner, Thing::Entity(EntityHead {
                     inputs: vec! [
                         $(
-                            (ast_ident($expected_arg), hir::TypeSpec::unit().nowhere()),
                             (ast_ident($expected_arg), hir::TypeSpec::unit().nowhere())
                         ),*
                     ],
@@ -865,23 +990,89 @@ mod expression_visiting {
 
                 matches::assert_matches!(
                     visit_expression(&input, &mut symtab, &mut idtracker),
-                    Err(_)
+                    Err($err)
                 )
             }
         }
     }
 
     test_named_argument_error!(missing_arg(
-        "a"; "a", "b"
+        "a"; "a", "b"; Error::MissingArguments{..}
     ));
 
     test_named_argument_error!(too_many_args(
-        "a", "b", "c"; "a", "b"
+        "a", "b", "c"; "a", "b"; Error::NoSuchArgument{..}
     ));
 
     test_named_argument_error!(duplicate_name_causes_error(
-        "a", "b", "b"; "a", "b"
+        "a", "b", "b"; "a", "b"; Error::DuplicateNamedBindings{..}
     ));
+
+    macro_rules! test_shorthand_named_arg {
+        (
+            $name:ident($($input_arg:expr),*; $($expected_arg:expr),*; $err:pat)
+                $symtab:tt
+        ) => {
+            #[test]
+            fn $name() {
+                let input = ast::Expression::EntityInstance(
+                        ast_path("test"),
+                        ast::ArgumentList::Named(
+                            vec![
+                                $(
+                                    ast::NamedArgument::Short(ast_ident($input_arg))
+                                ),*
+                            ]
+                        ).nowhere()
+                    ).nowhere();
+
+                let mut symtab = $symtab;
+                let mut idtracker = IdTracker::new();
+
+                symtab.add_thing(ast_path("test").inner, Thing::Entity(EntityHead {
+                    inputs: vec! [
+                        $(
+                            (ast_ident($expected_arg), hir::TypeSpec::unit().nowhere())
+                        ),*
+                    ],
+                    output_type: None,
+                    type_params: vec![],
+                }.nowhere()));
+
+                matches::assert_matches!(
+                    visit_expression(&input, &mut symtab, &mut idtracker),
+                    Err($err)
+                )
+            }
+        }
+    }
+
+    test_shorthand_named_arg!(shorthand_missing_arg(
+        "a"; "a", "b"; Error::MissingArguments{..}) {
+            let mut symtab = SymbolTable::new();
+            symtab.add_local_variable(ast_ident("a"));
+            symtab
+        }
+    );
+
+    test_shorthand_named_arg!(shorthand_too_many_args(
+        "a", "b", "c"; "a", "b"; Error::NoSuchArgument{..}) {
+            let mut symtab = SymbolTable::new();
+            symtab.add_local_variable(ast_ident("a"));
+            symtab.add_local_variable(ast_ident("b"));
+            symtab.add_local_variable(ast_ident("c"));
+            symtab
+        }
+    );
+
+    test_shorthand_named_arg!(shorthand_duplicate_name_causes_error(
+        "a", "b", "b"; "a", "b"; Error::DuplicateNamedBindings{..}) {
+            let mut symtab = SymbolTable::new();
+            symtab.add_local_variable(ast_ident("a"));
+            symtab.add_local_variable(ast_ident("b"));
+            symtab
+        }
+    );
 }
 
 #[cfg(test)]

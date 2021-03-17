@@ -1,5 +1,5 @@
 use spade_common::location_info::Loc;
-use spade_hir::NameID;
+use spade_hir as hir;
 use spade_parser::ast;
 use thiserror::Error;
 
@@ -18,6 +18,22 @@ pub enum Error {
         got: usize,
         at: Loc<()>,
         for_entity: Loc<()>,
+    },
+    #[error("{new} was bound more than once")]
+    DuplicateNamedBindings {
+        new: Loc<ast::Identifier>,
+        prev_loc: Loc<()>,
+    },
+    #[error("Entity has no argument named {name}")]
+    NoSuchArgument {
+        name: Loc<ast::Identifier>,
+        for_entity: Loc<hir::EntityHead>,
+    },
+    #[error("Missing arguments")]
+    MissingArguments {
+        missing: Vec<ast::Identifier>,
+        for_entity: Loc<hir::EntityHead>,
+        at: Loc<()>,
     },
 }
 

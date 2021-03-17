@@ -1,10 +1,10 @@
 pub mod expression;
 
 use spade_common::location_info::{Loc, WithLocation};
-use spade_parser::ast;
+pub use spade_parser::ast;
 use spade_types as types;
 
-pub use expression::{ExprKind, Expression};
+pub use expression::{Argument, ArgumentKind, ExprKind, Expression};
 
 /// Anything named will get assigned a unique name ID in order to avoid caring
 /// about scopes HIR has been generated. This is the type of those IDs
@@ -103,6 +103,13 @@ impl TypeSpec {
     pub fn unit() -> Self {
         TypeSpec::Concrete(types::BaseType::Unit.nowhere(), vec![])
     }
+
+    pub fn int(size: u128) -> Self {
+        TypeSpec::Concrete(
+            types::BaseType::Int.nowhere(),
+            vec![TypeExpression::Integer(size).nowhere()],
+        )
+    }
 }
 
 #[derive(PartialEq, Debug, Clone)]
@@ -119,6 +126,20 @@ pub struct EntityHead {
     pub inputs: Vec<(Loc<ast::Identifier>, Loc<TypeSpec>)>,
     pub output_type: Option<Loc<TypeSpec>>,
     pub type_params: Vec<ast::Identifier>,
+}
+impl EntityHead {
+    // Look up the type of an argument. Panics if no such argument exists
+    pub fn arg_type(&self, name: &ast::Identifier) -> TypeSpec {
+        for (arg, ty) in &self.inputs {
+            if &arg.inner == name {
+                return ty.inner.clone();
+            }
+        }
+        panic!(
+            "Tried to get type of an argument which is not part of the entity. {}",
+            name
+        )
+    }
 }
 impl WithLocation for EntityHead {}
 
