@@ -768,7 +768,7 @@ impl<'a> Parser<'a> {
     ///
     /// If the `start` token is found, but the inner parser returns `None`, `None` is returned.
     ///
-    /// If the end token is not found, return a missmatch error
+    /// If the end token is not found, return a mismatch error
     fn surrounded<T>(
         &mut self,
         start: &TokenKind,

@@ -49,7 +49,7 @@ mod tests {
                     "{}",
                     "==============================================".yellow()
                 );
-                panic!("Code missmatch")
+                panic!("Code mismatch")
             }
         };
     }

@@ -257,7 +257,7 @@ fn visit_entity_arguments(
     match &arguments.inner {
         ast::ArgumentList::Positional(args) => {
             if args.len() != head.inputs.len() {
-                return Err(Error::ArgumentListLenghtMissmatch {
+                return Err(Error::ArgumentListLenghtMismatch {
                     got: args.len(),
                     expected: head.inputs.len(),
                     at: arguments.loc(),

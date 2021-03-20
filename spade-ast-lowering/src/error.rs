@@ -12,8 +12,8 @@ pub enum Error {
         found: Loc<ast::Identifier>,
         previously: Loc<ast::Identifier>,
     },
-    #[error("Argument list lenght missmatch, expected {expected} got {got}")]
-    ArgumentListLenghtMissmatch {
+    #[error("Argument list lenght mismatch, expected {expected} got {got}")]
+    ArgumentListLenghtMismatch {
         expected: usize,
         got: usize,
         at: Loc<()>,

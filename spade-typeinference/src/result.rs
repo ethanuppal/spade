@@ -54,11 +54,11 @@ pub type UnificationError = (UnificationTrace, UnificationTrace);
 pub enum Error {
     #[error("The specified expression has no type information {}", 0.0)]
     UnknownType(TypedExpression),
-    #[error("Type missmatch between {0:?} and {1:?}")]
-    TypeMissmatch(UnificationTrace, UnificationTrace),
+    #[error("Type mismatch between {0:?} and {1:?}")]
+    TypeMismatch(UnificationTrace, UnificationTrace),
 
-    #[error("Entity output type missmatch")]
-    EntityOutputTypeMissmatch {
+    #[error("Entity output type mismatch")]
+    EntityOutputTypeMismatch {
         expected: UnificationTrace,
         got: UnificationTrace,
         // The location of the type specification
@@ -66,10 +66,10 @@ pub enum Error {
         // The location of the output expression with the offending type
         output_expr: Loc<()>,
     },
-    // An entity output missmatch where the output type was unspecified and defaulted
+    // An entity output mismatch where the output type was unspecified and defaulted
     // to unit
-    #[error("Entity output type missmatch without spec")]
-    UnspecedEntityOutputTypeMissmatch {
+    #[error("Entity output type mismatch without spec")]
+    UnspecedEntityOutputTypeMismatch {
         expected: UnificationTrace,
         got: UnificationTrace,
         // The location of the output expression with the offending type
@@ -85,8 +85,8 @@ pub enum Error {
     IntLiteralIncompatible { got: UnificationTrace, loc: Loc<()> },
     #[error("If condition must be boolean")]
     NonBooleanCondition { got: UnificationTrace, loc: Loc<()> },
-    #[error("If condition missmatch")]
-    IfConditionMissmatch {
+    #[error("If condition mismatch")]
+    IfConditionMismatch {
         expected: UnificationTrace,
         got: UnificationTrace,
         first_branch: Loc<()>,
@@ -105,27 +105,27 @@ pub enum Error {
         loc: Loc<()>,
     },
     #[error("Reset value must match register type")]
-    RegisterResetMissmatch {
+    RegisterResetMismatch {
         expected: UnificationTrace,
         got: UnificationTrace,
         loc: Loc<()>,
     },
 
-    #[error("Named argument missmatch")]
-    NamedArgumentMissmatch {
+    #[error("Named argument mismatch")]
+    NamedArgumentMismatch {
         name: Loc<ast::Identifier>,
         expr: Loc<()>,
         expected: UnificationTrace,
         got: UnificationTrace,
     },
-    #[error("Named argument missmatch")]
-    ShortNamedArgumentMissmatch {
+    #[error("Named argument mismatch")]
+    ShortNamedArgumentMismatch {
         name: Loc<ast::Identifier>,
         expected: UnificationTrace,
         got: UnificationTrace,
     },
-    #[error("Positional argument missmatch")]
-    PositionalArgumentMissmatch {
+    #[error("Positional argument mismatch")]
+    PositionalArgumentMismatch {
         index: usize,
         expr: Loc<()>,
         expected: UnificationTrace,

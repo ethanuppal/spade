@@ -214,7 +214,7 @@ macro_rules! assert_same_code {
                 "{}",
                 "==============================================".yellow()
             );
-            panic!("Code missmatch")
+            panic!("Code mismatch")
         }
     };
 }

@@ -236,7 +236,7 @@ mod statement_comparison_tests {
     }
 
     #[test]
-    fn bindings_with_missmatched_types_are_different() {
+    fn bindings_with_mismatched_types_are_different() {
         let mut map = VarMap::new();
 
         map.map_expr(1, 1);
@@ -249,7 +249,7 @@ mod statement_comparison_tests {
     }
 
     #[test]
-    fn bindings_with_missmatched_operators_are_different() {
+    fn bindings_with_mismatched_operators_are_different() {
         let mut map = VarMap::new();
 
         map.map_expr(1, 1);
@@ -262,7 +262,7 @@ mod statement_comparison_tests {
     }
 
     #[test]
-    fn bindings_with_missmatched_operands_are_different() {
+    fn bindings_with_mismatched_operands_are_different() {
         let mut map = VarMap::new();
 
         map.map_expr(1, 1);
@@ -338,7 +338,7 @@ mod statement_comparison_tests {
     }
 
     #[test]
-    fn missmatched_register_clocks_causes_a_diff() {
+    fn mismatched_register_clocks_causes_a_diff() {
         let mut map = VarMap::new();
 
         map.map_expr(1, 1);
@@ -353,7 +353,7 @@ mod statement_comparison_tests {
     }
 
     #[test]
-    fn missmatched_register_reset_trig_causes_a_diff() {
+    fn mismatched_register_reset_trig_causes_a_diff() {
         let mut map = VarMap::new();
 
         map.map_expr(1, 1);
@@ -368,7 +368,7 @@ mod statement_comparison_tests {
     }
 
     #[test]
-    fn missmatched_register_value_causes_diff() {
+    fn mismatched_register_value_causes_diff() {
         let mut map = VarMap::new();
 
         map.map_expr(1, 1);
@@ -383,7 +383,7 @@ mod statement_comparison_tests {
     }
 
     #[test]
-    fn identical_registers_with_missmatched_value_diff() {
+    fn identical_registers_with_mismatched_value_diff() {
         let mut map = VarMap::new();
 
         map.map_expr(1, 1);
@@ -413,7 +413,7 @@ mod statement_comparison_tests {
     }
 
     #[test]
-    fn missmatched_types_causes_register_diff() {
+    fn mismatched_types_causes_register_diff() {
         let mut map = VarMap::new();
 
         map.map_expr(1, 1);
@@ -452,7 +452,7 @@ mod statement_comparison_tests {
     }
 
     #[test]
-    fn constant_type_missmatch_diff() {
+    fn constant_type_mismatch_diff() {
         let mut map = VarMap::new();
 
         let lhs = statement!(const 0; Type::Int(6); ConstantValue::Int(10));
@@ -462,7 +462,7 @@ mod statement_comparison_tests {
     }
 
     #[test]
-    fn constant_value_missmatch_diff() {
+    fn constant_value_mismatch_diff() {
         let mut map = VarMap::new();
 
         let lhs = statement!(const 0; Type::Int(5); ConstantValue::Int(11));
@@ -472,7 +472,7 @@ mod statement_comparison_tests {
     }
 
     #[test]
-    fn constant_value_type_missmatch_diff() {
+    fn constant_value_type_mismatch_diff() {
         let mut map = VarMap::new();
 
         let lhs = statement!(const 0; Type::Int(5); ConstantValue::Bool(false));
@@ -517,7 +517,7 @@ mod entity_comparison_tests {
     }
 
     #[test]
-    fn missmatched_name_causes_diff() {
+    fn mismatched_name_causes_diff() {
         let mut var_map = VarMap::new();
         var_map.map_name(1, 1);
 
@@ -543,7 +543,7 @@ mod entity_comparison_tests {
     }
 
     #[test]
-    fn input_name_missmatch() {
+    fn input_name_mismatch() {
         let mut var_map = VarMap::new();
         var_map.map_name(1, 1);
 
@@ -556,7 +556,7 @@ mod entity_comparison_tests {
     }
 
     #[test]
-    fn input_value_name_missmatch() {
+    fn input_value_name_mismatch() {
         let mut var_map = VarMap::new();
         var_map.map_name(1, 1);
 
@@ -569,7 +569,7 @@ mod entity_comparison_tests {
     }
 
     #[test]
-    fn output_type_missmatch_causes_diff() {
+    fn output_type_mismatch_causes_diff() {
         let mut var_map = VarMap::new();
         var_map.map_name(1, 1);
 
@@ -582,7 +582,7 @@ mod entity_comparison_tests {
     }
 
     #[test]
-    fn output_name_missmatches_are_caught() {
+    fn output_name_mismatches_are_caught() {
         let mut var_map = VarMap::new();
         var_map.map_name(1, 1);
 
@@ -595,7 +595,7 @@ mod entity_comparison_tests {
     }
 
     #[test]
-    fn missmatched_statements_cause_diff() {
+    fn mismatched_statements_cause_diff() {
         let mut var_map = VarMap::new();
         var_map.map_name(1, 1);
 
@@ -610,7 +610,7 @@ mod entity_comparison_tests {
     }
 
     #[test]
-    fn missmatched_statement_counts_diff() {
+    fn mismatched_statement_counts_diff() {
         let mut var_map = VarMap::new();
         var_map.map_name(1, 1);
 

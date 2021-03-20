@@ -51,7 +51,7 @@ pub fn report_semantic_error(filename: &Path, file_content: &str, err: Error, no
                     got.kind_string()
                 )),
             ]),
-        Error::ArgumentListLenghtMissmatch {
+        Error::ArgumentListLenghtMismatch {
             expected,
             got,
             at,

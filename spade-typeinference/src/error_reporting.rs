@@ -6,7 +6,7 @@ use codespan_reporting::files::SimpleFiles;
 use codespan_reporting::term::{self, termcolor::StandardStream};
 use spade_common::error_reporting::{codespan_config, color_choice};
 
-pub fn type_missmatch_notes(got: UnificationTrace, expected: UnificationTrace) -> Vec<String> {
+pub fn type_mismatch_notes(got: UnificationTrace, expected: UnificationTrace) -> Vec<String> {
     let mut result = vec![];
 
     result.push(format!("Expected: {}", expected.failing));
@@ -32,13 +32,13 @@ pub fn report_typeinference_error(filename: &Path, file_content: &str, err: Erro
                     expr
                 ))
                 .with_notes(vec!["This is an internal compiler error".to_string()]),
-            Error::TypeMissmatch(lhs, rhs) => Diagnostic::error()
+            Error::TypeMismatch(lhs, rhs) => Diagnostic::error()
                 .with_message(format!(
-                    "Type missmatch. {} is incompatible with {}",
+                    "Type mismatch. {} is incompatible with {}",
                     lhs, rhs
                 ))
                 .with_notes(vec!["This is an internal compiler error".to_string()]),
-            Error::EntityOutputTypeMissmatch {
+            Error::EntityOutputTypeMismatch {
                 expected,
                 got,
                 type_spec,
@@ -51,7 +51,7 @@ pub fn report_typeinference_error(filename: &Path, file_content: &str, err: Erro
                     Label::secondary(file_id, type_spec.loc().span)
                         .with_message(format!("{} type specified here", expected)),
                 ])
-                .with_notes(type_missmatch_notes(got, expected)),
+                .with_notes(type_mismatch_notes(got, expected)),
             Error::UnspecifiedTypeError { expected, got, loc } => Diagnostic::error()
                 .with_message(format!("Expected type {}, got {}", expected, got))
                 .with_labels(vec![Label::primary(file_id, loc.loc().span)
@@ -68,7 +68,7 @@ pub fn report_typeinference_error(filename: &Path, file_content: &str, err: Erro
                     format!("Expected: {}", "bool"), // TODO: Specify full path to the type
                     format!("     Got: {}", got),
                 ]),
-            Error::IfConditionMissmatch {
+            Error::IfConditionMismatch {
                 expected,
                 got,
                 first_branch,
@@ -81,34 +81,34 @@ pub fn report_typeinference_error(filename: &Path, file_content: &str, err: Erro
                     Label::primary(file_id, incorrect_branch.loc().span)
                         .with_message(format!("But this one has type {}", got)),
                 ])
-                .with_notes(type_missmatch_notes(got, expected)),
+                .with_notes(type_mismatch_notes(got, expected)),
             Error::NonClockClock { expected, got, loc } => Diagnostic::error()
                 .with_message("Register clock must be a type clock")
                 .with_labels(vec![
                     Label::primary(file_id, loc.span).with_message(format!("Found type {}", got))
                 ])
-                .with_notes(type_missmatch_notes(got, expected)),
+                .with_notes(type_mismatch_notes(got, expected)),
             Error::NonBoolReset { expected, got, loc } => Diagnostic::error()
                 .with_message("Register reset must be a bool")
                 .with_labels(vec![
                     Label::primary(file_id, loc.span).with_message(format!("Found type {}", got))
                 ])
-                .with_notes(type_missmatch_notes(got, expected)),
-            Error::RegisterResetMissmatch { expected, got, loc } => Diagnostic::error()
-                .with_message("Register reset value missmatch")
+                .with_notes(type_mismatch_notes(got, expected)),
+            Error::RegisterResetMismatch { expected, got, loc } => Diagnostic::error()
+                .with_message("Register reset value mismatch")
                 .with_labels(vec![
                     Label::primary(file_id, loc.span).with_message(format!("Found type {}", got))
                 ])
-                .with_notes(type_missmatch_notes(got, expected)),
-            Error::UnspecedEntityOutputTypeMissmatch {
+                .with_notes(type_mismatch_notes(got, expected)),
+            Error::UnspecedEntityOutputTypeMismatch {
                 expected,
                 got,
                 output_expr,
             } => Diagnostic::error()
-                .with_message(format!("Output type missmatch"))
+                .with_message(format!("Output type mismatch"))
                 .with_labels(vec![Label::primary(file_id, output_expr.loc().span)
                     .with_message(format!("Found type {}", got))])
-                .with_notes(type_missmatch_notes(got, expected)),
+                .with_notes(type_mismatch_notes(got, expected)),
             Error::TupleIndexOfGeneric { loc } => Diagnostic::error()
                 .with_message(format!("Type of tuple indexee must be known at this point"))
                 .with_labels(vec![Label::primary(file_id, loc.span)
@@ -130,38 +130,38 @@ pub fn report_typeinference_error(filename: &Path, file_content: &str, err: Erro
                     format!("     Index: {}", index),
                     format!("Tuple size: {}", actual_size),
                 ]),
-            Error::NamedArgumentMissmatch {
+            Error::NamedArgumentMismatch {
                 expr,
                 expected,
                 got,
                 ..
             } => Diagnostic::error()
-                .with_message("Argument type missmatch")
+                .with_message("Argument type mismatch")
                 .with_labels(vec![Label::primary(file_id, expr.span)
                     .with_message(format!("Expected {}", expected))])
                 .with_notes(vec![
                     format!("Expected: {}", expected),
                     format!("     Got: {}", got),
                 ]),
-            Error::ShortNamedArgumentMissmatch {
+            Error::ShortNamedArgumentMismatch {
                 name,
                 expected,
                 got,
             } => Diagnostic::error()
-                .with_message("Argument type missmatch")
+                .with_message("Argument type mismatch")
                 .with_labels(vec![Label::primary(file_id, name.span)
                     .with_message(format!("Expected {}", expected))])
                 .with_notes(vec![
                     format!("Expected: {}", expected),
                     format!("     Got: {}", got),
                 ]),
-            Error::PositionalArgumentMissmatch {
+            Error::PositionalArgumentMismatch {
                 expr,
                 expected,
                 got,
                 ..
             } => Diagnostic::error()
-                .with_message("Argument type missmatch")
+                .with_message("Argument type mismatch")
                 .with_labels(vec![Label::primary(file_id, expr.span)
                     .with_message(format!("Expected {}", expected))])
                 .with_notes(vec![

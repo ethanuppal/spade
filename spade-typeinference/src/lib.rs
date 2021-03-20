@@ -145,7 +145,7 @@ impl TypeState {
                 &TypedExpression::Id(entity.body.inner.id),
                 &Self::type_var_from_hir(&output_type),
             )
-            .map_err(|(got, expected)| Error::EntityOutputTypeMissmatch {
+            .map_err(|(got, expected)| Error::EntityOutputTypeMismatch {
                 expected,
                 got,
                 type_spec: output_type.loc(),
@@ -156,7 +156,7 @@ impl TypeState {
                 &TypedExpression::Id(entity.body.inner.id),
                 &TypeVar::Known(KnownType::Type(BaseType::Unit), vec![], None),
             )
-            .map_err(|(got, expected)| Error::UnspecedEntityOutputTypeMissmatch {
+            .map_err(|(got, expected)| Error::UnspecedEntityOutputTypeMismatch {
                 expected,
                 got,
                 output_expr: entity.body.loc(),
@@ -264,7 +264,7 @@ impl TypeState {
                         loc: cond.loc(),
                     })?;
                 self.unify_types(&on_true.inner, &on_false.inner)
-                    .map_err(|(expected, got)| Error::IfConditionMissmatch {
+                    .map_err(|(expected, got)| Error::IfConditionMismatch {
                         expected,
                         got,
                         first_branch: on_true.loc(),
@@ -325,19 +325,19 @@ impl TypeState {
 
                     self.unify_types(&target_type, value).map_err(
                         |(expected, got)| match kind {
-                            hir::ArgumentKind::Positional => Error::PositionalArgumentMissmatch {
+                            hir::ArgumentKind::Positional => Error::PositionalArgumentMismatch {
                                 index: i,
                                 expr: value.loc(),
                                 expected,
                                 got,
                             },
-                            hir::ArgumentKind::Named => Error::NamedArgumentMissmatch {
+                            hir::ArgumentKind::Named => Error::NamedArgumentMismatch {
                                 name: target.clone(),
                                 expr: value.loc(),
                                 expected,
                                 got,
                             },
-                            hir::ArgumentKind::ShortNamed => Error::ShortNamedArgumentMissmatch {
+                            hir::ArgumentKind::ShortNamed => Error::ShortNamedArgumentMismatch {
                                 name: target.clone(),
                                 expected,
                                 got,
@@ -423,7 +423,7 @@ impl TypeState {
 
             // Ensure the reset value has the same type as the register itself
             self.unify_types(&rst_value.inner, &reg.value.inner)
-                .map_err(|(got, expected)| Error::RegisterResetMissmatch {
+                .map_err(|(got, expected)| Error::RegisterResetMismatch {
                     expected,
                     got,
                     loc: rst_cond.loc(),
@@ -914,7 +914,7 @@ mod tests {
 
         // assert_matches!(
         //     state.visit_entity(&input),
-        //     Err(Error::EntityOutputTypeMissmatch { .. })
+        //     Err(Error::EntityOutputTypeMismatch { .. })
         // );
     }
 

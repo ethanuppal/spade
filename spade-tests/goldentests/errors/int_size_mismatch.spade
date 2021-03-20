@@ -6,7 +6,7 @@ entity wrong_type(a: int<8>) -> int<7> {
 // expected exit status: 1
 // expected stderr:
 // error: Type error
-//   ┌─ goldentests/errors/int_size_missmatch.spade:1:33
+//   ┌─ goldentests/errors/int_size_mismatch.spade:1:33
 //   │  
 // 1 │   entity wrong_type(a: int<8>) -> int<7> {
 //   │                                   ------ int<7> type specified here
