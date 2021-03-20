@@ -79,6 +79,18 @@ pub fn report_parse_error(filename: &Path, file_content: &str, err: Error, no_co
                     Label::primary(file_id, for_what.span).with_message("expected `(` or `{`")
                 ])
         }
+        Error::ExpectedType(got) => {
+            let message = format!(
+                "Unexpected token. Got `{}`, expected type",
+                got.kind.as_str()
+            );
+
+            Diagnostic::error()
+                .with_message(message)
+                .with_labels(vec![
+                    Label::primary(file_id, got.span).with_message("Expected a type")
+                ])
+        }
     };
 
     let writer = StandardStream::stderr(color_choice(no_color));

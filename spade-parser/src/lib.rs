@@ -58,11 +58,25 @@ pub enum Error {
         loc: Loc<()>,
     },
 
+    #[error("Expected type, got {0:?}")]
+    ExpectedType(Token),
+
     #[error("Expected argument list for {0}")]
     ExpectedArgumentList(Loc<Path>),
 
     #[error("Missing tuple index")]
     MissingTupleIndex { hash_loc: Loc<()> },
+}
+
+impl Error {
+    /// If the error is UnexpectedToken, replace it with the type returned by the
+    /// provided closure. Otherwise, return the error unaffected
+    pub fn specify_unexpected_token(self, f: impl Fn(Token) -> Self) -> Self {
+        match self {
+            Error::UnexpectedToken { got, .. } => f(got),
+            other => other,
+        }
+    }
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
@@ -342,7 +356,10 @@ impl<'a> Parser<'a> {
         if let Some(tuple) = self.tuple_spec()? {
             Ok(tuple)
         } else {
-            let (path, span) = self.path()?.separate();
+            let (path, span) = self
+                .path()
+                .map_err(|e| e.specify_unexpected_token(|t| Error::ExpectedType(t)))?
+                .separate();
 
             // Check if this type has generic params
             let (params, generic_span) = if self.peek_kind(&TokenKind::Lt)? {
