@@ -54,6 +54,10 @@ pub enum Operator {
     /// Get the `.0`th element of a tuple. The types of the elements are specified
     /// in the second argument
     IndexTuple(u64, Vec<Type>),
+    /// Instantiation of another module with the specified name. The operands are passed
+    /// positionally to the entity. The target module can only have a single output which
+    /// must be the last argument
+    Instance(String),
     /// Alias another named value
     Alias,
 }
@@ -74,6 +78,7 @@ impl std::fmt::Display for Operator {
             Operator::LeftShift => write!(f, "LeftShift"),
             Operator::ConstructTuple => write!(f, "ConstructTuple"),
             Operator::IndexTuple(idx, _) => write!(f, "IndexTuple({})", idx),
+            Operator::Instance(name) => write!(f, "Instance({})", name),
             Operator::Alias => write!(f, "Alias"),
         }
     }

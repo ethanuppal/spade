@@ -19,11 +19,22 @@ pub struct ProcessedEntity {
 }
 
 pub fn parse_typecheck_entity<'a>(input: &str) -> ProcessedEntity {
+    let mut entities = parse_typecheck_module_body(input);
+
+    if entities.is_empty() {
+        panic!("No entities found");
+    } else if entities.len() > 1 {
+        panic!("Found multiple entities");
+    } else {
+        entities.pop().unwrap()
+    }
+}
+
+pub fn parse_typecheck_module_body(input: &str) -> Vec<ProcessedEntity> {
     let mut parser = parser::Parser::new(lexer::TokenKind::lexer(&input));
 
-    let entity_ast = match parser.entity() {
-        Ok(Some(v)) => v,
-        Ok(None) => panic!("No parse error but code contained no entity"),
+    let module_ast = match parser.module_body() {
+        Ok(body) => body,
         Err(e) => {
             report_parse_error(&PathBuf::from(""), &input, e, false);
             panic!("Parse error")
@@ -32,40 +43,68 @@ pub fn parse_typecheck_entity<'a>(input: &str) -> ProcessedEntity {
 
     let mut symtab = symbol_table::SymbolTable::new();
     spade_builtins::populate_symtab(&mut symtab);
-    match global_symbols::visit_entity(&entity_ast, &ast::Path(vec![]), &mut symtab) {
-        Ok(_) => (),
-        Err(e) => {
-            report_semantic_error(&PathBuf::from(""), &input, e, false);
-            panic!("Semantic error")
+    for item in &module_ast.members {
+        match item {
+            ast::Item::Entity(entity_ast) => {
+                match global_symbols::visit_entity(&entity_ast, &ast::Path(vec![]), &mut symtab) {
+                    Ok(_) => (),
+                    Err(e) => {
+                        report_semantic_error(&PathBuf::from(""), &input, e, false);
+                        panic!("Semantic error")
+                    }
+                }
+            }
+            ast::Item::TraitDef(_) => {
+                todo!("Parse and typecheck trait definitions")
+            }
         }
     }
+
     let mut idtracker = IdTracker::new();
-    let hir = match visit_entity(&entity_ast, &ast::Path(vec![]), &mut symtab, &mut idtracker) {
-        Ok(v) => v,
-        Err(e) => {
-            report_semantic_error(&PathBuf::from(""), &input, e, false);
-            panic!("Semantic error")
-        }
-    };
 
-    let mut type_state = typeinference::TypeState::new();
+    let mut entities = vec![];
+    for item in &module_ast.members {
+        match item {
+            ast::Item::Entity(entity_ast) => {
+                let hir = match visit_entity(
+                    &entity_ast,
+                    &ast::Path(vec![]),
+                    &mut symtab,
+                    &mut idtracker,
+                ) {
+                    Ok(v) => v,
+                    Err(e) => {
+                        report_semantic_error(&PathBuf::from(""), &input, e, false);
+                        panic!("Semantic error")
+                    }
+                };
 
-    match type_state.visit_entity(&hir, &symtab) {
-        Ok(()) => {}
-        Err(e) => {
-            println!(
-                "Type check trace:\n{}",
-                typeinference::format_trace_stack(&type_state.trace_stack)
-            );
-            report_typeinference_error(&PathBuf::from(""), &input, e, false);
-            panic!("Type error")
+                let mut type_state = typeinference::TypeState::new();
+
+                match type_state.visit_entity(&hir, &symtab) {
+                    Ok(()) => {}
+                    Err(e) => {
+                        println!(
+                            "Type check trace:\n{}",
+                            typeinference::format_trace_stack(&type_state.trace_stack)
+                        );
+                        report_typeinference_error(&PathBuf::from(""), &input, e, false);
+                        panic!("Type error")
+                    }
+                }
+
+                entities.push(ProcessedEntity {
+                    entity: hir.inner,
+                    type_state,
+                })
+            }
+            ast::Item::TraitDef(_) => {
+                todo!("Parse and typecheck trait definitions")
+            }
         }
     }
 
-    ProcessedEntity {
-        entity: hir.inner,
-        type_state,
-    }
+    entities
 }
 
 pub fn name_id(id: u64, name: &str) -> Loc<NameID> {

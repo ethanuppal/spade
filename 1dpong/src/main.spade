@@ -1,4 +1,5 @@
-entity pong(clk: clk, rst: bool, tick_length: int<32>) -> int<8> {
+// Generates game ticks
+entity tick_gen(clk: clk, rst: bool, tick_length: int<32>) -> bool {
     // Counter to lower the frequency
     reg(clk) timer reset (rst: 0) = if timer == tick_length {
         0
@@ -6,8 +7,11 @@ entity pong(clk: clk, rst: bool, tick_length: int<32>) -> int<8> {
         timer + 1
     };
 
-    // Game tick
-    let tick = timer == tick_length;
+    timer == tick_length
+}
+
+entity pong(clk: clk, rst: bool, tick_len: int<32>) -> int<8> {
+    let tick = inst tick_gen{clk, rst, tick_length = tick_len};
 
     let board_end_right = 0b0000_0001;
     let board_end_left = 0b1000_0000;

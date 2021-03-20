@@ -38,7 +38,7 @@ fn main() -> Result<()> {
     // TODO: Namespace individual files
     let namespace = ast::Path(vec![]);
 
-    let entity_ast = match parser.entity() {
+    let module_ast = match parser.module_body() {
         Ok(v) => v,
         Err(e) => {
             report_parse_error(&opts.infile, &file_content, e, opts.no_color);
@@ -48,59 +48,78 @@ fn main() -> Result<()> {
 
     let mut symtab = symbol_table::SymbolTable::new();
     spade_builtins::populate_symtab(&mut symtab);
-    match global_symbols::visit_entity(&entity_ast.as_ref().unwrap(), &namespace, &mut symtab) {
-        Ok(()) => (),
-        Err(e) => {
-            report_semantic_error(&opts.infile, &file_content, e, opts.no_color);
-            return Err(anyhow!("aborting due to previous error"));
+
+    // First pass over the module to collect all global symbols
+    for item in &module_ast.members {
+        match item {
+            ast::Item::Entity(entity_ast) => {
+                match global_symbols::visit_entity(&entity_ast, &namespace, &mut symtab) {
+                    Ok(()) => (),
+                    Err(e) => {
+                        report_semantic_error(&opts.infile, &file_content, e, opts.no_color);
+                        return Err(anyhow!("aborting due to previous error"));
+                    }
+                }
+            }
+            ast::Item::TraitDef(_) => {
+                todo!("Trait definitions are not supported by the compiler")
+            }
         }
     }
 
+    // Second pass to actually generate the mir
     let mut idtracker = id_tracker::IdTracker::new();
-    let hir = match visit_entity(
-        &entity_ast.unwrap(),
-        &namespace,
-        &mut symtab,
-        &mut idtracker,
-    ) {
-        Ok(v) => v,
-        Err(e) => {
-            report_semantic_error(&opts.infile, &file_content, e, opts.no_color);
-            return Err(anyhow!("aborting due to previous error"));
-        }
-    };
+    let mut module_code = vec![];
+    for item in module_ast.members {
+        match item {
+            ast::Item::Entity(entity_ast) => {
+                let hir = match visit_entity(&entity_ast, &namespace, &mut symtab, &mut idtracker) {
+                    Ok(v) => v,
+                    Err(e) => {
+                        report_semantic_error(&opts.infile, &file_content, e, opts.no_color);
+                        return Err(anyhow!("aborting due to previous error"));
+                    }
+                };
 
-    let mut type_state = typeinference::TypeState::new();
+                let mut type_state = typeinference::TypeState::new();
 
-    match type_state.visit_entity(&hir, &symtab) {
-        Ok(()) => {}
-        Err(e) => {
-            typeinference::error_reporting::report_typeinference_error(
-                &opts.infile,
-                &file_content,
-                e,
-                opts.no_color,
-            );
-            return Err(anyhow!("aborting due to previous error"));
+                match type_state.visit_entity(&hir, &symtab) {
+                    Ok(()) => {}
+                    Err(e) => {
+                        typeinference::error_reporting::report_typeinference_error(
+                            &opts.infile,
+                            &file_content,
+                            e,
+                            opts.no_color,
+                        );
+                        return Err(anyhow!("aborting due to previous error"));
+                    }
+                }
+
+                let mir = match spade_hir_lowering::generate_entity(&hir, &type_state) {
+                    Ok(val) => val,
+                    Err(e) => {
+                        spade_hir_lowering::error_reporting::report_hir_lowering_error(
+                            &opts.infile,
+                            &file_content,
+                            e,
+                            opts.no_color,
+                        );
+                        return Err(anyhow!("aborting due to previous error"));
+                    }
+                };
+
+                let code = spade_mir::codegen::entity_code(&mir);
+
+                module_code.push(code.to_string());
+            }
+            ast::Item::TraitDef(_) => {
+                todo!("Trait definitions are not supported by the compiler")
+            }
         }
     }
 
-    let mir = match spade_hir_lowering::generate_entity(&hir, &type_state) {
-        Ok(val) => val,
-        Err(e) => {
-            spade_hir_lowering::error_reporting::report_hir_lowering_error(
-                &opts.infile,
-                &file_content,
-                e,
-                opts.no_color,
-            );
-            return Err(anyhow!("aborting due to previous error"));
-        }
-    };
-
-    let code = spade_mir::codegen::entity_code(&mir);
-
-    std::fs::write(opts.outfile, code.to_string())?;
+    std::fs::write(opts.outfile, module_code.join("\n\n"))?;
 
     Ok(())
 }

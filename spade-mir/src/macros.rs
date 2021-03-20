@@ -78,6 +78,7 @@ macro_rules! statement {
 /// use spade_mir::types::Type;
 /// entity!("pong"; ("_i_clk", n(0, "clk"), Type::Bool) -> Type::Int(6); {
 ///     (e(0); Type::Int(6); Add; n(1, "value"));
+///     (const 0; Type::Int(10); ConstantValue::Int(6));
 ///     (reg n(1, "value"); Type::Int(6); clock (n(0, "clk")); e(0))
 /// } => n(1, "value"));
 /// ```

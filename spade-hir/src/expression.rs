@@ -1,5 +1,3 @@
-use crate::EntityHead;
-
 use super::{Block, NameID};
 use spade_common::location_info::{Loc, WithLocation};
 use spade_parser::ast::Identifier;
@@ -54,8 +52,9 @@ pub enum ExprKind {
     FnCall(Loc<NameID>, Vec<Loc<Expression>>),
     BinaryOperator(Box<Loc<Expression>>, BinaryOperator, Box<Loc<Expression>>),
     Block(Box<Block>),
-    // NOTE We copy the entity head here. If we, for whatever reason end up changing
-    // the head in another pass, we would need to reflect that here.
+    /// Instantiation of an entity. While the argument contains information about
+    /// argument names, for codegen purposes, the arguments must be ordered in
+    /// the target order. I.e. they should all act as positioanl arguments
     EntityInstance(Loc<NameID>, Vec<Argument>),
     If(
         Box<Loc<Expression>>,

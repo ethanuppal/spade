@@ -4,6 +4,8 @@ pub mod global_symbols;
 pub mod id_tracker;
 pub mod symbol_table;
 
+use std::collections::HashMap;
+
 use thiserror::Error;
 
 use crate::symbol_table::SymbolTable;
@@ -282,8 +284,9 @@ fn visit_entity_arguments(
             let mut unbound_args = head
                 .inputs
                 .iter()
-                .map(|(name, _)| name.clone())
-                .collect::<Vec<_>>();
+                .enumerate()
+                .map(|(index, (name, _))| (name.clone(), index))
+                .collect::<HashMap<_, _>>();
             let mut bound_args = vec![];
 
             let mut result_args = vec![];
@@ -291,19 +294,19 @@ fn visit_entity_arguments(
                 match arg {
                     ast::NamedArgument::Full(name, value) => {
                         let value = value.try_visit(visit_expression, symtab, idtracker)?;
-                        // Check if this is a new unbound arg
-                        let unbounded_idx = unbound_args.iter().position(|n| n == name);
 
-                        if let Some(idx) = unbounded_idx {
+                        if let Some(arg_idx) = unbound_args.remove(name) {
                             // Mark it as bound
-                            unbound_args.remove(idx);
                             bound_args.push(name);
 
-                            result_args.push(hir::Argument {
-                                target: name.clone(),
-                                value: value,
-                                kind: hir::ArgumentKind::Positional,
-                            });
+                            result_args.push((
+                                arg_idx,
+                                hir::Argument {
+                                    target: name.clone(),
+                                    value: value,
+                                    kind: hir::ArgumentKind::Positional,
+                                },
+                            ));
                         } else {
                             // Check if we bound it already
                             let prev_idx = bound_args.iter().position(|n| n == &name);
@@ -325,19 +328,18 @@ fn visit_entity_arguments(
                             ast::Expression::Identifier(ast::Path(vec![name.clone()]).at_loc(name));
                         let value = visit_expression(&expr, symtab, idtracker)?;
 
-                        // Check if this is a new unbound arg
-                        let unbounded_idx = unbound_args.iter().position(|n| n == name);
-
-                        if let Some(idx) = unbounded_idx {
+                        if let Some(arg_idx) = unbound_args.remove(name) {
                             // Mark it as bound
-                            unbound_args.remove(idx);
                             bound_args.push(name);
 
-                            result_args.push(hir::Argument {
-                                target: name.clone(),
-                                value: value.nowhere(),
-                                kind: hir::ArgumentKind::ShortNamed,
-                            });
+                            result_args.push((
+                                arg_idx,
+                                hir::Argument {
+                                    target: name.clone(),
+                                    value: value.nowhere(),
+                                    kind: hir::ArgumentKind::ShortNamed,
+                                },
+                            ));
                         } else {
                             // Check if we bound it already
                             let prev_idx = bound_args.iter().position(|n| n == &name);
@@ -359,13 +361,19 @@ fn visit_entity_arguments(
 
             if !unbound_args.is_empty() {
                 return Err(Error::MissingArguments {
-                    missing: unbound_args.into_iter().map(|name| name.inner).collect(),
+                    missing: unbound_args
+                        .into_iter()
+                        .map(|(name, _)| name.inner)
+                        .collect(),
                     for_entity: head,
                     at: arguments.loc(),
                 });
             }
 
-            Ok(result_args)
+            // Sort the arguments based on the position of the bound arg
+            result_args.sort_by_key(|(idx, _)| *idx);
+
+            Ok(result_args.into_iter().map(|(_, name)| name).collect())
         }
     }
 }
@@ -910,8 +918,8 @@ mod expression_visiting {
         let input = ast::Expression::EntityInstance(
             ast_path("test"),
             ast::ArgumentList::Named(vec![
-                ast::NamedArgument::Full(ast_ident("a"), ast::Expression::IntLiteral(1).nowhere()),
                 ast::NamedArgument::Full(ast_ident("b"), ast::Expression::IntLiteral(2).nowhere()),
+                ast::NamedArgument::Full(ast_ident("a"), ast::Expression::IntLiteral(1).nowhere()),
             ])
             .nowhere(),
         )

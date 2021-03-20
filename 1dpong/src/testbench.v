@@ -32,7 +32,7 @@ module counter_tb();
     pong pong
         ( ._i_clk(clk)
         , ._i_rst(rst)
-        , ._i_tick_length(tick_length)
+        , ._i_tick_len(tick_length)
         , .__output(result)
         );
 endmodule

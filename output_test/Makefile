@@ -11,6 +11,7 @@ all: ${TEST_DIRS} .PHONY
 
 test/saturating_adder: test/saturating_adder/build/code.v.vcd .PHONY
 test/counter: test/counter/build/code.v.vcd .PHONY
+test/multi_entity: test/multi_entity/build/code.v.vcd .PHONY
 
 # Build verilog from the spade code
 test/%/build/code.v: test/%/code.spade $(SPADEC) | build_compiler

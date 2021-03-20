@@ -40,7 +40,7 @@ fn statement_code(statement: &Statement) -> Code {
                 }};
             }
 
-            let expression = match binding.operator {
+            let expression = match &binding.operator {
                 Operator::Add => binop!("+"),
                 Operator::Sub => binop!("-"),
                 Operator::Mul => binop!("*"),
@@ -61,11 +61,11 @@ fn statement_code(statement: &Statement) -> Code {
                 Operator::IndexTuple(idx, ref types) => {
                     // Compute the start index of the element we're looking for
                     let mut start_bit = 0;
-                    for i in 0..idx {
+                    for i in 0..*idx {
                         start_bit += types[i as usize].size();
                     }
 
-                    let target_width = types[idx as usize].size();
+                    let target_width = types[*idx as usize].size();
                     let end_bit = start_bit + target_width;
 
                     let total_width: u64 = types.iter().map(crate::types::Type::size).sum();
@@ -84,12 +84,29 @@ fn statement_code(statement: &Statement) -> Code {
                     // i.e. the left-most element is stored to the right in the bit vector.
                     format!("{{{}}}", ops.join(", "))
                 }
+                Operator::Instance(_) => {
+                    format!("") // NOTE: dummy. Set in the next match statement
+                }
                 Operator::Alias => {
                     format!("{}", ops[0])
                 }
             };
 
-            let assignment = format!("assign {} = {};", name, expression);
+            // Unless this is a special operator, we just use assign value = expression
+            let assignment = match &binding.operator {
+                Operator::Instance(module_name) => {
+                    // Input args
+                    let mut args = ops.join(", ");
+                    // Output arg
+                    args += ", ";
+                    args += &name;
+
+                    let instance_name = format!("_instance{}", name);
+
+                    format!("{} {}({});", module_name, instance_name, args)
+                }
+                _ => format!("assign {} = {};", name, expression),
+            };
 
             code! {
                 [0] &declaration;
@@ -436,6 +453,19 @@ mod expression_tests {
             r#"
             wire _e_0;
             assign _e_0 = _e_1[3];"#
+        );
+
+        assert_same_code!(&statement_code(&stmt).to_string(), expected);
+    }
+
+    #[test]
+    fn entity_instanciation_works() {
+        let stmt = statement!(e(0); Type::Bool; Instance(("test".to_string())); e(1), e(2));
+
+        let expected = indoc!(
+            r#"
+            wire _e_0;
+            test _instance_e_0(_e_1, _e_2, _e_0);"#
         );
 
         assert_same_code!(&statement_code(&stmt).to_string(), expected);

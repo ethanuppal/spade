@@ -328,8 +328,16 @@ impl ExprLocal for Loc<Expression> {
                     ty: types.expr_type(self)?.to_mir_type(),
                 }));
             }
-            ExprKind::EntityInstance(name, _) => {
-                todo!("Implement mir lowering for entity instanciation")
+            ExprKind::EntityInstance(name, args) => {
+                for arg in args {
+                    result.append(&mut arg.value.lower(types)?)
+                }
+                result.push(mir::Statement::Binding(mir::Binding {
+                    name: self.variable(),
+                    operator: mir::Operator::Instance(name.1.to_string()),
+                    operands: args.into_iter().map(|arg| arg.value.variable()).collect(),
+                    ty: types.expr_type(self)?.to_mir_type(),
+                }))
             }
         }
         Ok(result)

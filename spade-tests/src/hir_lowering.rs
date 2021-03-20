@@ -13,7 +13,7 @@ mod tests {
         types::Type,
         ConstantValue,
     };
-    use spade_testutil::parse_typecheck_entity;
+    use spade_testutil::{parse_typecheck_entity, parse_typecheck_module_body};
 
     pub trait ResultExt<T> {
         fn report_failure(self) -> T;
@@ -418,5 +418,41 @@ mod tests {
 
         let result = generate_entity(&processed.entity, &processed.type_state).report_failure();
         assert_same_mir!(&result, &expected);
+    }
+
+    #[test]
+    fn entity_instanciation_works() {
+        let code = r#"
+            entity sub(a: int<16>) -> int<16> {
+                a
+            }
+
+            entity top() -> int<16> {
+                inst sub(0)
+            }
+        "#;
+
+        let expected = vec![
+            entity!("sub"; (
+                    "_i_a", n(0, "a"), Type::Int(16)
+                ) -> Type::Int(16); {
+                } => n(0, "a")
+            ),
+            entity!("top"; () -> Type::Int(16); {
+                (const 1; Type::Int(16); ConstantValue::Int(0));
+                (e(0); Type::Int(16); Instance(("sub".to_string())); e(1))
+            } => e(0)),
+        ];
+
+        let module = parse_typecheck_module_body(code);
+
+        let mut result = vec![];
+        for processed in module {
+            result.push(generate_entity(&processed.entity, &processed.type_state).report_failure());
+        }
+
+        for (exp, res) in expected.into_iter().zip(result.into_iter()) {
+            assert_same_mir!(&res, &exp);
+        }
     }
 }
