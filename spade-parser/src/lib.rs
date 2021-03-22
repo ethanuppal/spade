@@ -101,7 +101,7 @@ impl<'a> Parser<'a> {
 /// otherwise return Ok(none)
 macro_rules! peek_for {
     ($self:expr, $token:expr) => {
-        if let Some(t) = $self.peek_and_eat_kind($token)? {
+        if let Some(t) = $self.peek_and_eat($token)? {
             t
         } else {
             return Ok(None);
@@ -124,7 +124,7 @@ impl<'a> Parser<'a> {
         let token = self.eat_cond(TokenKind::is_ident, "Identifier")?;
 
         if let TokenKind::Identifier(name) = token.kind {
-            Ok(Identifier(name).at(lspan(token.span)))
+            Ok(Identifier(name).at(&token.span))
         } else {
             unreachable!("eat_cond should have checked this");
         }
@@ -136,7 +136,7 @@ impl<'a> Parser<'a> {
         loop {
             result.push(self.identifier()?);
 
-            if let None = self.peek_and_eat_kind(&TokenKind::PathSeparator)? {
+            if let None = self.peek_and_eat(&TokenKind::PathSeparator)? {
                 break;
             }
         }
@@ -144,7 +144,7 @@ impl<'a> Parser<'a> {
         // in the loop must pus an identifier.
         let start = result.first().unwrap().span;
         let end = result.last().unwrap().span;
-        Ok(Path(result).at(start.merge(end)))
+        Ok(Path(result).between(&start, &end))
     }
 
     pub fn binary_operator(
@@ -160,7 +160,7 @@ impl<'a> Parser<'a> {
             let rest = rhs(self)?;
 
             let span = start.span.merge(rest.span);
-            Ok(Expression::BinaryOperator(Box::new(start), operator.kind, Box::new(rest)).at(span))
+            Ok(Expression::BinaryOperator(Box::new(start), operator.kind, Box::new(rest)).at(&span))
         } else {
             Ok(start)
         }
@@ -171,10 +171,10 @@ impl<'a> Parser<'a> {
     pub fn expression(&mut self) -> Result<Loc<Expression>> {
         let expr = self.logical_or_expression()?;
 
-        if let Some(hash) = self.peek_and_eat_kind(&TokenKind::Hash)? {
+        if let Some(hash) = self.peek_and_eat(&TokenKind::Hash)? {
             if let Some(index) = self.int_literal()? {
                 let span = expr.span.merge(lspan(hash.span));
-                Ok(Expression::TupleIndex(Box::new(expr), index).at(span))
+                Ok(Expression::TupleIndex(Box::new(expr), index).at(&span))
             } else {
                 Err(Error::MissingTupleIndex {
                     hash_loc: Loc::new((), lspan(hash.span)),
@@ -218,7 +218,7 @@ impl<'a> Parser<'a> {
 
     #[trace_parser]
     pub fn base_expression(&mut self) -> Result<Loc<Expression>> {
-        if self.peek_and_eat_kind(&TokenKind::OpenParen)?.is_some() {
+        if self.peek_and_eat(&TokenKind::OpenParen)?.is_some() {
             let mut inner = self.comma_separated(Self::expression, &TokenKind::CloseParen)?;
             let result = if inner.is_empty() {
                 todo!("Implement unit literals")
@@ -231,23 +231,23 @@ impl<'a> Parser<'a> {
                     .unwrap()
                     .span
                     .merge(inner.last().unwrap().span);
-                Ok(Expression::TupleLiteral(inner).at(span))
+                Ok(Expression::TupleLiteral(inner).at(&span))
             };
             self.eat(&TokenKind::CloseParen)?;
             result
-        } else if let Some(start) = self.peek_and_eat_kind(&TokenKind::Instance)? {
+        } else if let Some(start) = self.peek_and_eat(&TokenKind::Instance)? {
             let name = self.path()?;
-            if let Some(open_paren) = self.peek_and_eat_kind(&TokenKind::OpenParen)? {
+            if let Some(open_paren) = self.peek_and_eat(&TokenKind::OpenParen)? {
                 let args = self.comma_separated(Self::expression, &TokenKind::CloseParen)?;
                 let end = self.eat(&TokenKind::CloseParen)?;
 
                 let span = lspan(start.span).merge(lspan(end.span.clone()));
                 let list_span = lspan(open_paren.span).merge(lspan(end.span));
                 Ok(
-                    Expression::EntityInstance(name, ArgumentList::Positional(args).at(list_span))
-                        .at(span),
+                    Expression::EntityInstance(name, ArgumentList::Positional(args).at(&list_span))
+                        .at(&span),
                 )
-            } else if let Some(open_brace) = self.peek_and_eat_kind(&TokenKind::OpenBrace)? {
+            } else if let Some(open_brace) = self.peek_and_eat(&TokenKind::OpenBrace)? {
                 let args = self
                     .comma_separated(Self::named_argument, &TokenKind::CloseBrace)?
                     .into_iter()
@@ -258,16 +258,17 @@ impl<'a> Parser<'a> {
                 let list_span = lspan(open_brace.span).merge(lspan(end.span.clone()));
                 let span = lspan(start.span).merge(lspan(end.span));
                 Ok(
-                    Expression::EntityInstance(name, ArgumentList::Named(args).at(list_span))
-                        .at(span),
+                    Expression::EntityInstance(name, ArgumentList::Named(args)
+                        .at(&list_span))
+                        .at(&span),
                 )
             } else {
                 Err(Error::ExpectedArgumentList(name))
             }
-        } else if let Some(tok) = self.peek_and_eat_kind(&TokenKind::True)? {
-            Ok(Expression::BoolLiteral(true).at(lspan(tok.span)))
-        } else if let Some(tok) = self.peek_and_eat_kind(&TokenKind::False)? {
-            Ok(Expression::BoolLiteral(false).at(lspan(tok.span)))
+        } else if let Some(tok) = self.peek_and_eat(&TokenKind::True)? {
+            Ok(Expression::BoolLiteral(true).at(&tok.span))
+        } else if let Some(tok) = self.peek_and_eat(&TokenKind::False)? {
+            Ok(Expression::BoolLiteral(false).at(&tok.span))
         } else if let Some(val) = self.int_literal()? {
             Ok(val.map(Expression::IntLiteral))
         } else if let Some(block) = self.block()? {
@@ -278,7 +279,7 @@ impl<'a> Parser<'a> {
             match self.path() {
                 Ok(path) => {
                     let span = path.span;
-                    Ok(Expression::Identifier(path).at(span))
+                    Ok(Expression::Identifier(path).at(&span))
                 }
                 Err(Error::UnexpectedToken { got, .. }) => Err(Error::ExpectedExpression { got }),
                 Err(e) => Err(e),
@@ -290,14 +291,14 @@ impl<'a> Parser<'a> {
     fn named_argument(&mut self) -> Result<Loc<NamedArgument>> {
         // This is a named arg
         let name = self.identifier()?;
-        if self.peek_and_eat_kind(&TokenKind::Assignment)?.is_some() {
+        if self.peek_and_eat(&TokenKind::Assignment)?.is_some() {
             let value = self.expression()?;
 
             let span = name.span.merge(value.span);
 
-            Ok(NamedArgument::Full(name, value).at(span))
+            Ok(NamedArgument::Full(name, value).at(&span))
         } else {
-            Ok(NamedArgument::Short(name.clone()).at_loc(&name))
+            Ok(NamedArgument::Short(name.clone()).at(&name))
         }
     }
 
@@ -312,7 +313,7 @@ impl<'a> Parser<'a> {
 
         Ok(Some(
             Expression::If(Box::new(cond), Box::new(on_true), Box::new(on_false))
-                .at(lspan(start.span).merge(end_span)),
+            .between(&start.span, &end_span)
         ))
     }
 
@@ -335,14 +336,14 @@ impl<'a> Parser<'a> {
 
         let statements = self.statements()?;
         let output_value = self.expression()?;
-        let end_token = self.eat(&TokenKind::CloseBrace)?;
+        let end = self.eat(&TokenKind::CloseBrace)?;
 
         Ok(Some(
             Block {
                 statements,
                 result: output_value,
             }
-            .at(lspan(start.span).merge(lspan(end_token.span))),
+            .between(&start.span, &end.span)
         ))
     }
 
@@ -384,7 +385,7 @@ impl<'a> Parser<'a> {
                 (vec![], span)
             };
 
-            Ok(TypeSpec::Named(path, params).at(span.merge(generic_span)))
+            Ok(TypeSpec::Named(path, params).between(&span, &generic_span))
         }
     }
 
@@ -397,7 +398,7 @@ impl<'a> Parser<'a> {
 
         let span = lspan(start.span).merge(lspan(end.span));
 
-        Ok(Some(TypeSpec::Tuple(inner).at(span)))
+        Ok(Some(TypeSpec::Tuple(inner).at(&span)))
     }
 
     /// A name with an associated type, as used in argument definitions as well
@@ -421,7 +422,7 @@ impl<'a> Parser<'a> {
 
         let (ident, start_span) = self.identifier()?.separate();
 
-        let t = if self.peek_and_eat_kind(&TokenKind::Colon)?.is_some() {
+        let t = if self.peek_and_eat(&TokenKind::Colon)?.is_some() {
             Some(self.type_spec()?)
         } else {
             None
@@ -431,7 +432,7 @@ impl<'a> Parser<'a> {
         let (value, end_span) = self.expression()?.separate();
 
         Ok(Some(
-            Statement::Binding(ident, t, value).at(start_span.merge(end_span)),
+            Statement::Binding(ident, t, value).between(&start_span, &end_span),
         ))
     }
 
@@ -463,14 +464,14 @@ impl<'a> Parser<'a> {
         let name = self.identifier()?;
 
         // Optional type
-        let value_type = if self.peek_and_eat_kind(&TokenKind::Colon)?.is_some() {
+        let value_type = if self.peek_and_eat(&TokenKind::Colon)?.is_some() {
             Some(self.type_spec()?)
         } else {
             None
         };
 
         // Optional reset
-        let reset = if self.peek_and_eat_kind(&TokenKind::Reset)?.is_some() {
+        let reset = if self.peek_and_eat(&TokenKind::Reset)?.is_some() {
             let (reset, _) = self.surrounded(
                 &TokenKind::OpenParen,
                 |s| s.register_reset_definition().map(Some),
@@ -494,9 +495,9 @@ impl<'a> Parser<'a> {
                 value,
                 value_type,
             }
-            .at(span),
+            .at(&span),
         )
-        .at(span);
+        .at(&span);
         Ok(Some(result))
     }
 
@@ -527,7 +528,7 @@ impl<'a> Parser<'a> {
             "looking for self",
         )? {
             let tok = self.eat_unconditional()?;
-            Ok(Some(().at(lspan(tok.span))))
+            Ok(Some(().at(&tok.span)))
         } else {
             Ok(None)
         }
@@ -548,7 +549,7 @@ impl<'a> Parser<'a> {
         let close_paren = self.eat(&TokenKind::CloseParen)?;
 
         // Return type
-        let output_type = if self.peek_and_eat_kind(&TokenKind::SlimArrow)?.is_some() {
+        let output_type = if self.peek_and_eat(&TokenKind::SlimArrow)?.is_some() {
             Some(self.type_spec()?)
         } else {
             None
@@ -581,16 +582,16 @@ impl<'a> Parser<'a> {
                 body: block.map(|inner| Expression::Block(Box::new(inner))),
                 type_params,
             }
-            .at(lspan(start_token.span).merge(block_span)),
+            .between(&start_token.span, &block_span)
         ))
     }
 
     #[trace_parser]
     pub fn type_param(&mut self) -> Result<Loc<TypeParam>> {
         // If this is a type level integer
-        if let Some(hash) = self.peek_and_eat_kind(&TokenKind::Hash)? {
+        if let Some(hash) = self.peek_and_eat(&TokenKind::Hash)? {
             let (id, loc) = self.identifier()?.separate();
-            Ok(TypeParam::Integer(id).at(lspan(hash.span).merge(loc)))
+            Ok(TypeParam::Integer(id).between(&hash.span, &loc))
         } else {
             Ok(self.identifier()?.map(TypeParam::TypeName))
         }
@@ -598,7 +599,7 @@ impl<'a> Parser<'a> {
 
     #[trace_parser]
     pub fn generics_list(&mut self) -> Result<Vec<Loc<TypeParam>>> {
-        if let Some(lt) = self.peek_and_eat_kind(&TokenKind::Lt)? {
+        if let Some(lt) = self.peek_and_eat(&TokenKind::Lt)? {
             let params = self.comma_separated(Self::type_param, &TokenKind::Gt)?;
             self.eat(&TokenKind::Gt).map_err(|_| Error::UnmatchedPair {
                 friend: lt,
@@ -622,9 +623,9 @@ impl<'a> Parser<'a> {
         // Input types
         self.eat(&TokenKind::OpenParen)?;
         let (self_arg, more_args) = if let Some(arg) = self.self_arg()? {
-            if let Some(_) = self.peek_and_eat_kind(&TokenKind::Comma)? {
+            if let Some(_) = self.peek_and_eat(&TokenKind::Comma)? {
                 (Some(arg), true)
-            } else if let Some(_) = self.peek_and_eat_kind(&TokenKind::CloseParen)? {
+            } else if let Some(_) = self.peek_and_eat(&TokenKind::CloseParen)? {
                 (Some(arg), false)
             } else {
                 let next = self.eat_unconditional()?;
@@ -646,7 +647,7 @@ impl<'a> Parser<'a> {
         };
 
         // Return type
-        let return_type = if self.peek_and_eat_kind(&TokenKind::SlimArrow)?.is_some() {
+        let return_type = if self.peek_and_eat(&TokenKind::SlimArrow)?.is_some() {
             Some(self.type_spec()?)
         } else {
             None
@@ -662,7 +663,7 @@ impl<'a> Parser<'a> {
                 return_type,
                 type_params,
             }
-            .at(lspan(start_token.span).merge(lspan(end_token.span))),
+            .between(&start_token.span, &end_token.span)
         ))
     }
 
@@ -685,7 +686,7 @@ impl<'a> Parser<'a> {
         let end_token = self.eat(&TokenKind::CloseBrace)?;
 
         Ok(Some(
-            result.at(lspan(start_token.span).merge(lspan(end_token.span))),
+            result.between(&start_token.span, &end_token.span),
         ))
     }
 
@@ -863,7 +864,7 @@ impl<'a> Parser<'a> {
 
     /// Peeks the next token. If it is the sepcified kind, returns that token, otherwise
     /// returns None
-    fn peek_and_eat_kind(&mut self, kind: &TokenKind) -> Result<Option<Token>> {
+    fn peek_and_eat(&mut self, kind: &TokenKind) -> Result<Option<Token>> {
         if self.peek_kind(kind)? {
             Ok(Some(self.eat_unconditional()?))
         } else {

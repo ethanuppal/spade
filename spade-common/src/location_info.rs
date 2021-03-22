@@ -1,11 +1,30 @@
 use codespan::Span;
 
+pub trait HasCodespan {
+    fn codespan(&self) -> Span;
+}
+impl<T> HasCodespan for Loc<T> {
+    fn codespan(&self) -> Span {
+        self.span
+    }
+}
+impl HasCodespan for Span {
+    fn codespan(&self) -> Span {
+        self.clone()
+    }
+}
+impl HasCodespan for std::ops::Range<usize> {
+    fn codespan(&self) -> Span {
+        lspan(self.clone())
+    }
+}
+
 pub trait WithLocation: Sized {
-    fn at(self, span: Span) -> Loc<Self>
+    fn at(self, span: &impl HasCodespan) -> Loc<Self>
     where
         Self: Sized,
     {
-        Loc::new(self, span)
+        Loc::new(self, span.codespan())
     }
 
     /// Creates a new Loc from another Loc
@@ -13,11 +32,15 @@ pub trait WithLocation: Sized {
         Loc::new(self, loc.span)
     }
 
+    fn between(self, start: &impl HasCodespan, end: &impl HasCodespan) -> Loc<Self> {
+        Loc::new(self, start.codespan().merge(end.codespan()))
+    }
+
     fn nowhere(self) -> Loc<Self>
     where
         Self: Sized,
     {
-        self.at(Span::new(0, 0))
+        self.at(&Span::new(0, 0))
     }
 }
 
@@ -104,7 +127,7 @@ impl<T, E> Loc<Result<T, E>> {
                 inner,
                 span: self.span,
             }),
-            Err(e) => Err(err_fn(e, ().at(self.span))),
+            Err(e) => Err(err_fn(e, ().at(&self.span))),
         }
     }
 }
