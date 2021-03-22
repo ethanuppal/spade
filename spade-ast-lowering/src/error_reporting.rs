@@ -52,6 +52,16 @@ impl CompilationError for Error {
                         got.kind_string()
                     )),
                 ]),
+            Error::LookupError(LookupError::NotAPipeline(path, got)) => Diagnostic::error()
+                .with_message(format!("Expected {} to be a pipeline", path))
+                .with_labels(vec![
+                    Label::primary(file_id, path.span).with_message(format!("Expected pipeline")),
+                    Label::secondary(file_id, got.loc().span).with_message(format!(
+                        "{} is a {}",
+                        path,
+                        got.kind_string()
+                    )),
+                ]),
             Error::ArgumentListLenghtMismatch {
                 expected,
                 got,
@@ -96,14 +106,43 @@ impl CompilationError for Error {
                 Diagnostic::error()
                     .with_message(format!("Missing {}: {}", plural, arg_list))
                     .with_labels(vec![
-                        Label::primary(file_id, at.span)
-                            .with_message(format!("Missing {}", plural)),
+                        Label::primary(file_id, at.span).with_message(format!("Missing {}", plural)),
                         Label::secondary(file_id, at.span)
                             .with_message(format!("Missing {}", arg_list)),
                         Label::secondary(file_id, for_entity.span)
                             .with_message(format!("Entity defined here")),
                     ])
-            }
+            },
+            Error::MissingPipelineReturn { in_stage } => Diagnostic::error()
+                .with_message(format!("Missing return expression"))
+                .with_labels(vec![Label::primary(file_id, in_stage.span)
+                    .with_message(format!("Missing return expression"))])
+                .with_notes(vec![format!(
+                    "The last stage of a pipeline must return a value"
+                )]),
+            Error::NoPipelineStages { pipeline } => Diagnostic::error()
+                .with_message("Missing pipeline stages")
+                .with_labels(vec![Label::primary(file_id, pipeline.span)
+                    .with_message(format!("Pipelien must have at least one stage"))]),
+            Error::IncorrectStageCount {
+                got,
+                expected,
+                pipeline,
+            } => Diagnostic::error()
+                .with_message(format!("Expected {} pipeline stages", expected))
+                .with_labels(vec![
+                    Label::primary(file_id, pipeline.span)
+                        .with_message(format!("Found {} stages", got)),
+                    Label::secondary(file_id, expected.span)
+                        .with_message(format!("{} specified here", expected)),
+                ]),
+            Error::EarlyPipelineReturn { expression } => Diagnostic::error()
+                .with_message(format!("Unexpected return expression"))
+                .with_labels(vec![Label::primary(file_id, expression.span)
+                    .with_message(format!("Did not expect an value in this stage"))])
+                .with_notes(vec![format!(
+                    "Only the last stage of a pipeline can return values"
+                )]),
         };
 
         let writer = StandardStream::stderr(color_choice(no_color));

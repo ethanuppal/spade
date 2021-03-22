@@ -27,23 +27,42 @@ impl<T> SymbolTable<T> {
         self.symbols.pop();
     }
 
-    pub fn add_thing_with_id(&mut self, id: u64, name: Path, item: T) -> NameID {
+
+    /// Adds a thing to the scope at `current_scope - offset`. Panics if there is no such scope
+    pub fn add_thing_with_id_at_offset(
+        &mut self,
+        offset: usize,
+        id: u64,
+        name: Path,
+        item: T,
+    ) -> NameID {
         let name_id = NameID(id, name.clone());
         if self.items.contains_key(&name_id) {
             panic!("Duplicate nameID inserted, {}", id);
         }
         self.items.insert(name_id.clone(), item);
 
-        self.symbols
-            .last_mut()
-            .expect("At least one scope must be present to add a symbol")
-            .insert(name, name_id.clone());
+        if offset > self.symbols.len() {
+            panic!("Not enough scopes to add symbol at offset {}", offset);
+        }
+
+        let index = self.symbols.len() - 1 - offset;
+        self.symbols[index].insert(name, name_id.clone());
 
         name_id
+    }
+
+    pub fn add_thing_with_id(&mut self, id: u64, name: Path, item: T) -> NameID {
+        self.add_thing_with_id_at_offset(0, id, name, item)
     }
 
     pub fn add_thing(&mut self, name: Path, item: T) -> NameID {
         let id = self.id_tracker.next();
         self.add_thing_with_id(id, name, item)
+    }
+
+    pub fn add_thing_at_offset(&mut self, offset: usize, name: Path, item: T) -> NameID {
+        let id = self.id_tracker.next();
+        self.add_thing_with_id_at_offset(offset, id, name, item)
     }
 }

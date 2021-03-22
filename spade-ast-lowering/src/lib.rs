@@ -1,6 +1,7 @@
 pub mod error;
 pub mod error_reporting;
 pub mod global_symbols;
+pub mod pipelines;
 pub mod symbol_table;
 
 use std::collections::HashMap;

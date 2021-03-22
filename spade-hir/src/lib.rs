@@ -84,6 +84,7 @@ impl TypeSpec {
 pub struct Entity {
     pub name: Loc<NameID>,
     pub head: EntityHead,
+    // This is needed here because the head does not have NameIDs
     pub inputs: Vec<(NameID, Loc<TypeSpec>)>,
     pub body: Loc<Expression>,
 }
@@ -110,6 +111,39 @@ impl EntityHead {
     }
 }
 impl WithLocation for EntityHead {}
+
+#[derive(PartialEq, Debug, Clone)]
+pub struct PipelineHead {
+    pub depth: Loc<usize>,
+    pub inputs: Vec<(Loc<Identifier>, Loc<TypeSpec>)>,
+    pub output_type: Option<Loc<TypeSpec>>,
+}
+impl WithLocation for PipelineHead {}
+
+#[derive(PartialEq, Debug, Clone)]
+pub struct PipelineBinding {
+    pub name: Loc<NameID>,
+    pub type_spec: Option<Loc<TypeSpec>>,
+    pub value: Loc<Expression>,
+}
+impl WithLocation for PipelineBinding {}
+
+#[derive(PartialEq, Debug, Clone)]
+pub struct PipelineStage {
+    pub bindings: Vec<Loc<PipelineBinding>>,
+}
+impl WithLocation for PipelineStage {}
+
+#[derive(PartialEq, Debug, Clone)]
+pub struct Pipeline {
+    pub name: Loc<NameID>,
+    pub inputs: Vec<(NameID, Loc<TypeSpec>)>,
+    pub body: Vec<Loc<PipelineStage>>,
+    pub result: Loc<Expression>,
+    pub depth: Loc<u128>,
+    pub output_type: Loc<TypeSpec>,
+}
+impl WithLocation for Pipeline {}
 
 /// Items are things typically present at the top level of a module such as
 /// entities, pipelines, submodules etc.

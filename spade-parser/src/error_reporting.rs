@@ -78,19 +78,29 @@ impl CompilationError for Error {
                 Diagnostic::error()
                     .with_message(message)
                     .with_labels(vec![
-                        Label::primary(file_id, for_what.span).with_message("expected `(` or `{`")
+                        Label::primary(file_id, for_what.span)
+                            .with_message("Expected an argument list")
                     ])
             }
-            Error::ExpectedType(got) => {
-                let message = format!(
-                    "Unexpected token. Got `{}`, expected type",
-                    got.kind.as_str()
-                );
+            Error::ExpectedPipelineDepth { got } => {
+                let message = format!("Expected pipeline depth");
 
                 Diagnostic::error()
                     .with_message(message)
                     .with_labels(vec![
-                        Label::primary(file_id, got.span).with_message("Expected a type")
+                        Label::primary(file_id, got.span).with_message("Expected pipeline depth")
+                    ])
+                    .with_notes(vec![
+                        format!("Found {}", got.kind.as_str()),
+                        format!("Pipeline depth can only be fixed integers"),
+                    ])
+            }
+            Error::ExpectedType(found) => {
+                Diagnostic::error()
+                    .with_message("Expected type")
+                    .with_labels(vec![
+                        Label::primary(file_id, found.span)
+                            .with_message("Expected type")
                     ])
             }
         };

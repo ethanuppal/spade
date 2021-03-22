@@ -3,7 +3,7 @@ use spade_common::{
     name::{Identifier, NameID, Path},
     symbol_table::SymbolTable as BaseSymbolTable,
 };
-use spade_hir::{EntityHead, TypeParam};
+use spade_hir::{EntityHead, PipelineHead, TypeParam};
 use spade_types::BaseType;
 use thiserror::Error;
 
@@ -17,6 +17,8 @@ pub enum Error {
     NotAVariable(Loc<Path>, Thing),
     #[error("Not an entity")]
     NotAnEntity(Loc<Path>, Thing),
+    #[error("Not a pipeline")]
+    NotAPipeline(Loc<Path>, Thing),
 }
 
 /// Any named thing in the language
@@ -26,6 +28,7 @@ pub enum Thing {
     Type(TypeSymbol),
     TraitDef(Loc<TraitDef>),
     Entity(Loc<EntityHead>),
+    Pipeline(Loc<PipelineHead>),
     Variable(Loc<Identifier>),
 }
 
@@ -36,6 +39,7 @@ impl Thing {
             Thing::TraitDef(_) => "trait definition",
             Thing::Entity(_) => "entity",
             Thing::Variable(_) => "variable",
+            Thing::Pipeline(_) => "pipeline",
         }
     }
 
@@ -45,6 +49,7 @@ impl Thing {
             Thing::Type(TypeSymbol::Param(i)) => i.loc(),
             Thing::TraitDef(i) => i.loc(),
             Thing::Entity(i) => i.loc(),
+            Thing::Pipeline(i) => i.loc(),
             Thing::Variable(i) => i.loc(),
         }
     }
@@ -82,11 +87,20 @@ pub trait SymbolTableExt {
     fn lookup_variable(&self, name: &Loc<Path>) -> Result<NameID, Error>;
     fn lookup_entity(&self, name: &Loc<Path>) -> Result<(NameID, &Loc<EntityHead>), Error>;
     fn lookup_id(&self, name: &Loc<Path>) -> Result<NameID, Error>;
+    fn add_local_variable_at_offset(&mut self, offset: usize, name: Loc<Identifier>) -> NameID;
+    fn lookup_pipeline(&self, name: &Loc<Path>) -> Result<(NameID, &Loc<PipelineHead>), Error>;
 }
 
 impl SymbolTableExt for SymbolTable {
     fn add_local_variable(&mut self, name: Loc<Identifier>) -> NameID {
         self.add_thing(
+            crate::path_from_ident(name.clone()).inner,
+            Thing::Variable(name),
+        )
+    }
+    fn add_local_variable_at_offset(&mut self, offset: usize, name: Loc<Identifier>) -> NameID {
+        self.add_thing_at_offset(
+            offset,
             crate::path_from_ident(name.clone()).inner,
             Thing::Variable(name),
         )
@@ -108,6 +122,7 @@ impl SymbolTableExt for SymbolTable {
             Err(Error::NotATypeSymbol(_, _)) => unreachable!(),
             Err(Error::NotAVariable(_, _)) => unreachable!(),
             Err(Error::NotAnEntity(_, _)) => unreachable!(),
+            Err(Error::NotAPipeline(_, _)) => unreachable!(),
         }
     }
 
@@ -145,5 +160,13 @@ impl SymbolTableExt for SymbolTable {
             }
         }
         Err(Error::NoSuchSymbol(name.clone()))
+    }
+    fn lookup_pipeline(&self, name: &Loc<Path>) -> Result<(NameID, &Loc<PipelineHead>), Error> {
+        let id = self.lookup_id(name)?;
+
+        match self.items.get(&id).unwrap() {
+            Thing::Pipeline(head) => Ok((id, head)),
+            other => Err(Error::NotAPipeline(name.clone(), other.clone())),
+        }
     }
 }

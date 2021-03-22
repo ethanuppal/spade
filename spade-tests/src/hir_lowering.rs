@@ -455,4 +455,43 @@ mod tests {
             assert_same_mir!(&res, &exp);
         }
     }
+
+    #[test]
+    fn pipelines_work() {
+        unimplemented!("Test pipeline codegen");
+        let code = r#"
+            pipeline pl(a: int<16>) -> int<16> {
+                stage {
+                    let reg x = a + a;
+                }
+                stage {
+                    let reg y = x * 2;
+                    y
+                }
+            }
+        "#;
+
+        let expected = vec![
+            entity!("sub"; (
+                    "_i_a", n(0, "a"), Type::Int(16)
+                ) -> Type::Int(16); {
+                } => n(0, "a")
+            ),
+            entity!("top"; () -> Type::Int(16); {
+                (const 1; Type::Int(16); ConstantValue::Int(0));
+                (e(0); Type::Int(16); Instance(("sub".to_string())); e(1))
+            } => e(0)),
+        ];
+
+        let module = parse_typecheck_module_body(code);
+
+        let mut result = vec![];
+        for processed in module {
+            result.push(generate_entity(&processed.entity, &processed.type_state).report_failure());
+        }
+
+        for (exp, res) in expected.into_iter().zip(result.into_iter()) {
+            assert_same_mir!(&res, &exp);
+        }
+    }
 }

@@ -1,5 +1,6 @@
 use spade_common::{location_info::Loc, name::Identifier};
 use spade_hir as hir;
+use spade_parser::ast;
 use thiserror::Error;
 
 #[derive(Error, Debug, PartialEq, Clone)]
@@ -34,6 +35,18 @@ pub enum Error {
         for_entity: Loc<hir::EntityHead>,
         at: Loc<()>,
     },
+    #[error("Missing pipeline return")]
+    MissingPipelineReturn { in_stage: Loc<hir::PipelineStage> },
+    #[error("Pipelines must have at least one stage")]
+    NoPipelineStages { pipeline: Loc<ast::Pipeline> },
+    #[error("Incorrect stage count")]
+    IncorrectStageCount {
+        got: usize,
+        expected: Loc<u128>,
+        pipeline: Loc<ast::Pipeline>,
+    },
+    #[error("Early pipeline return")]
+    EarlyPipelineReturn { expression: Loc<hir::Expression> },
 }
 
 pub type Result<T> = std::result::Result<T, Error>;

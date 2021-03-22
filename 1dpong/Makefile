@@ -48,37 +48,6 @@ upload: bitgen
 build_compiler:
 	@cd .. && cargo build
 
-# ECPIX5 stuff
-IDCODE ?= 0x81112043 # 12f
-
-
-ecp5.json: top_ecp5.v build/main.v ecpix5.lpf
-	yosys \
-		-p "synth_ecp5 -json $@" \
-		-E .$(basename $@).d \
-		top_ecp5.v build/main.v
-
-ecp5.config: ecp5.json ecpix5.lpf
-	nextpnr-ecp5 \
-		--json $< \
-		--textcfg $@ \
-		--lpf ecpix5.lpf \
-		--um5g-45k \
-		--package CABGA554
-
-ecp5.bit: ecp5.config
-	ecppack --idcode $(IDCODE) $< $@
-
-ecp5.svf: ecp5.config
-	ecppack --idcode $(IDCODE) --input $< --svf $@
-
-# pll_%.v:
-# 	ecppll \
-# 		-i 25 \
-# 		-o $(subst pll_,,$(basename $@)) \
-# 		-n $(basename $@) \
-# 		-f $@
-
 clean:
 	rm -rf build/
 

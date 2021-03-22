@@ -51,3 +51,17 @@ pub fn visit_entity(
 
     Ok(())
 }
+
+pub fn visit_pipeline(
+    p: &Loc<ast::Pipeline>,
+    namespace: &Path,
+    symtab: &mut SymbolTable,
+) -> Result<(), Error> {
+    let head = crate::pipelines::pipeline_head(&p, symtab)?;
+
+    let path = namespace.push_ident(p.name.clone());
+
+    symtab.add_thing(path, Thing::Pipeline(head.at_loc(p)));
+
+    Ok(())
+}

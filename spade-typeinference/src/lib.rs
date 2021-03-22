@@ -17,7 +17,9 @@ use colored::*;
 pub mod equation;
 pub mod error_reporting;
 pub mod fixed_types;
+pub mod pipeline;
 pub mod result;
+pub mod testutil;
 
 use crate::fixed_types::t_clock;
 use crate::fixed_types::{t_bool, t_int};
@@ -670,6 +672,8 @@ mod tests {
     use super::TypeVar as TVar;
     use super::TypedExpression as TExpr;
 
+    use crate::testutil::{sized_int, unsized_int};
+    use crate::{ensure_same_type, get_type};
     use crate::{
         fixed_types::t_clock,
         hir::{self, Block},
@@ -679,48 +683,6 @@ mod tests {
     use spade_common::location_info::WithLocation;
     use spade_parser::testutil::{ast_ident, ast_path};
     use spade_testutil::name_id;
-
-    fn sized_int(size: u128) -> TVar {
-        TVar::Known(
-            t_int(),
-            vec![TVar::Known(KnownType::Integer(size), vec![], None)],
-            None,
-        )
-    }
-
-    fn unsized_int(id: u64) -> TVar {
-        TVar::Known(t_int(), vec![TVar::Generic(id)], None)
-    }
-
-    macro_rules! get_type {
-        ($state:ident, $e:expr) => {
-            if let Ok(t) = $state.type_of($e) {
-                t
-            } else {
-                println!("{}", format_trace_stack(&$state.trace_stack));
-                panic!("Failed to get type of {:?}", $e)
-            }
-        };
-    }
-
-    macro_rules! ensure_same_type {
-        ($state:ident, $t1:expr, $t2:expr) => {
-            let _t1 = $t1.get_type(&$state);
-            let _t2 = $t2.get_type(&$state);
-            if _t1 != _t2 {
-                println!("{}", format_trace_stack(&$state.trace_stack));
-                $state.print_equations();
-
-                if let (Ok(t1), Ok(t2)) = (&_t1, &_t2) {
-                    println!("Types were OK and have values {}, {}", t1, t2);
-                    println!("Raw: {:?}, {:?}", t1, t2);
-                } else {
-                    println!("{:?}\n!=\n{:?}", _t1, _t2);
-                }
-                panic!("Types are not the same")
-            }
-        };
-    }
 
     #[test]
     fn int_literals_have_type_known_int() {

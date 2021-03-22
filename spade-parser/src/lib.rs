@@ -3,7 +3,7 @@ pub mod error_reporting;
 pub mod lexer;
 pub mod testutil;
 
-use ast::{ArgumentList, NamedArgument};
+use ast::{ArgumentList, NamedArgument, Pipeline, PipelineBindModifier, PipelineBinding, PipelineStage};
 use spade_common::{
     location_info::{lspan, Loc, WithLocation},
     name::{Identifier, Path},
@@ -69,6 +69,9 @@ pub enum Error {
 
     #[error("Missing tuple index")]
     MissingTupleIndex { hash_loc: Loc<()> },
+
+    #[error("Expected pipeline depth")]
+    ExpectedPipelineDepth { got: Token },
 }
 
 impl Error {
@@ -588,6 +591,116 @@ impl<'a> Parser<'a> {
                 type_params,
             }
             .between(&start_token.span, &block_span),
+        ))
+    }
+
+    #[trace_parser]
+    pub fn pipeline_binding(&mut self) -> Result<Option<Loc<PipelineBinding>>> {
+        let start = peek_for!(self, &TokenKind::Let);
+
+        let modifier = if let Some(t) = self.peek_and_eat(&TokenKind::Reg)? {
+            Some(PipelineBindModifier::Reg.at(&t.span))
+        } else {
+            None
+        };
+
+        let name = self.identifier()?;
+
+        let type_spec = if self.peek_and_eat(&TokenKind::Colon)?.is_some() {
+            Some(self.type_spec()?)
+        } else {
+            None
+        };
+
+        self.eat(&TokenKind::Assignment)?;
+
+        let value = self.expression()?;
+
+        let end = self.eat(&TokenKind::Semi)?;
+
+        Ok(Some(
+            PipelineBinding {
+                name,
+                modifier,
+                type_spec,
+                value,
+            }
+            .between(&start.span, &end.span),
+        ))
+    }
+
+    #[trace_parser]
+    pub fn pipeline_stage(&mut self) -> Result<Option<Loc<PipelineStage>>> {
+        let start = peek_for!(self, &TokenKind::Stage);
+
+        self.eat(&TokenKind::OpenBrace)?;
+
+        let mut bindings = vec![];
+        while let Some(statement) = self.pipeline_binding()? {
+            bindings.push(statement)
+        }
+
+        // Check if this is the end, or or if there is a return expression
+        let result = if self.peek_kind(&TokenKind::CloseBrace)? {
+            None
+        } else {
+            Some(self.expression()?)
+        };
+
+        let end = self.eat(&TokenKind::CloseBrace)?;
+
+        Ok(Some(
+            PipelineStage { bindings, result }.between(&start.span, &end.span),
+        ))
+    }
+
+    #[trace_parser]
+    pub fn pipeline(&mut self) -> Result<Option<Loc<Pipeline>>> {
+        let start = peek_for!(self, &TokenKind::Pipeline);
+
+        // Depth
+        self.eat(&TokenKind::OpenParen)?;
+        let depth = if let Some(d) = self.int_literal()? {
+            d
+        } else {
+            return Err(Error::ExpectedPipelineDepth {
+                got: self.eat_unconditional()?,
+            });
+        };
+        self.eat(&TokenKind::CloseParen)?;
+
+        let name = self.identifier()?;
+
+        // Input types
+        self.eat(&TokenKind::OpenParen)?;
+        let inputs = self.comma_separated(Self::name_and_type, &TokenKind::CloseParen)?;
+        self.eat(&TokenKind::CloseParen)?;
+
+        // Return type
+        let output_type = if self.peek_and_eat(&TokenKind::SlimArrow)?.is_some() {
+            Some(self.type_spec()?)
+        } else {
+            None
+        };
+
+        self.eat(&TokenKind::OpenBrace)?;
+
+        let mut stages = vec![];
+        while let Some(stage) = self.pipeline_stage()? {
+            stages.push(stage)
+        }
+
+        let end = self.eat(&TokenKind::CloseBrace)?;
+
+        Ok(Some(
+            Pipeline {
+                depth,
+                name,
+                inputs,
+                output_type,
+                stages,
+            }
+            .between(&start.span, &end.span),
         ))
     }
 
@@ -1684,5 +1797,98 @@ mod tests {
         let expected = NamedArgument::Short(ast_ident("x")).nowhere();
 
         check_parse!(code, named_argument, Ok(expected));
+    }
+
+    #[test]
+    fn pipeline_stage_parsing_works() {
+        let code = r#"
+            stage {
+                let y = 0;
+                let reg x = 0;
+                let reg x: bool = 0;
+                y
+            }
+            "#;
+
+        let expected = PipelineStage {
+            bindings: vec![
+                PipelineBinding {
+                    name: ast_ident("y"),
+                    modifier: None,
+                    type_spec: None,
+                    value: Expression::IntLiteral(0).nowhere(),
+                }
+                .nowhere(),
+                PipelineBinding {
+                    name: ast_ident("x"),
+                    modifier: Some(PipelineBindModifier::Reg.nowhere()),
+                    type_spec: None,
+                    value: Expression::IntLiteral(0).nowhere(),
+                }
+                .nowhere(),
+                PipelineBinding {
+                    name: ast_ident("x"),
+                    modifier: Some(PipelineBindModifier::Reg.nowhere()),
+                    type_spec: Some(TypeSpec::Named(ast_path("bool"), vec![]).nowhere()),
+                    value: Expression::IntLiteral(0).nowhere(),
+                }
+                .nowhere(),
+            ],
+            result: Some(Expression::Identifier(ast_path("y")).nowhere()),
+        }
+        .nowhere();
+
+        check_parse!(code, pipeline_stage, Ok(Some(expected)));
+    }
+
+    #[test]
+    fn pipeline_parsing_works() {
+        let code = r#"
+            pipeline(2) test(a: bool) -> bool {
+                stage {
+                    let reg b = 0;
+                }
+                stage {
+                    let c = 0;
+                }
+            }
+        "#;
+
+        let expected = Pipeline {
+            depth: Loc::new(2, lspan(0..0)),
+            name: ast_ident("test"),
+            inputs: vec![(
+                ast_ident("a"),
+                TypeSpec::Named(ast_path("bool"), vec![]).nowhere(),
+            )],
+            output_type: Some(TypeSpec::Named(ast_path("bool"), vec![]).nowhere()),
+            stages: vec![
+                PipelineStage {
+                    bindings: vec![PipelineBinding {
+                        name: ast_ident("b"),
+                        modifier: Some(PipelineBindModifier::Reg.nowhere()),
+                        type_spec: None,
+                        value: Expression::IntLiteral(0).nowhere(),
+                    }
+                    .nowhere()],
+                    result: None,
+                }
+                .nowhere(),
+                PipelineStage {
+                    bindings: vec![PipelineBinding {
+                        name: ast_ident("c"),
+                        modifier: None,
+                        type_spec: None,
+                        value: Expression::IntLiteral(0).nowhere(),
+                    }
+                    .nowhere()],
+                    result: None,
+                }
+                .nowhere(),
+            ],
+        }
+        .nowhere();
+
+        check_parse!(code, pipeline, Ok(Some(expected)));
     }
 }

@@ -85,6 +85,43 @@ pub struct Entity {
 }
 impl WithLocation for Entity {}
 
+/// Modifiers on pipeline bindings which change the visibility of the binding
+#[derive(PartialEq, Debug, Clone)]
+pub enum PipelineBindModifier {
+    Reg,
+}
+impl WithLocation for PipelineBindModifier {}
+/// A variable binding inside a pipeline. These behave a bit differently
+/// to standard bindings
+#[derive(PartialEq, Debug, Clone)]
+pub struct PipelineBinding {
+    pub name: Loc<Identifier>,
+    pub modifier: Option<Loc<PipelineBindModifier>>,
+    pub type_spec: Option<Loc<TypeSpec>>,
+    pub value: Loc<Expression>,
+}
+impl WithLocation for PipelineBinding {}
+
+/// A single stage in a pipeline.
+#[derive(PartialEq, Debug, Clone)]
+pub struct PipelineStage {
+    pub bindings: Vec<Loc<PipelineBinding>>,
+    pub result: Option<Loc<Expression>>,
+}
+impl WithLocation for PipelineStage {}
+
+#[derive(PartialEq, Debug, Clone)]
+pub struct Pipeline {
+    pub depth: Loc<u128>,
+    pub name: Loc<Identifier>,
+    pub inputs: Vec<(Loc<Identifier>, Loc<TypeSpec>)>,
+    pub output_type: Option<Loc<TypeSpec>>,
+    /// The body is a list of expression for ID assignment purposes, but semantic analysis
+    /// ensures that it is always a block.
+    pub stages: Vec<Loc<PipelineStage>>,
+}
+impl WithLocation for Pipeline {}
+
 #[derive(PartialEq, Debug, Clone)]
 pub struct Register {
     pub name: Loc<Identifier>,

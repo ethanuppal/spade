@@ -45,6 +45,8 @@ pub trait WithLocation: Sized {
 }
 
 impl WithLocation for () {}
+impl WithLocation for u128 {}
+impl WithLocation for u64 {}
 
 pub fn lspan(s: logos::Span) -> Span {
     Span::new(s.start as u32, s.end as u32)

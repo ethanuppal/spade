@@ -1,7 +1,7 @@
 pub mod error_reporting;
 
 use spade_common::{location_info::Loc, name::NameID};
-use spade_hir::{expression::BinaryOperator, Entity, ExprKind, Expression, Statement};
+use spade_hir::{expression::BinaryOperator, Entity, ExprKind, Expression, Statement, Pipeline};
 use spade_mir as mir;
 use spade_typeinference::{
     equation::{TypeVar, TypedExpression},
@@ -368,4 +368,8 @@ pub fn generate_entity<'a>(entity: &Entity, types: &TypeState) -> Result<mir::En
         output_type: output_t,
         statements: statements,
     })
+}
+
+pub fn generate_pipeline<'a>(pipeline: &Pipeline, types: &TypeState) -> Result<mir::Entity> {
+    unimplemented!()
 }

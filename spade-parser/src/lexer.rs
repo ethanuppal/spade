@@ -44,6 +44,10 @@ pub enum TokenKind {
     #[token("else")]
     Else,
 
+    #[token("pipeline")]
+    Pipeline,
+    #[token("stage")]
+    Stage,
     #[token("entity")]
     Entity,
     #[token("trait")]
@@ -131,6 +135,8 @@ impl TokenKind {
             TokenKind::Let => "let",
             TokenKind::Reg => "reg",
             TokenKind::Entity => "entity",
+            TokenKind::Pipeline => "pipeline",
+            TokenKind::Stage => "stage",
             TokenKind::Instance => "inst",
             TokenKind::Reset => "reset",
             TokenKind::If => "if",
