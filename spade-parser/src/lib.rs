@@ -97,6 +97,18 @@ impl<'a> Parser<'a> {
     }
 }
 
+/// Peek the next token. If it matches the specified token, return that token
+/// otherwise return Ok(none)
+macro_rules! peek_for {
+    ($self:expr, $token:expr) => {
+        if let Some(t) = $self.peek_and_eat_kind($token)? {
+            t
+        } else {
+            return Ok(None);
+        }
+    };
+}
+
 macro_rules! operator_expr {
     ($this_operator:ident, $condition:ident, $next:ident) => {
         fn $this_operator(&mut self) -> Result<Loc<Expression>> {
@@ -291,19 +303,17 @@ impl<'a> Parser<'a> {
 
     #[trace_parser]
     pub fn if_expression(&mut self) -> Result<Option<Loc<Expression>>> {
-        if let Some(start) = self.peek_and_eat_kind(&TokenKind::If)? {
-            let cond = self.expression()?;
-            let on_true = self.expression()?;
-            self.eat(&TokenKind::Else)?;
-            let (on_false, end_span) = self.expression()?.separate();
+        let start = peek_for!(self, &TokenKind::If);
 
-            Ok(Some(
-                Expression::If(Box::new(cond), Box::new(on_true), Box::new(on_false))
-                    .at(lspan(start.span).merge(end_span)),
-            ))
-        } else {
-            Ok(None)
-        }
+        let cond = self.expression()?;
+        let on_true = self.expression()?;
+        self.eat(&TokenKind::Else)?;
+        let (on_false, end_span) = self.expression()?.separate();
+
+        Ok(Some(
+            Expression::If(Box::new(cond), Box::new(on_true), Box::new(on_false))
+                .at(lspan(start.span).merge(end_span)),
+        ))
     }
 
     #[trace_parser]
@@ -321,11 +331,8 @@ impl<'a> Parser<'a> {
 
     #[trace_parser]
     pub fn block(&mut self) -> Result<Option<Loc<Block>>> {
-        let start = if let Some(start) = self.peek_and_eat_kind(&TokenKind::OpenBrace)? {
-            start
-        } else {
-            return Ok(None);
-        };
+        let start = peek_for!(self, &TokenKind::OpenBrace);
+
         let statements = self.statements()?;
         let output_value = self.expression()?;
         let end_token = self.eat(&TokenKind::CloseBrace)?;
@@ -383,16 +390,14 @@ impl<'a> Parser<'a> {
 
     #[trace_parser]
     pub fn tuple_spec(&mut self) -> Result<Option<Loc<TypeSpec>>> {
-        if let Some(start) = self.peek_and_eat_kind(&TokenKind::OpenParen)? {
-            let inner = self.comma_separated(Self::type_spec, &TokenKind::CloseParen)?;
-            let end = self.eat(&TokenKind::CloseParen)?;
+        let start = peek_for!(self, &TokenKind::OpenParen);
 
-            let span = lspan(start.span).merge(lspan(end.span));
+        let inner = self.comma_separated(Self::type_spec, &TokenKind::CloseParen)?;
+        let end = self.eat(&TokenKind::CloseParen)?;
 
-            Ok(Some(TypeSpec::Tuple(inner).at(span)))
-        } else {
-            Ok(None)
-        }
+        let span = lspan(start.span).merge(lspan(end.span));
+
+        Ok(Some(TypeSpec::Tuple(inner).at(span)))
     }
 
     /// A name with an associated type, as used in argument definitions as well
@@ -412,24 +417,22 @@ impl<'a> Parser<'a> {
 
     #[trace_parser]
     pub fn binding(&mut self) -> Result<Option<Loc<Statement>>> {
-        if self.peek_and_eat_kind(&TokenKind::Let)?.is_some() {
-            let (ident, start_span) = self.identifier()?.separate();
+        peek_for!(self, &TokenKind::Let);
 
-            let t = if self.peek_and_eat_kind(&TokenKind::Colon)?.is_some() {
-                Some(self.type_spec()?)
-            } else {
-                None
-            };
+        let (ident, start_span) = self.identifier()?.separate();
 
-            self.eat(&TokenKind::Assignment)?;
-            let (value, end_span) = self.expression()?.separate();
-
-            Ok(Some(
-                Statement::Binding(ident, t, value).at(start_span.merge(end_span)),
-            ))
+        let t = if self.peek_and_eat_kind(&TokenKind::Colon)?.is_some() {
+            Some(self.type_spec()?)
         } else {
-            Ok(None)
-        }
+            None
+        };
+
+        self.eat(&TokenKind::Assignment)?;
+        let (value, end_span) = self.expression()?.separate();
+
+        Ok(Some(
+            Statement::Binding(ident, t, value).at(start_span.merge(end_span)),
+        ))
     }
 
     #[trace_parser]
@@ -443,60 +446,58 @@ impl<'a> Parser<'a> {
 
     #[trace_parser]
     pub fn register(&mut self) -> Result<Option<Loc<Statement>>> {
-        if let Some(start_token) = self.peek_and_eat_kind(&TokenKind::Reg)? {
-            // Clock selection
-            let (clock, _clock_paren_span) = self.surrounded(
+        let start_token = peek_for!(self, &TokenKind::Reg);
+
+        // Clock selection
+        let (clock, _clock_paren_span) = self.surrounded(
+            &TokenKind::OpenParen,
+            |s| s.expression().map(Some),
+            &TokenKind::CloseParen,
+        )?;
+
+        // Identifier parsing can not fail since we map it into a Some. Therefore,
+        // unwrap is safe
+        let clock = clock.unwrap();
+
+        // Name
+        let name = self.identifier()?;
+
+        // Optional type
+        let value_type = if self.peek_and_eat_kind(&TokenKind::Colon)?.is_some() {
+            Some(self.type_spec()?)
+        } else {
+            None
+        };
+
+        // Optional reset
+        let reset = if self.peek_and_eat_kind(&TokenKind::Reset)?.is_some() {
+            let (reset, _) = self.surrounded(
                 &TokenKind::OpenParen,
-                |s| s.expression().map(Some),
+                |s| s.register_reset_definition().map(Some),
                 &TokenKind::CloseParen,
             )?;
-
-            // Identifier parsing can not fail since we map it into a Some. Therefore,
-            // unwrap is safe
-            let clock = clock.unwrap();
-
-            // Name
-            let name = self.identifier()?;
-
-            // Optional type
-            let value_type = if self.peek_and_eat_kind(&TokenKind::Colon)?.is_some() {
-                Some(self.type_spec()?)
-            } else {
-                None
-            };
-
-            // Optional reset
-            let reset = if self.peek_and_eat_kind(&TokenKind::Reset)?.is_some() {
-                let (reset, _) = self.surrounded(
-                    &TokenKind::OpenParen,
-                    |s| s.register_reset_definition().map(Some),
-                    &TokenKind::CloseParen,
-                )?;
-                reset
-            } else {
-                None
-            };
-
-            // Value
-            self.eat(&TokenKind::Assignment)?;
-            let (value, end_span) = self.expression()?.separate();
-
-            let span = lspan(start_token.span).merge(end_span);
-            let result = Statement::Register(
-                Register {
-                    name,
-                    clock,
-                    reset,
-                    value,
-                    value_type,
-                }
-                .at(span),
-            )
-            .at(span);
-            Ok(Some(result))
+            reset
         } else {
-            Ok(None)
-        }
+            None
+        };
+
+        // Value
+        self.eat(&TokenKind::Assignment)?;
+        let (value, end_span) = self.expression()?.separate();
+
+        let span = lspan(start_token.span).merge(end_span);
+        let result = Statement::Register(
+            Register {
+                name,
+                clock,
+                reset,
+                value,
+                value_type,
+            }
+            .at(span),
+        )
+        .at(span);
+        Ok(Some(result))
     }
 
     /// If the next token is the start of a statement, return that statement,
@@ -535,11 +536,7 @@ impl<'a> Parser<'a> {
     // Entities
     #[trace_parser]
     pub fn entity(&mut self) -> Result<Option<Loc<Entity>>> {
-        let start_token = if let Some(t) = self.peek_and_eat_kind(&TokenKind::Entity)? {
-            t
-        } else {
-            return Ok(None);
-        };
+        let start_token = peek_for!(self, &TokenKind::Entity);
 
         let name = self.identifier()?;
 
@@ -616,11 +613,7 @@ impl<'a> Parser<'a> {
     // Traits
     #[trace_parser]
     pub fn function_decl(&mut self) -> Result<Option<Loc<FunctionDecl>>> {
-        let start_token = if let Some(t) = self.peek_and_eat_kind(&TokenKind::Function)? {
-            t
-        } else {
-            return Ok(None);
-        };
+        let start_token = peek_for!(self, &TokenKind::Function);
 
         let name = self.identifier()?;
 
@@ -675,11 +668,7 @@ impl<'a> Parser<'a> {
 
     #[trace_parser]
     pub fn trait_def(&mut self) -> Result<Option<Loc<TraitDef>>> {
-        let start_token = if let Some(start) = self.peek_and_eat_kind(&TokenKind::Trait)? {
-            start
-        } else {
-            return Ok(None);
-        };
+        let start_token = peek_for!(self, &TokenKind::Trait);
 
         let name = self.identifier()?;
 
