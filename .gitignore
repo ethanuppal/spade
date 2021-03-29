@@ -2,5 +2,6 @@ target
 parse_tree_macros/target
 Cargo.lock
 build
+.ecp5.d
 
 .env

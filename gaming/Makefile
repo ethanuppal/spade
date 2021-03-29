@@ -1,10 +1,6 @@
 $(shell cd .. && cargo build)
 BUILD_DIR=build
 
-# APIO stuff
-APIO_BUILD_DIR=apio_build
-APIO_FILES=apio.ini pins.pcf
-
 IVERILOG_FLAGS=-g2012
 
 SPADEC=../target/debug/spade
@@ -12,7 +8,7 @@ SPADEC=../target/debug/spade
 VCDS=$(wildcard test/*)
 
 # Main rule
-all: build/main.v.vcd
+all: ecp5.svf
 
 # Build verilog from the spade code
 build/main.v: src/main.spade $(SPADEC)
@@ -20,37 +16,11 @@ build/main.v: src/main.spade $(SPADEC)
 	@echo -e "[\033[0;34m${SPADEC}\033[0m] building $@"
 	@${SPADEC} $< -o $@
 
-# Build a test binary
-build/main.v.out: build/main.v
-	@echo -e "[\033[0;34miverilog\033[0m] building $@"
-	@iverilog \
-		-o ${@} \
-		${IVERILOG_FLAGS} \
-		-DVCD_OUTPUT=\"build/${<F}.vcd\" \
-		$< src/testbench.v
-
-# Simulate the test binary
-build/main.v.vcd: build/main.v.out
-	@mkdir -p output
-	@echo -e "[\033[0;34mvvp\033[0m] simulating $@"
-	@vvp $< | grep -v dumpfile
-
-
-bitgen: top.v build/main.v ${APIO_FILES}
-	@mkdir -p ${APIO_BUILD_DIR}
-	@cp top.v build/main.v ${APIO_FILES} ${APIO_BUILD_DIR}
-	@echo -e "[\033[0;34mapio\033[0m] building"
-	@apio build -p ${APIO_BUILD_DIR}
-
-upload: bitgen
-	@apio upload -p ${APIO_BUILD_DIR}
-
-build_compiler:
-	@cd .. && cargo build
+upload: ecp5.svf .PHONY
+	openocd -f openocd-ecpix5.cfg -c "init" -c "svf -quiet ecp5.svf" -c "exit"
 
 # ECPIX5 stuff
 IDCODE ?= 0x81112043 # 12f
-
 
 ecp5.json: top_ecp5.v build/main.v ecpix5.lpf
 	yosys \
@@ -71,13 +41,6 @@ ecp5.bit: ecp5.config
 
 ecp5.svf: ecp5.config
 	ecppack --idcode $(IDCODE) --input $< --svf $@
-
-# pll_%.v:
-# 	ecppll \
-# 		-i 25 \
-# 		-o $(subst pll_,,$(basename $@)) \
-# 		-n $(basename $@) \
-# 		-f $@
 
 clean:
 	rm -rf build/

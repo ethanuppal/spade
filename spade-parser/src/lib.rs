@@ -160,7 +160,10 @@ impl<'a> Parser<'a> {
             let rest = rhs(self)?;
 
             let span = start.span.merge(rest.span);
-            Ok(Expression::BinaryOperator(Box::new(start), operator.kind, Box::new(rest)).at(&span))
+            Ok(
+                Expression::BinaryOperator(Box::new(start), operator.kind, Box::new(rest))
+                    .at(&span),
+            )
         } else {
             Ok(start)
         }
@@ -258,8 +261,7 @@ impl<'a> Parser<'a> {
                 let list_span = lspan(open_brace.span).merge(lspan(end.span.clone()));
                 let span = lspan(start.span).merge(lspan(end.span));
                 Ok(
-                    Expression::EntityInstance(name, ArgumentList::Named(args)
-                        .at(&list_span))
+                    Expression::EntityInstance(name, ArgumentList::Named(args).at(&list_span))
                         .at(&span),
                 )
             } else {
@@ -313,7 +315,7 @@ impl<'a> Parser<'a> {
 
         Ok(Some(
             Expression::If(Box::new(cond), Box::new(on_true), Box::new(on_false))
-            .between(&start.span, &end_span)
+                .between(&start.span, &end_span),
         ))
     }
 
@@ -343,7 +345,7 @@ impl<'a> Parser<'a> {
                 statements,
                 result: output_value,
             }
-            .between(&start.span, &end.span)
+            .between(&start.span, &end.span),
         ))
     }
 
@@ -582,7 +584,7 @@ impl<'a> Parser<'a> {
                 body: block.map(|inner| Expression::Block(Box::new(inner))),
                 type_params,
             }
-            .between(&start_token.span, &block_span)
+            .between(&start_token.span, &block_span),
         ))
     }
 
@@ -663,7 +665,7 @@ impl<'a> Parser<'a> {
                 return_type,
                 type_params,
             }
-            .between(&start_token.span, &end_token.span)
+            .between(&start_token.span, &end_token.span),
         ))
     }
 
@@ -685,9 +687,7 @@ impl<'a> Parser<'a> {
         }
         let end_token = self.eat(&TokenKind::CloseBrace)?;
 
-        Ok(Some(
-            result.between(&start_token.span, &end_token.span),
-        ))
+        Ok(Some(result.between(&start_token.span, &end_token.span)))
     }
 
     #[trace_parser]

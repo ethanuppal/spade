@@ -1,0 +1,83 @@
+entity tick_gen(clk: clk, rst: bool, tick_length: int<32>) -> bool {
+    reg(clk) timer reset (rst: 0) = if timer == tick_length {
+        0
+    } else {
+        timer + 1
+    };
+
+    timer == tick_length
+}
+
+entity pwm(clk: clk, rst: bool, duty_cycle: int<8>) -> bool {
+    reg(clk) timer reset (rst: 0) = {
+        timer + 1
+    };
+    timer < duty_cycle
+}
+
+entity pulse_led(clk: clk, rst: bool, tick_len: int<32>, max: int<8>, start: int<8>) -> bool {
+    let tick = inst tick_gen(clk, rst, tick_len);
+
+    reg(clk) state: (int<8>, bool) reset (rst: (start, false)) = {
+        let duty = state#0;
+        let dir = state#1;
+
+        let new_dir =
+            if duty == max {
+                true
+            }
+            else if duty == 0 {
+                false
+            }
+            else {
+                dir
+            };
+
+        let new_duty =
+            if tick {
+                if dir { duty - 1 } else { duty + 1 }
+            }
+            else {
+                duty
+            };
+
+        (new_duty, new_dir)
+    };
+
+    let duty = state#0;
+    inst pwm(clk, rst, duty)
+}
+
+entity pong(clk: clk, rst: bool) -> (
+    (bool, bool, bool),
+    (bool, bool, bool),
+    (bool, bool, bool),
+    (bool, bool, bool)
+) {
+    let tick_len_r = 80_000;
+    let tick_len_g = 100_000 << 4;
+    let tick_len_b = 120_000 << 4;
+
+    (
+        (
+            inst pulse_led(clk, rst, tick_len_b, 32, 0),
+            inst pulse_led(clk, rst, tick_len_g, 32, 0),
+            inst pulse_led(clk, rst, tick_len_r, 255, 0)
+        ),
+        (
+            inst pulse_led(clk, rst, tick_len_b, 32, 8),
+            inst pulse_led(clk, rst, tick_len_g, 32, 8),
+            inst pulse_led(clk, rst, tick_len_r, 255, 64)
+        ),
+        (
+            inst pulse_led(clk, rst, tick_len_b, 32, 16),
+            inst pulse_led(clk, rst, tick_len_g, 32, 16),
+            inst pulse_led(clk, rst, tick_len_r, 255, 128)
+        ),
+        (
+            inst pulse_led(clk, rst, tick_len_b, 32, 24),
+            inst pulse_led(clk, rst, tick_len_g, 32, 24),
+            inst pulse_led(clk, rst, tick_len_r, 255, 128+64)
+        )
+    )
+}
