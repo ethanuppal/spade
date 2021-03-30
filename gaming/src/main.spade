@@ -48,36 +48,28 @@ entity pulse_led(clk: clk, rst: bool, tick_len: int<32>, max: int<8>, start: int
     inst pwm(clk, rst, duty)
 }
 
+entity rgb_pulse(clk: clk, rst: bool, start_offset: int<8>) -> (bool, bool, bool) {
+    let tick_len_r = 80_000 << 1;
+    let tick_len_g = 100_000 << 4 << 1;
+    let tick_len_b = 120_000 << 4 << 1;
+
+    (
+        inst pulse_led(clk, rst, tick_len_b, 32, start_offset >> 4),
+        inst pulse_led(clk, rst, tick_len_g, 32, start_offset >> 4),
+        inst pulse_led(clk, rst, tick_len_r, 255, start_offset)
+    )
+}
+
 entity pong(clk: clk, rst: bool) -> (
     (bool, bool, bool),
     (bool, bool, bool),
     (bool, bool, bool),
     (bool, bool, bool)
 ) {
-    let tick_len_r = 80_000;
-    let tick_len_g = 100_000 << 4;
-    let tick_len_b = 120_000 << 4;
-
     (
-        (
-            inst pulse_led(clk, rst, tick_len_b, 32, 0),
-            inst pulse_led(clk, rst, tick_len_g, 32, 0),
-            inst pulse_led(clk, rst, tick_len_r, 255, 0)
-        ),
-        (
-            inst pulse_led(clk, rst, tick_len_b, 32, 8),
-            inst pulse_led(clk, rst, tick_len_g, 32, 8),
-            inst pulse_led(clk, rst, tick_len_r, 255, 64)
-        ),
-        (
-            inst pulse_led(clk, rst, tick_len_b, 32, 16),
-            inst pulse_led(clk, rst, tick_len_g, 32, 16),
-            inst pulse_led(clk, rst, tick_len_r, 255, 128)
-        ),
-        (
-            inst pulse_led(clk, rst, tick_len_b, 32, 24),
-            inst pulse_led(clk, rst, tick_len_g, 32, 24),
-            inst pulse_led(clk, rst, tick_len_r, 255, 128+64)
-        )
+        inst rgb_pulse(clk, rst, 0),
+        inst rgb_pulse(clk, rst, 64),
+        inst rgb_pulse(clk, rst, 128),
+        inst rgb_pulse(clk, rst, 128+64),
     )
 }
