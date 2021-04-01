@@ -31,6 +31,9 @@ pub fn visit_item(
         ast::Item::Entity(e) => {
             visit_entity(&e, namespace, symtab)?;
         }
+        ast::Item::Pipeline(p) => {
+            visit_pipeline(&p, namespace, symtab)?;
+        }
         ast::Item::TraitDef(_) => {
             todo!("Trait definitions are unsupported")
         }

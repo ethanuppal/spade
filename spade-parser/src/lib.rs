@@ -3,7 +3,9 @@ pub mod error_reporting;
 pub mod lexer;
 pub mod testutil;
 
-use ast::{ArgumentList, NamedArgument, Pipeline, PipelineBindModifier, PipelineBinding, PipelineStage};
+use ast::{
+    ArgumentList, NamedArgument, Pipeline, PipelineBindModifier, PipelineBinding, PipelineStage,
+};
 use spade_common::{
     location_info::{lspan, Loc, WithLocation},
     name::{Identifier, Path},
@@ -673,7 +675,12 @@ impl<'a> Parser<'a> {
 
         // Input types
         self.eat(&TokenKind::OpenParen)?;
-        let inputs = self.comma_separated(Self::name_and_type, &TokenKind::CloseParen)?;
+        let clock = self.identifier()?;
+        let inputs = if self.peek_and_eat(&TokenKind::Comma)?.is_some() {
+            self.comma_separated(Self::name_and_type, &TokenKind::CloseParen)?
+        } else {
+            vec![]
+        };
         self.eat(&TokenKind::CloseParen)?;
 
         // Return type
@@ -695,6 +702,7 @@ impl<'a> Parser<'a> {
         Ok(Some(
             Pipeline {
                 depth,
+                clock,
                 name,
                 inputs,
                 output_type,
@@ -811,6 +819,7 @@ impl<'a> Parser<'a> {
         self.first_successful(vec![
             &|s: &mut Self| s.entity().map(|e| e.map(Item::Entity)),
             &|s: &mut Self| s.trait_def().map(|e| e.map(Item::TraitDef)),
+            &|s: &mut Self| s.pipeline().map(|e| e.map(Item::Pipeline)),
         ])
     }
 
@@ -1844,7 +1853,7 @@ mod tests {
     #[test]
     fn pipeline_parsing_works() {
         let code = r#"
-            pipeline(2) test(a: bool) -> bool {
+            pipeline(2) test(clk, a: bool) -> bool {
                 stage {
                     let reg b = 0;
                 }
@@ -1855,6 +1864,7 @@ mod tests {
         "#;
 
         let expected = Pipeline {
+            clock: ast_ident("clk"),
             depth: Loc::new(2, lspan(0..0)),
             name: ast_ident("test"),
             inputs: vec![(
@@ -1890,5 +1900,32 @@ mod tests {
         .nowhere();
 
         check_parse!(code, pipeline, Ok(Some(expected)));
+    }
+
+    #[test]
+    fn pipelines_are_items() {
+        let code = r#"
+            pipeline(2) test(clk, a: bool) -> bool {
+            }
+        "#;
+
+        let expected = ModuleBody {
+            members: vec![Item::Pipeline(
+                Pipeline {
+                    clock: ast_ident("clk"),
+                    depth: Loc::new(2, lspan(0..0)),
+                    name: ast_ident("test"),
+                    inputs: vec![(
+                        ast_ident("a"),
+                        TypeSpec::Named(ast_path("bool"), vec![]).nowhere(),
+                    )],
+                    output_type: Some(TypeSpec::Named(ast_path("bool"), vec![]).nowhere()),
+                    stages: vec![],
+                }
+                .nowhere(),
+            )],
+        };
+
+        check_parse!(code, module_body, Ok(expected));
     }
 }

@@ -13,7 +13,9 @@ mod tests {
         types::Type,
         ConstantValue,
     };
-    use spade_testutil::{parse_typecheck_entity, parse_typecheck_module_body};
+    use spade_testutil::{
+        parse_typecheck_entity, parse_typecheck_module_body, parse_typecheck_pipeline,
+    };
 
     pub trait ResultExt<T> {
         fn report_failure(self) -> T;
@@ -447,8 +449,15 @@ mod tests {
         let module = parse_typecheck_module_body(code);
 
         let mut result = vec![];
-        for processed in module {
-            result.push(generate_entity(&processed.entity, &processed.type_state).report_failure());
+        for processed in module.items {
+            match processed {
+                spade_hir_lowering::ProcessedItem::Entity(processed) => {
+                    result.push(
+                        generate_entity(&processed.entity, &processed.type_state).report_failure(),
+                    );
+                }
+                _ => panic!("expected an entity"),
+            }
         }
 
         for (exp, res) in expected.into_iter().zip(result.into_iter()) {
@@ -458,40 +467,56 @@ mod tests {
 
     #[test]
     fn pipelines_work() {
-        unimplemented!("Test pipeline codegen");
         let code = r#"
-            pipeline pl(a: int<16>) -> int<16> {
+            pipeline(3) pl(clk, a: int<16>) -> int<16> {
                 stage {
                     let reg x = a + a;
                 }
                 stage {
-                    let reg y = x * 2;
-                    y
+                    let reg y = x + a;
+                }
+                stage {
+                    let res = y + y;
+                    res
                 }
             }
         "#;
 
-        let expected = vec![
-            entity!("sub"; (
-                    "_i_a", n(0, "a"), Type::Int(16)
-                ) -> Type::Int(16); {
-                } => n(0, "a")
-            ),
-            entity!("top"; () -> Type::Int(16); {
-                (const 1; Type::Int(16); ConstantValue::Int(0));
-                (e(0); Type::Int(16); Instance(("sub".to_string())); e(1))
-            } => e(0)),
-        ];
+        let expected = entity!("pl"; (
+                "_i_clk", n(3, "clk"), Type::Bool,
+                "_i_a", n(0, "a"), Type::Int(16),
+            ) -> Type::Int(16); {
+                // Stage 0
+                (e(0); Type::Int(16); Add; n(0, "a"), n(0, "a"));
+                (n(10, "x"); Type::Int(16); Alias; e(0));
+                (reg n(2, "a_s0"); Type::Int(16); clock(n(3, "clk")); n(0, "a"));
+                (reg n(4, "x_s0"); Type::Int(16); clock(n(3, "clk")); n(10, "x"));
 
-        let module = parse_typecheck_module_body(code);
+                // Stage 1
+                (e(1); Type::Int(16); Add; n(4, "x_s0"), n(2, "a_s0"));
+                (n(11, "y"); Type::Int(16); Alias; e(1));
+                (reg n(21, "a_s1"); Type::Int(16); clock(n(3, "clk")); n(2, "a_s0"));
+                (reg n(22, "x_s1"); Type::Int(16); clock(n(3, "clk")); n(4, "x_s0"));
+                (reg n(23, "y_s1"); Type::Int(16); clock(n(3, "clk")); n(11, "y"));
 
-        let mut result = vec![];
-        for processed in module {
-            result.push(generate_entity(&processed.entity, &processed.type_state).report_failure());
-        }
+                // Stage 3
+                (e(2); Type::Int(16); Add; n(23, "y_s1"), n(23, "y_s1"));
+                (n(6, "res"); Type::Int(16); Alias; e(2));
+                (reg n(31, "a_s2"); Type::Int(16); clock(n(3, "clk")); n(21, "a_s1"));
+                (reg n(32, "x_s2"); Type::Int(16); clock(n(3, "clk")); n(22, "x_s1"));
+                (reg n(33, "y_s2"); Type::Int(16); clock(n(3, "clk")); n(23, "y_s1"));
+                (reg n(34, "res_s2"); Type::Int(16); clock(n(3, "clk")); n(6, "res"));
+            } => n(34, "res_s2")
+        );
 
-        for (exp, res) in expected.into_iter().zip(result.into_iter()) {
-            assert_same_mir!(&res, &exp);
-        }
+        let (processed, mut symbol_tracker) = parse_typecheck_pipeline(code);
+
+        let result = generate_pipeline(
+            &processed.pipeline,
+            &processed.type_state,
+            &mut symbol_tracker,
+        )
+        .report_failure();
+        assert_same_mir!(&result, &expected);
     }
 }

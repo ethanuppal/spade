@@ -1,10 +1,17 @@
 use std::collections::HashSet;
 
-use spade_common::{id_tracker::IdTracker, location_info::{Loc, WithLocation}, name::{NameID, Path}};
+use spade_common::{
+    id_tracker::IdTracker,
+    location_info::{Loc, WithLocation},
+    name::{NameID, Path},
+};
 use spade_hir as hir;
 use spade_parser::ast;
 
-use crate::{error::{Error, Result}, symbol_table::SymbolTableExt};
+use crate::{
+    error::{Error, Result},
+    symbol_table::SymbolTableExt,
+};
 use crate::{symbol_table::SymbolTable, visit_type_spec, LocExt};
 
 #[derive(Debug, Clone)]
@@ -132,6 +139,7 @@ pub fn visit_pipeline(
 ) -> Result<Loc<hir::Pipeline>> {
     let ast::Pipeline {
         depth,
+        clock,
         name: _,
         inputs: _,
         output_type,
@@ -146,6 +154,9 @@ pub fn visit_pipeline(
         .lookup_pipeline(&path.at_loc(&pipeline.name))
         .expect("Attempting to lower a pipeline that has not been added to the symtab previously");
     let head = head.clone(); // An offering to the borrow checker. May ferris have mercy on us all
+
+    // Add the mandatory clock input to the symtab
+    let clock = symtab.add_local_variable(clock.clone()).at_loc(&clock);
 
     // Add the inputs to the symtab
     let inputs = head
@@ -203,6 +214,7 @@ pub fn visit_pipeline(
 
     Ok(hir::Pipeline {
         depth,
+        clock,
         name: id.at_loc(&pipeline.name),
         output_type,
         inputs,
@@ -401,6 +413,7 @@ mod pipeline_visiting {
     fn correct_pipeline_works() {
         let input = ast::Pipeline {
             name: ast_ident("pipe"),
+            clock: ast_ident("clk"),
             depth: 2.nowhere(),
             inputs: vec![(ast_ident("in"), ast::TypeSpec::Unit(().nowhere()).nowhere())],
             output_type: Some(ast::TypeSpec::Unit(().nowhere()).nowhere()),
@@ -427,11 +440,12 @@ mod pipeline_visiting {
 
         let expected = hir::Pipeline {
             name: name_id(0, "pipe"),
-            inputs: vec![(name_id(1, "in").inner, hir::TypeSpec::unit().nowhere())],
+            clock: name_id(1, "clk"),
+            inputs: vec![(name_id(2, "in").inner, hir::TypeSpec::unit().nowhere())],
             body: vec![
                 hir::PipelineStage {
                     bindings: vec![hir::PipelineBinding {
-                        name: name_id(2, "a"),
+                        name: name_id(3, "a"),
                         type_spec: None,
                         value: hir::ExprKind::IntLiteral(0).with_id(0).nowhere(),
                     }
@@ -441,7 +455,7 @@ mod pipeline_visiting {
                 hir::PipelineStage { bindings: vec![] }.nowhere(),
             ],
             output_type: hir::TypeSpec::unit().nowhere(),
-            result: hir::Expression::ident(0, 2, "a").nowhere(),
+            result: hir::Expression::ident(0, 3, "a").nowhere(),
             depth: 2.nowhere(),
         }
         .nowhere();
@@ -461,6 +475,7 @@ mod pipeline_visiting {
     fn incorrect_stage_count_causes_error() {
         let input = ast::Pipeline {
             name: ast_ident("pipe"),
+            clock: ast_ident("clk"),
             depth: 3.nowhere(),
             inputs: vec![],
             output_type: Some(ast::TypeSpec::Unit(().nowhere()).nowhere()),
@@ -501,6 +516,7 @@ mod pipeline_visiting {
     fn early_return_causes_error() {
         let input = ast::Pipeline {
             name: ast_ident("pipe"),
+            clock: ast_ident("clk"),
             depth: 2.nowhere(),
             inputs: vec![],
             output_type: Some(ast::TypeSpec::Unit(().nowhere()).nowhere()),
@@ -539,6 +555,7 @@ mod pipeline_visiting {
     fn pipeline_without_stages_is_invalid() {
         let input = ast::Pipeline {
             name: ast_ident("pipe"),
+            clock: ast_ident("clk"),
             depth: 0.nowhere(),
             inputs: vec![],
             output_type: Some(ast::TypeSpec::Unit(().nowhere()).nowhere()),

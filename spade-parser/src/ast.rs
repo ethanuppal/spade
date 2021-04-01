@@ -113,6 +113,8 @@ impl WithLocation for PipelineStage {}
 #[derive(PartialEq, Debug, Clone)]
 pub struct Pipeline {
     pub depth: Loc<u128>,
+    /// Name of the local clock signal
+    pub clock: Loc<Identifier>,
     pub name: Loc<Identifier>,
     pub inputs: Vec<(Loc<Identifier>, Loc<TypeSpec>)>,
     pub output_type: Option<Loc<TypeSpec>>,
@@ -156,6 +158,7 @@ impl WithLocation for TraitDef {}
 #[derive(PartialEq, Debug, Clone)]
 pub enum Item {
     Entity(Loc<Entity>),
+    Pipeline(Loc<Pipeline>),
     TraitDef(Loc<TraitDef>),
 }
 impl WithLocation for Item {}

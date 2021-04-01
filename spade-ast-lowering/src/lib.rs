@@ -4,6 +4,8 @@ pub mod global_symbols;
 pub mod pipelines;
 pub mod symbol_table;
 
+pub use spade_common::id_tracker;
+
 use std::collections::HashMap;
 
 use symbol_table::SymbolTableExt;
@@ -192,6 +194,9 @@ pub fn visit_item(
     match item {
         ast::Item::Entity(e) => Ok(Some(hir::Item::Entity(visit_entity(
             e, namespace, symtab, idtracker,
+        )?))),
+        ast::Item::Pipeline(p) => Ok(Some(hir::Item::Pipeline(pipelines::visit_pipeline(
+            p, namespace, symtab, idtracker,
         )?))),
         ast::Item::TraitDef(_) => {
             // NOTE: Traits are invisible at the HIR stage, so we just ignore them

@@ -2,7 +2,7 @@ use parse_tree_macros::trace_typechecker;
 use spade_ast_lowering::symbol_table::SymbolTable;
 use spade_hir::{Pipeline, PipelineBinding, PipelineStage};
 
-use crate::{equation::TypedExpression, result::Error};
+use crate::{equation::TypedExpression, fixed_types::t_clock, result::Error};
 
 use super::{Result, TraceStack, TypeState};
 
@@ -34,7 +34,7 @@ impl TypeState {
     pub fn visit_pipeline_stage(
         &mut self,
         stage: &PipelineStage,
-        symtab: &mut SymbolTable
+        symtab: &SymbolTable,
     ) -> Result<()> {
         for binding in &stage.bindings {
             // Add a type eq for the name
@@ -44,13 +44,29 @@ impl TypeState {
     }
 
     #[trace_typechecker]
-    pub fn visit_pipeline(
-        &mut self,
-        pipeline: &Pipeline,
-        symtab: &mut SymbolTable
-    ) -> Result<()> {
+    pub fn visit_pipeline(&mut self, pipeline: &Pipeline, symtab: &SymbolTable) -> Result<()> {
+        let Pipeline {
+            name: _,
+            clock,
+            inputs,
+            body,
+            result,
+            depth: _,
+            output_type,
+        } = pipeline;
+
+        // Add an equation for the clock
+        let new_type = self.new_generic();
+        self.add_equation(TypedExpression::Name(clock.clone().inner), new_type);
+        self.unify_types(&TypedExpression::Name(clock.clone().inner), &t_clock())
+            .map_err(|(got, expected)| Error::NonClockClock {
+                expected,
+                got,
+                loc: clock.loc(),
+            })?;
+
         // Add equations for the inputs
-        for (name, t) in &pipeline.inputs {
+        for (name, t) in inputs {
             self.add_equation(
                 TypedExpression::Name(name.clone()),
                 Self::type_var_from_hir(t),
@@ -58,21 +74,21 @@ impl TypeState {
         }
 
         // Go through the stages
-        for stage in &pipeline.body {
+        for stage in body {
             self.visit_pipeline_stage(stage, symtab)?
         }
 
-        self.visit_expression(&pipeline.result, symtab)?;
+        self.visit_expression(result, symtab)?;
 
         self.unify_types(
-            &TypedExpression::Id(pipeline.result.inner.id),
-            &Self::type_var_from_hir(&pipeline.output_type),
+            &TypedExpression::Id(result.inner.id),
+            &Self::type_var_from_hir(output_type),
         )
         .map_err(|(got, expected)| Error::EntityOutputTypeMismatch {
             expected,
             got,
-            type_spec: pipeline.output_type.loc(),
-            output_expr: pipeline.result.loc(),
+            type_spec: output_type.loc(),
+            output_expr: result.loc(),
         })?;
 
         Ok(())
@@ -87,10 +103,7 @@ mod tests {
     use crate::TypedExpression as TExpr;
 
     use crate::{ensure_same_type, get_type, HasType};
-    use crate::{
-        format_trace_stack,
-        hir::self,
-    };
+    use crate::{format_trace_stack, hir};
     use hir::{ExprKind, Expression, PipelineStage, TypeExpression, TypeSpec};
     use spade_ast_lowering::symbol_table::SymbolTable;
     use spade_common::location_info::WithLocation;
@@ -123,12 +136,14 @@ mod tests {
     fn pipelines_typecheck_correctly() {
         let input = Pipeline {
             name: name_id(0, "pipe"),
+            clock: name_id(4, "clk"),
             inputs: vec![(
                 name_id(1, "a").inner,
                 TypeSpec::Concrete(
                     BaseType::Int.nowhere(),
                     vec![TypeExpression::Integer(5).nowhere()],
-                ).nowhere()
+                )
+                .nowhere(),
             )],
             body: vec![
                 PipelineStage {
@@ -166,12 +181,15 @@ mod tests {
             vec![TVar::Known(KnownType::Integer(8), vec![], None)],
             None,
         );
+        let clk_type = TVar::Known(KnownType::Type(BaseType::Clock), vec![], None);
 
         let t_b = get_type!(state, &TExpr::Name(name_id(1, "b").inner));
         let t_ret = get_type!(state, &TExpr::Id(10));
+        let t_clk = get_type!(state, &TExpr::Name(name_id(4, "clk").inner));
 
         ensure_same_type!(state, t_b, a_type);
         ensure_same_type!(state, t_ret, ret_type);
+        ensure_same_type!(state, t_clk, clk_type);
 
         // ensure_same_type!(state, t_a, t_b);
     }

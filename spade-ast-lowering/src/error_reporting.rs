@@ -106,13 +106,14 @@ impl CompilationError for Error {
                 Diagnostic::error()
                     .with_message(format!("Missing {}: {}", plural, arg_list))
                     .with_labels(vec![
-                        Label::primary(file_id, at.span).with_message(format!("Missing {}", plural)),
+                        Label::primary(file_id, at.span)
+                            .with_message(format!("Missing {}", plural)),
                         Label::secondary(file_id, at.span)
                             .with_message(format!("Missing {}", arg_list)),
                         Label::secondary(file_id, for_entity.span)
                             .with_message(format!("Entity defined here")),
                     ])
-            },
+            }
             Error::MissingPipelineReturn { in_stage } => Diagnostic::error()
                 .with_message(format!("Missing return expression"))
                 .with_labels(vec![Label::primary(file_id, in_stage.span)

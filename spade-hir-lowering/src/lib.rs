@@ -1,13 +1,30 @@
 pub mod error_reporting;
+pub mod pipelines;
+pub mod substitution;
 
 use spade_common::{location_info::Loc, name::NameID};
-use spade_hir::{expression::BinaryOperator, Entity, ExprKind, Expression, Statement, Pipeline};
+use spade_hir::{expression::BinaryOperator, Entity, ExprKind, Expression, Pipeline, Statement};
 use spade_mir as mir;
 use spade_typeinference::{
     equation::{TypeVar, TypedExpression},
     TypeState,
 };
 use spade_types::{BaseType, ConcreteType, KnownType};
+
+pub struct ProcessedEntity {
+    pub entity: Entity,
+    pub type_state: TypeState,
+}
+
+pub struct ProcessedPipeline {
+    pub pipeline: Pipeline,
+    pub type_state: TypeState,
+}
+
+pub enum ProcessedItem {
+    Entity(ProcessedEntity),
+    Pipeline(ProcessedPipeline),
+}
 
 pub enum Error {
     UsingGenericType { expr: Loc<Expression>, t: TypeVar },
@@ -19,7 +36,8 @@ pub trait Manglable {
 }
 impl Manglable for NameID {
     fn mangled(&self) -> String {
-        format!("_m{}_{}", self.0, self.1)
+        let str_name = self.1.as_strs().join("_");
+        format!("_m{}_{}", self.0, str_name)
     }
 }
 
@@ -99,7 +117,7 @@ trait NameIDLocal {
 }
 impl NameIDLocal for NameID {
     fn value_name(&self) -> mir::ValueName {
-        let mangled = format!("{}", self.1);
+        let mangled = format!("{}", self.1.as_strs().join("_"));
         mir::ValueName::Named(self.0, mangled)
     }
 }
@@ -107,41 +125,41 @@ impl NameIDLocal for NameID {
 // TODO: Consider adding a proc-macro to add these local derives automatically
 
 trait StatementLocal {
-    fn lower(&self, types: &TypeState) -> Result<Vec<mir::Statement>>;
+    fn lower(&self, types: &TypeState, subs: &Substitutions) -> Result<Vec<mir::Statement>>;
 }
 impl StatementLocal for Statement {
-    fn lower(&self, types: &TypeState) -> Result<Vec<mir::Statement>> {
+    fn lower(&self, types: &TypeState, subs: &Substitutions) -> Result<Vec<mir::Statement>> {
         let mut result = vec![];
         match &self {
             Statement::Binding(name, _t, value) => {
-                result.append(&mut value.lower(types)?);
+                result.append(&mut value.lower(types, subs)?);
 
                 result.push(mir::Statement::Binding(mir::Binding {
                     name: name.value_name(),
                     operator: mir::Operator::Alias,
-                    operands: vec![value.variable()],
+                    operands: vec![value.variable(subs)],
                     ty: types.type_of_name(name).to_mir_type(),
                 }));
             }
             Statement::Register(register) => {
-                result.append(&mut register.clock.lower(types)?);
+                result.append(&mut register.clock.lower(types, subs)?);
 
                 if let Some((trig, value)) = &register.reset {
-                    result.append(&mut trig.lower(types)?);
-                    result.append(&mut value.lower(types)?);
+                    result.append(&mut trig.lower(types, subs)?);
+                    result.append(&mut value.lower(types, subs)?);
                 }
 
-                result.append(&mut register.value.lower(types)?);
+                result.append(&mut register.value.lower(types, subs)?);
 
                 result.push(mir::Statement::Register(mir::Register {
                     name: register.name.value_name(),
                     ty: types.type_of_name(&register.name).to_mir_type(),
-                    clock: register.clock.variable(),
+                    clock: register.clock.variable(subs),
                     reset: register
                         .reset
                         .as_ref()
-                        .map(|(value, trig)| (value.variable(), trig.variable())),
-                    value: register.value.variable(),
+                        .map(|(value, trig)| (value.variable(subs), trig.variable(subs))),
+                    value: register.value.variable(subs),
                 }))
             }
         }
@@ -150,27 +168,27 @@ impl StatementLocal for Statement {
 }
 
 trait ExprLocal {
-    fn alias(&self) -> Option<mir::ValueName>;
+    fn alias(&self, subs: &Substitutions) -> Option<mir::ValueName>;
 
     // NOTE: this impl and a few others could be moved to a impl block that does not have
     // the Loc requirement if desired
-    fn variable(&self) -> mir::ValueName;
+    fn variable(&self, subs: &Substitutions) -> mir::ValueName;
 
-    fn lower(&self, types: &TypeState) -> Result<Vec<mir::Statement>>;
+    fn lower(&self, types: &TypeState, subs: &Substitutions) -> Result<Vec<mir::Statement>>;
 }
 impl ExprLocal for Loc<Expression> {
     /// If the verilog code for this expression is just an alias for another variable
     /// that is returned here. This allows us to skip generating wires that we don't
     /// really need
-    fn alias(&self) -> Option<mir::ValueName> {
+    fn alias(&self, subs: &Substitutions) -> Option<mir::ValueName> {
         match &self.kind {
-            ExprKind::Identifier(ident) => Some(ident.value_name()),
+            ExprKind::Identifier(ident) => Some(subs.lookup(&ident).value_name()),
             ExprKind::IntLiteral(_) => None,
             ExprKind::BoolLiteral(_) => None,
             ExprKind::FnCall(_, _) => None,
             ExprKind::TupleLiteral(_) => None,
             ExprKind::TupleIndex(_, _) => None,
-            ExprKind::Block(block) => Some(block.result.variable()),
+            ExprKind::Block(block) => Some(block.result.variable(subs)),
             ExprKind::If(_, _, _) => None,
             ExprKind::BinaryOperator(_, _, _) => None,
             ExprKind::EntityInstance(_, _) => None,
@@ -179,15 +197,15 @@ impl ExprLocal for Loc<Expression> {
 
     // NOTE: this impl and a few others could be moved to a impl block that does not have
     // the Loc requirement if desired
-    fn variable(&self) -> mir::ValueName {
+    fn variable(&self, subs: &Substitutions) -> mir::ValueName {
         // If this expressions should not use the standard __expr__{} variable,
         // that is specified here
 
-        self.alias()
+        self.alias(subs)
             .unwrap_or_else(|| mir::ValueName::Expr(self.id))
     }
 
-    fn lower(&self, types: &TypeState) -> Result<Vec<mir::Statement>> {
+    fn lower(&self, types: &TypeState, subs: &Substitutions) -> Result<Vec<mir::Statement>> {
         let mut result = vec![];
 
         let self_type = types.expr_type(self)?.to_mir_type();
@@ -217,13 +235,13 @@ impl ExprLocal for Loc<Expression> {
             }
             ExprKind::BinaryOperator(lhs, op, rhs) => {
                 let binop_builder = |op| {
-                    result.append(&mut lhs.lower(types)?);
-                    result.append(&mut rhs.lower(types)?);
+                    result.append(&mut lhs.lower(types, subs)?);
+                    result.append(&mut rhs.lower(types, subs)?);
 
                     result.push(mir::Statement::Binding(mir::Binding {
-                        name: self.variable(),
+                        name: self.variable(subs),
                         operator: op,
-                        operands: vec![lhs.variable(), rhs.variable()],
+                        operands: vec![lhs.variable(subs), rhs.variable(subs)],
                         ty: self_type,
                     }));
                     Ok(())
@@ -244,13 +262,13 @@ impl ExprLocal for Loc<Expression> {
             }
             ExprKind::TupleLiteral(elems) => {
                 for elem in elems {
-                    result.append(&mut elem.lower(types)?)
+                    result.append(&mut elem.lower(types, subs)?)
                 }
 
                 result.push(mir::Statement::Binding(mir::Binding {
-                    name: self.variable(),
+                    name: self.variable(subs),
                     operator: mir::Operator::ConstructTuple,
-                    operands: elems.iter().map(|e| e.variable()).collect(),
+                    operands: elems.iter().map(|e| e.variable(subs)).collect(),
                     ty: self_type,
                 }))
                 // for elem in elems {
@@ -266,7 +284,7 @@ impl ExprLocal for Loc<Expression> {
                 // code.join(&assign(&self.variable(), &format!("{{{}}}", elem_code)))
             }
             ExprKind::TupleIndex(tup, idx) => {
-                result.append(&mut tup.lower(types)?);
+                result.append(&mut tup.lower(types, subs)?);
 
                 let types =
                     if let mir::types::Type::Tuple(inner) = &types.expr_type(tup)?.to_mir_type() {
@@ -276,9 +294,9 @@ impl ExprLocal for Loc<Expression> {
                     };
 
                 result.push(mir::Statement::Binding(mir::Binding {
-                    name: self.variable(),
+                    name: self.variable(subs),
                     operator: mir::Operator::IndexTuple(idx.inner as u64, types),
-                    operands: vec![tup.variable()],
+                    operands: vec![tup.variable(subs)],
                     ty: self_type,
                 }))
                 // code.join(&tup.code(types)?);
@@ -310,32 +328,39 @@ impl ExprLocal for Loc<Expression> {
             }
             ExprKind::Block(block) => {
                 for statement in &block.statements {
-                    result.append(&mut statement.lower(types)?);
+                    result.append(&mut statement.lower(types, subs)?);
                 }
-                result.append(&mut block.result.lower(types)?);
+                result.append(&mut block.result.lower(types, subs)?);
 
                 // Empty. The block result will always be the last expression
             }
             ExprKind::If(cond, on_true, on_false) => {
-                result.append(&mut cond.lower(types)?);
-                result.append(&mut on_true.lower(types)?);
-                result.append(&mut on_false.lower(types)?);
+                result.append(&mut cond.lower(types, subs)?);
+                result.append(&mut on_true.lower(types, subs)?);
+                result.append(&mut on_false.lower(types, subs)?);
 
                 result.push(mir::Statement::Binding(mir::Binding {
-                    name: self.variable(),
+                    name: self.variable(subs),
                     operator: mir::Operator::Select,
-                    operands: vec![cond.variable(), on_true.variable(), on_false.variable()],
+                    operands: vec![
+                        cond.variable(subs),
+                        on_true.variable(subs),
+                        on_false.variable(subs),
+                    ],
                     ty: types.expr_type(self)?.to_mir_type(),
                 }));
             }
             ExprKind::EntityInstance(name, args) => {
                 for arg in args {
-                    result.append(&mut arg.value.lower(types)?)
+                    result.append(&mut arg.value.lower(types, subs)?)
                 }
                 result.push(mir::Statement::Binding(mir::Binding {
-                    name: self.variable(),
+                    name: self.variable(subs),
                     operator: mir::Operator::Instance(name.1.to_string()),
-                    operands: args.into_iter().map(|arg| arg.value.variable()).collect(),
+                    operands: args
+                        .into_iter()
+                        .map(|arg| arg.value.variable(subs))
+                        .collect(),
                     ty: types.expr_type(self)?.to_mir_type(),
                 }))
             }
@@ -357,19 +382,20 @@ pub fn generate_entity<'a>(entity: &Entity, types: &TypeState) -> Result<mir::En
         })
         .collect();
 
-    let statements = entity.body.lower(types)?;
+    let statements = entity.body.lower(types, &Substitutions::new())?;
 
     let output_t = types.expr_type(&entity.body)?.to_mir_type();
+
+    let subs = Substitutions::new();
 
     Ok(mir::Entity {
         name: entity.name.1.to_string(),
         inputs: inputs,
-        output: entity.body.variable(),
+        output: entity.body.variable(&subs),
         output_type: output_t,
         statements: statements,
     })
 }
 
-pub fn generate_pipeline<'a>(pipeline: &Pipeline, types: &TypeState) -> Result<mir::Entity> {
-    unimplemented!()
-}
+pub use pipelines::generate_pipeline;
+use substitution::Substitutions;

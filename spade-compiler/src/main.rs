@@ -8,6 +8,7 @@ use structopt::StructOpt;
 
 use spade_ast_lowering::{global_symbols, symbol_table, visit_entity};
 use spade_common::{error_reporting::CompilationError, id_tracker, name::Path};
+use spade_hir_lowering::{ProcessedEntity, ProcessedItem, ProcessedPipeline};
 pub use spade_parser::lexer;
 use spade_parser::{ast, Parser};
 use spade_typeinference as typeinference;
@@ -63,7 +64,7 @@ fn main() -> Result<()> {
 
     // Second pass to actually generate the mir
     let mut idtracker = id_tracker::IdTracker::new();
-    let mut module_code = vec![];
+    let mut hir_items = vec![];
     for item in module_ast.members {
         match item {
             ast::Item::Entity(entity_ast) => {
@@ -77,14 +78,57 @@ fn main() -> Result<()> {
                 let mut type_state = typeinference::TypeState::new();
                 try_or_report!(type_state.visit_entity(&hir, &symtab));
 
-                let mir = try_or_report!(spade_hir_lowering::generate_entity(&hir, &type_state));
+                hir_items.push(ProcessedItem::Entity(ProcessedEntity {
+                    entity: hir.inner,
+                    type_state,
+                }));
+            }
+            ast::Item::TraitDef(_) => {
+                todo!("Trait definitions are not supported by the compiler")
+            }
+            ast::Item::Pipeline(pipeline_ast) => {
+                let hir = try_or_report!(spade_ast_lowering::pipelines::visit_pipeline(
+                    &pipeline_ast,
+                    &namespace,
+                    &mut symtab,
+                    &mut idtracker
+                ));
+
+                let mut type_state = typeinference::TypeState::new();
+                try_or_report!(type_state.visit_pipeline(&hir, &symtab));
+
+                hir_items.push(ProcessedItem::Pipeline(ProcessedPipeline {
+                    pipeline: hir.inner,
+                    type_state,
+                }));
+            }
+        }
+    }
+
+    let mut module_code = vec![];
+    let mut symbol_tracker = symtab.symbol_tracker();
+    for item in hir_items {
+        match item {
+            ProcessedItem::Entity(e) => {
+                let mir = try_or_report!(spade_hir_lowering::generate_entity(
+                    &e.entity,
+                    &e.type_state
+                ));
 
                 let code = spade_mir::codegen::entity_code(&mir);
 
                 module_code.push(code.to_string());
             }
-            ast::Item::TraitDef(_) => {
-                todo!("Trait definitions are not supported by the compiler")
+            ProcessedItem::Pipeline(p) => {
+                let mir = try_or_report!(spade_hir_lowering::generate_pipeline(
+                    &p.pipeline,
+                    &p.type_state,
+                    &mut symbol_tracker
+                ));
+
+                let code = spade_mir::codegen::entity_code(&mir);
+
+                module_code.push(code.to_string());
             }
         }
     }

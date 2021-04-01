@@ -137,6 +137,7 @@ impl WithLocation for PipelineStage {}
 #[derive(PartialEq, Debug, Clone)]
 pub struct Pipeline {
     pub name: Loc<NameID>,
+    pub clock: Loc<NameID>,
     pub inputs: Vec<(NameID, Loc<TypeSpec>)>,
     pub body: Vec<Loc<PipelineStage>>,
     pub result: Loc<Expression>,
@@ -150,6 +151,7 @@ impl WithLocation for Pipeline {}
 #[derive(PartialEq, Debug, Clone)]
 pub enum Item {
     Entity(Loc<Entity>),
+    Pipeline(Loc<Pipeline>),
 }
 impl WithLocation for Item {}
 

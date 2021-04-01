@@ -2,6 +2,14 @@ use crate::id_tracker::IdTracker;
 use crate::name::{NameID, Path};
 use std::collections::HashMap;
 
+pub struct SymbolTracker(IdTracker);
+
+impl SymbolTracker {
+    pub fn new_name(&mut self, description: Path) -> NameID {
+        NameID(self.0.next(), description)
+    }
+}
+
 /// A table of the symbols known to the program in the current scope. Names
 /// are mapped to IDs which are then mapped to the actual things
 pub struct SymbolTable<T> {
@@ -26,7 +34,6 @@ impl<T> SymbolTable<T> {
     pub fn close_scope(&mut self) {
         self.symbols.pop();
     }
-
 
     /// Adds a thing to the scope at `current_scope - offset`. Panics if there is no such scope
     pub fn add_thing_with_id_at_offset(
@@ -64,5 +71,9 @@ impl<T> SymbolTable<T> {
     pub fn add_thing_at_offset(&mut self, offset: usize, name: Path, item: T) -> NameID {
         let id = self.id_tracker.next();
         self.add_thing_with_id_at_offset(offset, id, name, item)
+    }
+
+    pub fn symbol_tracker(self) -> SymbolTracker {
+        SymbolTracker(self.id_tracker)
     }
 }
