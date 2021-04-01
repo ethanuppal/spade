@@ -1,3 +1,5 @@
+use std::path::Path;
+
 use codespan_reporting::term::termcolor::ColorChoice;
 use codespan_reporting::term::termcolor::{Color, ColorSpec};
 
@@ -23,4 +25,8 @@ pub fn codespan_config() -> codespan_reporting::term::Config {
         styles: style,
         ..Default::default()
     }
+}
+
+pub trait CompilationError {
+    fn report(self, filename: &Path, file_content: &str, no_color: bool);
 }

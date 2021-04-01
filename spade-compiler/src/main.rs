@@ -6,11 +6,10 @@ use anyhow::{anyhow, Result};
 use logos::Logos;
 use structopt::StructOpt;
 
-use spade_ast_lowering::{
-    error_reporting::report_semantic_error, global_symbols, id_tracker, symbol_table, visit_entity,
-};
+use spade_ast_lowering::{global_symbols, id_tracker, symbol_table, visit_entity};
+use spade_common::error_reporting::CompilationError;
 pub use spade_parser::lexer;
-use spade_parser::{ast, error_reporting::report_parse_error, Parser};
+use spade_parser::{ast, Parser};
 use spade_typeinference as typeinference;
 
 mod golden;
@@ -40,33 +39,26 @@ fn main() -> Result<()> {
     // TODO: Namespace individual files
     let namespace = ast::Path(vec![]);
 
-    let module_ast = match parser.module_body() {
-        Ok(v) => v,
-        Err(e) => {
-            report_parse_error(&opts.infile, &file_content, e, opts.no_color);
-            return Err(anyhow!("aborting due to previous error"));
-        }
-    };
+    macro_rules! try_or_report {
+        ($to_try:expr) => {
+            match $to_try {
+                Ok(result) => result,
+                Err(e) => {
+                    e.report(&opts.infile, &file_content, opts.no_color);
+                    return Err(anyhow!("aborting due to previous error"));
+                }
+            }
+        };
+    }
+
+    let module_ast = try_or_report!(parser.module_body());
 
     let mut symtab = symbol_table::SymbolTable::new();
     spade_builtins::populate_symtab(&mut symtab);
 
     // First pass over the module to collect all global symbols
     for item in &module_ast.members {
-        match item {
-            ast::Item::Entity(entity_ast) => {
-                match global_symbols::visit_entity(&entity_ast, &namespace, &mut symtab) {
-                    Ok(()) => (),
-                    Err(e) => {
-                        report_semantic_error(&opts.infile, &file_content, e, opts.no_color);
-                        return Err(anyhow!("aborting due to previous error"));
-                    }
-                }
-            }
-            ast::Item::TraitDef(_) => {
-                todo!("Trait definitions are not supported by the compiler")
-            }
-        }
+        try_or_report!(global_symbols::visit_item(&item, &namespace, &mut symtab));
     }
 
     // Second pass to actually generate the mir
@@ -75,41 +67,17 @@ fn main() -> Result<()> {
     for item in module_ast.members {
         match item {
             ast::Item::Entity(entity_ast) => {
-                let hir = match visit_entity(&entity_ast, &namespace, &mut symtab, &mut idtracker) {
-                    Ok(v) => v,
-                    Err(e) => {
-                        report_semantic_error(&opts.infile, &file_content, e, opts.no_color);
-                        return Err(anyhow!("aborting due to previous error"));
-                    }
-                };
+                let hir = try_or_report!(visit_entity(
+                    &entity_ast,
+                    &namespace,
+                    &mut symtab,
+                    &mut idtracker
+                ));
 
                 let mut type_state = typeinference::TypeState::new();
+                try_or_report!(type_state.visit_entity(&hir, &symtab));
 
-                match type_state.visit_entity(&hir, &symtab) {
-                    Ok(()) => {}
-                    Err(e) => {
-                        typeinference::error_reporting::report_typeinference_error(
-                            &opts.infile,
-                            &file_content,
-                            e,
-                            opts.no_color,
-                        );
-                        return Err(anyhow!("aborting due to previous error"));
-                    }
-                }
-
-                let mir = match spade_hir_lowering::generate_entity(&hir, &type_state) {
-                    Ok(val) => val,
-                    Err(e) => {
-                        spade_hir_lowering::error_reporting::report_hir_lowering_error(
-                            &opts.infile,
-                            &file_content,
-                            e,
-                            opts.no_color,
-                        );
-                        return Err(anyhow!("aborting due to previous error"));
-                    }
-                };
+                let mir = try_or_report!(spade_hir_lowering::generate_entity(&hir, &type_state));
 
                 let code = spade_mir::codegen::entity_code(&mir);
 

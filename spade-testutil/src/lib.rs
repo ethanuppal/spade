@@ -2,16 +2,14 @@ use std::path::PathBuf;
 
 use logos::Logos;
 
-use spade_ast_lowering::{
-    error_reporting::report_semantic_error, global_symbols, id_tracker::IdTracker, symbol_table,
-    visit_entity,
+use spade_ast_lowering::{global_symbols, id_tracker::IdTracker, symbol_table, visit_entity};
+use spade_common::{
+    error_reporting::CompilationError,
+    location_info::{Loc, WithLocation},
 };
-use spade_common::location_info::{Loc, WithLocation};
 use spade_hir::{self as hir, NameID};
-use spade_parser::{self as parser, ast, error_reporting::report_parse_error, lexer};
-use spade_typeinference::{
-    self as typeinference, error_reporting::report_typeinference_error, TypeState,
-};
+use spade_parser::{self as parser, ast, lexer};
+use spade_typeinference::{self as typeinference, TypeState};
 
 pub struct ProcessedEntity {
     pub entity: hir::Entity,
@@ -36,7 +34,7 @@ pub fn parse_typecheck_module_body(input: &str) -> Vec<ProcessedEntity> {
     let module_ast = match parser.module_body() {
         Ok(body) => body,
         Err(e) => {
-            report_parse_error(&PathBuf::from(""), &input, e, false);
+            e.report(&PathBuf::from(""), &input, false);
             panic!("Parse error")
         }
     };
@@ -44,18 +42,11 @@ pub fn parse_typecheck_module_body(input: &str) -> Vec<ProcessedEntity> {
     let mut symtab = symbol_table::SymbolTable::new();
     spade_builtins::populate_symtab(&mut symtab);
     for item in &module_ast.members {
-        match item {
-            ast::Item::Entity(entity_ast) => {
-                match global_symbols::visit_entity(&entity_ast, &ast::Path(vec![]), &mut symtab) {
-                    Ok(_) => (),
-                    Err(e) => {
-                        report_semantic_error(&PathBuf::from(""), &input, e, false);
-                        panic!("Semantic error")
-                    }
-                }
-            }
-            ast::Item::TraitDef(_) => {
-                todo!("Parse and typecheck trait definitions")
+        match global_symbols::visit_item(item, &ast::Path(vec![]), &mut symtab) {
+            Ok(_) => (),
+            Err(e) => {
+                e.report(&PathBuf::from(""), &input, false);
+                panic!("Semantic error")
             }
         }
     }
@@ -74,7 +65,7 @@ pub fn parse_typecheck_module_body(input: &str) -> Vec<ProcessedEntity> {
                 ) {
                     Ok(v) => v,
                     Err(e) => {
-                        report_semantic_error(&PathBuf::from(""), &input, e, false);
+                        e.report(&PathBuf::from(""), &input, false);
                         panic!("Semantic error")
                     }
                 };
@@ -88,7 +79,7 @@ pub fn parse_typecheck_module_body(input: &str) -> Vec<ProcessedEntity> {
                             "Type check trace:\n{}",
                             typeinference::format_trace_stack(&type_state.trace_stack)
                         );
-                        report_typeinference_error(&PathBuf::from(""), &input, e, false);
+                        e.report(&PathBuf::from(""), &input, false);
                         panic!("Type error")
                     }
                 }

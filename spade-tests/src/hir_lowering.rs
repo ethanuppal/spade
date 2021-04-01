@@ -3,7 +3,7 @@ mod tests {
     use std::path::PathBuf;
 
     use colored::Colorize;
-    use spade_hir_lowering::error_reporting::report_hir_lowering_error;
+    use spade_common::error_reporting::CompilationError;
     use spade_hir_lowering::*;
     use spade_mir::{
         self,
@@ -23,7 +23,7 @@ mod tests {
             match self {
                 Ok(t) => t,
                 Err(e) => {
-                    report_hir_lowering_error(&PathBuf::from(""), "", e, false);
+                    e.report(&PathBuf::from(""), "", false);
                     panic!("Compilation error")
                 }
             }
