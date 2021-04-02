@@ -1,50 +1,8 @@
 use crate::lexer::TokenKind;
-use spade_common::location_info::{Loc, WithLocation};
-
-#[derive(PartialEq, Debug, Clone, Eq, Hash)]
-pub struct Identifier(pub String);
-
-impl std::fmt::Display for Identifier {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.0)
-    }
-}
-
-impl WithLocation for Identifier {}
-
-#[derive(PartialEq, Debug, Clone, Eq, Hash)]
-pub struct Path(pub Vec<Loc<Identifier>>);
-impl WithLocation for Path {}
-
-impl Path {
-    pub fn as_strs(&self) -> Vec<&str> {
-        self.0.iter().map(|id| id.inner.0.as_ref()).collect()
-    }
-    pub fn as_strings(&self) -> Vec<String> {
-        self.0.iter().map(|id| id.inner.0.clone()).collect()
-    }
-    /// Generate a path from a list of strings
-    pub fn from_strs(elems: &[&str]) -> Self {
-        Path(
-            elems
-                .iter()
-                .map(|x| Identifier(x.to_string()).nowhere())
-                .collect(),
-        )
-    }
-
-    pub fn push_ident(&self, ident: Loc<Identifier>) -> Path {
-        let mut result = self.clone();
-        result.0.push(ident);
-        result
-    }
-}
-
-impl std::fmt::Display for Path {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.as_strs().join("::"))
-    }
-}
+use spade_common::{
+    location_info::{Loc, WithLocation},
+    name::{Identifier, Path},
+};
 
 #[derive(PartialEq, Debug, Clone)]
 pub enum TypeExpression {

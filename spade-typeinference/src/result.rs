@@ -1,8 +1,7 @@
-use spade_hir::ast;
 use thiserror::Error;
 
 use super::equation::{TypeVar, TypedExpression};
-use spade_common::location_info::Loc;
+use spade_common::{location_info::Loc, name::Identifier};
 
 /// A trace of a unification error. The `failing` field indicates which exact type failed to unify,
 /// while the `inside` is the "top level" type which failed to unify if it's not the same as
@@ -113,14 +112,14 @@ pub enum Error {
 
     #[error("Named argument mismatch")]
     NamedArgumentMismatch {
-        name: Loc<ast::Identifier>,
+        name: Loc<Identifier>,
         expr: Loc<()>,
         expected: UnificationTrace,
         got: UnificationTrace,
     },
     #[error("Named argument mismatch")]
     ShortNamedArgumentMismatch {
-        name: Loc<ast::Identifier>,
+        name: Loc<Identifier>,
         expected: UnificationTrace,
         got: UnificationTrace,
     },

@@ -1,21 +1,22 @@
 pub mod error;
 pub mod error_reporting;
 pub mod global_symbols;
-pub mod id_tracker;
 pub mod symbol_table;
 
 use std::collections::HashMap;
 
+use symbol_table::SymbolTableExt;
 use thiserror::Error;
 
 use crate::symbol_table::SymbolTable;
-use crate::{
-    id_tracker::IdTracker,
-    symbol_table::{Thing, TypeSymbol},
+use crate::symbol_table::{Thing, TypeSymbol};
+use spade_common::id_tracker::IdTracker;
+use spade_common::{
+    location_info::{Loc, WithLocation},
+    name::{Identifier, NameID, Path},
 };
-use spade_common::location_info::{Loc, WithLocation};
 use spade_hir as hir;
-use spade_hir::{expression::BinaryOperator, EntityHead, NameID};
+use spade_hir::{expression::BinaryOperator, EntityHead};
 use spade_parser::ast;
 use spade_parser::lexer::TokenKind;
 
@@ -47,8 +48,8 @@ impl<T> LocExt<T> for Loc<T> {
     }
 }
 
-pub fn path_from_ident(ident: Loc<ast::Identifier>) -> Loc<ast::Path> {
-    ast::Path(vec![ident.clone()]).at_loc(&ident)
+pub fn path_from_ident(ident: Loc<Identifier>) -> Loc<Path> {
+    Path(vec![ident.clone()]).at_loc(&ident)
 }
 
 pub fn visit_type_param(_param: &Loc<ast::TypeParam>, _symtab: &mut SymbolTable) -> NameID {
@@ -141,7 +142,7 @@ pub fn entity_head(item: &ast::Entity, symtab: &mut SymbolTable) -> Result<Entit
 
 pub fn visit_entity(
     item: &Loc<ast::Entity>,
-    namespace: &ast::Path,
+    namespace: &Path,
     symtab: &mut SymbolTable,
     idtracker: &mut IdTracker,
 ) -> Result<Loc<hir::Entity>> {
@@ -183,7 +184,7 @@ pub fn visit_entity(
 
 pub fn visit_item(
     item: &ast::Item,
-    namespace: &ast::Path,
+    namespace: &Path,
     symtab: &mut SymbolTable,
     idtracker: &mut IdTracker,
 ) -> Result<Option<hir::Item>> {
@@ -200,7 +201,7 @@ pub fn visit_item(
 
 pub fn visit_module_body(
     module: &ast::ModuleBody,
-    namespace: &ast::Path,
+    namespace: &Path,
     symtab: &mut SymbolTable,
     idtracker: &mut IdTracker,
 ) -> Result<hir::ModuleBody> {
@@ -325,7 +326,7 @@ fn visit_entity_arguments(
                     }
                     ast::NamedArgument::Short(name) => {
                         let expr =
-                            ast::Expression::Identifier(ast::Path(vec![name.clone()]).at_loc(name));
+                            ast::Expression::Identifier(Path(vec![name.clone()]).at_loc(name));
                         let value = visit_expression(&expr, symtab, idtracker)?;
 
                         if let Some(arg_idx) = unbound_args.remove(name) {
@@ -524,7 +525,7 @@ mod entity_visiting {
     #[test]
     fn entity_visits_work() {
         let input = ast::Entity {
-            name: ast::Identifier("test".to_string()).nowhere(),
+            name: Identifier("test".to_string()).nowhere(),
             inputs: vec![(ast_ident("a"), ast::TypeSpec::Unit(().nowhere()).nowhere())],
             output_type: None,
             body: ast::Expression::Block(Box::new(ast::Block {
@@ -565,10 +566,10 @@ mod entity_visiting {
 
         let mut symtab = SymbolTable::new();
         let mut idtracker = IdTracker::new();
-        global_symbols::visit_entity(&input, &ast::Path(vec![]), &mut symtab)
+        global_symbols::visit_entity(&input, &Path(vec![]), &mut symtab)
             .expect("Failed to collect global symbols");
 
-        let result = visit_entity(&input, &ast::Path(vec![]), &mut symtab, &mut idtracker);
+        let result = visit_entity(&input, &Path(vec![]), &mut symtab, &mut idtracker);
 
         assert_eq!(result, Ok(expected));
 
@@ -582,7 +583,7 @@ mod entity_visiting {
     fn entity_with_generics_works() {
         unimplemented![]
         // let input = ast::Entity {
-        //     name: ast::Identifier("test".to_string()).nowhere(),
+        //     name: Identifier("test".to_string()).nowhere(),
         //     inputs: vec![(ast_ident("a"), ast::Type::UnitType.nowhere())],
         //     output_type: ast::Type::UnitType.nowhere(),
         //     body: ast::Expression::Block(Box::new(ast::Block {
@@ -605,7 +606,7 @@ mod entity_visiting {
         //     head: hir::EntityHead {
         //         inputs: vec![
         //             ((
-        //                 NameID(0, ast::Path::from_strs(&["a"])),
+        //                 NameID(0, Path::from_strs(&["a"])),
         //                 hir::Type::Unit.nowhere(),
         //             )),
         //         ],
@@ -785,7 +786,7 @@ mod expression_visiting {
     fn blocks_work() {
         let input = ast::Expression::Block(Box::new(ast::Block {
             statements: vec![ast::Statement::Binding(
-                ast::Identifier("a".to_string()).nowhere(),
+                Identifier("a".to_string()).nowhere(),
                 None,
                 ast::Expression::IntLiteral(0).nowhere(),
             )
@@ -1094,7 +1095,7 @@ mod register_visiting {
     #[test]
     fn register_visiting_works() {
         let input = ast::Register {
-            name: ast::Identifier("test".to_string()).nowhere(),
+            name: Identifier("test".to_string()).nowhere(),
             clock: ast::Expression::Identifier(ast_path("clk")).nowhere(),
             reset: Some((
                 ast::Expression::Identifier(ast_path("rst")).nowhere(),
@@ -1182,7 +1183,7 @@ mod item_visiting {
 
         let mut symtab = SymbolTable::new();
         let mut idtracker = IdTracker::new();
-        let namespace = ast::Path(vec![]);
+        let namespace = Path(vec![]);
         crate::global_symbols::visit_item(&input, &namespace, &mut symtab).unwrap();
         assert_eq!(
             visit_item(&input, &namespace, &mut symtab, &mut idtracker),
@@ -1243,10 +1244,10 @@ mod module_visiting {
 
         let mut symtab = SymbolTable::new();
         let mut idtracker = IdTracker::new();
-        global_symbols::gather_symbols(&input, &ast::Path(vec![]), &mut symtab)
+        global_symbols::gather_symbols(&input, &Path(vec![]), &mut symtab)
             .expect("failed to collect global symbols");
         assert_eq!(
-            visit_module_body(&input, &ast::Path(vec![]), &mut symtab, &mut idtracker),
+            visit_module_body(&input, &Path(vec![]), &mut symtab, &mut idtracker),
             Ok(expected)
         );
     }

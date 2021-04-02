@@ -1,6 +1,5 @@
 use spade_ast_lowering::symbol_table::{SymbolTable, Thing, TypeSymbol};
-use spade_common::location_info::WithLocation;
-use spade_parser::ast::Path;
+use spade_common::{location_info::WithLocation, name::Path};
 use spade_types::BaseType;
 
 /// Add built in symbols like types to the symtab. The symbols are added with very high NameIDs to

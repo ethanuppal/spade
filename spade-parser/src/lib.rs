@@ -4,7 +4,10 @@ pub mod lexer;
 pub mod testutil;
 
 use ast::{ArgumentList, NamedArgument};
-use spade_common::location_info::{lspan, Loc, WithLocation};
+use spade_common::{
+    location_info::{lspan, Loc, WithLocation},
+    name::{Identifier, Path},
+};
 
 use colored::*;
 use logos::Lexer;
@@ -13,8 +16,8 @@ use thiserror::Error;
 use parse_tree_macros::trace_parser;
 
 use crate::ast::{
-    Block, Entity, Expression, FunctionDecl, Identifier, Item, ModuleBody, Path, Register,
-    Statement, TraitDef, TypeExpression, TypeParam, TypeSpec,
+    Block, Entity, Expression, FunctionDecl, Item, ModuleBody, Register, Statement, TraitDef,
+    TypeExpression, TypeParam, TypeSpec,
 };
 use crate::lexer::TokenKind;
 

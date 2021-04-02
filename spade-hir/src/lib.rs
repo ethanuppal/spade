@@ -1,44 +1,12 @@
 pub mod expression;
 
-use spade_common::location_info::{Loc, WithLocation};
-pub use spade_parser::ast;
+use spade_common::{
+    location_info::{Loc, WithLocation},
+    name::{Identifier, NameID},
+};
 use spade_types as types;
 
 pub use expression::{Argument, ArgumentKind, ExprKind, Expression};
-
-/// Anything named will get assigned a unique name ID in order to avoid caring
-/// about scopes HIR has been generated. This is the type of those IDs
-///
-/// The associated string is only used for formating when printing. The hash and eq
-/// methods do not use it
-#[derive(Clone)]
-pub struct NameID(pub u64, pub ast::Path);
-impl WithLocation for NameID {}
-
-impl std::cmp::PartialEq for NameID {
-    fn eq(&self, other: &Self) -> bool {
-        self.0 == other.0
-    }
-}
-
-impl std::cmp::Eq for NameID {}
-
-impl std::hash::Hash for NameID {
-    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        self.0.hash(state);
-    }
-}
-
-impl std::fmt::Debug for NameID {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}#{}", self.1, self.0)
-    }
-}
-impl std::fmt::Display for NameID {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.1)
-    }
-}
 
 /**
   Representation of the language with most language constructs still present, with
@@ -123,13 +91,13 @@ impl WithLocation for Entity {}
 
 #[derive(PartialEq, Debug, Clone)]
 pub struct EntityHead {
-    pub inputs: Vec<(Loc<ast::Identifier>, Loc<TypeSpec>)>,
+    pub inputs: Vec<(Loc<Identifier>, Loc<TypeSpec>)>,
     pub output_type: Option<Loc<TypeSpec>>,
-    pub type_params: Vec<ast::Identifier>,
+    pub type_params: Vec<Identifier>,
 }
 impl EntityHead {
     // Look up the type of an argument. Panics if no such argument exists
-    pub fn arg_type(&self, name: &ast::Identifier) -> TypeSpec {
+    pub fn arg_type(&self, name: &Identifier) -> TypeSpec {
         for (arg, ty) in &self.inputs {
             if &arg.inner == name {
                 return ty.inner.clone();

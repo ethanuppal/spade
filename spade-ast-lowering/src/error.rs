@@ -1,6 +1,5 @@
-use spade_common::location_info::Loc;
+use spade_common::{location_info::Loc, name::Identifier};
 use spade_hir as hir;
-use spade_parser::ast;
 use thiserror::Error;
 
 #[derive(Error, Debug, PartialEq, Clone)]
@@ -9,8 +8,8 @@ pub enum Error {
     LookupError(#[from] crate::symbol_table::Error),
     #[error("Duplicate type variable")]
     DuplicateTypeVariable {
-        found: Loc<ast::Identifier>,
-        previously: Loc<ast::Identifier>,
+        found: Loc<Identifier>,
+        previously: Loc<Identifier>,
     },
     #[error("Argument list lenght mismatch, expected {expected} got {got}")]
     ArgumentListLenghtMismatch {
@@ -21,17 +20,17 @@ pub enum Error {
     },
     #[error("{new} was bound more than once")]
     DuplicateNamedBindings {
-        new: Loc<ast::Identifier>,
+        new: Loc<Identifier>,
         prev_loc: Loc<()>,
     },
     #[error("Entity has no argument named {name}")]
     NoSuchArgument {
-        name: Loc<ast::Identifier>,
+        name: Loc<Identifier>,
         for_entity: Loc<hir::EntityHead>,
     },
     #[error("Missing arguments")]
     MissingArguments {
-        missing: Vec<ast::Identifier>,
+        missing: Vec<Identifier>,
         for_entity: Loc<hir::EntityHead>,
         at: Loc<()>,
     },

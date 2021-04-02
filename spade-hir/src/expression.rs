@@ -1,6 +1,8 @@
 use super::{Block, NameID};
-use spade_common::location_info::{Loc, WithLocation};
-use spade_parser::ast::Identifier;
+use spade_common::{
+    location_info::{Loc, WithLocation},
+    name::{Identifier, Path},
+};
 
 #[derive(Clone, Copy, PartialEq, Debug)]
 pub enum BinaryOperator {
@@ -86,7 +88,7 @@ impl Expression {
     /// Create a new expression referencing an identifier with the specified
     /// id and name
     pub fn ident(expr_id: u64, name_id: u64, name: &str) -> Expression {
-        ExprKind::Identifier(NameID(name_id, crate::ast::Path::from_strs(&[name]))).with_id(expr_id)
+        ExprKind::Identifier(NameID(name_id, Path::from_strs(&[name]))).with_id(expr_id)
     }
 }
 

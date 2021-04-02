@@ -1,7 +1,6 @@
 use std::collections::HashMap;
 
-use spade_common::location_info::Loc;
-use spade_hir::NameID;
+use spade_common::{location_info::Loc, name::NameID};
 use spade_types::KnownType;
 
 pub type TypeEquations = HashMap<TypedExpression, TypeVar>;

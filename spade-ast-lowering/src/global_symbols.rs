@@ -1,4 +1,7 @@
-use spade_common::location_info::{Loc, WithLocation};
+use spade_common::{
+    location_info::{Loc, WithLocation},
+    name::Path,
+};
 use spade_parser::ast;
 
 use crate::{
@@ -9,7 +12,7 @@ use crate::{
 /// Collect global symbols as a first pass before generating HIR
 pub fn gather_symbols(
     module: &ast::ModuleBody,
-    namespace: &ast::Path,
+    namespace: &Path,
     symtab: &mut SymbolTable,
 ) -> Result<(), Error> {
     for item in &module.members {
@@ -21,7 +24,7 @@ pub fn gather_symbols(
 
 pub fn visit_item(
     item: &ast::Item,
-    namespace: &ast::Path,
+    namespace: &Path,
     symtab: &mut SymbolTable,
 ) -> Result<(), Error> {
     match item {
@@ -37,7 +40,7 @@ pub fn visit_item(
 
 pub fn visit_entity(
     e: &Loc<ast::Entity>,
-    namespace: &ast::Path,
+    namespace: &Path,
     symtab: &mut SymbolTable,
 ) -> Result<(), Error> {
     let head = crate::entity_head(&e, symtab)?;

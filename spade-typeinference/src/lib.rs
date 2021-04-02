@@ -3,14 +3,13 @@
 
 use hir::Argument;
 use parse_tree_macros::trace_typechecker;
-use spade_ast_lowering::symbol_table::SymbolTable;
-use spade_common::location_info::Loc;
+use spade_ast_lowering::symbol_table::{SymbolTable, SymbolTableExt};
+use spade_common::{location_info::Loc, name::NameID};
 use spade_hir as hir;
 use spade_hir::{
-    expression::BinaryOperator, Block, Entity, ExprKind, Expression, NameID, Register, Statement,
+    expression::BinaryOperator, Block, Entity, ExprKind, Expression, Register, Statement,
 };
 use spade_types::{BaseType, ConcreteType, KnownType};
-
 use std::collections::HashMap;
 
 use colored::*;

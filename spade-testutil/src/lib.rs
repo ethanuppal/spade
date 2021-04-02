@@ -2,12 +2,15 @@ use std::path::PathBuf;
 
 use logos::Logos;
 
-use spade_ast_lowering::{global_symbols, id_tracker::IdTracker, symbol_table, visit_entity};
+use spade_ast_lowering::{global_symbols, visit_entity};
 use spade_common::{
     error_reporting::CompilationError,
+    id_tracker::IdTracker,
     location_info::{Loc, WithLocation},
+    name::{NameID, Path},
+    symbol_table::SymbolTable,
 };
-use spade_hir::{self as hir, NameID};
+use spade_hir as hir;
 use spade_parser::{self as parser, ast, lexer};
 use spade_typeinference::{self as typeinference, TypeState};
 
@@ -45,10 +48,10 @@ pub fn parse_typecheck_module_body(input: &str) -> Vec<ProcessedEntity> {
 
     let module_ast = try_or_report!(parser.module_body());
 
-    let mut symtab = symbol_table::SymbolTable::new();
+    let mut symtab = SymbolTable::new();
     spade_builtins::populate_symtab(&mut symtab);
     for item in &module_ast.members {
-        try_or_report!(global_symbols::visit_item(item, &ast::Path(vec![]), &mut symtab));
+        try_or_report!(global_symbols::visit_item(item, &Path(vec![]), &mut symtab));
     }
 
     let mut idtracker = IdTracker::new();
@@ -59,7 +62,7 @@ pub fn parse_typecheck_module_body(input: &str) -> Vec<ProcessedEntity> {
             ast::Item::Entity(entity_ast) => {
                 let hir = try_or_report!(visit_entity(
                     &entity_ast,
-                    &ast::Path(vec![]),
+                    &Path(vec![]),
                     &mut symtab,
                     &mut idtracker,
                 ));
@@ -83,7 +86,7 @@ pub fn parse_typecheck_module_body(input: &str) -> Vec<ProcessedEntity> {
 }
 
 pub fn name_id(id: u64, name: &str) -> Loc<NameID> {
-    NameID(id, ast::Path::from_strs(&[name])).nowhere()
+    NameID(id, Path::from_strs(&[name])).nowhere()
 }
 
 #[macro_export]

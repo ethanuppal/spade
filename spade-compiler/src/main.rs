@@ -6,8 +6,8 @@ use anyhow::{anyhow, Result};
 use logos::Logos;
 use structopt::StructOpt;
 
-use spade_ast_lowering::{global_symbols, id_tracker, symbol_table, visit_entity};
-use spade_common::error_reporting::CompilationError;
+use spade_ast_lowering::{global_symbols, symbol_table, visit_entity};
+use spade_common::{error_reporting::CompilationError, id_tracker, name::Path};
 pub use spade_parser::lexer;
 use spade_parser::{ast, Parser};
 use spade_typeinference as typeinference;
@@ -37,7 +37,7 @@ fn main() -> Result<()> {
     let mut parser = Parser::new(lexer::TokenKind::lexer(&file_content));
 
     // TODO: Namespace individual files
-    let namespace = ast::Path(vec![]);
+    let namespace = Path(vec![]);
 
     macro_rules! try_or_report {
         ($to_try:expr) => {

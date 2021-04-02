@@ -1,7 +1,7 @@
 pub mod error_reporting;
 
-use spade_common::location_info::Loc;
-use spade_hir::{expression::BinaryOperator, Entity, ExprKind, Expression, NameID, Statement};
+use spade_common::{location_info::Loc, name::NameID};
+use spade_hir::{expression::BinaryOperator, Entity, ExprKind, Expression, Statement};
 use spade_mir as mir;
 use spade_typeinference::{
     equation::{TypeVar, TypedExpression},
