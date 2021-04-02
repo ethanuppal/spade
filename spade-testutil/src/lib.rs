@@ -31,24 +31,24 @@ pub fn parse_typecheck_entity<'a>(input: &str) -> ProcessedEntity {
 pub fn parse_typecheck_module_body(input: &str) -> Vec<ProcessedEntity> {
     let mut parser = parser::Parser::new(lexer::TokenKind::lexer(&input));
 
-    let module_ast = match parser.module_body() {
-        Ok(body) => body,
-        Err(e) => {
-            e.report(&PathBuf::from(""), &input, false);
-            panic!("Parse error")
-        }
-    };
+    macro_rules! try_or_report {
+        ($to_try:expr) => {
+            match $to_try {
+                Ok(result) => result,
+                Err(e) => {
+                    e.report(&PathBuf::new(), &"", true);
+                    panic!("Aborting due to previous error")
+                }
+            }
+        };
+    }
+
+    let module_ast = try_or_report!(parser.module_body());
 
     let mut symtab = symbol_table::SymbolTable::new();
     spade_builtins::populate_symtab(&mut symtab);
     for item in &module_ast.members {
-        match global_symbols::visit_item(item, &ast::Path(vec![]), &mut symtab) {
-            Ok(_) => (),
-            Err(e) => {
-                e.report(&PathBuf::from(""), &input, false);
-                panic!("Semantic error")
-            }
-        }
+        try_or_report!(global_symbols::visit_item(item, &ast::Path(vec![]), &mut symtab));
     }
 
     let mut idtracker = IdTracker::new();
@@ -57,32 +57,16 @@ pub fn parse_typecheck_module_body(input: &str) -> Vec<ProcessedEntity> {
     for item in &module_ast.members {
         match item {
             ast::Item::Entity(entity_ast) => {
-                let hir = match visit_entity(
+                let hir = try_or_report!(visit_entity(
                     &entity_ast,
                     &ast::Path(vec![]),
                     &mut symtab,
                     &mut idtracker,
-                ) {
-                    Ok(v) => v,
-                    Err(e) => {
-                        e.report(&PathBuf::from(""), &input, false);
-                        panic!("Semantic error")
-                    }
-                };
+                ));
 
                 let mut type_state = typeinference::TypeState::new();
 
-                match type_state.visit_entity(&hir, &symtab) {
-                    Ok(()) => {}
-                    Err(e) => {
-                        println!(
-                            "Type check trace:\n{}",
-                            typeinference::format_trace_stack(&type_state.trace_stack)
-                        );
-                        e.report(&PathBuf::from(""), &input, false);
-                        panic!("Type error")
-                    }
-                }
+                try_or_report!(type_state.visit_entity(&hir, &symtab));
 
                 entities.push(ProcessedEntity {
                     entity: hir.inner,
