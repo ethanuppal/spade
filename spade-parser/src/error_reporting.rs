@@ -93,14 +93,14 @@ impl CompilationError for Error {
                         format!("Pipeline depth can only be fixed integers"),
                     ])
             }
-            Error::ExpectedType(found) => {
-                Diagnostic::error()
-                    .with_message(format!("Unexpected token. Got `{}`, expected type", found.kind.as_str()))
-                    .with_labels(vec![
-                        Label::primary(file_id, found.span)
-                            .with_message("Expected a type")
-                    ])
-            }
+            Error::ExpectedType(found) => Diagnostic::error()
+                .with_message(format!(
+                    "Unexpected token. Got `{}`, expected type",
+                    found.kind.as_str()
+                ))
+                .with_labels(vec![
+                    Label::primary(file_id, found.span).with_message("Expected a type")
+                ]),
         };
 
         let writer = StandardStream::stderr(color_choice(no_color));

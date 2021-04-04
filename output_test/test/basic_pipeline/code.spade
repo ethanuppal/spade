@@ -1,0 +1,8 @@
+pipeline(3) delay_3(clk, input: int<8>) -> int<8> {
+    stage {}
+    stage {}
+    stage {
+        input
+    }
+}
+
