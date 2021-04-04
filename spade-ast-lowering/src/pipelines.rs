@@ -1,12 +1,12 @@
 use std::collections::HashSet;
 
+use spade_ast as ast;
 use spade_common::{
     id_tracker::IdTracker,
     location_info::{Loc, WithLocation},
     name::{NameID, Path},
 };
 use spade_hir as hir;
-use spade_parser::ast;
 
 use crate::{
     error::{Error, Result},
@@ -228,8 +228,8 @@ pub fn visit_pipeline(
 mod binding_visiting {
     use super::*;
 
+    use spade_ast::testutil::{ast_ident, ast_path};
     use spade_common::location_info::WithLocation;
-    use spade_parser::testutil::{ast_ident, ast_path};
     use spade_testutil::name_id;
     use spade_types::BaseType;
 
@@ -325,8 +325,8 @@ mod binding_visiting {
 mod stage_visiting {
     use super::*;
 
+    use spade_ast::testutil::{ast_ident, ast_path};
     use spade_common::location_info::WithLocation;
-    use spade_parser::testutil::{ast_ident, ast_path};
     use spade_testutil::name_id;
 
     #[test]
@@ -403,8 +403,8 @@ mod stage_visiting {
 mod pipeline_visiting {
     use super::*;
 
+    use spade_ast::testutil::{ast_ident, ast_path};
     use spade_common::location_info::WithLocation;
-    use spade_parser::testutil::{ast_ident, ast_path};
     use spade_testutil::name_id;
 
     use pretty_assertions::assert_eq;

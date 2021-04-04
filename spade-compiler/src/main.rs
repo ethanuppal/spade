@@ -6,11 +6,12 @@ use anyhow::{anyhow, Result};
 use logos::Logos;
 use structopt::StructOpt;
 
+use spade_ast as ast;
 use spade_ast_lowering::{global_symbols, symbol_table, visit_entity};
 use spade_common::{error_reporting::CompilationError, id_tracker, name::Path};
 use spade_hir_lowering::{ProcessedEntity, ProcessedItem, ProcessedPipeline};
 pub use spade_parser::lexer;
-use spade_parser::{ast, Parser};
+use spade_parser::Parser;
 use spade_typeinference as typeinference;
 
 mod golden;

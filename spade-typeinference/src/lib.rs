@@ -679,9 +679,9 @@ mod tests {
         hir::{self, Block},
     };
     use hir::{Argument, TypeSpec};
+    use spade_ast::testutil::{ast_ident, ast_path};
     use spade_ast_lowering::symbol_table::{SymbolTable, Thing};
     use spade_common::location_info::WithLocation;
-    use spade_parser::testutil::{ast_ident, ast_path};
     use spade_testutil::name_id;
 
     #[test]

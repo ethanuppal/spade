@@ -1,6 +1,6 @@
+use spade_ast as ast;
 use spade_common::{location_info::Loc, name::Identifier};
 use spade_hir as hir;
-use spade_parser::ast;
 use thiserror::Error;
 
 #[derive(Error, Debug, PartialEq, Clone)]

@@ -1,8 +1,8 @@
+use spade_ast as ast;
 use spade_common::{
     location_info::{Loc, WithLocation},
     name::Path,
 };
-use spade_parser::ast;
 
 use crate::{
     symbol_table::{SymbolTable, Thing},

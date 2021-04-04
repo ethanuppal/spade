@@ -13,6 +13,7 @@ use thiserror::Error;
 
 use crate::symbol_table::SymbolTable;
 use crate::symbol_table::{Thing, TypeSymbol};
+use spade_ast as ast;
 use spade_common::id_tracker::IdTracker;
 use spade_common::{
     location_info::{Loc, WithLocation},
@@ -20,8 +21,6 @@ use spade_common::{
 };
 use spade_hir as hir;
 use spade_hir::{expression::BinaryOperator, EntityHead};
-use spade_parser::ast;
-use spade_parser::lexer::TokenKind;
 
 pub use error::{Error, Result};
 
@@ -400,18 +399,15 @@ pub fn visit_expression(
             let operator = |op| hir::ExprKind::BinaryOperator(Box::new(lhs), op, Box::new(rhs));
 
             match tok {
-                TokenKind::Plus => Ok(operator(BinaryOperator::Add)),
-                TokenKind::Minus => Ok(operator(BinaryOperator::Sub)),
-                TokenKind::Asterisk => Ok(operator(BinaryOperator::Mul)),
-                TokenKind::Slash => panic!("division is unsupported"),
-                TokenKind::Equals => Ok(operator(BinaryOperator::Eq)),
-                TokenKind::Gt => Ok(operator(BinaryOperator::Gt)),
-                TokenKind::Lt => Ok(operator(BinaryOperator::Lt)),
-                TokenKind::LeftShift => Ok(operator(BinaryOperator::LeftShift)),
-                TokenKind::RightShift => Ok(operator(BinaryOperator::RightShift)),
-                TokenKind::LogicalAnd => Ok(operator(BinaryOperator::LogicalAnd)),
-                TokenKind::LogicalOr => Ok(operator(BinaryOperator::LogicalOr)),
-                _ => unreachable! {},
+                ast::BinaryOperator::Add => Ok(operator(BinaryOperator::Add)),
+                ast::BinaryOperator::Sub => Ok(operator(BinaryOperator::Sub)),
+                ast::BinaryOperator::Equals => Ok(operator(BinaryOperator::Eq)),
+                ast::BinaryOperator::Gt => Ok(operator(BinaryOperator::Gt)),
+                ast::BinaryOperator::Lt => Ok(operator(BinaryOperator::Lt)),
+                ast::BinaryOperator::LeftShift => Ok(operator(BinaryOperator::LeftShift)),
+                ast::BinaryOperator::RightShift => Ok(operator(BinaryOperator::RightShift)),
+                ast::BinaryOperator::LogicalAnd => Ok(operator(BinaryOperator::LogicalAnd)),
+                ast::BinaryOperator::LogicalOr => Ok(operator(BinaryOperator::LogicalOr)),
             }
         }
         ast::Expression::EntityInstance(name, arg_list) => {
@@ -522,8 +518,8 @@ pub fn visit_register(
 mod entity_visiting {
     use super::*;
 
+    use spade_ast::testutil::{ast_ident, ast_path};
     use spade_common::location_info::WithLocation;
-    use spade_parser::testutil::{ast_ident, ast_path};
     use spade_testutil::name_id;
 
     use pretty_assertions::assert_eq;
@@ -652,8 +648,8 @@ mod entity_visiting {
 mod statement_visiting {
     use super::*;
 
+    use spade_ast::testutil::{ast_ident, ast_path};
     use spade_common::location_info::WithLocation;
-    use spade_parser::testutil::{ast_ident, ast_path};
     use spade_testutil::name_id;
 
     #[test]
@@ -726,8 +722,8 @@ mod statement_visiting {
 mod expression_visiting {
     use super::*;
 
+    use spade_ast::testutil::{ast_ident, ast_path};
     use spade_common::location_info::WithLocation;
-    use spade_parser::testutil::{ast_ident, ast_path};
     use spade_testutil::name_id;
 
     #[test]
@@ -751,7 +747,7 @@ mod expression_visiting {
                 let mut idtracker = IdTracker::new();
                 let input = ast::Expression::BinaryOperator(
                     Box::new(ast::Expression::IntLiteral(123).nowhere()),
-                    spade_parser::lexer::TokenKind::$token,
+                    spade_ast::BinaryOperator::$token,
                     Box::new(ast::Expression::IntLiteral(456).nowhere()),
                 );
                 let expected = hir::ExprKind::BinaryOperator(
@@ -769,9 +765,8 @@ mod expression_visiting {
         };
     }
 
-    binop_test!(additions, Plus, Add);
-    binop_test!(subtractions, Minus, Sub);
-    binop_test!(multiplication, Asterisk, Mul);
+    binop_test!(additions, Add, Add);
+    binop_test!(subtractions, Sub, Sub);
     binop_test!(equals, Equals, Eq);
 
     #[test]
@@ -1094,8 +1089,8 @@ mod expression_visiting {
 mod register_visiting {
     use super::*;
 
+    use spade_ast::testutil::{ast_ident, ast_path};
     use spade_common::location_info::WithLocation;
-    use spade_parser::testutil::{ast_ident, ast_path};
     use spade_testutil::name_id;
 
     #[test]
@@ -1145,8 +1140,8 @@ mod register_visiting {
 mod item_visiting {
     use super::*;
 
+    use spade_ast::testutil::ast_ident;
     use spade_common::location_info::WithLocation;
-    use spade_parser::testutil::ast_ident;
     use spade_testutil::name_id;
 
     use pretty_assertions::assert_eq;
@@ -1202,8 +1197,8 @@ mod item_visiting {
 mod module_visiting {
     use super::*;
 
+    use spade_ast::testutil::ast_ident;
     use spade_common::location_info::WithLocation;
-    use spade_parser::testutil::ast_ident;
     use spade_testutil::name_id;
 
     use pretty_assertions::assert_eq;

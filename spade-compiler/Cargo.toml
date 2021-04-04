@@ -22,6 +22,7 @@ indoc = "1.0"
 
 spade-common = {path = "../spade-common"}
 spade-hir = {path = "../spade-hir"}
+spade-ast = {path = "../spade-ast"}
 spade-types = {path = "../spade-types"}
 spade-parser = {path = "../spade-parser"}
 spade-typeinference = {path = "../spade-typeinference"}

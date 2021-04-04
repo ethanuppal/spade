@@ -17,4 +17,5 @@ codespan = "0.9"
 codespan-reporting = "0.9"
 
 spade-common = {path = "../spade-common"}
+spade-ast = {path = "../spade-ast"}
 parse_tree_macros = {path = "../parse_tree_macros"}

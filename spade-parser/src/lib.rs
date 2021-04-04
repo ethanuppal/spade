@@ -1,10 +1,10 @@
-pub mod ast;
 pub mod error_reporting;
 pub mod lexer;
-pub mod testutil;
 
-use ast::{
-    ArgumentList, NamedArgument, Pipeline, PipelineBindModifier, PipelineBinding, PipelineStage,
+use spade_ast::{
+    ArgumentList, BinaryOperator, Block, Entity, Expression, FunctionDecl, Item, ModuleBody,
+    NamedArgument, Pipeline, PipelineBindModifier, PipelineBinding, PipelineStage, Register,
+    Statement, TraitDef, TypeExpression, TypeParam, TypeSpec,
 };
 use spade_common::{
     location_info::{lspan, Loc, WithLocation},
@@ -17,10 +17,6 @@ use thiserror::Error;
 
 use parse_tree_macros::trace_parser;
 
-use crate::ast::{
-    Block, Entity, Expression, FunctionDecl, Item, ModuleBody, Register, Statement, TraitDef,
-    TypeExpression, TypeParam, TypeSpec,
-};
 use crate::lexer::TokenKind;
 
 /// A token with location info
@@ -168,10 +164,20 @@ impl<'a> Parser<'a> {
             let rest = rhs(self)?;
 
             let span = start.span.merge(rest.span);
-            Ok(
-                Expression::BinaryOperator(Box::new(start), operator.kind, Box::new(rest))
-                    .at(&span),
-            )
+
+            let op = match operator.kind {
+                TokenKind::Plus => BinaryOperator::Add,
+                TokenKind::Minus => BinaryOperator::Sub,
+                TokenKind::Equals => BinaryOperator::Equals,
+                TokenKind::Lt => BinaryOperator::Lt,
+                TokenKind::Gt => BinaryOperator::Gt,
+                TokenKind::RightShift => BinaryOperator::RightShift,
+                TokenKind::LeftShift => BinaryOperator::LeftShift,
+                TokenKind::LogicalOr => BinaryOperator::LogicalOr,
+                TokenKind::LogicalAnd => BinaryOperator::LogicalAnd,
+                x => unreachable!("{} is not an operator", x.as_str()),
+            };
+            Ok(Expression::BinaryOperator(Box::new(start), op, Box::new(rest)).at(&span))
         } else {
             Ok(start)
         }
@@ -850,9 +856,9 @@ impl<'a> Parser<'a> {
         })
     }
     fn is_next_multiplication_operator(&mut self) -> Result<bool> {
+        // NOTE: We currently have no multiplication-like operators but I'll leave this
+        // here in case I come up with a good way to support them
         Ok(match self.peek()?.map(|token| token.kind) {
-            Some(TokenKind::Asterisk) => true,
-            Some(TokenKind::Slash) => true,
             _ => false,
         })
     }
@@ -1119,9 +1125,10 @@ pub fn format_parse_stack(stack: &[ParseStackEntry]) -> String {
 
 #[cfg(test)]
 mod tests {
-    use crate::ast::*;
+    use spade_ast::testutil::{ast_ident, ast_path};
+    use spade_ast::*;
+
     use crate::lexer::TokenKind;
-    use crate::testutil::{ast_ident, ast_path};
     use crate::*;
 
     use logos::Logos;
@@ -1163,7 +1170,7 @@ mod tests {
     fn addition_operatoins_are_expressions() {
         let expected_value = Expression::BinaryOperator(
             Box::new(Expression::Identifier(ast_path("a")).nowhere()),
-            TokenKind::Plus,
+            BinaryOperator::Add,
             Box::new(Expression::Identifier(ast_path("b")).nowhere()),
         )
         .nowhere();
@@ -1171,6 +1178,10 @@ mod tests {
         check_parse!("a + b", expression, Ok(expected_value.clone()));
     }
 
+    #[ignore]
+    #[test]
+    fn multiplication() {}
+    /*
     #[test]
     fn multiplications_are_expressions() {
         let expected_value = Expression::BinaryOperator(
@@ -1201,6 +1212,7 @@ mod tests {
 
         check_parse!("a*b + c", expression, Ok(expected_value.clone()));
     }
+    */
 
     #[test]
     fn equals_after_addition() {
@@ -1208,12 +1220,12 @@ mod tests {
             Box::new(
                 Expression::BinaryOperator(
                     Box::new(Expression::Identifier(ast_path("a")).nowhere()),
-                    TokenKind::Plus,
+                    BinaryOperator::Add,
                     Box::new(Expression::Identifier(ast_path("b")).nowhere()),
                 )
                 .nowhere(),
             ),
-            TokenKind::Equals,
+            BinaryOperator::Equals,
             Box::new(Expression::Identifier(ast_path("c")).nowhere()),
         )
         .nowhere();
@@ -1228,12 +1240,12 @@ mod tests {
                 Box::new(
                     Expression::BinaryOperator(
                         Box::new(Expression::Identifier(ast_path("a")).nowhere()),
-                        TokenKind::Equals,
+                        BinaryOperator::Equals,
                         Box::new(Expression::Identifier(ast_path("b")).nowhere()),
                     )
                     .nowhere(),
                 ),
-                TokenKind::LogicalAnd,
+                BinaryOperator::LogicalAnd,
                 Box::new(Expression::Identifier(ast_path("c")).nowhere()),
             )
             .nowhere();
@@ -1243,11 +1255,11 @@ mod tests {
         {
             let expected_value = Expression::BinaryOperator(
                 Box::new(Expression::Identifier(ast_path("a")).nowhere()),
-                TokenKind::LogicalAnd,
+                BinaryOperator::LogicalAnd,
                 Box::new(
                     Expression::BinaryOperator(
                         Box::new(Expression::Identifier(ast_path("b")).nowhere()),
-                        TokenKind::Equals,
+                        BinaryOperator::Equals,
                         Box::new(Expression::Identifier(ast_path("c")).nowhere()),
                     )
                     .nowhere(),
@@ -1263,11 +1275,11 @@ mod tests {
     fn bracketed_expressions_are_expressions() {
         let expected_value = Expression::BinaryOperator(
             Box::new(Expression::Identifier(ast_path("a")).nowhere()),
-            TokenKind::Asterisk,
+            BinaryOperator::Add,
             Box::new(
                 Expression::BinaryOperator(
                     Box::new(Expression::Identifier(ast_path("b")).nowhere()),
-                    TokenKind::Plus,
+                    BinaryOperator::Add,
                     Box::new(Expression::Identifier(ast_path("c")).nowhere()),
                 )
                 .nowhere(),
@@ -1275,7 +1287,7 @@ mod tests {
         )
         .nowhere();
 
-        check_parse!("a * (b + c)", expression, Ok(expected_value.clone()));
+        check_parse!("a + (b + c)", expression, Ok(expected_value.clone()));
     }
 
     #[test]
@@ -1284,17 +1296,17 @@ mod tests {
             Box::new(
                 Expression::BinaryOperator(
                     Box::new(Expression::Identifier(ast_path("b")).nowhere()),
-                    TokenKind::Plus,
+                    BinaryOperator::Add,
                     Box::new(Expression::Identifier(ast_path("c")).nowhere()),
                 )
                 .nowhere(),
             ),
-            TokenKind::Asterisk,
+            BinaryOperator::Add,
             Box::new(Expression::Identifier(ast_path("a")).nowhere()),
         )
         .nowhere();
 
-        check_parse!("((b + c) * a)", expression, Ok(expected_value.clone()));
+        check_parse!("((b + c) + a)", expression, Ok(expected_value.clone()));
     }
 
     #[test]

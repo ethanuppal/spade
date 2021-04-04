@@ -13,5 +13,6 @@ members = [
     "spade-tests",
     "spade-mir",
     "spade-hir-lowering",
+    "spade-ast",
     "parse_tree_macros"
 ]

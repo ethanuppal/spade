@@ -2,6 +2,7 @@ use std::path::PathBuf;
 
 use logos::Logos;
 
+use spade_ast as ast;
 use spade_ast_lowering::{global_symbols, pipelines::visit_pipeline, visit_entity};
 use spade_common::{
     error_reporting::CompilationError,
@@ -11,7 +12,7 @@ use spade_common::{
     symbol_table::{SymbolTable, SymbolTracker},
 };
 use spade_hir_lowering::{ProcessedEntity, ProcessedItem, ProcessedPipeline};
-use spade_parser::{self as parser, ast, lexer};
+use spade_parser::{self as parser, lexer};
 use spade_typeinference::{self as typeinference};
 
 pub fn parse_typecheck_entity<'a>(input: &str) -> ProcessedEntity {
