@@ -9,7 +9,7 @@ impl ValueName {
     fn var_name(&self) -> String {
         match self {
             ValueName::Named(id, name) => {
-                format!("_n{}_{}", id, name)
+                format!("{}_n{}", name, id)
             }
             ValueName::Expr(id) => {
                 format!("_e_{}", id)
@@ -261,9 +261,9 @@ mod tests {
 
         let expected = indoc!(
             r#"
-                reg[6:0] _n0_r;
+                reg[6:0] r_n0;
                 always @(posedge _e_0) begin
-                    _n0_r <= _e_1;
+                    r_n0 <= _e_1;
                 end"#
         );
 
@@ -276,13 +276,13 @@ mod tests {
 
         let expected = indoc!(
             r#"
-                reg[6:0] _n0_r;
+                reg[6:0] r_n0;
                 always @(posedge _e_0, posedge _e_2) begin
                     if (_e_2) begin
-                        _n0_r <= _e_3;
+                        r_n0 <= _e_3;
                     end
                     else begin
-                        _n0_r <= _e_1;
+                        r_n0 <= _e_1;
                     end
                 end"#
         );
@@ -302,10 +302,10 @@ mod tests {
                     input[5:0] _i_op,
                     output[5:0] __output
                 );
-                wire[5:0] _n0_op;
-                assign _n0_op = _i_op;
+                wire[5:0] op_n0;
+                assign op_n0 = _i_op;
                 wire[5:0] _e_0;
-                assign _e_0 = _n0_op + _e_1;
+                assign _e_0 = op_n0 + _e_1;
                 assign __output = _e_0;
             endmodule"#
         );
