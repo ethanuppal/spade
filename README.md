@@ -18,6 +18,12 @@ entity counter(clk: clk, rst: bool, max: int<8>) -> int<8> {
 }
 ```
 
+## Getting started
+1. Clone the repo `git clone https://gitlab.com/TheZoq2/spade/-/issues/43`
+2. Initalize the submodules `git submodules init && git submodules update`
+3. Build the project `cargo build`
+4. Fix a nice issue
+
 ## Planned features
 
 - [x] Type inference
