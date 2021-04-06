@@ -1,6 +1,6 @@
 [submodule "output_test/vatch"]
 	path = output_test/vatch
-	url = git@gitlab.com:TheZoq2/vatch.git
+	url = https://gitlab.com/TheZoq2/vatch.git
 [submodule "crates/golden-tests"]
 	path = crates/golden-tests
 	url = https://github.com/TheZoq2/golden-tests.git

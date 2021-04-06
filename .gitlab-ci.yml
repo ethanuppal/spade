@@ -1,0 +1,18 @@
+# image: "scorpil/rust:nightly"
+image: rust:latest
+
+test:cargo:
+    script:
+        - git submodule init
+        - git submodule update
+        - cargo build --color=always
+        - cargo test --color=always
+    cache:
+        paths:
+            - target/
+            - cargo/
+
+variables:
+    CARGO_HOME: $CI_PROJECT_DIR/cargo
+
+
