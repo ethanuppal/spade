@@ -19,10 +19,10 @@ entity counter(clk: clk, rst: bool, max: int<8>) -> int<8> {
 ```
 
 ## Getting started
-1. Clone the repo `git clone https://gitlab.com/TheZoq2/spade/-/issues/43`
+1. Clone the repo `git clone git@gitlab.com:TheZoq2/spade.git`
 2. Initalize the submodules `git submodules init && git submodules update`
 3. Build the project `cargo build`
-4. Fix a nice issue
+4. Build your spade code using `cargo run -- <input.spade> -o output.v`
 
 ## Planned features
 
