@@ -33,3 +33,7 @@ entity counter(clk: clk, rst: bool, max: int<8>) -> int<8> {
 - [ ] Sum types and pattern matching
 - [ ] Compile time checked pipelines
 - [ ] ...
+
+## License
+
+Spade is licensed under the [EUPL-1.2 license](LICENSE.txt).
