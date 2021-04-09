@@ -109,7 +109,6 @@ pub fn generate_pipeline<'a>(
 ) -> Result<mir::Entity> {
     let Pipeline {
         name,
-        clock,
         inputs,
         body,
         result,
@@ -117,9 +116,10 @@ pub fn generate_pipeline<'a>(
         output_type: _,
     } = pipeline;
 
-    let mut live_vars = inputs.iter().map(|var| var.0.clone()).collect();
+    // Skip because the clock does not need to be pipelined
+    let mut live_vars = inputs.iter().skip(1).map(|var| var.0.clone()).collect();
 
-    let mut inputs = inputs
+    let lowered_inputs = inputs
         .iter()
         .map(|(name_id, _)| {
             let name = format!("_i_{}", name_id.1.to_string());
@@ -130,11 +130,6 @@ pub fn generate_pipeline<'a>(
         })
         .collect::<Vec<_>>();
 
-    let clk_input_name = format!("_i_{}", clock.1.to_string());
-    let clk_val_name = clock.value_name();
-    let clk_ty = types.type_of_name(clock).to_mir_type();
-    inputs.insert(0, (clk_input_name, clk_val_name, clk_ty));
-
     let mut subs = Substitutions::new();
     let mut statements = vec![];
     for (stage_num, stage) in body.iter().enumerate() {
@@ -143,7 +138,7 @@ pub fn generate_pipeline<'a>(
             types,
             id_tracker,
             &mut live_vars,
-            clock,
+            &inputs[0].0,
             &mut subs,
         )?);
     }
@@ -153,7 +148,7 @@ pub fn generate_pipeline<'a>(
 
     Ok(mir::Entity {
         name: name.1.to_string(),
-        inputs,
+        inputs: lowered_inputs,
         output,
         output_type,
         statements,

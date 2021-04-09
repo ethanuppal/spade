@@ -136,7 +136,7 @@ pub fn entity_head(item: &ast::Entity, symtab: &mut SymbolTable) -> Result<Entit
     };
 
     Ok(EntityHead {
-        inputs,
+        inputs: hir::ParameterList(inputs),
         output_type,
         type_params,
     })
@@ -159,6 +159,7 @@ pub fn visit_entity(
     // Add the inputs to the symtab
     let inputs = head
         .inputs
+        .0
         .iter()
         .map(|(ident, ty)| (symtab.add_local_variable(ident.clone()), ty.clone()))
         .collect();
@@ -254,27 +255,26 @@ pub fn visit_statement(
     }
 }
 
-fn visit_entity_arguments(
+fn visit_argument_list(
     arguments: &Loc<ast::ArgumentList>,
-    head: Loc<hir::EntityHead>,
+    inputs: &hir::ParameterList,
     symtab: &mut SymbolTable,
     idtracker: &mut IdTracker,
 ) -> Result<Vec<hir::Argument>> {
     match &arguments.inner {
         ast::ArgumentList::Positional(args) => {
-            if args.len() != head.inputs.len() {
+            if args.len() != inputs.0.len() {
                 return Err(Error::ArgumentListLenghtMismatch {
                     got: args.len(),
-                    expected: head.inputs.len(),
+                    expected: inputs.0.len(),
                     at: arguments.loc(),
-                    for_entity: head.loc(),
                 });
             }
 
             let args = args
                 .iter()
                 .map(|a| a.try_visit(visit_expression, symtab, idtracker))
-                .zip(head.inputs.iter())
+                .zip(inputs.0.iter())
                 .map(|(arg, target)| {
                     Ok(hir::Argument {
                         target: target.0.clone(),
@@ -287,8 +287,8 @@ fn visit_entity_arguments(
             Ok(args)
         }
         ast::ArgumentList::Named(args) => {
-            let mut unbound_args = head
-                .inputs
+            let mut unbound_args = inputs
+                .0
                 .iter()
                 .enumerate()
                 .map(|(index, (name, _))| (name.clone(), index))
@@ -322,10 +322,7 @@ fn visit_entity_arguments(
                                     prev_loc: bound_args[idx].loc(),
                                 });
                             } else {
-                                return Err(Error::NoSuchArgument {
-                                    name: name.clone(),
-                                    for_entity: head.clone(),
-                                });
+                                return Err(Error::NoSuchArgument { name: name.clone() });
                             }
                         }
                     }
@@ -355,10 +352,7 @@ fn visit_entity_arguments(
                                     prev_loc: bound_args[idx].loc(),
                                 });
                             } else {
-                                return Err(Error::NoSuchArgument {
-                                    name: name.clone(),
-                                    for_entity: head.clone(),
-                                });
+                                return Err(Error::NoSuchArgument { name: name.clone() });
                             }
                         }
                     }
@@ -371,7 +365,6 @@ fn visit_entity_arguments(
                         .into_iter()
                         .map(|(name, _)| name.inner)
                         .collect(),
-                    for_entity: head,
                     at: arguments.loc(),
                 });
             }
@@ -414,8 +407,26 @@ pub fn visit_expression(
             let (name_id, head) = symtab.lookup_entity(name)?;
             let head = head.clone();
 
-            let args = visit_entity_arguments(arg_list, head, symtab, idtracker)?;
+            let args = visit_argument_list(arg_list, &head.inputs, symtab, idtracker)?;
             Ok(hir::ExprKind::EntityInstance(name_id.at_loc(name), args))
+        }
+        ast::Expression::PipelineInstance(depth, name, arg_list) => {
+            let (name_id, head) = symtab.lookup_pipeline(name)?;
+            let head = head.clone();
+
+            if head.depth.inner != depth.inner as usize {
+                return Err(Error::PipelineDepthMissmatch {
+                    expected: head.depth.inner,
+                    got: depth.clone(),
+                });
+            }
+
+            let args = visit_argument_list(arg_list, &head.inputs, symtab, idtracker)?;
+            Ok(hir::ExprKind::PipelineInstance {
+                depth: depth.clone(),
+                name: name_id.at_loc(name),
+                args,
+            })
         }
         ast::Expression::TupleLiteral(exprs) => {
             let exprs = exprs
@@ -520,7 +531,7 @@ mod entity_visiting {
 
     use spade_ast::testutil::{ast_ident, ast_path};
     use spade_common::location_info::WithLocation;
-    use spade_testutil::name_id;
+    use spade_common::name::testutil::name_id;
 
     use pretty_assertions::assert_eq;
 
@@ -547,7 +558,7 @@ mod entity_visiting {
         let expected = hir::Entity {
             name: name_id(0, "test"),
             head: hir::EntityHead {
-                inputs: vec![(ast_ident("a"), hir::TypeSpec::unit().nowhere())],
+                inputs: hir::ParameterList(vec![(ast_ident("a"), hir::TypeSpec::unit().nowhere())]),
                 output_type: None,
                 type_params: vec![],
             },
@@ -650,7 +661,7 @@ mod statement_visiting {
 
     use spade_ast::testutil::{ast_ident, ast_path};
     use spade_common::location_info::WithLocation;
-    use spade_testutil::name_id;
+    use spade_common::name::testutil::name_id;
 
     #[test]
     fn bindings_convert_correctly() {
@@ -722,9 +733,10 @@ mod statement_visiting {
 mod expression_visiting {
     use super::*;
 
+    use hir::PipelineHead;
     use spade_ast::testutil::{ast_ident, ast_path};
     use spade_common::location_info::WithLocation;
-    use spade_testutil::name_id;
+    use spade_common::name::testutil::name_id;
 
     #[test]
     fn int_literals_work() {
@@ -898,10 +910,10 @@ mod expression_visiting {
             ast_path("test").inner,
             Thing::Entity(
                 EntityHead {
-                    inputs: vec![
+                    inputs: hir::ParameterList(vec![
                         (ast_ident("a"), hir::TypeSpec::unit().nowhere()),
                         (ast_ident("b"), hir::TypeSpec::unit().nowhere()),
-                    ],
+                    ]),
                     output_type: None,
                     type_params: vec![],
                 }
@@ -951,10 +963,10 @@ mod expression_visiting {
             ast_path("test").inner,
             Thing::Entity(
                 EntityHead {
-                    inputs: vec![
+                    inputs: hir::ParameterList(vec![
                         (ast_ident("a"), hir::TypeSpec::unit().nowhere()),
                         (ast_ident("b"), hir::TypeSpec::unit().nowhere()),
-                    ],
+                    ]),
                     output_type: None,
                     type_params: vec![],
                 }
@@ -989,11 +1001,11 @@ mod expression_visiting {
                 let mut idtracker = IdTracker::new();
 
                 symtab.add_thing(ast_path("test").inner, Thing::Entity(EntityHead {
-                    inputs: vec! [
+                    inputs: hir::ParameterList(vec! [
                         $(
                             (ast_ident($expected_arg), hir::TypeSpec::unit().nowhere())
                         ),*
-                    ],
+                    ]),
                     output_type: None,
                     type_params: vec![],
                 }.nowhere()));
@@ -1040,11 +1052,11 @@ mod expression_visiting {
                 let mut idtracker = IdTracker::new();
 
                 symtab.add_thing(ast_path("test").inner, Thing::Entity(EntityHead {
-                    inputs: vec! [
+                    inputs: hir::ParameterList(vec! [
                         $(
                             (ast_ident($expected_arg), hir::TypeSpec::unit().nowhere())
                         ),*
-                    ],
+                    ]),
                     output_type: None,
                     type_params: vec![],
                 }.nowhere()));
@@ -1083,6 +1095,101 @@ mod expression_visiting {
             symtab
         }
     );
+
+    #[test]
+    fn pipeline_instanciation_works() {
+        let input = ast::Expression::PipelineInstance(
+            2.nowhere(),
+            ast_path("test"),
+            ast::ArgumentList::Positional(vec![
+                ast::Expression::IntLiteral(1).nowhere(),
+                ast::Expression::IntLiteral(2).nowhere(),
+            ])
+            .nowhere(),
+        )
+        .nowhere();
+
+        let expected = hir::ExprKind::PipelineInstance {
+            depth: 2.nowhere(),
+            name: name_id(0, "test"),
+            args: vec![
+                hir::Argument {
+                    target: ast_ident("a"),
+                    value: hir::ExprKind::IntLiteral(1).idless().nowhere(),
+                    kind: hir::ArgumentKind::Positional,
+                },
+                hir::Argument {
+                    target: ast_ident("b"),
+                    value: hir::ExprKind::IntLiteral(2).idless().nowhere(),
+                    kind: hir::ArgumentKind::Positional,
+                },
+            ],
+        }
+        .idless();
+
+        let mut symtab = SymbolTable::new();
+        let mut idtracker = IdTracker::new();
+
+        symtab.add_thing(
+            ast_path("test").inner,
+            Thing::Pipeline(
+                PipelineHead {
+                    depth: 2.nowhere(),
+                    inputs: hir::ParameterList(vec![
+                        (ast_ident("a"), hir::TypeSpec::unit().nowhere()),
+                        (ast_ident("b"), hir::TypeSpec::unit().nowhere()),
+                    ]),
+                    output_type: None,
+                }
+                .nowhere(),
+            ),
+        );
+
+        assert_eq!(
+            visit_expression(&input, &mut symtab, &mut idtracker),
+            Ok(expected)
+        );
+    }
+
+    #[test]
+    fn pipeline_instantiation_with_missmatched_depth_causes_error() {
+        let input = ast::Expression::PipelineInstance(
+            2.nowhere(),
+            ast_path("test"),
+            ast::ArgumentList::Positional(vec![
+                ast::Expression::IntLiteral(1).nowhere(),
+                ast::Expression::IntLiteral(2).nowhere(),
+            ])
+            .nowhere(),
+        )
+        .nowhere();
+
+        let mut symtab = SymbolTable::new();
+        let mut idtracker = IdTracker::new();
+
+        symtab.add_thing(
+            ast_path("test").inner,
+            Thing::Pipeline(
+                PipelineHead {
+                    depth: 3.nowhere(),
+                    inputs: hir::ParameterList(vec![
+                        (ast_ident("a"), hir::TypeSpec::unit().nowhere()),
+                        (ast_ident("b"), hir::TypeSpec::unit().nowhere()),
+                    ]),
+                    output_type: None,
+                }
+                .nowhere(),
+            ),
+        );
+
+        assert_eq!(
+            visit_expression(&input, &mut symtab, &mut idtracker),
+            Err(Error::PipelineDepthMissmatch {
+                expected: 3,
+                got: 2.nowhere()
+            })
+        );
+    }
 }
 
 #[cfg(test)]
@@ -1091,7 +1198,7 @@ mod register_visiting {
 
     use spade_ast::testutil::{ast_ident, ast_path};
     use spade_common::location_info::WithLocation;
-    use spade_testutil::name_id;
+    use spade_common::name::testutil::name_id;
 
     #[test]
     fn register_visiting_works() {
@@ -1142,7 +1249,7 @@ mod item_visiting {
 
     use spade_ast::testutil::ast_ident;
     use spade_common::location_info::WithLocation;
-    use spade_testutil::name_id;
+    use spade_common::name::testutil::name_id;
 
     use pretty_assertions::assert_eq;
 
@@ -1168,7 +1275,7 @@ mod item_visiting {
                 name: name_id(0, "test"),
                 head: EntityHead {
                     output_type: None,
-                    inputs: vec![],
+                    inputs: hir::ParameterList(vec![]),
                     type_params: vec![],
                 },
                 inputs: vec![],
@@ -1199,7 +1306,7 @@ mod module_visiting {
 
     use spade_ast::testutil::ast_ident;
     use spade_common::location_info::WithLocation;
-    use spade_testutil::name_id;
+    use spade_common::name::testutil::name_id;
 
     use pretty_assertions::assert_eq;
 
@@ -1228,7 +1335,7 @@ mod module_visiting {
                     name: name_id(0, "test"),
                     head: EntityHead {
                         output_type: None,
-                        inputs: vec![],
+                        inputs: hir::ParameterList(vec![]),
                         type_params: vec![],
                     },
                     inputs: vec![],

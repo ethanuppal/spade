@@ -192,6 +192,7 @@ impl ExprLocal for Loc<Expression> {
             ExprKind::If(_, _, _) => None,
             ExprKind::BinaryOperator(_, _, _) => None,
             ExprKind::EntityInstance(_, _) => None,
+            ExprKind::PipelineInstance { .. } => None,
         }
     }
 
@@ -271,17 +272,6 @@ impl ExprLocal for Loc<Expression> {
                     operands: elems.iter().map(|e| e.variable(subs)).collect(),
                     ty: self_type,
                 }))
-                // for elem in elems {
-                //     code.join(&elem.code(types)?);
-                // }
-                // let elem_code = elems
-                //     .iter()
-                //     // NOTE: we reverse here in order to get the first element in the lsb position
-                //     .rev()
-                //     .map(|elem| elem.variable())
-                //     .collect::<Vec<_>>()
-                //     .join(", ");
-                // code.join(&assign(&self.variable(), &format!("{{{}}}", elem_code)))
             }
             ExprKind::TupleIndex(tup, idx) => {
                 result.append(&mut tup.lower(types, subs)?);
@@ -299,32 +289,6 @@ impl ExprLocal for Loc<Expression> {
                     operands: vec![tup.variable(subs)],
                     ty: self_type,
                 }))
-                // code.join(&tup.code(types)?);
-
-                // let types = match types.expr_type(tup)? {
-                //     ConcreteType::Tuple(inner) => inner,
-                //     ConcreteType::Single { .. } => {
-                //         panic!("Tuple indexing of non-tuple after type check");
-                //     }
-                // };
-                // // Compute the start index of the element we're looking for
-                // let mut start_idx = 0;
-                // for i in 0..idx.inner {
-                //     start_idx += size_of_type(&types[i as usize]);
-                // }
-
-                // let end_idx = start_idx + size_of_type(&types[idx.inner as usize]) - 1;
-
-                // let index = if start_idx == end_idx {
-                //     format!("{}", start_idx)
-                // } else {
-                //     format!("{}:{}", end_idx, start_idx)
-                // };
-
-                // code.join(&assign(
-                //     &self.variable(),
-                //     &format!("{}[{}]", tup.variable(), index),
-                // ));
             }
             ExprKind::Block(block) => {
                 for statement in &block.statements {
@@ -351,6 +315,24 @@ impl ExprLocal for Loc<Expression> {
                 }));
             }
             ExprKind::EntityInstance(name, args) => {
+                for arg in args {
+                    result.append(&mut arg.value.lower(types, subs)?)
+                }
+                result.push(mir::Statement::Binding(mir::Binding {
+                    name: self.variable(subs),
+                    operator: mir::Operator::Instance(name.1.to_string()),
+                    operands: args
+                        .into_iter()
+                        .map(|arg| arg.value.variable(subs))
+                        .collect(),
+                    ty: types.expr_type(self)?.to_mir_type(),
+                }))
+            }
+            ExprKind::PipelineInstance {
+                depth: _,
+                name,
+                args,
+            } => {
                 for arg in args {
                     result.append(&mut arg.value.lower(types, subs)?)
                 }

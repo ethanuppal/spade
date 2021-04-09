@@ -253,17 +253,31 @@ impl<'a> Parser<'a> {
             self.eat(&TokenKind::CloseParen)?;
             result
         } else if let Some(start) = self.peek_and_eat(&TokenKind::Instance)? {
+            // TODO: Clean this up a bit
+            // Check if this is a pipeline or not
+            let pipeline_depth = if self.peek_and_eat(&TokenKind::OpenParen)?.is_some() {
+                if let Some(depth) = self.int_literal()? {
+                    self.eat(&TokenKind::CloseParen)?;
+                    Some(depth)
+                } else {
+                    return Err(Error::ExpectedPipelineDepth {
+                        got: self.eat_unconditional()?,
+                    });
+                }
+            } else {
+                None
+            };
+
             let name = self.path()?;
-            if let Some(open_paren) = self.peek_and_eat(&TokenKind::OpenParen)? {
+
+            let (args, span) = if let Some(open_paren) = self.peek_and_eat(&TokenKind::OpenParen)? {
                 let args = self.comma_separated(Self::expression, &TokenKind::CloseParen)?;
                 let end = self.eat(&TokenKind::CloseParen)?;
 
                 let span = lspan(start.span).merge(lspan(end.span.clone()));
                 let list_span = lspan(open_paren.span).merge(lspan(end.span));
-                Ok(
-                    Expression::EntityInstance(name, ArgumentList::Positional(args).at(&list_span))
-                        .at(&span),
-                )
+
+                (ArgumentList::Positional(args).at(&list_span), span)
             } else if let Some(open_brace) = self.peek_and_eat(&TokenKind::OpenBrace)? {
                 let args = self
                     .comma_separated(Self::named_argument, &TokenKind::CloseBrace)?
@@ -274,12 +288,15 @@ impl<'a> Parser<'a> {
 
                 let list_span = lspan(open_brace.span).merge(lspan(end.span.clone()));
                 let span = lspan(start.span).merge(lspan(end.span));
-                Ok(
-                    Expression::EntityInstance(name, ArgumentList::Named(args).at(&list_span))
-                        .at(&span),
-                )
+                (ArgumentList::Named(args).at(&list_span), span)
             } else {
-                Err(Error::ExpectedArgumentList(name))
+                return Err(Error::ExpectedArgumentList(name));
+            };
+
+            if let Some(depth) = pipeline_depth {
+                Ok(Expression::PipelineInstance(depth, name, args).at(&span))
+            } else {
+                Ok(Expression::EntityInstance(name, args).at(&span))
             }
         } else if let Some(tok) = self.peek_and_eat(&TokenKind::True)? {
             Ok(Expression::BoolLiteral(true).at(&tok.span))
@@ -681,12 +698,8 @@ impl<'a> Parser<'a> {
 
         // Input types
         self.eat(&TokenKind::OpenParen)?;
-        let clock = self.identifier()?;
-        let inputs = if self.peek_and_eat(&TokenKind::Comma)?.is_some() {
-            self.comma_separated(Self::name_and_type, &TokenKind::CloseParen)?
-        } else {
-            vec![]
-        };
+        // TODO: Can we use surrounded here?
+        let inputs = self.comma_separated(Self::name_and_type, &TokenKind::CloseParen)?;
         self.eat(&TokenKind::CloseParen)?;
 
         // Return type
@@ -708,7 +721,6 @@ impl<'a> Parser<'a> {
         Ok(Some(
             Pipeline {
                 depth,
-                clock,
                 name,
                 inputs,
                 output_type,
@@ -1865,7 +1877,7 @@ mod tests {
     #[test]
     fn pipeline_parsing_works() {
         let code = r#"
-            pipeline(2) test(clk, a: bool) -> bool {
+            pipeline(2) test(a: bool) -> bool {
                 stage {
                     let reg b = 0;
                 }
@@ -1876,7 +1888,6 @@ mod tests {
         "#;
 
         let expected = Pipeline {
-            clock: ast_ident("clk"),
             depth: Loc::new(2, lspan(0..0)),
             name: ast_ident("test"),
             inputs: vec![(
@@ -1917,14 +1928,13 @@ mod tests {
     #[test]
     fn pipelines_are_items() {
         let code = r#"
-            pipeline(2) test(clk, a: bool) -> bool {
+            pipeline(2) test(a: bool) -> bool {
             }
         "#;
 
         let expected = ModuleBody {
             members: vec![Item::Pipeline(
                 Pipeline {
-                    clock: ast_ident("clk"),
                     depth: Loc::new(2, lspan(0..0)),
                     name: ast_ident("test"),
                     inputs: vec![(
@@ -1939,5 +1949,24 @@ mod tests {
         };
 
         check_parse!(code, module_body, Ok(expected));
+    }
+
+    #[test]
+    fn pipeline_instanciation_works() {
+        let code = "inst(2) some_pipeline(x, y, z)";
+
+        let expected = Expression::PipelineInstance(
+            2.nowhere(),
+            ast_path("some_pipeline"),
+            ArgumentList::Positional(vec![
+                Expression::Identifier(ast_path("x")).nowhere(),
+                Expression::Identifier(ast_path("y")).nowhere(),
+                Expression::Identifier(ast_path("z")).nowhere(),
+            ])
+            .nowhere(),
+        )
+        .nowhere();
+
+        check_parse!(code, expression, Ok(expected));
     }
 }

@@ -78,3 +78,10 @@ impl std::fmt::Display for NameID {
         write!(f, "{}", self.1)
     }
 }
+
+pub mod testutil {
+    use super::*;
+    pub fn name_id(id: u64, name: &str) -> Loc<NameID> {
+        NameID(id, Path::from_strs(&[name])).nowhere()
+    }
+}

@@ -1,5 +1,6 @@
 use parse_tree_macros::trace_typechecker;
 use spade_ast_lowering::symbol_table::SymbolTable;
+use spade_common::location_info::WithLocation;
 use spade_hir::{Pipeline, PipelineBinding, PipelineStage};
 
 use crate::{equation::TypedExpression, fixed_types::t_clock, result::Error};
@@ -47,7 +48,6 @@ impl TypeState {
     pub fn visit_pipeline(&mut self, pipeline: &Pipeline, symtab: &SymbolTable) -> Result<()> {
         let Pipeline {
             name: _,
-            clock,
             inputs,
             body,
             result,
@@ -57,16 +57,19 @@ impl TypeState {
 
         // Add an equation for the clock
         let new_type = self.new_generic();
-        self.add_equation(TypedExpression::Name(clock.clone().inner), new_type);
-        self.unify_types(&TypedExpression::Name(clock.clone().inner), &t_clock())
-            .map_err(|(got, expected)| Error::NonClockClock {
+        self.add_equation(TypedExpression::Name(inputs[0].0.clone()), new_type);
+        self.add_equation(
+            TypedExpression::Name(inputs[0].0.clone()),
+            Self::type_var_from_hir(&inputs[0].1.inner),
+        );
+        self.unify_types(&TypedExpression::Name(inputs[0].0.clone()), &t_clock())
+            .map_err(|(got, expected)| Error::FirstPipelineArgNotClock {
                 expected,
-                got,
-                loc: clock.loc(),
+                spec: got.at_loc(&inputs[0].1.loc()),
             })?;
 
         // Add equations for the inputs
-        for (name, t) in inputs {
+        for (name, t) in inputs.iter().skip(1) {
             self.add_equation(
                 TypedExpression::Name(name.clone()),
                 Self::type_var_from_hir(t),
@@ -107,7 +110,7 @@ mod tests {
     use hir::{ExprKind, Expression, PipelineStage, TypeExpression, TypeSpec};
     use spade_ast_lowering::symbol_table::SymbolTable;
     use spade_common::location_info::WithLocation;
-    use spade_testutil::name_id;
+    use spade_common::name::testutil::name_id;
     use spade_types::{BaseType, KnownType};
 
     #[test]
@@ -136,15 +139,20 @@ mod tests {
     fn pipelines_typecheck_correctly() {
         let input = Pipeline {
             name: name_id(0, "pipe"),
-            clock: name_id(4, "clk"),
-            inputs: vec![(
-                name_id(1, "a").inner,
-                TypeSpec::Concrete(
-                    BaseType::Int.nowhere(),
-                    vec![TypeExpression::Integer(5).nowhere()],
-                )
-                .nowhere(),
-            )],
+            inputs: vec![
+                (
+                    name_id(10, "clk").inner,
+                    TypeSpec::Concrete(BaseType::Clock.nowhere(), vec![]).nowhere(),
+                ),
+                (
+                    name_id(1, "a").inner,
+                    TypeSpec::Concrete(
+                        BaseType::Int.nowhere(),
+                        vec![TypeExpression::Integer(5).nowhere()],
+                    )
+                    .nowhere(),
+                ),
+            ],
             body: vec![
                 PipelineStage {
                     bindings: vec![PipelineBinding {
@@ -185,12 +193,60 @@ mod tests {
 
         let t_b = get_type!(state, &TExpr::Name(name_id(1, "b").inner));
         let t_ret = get_type!(state, &TExpr::Id(10));
-        let t_clk = get_type!(state, &TExpr::Name(name_id(4, "clk").inner));
+        let t_clk = get_type!(state, &TExpr::Name(name_id(10, "clk").inner));
 
         ensure_same_type!(state, t_b, a_type);
         ensure_same_type!(state, t_ret, ret_type);
         ensure_same_type!(state, t_clk, clk_type);
 
         // ensure_same_type!(state, t_a, t_b);
+    }
+
+    #[test]
+    fn pipeline_first_argument_is_clock() {
+        // Add the head to the symtab
+        let symtab = SymbolTable::new();
+
+        // Add the entity to the symtab
+        let pipeline = Pipeline {
+            name: name_id(0, "pipe"),
+            inputs: vec![(
+                name_id(1, "clk").inner,
+                TypeSpec::Concrete(
+                    BaseType::Int.nowhere(),
+                    vec![TypeExpression::Integer(5).nowhere()],
+                )
+                .nowhere(),
+            )],
+            body: vec![
+                PipelineStage {
+                    bindings: vec![PipelineBinding {
+                        name: name_id(3, "b"),
+                        type_spec: None,
+                        value: Expression::ident(2, 1, "a").nowhere(),
+                    }
+                    .nowhere()],
+                }
+                .nowhere(),
+                PipelineStage { bindings: vec![] }.nowhere(),
+            ],
+            result: ExprKind::IntLiteral(0).with_id(10).nowhere(),
+            depth: 3.nowhere(),
+            output_type: TypeSpec::Concrete(
+                BaseType::Int.nowhere(),
+                vec![TypeExpression::Integer(8).nowhere()],
+            )
+            .nowhere(),
+        };
+
+        let mut state = TypeState::new();
+
+        match state.visit_pipeline(&pipeline, &symtab) {
+            Err(Error::FirstPipelineArgNotClock { .. }) => {}
+            other => {
+                println!("{}", format_trace_stack(&state.trace_stack));
+                panic!("Expected FirstPipelineArgNotClock, got {:?}", other)
+            }
+        }
     }
 }

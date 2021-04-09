@@ -91,15 +91,12 @@ pub struct Entity {
 impl WithLocation for Entity {}
 
 #[derive(PartialEq, Debug, Clone)]
-pub struct EntityHead {
-    pub inputs: Vec<(Loc<Identifier>, Loc<TypeSpec>)>,
-    pub output_type: Option<Loc<TypeSpec>>,
-    pub type_params: Vec<Identifier>,
-}
-impl EntityHead {
+pub struct ParameterList(pub Vec<(Loc<Identifier>, Loc<TypeSpec>)>);
+
+impl ParameterList {
     // Look up the type of an argument. Panics if no such argument exists
     pub fn arg_type(&self, name: &Identifier) -> TypeSpec {
-        for (arg, ty) in &self.inputs {
+        for (arg, ty) in &self.0 {
             if &arg.inner == name {
                 return ty.inner.clone();
             }
@@ -110,12 +107,19 @@ impl EntityHead {
         )
     }
 }
+
+#[derive(PartialEq, Debug, Clone)]
+pub struct EntityHead {
+    pub inputs: ParameterList,
+    pub output_type: Option<Loc<TypeSpec>>,
+    pub type_params: Vec<Identifier>,
+}
 impl WithLocation for EntityHead {}
 
 #[derive(PartialEq, Debug, Clone)]
 pub struct PipelineHead {
     pub depth: Loc<usize>,
-    pub inputs: Vec<(Loc<Identifier>, Loc<TypeSpec>)>,
+    pub inputs: ParameterList,
     pub output_type: Option<Loc<TypeSpec>>,
 }
 impl WithLocation for PipelineHead {}
@@ -137,7 +141,8 @@ impl WithLocation for PipelineStage {}
 #[derive(PartialEq, Debug, Clone)]
 pub struct Pipeline {
     pub name: Loc<NameID>,
-    pub clock: Loc<NameID>,
+    // The inputs to the pipeline as visible locally, rather than the inputs
+    // as visible externally in the PipelineHead
     pub inputs: Vec<(NameID, Loc<TypeSpec>)>,
     pub body: Vec<Loc<PipelineStage>>,
     pub result: Loc<Expression>,

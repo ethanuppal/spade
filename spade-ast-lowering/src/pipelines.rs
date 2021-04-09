@@ -62,7 +62,7 @@ pub fn pipeline_head(input: &ast::Pipeline, symtab: &mut SymbolTable) -> Result<
 
     Ok(hir::PipelineHead {
         depth,
-        inputs,
+        inputs: hir::ParameterList(inputs),
         output_type,
     })
 }
@@ -139,7 +139,6 @@ pub fn visit_pipeline(
 ) -> Result<Loc<hir::Pipeline>> {
     let ast::Pipeline {
         depth,
-        clock,
         name: _,
         inputs: _,
         output_type,
@@ -155,12 +154,14 @@ pub fn visit_pipeline(
         .expect("Attempting to lower a pipeline that has not been added to the symtab previously");
     let head = head.clone(); // An offering to the borrow checker. May ferris have mercy on us all
 
-    // Add the mandatory clock input to the symtab
-    let clock = symtab.add_local_variable(clock.clone()).at_loc(&clock);
+    if head.inputs.0.is_empty() {
+        return Err(Error::MissingPipelineClock { at_loc: head.loc() });
+    }
 
     // Add the inputs to the symtab
     let inputs = head
         .inputs
+        .0
         .iter()
         .map(|(ident, ty)| (symtab.add_local_variable(ident.clone()), ty.clone()))
         .collect();
@@ -214,7 +215,6 @@ pub fn visit_pipeline(
 
     Ok(hir::Pipeline {
         depth,
-        clock,
         name: id.at_loc(&pipeline.name),
         output_type,
         inputs,
@@ -230,7 +230,7 @@ mod binding_visiting {
 
     use spade_ast::testutil::{ast_ident, ast_path};
     use spade_common::location_info::WithLocation;
-    use spade_testutil::name_id;
+    use spade_common::name::testutil::name_id;
     use spade_types::BaseType;
 
     #[test]
@@ -327,7 +327,7 @@ mod stage_visiting {
 
     use spade_ast::testutil::{ast_ident, ast_path};
     use spade_common::location_info::WithLocation;
-    use spade_testutil::name_id;
+    use spade_common::name::testutil::name_id;
 
     #[test]
     fn stage_visiting_works() {
@@ -405,7 +405,7 @@ mod pipeline_visiting {
 
     use spade_ast::testutil::{ast_ident, ast_path};
     use spade_common::location_info::WithLocation;
-    use spade_testutil::name_id;
+    use spade_common::name::testutil::name_id;
 
     use pretty_assertions::assert_eq;
 
@@ -413,9 +413,14 @@ mod pipeline_visiting {
     fn correct_pipeline_works() {
         let input = ast::Pipeline {
             name: ast_ident("pipe"),
-            clock: ast_ident("clk"),
             depth: 2.nowhere(),
-            inputs: vec![(ast_ident("in"), ast::TypeSpec::Unit(().nowhere()).nowhere())],
+            inputs: vec![
+                (
+                    ast_ident("clk"),
+                    ast::TypeSpec::Unit(().nowhere()).nowhere(),
+                ),
+                (ast_ident("in"), ast::TypeSpec::Unit(().nowhere()).nowhere()),
+            ],
             output_type: Some(ast::TypeSpec::Unit(().nowhere()).nowhere()),
             stages: vec![
                 ast::PipelineStage {
@@ -440,8 +445,10 @@ mod pipeline_visiting {
 
         let expected = hir::Pipeline {
             name: name_id(0, "pipe"),
-            clock: name_id(1, "clk"),
-            inputs: vec![(name_id(2, "in").inner, hir::TypeSpec::unit().nowhere())],
+            inputs: vec![
+                (name_id(1, "clk").inner, hir::TypeSpec::unit().nowhere()),
+                (name_id(2, "in").inner, hir::TypeSpec::unit().nowhere()),
+            ],
             body: vec![
                 hir::PipelineStage {
                     bindings: vec![hir::PipelineBinding {
@@ -475,9 +482,11 @@ mod pipeline_visiting {
     fn incorrect_stage_count_causes_error() {
         let input = ast::Pipeline {
             name: ast_ident("pipe"),
-            clock: ast_ident("clk"),
             depth: 3.nowhere(),
-            inputs: vec![],
+            inputs: vec![(
+                ast_ident("clk"),
+                ast::TypeSpec::Unit(().nowhere()).nowhere(),
+            )],
             output_type: Some(ast::TypeSpec::Unit(().nowhere()).nowhere()),
             stages: vec![
                 ast::PipelineStage {
@@ -516,9 +525,11 @@ mod pipeline_visiting {
     fn early_return_causes_error() {
         let input = ast::Pipeline {
             name: ast_ident("pipe"),
-            clock: ast_ident("clk"),
             depth: 2.nowhere(),
-            inputs: vec![],
+            inputs: vec![(
+                ast_ident("clk"),
+                ast::TypeSpec::Unit(().nowhere()).nowhere(),
+            )],
             output_type: Some(ast::TypeSpec::Unit(().nowhere()).nowhere()),
             stages: vec![
                 ast::PipelineStage {
@@ -555,9 +566,11 @@ mod pipeline_visiting {
     fn pipeline_without_stages_is_invalid() {
         let input = ast::Pipeline {
             name: ast_ident("pipe"),
-            clock: ast_ident("clk"),
             depth: 0.nowhere(),
-            inputs: vec![],
+            inputs: vec![(
+                ast_ident("clk"),
+                ast::TypeSpec::Unit(().nowhere()).nowhere(),
+            )],
             output_type: Some(ast::TypeSpec::Unit(().nowhere()).nowhere()),
             stages: vec![],
         }
@@ -572,5 +585,43 @@ mod pipeline_visiting {
         let result = visit_pipeline(&input, &Path(vec![]), &mut symtab, &mut id_tracker);
 
         assert_eq!(result, Err(Error::NoPipelineStages { pipeline: input }));
+    }
+
+    #[test]
+    fn pipeline_without_clock_is_an_error() {
+        let input = ast::Pipeline {
+            name: ast_ident("pipe"),
+            depth: 2.nowhere(),
+            inputs: vec![],
+            output_type: Some(ast::TypeSpec::Unit(().nowhere()).nowhere()),
+            stages: vec![
+                ast::PipelineStage {
+                    bindings: vec![],
+                    result: None,
+                }
+                .nowhere(),
+                ast::PipelineStage {
+                    bindings: vec![],
+                    result: Some(ast::Expression::IntLiteral(0).nowhere()),
+                }
+                .nowhere(),
+            ],
+        }
+        .nowhere();
+
+        let mut symtab = SymbolTable::new();
+        let mut id_tracker = IdTracker::new();
+
+        crate::global_symbols::visit_pipeline(&input, &Path(vec![]), &mut symtab)
+            .expect("Failed to add pipeline to symtab");
+
+        let result = visit_pipeline(&input, &Path(vec![]), &mut symtab, &mut id_tracker);
+
+        assert_eq!(
+            result,
+            Err(Error::MissingPipelineClock {
+                at_loc: ().nowhere()
+            })
+        );
     }
 }

@@ -20,6 +20,6 @@ spade-types = {path = "../spade-types"}
 spade-hir = {path = "../spade-hir"}
 
 [dev-dependencies]
-spade-testutil = {path = "../spade-testutil"}
+# spade-testutil = {path = "../spade-testutil"}
 pretty_assertions = "0.6"
 matches = "0.1"

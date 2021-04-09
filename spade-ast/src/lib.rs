@@ -62,6 +62,7 @@ pub enum Expression {
     BinaryOperator(Box<Loc<Expression>>, BinaryOperator, Box<Loc<Expression>>),
     Block(Box<Block>),
     EntityInstance(Loc<Path>, Loc<ArgumentList>),
+    PipelineInstance(Loc<u128>, Loc<Path>, Loc<ArgumentList>),
 }
 impl WithLocation for Expression {}
 
@@ -127,8 +128,6 @@ impl WithLocation for PipelineStage {}
 #[derive(PartialEq, Debug, Clone)]
 pub struct Pipeline {
     pub depth: Loc<u128>,
-    /// Name of the local clock signal
-    pub clock: Loc<Identifier>,
     pub name: Loc<Identifier>,
     pub inputs: Vec<(Loc<Identifier>, Loc<TypeSpec>)>,
     pub output_type: Option<Loc<TypeSpec>>,

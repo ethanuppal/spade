@@ -58,6 +58,11 @@ pub enum ExprKind {
     /// argument names, for codegen purposes, the arguments must be ordered in
     /// the target order. I.e. they should all act as positioanl arguments
     EntityInstance(Loc<NameID>, Vec<Argument>),
+    PipelineInstance {
+        depth: Loc<u128>,
+        name: Loc<NameID>,
+        args: Vec<Argument>,
+    },
     If(
         Box<Loc<Expression>>,
         Box<Loc<Expression>>,

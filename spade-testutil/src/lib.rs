@@ -7,8 +7,7 @@ use spade_ast_lowering::{global_symbols, pipelines::visit_pipeline, visit_entity
 use spade_common::{
     error_reporting::CompilationError,
     id_tracker::IdTracker,
-    location_info::{Loc, WithLocation},
-    name::{NameID, Path},
+    name::Path,
     symbol_table::{SymbolTable, SymbolTracker},
 };
 use spade_hir_lowering::{ProcessedEntity, ProcessedItem, ProcessedPipeline};
@@ -123,10 +122,6 @@ pub fn parse_typecheck_module_body(input: &str) -> ParseTypececkResult {
         items,
         symbol_tracker: symtab.symbol_tracker(),
     }
-}
-
-pub fn name_id(id: u64, name: &str) -> Loc<NameID> {
-    NameID(id, Path::from_strs(&[name])).nowhere()
 }
 
 #[macro_export]

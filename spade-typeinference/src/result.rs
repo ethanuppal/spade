@@ -1,7 +1,10 @@
 use thiserror::Error;
 
 use super::equation::{TypeVar, TypedExpression};
-use spade_common::{location_info::Loc, name::Identifier};
+use spade_common::{
+    location_info::{Loc, WithLocation},
+    name::Identifier,
+};
 
 /// A trace of a unification error. The `failing` field indicates which exact type failed to unify,
 /// while the `inside` is the "top level" type which failed to unify if it's not the same as
@@ -14,6 +17,7 @@ pub struct UnificationTrace {
     pub failing: TypeVar,
     pub inside: Option<TypeVar>,
 }
+impl WithLocation for UnificationTrace {}
 impl std::fmt::Display for UnificationTrace {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.outer())
@@ -137,6 +141,12 @@ pub enum Error {
     TupleIndexOfNonTuple { got: TypeVar, loc: Loc<()> },
     #[error("Tuple index out of boudns")]
     TupleIndexOutOfBounds { index: Loc<u128>, actual_size: u128 },
+
+    #[error("The first argument of a pipeline must be a clock")]
+    FirstPipelineArgNotClock {
+        expected: UnificationTrace,
+        spec: Loc<UnificationTrace>,
+    },
 
     #[error("Attempting to instanciate generic type")]
     GenericTypeInstanciation,

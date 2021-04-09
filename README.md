@@ -27,7 +27,7 @@ and `gaming` directories.
 
 ## Getting started
 1. Clone the repo `git clone git@gitlab.com:TheZoq2/spade.git`
-2. Initalize the submodules `git submodules init && git submodules update`
+2. Initialize the submodules `git submodules init && git submodules update`
 3. Build the project `cargo build`
 4. Build your spade code using `cargo run -- <input.spade> -o output.v`
 

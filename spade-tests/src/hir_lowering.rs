@@ -466,9 +466,66 @@ mod tests {
     }
 
     #[test]
+    fn pipeline_instanciation_works() {
+        let code = r#"
+            pipeline(2) sub(clk: clk, a: int<16>) -> int<16> {
+                stage {}
+                stage {a}
+            }
+
+            entity top(clk: clk) -> int<16> {
+                inst(2) sub(clk, 0)
+            }
+        "#;
+
+        let expected = vec![
+            entity!("sub"; (
+                    "_i_clk", n(100, "clk"), Type::Bool,
+                    "_i_a", n(0, "a"), Type::Int(16)
+                ) -> Type::Int(16); {
+                    (reg n(1, "a_s0"); Type::Int(16); clock (n(100, "clk")); n(0, "a"));
+                    (reg n(2, "a_s1"); Type::Int(16); clock (n(100, "clk")); n(1, "a_s0"));
+                } => n(2, "a_s1")
+            ),
+            entity!("top"; ("_i_clk", n(100, "clk"), Type::Bool) -> Type::Int(16); {
+                (const 1; Type::Int(16); ConstantValue::Int(0));
+                (e(0); Type::Int(16); Instance(("sub".to_string())); n(100, "clk"), e(1))
+            } => e(0)),
+        ];
+
+        let module = parse_typecheck_module_body(code);
+        let mut id_tracker = module.symbol_tracker;
+
+        let mut result = vec![];
+        for processed in module.items {
+            match processed {
+                spade_hir_lowering::ProcessedItem::Entity(processed) => {
+                    result.push(
+                        generate_entity(&processed.entity, &processed.type_state).report_failure(),
+                    );
+                }
+                spade_hir_lowering::ProcessedItem::Pipeline(processed) => {
+                    result.push(
+                        generate_pipeline(
+                            &processed.pipeline,
+                            &processed.type_state,
+                            &mut id_tracker,
+                        )
+                        .report_failure(),
+                    );
+                }
+            }
+        }
+
+        for (exp, res) in expected.into_iter().zip(result.into_iter()) {
+            assert_same_mir!(&res, &exp);
+        }
+    }
+
+    #[test]
     fn pipelines_work() {
         let code = r#"
-            pipeline(3) pl(clk, a: int<16>) -> int<16> {
+            pipeline(3) pl(clk: clk, a: int<16>) -> int<16> {
                 stage {
                     let reg x = a + a;
                 }

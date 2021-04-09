@@ -166,6 +166,13 @@ impl CompilationError for Error {
                         format!("Expected: {}", expected),
                         format!("     Got: {}", got),
                     ]),
+                Error::FirstPipelineArgNotClock { expected, spec } => Diagnostic::error()
+                    .with_message(format!(
+                        "First pipeline argument must be a clock. Got {}",
+                        spec
+                    ))
+                    .with_labels(vec![Label::primary(file_id, spec.span)
+                        .with_message(format!("Expected {}", expected))]),
             };
 
         let writer = StandardStream::stderr(color_choice(no_color));

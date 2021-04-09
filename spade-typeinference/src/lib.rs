@@ -1,7 +1,7 @@
 // This algorithm is based off the excelent lecture here
 // https://www.youtube.com/watch?v=xJXcZp2vgLs
 
-use hir::Argument;
+use hir::{Argument, ParameterList};
 use parse_tree_macros::trace_typechecker;
 use spade_ast_lowering::symbol_table::{SymbolTable, SymbolTableExt};
 use spade_common::{location_info::Loc, name::NameID};
@@ -167,6 +167,50 @@ impl TypeState {
     }
 
     #[trace_typechecker]
+    pub fn visit_argument_list(
+        &mut self,
+        args: &[Argument],
+        params: &ParameterList,
+        symtab: &SymbolTable,
+    ) -> Result<()> {
+        for (
+            i,
+            Argument {
+                target,
+                value,
+                kind,
+            },
+        ) in args.iter().enumerate()
+        {
+            let target_type = Self::type_var_from_hir(&params.arg_type(&target));
+            self.visit_expression(&value, symtab)?;
+
+            self.unify_types(&target_type, value)
+                .map_err(|(expected, got)| match kind {
+                    hir::ArgumentKind::Positional => Error::PositionalArgumentMismatch {
+                        index: i,
+                        expr: value.loc(),
+                        expected,
+                        got,
+                    },
+                    hir::ArgumentKind::Named => Error::NamedArgumentMismatch {
+                        name: target.clone(),
+                        expr: value.loc(),
+                        expected,
+                        got,
+                    },
+                    hir::ArgumentKind::ShortNamed => Error::ShortNamedArgumentMismatch {
+                        name: target.clone(),
+                        expected,
+                        got,
+                    },
+                })?;
+        }
+
+        Ok(())
+    }
+
+    #[trace_typechecker]
     pub fn visit_expression(
         &mut self,
         expression: &Loc<Expression>,
@@ -312,40 +356,24 @@ impl TypeState {
             ExprKind::EntityInstance(name, args) => {
                 let head = symtab.entity_by_id(&name.inner);
                 // Unify the types of the arguments
-                for (
-                    i,
-                    Argument {
-                        target,
-                        value,
-                        kind,
-                    },
-                ) in args.iter().enumerate()
-                {
-                    let target_type = Self::type_var_from_hir(&head.arg_type(target));
-                    self.visit_expression(&value, symtab)?;
+                self.visit_argument_list(args, &head.inputs, symtab)?;
 
-                    self.unify_types(&target_type, value).map_err(
-                        |(expected, got)| match kind {
-                            hir::ArgumentKind::Positional => Error::PositionalArgumentMismatch {
-                                index: i,
-                                expr: value.loc(),
-                                expected,
-                                got,
-                            },
-                            hir::ArgumentKind::Named => Error::NamedArgumentMismatch {
-                                name: target.clone(),
-                                expr: value.loc(),
-                                expected,
-                                got,
-                            },
-                            hir::ArgumentKind::ShortNamed => Error::ShortNamedArgumentMismatch {
-                                name: target.clone(),
-                                expected,
-                                got,
-                            },
-                        },
-                    )?;
-                }
+                let return_type = Self::type_var_from_hir(
+                    &head
+                        .output_type
+                        .as_ref()
+                        .expect("Unit return type from entity is unsupported"),
+                );
+                self.unify_expression_generic_error(expression, &return_type)?;
+            }
+            ExprKind::PipelineInstance {
+                depth: _,
+                name,
+                args,
+            } => {
+                let head = symtab.pipeline_by_id(&name.inner);
+                // Unify the types of the arguments
+                self.visit_argument_list(args, &head.inputs, symtab)?;
 
                 let return_type = Self::type_var_from_hir(
                     &head
@@ -682,7 +710,7 @@ mod tests {
     use spade_ast::testutil::{ast_ident, ast_path};
     use spade_ast_lowering::symbol_table::{SymbolTable, Thing};
     use spade_common::location_info::WithLocation;
-    use spade_testutil::name_id;
+    use spade_common::name::testutil::name_id;
 
     #[test]
     fn int_literals_have_type_known_int() {
@@ -1111,13 +1139,13 @@ mod tests {
 
         // Add the entity to the symtab
         let entity = hir::EntityHead {
-            inputs: vec![
+            inputs: hir::ParameterList(vec![
                 (
                     ast_ident("a"),
                     TypeSpec::Concrete(BaseType::Bool.nowhere(), vec![]).nowhere(),
                 ),
                 (ast_ident("b"), TypeSpec::int(10).nowhere()),
-            ],
+            ]),
             output_type: Some(TypeSpec::int(5).nowhere()),
             type_params: vec![],
         };
@@ -1139,6 +1167,89 @@ mod tests {
                 },
             ],
         )
+        .with_id(2)
+        .nowhere();
+
+        let mut state = TypeState::new();
+
+        // Add eqs for the literals
+        let expr_a = TExpr::Name(name_id(0, "a").inner);
+        let expr_b = TExpr::Name(name_id(1, "b").inner);
+        state.add_equation(expr_a.clone(), TVar::Generic(100));
+        state.add_equation(expr_b.clone(), TVar::Generic(101));
+
+        state.visit_expression(&input, &symtab).unwrap();
+
+        let t0 = get_type!(state, &TExpr::Id(0));
+        let t1 = get_type!(state, &TExpr::Id(1));
+        let t2 = get_type!(state, &TExpr::Id(2));
+
+        let ta = get_type!(state, &expr_a);
+        let tb = get_type!(state, &expr_b);
+
+        // Check the generic type variables
+        ensure_same_type!(state, t0, TVar::Known(t_bool(), vec![], None));
+        ensure_same_type!(
+            state,
+            t1,
+            TVar::Known(
+                t_int(),
+                vec![TypeVar::Known(KnownType::Integer(10), vec![], None)],
+                None,
+            )
+        );
+        ensure_same_type!(
+            state,
+            t2,
+            TVar::Known(
+                t_int(),
+                vec![TypeVar::Known(KnownType::Integer(5), vec![], None)],
+                None,
+            )
+        );
+
+        // Check the constraints added to the literals
+        ensure_same_type!(state, t0, ta);
+        ensure_same_type!(state, t1, tb);
+    }
+
+    #[test]
+    fn pipeline_type_inference_works() {
+        // Add the head to the symtab
+        let mut symtab = SymbolTable::new();
+
+        // Add the entity to the symtab
+        let entity = hir::PipelineHead {
+            depth: 2.nowhere(),
+            inputs: hir::ParameterList(vec![
+                (
+                    ast_ident("a"),
+                    TypeSpec::Concrete(BaseType::Bool.nowhere(), vec![]).nowhere(),
+                ),
+                (ast_ident("b"), TypeSpec::int(10).nowhere()),
+            ]),
+            output_type: Some(TypeSpec::int(5).nowhere()),
+        };
+
+        let entity_name =
+            symtab.add_thing(ast_path("test").inner, Thing::Pipeline(entity.nowhere()));
+
+        let input = ExprKind::PipelineInstance {
+            depth: 2.nowhere(),
+            name: entity_name.nowhere(),
+            args: vec![
+                Argument {
+                    target: ast_ident("a"),
+                    value: Expression::ident(0, 0, "x").nowhere(),
+                    kind: hir::ArgumentKind::Named,
+                },
+                Argument {
+                    target: ast_ident("b"),
+                    value: Expression::ident(1, 1, "b").nowhere(),
+                    kind: hir::ArgumentKind::Named,
+                },
+            ],
+        }
         .with_id(2)
         .nowhere();
 

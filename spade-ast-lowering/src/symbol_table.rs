@@ -89,6 +89,7 @@ pub trait SymbolTableExt {
     fn lookup_id(&self, name: &Loc<Path>) -> Result<NameID, Error>;
     fn add_local_variable_at_offset(&mut self, offset: usize, name: Loc<Identifier>) -> NameID;
     fn lookup_pipeline(&self, name: &Loc<Path>) -> Result<(NameID, &Loc<PipelineHead>), Error>;
+    fn pipeline_by_id(&self, id: &NameID) -> &Loc<PipelineHead>;
 }
 
 impl SymbolTableExt for SymbolTable {
@@ -111,6 +112,16 @@ impl SymbolTableExt for SymbolTable {
         match self.items.get(&id) {
             Some(Thing::Entity(head)) => head,
             Some(other) => panic!("attempted to look up entity {} but it was {:?}", id, other),
+            None => panic!("No thing entry for {:?}", id),
+        }
+    }
+    fn pipeline_by_id(&self, id: &NameID) -> &Loc<PipelineHead> {
+        match self.items.get(&id) {
+            Some(Thing::Pipeline(head)) => head,
+            Some(other) => panic!(
+                "attempted to look up pipeline {} but it was {:?}",
+                id, other
+            ),
             None => panic!("No thing entry for {:?}", id),
         }
     }

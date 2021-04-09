@@ -62,35 +62,20 @@ impl CompilationError for Error {
                         got.kind_string()
                     )),
                 ]),
-            Error::ArgumentListLenghtMismatch {
-                expected,
-                got,
-                at,
-                for_entity,
-            } => Diagnostic::error()
+            Error::ArgumentListLenghtMismatch { expected, got, at } => Diagnostic::error()
                 .with_message(format!("Expected {} arguments, got {}", expected, got))
-                .with_labels(vec![
-                    Label::primary(file_id, at.span)
-                        .with_message(format!("Expected {} arguments", expected)),
-                    Label::secondary(file_id, for_entity.span)
-                        .with_message(format!("When instanciating this entity",)),
-                ]),
+                .with_labels(vec![Label::primary(file_id, at.span)
+                    .with_message(format!("Expected {} arguments", expected))]),
             Error::DuplicateNamedBindings { new, prev_loc } => Diagnostic::error()
                 .with_message(format!("Multiple bindings to {}", new))
                 .with_labels(vec![Label::primary(file_id, prev_loc.span)
                     .with_message(format!("previously bound here"))]),
-            Error::NoSuchArgument { name, for_entity } => Diagnostic::error()
+            Error::NoSuchArgument { name } => Diagnostic::error()
                 .with_message(format!("{}: No such argument to", name))
                 .with_labels(vec![
-                    Label::primary(file_id, name.span).with_message(format!("No such argument")),
-                    Label::secondary(file_id, for_entity.span)
-                        .with_message(format!("Has no argument named {}", name)),
+                    Label::primary(file_id, name.span).with_message(format!("No such argument"))
                 ]),
-            Error::MissingArguments {
-                missing,
-                for_entity,
-                at,
-            } => {
+            Error::MissingArguments { missing, at } => {
                 let plural = if missing.len() == 1 {
                     "argument"
                 } else {
@@ -110,8 +95,6 @@ impl CompilationError for Error {
                             .with_message(format!("Missing {}", plural)),
                         Label::secondary(file_id, at.span)
                             .with_message(format!("Missing {}", arg_list)),
-                        Label::secondary(file_id, for_entity.span)
-                            .with_message(format!("Entity defined here")),
                     ])
             }
             Error::MissingPipelineReturn { in_stage } => Diagnostic::error()
@@ -144,6 +127,18 @@ impl CompilationError for Error {
                 .with_notes(vec![format!(
                     "Only the last stage of a pipeline can return values"
                 )]),
+            Error::PipelineDepthMissmatch { expected, got } => Diagnostic::error()
+                .with_message(format!(
+                    "Pipeline depth mismatch. Expected {} got {}",
+                    expected, got
+                ))
+                .with_labels(vec![Label::primary(file_id, got.span)
+                    .with_message(format!("Expected {}", expected))]),
+            Error::MissingPipelineClock { at_loc } => Diagnostic::error()
+                .with_message(format!("Missing clock argument."))
+                .with_labels(vec![Label::primary(file_id, at_loc.span)
+                    .with_message(format!("Expected clock argument"))])
+                .with_notes(vec![format!("All pipelines take a clock as an argument")]),
         };
 
         let writer = StandardStream::stderr(color_choice(no_color));
