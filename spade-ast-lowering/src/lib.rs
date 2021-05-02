@@ -2,6 +2,7 @@ pub mod error;
 pub mod error_reporting;
 pub mod global_symbols;
 pub mod pipelines;
+pub mod types;
 pub mod symbol_table;
 
 pub use spade_common::id_tracker;
@@ -80,25 +81,43 @@ pub fn visit_type_expression(
 
 pub fn visit_type_spec(t: &ast::TypeSpec, symtab: &mut SymbolTable) -> Result<hir::TypeSpec> {
     match t {
-        ast::TypeSpec::Named(name, params) => {
+        ast::TypeSpec::Named(path, params) => {
+            // Lookup the referenced type
             // NOTE: this weird scope is required because the borrow of t lasts
             // until the end of the outer scope even if we clone here.
-            let t = {
-                let (_, t) = symtab.lookyp_type_symbol(name)?;
-                t.clone()
+            let (base_id, t) = {
+                symtab.lookyp_type_symbol(path)?.clone()
             };
 
-            let base = match t {
-                TypeSymbol::Alias(t) => t.clone(),
-                _ => todo!("Implement support for generic type parameters"),
-            };
+            // Check if the type is a declared type or a generic argument.
+            match &t.inner {
+                TypeSymbol::Declared ( generic_args ) => {
+                    // We'll defer checking the validity of generic args to the type checker,
+                    // but we still have to visit them now
+                    let params = params
+                        .iter()
+                        .map(|p| p.try_map_ref(|p| visit_type_expression(p, symtab)))
+                        .collect::<Result<Vec<_>>>()?;
 
-            let params = params
-                .iter()
-                .map(|p| p.try_map_ref(|p| visit_type_expression(p, symtab)))
-                .collect::<Result<Vec<_>>>()?;
+                    Ok(hir::TypeSpec::Declared(base_id.at_loc(path), params))
+                }
+                TypeSymbol::GenericArg => {
+                    // If this typename refers to a generic argument we need to make
+                    // sure that no generic arguments are passed, as generic names
+                    // can't have generic parameters
 
-            Ok(hir::TypeSpec::Concrete(base, params))
+                    if !params.is_empty() {
+                        let at_loc = ().between(params.first().unwrap(), params.last().unwrap());
+                        Err(Error::GenericsGivenForGeneric{
+                            at_loc,
+                            for_type: base_id.1.clone().at_loc(&t.loc())
+                        })
+                    }
+                    else {
+                        Ok(hir::TypeSpec::Generic(base_id.at_loc(&path)))
+                    }
+                }
+            }
         }
         ast::TypeSpec::Tuple(inner) => {
             let inner = inner
@@ -108,10 +127,7 @@ pub fn visit_type_spec(t: &ast::TypeSpec, symtab: &mut SymbolTable) -> Result<hi
 
             Ok(hir::TypeSpec::Tuple(inner))
         }
-        ast::TypeSpec::Unit(w) => Ok(hir::TypeSpec::Concrete(
-            w.map(|_| spade_types::BaseType::Unit),
-            vec![],
-        )),
+        ast::TypeSpec::Unit(w) => Ok(hir::TypeSpec::Unit(w.clone())),
     }
 }
 
@@ -201,6 +217,9 @@ pub fn visit_item(
         ast::Item::TraitDef(_) => {
             // NOTE: Traits are invisible at the HIR stage, so we just ignore them
             Ok(None)
+        }
+        ast::Item::Type(_) => {
+            todo!("Visit types")
         }
     }
 }

@@ -1,11 +1,7 @@
 pub mod error_reporting;
 pub mod lexer;
 
-use spade_ast::{
-    ArgumentList, BinaryOperator, Block, Entity, Expression, FunctionDecl, Item, ModuleBody,
-    NamedArgument, Pipeline, PipelineBindModifier, PipelineBinding, PipelineStage, Register,
-    Statement, TraitDef, TypeExpression, TypeParam, TypeSpec,
-};
+use spade_ast::{ArgumentList, BinaryOperator, Block, Entity, Enum, Expression, FunctionDecl, Item, ModuleBody, NamedArgument, Pipeline, PipelineBindModifier, PipelineBinding, PipelineStage, Register, Statement, TraitDef, TypeDeclKind, TypeDeclaration, TypeExpression, TypeParam, TypeSpec};
 use spade_common::{
     location_info::{lspan, Loc, WithLocation},
     name::{Identifier, Path},
@@ -833,12 +829,66 @@ impl<'a> Parser<'a> {
         Ok(Some(result.between(&start_token.span, &end_token.span)))
     }
 
+
+    #[trace_parser]
+    pub fn enum_option(&mut self) -> Result<(Loc<Identifier>, Option<Vec<Loc<TypeSpec>>>)> {
+        let name = self.identifier()?;
+
+        let args = if self.peek_kind(&TokenKind::OpenParen)? {
+            Some(self.surrounded(
+                &TokenKind::OpenParen,
+                |s: &mut Self| s.comma_separated(Self::type_spec, &TokenKind::CloseParen),
+                &TokenKind::CloseParen
+            )?.0)
+        }
+        else {
+            None
+        };
+
+        Ok((name, args))
+    }
+
+    #[trace_parser]
+    pub fn enum_declaration(&mut self) -> Result<Option<Loc<TypeDeclaration>>> {
+        let start_token = peek_for!(self, &TokenKind::Enum);
+
+        let name = self.identifier()?;
+
+        let generic_args = self.generics_list()?;
+
+        let (options, options_loc) = self.surrounded(
+            &TokenKind::OpenBrace,
+            |s: &mut Self| s.comma_separated(Self::enum_option, &TokenKind::CloseBrace),
+            &TokenKind::CloseBrace,
+        )?;
+
+        let result = TypeDeclaration {
+            name: name.clone(),
+            kind: TypeDeclKind::Enum(Enum{name, options}.between(&start_token.span, &options_loc)),
+            generic_args,
+        }.between(&start_token.span, &options_loc);
+
+        Ok(Some(result))
+    }
+
+    #[trace_parser]
+    pub fn type_declaration(&mut self) -> Result<Option<Loc<TypeDeclaration>>> {
+        // The head of all type declarations will be `(enum|struct|type...) Name<T, S, ...>`
+        // since we want access to the name and type params, we'll parse all those three, then
+        // defer to parsing the rest.
+
+        self.first_successful(vec! [
+            &Self::enum_declaration
+        ])
+    }
+
     #[trace_parser]
     pub fn item(&mut self) -> Result<Option<Item>> {
         self.first_successful(vec![
             &|s: &mut Self| s.entity().map(|e| e.map(Item::Entity)),
             &|s: &mut Self| s.trait_def().map(|e| e.map(Item::TraitDef)),
             &|s: &mut Self| s.pipeline().map(|e| e.map(Item::Pipeline)),
+            &|s: &mut Self| s.type_declaration().map(|e| e.map(Item::Type)),
         ])
     }
 
@@ -924,9 +974,9 @@ impl<'a> Parser<'a> {
     fn surrounded<T>(
         &mut self,
         start: &TokenKind,
-        inner: impl Fn(&mut Self) -> Result<Option<T>>,
+        inner: impl Fn(&mut Self) -> Result<T>,
         end: &TokenKind,
-    ) -> Result<(Option<T>, Loc<()>)> {
+    ) -> Result<(T, Loc<()>)> {
         let opener = self.eat(start)?;
         let result = inner(self)?;
         // TODO: Better error handling here. We are throwing away potential EOFs
@@ -1970,5 +2020,66 @@ mod tests {
         .nowhere();
 
         check_parse!(code, expression, Ok(expected));
+    }
+
+    #[test]
+    fn enums_declarations_parse() {
+        let code = "enum State {
+            First,
+            Second(bool),
+            Third(bool, bool)
+        }";
+
+        let expected = Item::Type(TypeDeclaration {
+            name: ast_ident("State"),
+            kind: TypeDeclKind::Enum(Enum{
+                name: ast_ident("State"),
+                options: vec![
+                    (ast_ident("First"), None),
+                    (ast_ident("Second"), Some(vec![
+                        TypeSpec::Named(ast_path("bool"), vec![]).nowhere()
+                    ])),
+                    (ast_ident("Third"), Some(vec![
+                        TypeSpec::Named(ast_path("bool"), vec![]).nowhere(),
+                        TypeSpec::Named(ast_path("bool"), vec![]).nowhere()
+                    ])),
+                ]
+            }.nowhere()),
+            generic_args: vec![]
+        }.nowhere());
+
+        check_parse!(code, item, Ok(Some(expected)));
+    }
+
+    #[test]
+    fn enums_declarations_with_type_args_parse() {
+        let code = "enum State<T, #N> {
+            First,
+            Second(T),
+            Third(N, bool)
+        }";
+
+        let expected = Item::Type(TypeDeclaration {
+            name: ast_ident("State"),
+            kind: TypeDeclKind::Enum(Enum{
+                name: ast_ident("State"),
+                options: vec![
+                    (ast_ident("First"), None),
+                    (ast_ident("Second"), Some(vec![
+                        TypeSpec::Named(ast_path("T"), vec![]).nowhere()
+                    ])),
+                    (ast_ident("Third"), Some(vec![
+                        TypeSpec::Named(ast_path("N"), vec![]).nowhere(),
+                        TypeSpec::Named(ast_path("bool"), vec![]).nowhere()
+                    ])),
+                ]
+            }.nowhere()),
+            generic_args: vec![
+                TypeParam::TypeName(ast_ident("T").inner).nowhere(),
+                TypeParam::Integer(ast_ident("N")).nowhere()
+            ]
+        }.nowhere());
+
+        check_parse!(code, item, Ok(Some(expected)));
     }
 }

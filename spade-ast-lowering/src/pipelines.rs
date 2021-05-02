@@ -244,7 +244,7 @@ mod binding_visiting {
 
         let expected = hir::PipelineBinding {
             name: name_id(1, "a"),
-            type_spec: Some(hir::TypeSpec::Concrete(BaseType::Unit.nowhere(), vec![]).nowhere()),
+            type_spec: Some(hir::TypeSpec::Unit(().nowhere()).nowhere()),
             value: hir::Expression::ident(0, 0, "b").nowhere(),
         };
 

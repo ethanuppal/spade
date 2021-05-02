@@ -139,6 +139,9 @@ impl CompilationError for Error {
                 .with_labels(vec![Label::primary(file_id, at_loc.span)
                     .with_message(format!("Expected clock argument"))])
                 .with_notes(vec![format!("All pipelines take a clock as an argument")]),
+            Error::GenericsGivenForGeneric{at_loc, for_type} => {
+                Diagnostic::error()
+            }
         };
 
         let writer = StandardStream::stderr(color_choice(no_color));

@@ -53,32 +53,56 @@ pub enum TypeExpression {
 }
 impl WithLocation for TypeExpression {}
 
+/// A specification of a type to be used. For example, the types of input/output arguments the type
+/// of fields in a struct etc.
 #[derive(PartialEq, Debug, Clone)]
-/// The type is not unit with 0 or more type parameters. The amount of type parameters is
-/// checked by the type checker.
 pub enum TypeSpec {
-    /// The type is a fixed known type with 0 or more type parameters
-    Concrete(Loc<types::BaseType>, Vec<Loc<TypeExpression>>),
-    /// The type is a generic type parameter visible in the current scope
-    Generic(NameID),
+    /// The type is a declared type (struct, enum, typedef etc.) with n arguments
+    Declared(Loc<NameID>, Vec<Loc<TypeExpression>>),
+    /// Tye type is a generic argument visible in the current scope
+    Generic(Loc<NameID>),
     /// The type is a tuple of other variables
     Tuple(Vec<Loc<TypeSpec>>),
+    Unit(Loc<()>),
 }
 impl WithLocation for TypeSpec {}
 
 // Quick functions for creating types wihtout typing so much
 impl TypeSpec {
     pub fn unit() -> Self {
-        TypeSpec::Concrete(types::BaseType::Unit.nowhere(), vec![])
+        TypeSpec::Unit(().nowhere())
     }
 
     pub fn int(size: u128) -> Self {
-        TypeSpec::Concrete(
-            types::BaseType::Int.nowhere(),
-            vec![TypeExpression::Integer(size).nowhere()],
-        )
+        todo!("How do we do this?")
+        // TypeSpec::Concrete(
+        //     types::BaseType::Int.nowhere(),
+        //     vec![TypeExpression::Integer(size).nowhere()],
+        // )
     }
 }
+
+/// Declaration of an enum
+#[derive(PartialEq, Debug, Clone)]
+pub struct Enum {
+    pub options: Vec<(Loc<NameID>, Vec<Loc<TypeSpec>>)>
+}
+impl WithLocation for Enum {}
+
+#[derive(PartialEq, Debug, Clone)]
+pub enum TypeDeclKind {
+    Enum(Loc<Enum>)
+}
+
+/// A declaration of a new type
+#[derive(PartialEq, Debug, Clone)]
+pub struct TypeDeclaration {
+    pub name: Loc<NameID>,
+    pub kind: TypeDeclKind,
+    pub generic_args: Vec<Loc<TypeParam>>
+}
+impl WithLocation for TypeDeclaration {}
+
 
 #[derive(PartialEq, Debug, Clone)]
 pub struct Entity {

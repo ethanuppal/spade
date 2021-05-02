@@ -54,6 +54,8 @@ pub enum TokenKind {
     Trait,
     #[token("fn")]
     Function,
+    #[token("enum")]
+    Enum,
 
     // Math operators
     #[token("+")]
@@ -143,6 +145,7 @@ impl TokenKind {
             TokenKind::Else => "else",
             TokenKind::Trait => "trait",
             TokenKind::Function => "fn",
+            TokenKind::Enum => "enum",
 
             TokenKind::Assignment => "=",
             TokenKind::Plus => "+",

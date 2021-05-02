@@ -25,7 +25,7 @@ pub enum Error {
 #[derive(PartialEq, Debug, Clone)]
 pub enum Thing {
     /// Defintion of a named type
-    Type(TypeSymbol),
+    Type(Loc<TypeSymbol>),
     TraitDef(Loc<TraitDef>),
     Entity(Loc<EntityHead>),
     Pipeline(Loc<PipelineHead>),
@@ -45,8 +45,7 @@ impl Thing {
 
     pub fn loc(&self) -> Loc<()> {
         match self {
-            Thing::Type(TypeSymbol::Alias(i)) => i.loc(),
-            Thing::Type(TypeSymbol::Param(i)) => i.loc(),
+            Thing::Type(i) => i.loc(),
             Thing::TraitDef(i) => i.loc(),
             Thing::Entity(i) => i.loc(),
             Thing::Pipeline(i) => i.loc(),
@@ -71,9 +70,20 @@ pub struct TraitDef {
 impl WithLocation for TraitDef {}
 
 #[derive(Clone, Debug, PartialEq)]
+pub enum GenericArg {
+    TypeName(Identifier),
+    Number(Identifier)
+}
+impl WithLocation for GenericArg {}
+
+/// A previously declared type symbol
+#[derive(Clone, Debug, PartialEq)]
 pub enum TypeSymbol {
-    Alias(Loc<BaseType>),
-    Param(Loc<TypeParam>),
+    /// A fixed type that has been declared, like a typedef, enum or struct with the
+    /// specified generic arguments
+    Declared(Vec<Loc<GenericArg>>),
+    /// A generic type present in the current scope
+    GenericArg
 }
 impl WithLocation for TypeSymbol {}
 
@@ -83,7 +93,7 @@ pub trait SymbolTableExt {
     fn add_local_variable(&mut self, name: Loc<Identifier>) -> NameID;
     fn entity_by_id(&self, id: &NameID) -> &Loc<EntityHead>;
     fn has_symbol(&self, name: Path) -> bool;
-    fn lookyp_type_symbol(&self, name: &Loc<Path>) -> Result<(NameID, &TypeSymbol), Error>;
+    fn lookyp_type_symbol(&self, name: &Loc<Path>) -> Result<(NameID, &Loc<TypeSymbol>), Error>;
     fn lookup_variable(&self, name: &Loc<Path>) -> Result<NameID, Error>;
     fn lookup_entity(&self, name: &Loc<Path>) -> Result<(NameID, &Loc<EntityHead>), Error>;
     fn lookup_id(&self, name: &Loc<Path>) -> Result<NameID, Error>;
@@ -137,7 +147,7 @@ impl SymbolTableExt for SymbolTable {
         }
     }
 
-    fn lookyp_type_symbol(&self, name: &Loc<Path>) -> Result<(NameID, &TypeSymbol), Error> {
+    fn lookyp_type_symbol(&self, name: &Loc<Path>) -> Result<(NameID, &Loc<TypeSymbol>), Error> {
         let id = self.lookup_id(name)?;
 
         match self.items.get(&id).unwrap() {

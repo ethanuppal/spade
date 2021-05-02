@@ -1,3 +1,5 @@
+use spade_common::name::Identifier;
+
 /// Base type without generic parameters
 #[derive(Clone, Debug, PartialEq)]
 pub enum BaseType {
@@ -31,11 +33,13 @@ impl std::fmt::Display for BaseType {
 #[derive(Debug, Clone, PartialEq)]
 pub enum ConcreteType {
     Tuple(Vec<ConcreteType>),
+    Enum{name: Identifier, options: Vec<(Identifier, ConcreteType)>},
     Single {
         base: KnownType,
         params: Vec<ConcreteType>,
     },
 }
+
 impl std::fmt::Display for ConcreteType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -49,6 +53,9 @@ impl std::fmt::Display for ConcreteType {
                         .collect::<Vec<_>>()
                         .join(", ")
                 )
+            }
+            ConcreteType::Enum{name, options: _} => {
+                write!(f, "{}", name)
             }
             ConcreteType::Single { base, params } => {
                 let params_str = if params.is_empty() {

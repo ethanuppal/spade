@@ -11,6 +11,9 @@ pub enum TypeExpression {
     Integer(u128),
 }
 impl WithLocation for TypeExpression {}
+
+/// A specification of a type to be used. For example, the types of input/output arguments the type
+/// of fields in a struct etc.
 #[derive(PartialEq, Debug, Clone)]
 pub enum TypeSpec {
     Tuple(Vec<Loc<TypeSpec>>),
@@ -167,6 +170,28 @@ pub struct TraitDef {
 }
 impl WithLocation for TraitDef {}
 
+/// Declaration of an enum
+#[derive(PartialEq, Debug, Clone)]
+pub struct Enum {
+    pub name: Loc<Identifier>,
+    pub options: Vec<(Loc<Identifier>, Option<Vec<Loc<TypeSpec>>>)>
+}
+impl WithLocation for Enum {}
+
+#[derive(PartialEq, Debug, Clone)]
+pub enum TypeDeclKind {
+    Enum(Loc<Enum>)
+}
+
+/// A declaration of a new type
+#[derive(PartialEq, Debug, Clone)]
+pub struct TypeDeclaration {
+    pub name: Loc<Identifier>,
+    pub kind: TypeDeclKind,
+    pub generic_args: Vec<Loc<TypeParam>>
+}
+impl WithLocation for TypeDeclaration {}
+
 /// Items are things typically present at the top level of a module such as
 /// entities, pipelines, submodules etc.
 #[derive(PartialEq, Debug, Clone)]
@@ -174,6 +199,7 @@ pub enum Item {
     Entity(Loc<Entity>),
     Pipeline(Loc<Pipeline>),
     TraitDef(Loc<TraitDef>),
+    Type(Loc<TypeDeclaration>),
 }
 impl WithLocation for Item {}
 
