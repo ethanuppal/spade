@@ -4,18 +4,14 @@ use logos::Logos;
 
 use spade_ast as ast;
 use spade_ast_lowering::{global_symbols, pipelines::visit_pipeline, visit_entity};
-use spade_common::{
-    error_reporting::CompilationError,
-    id_tracker::IdTracker,
-    name::Path,
-    symbol_table::{SymbolTable, SymbolTracker},
-};
+use spade_common::{error_reporting::CompilationError, id_tracker::IdTracker, name::Path};
+use spade_hir::symbol_table::{FrozenSymtab, SymbolTable};
 use spade_hir_lowering::{ProcessedEntity, ProcessedItem, ProcessedPipeline};
 use spade_parser::{self as parser, lexer};
 use spade_typeinference::{self as typeinference};
 
-pub fn parse_typecheck_entity<'a>(input: &str) -> ProcessedEntity {
-    let mut items = parse_typecheck_module_body(input).items;
+pub fn parse_typecheck_entity<'a>(input: &str) -> (ProcessedEntity, FrozenSymtab) {
+    let ParseTypececkResult { mut items, symtab } = parse_typecheck_module_body(input);
 
     if items.is_empty() {
         panic!("No entities items");
@@ -23,13 +19,13 @@ pub fn parse_typecheck_entity<'a>(input: &str) -> ProcessedEntity {
         panic!("Found multiple items");
     } else {
         match items.pop().unwrap() {
-            ProcessedItem::Entity(e) => e,
+            ProcessedItem::Entity(e) => (e, symtab),
             ProcessedItem::Pipeline(_) => panic!("Found a pipeline, expected entity"),
         }
     }
 }
 
-pub fn parse_typecheck_pipeline<'a>(input: &str) -> (ProcessedPipeline, SymbolTracker) {
+pub fn parse_typecheck_pipeline<'a>(input: &str) -> (ProcessedPipeline, FrozenSymtab) {
     let mut result = parse_typecheck_module_body(input);
 
     if result.items.is_empty() {
@@ -38,7 +34,7 @@ pub fn parse_typecheck_pipeline<'a>(input: &str) -> (ProcessedPipeline, SymbolTr
         panic!("Found multiple items");
     } else {
         match result.items.pop().unwrap() {
-            ProcessedItem::Pipeline(p) => (p, result.symbol_tracker),
+            ProcessedItem::Pipeline(p) => (p, result.symtab),
             ProcessedItem::Entity(_) => panic!("Found entity, expected pipeline"),
         }
     }
@@ -46,7 +42,7 @@ pub fn parse_typecheck_pipeline<'a>(input: &str) -> (ProcessedPipeline, SymbolTr
 
 pub struct ParseTypececkResult {
     pub items: Vec<ProcessedItem>,
-    pub symbol_tracker: SymbolTracker,
+    pub symtab: FrozenSymtab,
 }
 
 pub fn parse_typecheck_module_body(input: &str) -> ParseTypececkResult {
@@ -67,7 +63,7 @@ pub fn parse_typecheck_module_body(input: &str) -> ParseTypececkResult {
     let module_ast = try_or_report!(parser.module_body());
 
     let mut symtab = SymbolTable::new();
-    spade_builtins::populate_symtab(&mut symtab);
+    spade_ast_lowering::builtins::populate_symtab(&mut symtab);
     for item in &module_ast.members {
         try_or_report!(global_symbols::visit_item(item, &Path(vec![]), &mut symtab));
     }
@@ -97,6 +93,9 @@ pub fn parse_typecheck_module_body(input: &str) -> ParseTypececkResult {
             ast::Item::TraitDef(_) => {
                 todo!("Parse and typecheck trait definitions")
             }
+            ast::Item::Type(_) => {
+                // Types are invisible at this level
+            }
             ast::Item::Pipeline(pipeline_ast) => {
                 println!("visiting pipeline");
                 let hir = try_or_report!(visit_pipeline(
@@ -120,7 +119,7 @@ pub fn parse_typecheck_module_body(input: &str) -> ParseTypececkResult {
 
     ParseTypececkResult {
         items,
-        symbol_tracker: symtab.symbol_tracker(),
+        symtab: symtab.freeze(),
     }
 }
 

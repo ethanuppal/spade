@@ -7,8 +7,9 @@ use logos::Logos;
 use structopt::StructOpt;
 
 use spade_ast as ast;
-use spade_ast_lowering::{global_symbols, symbol_table, visit_entity};
+use spade_ast_lowering::{global_symbols, visit_entity};
 use spade_common::{error_reporting::CompilationError, id_tracker, name::Path};
+use spade_hir::symbol_table;
 use spade_hir_lowering::{ProcessedEntity, ProcessedItem, ProcessedPipeline};
 pub use spade_parser::lexer;
 use spade_parser::Parser;
@@ -56,7 +57,7 @@ fn main() -> Result<()> {
     let module_ast = try_or_report!(parser.module_body());
 
     let mut symtab = symbol_table::SymbolTable::new();
-    spade_builtins::populate_symtab(&mut symtab);
+    spade_ast_lowering::builtins::populate_symtab(&mut symtab);
 
     // First pass over the module to collect all global symbols
     for item in &module_ast.members {
@@ -87,6 +88,9 @@ fn main() -> Result<()> {
             ast::Item::TraitDef(_) => {
                 todo!("Trait definitions are not supported by the compiler")
             }
+            ast::Item::Type(_) => {
+                // Types are invisible at this level
+            }
             ast::Item::Pipeline(pipeline_ast) => {
                 let hir = try_or_report!(spade_ast_lowering::pipelines::visit_pipeline(
                     &pipeline_ast,
@@ -107,12 +111,13 @@ fn main() -> Result<()> {
     }
 
     let mut module_code = vec![];
-    let mut symbol_tracker = symtab.symbol_tracker();
+    let mut frozen_symtab = symtab.freeze();
     for item in hir_items {
         match item {
             ProcessedItem::Entity(e) => {
                 let mir = try_or_report!(spade_hir_lowering::generate_entity(
                     &e.entity,
+                    frozen_symtab.symtab(),
                     &e.type_state
                 ));
 
@@ -124,7 +129,7 @@ fn main() -> Result<()> {
                 let mir = try_or_report!(spade_hir_lowering::generate_pipeline(
                     &p.pipeline,
                     &p.type_state,
-                    &mut symbol_tracker
+                    &mut frozen_symtab
                 ));
 
                 let code = spade_mir::codegen::entity_code(&mir);

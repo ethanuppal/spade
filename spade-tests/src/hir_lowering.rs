@@ -15,6 +15,7 @@ mod tests {
     };
     use spade_testutil::{
         parse_typecheck_entity, parse_typecheck_module_body, parse_typecheck_pipeline,
+        ParseTypececkResult,
     };
 
     pub trait ResultExt<T> {
@@ -56,6 +57,15 @@ mod tests {
         };
     }
 
+    macro_rules! build_entity {
+        ($code:expr) => {{
+            let (processed, symtab) = parse_typecheck_entity($code);
+            let result = generate_entity(&processed.entity, symtab.symtab(), &processed.type_state)
+                .report_failure();
+            result
+        }};
+    }
+
     #[test]
     fn entity_defintions_are_correct() {
         let code = r#"
@@ -70,11 +80,7 @@ mod tests {
         ) -> Type::Int(16); {
         } => n(0, "a"));
 
-        let processed = parse_typecheck_entity(code);
-
-        let result = generate_entity(&processed.entity, &processed.type_state).report_failure();
-
-        assert_same_mir!(&result, &expected);
+        assert_same_mir!(&build_entity!(code), &expected);
     }
 
     #[test]
@@ -97,11 +103,7 @@ mod tests {
             } => e(0)
         };
 
-        let processed = parse_typecheck_entity(code);
-
-        let result = generate_entity(&processed.entity, &processed.type_state).report_failure();
-
-        assert_same_mir!(&result, &expected);
+        assert_same_mir!(&build_entity!(code), &expected);
     }
 
     #[test]
@@ -116,10 +118,7 @@ mod tests {
             (const 0; Type::Bool; ConstantValue::Bool(true))
         } => e(0)};
 
-        let processed = parse_typecheck_entity(code);
-
-        let result = generate_entity(&processed.entity, &processed.type_state).report_failure();
-        assert_same_mir!(&result, &expected);
+        assert_same_mir!(&build_entity!(code), &expected);
     }
 
     #[test]
@@ -138,10 +137,7 @@ mod tests {
             } => e(0)
         );
 
-        let processed = parse_typecheck_entity(code);
-
-        let result = generate_entity(&processed.entity, &processed.type_state).report_failure();
-        assert_same_mir!(&result, &expected);
+        assert_same_mir!(&build_entity!(code), &expected);
     }
 
     #[test]
@@ -160,10 +156,7 @@ mod tests {
             } => e(0)
         );
 
-        let processed = parse_typecheck_entity(code);
-
-        let result = generate_entity(&processed.entity, &processed.type_state).report_failure();
-        assert_same_mir!(&result, &expected);
+        assert_same_mir!(&build_entity!(code), &expected);
     }
 
     #[test]
@@ -182,10 +175,7 @@ mod tests {
             } => e(0)
         );
 
-        let processed = parse_typecheck_entity(code);
-
-        let result = generate_entity(&processed.entity, &processed.type_state).report_failure();
-        assert_same_mir!(&result, &expected);
+        assert_same_mir!(&build_entity!(code), &expected);
     }
 
     #[test]
@@ -204,10 +194,7 @@ mod tests {
             } => e(0)
         );
 
-        let processed = parse_typecheck_entity(code);
-
-        let result = generate_entity(&processed.entity, &processed.type_state).report_failure();
-        assert_same_mir!(&result, &expected);
+        assert_same_mir!(&build_entity!(code), &expected);
     }
 
     #[test]
@@ -226,10 +213,7 @@ mod tests {
             } => e(0)
         );
 
-        let processed = parse_typecheck_entity(code);
-
-        let result = generate_entity(&processed.entity, &processed.type_state).report_failure();
-        assert_same_mir!(&result, &expected);
+        assert_same_mir!(&build_entity!(code), &expected);
     }
 
     #[test]
@@ -248,10 +232,7 @@ mod tests {
             } => e(0)
         );
 
-        let processed = parse_typecheck_entity(code);
-
-        let result = generate_entity(&processed.entity, &processed.type_state).report_failure();
-        assert_same_mir!(&result, &expected);
+        assert_same_mir!(&build_entity!(code), &expected);
     }
 
     #[test]
@@ -270,10 +251,7 @@ mod tests {
             } => e(0)
         );
 
-        let processed = parse_typecheck_entity(code);
-
-        let result = generate_entity(&processed.entity, &processed.type_state).report_failure();
-        assert_same_mir!(&result, &expected);
+        assert_same_mir!(&build_entity!(code), &expected);
     }
 
     #[test]
@@ -292,10 +270,7 @@ mod tests {
             } => e(0)
         );
 
-        let processed = parse_typecheck_entity(code);
-
-        let result = generate_entity(&processed.entity, &processed.type_state).report_failure();
-        assert_same_mir!(&result, &expected);
+        assert_same_mir!(&build_entity!(code), &expected);
     }
 
     #[test]
@@ -314,10 +289,7 @@ mod tests {
             } => e(0)
         );
 
-        let processed = parse_typecheck_entity(code);
-
-        let result = generate_entity(&processed.entity, &processed.type_state).report_failure();
-        assert_same_mir!(&result, &expected);
+        assert_same_mir!(&build_entity!(code), &expected);
     }
 
     #[test]
@@ -337,10 +309,7 @@ mod tests {
             } => n(0, "res")
         };
 
-        let processed = parse_typecheck_entity(code);
-
-        let result = generate_entity(&processed.entity, &processed.type_state).report_failure();
-        assert_same_mir!(&result, &expected);
+        assert_same_mir!(&build_entity!(code), &expected);
     }
 
     #[test]
@@ -366,10 +335,7 @@ mod tests {
             } => n(0, "res")
         };
 
-        let processed = parse_typecheck_entity(code);
-
-        let result = generate_entity(&processed.entity, &processed.type_state).report_failure();
-        assert_same_mir!(&result, &expected);
+        assert_same_mir!(&build_entity!(code), &expected);
     }
 
     #[test]
@@ -389,10 +355,7 @@ mod tests {
             } => n(2, "res")
         };
 
-        let processed = parse_typecheck_entity(code);
-
-        let result = generate_entity(&processed.entity, &processed.type_state).report_failure();
-        assert_same_mir!(&result, &expected);
+        assert_same_mir!(&build_entity!(code), &expected);
     }
 
     #[test]
@@ -416,10 +379,7 @@ mod tests {
             } => e(0)
         );
 
-        let processed = parse_typecheck_entity(code);
-
-        let result = generate_entity(&processed.entity, &processed.type_state).report_failure();
-        assert_same_mir!(&result, &expected);
+        assert_same_mir!(&build_entity!(code), &expected);
     }
 
     #[test]
@@ -446,14 +406,15 @@ mod tests {
             } => e(0)),
         ];
 
-        let module = parse_typecheck_module_body(code);
+        let ParseTypececkResult { items, symtab } = parse_typecheck_module_body(code);
 
         let mut result = vec![];
-        for processed in module.items {
+        for processed in items {
             match processed {
                 spade_hir_lowering::ProcessedItem::Entity(processed) => {
                     result.push(
-                        generate_entity(&processed.entity, &processed.type_state).report_failure(),
+                        generate_entity(&processed.entity, symtab.symtab(), &processed.type_state)
+                            .report_failure(),
                     );
                 }
                 _ => panic!("expected an entity"),
@@ -494,24 +455,21 @@ mod tests {
         ];
 
         let module = parse_typecheck_module_body(code);
-        let mut id_tracker = module.symbol_tracker;
+        let mut symtab = module.symtab;
 
         let mut result = vec![];
         for processed in module.items {
             match processed {
                 spade_hir_lowering::ProcessedItem::Entity(processed) => {
                     result.push(
-                        generate_entity(&processed.entity, &processed.type_state).report_failure(),
+                        generate_entity(&processed.entity, symtab.symtab(), &processed.type_state)
+                            .report_failure(),
                     );
                 }
                 spade_hir_lowering::ProcessedItem::Pipeline(processed) => {
                     result.push(
-                        generate_pipeline(
-                            &processed.pipeline,
-                            &processed.type_state,
-                            &mut id_tracker,
-                        )
-                        .report_failure(),
+                        generate_pipeline(&processed.pipeline, &processed.type_state, &mut symtab)
+                            .report_failure(),
                     );
                 }
             }

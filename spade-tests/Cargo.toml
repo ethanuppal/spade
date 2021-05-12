@@ -22,6 +22,5 @@ spade-hir = {path = "../spade-hir"}
 spade-mir = {path = "../spade-mir"}
 spade-hir-lowering = {path = "../spade-hir-lowering"}
 spade-typeinference = {path = "../spade-typeinference"}
-spade-builtins = {path = "../spade-builtins"}
 spade-ast-lowering = {path = "../spade-ast-lowering"}
 parse_tree_macros = {path = "../parse_tree_macros"}

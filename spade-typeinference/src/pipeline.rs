@@ -1,6 +1,6 @@
 use parse_tree_macros::trace_typechecker;
-use spade_ast_lowering::symbol_table::SymbolTable;
 use spade_common::location_info::WithLocation;
+use spade_hir::symbol_table::SymbolTable;
 use spade_hir::{Pipeline, PipelineBinding, PipelineStage};
 
 use crate::{equation::TypedExpression, fixed_types::t_clock, result::Error};
@@ -62,11 +62,14 @@ impl TypeState {
             TypedExpression::Name(inputs[0].0.clone()),
             Self::type_var_from_hir(&inputs[0].1.inner),
         );
-        self.unify_types(&TypedExpression::Name(inputs[0].0.clone()), &t_clock())
-            .map_err(|(got, expected)| Error::FirstPipelineArgNotClock {
-                expected,
-                spec: got.at_loc(&inputs[0].1.loc()),
-            })?;
+        self.unify_types(
+            &TypedExpression::Name(inputs[0].0.clone()),
+            &t_clock(symtab),
+        )
+        .map_err(|(got, expected)| Error::FirstPipelineArgNotClock {
+            expected,
+            spec: got.at_loc(&inputs[0].1.loc()),
+        })?;
 
         // Add equations for the inputs
         for (name, t) in inputs.iter().skip(1) {
@@ -103,15 +106,17 @@ mod tests {
     use super::*;
 
     use crate::TypeVar as TVar;
+    use crate::TypeVar;
     use crate::TypedExpression as TExpr;
 
     use crate::{ensure_same_type, get_type, HasType};
-    use crate::{format_trace_stack, hir};
-    use hir::{ExprKind, Expression, PipelineStage, TypeExpression, TypeSpec};
-    use spade_ast_lowering::symbol_table::SymbolTable;
+    use crate::{fixed_types::t_int, format_trace_stack, hir, kvar};
+    use hir::{dtype, testutil::t_num, ExprKind, Expression, PipelineStage};
+    use spade_ast::testutil::ast_path;
     use spade_common::location_info::WithLocation;
     use spade_common::name::testutil::name_id;
-    use spade_types::{BaseType, KnownType};
+    use spade_hir::symbol_table::SymbolTable;
+    use spade_types::KnownType;
 
     #[test]
     fn pipeline_bindings_fixes_type_of_name() {
@@ -125,7 +130,7 @@ mod tests {
         let symtab = SymbolTable::new();
 
         let expr_a = TExpr::Name(name_id(1, "b").inner);
-        state.add_equation(expr_a.clone(), TVar::Generic(100));
+        state.add_equation(expr_a.clone(), TVar::Unknown(100));
 
         state.visit_pipeline_binding(&input, &symtab).unwrap();
 
@@ -137,21 +142,15 @@ mod tests {
 
     #[test]
     fn pipelines_typecheck_correctly() {
+        let mut symtab = SymbolTable::new();
+
+        spade_ast_lowering::builtins::populate_symtab(&mut symtab);
+
         let input = Pipeline {
             name: name_id(0, "pipe"),
             inputs: vec![
-                (
-                    name_id(10, "clk").inner,
-                    TypeSpec::Concrete(BaseType::Clock.nowhere(), vec![]).nowhere(),
-                ),
-                (
-                    name_id(1, "a").inner,
-                    TypeSpec::Concrete(
-                        BaseType::Int.nowhere(),
-                        vec![TypeExpression::Integer(5).nowhere()],
-                    )
-                    .nowhere(),
-                ),
+                (name_id(10, "clk").inner, dtype!(symtab => "clk")),
+                (name_id(1, "a").inner, dtype!(symtab => "int"; (t_num(5)))),
             ],
             body: vec![
                 PipelineStage {
@@ -167,29 +166,16 @@ mod tests {
             ],
             result: ExprKind::IntLiteral(0).with_id(10).nowhere(),
             depth: 3.nowhere(),
-            output_type: TypeSpec::Concrete(
-                BaseType::Int.nowhere(),
-                vec![TypeExpression::Integer(8).nowhere()],
-            )
-            .nowhere(),
+            output_type: dtype!(symtab => "int"; (t_num(8))),
         };
 
         let mut state = TypeState::new();
-        let mut symtab = SymbolTable::new();
 
         state.visit_pipeline(&input, &mut symtab).unwrap();
 
-        let a_type = TVar::Known(
-            KnownType::Type(BaseType::Int),
-            vec![TVar::Known(KnownType::Integer(5), vec![], None)],
-            None,
-        );
-        let ret_type = TVar::Known(
-            KnownType::Type(BaseType::Int),
-            vec![TVar::Known(KnownType::Integer(8), vec![], None)],
-            None,
-        );
-        let clk_type = TVar::Known(KnownType::Type(BaseType::Clock), vec![], None);
+        let a_type = kvar!( t_int(&symtab); ( kvar!( KnownType::Integer(5) ) ) );
+        let ret_type = kvar!( t_int(&symtab); ( kvar!( KnownType::Integer(8) ) ) );
+        let clk_type = kvar!(t_clock(&symtab));
 
         let t_b = get_type!(state, &TExpr::Name(name_id(1, "b").inner));
         let t_ret = get_type!(state, &TExpr::Id(10));
@@ -205,19 +191,13 @@ mod tests {
     #[test]
     fn pipeline_first_argument_is_clock() {
         // Add the head to the symtab
-        let symtab = SymbolTable::new();
+        let mut symtab = SymbolTable::new();
+        spade_ast_lowering::builtins::populate_symtab(&mut symtab);
 
         // Add the entity to the symtab
         let pipeline = Pipeline {
             name: name_id(0, "pipe"),
-            inputs: vec![(
-                name_id(1, "clk").inner,
-                TypeSpec::Concrete(
-                    BaseType::Int.nowhere(),
-                    vec![TypeExpression::Integer(5).nowhere()],
-                )
-                .nowhere(),
-            )],
+            inputs: vec![(name_id(1, "clk").inner, dtype!(symtab => "int"; (t_num(5))))],
             body: vec![
                 PipelineStage {
                     bindings: vec![PipelineBinding {
@@ -232,11 +212,7 @@ mod tests {
             ],
             result: ExprKind::IntLiteral(0).with_id(10).nowhere(),
             depth: 3.nowhere(),
-            output_type: TypeSpec::Concrete(
-                BaseType::Int.nowhere(),
-                vec![TypeExpression::Integer(8).nowhere()],
-            )
-            .nowhere(),
+            output_type: dtype!(symtab => "int"; (t_num(8))),
         };
 
         let mut state = TypeState::new();

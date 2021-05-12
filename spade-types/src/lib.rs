@@ -1,31 +1,20 @@
-use spade_common::name::Identifier;
+use spade_common::name::{Identifier, NameID};
 
-/// Base type without generic parameters
-#[derive(Clone, Debug, PartialEq)]
-pub enum BaseType {
+#[derive(Debug, Clone, PartialEq)]
+pub enum PrimitiveType {
     Int,
-    Bool,
+    Uint,
     Clock,
-    Unit,
+    Bool,
 }
 
-impl spade_common::location_info::WithLocation for BaseType {}
-
-impl std::fmt::Display for BaseType {
+impl std::fmt::Display for PrimitiveType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            BaseType::Int => {
-                write!(f, "int")
-            }
-            BaseType::Bool => {
-                write!(f, "bool")
-            }
-            BaseType::Clock => {
-                write!(f, "Clock")
-            }
-            BaseType::Unit => {
-                write!(f, "()")
-            }
+            PrimitiveType::Int => write!(f, "int"),
+            PrimitiveType::Uint => write!(f, "uint"),
+            PrimitiveType::Clock => write!(f, "clk"),
+            PrimitiveType::Bool => write!(f, "bool"),
         }
     }
 }
@@ -33,11 +22,15 @@ impl std::fmt::Display for BaseType {
 #[derive(Debug, Clone, PartialEq)]
 pub enum ConcreteType {
     Tuple(Vec<ConcreteType>),
-    Enum{name: Identifier, options: Vec<(Identifier, ConcreteType)>},
+    Enum {
+        name: Identifier,
+        options: Vec<(Identifier, ConcreteType)>,
+    },
     Single {
-        base: KnownType,
+        base: PrimitiveType,
         params: Vec<ConcreteType>,
     },
+    Integer(u128),
 }
 
 impl std::fmt::Display for ConcreteType {
@@ -54,7 +47,7 @@ impl std::fmt::Display for ConcreteType {
                         .join(", ")
                 )
             }
-            ConcreteType::Enum{name, options: _} => {
+            ConcreteType::Enum { name, options: _ } => {
                 write!(f, "{}", name)
             }
             ConcreteType::Single { base, params } => {
@@ -73,13 +66,16 @@ impl std::fmt::Display for ConcreteType {
 
                 write!(f, "{}{}", base, params_str)
             }
+            ConcreteType::Integer(size) => {
+                write!(f, "#{}", size)
+            }
         }
     }
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum KnownType {
-    Type(BaseType),
+    Type(NameID),
     Integer(u128),
 }
 

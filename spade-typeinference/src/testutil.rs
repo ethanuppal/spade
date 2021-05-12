@@ -1,18 +1,19 @@
+use spade_hir::symbol_table::SymbolTable;
 use spade_types::KnownType;
 
 use crate::fixed_types::t_int;
 use crate::TypeVar as TVar;
 
-pub fn sized_int(size: u128) -> TVar {
+pub fn sized_int(size: u128, symtab: &SymbolTable) -> TVar {
     TVar::Known(
-        t_int(),
+        t_int(symtab),
         vec![TVar::Known(KnownType::Integer(size), vec![], None)],
         None,
     )
 }
 
-pub fn unsized_int(id: u64) -> TVar {
-    TVar::Known(t_int(), vec![TVar::Generic(id)], None)
+pub fn unsized_int(id: u64, symtab: &SymbolTable) -> TVar {
+    TVar::Known(t_int(symtab), vec![TVar::Unknown(id)], None)
 }
 
 #[macro_export]
@@ -45,4 +46,12 @@ macro_rules! ensure_same_type {
             panic!("Types are not the same")
         }
     };
+}
+
+/// Shorthand macro for constructing TypeVar::Known
+#[macro_export]
+macro_rules! kvar {
+    ($base:expr $(; ( $( $params:expr ),* ) )? ) => {
+        TypeVar::Known($base, vec![ $( $($params),* )? ], None)
+    }
 }

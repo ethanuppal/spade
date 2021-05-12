@@ -84,4 +84,9 @@ pub mod testutil {
     pub fn name_id(id: u64, name: &str) -> Loc<NameID> {
         NameID(id, Path::from_strs(&[name])).nowhere()
     }
+
+    /// Shorthand for creating a name_id with static strs as name
+    pub fn name_id_p(id: u64, name: &[&str]) -> Loc<NameID> {
+        NameID(id, Path::from_strs(name)).nowhere()
+    }
 }

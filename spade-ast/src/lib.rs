@@ -93,9 +93,12 @@ pub enum TypeParam {
 impl WithLocation for TypeParam {}
 
 #[derive(PartialEq, Debug, Clone)]
+pub struct ParameterList(pub Vec<(Loc<Identifier>, Loc<TypeSpec>)>);
+
+#[derive(PartialEq, Debug, Clone)]
 pub struct Entity {
     pub name: Loc<Identifier>,
-    pub inputs: Vec<(Loc<Identifier>, Loc<TypeSpec>)>,
+    pub inputs: ParameterList,
     pub output_type: Option<Loc<TypeSpec>>,
     /// The body is an expression for ID assignment purposes, but semantic analysis
     /// ensures that it is always a block.
@@ -133,13 +136,24 @@ impl WithLocation for PipelineStage {}
 pub struct Pipeline {
     pub depth: Loc<u128>,
     pub name: Loc<Identifier>,
-    pub inputs: Vec<(Loc<Identifier>, Loc<TypeSpec>)>,
+    pub inputs: ParameterList,
     pub output_type: Option<Loc<TypeSpec>>,
     /// The body is a list of expression for ID assignment purposes, but semantic analysis
     /// ensures that it is always a block.
     pub stages: Vec<Loc<PipelineStage>>,
 }
 impl WithLocation for Pipeline {}
+
+/// A definition of a function without a body.
+#[derive(PartialEq, Debug, Clone)]
+pub struct FunctionDecl {
+    pub name: Loc<Identifier>,
+    pub self_arg: Option<Loc<()>>,
+    pub inputs: ParameterList,
+    pub return_type: Option<Loc<TypeSpec>>,
+    pub type_params: Vec<Loc<TypeParam>>,
+}
+impl WithLocation for FunctionDecl {}
 
 #[derive(PartialEq, Debug, Clone)]
 pub struct Register {
@@ -150,17 +164,6 @@ pub struct Register {
     pub value_type: Option<Loc<TypeSpec>>,
 }
 impl WithLocation for Register {}
-
-/// A definition of a function without a body.
-#[derive(PartialEq, Debug, Clone)]
-pub struct FunctionDecl {
-    pub name: Loc<Identifier>,
-    pub self_arg: Option<Loc<()>>,
-    pub inputs: Vec<(Loc<Identifier>, Loc<TypeSpec>)>,
-    pub return_type: Option<Loc<TypeSpec>>,
-    pub type_params: Vec<Loc<TypeParam>>,
-}
-impl WithLocation for FunctionDecl {}
 
 /// A definition of a trait
 #[derive(PartialEq, Debug, Clone)]
@@ -174,13 +177,13 @@ impl WithLocation for TraitDef {}
 #[derive(PartialEq, Debug, Clone)]
 pub struct Enum {
     pub name: Loc<Identifier>,
-    pub options: Vec<(Loc<Identifier>, Option<Vec<Loc<TypeSpec>>>)>
+    pub options: Vec<(Loc<Identifier>, Option<ParameterList>)>,
 }
 impl WithLocation for Enum {}
 
 #[derive(PartialEq, Debug, Clone)]
 pub enum TypeDeclKind {
-    Enum(Loc<Enum>)
+    Enum(Loc<Enum>),
 }
 
 /// A declaration of a new type
@@ -188,7 +191,7 @@ pub enum TypeDeclKind {
 pub struct TypeDeclaration {
     pub name: Loc<Identifier>,
     pub kind: TypeDeclKind,
-    pub generic_args: Vec<Loc<TypeParam>>
+    pub generic_args: Vec<Loc<TypeParam>>,
 }
 impl WithLocation for TypeDeclaration {}
 

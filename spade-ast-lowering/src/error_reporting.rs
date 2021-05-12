@@ -1,10 +1,11 @@
 use std::path::Path;
 
-use crate::{symbol_table::Error as LookupError, Error};
+use crate::Error;
 use codespan_reporting::diagnostic::{Diagnostic, Label};
 use codespan_reporting::files::SimpleFiles;
 use codespan_reporting::term::{self, termcolor::StandardStream};
 use spade_common::error_reporting::{codespan_config, color_choice, CompilationError};
+use spade_hir::symbol_table::Error as LookupError;
 
 impl CompilationError for Error {
     fn report(self, filename: &Path, file_content: &str, no_color: bool) {
@@ -56,6 +57,16 @@ impl CompilationError for Error {
                 .with_message(format!("Expected {} to be a pipeline", path))
                 .with_labels(vec![
                     Label::primary(file_id, path.span).with_message(format!("Expected pipeline")),
+                    Label::secondary(file_id, got.loc().span).with_message(format!(
+                        "{} is a {}",
+                        path,
+                        got.kind_string()
+                    )),
+                ]),
+            Error::LookupError(LookupError::NotAFunction(path, got)) => Diagnostic::error()
+                .with_message(format!("Expected {} to be a function", path))
+                .with_labels(vec![
+                    Label::primary(file_id, path.span).with_message(format!("Expected function")),
                     Label::secondary(file_id, got.loc().span).with_message(format!(
                         "{} is a {}",
                         path,
@@ -139,9 +150,13 @@ impl CompilationError for Error {
                 .with_labels(vec![Label::primary(file_id, at_loc.span)
                     .with_message(format!("Expected clock argument"))])
                 .with_notes(vec![format!("All pipelines take a clock as an argument")]),
-            Error::GenericsGivenForGeneric{at_loc, for_type} => {
-                Diagnostic::error()
-            }
+            Error::GenericsGivenForGeneric { at_loc, for_type } => Diagnostic::error()
+                .with_message("Generic arguments given for a generic type")
+                .with_labels(vec![Label::primary(file_id, at_loc.span)
+                    .with_message(format!("{} is a generic type", for_type))])
+                .with_notes(vec![format!(
+                    "A generic argument can not have generic types"
+                )]),
         };
 
         let writer = StandardStream::stderr(color_choice(no_color));

@@ -12,3 +12,4 @@ doctest = false
 [dependencies]
 spade-common = {path = "../spade-common"}
 spade-types = {path = "../spade-types"}
+thiserror = "1.0"

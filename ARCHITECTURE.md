@@ -37,13 +37,6 @@ All other rules of the language (apart from those which require type
 information) are also guaranteed to be upheld in the HIR, for example, the
 number of arguments to a function call is guaranteed correct.
 
-### TypeSpec
-
-The `TypeSpec` strut contains a mapping between the things (variables and
-expressions) and their inferred types. All types are guaranteed correct if the
-TypeSpec struct exists but they are not necessarily in their most concrete
-form, generics can still exist
-
 ### MIR (Medium Level Intermediate Representation)
 
 The MIR has lost almost all the structure of the program and therefore only consists of `entities` (and in the future, other top level constructs like pipelines and functions) which in turn are lists of `statements`. Statements `bindings` or `registers` where each `register` or `binding` has only one simple expression. For example, `let x = a + b + c` in HIR looks like
@@ -144,3 +137,49 @@ fn some_other_visitor(...) -> Result<..., Error> {
 Error reporting is done using the `codespan` and `codespan_reporting` crate.
 Each intermediate step defines its own `Error` type and has its own function
 for printing that error using `codespan_reporting`.
+
+### Type representations
+
+Types have several representations in the compiler, both between phases and for
+differnt kinds of types.
+
+The kinds include the following:
+
+- Declarations
+    - `enum X`
+    - `struct Y`
+- Generic arguments 
+    - `enum Z<T>`: a generic type
+    - `enum Z<#T>`: a generic number
+- Specifications in type signatures or used to define other types
+    - `x: X`
+    - `z: bool`
+    - `w: Z<int<8>>`
+    - `(X, Y)`
+- Type inferer internals (partially known types etc. `int<[type variable]>`)
+
+In the AST, declarations contain a name, optionally some generic arguments and
+a body. Specs are a `path` followed by 0 or more generic arguments
+
+During AST -> HIR lowering the different kinds of types are handled quite differently.
+
+### Declarations
+
+Declarations go through 2 passes: collection and elaboration. Type collection
+looks at the "left hand side" of the types and creates corresponding symtab
+entries which just contain a name and a list of generic args to be passed. In
+the future, these will also contain type constraints. After initial HIR lowering,
+these are not touched until types are concretised before MIR lowering
+
+
+### Type inference types
+
+In type inference, all expressions, and some other things are given types.  The
+types given are of type `TypeVar` which is one of 2 options: `Known` and
+`Unknown`. An unknown type is given to things before the true type is known,
+for example in a let binding with no type spec.
+
+A `Known` is either a type name and 0 or more `TypeVar` for the corresponding
+generics or a type level integer (TODO: We should incorporate integer expressions here).
+
+

@@ -1,5 +1,8 @@
 use spade_ast as ast;
-use spade_common::{location_info::Loc, name::{Identifier, Path}};
+use spade_common::{
+    location_info::Loc,
+    name::{Identifier, Path},
+};
 use spade_hir as hir;
 use thiserror::Error;
 
@@ -11,7 +14,7 @@ pub enum ItemKind {
 #[derive(Error, Debug, PartialEq, Clone)]
 pub enum Error {
     #[error("Lookup error")]
-    LookupError(#[from] crate::symbol_table::Error),
+    LookupError(#[from] spade_hir::symbol_table::Error),
     #[error("Duplicate type variable")]
     DuplicateTypeVariable {
         found: Loc<Identifier>,
@@ -54,7 +57,10 @@ pub enum Error {
 
     // Type related errors
     #[error("Generic parameters for generic name")]
-    GenericsGivenForGeneric{at_loc: Loc<()>, for_type: Loc<Path>}
+    GenericsGivenForGeneric {
+        at_loc: Loc<()>,
+        for_type: Loc<Path>,
+    },
 }
 
 pub type Result<T> = std::result::Result<T, Error>;

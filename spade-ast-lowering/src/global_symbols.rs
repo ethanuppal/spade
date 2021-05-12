@@ -3,8 +3,11 @@ use spade_common::{
     location_info::{Loc, WithLocation},
     name::Path,
 };
+use spade_hir as hir;
+use spade_hir::FunctionHead;
 
-use crate::{Error, symbol_table::{GenericArg, SymbolTable, Thing, TypeSymbol}};
+use crate::Error;
+use spade_hir::symbol_table::{GenericArg, SymbolTable, Thing, TypeSymbol};
 
 /// Collect global symbols as a first pass before generating HIR
 pub fn gather_symbols(
@@ -12,6 +15,15 @@ pub fn gather_symbols(
     namespace: &Path,
     symtab: &mut SymbolTable,
 ) -> Result<(), Error> {
+    // Start by visiting each item and adding types to the symtab. These are needed
+    // for signatures of other things which is why this has to be done first
+    for item in &module.members {
+        if let ast::Item::Type(t) = item {
+            visit_type_declaration(t, namespace, symtab)?;
+        }
+    }
+
+    // Then visit all the items adding their heads to the symtab
     for item in &module.members {
         visit_item(item, namespace, symtab)?;
     }
@@ -35,7 +47,7 @@ pub fn visit_item(
             todo!("Trait definitions are unsupported")
         }
         ast::Item::Type(t) => {
-            visit_type_declaration(t, namespace, symtab)?;
+            re_visit_type_declaration(t, namespace, symtab)?;
         }
     }
     Ok(())
@@ -72,19 +84,72 @@ pub fn visit_pipeline(
 pub fn visit_type_declaration(
     t: &Loc<ast::TypeDeclaration>,
     namespace: &Path,
-    symtab: &mut SymbolTable
+    symtab: &mut SymbolTable,
 ) -> Result<(), Error> {
     let path = namespace.push_ident(t.name.clone());
 
-    let args = t.generic_args
+    let args = t
+        .generic_args
         .iter()
-        .map(|arg| match &arg.inner {
-            ast::TypeParam::TypeName(n) => GenericArg::TypeName(n.clone()),
-            ast::TypeParam::Integer(n) => GenericArg::Number(n.inner.clone())
-        }.at_loc(&arg.loc()))
+        .map(|arg| {
+            match &arg.inner {
+                ast::TypeParam::TypeName(n) => GenericArg::TypeName(n.clone()),
+                ast::TypeParam::Integer(n) => GenericArg::Number(n.inner.clone()),
+            }
+            .at_loc(&arg.loc())
+        })
         .collect();
 
-    symtab.add_thing(path, Thing::Type(TypeSymbol::Declared(args).at_loc(&t)));
+    symtab.add_thing(
+        path.clone(),
+        Thing::Type(TypeSymbol::Declared(args).at_loc(&t)),
+    );
+
+    Ok(())
+}
+
+/// Visit type declarations a second time, primarily to add enum variants to the symtab.
+/// This can not be done in the same pass as normal type declaration visiting as other types
+/// may be present in the declaration
+pub fn re_visit_type_declaration(
+    t: &Loc<ast::TypeDeclaration>,
+    namespace: &Path,
+    symtab: &mut SymbolTable,
+) -> Result<(), Error> {
+    // Add things like enum variants to the symtab
+    match &t.inner.kind {
+        ast::TypeDeclKind::Enum(e) => {
+            let path = namespace.push_ident(t.name.clone()).nowhere();
+            let (id, _) = symtab.lookup_type_symbol(&path).expect(&format!(
+                "Failed to look up type {}. It was probably not added to the symtab",
+                path
+            ));
+            for option in &e.options {
+                let path = path.clone().push_ident(option.0.clone());
+
+                let parameter_list = option
+                    .1
+                    .clone()
+                    .map(|l| crate::visit_parameter_list(&l, symtab))
+                    .unwrap_or_else(|| Ok(hir::ParameterList(vec![])))?;
+
+                let head = FunctionHead {
+                    inputs: parameter_list,
+                    output_type: Some(
+                        hir::TypeSpec::Declared(
+                            id.clone().at_loc(&t.name),
+                            vec![], // TODO: Handle generics
+                        )
+                        .at_loc(&t.name),
+                    ),
+                    type_params: vec![], // TODO: Handle generics
+                }
+                .at_loc(&option.0);
+
+                symtab.add_thing(path.clone(), Thing::Function(head));
+            }
+        }
+    }
 
     Ok(())
 }

@@ -3,13 +3,13 @@
 
 use hir::{Argument, ParameterList};
 use parse_tree_macros::trace_typechecker;
-use spade_ast_lowering::symbol_table::{SymbolTable, SymbolTableExt};
 use spade_common::{location_info::Loc, name::NameID};
 use spade_hir as hir;
+use spade_hir::symbol_table::SymbolTable;
 use spade_hir::{
     expression::BinaryOperator, Block, Entity, ExprKind, Expression, Register, Statement,
 };
-use spade_types::{BaseType, ConcreteType, KnownType};
+use spade_types::{ConcreteType, KnownType, PrimitiveType};
 use std::collections::HashMap;
 
 use colored::*;
@@ -54,7 +54,7 @@ impl TypeState {
 
     pub fn type_var_from_hir(hir_type: &crate::hir::TypeSpec) -> TypeVar {
         match hir_type {
-            hir::TypeSpec::Concrete(base, params) => {
+            hir::TypeSpec::Declared(base, params) => {
                 let params = params
                     .into_iter()
                     .map(|e| Self::hir_type_expr_to_var(e))
@@ -62,12 +62,16 @@ impl TypeState {
 
                 TypeVar::Known(KnownType::Type(base.inner.clone()), params, None)
             }
+            hir::TypeSpec::Generic(name) => {
+                // NOTE: Should we care about this being generic here?
+                TypeVar::Known(KnownType::Type(name.inner.clone()), vec![], None)
+            }
             hir::TypeSpec::Tuple(inner) => {
                 let inner = inner.iter().map(|t| Self::type_var_from_hir(t)).collect();
                 TypeVar::Tuple(inner)
             }
-            hir::TypeSpec::Generic(_) => {
-                todo!("Support generic parameters")
+            hir::TypeSpec::Unit(_) => {
+                todo!("Support unit type in type inference")
             }
         }
     }
@@ -84,48 +88,59 @@ impl TypeState {
 
     /// Converts the specified type to a concrete type, returning None
     /// if it fails
-    pub fn ungenerify_type(var: &TypeVar) -> Option<ConcreteType> {
+    pub fn ungenerify_type(var: &TypeVar, symtab: &SymbolTable) -> Option<ConcreteType> {
         match var {
-            TypeVar::Known(t, params, _) => {
+            TypeVar::Known(KnownType::Type(t), params, _) => {
                 let params = params
                     .iter()
-                    .map(Self::ungenerify_type)
+                    .map(|v| Self::ungenerify_type(v, symtab))
                     .collect::<Option<Vec<_>>>()?;
 
-                Some(ConcreteType::Single {
-                    base: t.clone(),
-                    params,
-                })
+                // TODO: Do not hardcode paths here
+                let base = match t.1.as_strs().as_slice() {
+                    ["int"] => PrimitiveType::Int,
+                    ["clk"] => PrimitiveType::Clock,
+                    ["bool"] => PrimitiveType::Bool,
+                    _ => todo!("Implement support for non-primitive types"),
+                };
+
+                Some(ConcreteType::Single { base: base, params })
+            }
+            TypeVar::Known(KnownType::Integer(size), params, _) => {
+                assert!(params.len() == 0, "integers can not have type parameters");
+
+                Some(ConcreteType::Integer(*size))
             }
             TypeVar::Tuple(inner) => {
                 let inner = inner
                     .iter()
-                    .map(Self::ungenerify_type)
+                    .map(|v| Self::ungenerify_type(v, symtab))
                     .collect::<Option<Vec<_>>>()?;
                 Some(ConcreteType::Tuple(inner))
             }
-            TypeVar::Generic(_) => None,
+            TypeVar::Unknown(_) => None,
         }
     }
 
     /// Returns the type of the specified name as a concrete type. If the type is not known,
     /// or tye type is Generic, panics
-    pub fn type_of_name(&self, name: &NameID) -> ConcreteType {
+    pub fn type_of_name(&self, name: &NameID, symtab: &SymbolTable) -> ConcreteType {
         Self::ungenerify_type(
             &self
                 .type_of(&TypedExpression::Name(name.clone()))
                 .expect("Expression had no specified type"),
+            symtab,
         )
         .expect("Expr had generic type")
     }
 
-    pub fn new_generic_int(&mut self) -> TypeVar {
-        TypeVar::Known(t_int(), vec![self.new_generic()], None)
+    pub fn new_generic_int(&mut self, symtab: &SymbolTable) -> TypeVar {
+        TypeVar::Known(t_int(symtab), vec![self.new_generic()], None)
     }
 
     fn new_generic(&mut self) -> TypeVar {
         let id = self.new_typeid();
-        TypeVar::Generic(id)
+        TypeVar::Unknown(id)
     }
 
     #[trace_typechecker]
@@ -153,15 +168,16 @@ impl TypeState {
                 output_expr: entity.body.loc(),
             })?;
         } else {
-            self.unify_types(
-                &TypedExpression::Id(entity.body.inner.id),
-                &TypeVar::Known(KnownType::Type(BaseType::Unit), vec![], None),
-            )
-            .map_err(|(got, expected)| Error::UnspecedEntityOutputTypeMismatch {
-                expected,
-                got,
-                output_expr: entity.body.loc(),
-            })?;
+            todo!("Support unit types")
+            // self.unify_types(
+            //     &TypedExpression::Id(entity.body.inner.id),
+            //     &TypeVar::Known(KnownType::Type(BaseType::Unit), vec![], None),
+            // )
+            // .map_err(|(got, expected)| Error::UnspecedEntityOutputTypeMismatch {
+            //     expected,
+            //     got,
+            //     output_expr: entity.body.loc(),
+            // })?;
         }
         Ok(())
     }
@@ -228,7 +244,7 @@ impl TypeState {
                 )?;
             }
             ExprKind::IntLiteral(_) => {
-                let t = self.new_generic_int();
+                let t = self.new_generic_int(symtab);
                 self.unify_types(&t, &expression.inner)
                     .map_err(|(_, got)| Error::IntLiteralIncompatible {
                         got,
@@ -236,7 +252,7 @@ impl TypeState {
                     })?;
             }
             ExprKind::BoolLiteral(_) => {
-                self.unify_expression_generic_error(&expression, &t_bool())?;
+                self.unify_expression_generic_error(&expression, &t_bool(symtab))?;
             }
             ExprKind::FnCall(_name, _params) => {
                 // TODO: Propper error handling
@@ -278,7 +294,7 @@ impl TypeState {
                             loc: tup.loc(),
                         })
                     }
-                    Ok(TypeVar::Generic(_)) => {
+                    Ok(TypeVar::Unknown(_)) => {
                         return Err(Error::TupleIndexOfGeneric { loc: tup.loc() })
                     }
                     Err(e) => return Err(e),
@@ -303,7 +319,7 @@ impl TypeState {
                 self.visit_expression(&on_true, symtab)?;
                 self.visit_expression(&on_false, symtab)?;
 
-                self.unify_types(&cond.inner, &t_bool())
+                self.unify_types(&cond.inner, &t_bool(symtab))
                     .map_err(|(got, _)| Error::NonBooleanCondition {
                         got,
                         loc: cond.loc(),
@@ -331,25 +347,25 @@ impl TypeState {
                     | BinaryOperator::Mul
                     | BinaryOperator::LeftShift
                     | BinaryOperator::RightShift => {
-                        let int_type = self.new_generic_int();
+                        let int_type = self.new_generic_int(symtab);
                         // TODO: Make generic over types that can be added
                         self.unify_expression_generic_error(&lhs, &int_type)?;
                         self.unify_expression_generic_error(&lhs, &rhs.inner)?;
                         self.unify_expression_generic_error(expression, &rhs.inner)?
                     }
                     BinaryOperator::Eq | BinaryOperator::Gt | BinaryOperator::Lt => {
-                        let int_type = self.new_generic_int();
+                        let int_type = self.new_generic_int(symtab);
                         // TODO: Make generic over types that can be added
                         self.unify_expression_generic_error(&lhs, &int_type)?;
                         self.unify_expression_generic_error(&lhs, &rhs.inner)?;
-                        self.unify_expression_generic_error(expression, &t_bool())?
+                        self.unify_expression_generic_error(expression, &t_bool(symtab))?
                     }
                     BinaryOperator::LogicalAnd | BinaryOperator::LogicalOr => {
                         // TODO: Make generic over types that can be ored
-                        self.unify_expression_generic_error(&lhs, &t_bool())?;
+                        self.unify_expression_generic_error(&lhs, &t_bool(symtab))?;
                         self.unify_expression_generic_error(&lhs, &rhs.inner)?;
 
-                        self.unify_expression_generic_error(expression, &t_bool())?
+                        self.unify_expression_generic_error(expression, &t_bool(symtab))?
                     }
                 }
             }
@@ -443,7 +459,7 @@ impl TypeState {
             self.visit_expression(&rst_cond, symtab)?;
             self.visit_expression(&rst_value, symtab)?;
             // Ensure cond is a boolean
-            self.unify_types(&rst_cond.inner, &t_bool())
+            self.unify_types(&rst_cond.inner, &t_bool(symtab))
                 .map_err(|(got, expected)| Error::NonBoolReset {
                     expected,
                     got,
@@ -459,7 +475,7 @@ impl TypeState {
                 })?;
         }
 
-        self.unify_types(&reg.clock, &t_clock())
+        self.unify_types(&reg.clock, &t_clock(symtab))
             .map_err(|(got, expected)| Error::NonClockClock {
                 expected,
                 got,
@@ -553,9 +569,9 @@ impl<'a> TypeState {
                 UnificationTrace::new(v1.clone()),
                 UnificationTrace::new(v2.clone()),
             )),
-            (TypeVar::Generic(_), TypeVar::Generic(_)) => Ok((v1, Some(v2))),
-            (_other, TypeVar::Generic(_)) => Ok((v1, Some(v2))),
-            (TypeVar::Generic(_), _other) => Ok((v2, Some(v1))),
+            (TypeVar::Unknown(_), TypeVar::Unknown(_)) => Ok((v1, Some(v2))),
+            (_other, TypeVar::Unknown(_)) => Ok((v1, Some(v2))),
+            (TypeVar::Unknown(_), _other) => Ok((v2, Some(v1))),
         }?;
 
         if let Some(replaced_type) = replaced_type {
@@ -582,7 +598,7 @@ impl<'a> TypeState {
                     Self::replace_type_var(t, from, replacement.clone())
                 }
             }
-            TypeVar::Generic(_) => {}
+            TypeVar::Unknown(_) => {}
         }
 
         if in_var == from {
@@ -706,28 +722,30 @@ mod tests {
         fixed_types::t_clock,
         hir::{self, Block},
     };
-    use hir::{Argument, TypeSpec};
+    use hir::{dtype, testutil::t_num, Argument};
     use spade_ast::testutil::{ast_ident, ast_path};
-    use spade_ast_lowering::symbol_table::{SymbolTable, Thing};
     use spade_common::location_info::WithLocation;
     use spade_common::name::testutil::name_id;
+    use spade_hir::symbol_table::{SymbolTable, Thing};
 
     #[test]
     fn int_literals_have_type_known_int() {
         let mut state = TypeState::new();
-        let symtab = SymbolTable::new();
+        let mut symtab = SymbolTable::new();
+        spade_ast_lowering::builtins::populate_symtab(&mut symtab);
 
         let input = ExprKind::IntLiteral(0).with_id(0).nowhere();
 
         state.visit_expression(&input, &symtab).expect("Type error");
 
-        assert_eq!(state.type_of(&TExpr::Id(0)), Ok(unsized_int(1)));
+        assert_eq!(state.type_of(&TExpr::Id(0)), Ok(unsized_int(1, &symtab)));
     }
 
     #[test]
     fn if_statements_have_correctly_infered_types() {
         let mut state = TypeState::new();
-        let symtab = SymbolTable::new();
+        let mut symtab = SymbolTable::new();
+        spade_ast_lowering::builtins::populate_symtab(&mut symtab);
 
         let input = ExprKind::If(
             Box::new(Expression::ident(0, 0, "a").nowhere()),
@@ -741,9 +759,9 @@ mod tests {
         let expr_a = TExpr::Name(name_id(0, "a").inner);
         let expr_b = TExpr::Name(name_id(1, "b").inner);
         let expr_c = TExpr::Name(name_id(2, "c").inner);
-        state.add_equation(expr_a.clone(), TVar::Generic(100));
-        state.add_equation(expr_b.clone(), TVar::Generic(101));
-        state.add_equation(expr_c.clone(), TVar::Generic(102));
+        state.add_equation(expr_a.clone(), TVar::Unknown(100));
+        state.add_equation(expr_b.clone(), TVar::Unknown(101));
+        state.add_equation(expr_c.clone(), TVar::Unknown(102));
 
         state.visit_expression(&input, &symtab).unwrap();
 
@@ -757,7 +775,7 @@ mod tests {
         let tc = get_type!(state, &expr_c);
 
         // Check the generic type variables
-        ensure_same_type!(state, t0, TVar::Known(t_bool(), vec![], None));
+        ensure_same_type!(state, t0, TVar::Known(t_bool(&symtab), vec![], None));
         ensure_same_type!(state, t1, t2);
         ensure_same_type!(state, t1, t3);
 
@@ -770,7 +788,8 @@ mod tests {
     #[test]
     fn if_statements_get_correct_type_when_branches_are_of_known_type() {
         let mut state = TypeState::new();
-        let symtab = SymbolTable::new();
+        let mut symtab = SymbolTable::new();
+        spade_ast_lowering::builtins::populate_symtab(&mut symtab);
 
         let input = ExprKind::If(
             Box::new(Expression::ident(0, 0, "a").nowhere()),
@@ -784,9 +803,9 @@ mod tests {
         let expr_a = TExpr::Name(name_id(0, "a").inner);
         let expr_b = TExpr::Name(name_id(1, "b").inner);
         let expr_c = TExpr::Name(name_id(2, "c").inner);
-        state.add_equation(expr_a.clone(), TVar::Generic(100));
-        state.add_equation(expr_b.clone(), unsized_int(101));
-        state.add_equation(expr_c.clone(), TVar::Generic(102));
+        state.add_equation(expr_a.clone(), TVar::Unknown(100));
+        state.add_equation(expr_b.clone(), unsized_int(101, &symtab));
+        state.add_equation(expr_c.clone(), TVar::Unknown(102));
 
         state.visit_expression(&input, &symtab).unwrap();
 
@@ -800,10 +819,10 @@ mod tests {
         let tc = get_type!(state, &expr_c);
 
         // Check the generic type variables
-        ensure_same_type!(state, t0, TVar::Known(t_bool(), vec![], None));
-        ensure_same_type!(state, t1, unsized_int(101));
-        ensure_same_type!(state, t2, unsized_int(101));
-        ensure_same_type!(state, t3, unsized_int(101));
+        ensure_same_type!(state, t0, TVar::Known(t_bool(&symtab), vec![], None));
+        ensure_same_type!(state, t1, unsized_int(101, &symtab));
+        ensure_same_type!(state, t2, unsized_int(101, &symtab));
+        ensure_same_type!(state, t3, unsized_int(101, &symtab));
 
         // Check the constraints added to the literals
         ensure_same_type!(state, t0, ta);
@@ -814,7 +833,8 @@ mod tests {
     #[test]
     fn type_inference_fails_if_if_branches_have_incompatible_types() {
         let mut state = TypeState::new();
-        let symtab = SymbolTable::new();
+        let mut symtab = SymbolTable::new();
+        spade_ast_lowering::builtins::populate_symtab(&mut symtab);
 
         let input = ExprKind::If(
             Box::new(Expression::ident(0, 0, "a").nowhere()),
@@ -828,9 +848,9 @@ mod tests {
         let expr_a = TExpr::Name(name_id(0, "a").inner);
         let expr_b = TExpr::Name(name_id(1, "b").inner);
         let expr_c = TExpr::Name(name_id(2, "c").inner);
-        state.add_equation(expr_a.clone(), TVar::Generic(100));
-        state.add_equation(expr_b.clone(), unsized_int(101));
-        state.add_equation(expr_c.clone(), TVar::Known(t_clock(), vec![], None));
+        state.add_equation(expr_a.clone(), TVar::Unknown(100));
+        state.add_equation(expr_b.clone(), unsized_int(101, &symtab));
+        state.add_equation(expr_c.clone(), TVar::Known(t_clock(&symtab), vec![], None));
 
         assert_ne!(state.visit_expression(&input, &symtab), Ok(()));
     }
@@ -870,7 +890,7 @@ mod tests {
         //     state,
         //     t0,
         //     TypeVar::Known(
-        //         t_int(),
+        //         t_int(&symtab),
         //         vec![TypeVar::Known(KnownType::Integer(5), vec![], None)],
         //         None
         //     )
@@ -909,7 +929,8 @@ mod tests {
 
     #[test]
     fn block_visiting_without_definitions_works() {
-        let symtab = SymbolTable::new();
+        let mut symtab = SymbolTable::new();
+        spade_ast_lowering::builtins::populate_symtab(&mut symtab);
 
         let input = ExprKind::Block(Box::new(Block {
             statements: vec![],
@@ -922,14 +943,15 @@ mod tests {
 
         state.visit_expression(&input, &symtab).unwrap();
 
-        ensure_same_type!(state, TExpr::Id(0), unsized_int(2));
-        ensure_same_type!(state, TExpr::Id(1), unsized_int(2));
+        ensure_same_type!(state, TExpr::Id(0), unsized_int(2, &symtab));
+        ensure_same_type!(state, TExpr::Id(1), unsized_int(2, &symtab));
     }
 
     #[test]
     fn integer_literals_are_compatible_with_fixed_size_ints() {
         let mut state = TypeState::new();
-        let symtab = SymbolTable::new();
+        let mut symtab = SymbolTable::new();
+        spade_ast_lowering::builtins::populate_symtab(&mut symtab);
 
         let input = ExprKind::If(
             Box::new(Expression::ident(0, 0, "a").nowhere()),
@@ -943,9 +965,9 @@ mod tests {
         let expr_a = TExpr::Name(name_id(0, "a").inner);
         let expr_b = TExpr::Name(name_id(1, "b").inner);
         let expr_c = TExpr::Name(name_id(2, "c").inner);
-        state.add_equation(expr_a.clone(), TVar::Generic(100));
-        state.add_equation(expr_b.clone(), unsized_int(101));
-        state.add_equation(expr_c.clone(), sized_int(5));
+        state.add_equation(expr_a.clone(), TVar::Unknown(100));
+        state.add_equation(expr_b.clone(), unsized_int(101, &symtab));
+        state.add_equation(expr_c.clone(), sized_int(5, &symtab));
 
         state.visit_expression(&input, &symtab).unwrap();
 
@@ -959,10 +981,10 @@ mod tests {
         let tc = get_type!(state, &expr_c);
 
         // Check the generic type variables
-        ensure_same_type!(state, t0, TVar::Known(t_bool(), vec![], None));
-        ensure_same_type!(state, t1, sized_int(5));
-        ensure_same_type!(state, t2, sized_int(5));
-        ensure_same_type!(state, t3, sized_int(5));
+        ensure_same_type!(state, t0, TVar::Known(t_bool(&symtab), vec![], None));
+        ensure_same_type!(state, t1, sized_int(5, &symtab));
+        ensure_same_type!(state, t2, sized_int(5, &symtab));
+        ensure_same_type!(state, t3, sized_int(5, &symtab));
 
         // Check the constraints added to the literals
         ensure_same_type!(state, t0, ta);
@@ -972,7 +994,8 @@ mod tests {
 
     #[test]
     fn registers_typecheck_correctly() {
-        let symtab = SymbolTable::new();
+        let mut symtab = SymbolTable::new();
+        spade_ast_lowering::builtins::populate_symtab(&mut symtab);
 
         let input = hir::Register {
             name: name_id(0, "a"),
@@ -987,21 +1010,22 @@ mod tests {
         let mut state = TypeState::new();
 
         let expr_clk = TExpr::Name(name_id(1, "clk").inner);
-        state.add_equation(expr_clk.clone(), TVar::Generic(100));
+        state.add_equation(expr_clk.clone(), TVar::Unknown(100));
 
         state.visit_register(&input, &symtab).unwrap();
 
         let t0 = get_type!(state, &TExpr::Id(0));
         let ta = get_type!(state, &TExpr::Name(name_id(0, "a").inner));
         let tclk = get_type!(state, &TExpr::Name(name_id(1, "clk").inner));
-        ensure_same_type!(state, t0, unsized_int(3));
-        ensure_same_type!(state, ta, unsized_int(3));
-        ensure_same_type!(state, tclk, t_clock());
+        ensure_same_type!(state, t0, unsized_int(3, &symtab));
+        ensure_same_type!(state, ta, unsized_int(3, &symtab));
+        ensure_same_type!(state, tclk, t_clock(&symtab));
     }
 
     #[test]
     fn self_referential_registers_typepcheck_correctly() {
-        let symtab = SymbolTable::new();
+        let mut symtab = SymbolTable::new();
+        spade_ast_lowering::builtins::populate_symtab(&mut symtab);
 
         let input = hir::Register {
             name: name_id(0, "a"),
@@ -1018,19 +1042,20 @@ mod tests {
         let mut state = TypeState::new();
 
         let expr_clk = TExpr::Name(name_id(1, "clk").inner);
-        state.add_equation(expr_clk.clone(), TVar::Generic(100));
+        state.add_equation(expr_clk.clone(), TVar::Unknown(100));
 
         state.visit_register(&input, &symtab).unwrap();
 
         let ta = get_type!(state, &TExpr::Name(name_id(0, "a").inner));
         let tclk = get_type!(state, &TExpr::Name(name_id(1, "clk").inner));
-        ensure_same_type!(state, ta, TVar::Generic(2));
-        ensure_same_type!(state, tclk, t_clock());
+        ensure_same_type!(state, ta, TVar::Unknown(2));
+        ensure_same_type!(state, tclk, t_clock(&symtab));
     }
 
     #[test]
     fn registers_with_resets_typecheck_correctly() {
-        let symtab = SymbolTable::new();
+        let mut symtab = SymbolTable::new();
+        spade_ast_lowering::builtins::populate_symtab(&mut symtab);
 
         let rst_cond = name_id(2, "rst").inner;
         let rst_value = name_id(3, "rst_value").inner;
@@ -1052,9 +1077,9 @@ mod tests {
         let expr_clk = TExpr::Name(name_id(1, "clk").inner);
         let expr_rst_cond = TExpr::Name(name_id(2, "rst").inner);
         let expr_rst_value = TExpr::Name(name_id(3, "rst_value").inner);
-        state.add_equation(expr_clk.clone(), TVar::Generic(100));
-        state.add_equation(expr_rst_cond.clone(), TVar::Generic(101));
-        state.add_equation(expr_rst_value.clone(), TVar::Generic(102));
+        state.add_equation(expr_clk.clone(), TVar::Unknown(100));
+        state.add_equation(expr_rst_cond.clone(), TVar::Unknown(101));
+        state.add_equation(expr_rst_value.clone(), TVar::Unknown(102));
 
         state.visit_register(&input, &symtab).unwrap();
 
@@ -1063,16 +1088,17 @@ mod tests {
         let tclk = get_type!(state, &TExpr::Name(name_id(1, "clk").inner));
         let trst_cond = get_type!(state, &TExpr::Name(rst_cond.clone()));
         let trst_val = get_type!(state, &TExpr::Name(rst_value.clone()));
-        ensure_same_type!(state, t0, unsized_int(3));
-        ensure_same_type!(state, ta, unsized_int(3));
-        ensure_same_type!(state, tclk, t_clock());
-        ensure_same_type!(state, trst_cond, t_bool());
-        ensure_same_type!(state, trst_val, unsized_int(3));
+        ensure_same_type!(state, t0, unsized_int(3, &symtab));
+        ensure_same_type!(state, ta, unsized_int(3, &symtab));
+        ensure_same_type!(state, tclk, t_clock(&symtab));
+        ensure_same_type!(state, trst_cond, t_bool(&symtab));
+        ensure_same_type!(state, trst_val, unsized_int(3, &symtab));
     }
 
     #[test]
     fn untyped_let_bindings_typecheck_correctly() {
-        let symtab = SymbolTable::new();
+        let mut symtab = SymbolTable::new();
+        spade_ast_lowering::builtins::populate_symtab(&mut symtab);
 
         let input = hir::Statement::Binding(
             name_id(0, "a"),
@@ -1086,12 +1112,13 @@ mod tests {
         state.visit_statement(&input, &symtab).unwrap();
 
         let ta = get_type!(state, &TExpr::Name(name_id(0, "a").inner));
-        ensure_same_type!(state, ta, unsized_int(1));
+        ensure_same_type!(state, ta, unsized_int(1, &symtab));
     }
 
     #[test]
     fn tuple_type_specs_propagate_correctly() {
-        let symtab = SymbolTable::new();
+        let mut symtab = SymbolTable::new();
+        spade_ast_lowering::builtins::populate_symtab(&mut symtab);
 
         let input = Register {
             name: name_id(0, "test"),
@@ -1107,12 +1134,8 @@ mod tests {
             .nowhere(),
             value_type: Some(
                 hir::TypeSpec::Tuple(vec![
-                    hir::TypeSpec::Concrete(
-                        BaseType::Int.nowhere(),
-                        vec![hir::TypeExpression::Integer(5).nowhere()],
-                    )
-                    .nowhere(),
-                    hir::TypeSpec::Concrete(BaseType::Bool.nowhere(), vec![]).nowhere(),
+                    dtype!(symtab => "int"; ( t_num(5) )),
+                    hir::dtype!(symtab => "bool"),
                 ])
                 .nowhere(),
             ),
@@ -1121,13 +1144,16 @@ mod tests {
         let mut state = TypeState::new();
 
         let expr_clk = TExpr::Name(name_id(1, "clk").inner);
-        state.add_equation(expr_clk.clone(), TVar::Generic(100));
+        state.add_equation(expr_clk.clone(), TVar::Unknown(100));
 
         state.visit_register(&input, &symtab).unwrap();
 
         let ttup = get_type!(state, &TExpr::Id(3));
         let reg = get_type!(state, &TExpr::Name(name_id(0, "test").inner));
-        let expected = TypeVar::Tuple(vec![sized_int(5), TypeVar::Known(t_bool(), vec![], None)]);
+        let expected = TypeVar::Tuple(vec![
+            sized_int(5, &symtab),
+            TypeVar::Known(t_bool(&symtab), vec![], None),
+        ]);
         ensure_same_type!(state, ttup, expected);
         ensure_same_type!(state, reg, expected);
     }
@@ -1136,17 +1162,15 @@ mod tests {
     fn entity_type_inference_works() {
         // Add the head to the symtab
         let mut symtab = SymbolTable::new();
+        spade_ast_lowering::builtins::populate_symtab(&mut symtab);
 
         // Add the entity to the symtab
         let entity = hir::EntityHead {
             inputs: hir::ParameterList(vec![
-                (
-                    ast_ident("a"),
-                    TypeSpec::Concrete(BaseType::Bool.nowhere(), vec![]).nowhere(),
-                ),
-                (ast_ident("b"), TypeSpec::int(10).nowhere()),
+                (ast_ident("a"), dtype!(symtab => "bool")),
+                (ast_ident("b"), dtype!(symtab => "int"; (t_num(10)))),
             ]),
-            output_type: Some(TypeSpec::int(5).nowhere()),
+            output_type: Some(dtype!(symtab => "int"; (t_num(5)))),
             type_params: vec![],
         };
 
@@ -1175,8 +1199,8 @@ mod tests {
         // Add eqs for the literals
         let expr_a = TExpr::Name(name_id(0, "a").inner);
         let expr_b = TExpr::Name(name_id(1, "b").inner);
-        state.add_equation(expr_a.clone(), TVar::Generic(100));
-        state.add_equation(expr_b.clone(), TVar::Generic(101));
+        state.add_equation(expr_a.clone(), TVar::Unknown(100));
+        state.add_equation(expr_b.clone(), TVar::Unknown(101));
 
         state.visit_expression(&input, &symtab).unwrap();
 
@@ -1188,12 +1212,12 @@ mod tests {
         let tb = get_type!(state, &expr_b);
 
         // Check the generic type variables
-        ensure_same_type!(state, t0, TVar::Known(t_bool(), vec![], None));
+        ensure_same_type!(state, t0, TVar::Known(t_bool(&symtab), vec![], None));
         ensure_same_type!(
             state,
             t1,
             TVar::Known(
-                t_int(),
+                t_int(&symtab),
                 vec![TypeVar::Known(KnownType::Integer(10), vec![], None)],
                 None,
             )
@@ -1202,7 +1226,7 @@ mod tests {
             state,
             t2,
             TVar::Known(
-                t_int(),
+                t_int(&symtab),
                 vec![TypeVar::Known(KnownType::Integer(5), vec![], None)],
                 None,
             )
@@ -1217,18 +1241,16 @@ mod tests {
     fn pipeline_type_inference_works() {
         // Add the head to the symtab
         let mut symtab = SymbolTable::new();
+        spade_ast_lowering::builtins::populate_symtab(&mut symtab);
 
         // Add the entity to the symtab
         let entity = hir::PipelineHead {
             depth: 2.nowhere(),
             inputs: hir::ParameterList(vec![
-                (
-                    ast_ident("a"),
-                    TypeSpec::Concrete(BaseType::Bool.nowhere(), vec![]).nowhere(),
-                ),
-                (ast_ident("b"), TypeSpec::int(10).nowhere()),
+                (ast_ident("a"), dtype!(symtab => "bool")),
+                (ast_ident("b"), dtype!(symtab => "int"; ( t_num(10) ))),
             ]),
-            output_type: Some(TypeSpec::int(5).nowhere()),
+            output_type: Some(dtype!(symtab => "int"; ( t_num(5) ))),
         };
 
         let entity_name =
@@ -1258,8 +1280,8 @@ mod tests {
         // Add eqs for the literals
         let expr_a = TExpr::Name(name_id(0, "a").inner);
         let expr_b = TExpr::Name(name_id(1, "b").inner);
-        state.add_equation(expr_a.clone(), TVar::Generic(100));
-        state.add_equation(expr_b.clone(), TVar::Generic(101));
+        state.add_equation(expr_a.clone(), TVar::Unknown(100));
+        state.add_equation(expr_b.clone(), TVar::Unknown(101));
 
         state.visit_expression(&input, &symtab).unwrap();
 
@@ -1271,12 +1293,12 @@ mod tests {
         let tb = get_type!(state, &expr_b);
 
         // Check the generic type variables
-        ensure_same_type!(state, t0, TVar::Known(t_bool(), vec![], None));
+        ensure_same_type!(state, t0, TVar::Known(t_bool(&symtab), vec![], None));
         ensure_same_type!(
             state,
             t1,
             TVar::Known(
-                t_int(),
+                t_int(&symtab),
                 vec![TypeVar::Known(KnownType::Integer(10), vec![], None)],
                 None,
             )
@@ -1285,7 +1307,7 @@ mod tests {
             state,
             t2,
             TVar::Known(
-                t_int(),
+                t_int(&symtab),
                 vec![TypeVar::Known(KnownType::Integer(5), vec![], None)],
                 None,
             )

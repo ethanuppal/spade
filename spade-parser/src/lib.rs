@@ -1,7 +1,12 @@
 pub mod error_reporting;
 pub mod lexer;
 
-use spade_ast::{ArgumentList, BinaryOperator, Block, Entity, Enum, Expression, FunctionDecl, Item, ModuleBody, NamedArgument, Pipeline, PipelineBindModifier, PipelineBinding, PipelineStage, Register, Statement, TraitDef, TypeDeclKind, TypeDeclaration, TypeExpression, TypeParam, TypeSpec};
+use spade_ast::{
+    ArgumentList, BinaryOperator, Block, Entity, Enum, Expression, FunctionDecl, Item, ModuleBody,
+    NamedArgument, ParameterList, Pipeline, PipelineBindModifier, PipelineBinding, PipelineStage,
+    Register, Statement, TraitDef, TypeDeclKind, TypeDeclaration, TypeExpression, TypeParam,
+    TypeSpec,
+};
 use spade_common::{
     location_info::{lspan, Loc, WithLocation},
     name::{Identifier, Path},
@@ -564,6 +569,14 @@ impl<'a> Parser<'a> {
         }
     }
 
+    #[trace_parser]
+    pub fn parameter_list(&mut self) -> Result<ParameterList> {
+        Ok(ParameterList(self.comma_separated(
+            Self::name_and_type,
+            &TokenKind::CloseParen,
+        )?))
+    }
+
     // Entities
     #[trace_parser]
     pub fn entity(&mut self) -> Result<Option<Loc<Entity>>> {
@@ -575,7 +588,7 @@ impl<'a> Parser<'a> {
 
         // Input types
         self.eat(&TokenKind::OpenParen)?;
-        let inputs = self.comma_separated(Self::name_and_type, &TokenKind::CloseParen)?;
+        let inputs = self.parameter_list()?;
         let close_paren = self.eat(&TokenKind::CloseParen)?;
 
         // Return type
@@ -696,7 +709,7 @@ impl<'a> Parser<'a> {
         // Input types
         self.eat(&TokenKind::OpenParen)?;
         // TODO: Can we use surrounded here?
-        let inputs = self.comma_separated(Self::name_and_type, &TokenKind::CloseParen)?;
+        let inputs = self.parameter_list()?;
         self.eat(&TokenKind::CloseParen)?;
 
         // Return type
@@ -780,11 +793,11 @@ impl<'a> Parser<'a> {
         };
 
         let inputs = if more_args {
-            let inputs = self.comma_separated(Self::name_and_type, &TokenKind::CloseParen)?;
+            let inputs = self.parameter_list()?;
             self.eat(&TokenKind::CloseParen)?;
             inputs
         } else {
-            vec![]
+            ParameterList(vec![])
         };
 
         // Return type
@@ -829,19 +842,15 @@ impl<'a> Parser<'a> {
         Ok(Some(result.between(&start_token.span, &end_token.span)))
     }
 
-
     #[trace_parser]
-    pub fn enum_option(&mut self) -> Result<(Loc<Identifier>, Option<Vec<Loc<TypeSpec>>>)> {
+    pub fn enum_option(&mut self) -> Result<(Loc<Identifier>, Option<ParameterList>)> {
         let name = self.identifier()?;
 
-        let args = if self.peek_kind(&TokenKind::OpenParen)? {
-            Some(self.surrounded(
-                &TokenKind::OpenParen,
-                |s: &mut Self| s.comma_separated(Self::type_spec, &TokenKind::CloseParen),
-                &TokenKind::CloseParen
-            )?.0)
-        }
-        else {
+        let args = if self.peek_and_eat(&TokenKind::OpenParen)?.is_some() {
+            let result = Some(self.parameter_list()?);
+            self.eat(&TokenKind::CloseParen)?;
+            result
+        } else {
             None
         };
 
@@ -864,9 +873,12 @@ impl<'a> Parser<'a> {
 
         let result = TypeDeclaration {
             name: name.clone(),
-            kind: TypeDeclKind::Enum(Enum{name, options}.between(&start_token.span, &options_loc)),
+            kind: TypeDeclKind::Enum(
+                Enum { name, options }.between(&start_token.span, &options_loc),
+            ),
             generic_args,
-        }.between(&start_token.span, &options_loc);
+        }
+        .between(&start_token.span, &options_loc);
 
         Ok(Some(result))
     }
@@ -877,9 +889,7 @@ impl<'a> Parser<'a> {
         // since we want access to the name and type params, we'll parse all those three, then
         // defer to parsing the rest.
 
-        self.first_successful(vec! [
-            &Self::enum_declaration
-        ])
+        self.first_successful(vec![&Self::enum_declaration])
     }
 
     #[trace_parser]
@@ -1189,6 +1199,7 @@ pub fn format_parse_stack(stack: &[ParseStackEntry]) -> String {
 
 #[cfg(test)]
 mod tests {
+    use spade_ast as ast;
     use spade_ast::testutil::{ast_ident, ast_path};
     use spade_ast::*;
 
@@ -1479,7 +1490,7 @@ mod tests {
         let code = include_str!("../parser_test_code/entity_without_inputs.sp");
         let expected = Entity {
             name: Identifier("no_inputs".to_string()).nowhere(),
-            inputs: vec![],
+            inputs: aparams![],
             output_type: None,
             body: Expression::Block(Box::new(Block {
                 statements: vec![
@@ -1511,16 +1522,7 @@ mod tests {
         let code = include_str!("../parser_test_code/entity_with_inputs.sp");
         let expected = Entity {
             name: ast_ident("with_inputs"),
-            inputs: vec![
-                (
-                    Identifier("clk".to_string()).nowhere(),
-                    TypeSpec::Named(ast_path("bool"), vec![]).nowhere(),
-                ),
-                (
-                    Identifier("rst".to_string()).nowhere(),
-                    TypeSpec::Named(ast_path("bool"), vec![]).nowhere(),
-                ),
-            ],
+            inputs: aparams![("clk", tspec!("bool")), ("rst", tspec!("bool"))],
             output_type: Some(TypeSpec::Named(ast_path("bool"), vec![]).nowhere()),
             body: Expression::Block(Box::new(Block {
                 statements: vec![],
@@ -1539,7 +1541,7 @@ mod tests {
         let code = include_str!("../parser_test_code/entity_with_generics.sp");
         let expected = Entity {
             name: ast_ident("with_generics"),
-            inputs: vec![],
+            inputs: aparams![],
             output_type: None,
             body: Expression::Block(Box::new(Block {
                 statements: vec![],
@@ -1635,7 +1637,7 @@ mod tests {
 
         let e1 = Entity {
             name: Identifier("e1".to_string()).nowhere(),
-            inputs: vec![],
+            inputs: aparams![],
             output_type: None,
             body: Expression::Block(Box::new(Block {
                 statements: vec![],
@@ -1648,7 +1650,7 @@ mod tests {
 
         let e2 = Entity {
             name: Identifier("e2".to_string()).nowhere(),
-            inputs: vec![],
+            inputs: aparams![],
             output_type: None,
             body: Expression::Block(Box::new(Block {
                 statements: vec![],
@@ -1673,10 +1675,7 @@ mod tests {
         let expected = FunctionDecl {
             name: ast_ident("some_fn"),
             self_arg: Some(().nowhere()),
-            inputs: vec![(
-                ast_ident("a"),
-                TypeSpec::Named(ast_path("bit"), vec![]).nowhere(),
-            )],
+            inputs: aparams![("a", tspec!("bit"))],
             return_type: Some(TypeSpec::Named(ast_path("bit"), vec![]).nowhere()),
             type_params: vec![],
         }
@@ -1692,7 +1691,7 @@ mod tests {
         let expected = FunctionDecl {
             name: ast_ident("some_fn"),
             self_arg: Some(().nowhere()),
-            inputs: vec![],
+            inputs: aparams![],
             return_type: Some(TypeSpec::Named(ast_path("bit"), vec![]).nowhere()),
             type_params: vec![],
         }
@@ -1708,7 +1707,7 @@ mod tests {
         let expected = FunctionDecl {
             name: ast_ident("some_fn"),
             self_arg: Some(().nowhere()),
-            inputs: vec![],
+            inputs: aparams![],
             return_type: None,
             type_params: vec![],
         }
@@ -1724,7 +1723,7 @@ mod tests {
         let expected = FunctionDecl {
             name: ast_ident("some_fn"),
             self_arg: Some(().nowhere()),
-            inputs: vec![],
+            inputs: aparams![],
             return_type: None,
             type_params: vec![TypeParam::TypeName(ast_ident("X").inner).nowhere()],
         }
@@ -1745,10 +1744,7 @@ mod tests {
         let fn1 = FunctionDecl {
             name: ast_ident("some_fn"),
             self_arg: Some(().nowhere()),
-            inputs: vec![(
-                ast_ident("a"),
-                TypeSpec::Named(ast_path("bit"), vec![]).nowhere(),
-            )],
+            inputs: aparams![("a", tspec!("bit"))],
             return_type: Some(TypeSpec::Named(ast_path("bit"), vec![]).nowhere()),
             type_params: vec![],
         }
@@ -1756,7 +1752,7 @@ mod tests {
         let fn2 = FunctionDecl {
             name: ast_ident("another_fn"),
             self_arg: Some(().nowhere()),
-            inputs: vec![],
+            inputs: aparams![],
             return_type: Some(TypeSpec::Named(ast_path("bit"), vec![]).nowhere()),
             type_params: vec![],
         }
@@ -1942,10 +1938,7 @@ mod tests {
         let expected = Pipeline {
             depth: Loc::new(2, lspan(0..0)),
             name: ast_ident("test"),
-            inputs: vec![(
-                ast_ident("a"),
-                TypeSpec::Named(ast_path("bool"), vec![]).nowhere(),
-            )],
+            inputs: aparams![("a", tspec!("bool"))],
             output_type: Some(TypeSpec::Named(ast_path("bool"), vec![]).nowhere()),
             stages: vec![
                 PipelineStage {
@@ -1989,10 +1982,7 @@ mod tests {
                 Pipeline {
                     depth: Loc::new(2, lspan(0..0)),
                     name: ast_ident("test"),
-                    inputs: vec![(
-                        ast_ident("a"),
-                        TypeSpec::Named(ast_path("bool"), vec![]).nowhere(),
-                    )],
+                    inputs: aparams![("a", tspec!("bool"))],
                     output_type: Some(TypeSpec::Named(ast_path("bool"), vec![]).nowhere()),
                     stages: vec![],
                 }
@@ -2026,27 +2016,31 @@ mod tests {
     fn enums_declarations_parse() {
         let code = "enum State {
             First,
-            Second(bool),
-            Third(bool, bool)
+            Second(a: bool),
+            Third(a: bool, b: bool)
         }";
 
-        let expected = Item::Type(TypeDeclaration {
-            name: ast_ident("State"),
-            kind: TypeDeclKind::Enum(Enum{
+        let expected = Item::Type(
+            TypeDeclaration {
                 name: ast_ident("State"),
-                options: vec![
-                    (ast_ident("First"), None),
-                    (ast_ident("Second"), Some(vec![
-                        TypeSpec::Named(ast_path("bool"), vec![]).nowhere()
-                    ])),
-                    (ast_ident("Third"), Some(vec![
-                        TypeSpec::Named(ast_path("bool"), vec![]).nowhere(),
-                        TypeSpec::Named(ast_path("bool"), vec![]).nowhere()
-                    ])),
-                ]
-            }.nowhere()),
-            generic_args: vec![]
-        }.nowhere());
+                kind: TypeDeclKind::Enum(
+                    Enum {
+                        name: ast_ident("State"),
+                        options: vec![
+                            (ast_ident("First"), None),
+                            (ast_ident("Second"), Some(aparams![("a", tspec!("bool")),])),
+                            (
+                                ast_ident("Third"),
+                                Some(aparams![("a", tspec!("bool")), ("b", tspec!("bool"))]),
+                            ),
+                        ],
+                    }
+                    .nowhere(),
+                ),
+                generic_args: vec![],
+            }
+            .nowhere(),
+        );
 
         check_parse!(code, item, Ok(Some(expected)));
     }
@@ -2055,30 +2049,34 @@ mod tests {
     fn enums_declarations_with_type_args_parse() {
         let code = "enum State<T, #N> {
             First,
-            Second(T),
-            Third(N, bool)
+            Second(a: T),
+            Third(a: N, b: bool)
         }";
 
-        let expected = Item::Type(TypeDeclaration {
-            name: ast_ident("State"),
-            kind: TypeDeclKind::Enum(Enum{
+        let expected = Item::Type(
+            TypeDeclaration {
                 name: ast_ident("State"),
-                options: vec![
-                    (ast_ident("First"), None),
-                    (ast_ident("Second"), Some(vec![
-                        TypeSpec::Named(ast_path("T"), vec![]).nowhere()
-                    ])),
-                    (ast_ident("Third"), Some(vec![
-                        TypeSpec::Named(ast_path("N"), vec![]).nowhere(),
-                        TypeSpec::Named(ast_path("bool"), vec![]).nowhere()
-                    ])),
-                ]
-            }.nowhere()),
-            generic_args: vec![
-                TypeParam::TypeName(ast_ident("T").inner).nowhere(),
-                TypeParam::Integer(ast_ident("N")).nowhere()
-            ]
-        }.nowhere());
+                kind: TypeDeclKind::Enum(
+                    Enum {
+                        name: ast_ident("State"),
+                        options: vec![
+                            (ast_ident("First"), None),
+                            (ast_ident("Second"), Some(aparams![("a", tspec!("T"))])),
+                            (
+                                ast_ident("Third"),
+                                Some(aparams![("a", tspec!("N")), ("b", tspec!("bool")),]),
+                            ),
+                        ],
+                    }
+                    .nowhere(),
+                ),
+                generic_args: vec![
+                    TypeParam::TypeName(ast_ident("T").inner).nowhere(),
+                    TypeParam::Integer(ast_ident("N")).nowhere(),
+                ],
+            }
+            .nowhere(),
+        );
 
         check_parse!(code, item, Ok(Some(expected)));
     }

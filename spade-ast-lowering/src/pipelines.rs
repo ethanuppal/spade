@@ -10,9 +10,9 @@ use spade_hir as hir;
 
 use crate::{
     error::{Error, Result},
-    symbol_table::SymbolTableExt,
+    visit_type_spec, LocExt,
 };
-use crate::{symbol_table::SymbolTable, visit_type_spec, LocExt};
+use spade_hir::symbol_table::SymbolTable;
 
 #[derive(Debug, Clone)]
 pub struct PipelineState {
@@ -43,16 +43,7 @@ impl PipelineState {
 pub fn pipeline_head(input: &ast::Pipeline, symtab: &mut SymbolTable) -> Result<hir::PipelineHead> {
     let depth = input.depth.map(|u| u as usize);
 
-    let inputs = input
-        .inputs
-        .iter()
-        .map(|(name, ty)| {
-            Ok((
-                name.clone(),
-                ty.try_map_ref(|ty| super::visit_type_spec(ty, symtab))?,
-            ))
-        })
-        .collect::<Result<Vec<_>>>()?;
+    let inputs = crate::visit_parameter_list(&input.inputs, symtab)?;
 
     let output_type = if let Some(output_type) = &input.output_type {
         Some(output_type.try_map_ref(|ty| super::visit_type_spec(ty, symtab))?)
@@ -62,7 +53,7 @@ pub fn pipeline_head(input: &ast::Pipeline, symtab: &mut SymbolTable) -> Result<
 
     Ok(hir::PipelineHead {
         depth,
-        inputs: hir::ParameterList(inputs),
+        inputs,
         output_type,
     })
 }
@@ -231,7 +222,6 @@ mod binding_visiting {
     use spade_ast::testutil::{ast_ident, ast_path};
     use spade_common::location_info::WithLocation;
     use spade_common::name::testutil::name_id;
-    use spade_types::BaseType;
 
     #[test]
     fn local_pipeline_binding_visiting_works() {
@@ -414,13 +404,13 @@ mod pipeline_visiting {
         let input = ast::Pipeline {
             name: ast_ident("pipe"),
             depth: 2.nowhere(),
-            inputs: vec![
+            inputs: ast::ParameterList(vec![
                 (
                     ast_ident("clk"),
                     ast::TypeSpec::Unit(().nowhere()).nowhere(),
                 ),
                 (ast_ident("in"), ast::TypeSpec::Unit(().nowhere()).nowhere()),
-            ],
+            ]),
             output_type: Some(ast::TypeSpec::Unit(().nowhere()).nowhere()),
             stages: vec![
                 ast::PipelineStage {
@@ -483,10 +473,10 @@ mod pipeline_visiting {
         let input = ast::Pipeline {
             name: ast_ident("pipe"),
             depth: 3.nowhere(),
-            inputs: vec![(
+            inputs: ast::ParameterList(vec![(
                 ast_ident("clk"),
                 ast::TypeSpec::Unit(().nowhere()).nowhere(),
-            )],
+            )]),
             output_type: Some(ast::TypeSpec::Unit(().nowhere()).nowhere()),
             stages: vec![
                 ast::PipelineStage {
@@ -526,10 +516,10 @@ mod pipeline_visiting {
         let input = ast::Pipeline {
             name: ast_ident("pipe"),
             depth: 2.nowhere(),
-            inputs: vec![(
+            inputs: ast::ParameterList(vec![(
                 ast_ident("clk"),
                 ast::TypeSpec::Unit(().nowhere()).nowhere(),
-            )],
+            )]),
             output_type: Some(ast::TypeSpec::Unit(().nowhere()).nowhere()),
             stages: vec![
                 ast::PipelineStage {
@@ -567,10 +557,10 @@ mod pipeline_visiting {
         let input = ast::Pipeline {
             name: ast_ident("pipe"),
             depth: 0.nowhere(),
-            inputs: vec![(
+            inputs: ast::ParameterList(vec![(
                 ast_ident("clk"),
                 ast::TypeSpec::Unit(().nowhere()).nowhere(),
-            )],
+            )]),
             output_type: Some(ast::TypeSpec::Unit(().nowhere()).nowhere()),
             stages: vec![],
         }
@@ -592,7 +582,7 @@ mod pipeline_visiting {
         let input = ast::Pipeline {
             name: ast_ident("pipe"),
             depth: 2.nowhere(),
-            inputs: vec![],
+            inputs: ast::ParameterList(vec![]),
             output_type: Some(ast::TypeSpec::Unit(().nowhere()).nowhere()),
             stages: vec![
                 ast::PipelineStage {

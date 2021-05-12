@@ -1,11 +1,33 @@
-use spade_types::{BaseType, KnownType};
+use spade_common::{
+    location_info::WithLocation,
+    name::{Identifier, Path},
+};
+use spade_hir::symbol_table::SymbolTable;
+use spade_types::KnownType;
 
-pub fn t_int() -> KnownType {
-    KnownType::Type(BaseType::Int)
+fn lookup(symtab: &SymbolTable, name: &[&str]) -> KnownType {
+    let path = Path(
+        name.iter()
+            .map(|s| Identifier(s.to_string()).nowhere())
+            .collect(),
+    );
+    KnownType::Type(
+        symtab
+            .lookup_type_symbol(&path.clone().nowhere())
+            .expect(&format!(
+                "{} not found. Was the symtab not populated with builtins?",
+                path
+            ))
+            .0,
+    )
 }
-pub fn t_bool() -> KnownType {
-    KnownType::Type(BaseType::Bool)
+
+pub fn t_int(symtab: &SymbolTable) -> KnownType {
+    lookup(symtab, &["int"])
 }
-pub fn t_clock() -> KnownType {
-    KnownType::Type(BaseType::Clock)
+pub fn t_bool(symtab: &SymbolTable) -> KnownType {
+    lookup(symtab, &["bool"])
+}
+pub fn t_clock(symtab: &SymbolTable) -> KnownType {
+    lookup(symtab, &["clk"])
 }

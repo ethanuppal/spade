@@ -1,12 +1,13 @@
 pub mod expression;
+pub mod symbol_table;
+pub mod testutil;
+pub mod util;
 
+pub use expression::{Argument, ArgumentKind, ExprKind, Expression};
 use spade_common::{
     location_info::{Loc, WithLocation},
     name::{Identifier, NameID},
 };
-use spade_types as types;
-
-pub use expression::{Argument, ArgumentKind, ExprKind, Expression};
 
 /**
   Representation of the language with most language constructs still present, with
@@ -72,26 +73,18 @@ impl TypeSpec {
     pub fn unit() -> Self {
         TypeSpec::Unit(().nowhere())
     }
-
-    pub fn int(size: u128) -> Self {
-        todo!("How do we do this?")
-        // TypeSpec::Concrete(
-        //     types::BaseType::Int.nowhere(),
-        //     vec![TypeExpression::Integer(size).nowhere()],
-        // )
-    }
 }
 
 /// Declaration of an enum
 #[derive(PartialEq, Debug, Clone)]
 pub struct Enum {
-    pub options: Vec<(Loc<NameID>, Vec<Loc<TypeSpec>>)>
+    pub options: Vec<(Loc<NameID>, ParameterList)>,
 }
 impl WithLocation for Enum {}
 
 #[derive(PartialEq, Debug, Clone)]
 pub enum TypeDeclKind {
-    Enum(Loc<Enum>)
+    Enum(Loc<Enum>),
 }
 
 /// A declaration of a new type
@@ -99,10 +92,9 @@ pub enum TypeDeclKind {
 pub struct TypeDeclaration {
     pub name: Loc<NameID>,
     pub kind: TypeDeclKind,
-    pub generic_args: Vec<Loc<TypeParam>>
+    pub generic_args: Vec<Loc<TypeParam>>,
 }
 impl WithLocation for TypeDeclaration {}
-
 
 #[derive(PartialEq, Debug, Clone)]
 pub struct Entity {
@@ -131,6 +123,14 @@ impl ParameterList {
         )
     }
 }
+
+#[derive(PartialEq, Debug, Clone)]
+pub struct FunctionHead {
+    pub inputs: ParameterList,
+    pub output_type: Option<Loc<TypeSpec>>,
+    pub type_params: Vec<Identifier>,
+}
+impl WithLocation for FunctionHead {}
 
 #[derive(PartialEq, Debug, Clone)]
 pub struct EntityHead {

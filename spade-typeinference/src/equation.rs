@@ -12,7 +12,7 @@ pub enum TypeVar {
     Known(KnownType, Vec<TypeVar>, Option<Loc<()>>),
     Tuple(Vec<TypeVar>),
     /// The type is completely unknown
-    Generic(u64),
+    Unknown(u64),
 }
 
 impl std::fmt::Display for TypeVar {
@@ -44,7 +44,7 @@ impl std::fmt::Display for TypeVar {
                         .join(", ")
                 )
             }
-            TypeVar::Generic(id) => write!(f, "t{}", id),
+            TypeVar::Unknown(id) => write!(f, "t{}", id),
         }
     }
 }
@@ -53,12 +53,12 @@ impl PartialEq for TypeVar {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
             (TypeVar::Known(t1, p1, _), TypeVar::Known(t2, p2, _)) => t1 == t2 && p1 == p2,
-            (TypeVar::Known(_, _, _), TypeVar::Generic(_)) => false,
-            (TypeVar::Generic(_), TypeVar::Known(_, _, _)) => false,
+            (TypeVar::Known(_, _, _), TypeVar::Unknown(_)) => false,
+            (TypeVar::Unknown(_), TypeVar::Known(_, _, _)) => false,
             (TypeVar::Tuple(i1), TypeVar::Tuple(i2)) => i1 == i2,
             (TypeVar::Tuple(_), _) => false,
             (_, TypeVar::Tuple(_)) => false,
-            (TypeVar::Generic(t1), TypeVar::Generic(t2)) => t1 == t2,
+            (TypeVar::Unknown(t1), TypeVar::Unknown(t2)) => t1 == t2,
         }
     }
 }

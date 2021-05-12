@@ -1,26 +1,27 @@
+pub mod builtins;
 pub mod error;
 pub mod error_reporting;
 pub mod global_symbols;
 pub mod pipelines;
 pub mod types;
-pub mod symbol_table;
 
+use ast::ParameterList;
+use hir::util::path_from_ident;
 pub use spade_common::id_tracker;
 
 use std::collections::HashMap;
 
-use symbol_table::SymbolTableExt;
 use thiserror::Error;
 
-use crate::symbol_table::SymbolTable;
-use crate::symbol_table::{Thing, TypeSymbol};
 use spade_ast as ast;
 use spade_common::id_tracker::IdTracker;
 use spade_common::{
     location_info::{Loc, WithLocation},
-    name::{Identifier, NameID, Path},
+    name::{NameID, Path},
 };
 use spade_hir as hir;
+use spade_hir::symbol_table::SymbolTable;
+use spade_hir::symbol_table::{Thing, TypeSymbol};
 use spade_hir::{expression::BinaryOperator, EntityHead};
 
 pub use error::{Error, Result};
@@ -49,10 +50,6 @@ impl<T> LocExt<T> for Loc<T> {
         self.map_ref(|t| visitor(&t, symtab, idtracker))
             .map_err(|e, _| e)
     }
-}
-
-pub fn path_from_ident(ident: Loc<Identifier>) -> Loc<Path> {
-    Path(vec![ident.clone()]).at_loc(&ident)
 }
 
 pub fn visit_type_param(_param: &Loc<ast::TypeParam>, _symtab: &mut SymbolTable) -> NameID {
@@ -85,13 +82,11 @@ pub fn visit_type_spec(t: &ast::TypeSpec, symtab: &mut SymbolTable) -> Result<hi
             // Lookup the referenced type
             // NOTE: this weird scope is required because the borrow of t lasts
             // until the end of the outer scope even if we clone here.
-            let (base_id, t) = {
-                symtab.lookyp_type_symbol(path)?.clone()
-            };
+            let (base_id, t) = { symtab.lookup_type_symbol(path)?.clone() };
 
             // Check if the type is a declared type or a generic argument.
             match &t.inner {
-                TypeSymbol::Declared ( generic_args ) => {
+                TypeSymbol::Declared(_) => {
                     // We'll defer checking the validity of generic args to the type checker,
                     // but we still have to visit them now
                     let params = params
@@ -108,12 +103,11 @@ pub fn visit_type_spec(t: &ast::TypeSpec, symtab: &mut SymbolTable) -> Result<hi
 
                     if !params.is_empty() {
                         let at_loc = ().between(params.first().unwrap(), params.last().unwrap());
-                        Err(Error::GenericsGivenForGeneric{
+                        Err(Error::GenericsGivenForGeneric {
                             at_loc,
-                            for_type: base_id.1.clone().at_loc(&t.loc())
+                            for_type: base_id.1.clone().at_loc(&t.loc()),
                         })
-                    }
-                    else {
+                    } else {
                         Ok(hir::TypeSpec::Generic(base_id.at_loc(&path)))
                     }
                 }
@@ -131,18 +125,21 @@ pub fn visit_type_spec(t: &ast::TypeSpec, symtab: &mut SymbolTable) -> Result<hi
     }
 }
 
+fn visit_parameter_list(l: &ParameterList, symtab: &mut SymbolTable) -> Result<hir::ParameterList> {
+    let mut result = vec![];
+    for (name, input_type) in &l.0 {
+        let t = input_type.try_map_ref(|t| visit_type_spec(t, symtab))?;
+
+        result.push((name.clone(), t));
+    }
+    Ok(hir::ParameterList(result))
+}
+
 /// Visit the head of an entity to generate an entity head
 pub fn entity_head(item: &ast::Entity, symtab: &mut SymbolTable) -> Result<EntityHead> {
     let type_params = vec![];
     if !item.type_params.is_empty() {
         todo!("Handle generic type parameters in entities");
-    }
-
-    let mut inputs = vec![];
-    for (name, input_type) in &item.inputs {
-        let t = input_type.try_map_ref(|t| visit_type_spec(t, symtab))?;
-
-        inputs.push((name.clone(), t));
     }
 
     let output_type = if let Some(output_type) = &item.output_type {
@@ -152,7 +149,7 @@ pub fn entity_head(item: &ast::Entity, symtab: &mut SymbolTable) -> Result<Entit
     };
 
     Ok(EntityHead {
-        inputs: hir::ParameterList(inputs),
+        inputs: visit_parameter_list(&item.inputs, symtab)?,
         output_type,
         type_params,
     })
@@ -550,8 +547,8 @@ mod entity_visiting {
     use super::*;
 
     use spade_ast::testutil::{ast_ident, ast_path};
-    use spade_common::location_info::WithLocation;
     use spade_common::name::testutil::name_id;
+    use spade_common::{location_info::WithLocation, name::Identifier};
 
     use pretty_assertions::assert_eq;
 
@@ -559,7 +556,10 @@ mod entity_visiting {
     fn entity_visits_work() {
         let input = ast::Entity {
             name: Identifier("test".to_string()).nowhere(),
-            inputs: vec![(ast_ident("a"), ast::TypeSpec::Unit(().nowhere()).nowhere())],
+            inputs: ParameterList(vec![(
+                ast_ident("a"),
+                ast::TypeSpec::Unit(().nowhere()).nowhere(),
+            )]),
             output_type: None,
             body: ast::Expression::Block(Box::new(ast::Block {
                 statements: vec![ast::Statement::Binding(
@@ -755,8 +755,8 @@ mod expression_visiting {
 
     use hir::PipelineHead;
     use spade_ast::testutil::{ast_ident, ast_path};
-    use spade_common::location_info::WithLocation;
     use spade_common::name::testutil::name_id;
+    use spade_common::{location_info::WithLocation, name::Identifier};
 
     #[test]
     fn int_literals_work() {
@@ -810,7 +810,7 @@ mod expression_visiting {
         assert_eq!(
             visit_expression(&input, &mut symtab, &mut idtracker),
             Err(Error::LookupError(
-                crate::symbol_table::Error::NoSuchSymbol(ast_path("test"))
+                spade_hir::symbol_table::Error::NoSuchSymbol(ast_path("test"))
             ))
         );
     }
@@ -1217,8 +1217,8 @@ mod register_visiting {
     use super::*;
 
     use spade_ast::testutil::{ast_ident, ast_path};
-    use spade_common::location_info::WithLocation;
     use spade_common::name::testutil::name_id;
+    use spade_common::{location_info::WithLocation, name::Identifier};
 
     #[test]
     fn register_visiting_works() {
@@ -1279,7 +1279,7 @@ mod item_visiting {
             ast::Entity {
                 name: ast_ident("test"),
                 output_type: None,
-                inputs: vec![],
+                inputs: ParameterList(vec![]),
                 body: ast::Expression::Block(Box::new(ast::Block {
                     statements: vec![],
                     result: ast::Expression::IntLiteral(0).nowhere(),
@@ -1337,7 +1337,7 @@ mod module_visiting {
                 ast::Entity {
                     name: ast_ident("test"),
                     output_type: None,
-                    inputs: vec![],
+                    inputs: ParameterList(vec![]),
                     body: ast::Expression::Block(Box::new(ast::Block {
                         statements: vec![],
                         result: ast::Expression::IntLiteral(0).nowhere(),
