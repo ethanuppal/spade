@@ -38,6 +38,7 @@ impl WithLocation for ArgumentList {}
 pub enum BinaryOperator {
     Add,
     Sub,
+    Mul,
     Equals,
     Lt,
     Gt,

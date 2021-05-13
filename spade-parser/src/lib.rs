@@ -168,6 +168,7 @@ impl<'a> Parser<'a> {
             let op = match operator.kind {
                 TokenKind::Plus => BinaryOperator::Add,
                 TokenKind::Minus => BinaryOperator::Sub,
+                TokenKind::Asterisk => BinaryOperator::Mul,
                 TokenKind::Equals => BinaryOperator::Equals,
                 TokenKind::Lt => BinaryOperator::Lt,
                 TokenKind::Gt => BinaryOperator::Gt,
@@ -175,7 +176,7 @@ impl<'a> Parser<'a> {
                 TokenKind::LeftShift => BinaryOperator::LeftShift,
                 TokenKind::LogicalOr => BinaryOperator::LogicalOr,
                 TokenKind::LogicalAnd => BinaryOperator::LogicalAnd,
-                x => unreachable!("{} is not an operator", x.as_str()),
+                x => unreachable!("{:?} ({}) is not an operator", x, x.as_str()),
             };
             Ok(Expression::BinaryOperator(Box::new(start), op, Box::new(rest)).at(&span))
         } else {
@@ -871,6 +872,7 @@ impl<'a> Parser<'a> {
         // NOTE: We currently have no multiplication-like operators but I'll leave this
         // here in case I come up with a good way to support them
         Ok(match self.peek()?.map(|token| token.kind) {
+            Some(TokenKind::Asterisk) => true,
             _ => false,
         })
     }

@@ -394,6 +394,7 @@ pub fn visit_expression(
             match tok {
                 ast::BinaryOperator::Add => Ok(operator(BinaryOperator::Add)),
                 ast::BinaryOperator::Sub => Ok(operator(BinaryOperator::Sub)),
+                ast::BinaryOperator::Mul => Ok(operator(BinaryOperator::Mul)),
                 ast::BinaryOperator::Equals => Ok(operator(BinaryOperator::Eq)),
                 ast::BinaryOperator::Gt => Ok(operator(BinaryOperator::Gt)),
                 ast::BinaryOperator::Lt => Ok(operator(BinaryOperator::Lt)),

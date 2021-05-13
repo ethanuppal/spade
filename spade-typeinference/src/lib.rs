@@ -328,6 +328,7 @@ impl TypeState {
                 match *op {
                     BinaryOperator::Add
                     | BinaryOperator::Sub
+                    | BinaryOperator::Mul
                     | BinaryOperator::LeftShift
                     | BinaryOperator::RightShift => {
                         let int_type = self.new_generic_int();
@@ -350,7 +351,6 @@ impl TypeState {
 
                         self.unify_expression_generic_error(expression, &t_bool())?
                     }
-                    other => panic!("unrecognised intrinsic {:?}", other),
                 }
             }
             ExprKind::EntityInstance(name, args) => {
