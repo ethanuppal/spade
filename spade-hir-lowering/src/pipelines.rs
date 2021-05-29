@@ -131,8 +131,10 @@ pub fn generate_pipeline<'a>(
         .collect::<Vec<_>>();
 
     let mut subs = Substitutions::new();
+    let mut prev_subs = Substitutions::new();
     let mut statements = vec![];
     for (stage_num, stage) in body.iter().enumerate() {
+        prev_subs = subs.clone();
         statements.append(&mut stage.lower(
             stage_num,
             types,
@@ -142,6 +144,9 @@ pub fn generate_pipeline<'a>(
             &mut subs,
         )?);
     }
+
+    statements.append(&mut result.lower(types, &prev_subs)?);
+
     let output = result.variable(&subs);
 
     let output_type = types.expr_type(&result)?.to_mir_type();

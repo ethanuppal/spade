@@ -576,4 +576,45 @@ mod tests {
         .report_failure();
         assert_same_mir!(&result, &expected);
     }
+
+    #[test]
+    fn pipelines_returning_expressions_work() {
+        let code = r#"
+            pipeline(3) pl(clk: clk, a: int<16>) -> int<16> {
+                stage {
+                }
+                stage {
+                }
+                stage {
+                    a+a
+                }
+            }
+        "#;
+
+        let expected = entity!("pl"; (
+                "_i_clk", n(3, "clk"), Type::Bool,
+                "_i_a", n(0, "a"), Type::Int(16),
+            ) -> Type::Int(16); {
+                // Stage 0
+                (reg n(2, "a_s0"); Type::Int(16); clock(n(3, "clk")); n(0, "a"));
+
+                // Stage 1
+                (reg n(21, "a_s1"); Type::Int(16); clock(n(3, "clk")); n(2, "a_s0"));
+
+                // Stage 3
+                (reg n(31, "a_s2"); Type::Int(16); clock(n(3, "clk")); n(21, "a_s1"));
+                (e(3); Type::Int(16); Add; n(21, "a_s1"), n(21, "a_s1"));
+            } => e(3)
+        );
+
+        let (processed, mut symbol_tracker) = parse_typecheck_pipeline(code);
+
+        let result = generate_pipeline(
+            &processed.pipeline,
+            &processed.type_state,
+            &mut symbol_tracker,
+        )
+        .report_failure();
+        assert_same_mir!(&result, &expected);
+    }
 }
