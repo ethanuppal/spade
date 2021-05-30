@@ -141,7 +141,7 @@ pub fn generate_pipeline<'a>(
         )?);
     }
 
-    statements.append(&mut result.lower(types, &prev_subs)?);
+    statements.append(&mut result.lower(symtab.symtab(), types, &prev_subs)?);
 
     let output = result.variable(&subs);
 
