@@ -141,7 +141,7 @@ for printing that error using `codespan_reporting`.
 ### Type representations
 
 Types have several representations in the compiler, both between phases and for
-differnt kinds of types.
+different "kinds" of types.
 
 The kinds include the following:
 
@@ -167,19 +167,51 @@ During AST -> HIR lowering the different kinds of types are handled quite differ
 
 Declarations go through 2 passes: collection and elaboration. Type collection
 looks at the "left hand side" of the types and creates corresponding symtab
-entries which just contain a name and a list of generic args to be passed. In
+entries which just contain a name and a list of generic arguments to be passed. In
 the future, these will also contain type constraints. After initial HIR lowering,
 these are not touched until types are concretised before MIR lowering
 
+### Specifications
+
+Type specifications appear in the AST and HIR representations. In the AST, they
+are only names with optional generic arguments while in the HIR, they are
+"Declared" types, i.e. concrete types declared elsewhere, or generics present
+in the current scope. Generic arguments have been partially checked for
+correctness, in particular, generics can only appear on declared types, and the
+amount of arguments is correct.
 
 ### Type inference types
 
-In type inference, all expressions, and some other things are given types.  The
-types given are of type `TypeVar` which is one of 2 options: `Known` and
-`Unknown`. An unknown type is given to things before the true type is known,
-for example in a let binding with no type spec.
+The type inference code is loosely based on [this excellent lecture](type_inference_lecture)
 
-A `Known` is either a type name and 0 or more `TypeVar` for the corresponding
-generics or a type level integer (TODO: We should incorporate integer expressions here).
+Type inference runs once per item and tries to infer the type of everything in
+the item which is typed. This includes variables, of course, but also each
+sub-expression.
+
+Each typed thing (`TypedExpression`) is assigned a type equation, with the LHS
+containing the typed thing and the RHS containing a `TypeVar`. These equations
+are solved using unification, to (hopefully) remove all `TypeVar::Unknown`
+instances. If `Unknown` types remain after this process is done, user must
+specify some type signatures
+
+[type_inference_lecture]: https://www.youtube.com/watch?v=xJXcZp2vgLs
+
+### Types in HIR to MIR lowering
+
+Types in the HIR, and in type inference are "language level types" while types
+in the MIR are backend level types. For example, while clocks are their own
+type in the HIR, in the MIR they are lowered to booleans.
 
 
+Type inference does not care about the details of the types, essentially it
+only carers about the left hand side of the definition. The type arguments, the
+constraints etc., but not wether or not a type is an enum or a struct. During
+MIR to HIR lowering however, this information is needed. Thus, types from the
+TypeState produced by the type inferer are converted to `ConcreteType`s. At
+this point, items will also be monomorphised, i.e. generic items are turned
+into concrete items with the right types.
+
+`ConcreteType`s are then mapped to `MIR` types. During this conversion, it can
+be assumed that the type arguments are correct and valid, i.e. given a
+`ConcreteType::Single{base: Int, params}`, params is guaranteed to be a single
+integer.
