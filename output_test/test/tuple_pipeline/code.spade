@@ -1,8 +1,7 @@
 pipeline(3) delay_3(clk: clk, input1: int<4>, input2: int<4>) -> (int<4>, int<4>) {
     stage {}
     stage {}
-    stage {
-        (input1, input2)
-    }
+    stage {}
+    (input1, input2)
 }
 

@@ -127,10 +127,8 @@ pub fn generate_pipeline<'a>(
         .collect::<Vec<_>>();
 
     let mut subs = Substitutions::new();
-    let mut prev_subs = Substitutions::new();
     let mut statements = vec![];
     for (stage_num, stage) in body.iter().enumerate() {
-        prev_subs = subs.clone();
         statements.append(&mut stage.lower(
             stage_num,
             symtab,
@@ -141,7 +139,7 @@ pub fn generate_pipeline<'a>(
         )?);
     }
 
-    statements.append(&mut result.lower(symtab.symtab(), types, &prev_subs)?);
+    statements.append(&mut result.lower(symtab.symtab(), types, &subs)?);
 
     let output = result.variable(&subs);
 

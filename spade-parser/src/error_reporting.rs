@@ -101,6 +101,15 @@ impl CompilationError for Error {
                 .with_labels(vec![
                     Label::primary(file_id, found.span).with_message("Expected a type")
                 ]),
+            Error::ExpectedExpressionOrStage { got } => {
+                let message = format!("Expected return expression or pipeline stage");
+
+                Diagnostic::error()
+                    .with_message(message)
+                    .with_labels(vec![Label::primary(file_id, got.span)
+                        .with_message("Expected expression or stage")])
+                    .with_notes(vec![format!("Found {}", got.kind.as_str())])
+            }
         };
 
         let writer = StandardStream::stderr(color_choice(no_color));

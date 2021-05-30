@@ -16,7 +16,6 @@ use spade_hir::symbol_table::SymbolTable;
 
 #[derive(Debug, Clone)]
 pub struct PipelineState {
-    pub return_expr: Option<Loc<hir::Expression>>,
     pub stage_count: usize,
     // List of pipeline registers
     pub regs: HashSet<NameID>,
@@ -27,7 +26,6 @@ impl PipelineState {
         Self {
             stage_count: 0,
             regs: HashSet::new(),
-            return_expr: None,
         }
     }
 
@@ -101,7 +99,7 @@ pub fn visit_stage(
     idtracker: &mut IdTracker,
     pipeline_state: &mut PipelineState,
 ) -> Result<hir::PipelineStage> {
-    let ast::PipelineStage { bindings, result } = stage;
+    let ast::PipelineStage { bindings } = stage;
 
     symtab.new_scope();
 
@@ -111,11 +109,6 @@ pub fn visit_stage(
             binding.try_map_ref(|b| visit_pipeline_binding(b, symtab, idtracker, pipeline_state))
         })
         .collect::<Result<Vec<_>>>()?;
-
-    if let Some(result) = result {
-        pipeline_state.return_expr =
-            Some(result.try_visit(super::visit_expression, symtab, idtracker)?)
-    }
 
     symtab.close_scope();
 
@@ -134,6 +127,7 @@ pub fn visit_pipeline(
         inputs: _,
         output_type,
         stages,
+        result,
     } = pipeline.inner.clone();
 
     symtab.new_scope();
@@ -165,17 +159,8 @@ pub fn visit_pipeline(
 
     let mut state = PipelineState::new();
     let mut body = vec![];
-    for (i, stage) in stages.iter().enumerate() {
+    for stage in stages {
         let stage = stage.try_map_ref(|s| visit_stage(s, symtab, idtracker, &mut state))?;
-
-        // Check if we found an early return
-        if let Some(expression) = &state.return_expr {
-            if i != stages.len() - 1 {
-                return Err(Error::EarlyPipelineReturn {
-                    expression: expression.clone(),
-                });
-            }
-        }
 
         body.push(stage);
     }
@@ -188,13 +173,7 @@ pub fn visit_pipeline(
         });
     }
 
-    let result = if let Some(result) = state.return_expr {
-        result
-    } else {
-        return Err(Error::MissingPipelineReturn {
-            in_stage: body.pop().unwrap(),
-        });
-    };
+    let result = result.try_visit(super::visit_expression, symtab, idtracker)?;
 
     let output_type = if let Some(t) = output_type {
         t.try_map_ref(|t| visit_type_spec(t, symtab))?
@@ -338,7 +317,6 @@ mod stage_visiting {
                 }
                 .nowhere(),
             ],
-            result: Some(ast::Expression::Identifier(ast_path("b")).nowhere()),
         };
 
         let expected = hir::PipelineStage {
@@ -380,12 +358,6 @@ mod stage_visiting {
             !symtab.has_symbol(ast_path("b").inner),
             "Local reg was incorrectly visible to the outside world"
         );
-
-        // And that the return value of the pipeline state was updated
-        assert_eq!(
-            pipeline_state.return_expr,
-            Some(hir::Expression::ident(2, 1, "b").nowhere())
-        );
     }
 }
 
@@ -421,15 +393,11 @@ mod pipeline_visiting {
                         value: ast::Expression::IntLiteral(0).nowhere(),
                     }
                     .nowhere()],
-                    result: None,
                 }
                 .nowhere(),
-                ast::PipelineStage {
-                    bindings: vec![],
-                    result: Some(ast::Expression::Identifier(ast_path("a")).nowhere()),
-                }
-                .nowhere(),
+                ast::PipelineStage { bindings: vec![] }.nowhere(),
             ],
+            result: ast::Expression::Identifier(ast_path("a")).nowhere(),
         }
         .nowhere();
 
@@ -479,17 +447,10 @@ mod pipeline_visiting {
             )]),
             output_type: Some(ast::TypeSpec::Unit(().nowhere()).nowhere()),
             stages: vec![
-                ast::PipelineStage {
-                    bindings: vec![],
-                    result: None,
-                }
-                .nowhere(),
-                ast::PipelineStage {
-                    bindings: vec![],
-                    result: Some(ast::Expression::IntLiteral(0).nowhere()),
-                }
-                .nowhere(),
+                ast::PipelineStage { bindings: vec![] }.nowhere(),
+                ast::PipelineStage { bindings: vec![] }.nowhere(),
             ],
+            result: ast::Expression::IntLiteral(0).nowhere(),
         }
         .nowhere();
 
@@ -512,47 +473,6 @@ mod pipeline_visiting {
     }
 
     #[test]
-    fn early_return_causes_error() {
-        let input = ast::Pipeline {
-            name: ast_ident("pipe"),
-            depth: 2.nowhere(),
-            inputs: ast::ParameterList(vec![(
-                ast_ident("clk"),
-                ast::TypeSpec::Unit(().nowhere()).nowhere(),
-            )]),
-            output_type: Some(ast::TypeSpec::Unit(().nowhere()).nowhere()),
-            stages: vec![
-                ast::PipelineStage {
-                    bindings: vec![],
-                    result: Some(ast::Expression::IntLiteral(0).nowhere()),
-                }
-                .nowhere(),
-                ast::PipelineStage {
-                    bindings: vec![],
-                    result: Some(ast::Expression::IntLiteral(1).nowhere()),
-                }
-                .nowhere(),
-            ],
-        }
-        .nowhere();
-
-        let mut symtab = SymbolTable::new();
-        let mut id_tracker = IdTracker::new();
-
-        crate::global_symbols::visit_pipeline(&input, &Path(vec![]), &mut symtab)
-            .expect("Failed to add pipeline to symtab");
-
-        let result = visit_pipeline(&input, &Path(vec![]), &mut symtab, &mut id_tracker);
-
-        assert_eq!(
-            result,
-            Err(Error::EarlyPipelineReturn {
-                expression: hir::ExprKind::IntLiteral(0).with_id(0).nowhere()
-            })
-        );
-    }
-
-    #[test]
     fn pipeline_without_stages_is_invalid() {
         let input = ast::Pipeline {
             name: ast_ident("pipe"),
@@ -563,6 +483,7 @@ mod pipeline_visiting {
             )]),
             output_type: Some(ast::TypeSpec::Unit(().nowhere()).nowhere()),
             stages: vec![],
+            result: ast::Expression::IntLiteral(0).nowhere(),
         }
         .nowhere();
 
@@ -585,17 +506,10 @@ mod pipeline_visiting {
             inputs: ast::ParameterList(vec![]),
             output_type: Some(ast::TypeSpec::Unit(().nowhere()).nowhere()),
             stages: vec![
-                ast::PipelineStage {
-                    bindings: vec![],
-                    result: None,
-                }
-                .nowhere(),
-                ast::PipelineStage {
-                    bindings: vec![],
-                    result: Some(ast::Expression::IntLiteral(0).nowhere()),
-                }
-                .nowhere(),
+                ast::PipelineStage { bindings: vec![] }.nowhere(),
+                ast::PipelineStage { bindings: vec![] }.nowhere(),
             ],
+            result: ast::Expression::IntLiteral(0).nowhere(),
         }
         .nowhere();
 

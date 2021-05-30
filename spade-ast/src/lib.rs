@@ -128,7 +128,6 @@ impl WithLocation for PipelineBinding {}
 #[derive(PartialEq, Debug, Clone)]
 pub struct PipelineStage {
     pub bindings: Vec<Loc<PipelineBinding>>,
-    pub result: Option<Loc<Expression>>,
 }
 impl WithLocation for PipelineStage {}
 
@@ -141,6 +140,7 @@ pub struct Pipeline {
     /// The body is a list of expression for ID assignment purposes, but semantic analysis
     /// ensures that it is always a block.
     pub stages: Vec<Loc<PipelineStage>>,
+    pub result: Loc<Expression>,
 }
 impl WithLocation for Pipeline {}
 

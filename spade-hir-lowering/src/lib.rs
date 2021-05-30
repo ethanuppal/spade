@@ -2,6 +2,9 @@ pub mod error_reporting;
 pub mod pipelines;
 pub mod substitution;
 
+pub use pipelines::generate_pipeline;
+use substitution::Substitutions;
+
 use spade_common::{location_info::Loc, name::NameID};
 use spade_hir::{
     expression::BinaryOperator, symbol_table::SymbolTable, Entity, ExprKind, Expression, Pipeline,
@@ -402,6 +405,3 @@ pub fn generate_entity<'a>(
         statements: statements,
     })
 }
-
-pub use pipelines::generate_pipeline;
-use substitution::Substitutions;

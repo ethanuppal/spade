@@ -30,6 +30,7 @@ module pipeline_tb();
         @(negedge clk)
         in_val <= 0;
         @(negedge clk)
+        @(negedge clk)
         `ASSERT_EQ(result, 1);
         @(negedge clk)
         `ASSERT_EQ(result, 0);

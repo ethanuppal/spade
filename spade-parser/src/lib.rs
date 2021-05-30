@@ -71,6 +71,9 @@ pub enum Error {
 
     #[error("Expected pipeline depth")]
     ExpectedPipelineDepth { got: Token },
+
+    #[error("Expected expression or stage")]
+    ExpectedExpressionOrStage { got: Token },
 }
 
 impl Error {
@@ -675,17 +678,16 @@ impl<'a> Parser<'a> {
             bindings.push(statement)
         }
 
-        // Check if this is the end, or or if there is a return expression
-        let result = if self.peek_kind(&TokenKind::CloseBrace)? {
-            None
-        } else {
-            Some(self.expression()?)
-        };
-
-        let end = self.eat(&TokenKind::CloseBrace)?;
+        let end = self.eat(&TokenKind::CloseBrace).map_err(|e| match e {
+            Error::UnexpectedToken { got, mut expected } => {
+                expected.push("Pipeline binding");
+                Error::UnexpectedToken { got, expected }
+            }
+            other => other,
+        })?;
 
         Ok(Some(
-            PipelineStage { bindings, result }.between(&start.span, &end.span),
+            PipelineStage { bindings }.between(&start.span, &end.span),
         ))
     }
 
@@ -726,6 +728,11 @@ impl<'a> Parser<'a> {
             stages.push(stage)
         }
 
+        let result = self.expression().map_err(|e| match e {
+            Error::ExpectedExpression { got } => Error::ExpectedExpressionOrStage { got },
+            other => other,
+        })?;
+
         let end = self.eat(&TokenKind::CloseBrace)?;
 
         Ok(Some(
@@ -735,6 +742,7 @@ impl<'a> Parser<'a> {
                 inputs,
                 output_type,
                 stages,
+                result,
             }
             .between(&start.span, &end.span),
         ))
@@ -1887,7 +1895,6 @@ mod tests {
                 let y = 0;
                 let reg x = 0;
                 let reg x: bool = 0;
-                y
             }
             "#;
 
@@ -1915,7 +1922,6 @@ mod tests {
                 }
                 .nowhere(),
             ],
-            result: Some(Expression::Identifier(ast_path("y")).nowhere()),
         }
         .nowhere();
 
@@ -1932,6 +1938,7 @@ mod tests {
                 stage {
                     let c = 0;
                 }
+                0
             }
         "#;
 
@@ -1949,7 +1956,6 @@ mod tests {
                         value: Expression::IntLiteral(0).nowhere(),
                     }
                     .nowhere()],
-                    result: None,
                 }
                 .nowhere(),
                 PipelineStage {
@@ -1960,10 +1966,10 @@ mod tests {
                         value: Expression::IntLiteral(0).nowhere(),
                     }
                     .nowhere()],
-                    result: None,
                 }
                 .nowhere(),
             ],
+            result: Expression::IntLiteral(0).nowhere(),
         }
         .nowhere();
 
@@ -1974,6 +1980,7 @@ mod tests {
     fn pipelines_are_items() {
         let code = r#"
             pipeline(2) test(a: bool) -> bool {
+                0
             }
         "#;
 
@@ -1985,6 +1992,7 @@ mod tests {
                     inputs: aparams![("a", tspec!("bool"))],
                     output_type: Some(TypeSpec::Named(ast_path("bool"), vec![]).nowhere()),
                     stages: vec![],
+                    result: Expression::IntLiteral(0).nowhere(),
                 }
                 .nowhere(),
             )],

@@ -108,13 +108,6 @@ impl CompilationError for Error {
                             .with_message(format!("Missing {}", arg_list)),
                     ])
             }
-            Error::MissingPipelineReturn { in_stage } => Diagnostic::error()
-                .with_message(format!("Missing return expression"))
-                .with_labels(vec![Label::primary(file_id, in_stage.span)
-                    .with_message(format!("Missing return expression"))])
-                .with_notes(vec![format!(
-                    "The last stage of a pipeline must return a value"
-                )]),
             Error::NoPipelineStages { pipeline } => Diagnostic::error()
                 .with_message("Missing pipeline stages")
                 .with_labels(vec![Label::primary(file_id, pipeline.span)

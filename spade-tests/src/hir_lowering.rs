@@ -431,7 +431,8 @@ mod tests {
         let code = r#"
             pipeline(2) sub(clk: clk, a: int<16>) -> int<16> {
                 stage {}
-                stage {a}
+                stage {}
+                a
             }
 
             entity top(clk: clk) -> int<16> {
@@ -491,9 +492,9 @@ mod tests {
                     let reg y = x + a;
                 }
                 stage {
-                    let res = y + y;
-                    res
+                    let reg res = y + y;
                 }
+                res
             }
         "#;
 
@@ -544,8 +545,8 @@ mod tests {
                 stage {
                 }
                 stage {
-                    a+a
                 }
+                a+a
             }
         "#;
 
@@ -561,7 +562,9 @@ mod tests {
 
                 // Stage 3
                 (reg n(31, "a_s2"); Type::Int(16); clock(n(3, "clk")); n(21, "a_s1"));
-                (e(3); Type::Int(16); Add; n(21, "a_s1"), n(21, "a_s1"));
+
+                // Output
+                (e(3); Type::Int(16); Add; n(31, "a_s2"), n(31, "a_s2"));
             } => e(3)
         );
 
