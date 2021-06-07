@@ -93,7 +93,7 @@ pub fn visit_type_declaration(
         .iter()
         .map(|arg| {
             match &arg.inner {
-                ast::TypeParam::TypeName(n) => GenericArg::TypeName(n.clone()),
+                ast::TypeParam::TypeName(n) => GenericArg::TypeName(n.inner.clone()),
                 ast::TypeParam::Integer(n) => GenericArg::Number(n.inner.clone()),
             }
             .at_loc(&arg.loc())
@@ -116,6 +116,24 @@ pub fn re_visit_type_declaration(
     namespace: &Path,
     symtab: &mut SymbolTable,
 ) -> Result<(), Error> {
+    // Add the generic types declared here to the symtab
+    for param in &t.generic_args {
+        match &param.inner {
+            ast::TypeParam::TypeName(name) => {
+                symtab.add_thing(
+                    Path(vec![name.clone()]),
+                    Thing::Type(TypeSymbol::GenericArg.at_loc(&param)),
+                );
+            }
+            ast::TypeParam::Integer(name) => {
+                symtab.add_thing(
+                    Path(vec![name.clone()]),
+                    Thing::Type(TypeSymbol::GenericInt.at_loc(&param)),
+                );
+            }
+        }
+    }
+
     // Add things like enum variants to the symtab
     match &t.inner.kind {
         ast::TypeDeclKind::Enum(e) => {

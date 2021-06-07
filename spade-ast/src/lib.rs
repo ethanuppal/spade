@@ -87,7 +87,7 @@ impl WithLocation for Statement {}
 /// A generic type parameter
 #[derive(PartialEq, Debug, Clone)]
 pub enum TypeParam {
-    TypeName(Identifier),
+    TypeName(Loc<Identifier>),
     Integer(Loc<Identifier>),
 }
 impl WithLocation for TypeParam {}

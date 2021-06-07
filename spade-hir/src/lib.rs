@@ -38,10 +38,13 @@ pub struct Register {
 }
 impl WithLocation for Register {}
 
+/// Type params have both an identifier and a NameID since they go through the
+/// ast lowering process in a few separate steps, and the identifier needs to be
+/// re-added to the symtab multiple times
 #[derive(PartialEq, Debug, Clone)]
 pub enum TypeParam {
-    TypeName,
-    Integer,
+    TypeName(Identifier, NameID),
+    Integer(Identifier, NameID),
 }
 impl WithLocation for TypeParam {}
 

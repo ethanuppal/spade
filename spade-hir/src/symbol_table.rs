@@ -71,6 +71,7 @@ pub enum TypeSymbol {
     Declared(Vec<Loc<GenericArg>>),
     /// A generic type present in the current scope
     GenericArg,
+    GenericInt,
 }
 impl WithLocation for TypeSymbol {}
 

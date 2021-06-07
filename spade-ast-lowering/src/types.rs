@@ -3,7 +3,7 @@ use spade_ast as ast;
 use spade_common::{location_info::WithLocation, name::Path};
 use spade_hir as hir;
 
-use crate::Result;
+use crate::{visit_type_param, Result};
 
 pub fn visit_typedecl(
     decl: &ast::TypeDeclaration,
@@ -21,6 +21,11 @@ pub fn visit_typedecl(
     // TODO: Should this use expect or return an error?
     let (id, _) = symtab.lookup_type_symbol(&this_path.clone().at_loc(&name))
         .expect("Found no entry for typedecl in symtab. Was it not visited during global symbol collection?");
+
+    let generic_args = generic_args
+        .iter()
+        .map(|param| param.try_map_ref(|p| visit_type_param(p, symtab)))
+        .collect::<Result<Vec<_>>>()?;
 
     let kind = match kind {
         ast::TypeDeclKind::Enum(e) => {
@@ -50,12 +55,6 @@ pub fn visit_typedecl(
         }
     };
 
-    let generic_args = if !generic_args.is_empty() {
-        todo!("Support generic arguments")
-    } else {
-        vec![]
-    };
-
     Ok(hir::TypeDeclaration {
         name: id.at_loc(name),
         kind,
@@ -65,7 +64,11 @@ pub fn visit_typedecl(
 
 #[cfg(test)]
 mod tests {
-    use ast::testutil::{ast_ident, ast_path};
+    use ast::{
+        aparams,
+        testutil::{ast_ident, ast_path},
+        TypeParam,
+    };
     use hir::{dtype, hparams, testutil::t_num};
     use spade_common::name::testutil::{name_id, name_id_p};
 
@@ -147,21 +150,56 @@ mod tests {
         );
     }
 
-    #[ignore]
     #[test]
     fn type_declarations_with_generics_work() {
-        todo!()
-    }
+        let input = ast::TypeDeclaration {
+            name: ast_ident("test"),
+            kind: ast::TypeDeclKind::Enum(
+                ast::Enum {
+                    name: ast_ident("test"),
+                    options: vec![
+                        // Builtin type with no args
+                        (ast_ident("B"), Some(aparams!(("a", ast::tspec!("T"))))),
+                    ],
+                }
+                .nowhere(),
+            ),
+            generic_args: vec![TypeParam::TypeName(ast_ident("T")).nowhere()],
+        }
+        .nowhere();
 
-    #[ignore]
-    #[test]
-    fn type_declarations_with_undefined_types_throw_error() {
-        todo!()
-    }
+        // Populate the symtab with builtins
+        let mut symtab = SymbolTable::new();
 
-    #[ignore]
-    #[test]
-    fn type_declarations_with_incorrect_generics_throw_error() {
-        todo!()
+        let namespace = Path(vec![]);
+
+        crate::builtins::populate_symtab(&mut symtab);
+        crate::global_symbols::visit_type_declaration(&input, &namespace, &mut symtab)
+            .expect("Failed to visit global symbol");
+        crate::global_symbols::re_visit_type_declaration(&input, &namespace, &mut symtab)
+            .expect("Failed to visit global symbol");
+
+        let expected = hir::TypeDeclaration {
+            name: name_id(0, "test"),
+            kind: hir::TypeDeclKind::Enum(
+                hir::Enum {
+                    options: vec![(
+                        name_id_p(2, &["test", "B"]),
+                        hparams![("a", hir::TypeSpec::Generic(name_id(3, "T")).nowhere())],
+                    )],
+                }
+                .nowhere(),
+            ),
+            generic_args: vec![hir::TypeParam::TypeName(
+                ast_ident("T").inner,
+                name_id(3, "T").inner,
+            )
+            .nowhere()],
+        };
+
+        assert_eq!(
+            visit_typedecl(&input, &namespace, &mut symtab),
+            Ok(expected)
+        );
     }
 }

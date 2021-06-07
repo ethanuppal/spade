@@ -17,7 +17,7 @@ use spade_ast as ast;
 use spade_common::id_tracker::IdTracker;
 use spade_common::{
     location_info::{Loc, WithLocation},
-    name::{NameID, Path},
+    name::Path,
 };
 use spade_hir as hir;
 use spade_hir::symbol_table::SymbolTable;
@@ -52,13 +52,31 @@ impl<T> LocExt<T> for Loc<T> {
     }
 }
 
-pub fn visit_type_param(_param: &Loc<ast::TypeParam>, _symtab: &mut SymbolTable) -> NameID {
-    // let (name, kind) = match param {
-    //     ast::TypeParam::TypeName(name) => (param.map(|_| name), hir::TypeParam::TypeName),
-    //     ast::TypeParam::Integer(name) => (name, hir::TypeParam::Integer),
-    // };
-    // symtab.add_item(name, param.map(|_| kind))
-    todo!("Implement visiting type parameters")
+/// Visit an AST type parameter, converting it to a HIR type parameter. The name is not
+/// added to the symbol table as this function is re-used for both global symbol collection
+/// and normal HIR lowering.
+pub fn visit_type_param(
+    param: &ast::TypeParam,
+    symtab: &mut SymbolTable,
+) -> Result<hir::TypeParam> {
+    match &param {
+        ast::TypeParam::TypeName(ident) => {
+            let name_id = symtab.add_thing(
+                Path(vec![ident.clone()]),
+                Thing::Type(TypeSymbol::GenericArg.at_loc(&ident)),
+            );
+
+            Ok(hir::TypeParam::TypeName(ident.inner.clone(), name_id))
+        }
+        ast::TypeParam::Integer(ident) => {
+            let name_id = symtab.add_thing(
+                Path(vec![ident.clone()]),
+                Thing::Type(TypeSymbol::GenericArg.at_loc(&ident)),
+            );
+
+            Ok(hir::TypeParam::Integer(ident.inner.clone(), name_id))
+        }
+    }
 }
 
 pub fn visit_type_expression(
@@ -110,6 +128,9 @@ pub fn visit_type_spec(t: &ast::TypeSpec, symtab: &mut SymbolTable) -> Result<hi
                     } else {
                         Ok(hir::TypeSpec::Generic(base_id.at_loc(&path)))
                     }
+                }
+                TypeSymbol::GenericInt => {
+                    todo!("Support generic ints");
                 }
             }
         }

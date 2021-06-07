@@ -755,7 +755,8 @@ impl<'a> Parser<'a> {
             let (id, loc) = self.identifier()?.separate();
             Ok(TypeParam::Integer(id).between(&hash.span, &loc))
         } else {
-            Ok(self.identifier()?.map(TypeParam::TypeName))
+            let (id, loc) = self.identifier()?.separate();
+            Ok(TypeParam::TypeName(id).at(&loc))
         }
     }
 
@@ -1557,7 +1558,7 @@ mod tests {
             }))
             .nowhere(),
             type_params: vec![
-                TypeParam::TypeName(ast_ident("X").inner).nowhere(),
+                TypeParam::TypeName(ast_ident("X")).nowhere(),
                 TypeParam::Integer(ast_ident("Y")).nowhere(),
             ],
         }
@@ -1733,7 +1734,7 @@ mod tests {
             self_arg: Some(().nowhere()),
             inputs: aparams![],
             return_type: None,
-            type_params: vec![TypeParam::TypeName(ast_ident("X").inner).nowhere()],
+            type_params: vec![TypeParam::TypeName(ast_ident("X")).nowhere()],
         }
         .nowhere();
 
@@ -1779,7 +1780,7 @@ mod tests {
     fn typenames_parse() {
         let code = "X";
 
-        let expected = TypeParam::TypeName(ast_ident("X").inner).nowhere();
+        let expected = TypeParam::TypeName(ast_ident("X")).nowhere();
 
         check_parse!(code, type_param, Ok(expected));
     }
@@ -2079,7 +2080,7 @@ mod tests {
                     .nowhere(),
                 ),
                 generic_args: vec![
-                    TypeParam::TypeName(ast_ident("T").inner).nowhere(),
+                    TypeParam::TypeName(ast_ident("T")).nowhere(),
                     TypeParam::Integer(ast_ident("N")).nowhere(),
                 ],
             }
