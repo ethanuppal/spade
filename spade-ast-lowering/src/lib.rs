@@ -491,6 +491,14 @@ pub fn visit_expression(
         ast::Expression::Block(block) => Ok(hir::ExprKind::Block(Box::new(visit_block(
             block, symtab, idtracker,
         )?))),
+        ast::Expression::FnCall(callee, args) => {
+            let (name_id, head) = symtab.lookup_function(callee)?;
+            let head = head.clone();
+
+            let args = visit_argument_list(args, &head.inputs, symtab, idtracker)?;
+
+            Ok(hir::ExprKind::FnCall(name_id.at_loc(callee), args))
+        }
         ast::Expression::Identifier(path) => {
             let id = symtab.lookup_id(path)?;
 
@@ -774,7 +782,7 @@ mod statement_visiting {
 mod expression_visiting {
     use super::*;
 
-    use hir::PipelineHead;
+    use hir::{FunctionHead, PipelineHead};
     use spade_ast::testutil::{ast_ident, ast_path};
     use spade_common::name::testutil::name_id;
     use spade_common::{location_info::WithLocation, name::Identifier};
@@ -1004,6 +1012,59 @@ mod expression_visiting {
             ast_path("test").inner,
             Thing::Entity(
                 EntityHead {
+                    inputs: hir::ParameterList(vec![
+                        (ast_ident("a"), hir::TypeSpec::unit().nowhere()),
+                        (ast_ident("b"), hir::TypeSpec::unit().nowhere()),
+                    ]),
+                    output_type: None,
+                    type_params: vec![],
+                }
+                .nowhere(),
+            ),
+        );
+
+        assert_eq!(
+            visit_expression(&input, &mut symtab, &mut idtracker),
+            Ok(expected)
+        );
+    }
+
+    #[test]
+    fn function_instantiation_works() {
+        let input = ast::Expression::FnCall(
+            ast_path("test"),
+            ast::ArgumentList::Positional(vec![
+                ast::Expression::IntLiteral(1).nowhere(),
+                ast::Expression::IntLiteral(2).nowhere(),
+            ])
+            .nowhere(),
+        )
+        .nowhere();
+
+        let expected = hir::ExprKind::FnCall(
+            name_id(0, "test"),
+            vec![
+                hir::Argument {
+                    target: ast_ident("a"),
+                    value: hir::ExprKind::IntLiteral(1).idless().nowhere(),
+                    kind: hir::ArgumentKind::Positional,
+                },
+                hir::Argument {
+                    target: ast_ident("b"),
+                    value: hir::ExprKind::IntLiteral(2).idless().nowhere(),
+                    kind: hir::ArgumentKind::Positional,
+                },
+            ],
+        )
+        .idless();
+
+        let mut symtab = SymbolTable::new();
+        let mut idtracker = IdTracker::new();
+
+        symtab.add_thing(
+            ast_path("test").inner,
+            Thing::Function(
+                FunctionHead {
                     inputs: hir::ParameterList(vec![
                         (ast_ident("a"), hir::TypeSpec::unit().nowhere()),
                         (ast_ident("b"), hir::TypeSpec::unit().nowhere()),

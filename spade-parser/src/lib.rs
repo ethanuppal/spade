@@ -239,6 +239,30 @@ impl<'a> Parser<'a> {
     );
 
     #[trace_parser]
+    fn argument_list(&mut self) -> Result<Option<Loc<ArgumentList>>> {
+        if let Some(open_paren) = self.peek_and_eat(&TokenKind::OpenParen)? {
+            let args = self.comma_separated(Self::expression, &TokenKind::CloseParen)?;
+            let end = self.eat(&TokenKind::CloseParen)?;
+
+            let span = lspan(open_paren.span.clone()).merge(lspan(end.span));
+
+            Ok(Some(ArgumentList::Positional(args).at(&span)))
+        } else if let Some(open_brace) = self.peek_and_eat(&TokenKind::OpenBrace)? {
+            let args = self
+                .comma_separated(Self::named_argument, &TokenKind::CloseBrace)?
+                .into_iter()
+                .map(Loc::strip)
+                .collect();
+            let end = self.eat(&TokenKind::CloseBrace)?;
+
+            let span = lspan(open_brace.span).merge(lspan(end.span));
+            Ok(Some(ArgumentList::Named(args).at(&span)))
+        } else {
+            Ok(None)
+        }
+    }
+
+    #[trace_parser]
     pub fn base_expression(&mut self) -> Result<Loc<Expression>> {
         if self.peek_and_eat(&TokenKind::OpenParen)?.is_some() {
             let mut inner = self.comma_separated(Self::expression, &TokenKind::CloseParen)?;
@@ -275,33 +299,15 @@ impl<'a> Parser<'a> {
 
             let name = self.path()?;
 
-            let (args, span) = if let Some(open_paren) = self.peek_and_eat(&TokenKind::OpenParen)? {
-                let args = self.comma_separated(Self::expression, &TokenKind::CloseParen)?;
-                let end = self.eat(&TokenKind::CloseParen)?;
-
-                let span = lspan(start.span).merge(lspan(end.span.clone()));
-                let list_span = lspan(open_paren.span).merge(lspan(end.span));
-
-                (ArgumentList::Positional(args).at(&list_span), span)
-            } else if let Some(open_brace) = self.peek_and_eat(&TokenKind::OpenBrace)? {
-                let args = self
-                    .comma_separated(Self::named_argument, &TokenKind::CloseBrace)?
-                    .into_iter()
-                    .map(Loc::strip)
-                    .collect();
-                let end = self.eat(&TokenKind::CloseBrace)?;
-
-                let list_span = lspan(open_brace.span).merge(lspan(end.span.clone()));
-                let span = lspan(start.span).merge(lspan(end.span));
-                (ArgumentList::Named(args).at(&list_span), span)
-            } else {
-                return Err(Error::ExpectedArgumentList(name));
-            };
+            let args = self
+                .argument_list()?
+                .ok_or(Error::ExpectedArgumentList(name.clone()))?;
 
             if let Some(depth) = pipeline_depth {
-                Ok(Expression::PipelineInstance(depth, name, args).at(&span))
+                Ok(Expression::PipelineInstance(depth, name, args.clone())
+                    .between(&start.span, &args))
             } else {
-                Ok(Expression::EntityInstance(name, args).at(&span))
+                Ok(Expression::EntityInstance(name, args.clone()).between(&start.span, &args))
             }
         } else if let Some(tok) = self.peek_and_eat(&TokenKind::True)? {
             Ok(Expression::BoolLiteral(true).at(&tok.span))
@@ -317,7 +323,15 @@ impl<'a> Parser<'a> {
             match self.path() {
                 Ok(path) => {
                     let span = path.span;
-                    Ok(Expression::Identifier(path).at(&span))
+                    // Check if this is a function call by looking for an argument list
+                    if let Some(args) = self.argument_list()? {
+                        // Doing this avoids cloning result and args
+                        let span = ().between(&path, &args);
+
+                        Ok(Expression::FnCall(path, args).at_loc(&span))
+                    } else {
+                        Ok(Expression::Identifier(path).at(&span))
+                    }
                 }
                 Err(Error::UnexpectedToken { got, .. }) => Err(Error::ExpectedExpression { got }),
                 Err(e) => Err(e),
@@ -2107,5 +2121,39 @@ mod tests {
         );
 
         check_parse!(code, item, Ok(Some(expected)));
+    }
+
+    #[test]
+    fn functions_work() {
+        let code = "test(1, 2)";
+
+        let expected = Expression::FnCall(
+            ast_path("test"),
+            ArgumentList::Positional(vec![
+                Expression::IntLiteral(1).nowhere(),
+                Expression::IntLiteral(2).nowhere(),
+            ])
+            .nowhere(),
+        )
+        .nowhere();
+
+        check_parse!(code, expression, Ok(expected));
+    }
+
+    #[test]
+    fn functions_with_named_arguments_work() {
+        let code = "test{a, b}";
+
+        let expected = Expression::FnCall(
+            ast_path("test"),
+            ArgumentList::Named(vec![
+                NamedArgument::Short(ast_ident("a")),
+                NamedArgument::Short(ast_ident("b")),
+            ])
+            .nowhere(),
+        )
+        .nowhere();
+
+        check_parse!(code, expression, Ok(expected));
     }
 }

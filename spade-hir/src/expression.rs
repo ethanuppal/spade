@@ -51,7 +51,7 @@ pub enum ExprKind {
     BoolLiteral(bool),
     TupleLiteral(Vec<Loc<Expression>>),
     TupleIndex(Box<Loc<Expression>>, Loc<u128>),
-    FnCall(Loc<NameID>, Vec<Loc<Expression>>),
+    FnCall(Loc<NameID>, Vec<Argument>),
     BinaryOperator(Box<Loc<Expression>>, BinaryOperator, Box<Loc<Expression>>),
     Block(Box<Block>),
     /// Instantiation of an entity. While the argument contains information about

@@ -63,6 +63,7 @@ pub enum Expression {
         Box<Loc<Expression>>,
         Box<Loc<Expression>>,
     ),
+    FnCall(Loc<Path>, Loc<ArgumentList>),
     BinaryOperator(Box<Loc<Expression>>, BinaryOperator, Box<Loc<Expression>>),
     Block(Box<Block>),
     EntityInstance(Loc<Path>, Loc<ArgumentList>),
