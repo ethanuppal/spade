@@ -41,6 +41,8 @@ pub enum TokenKind {
     Reset,
     #[token("if")]
     If,
+    #[token("then")]
+    Then,
     #[token("else")]
     Else,
 
@@ -142,6 +144,7 @@ impl TokenKind {
             TokenKind::Instance => "inst",
             TokenKind::Reset => "reset",
             TokenKind::If => "if",
+            TokenKind::Then => "then",
             TokenKind::Else => "else",
             TokenKind::Trait => "trait",
             TokenKind::Function => "fn",

@@ -1,7 +1,7 @@
 // Generates game ticks
 entity tick_gen(clk: clk, rst: bool, tick_length: int<32>) -> bool {
     // Counter to lower the frequency
-    reg(clk) timer reset (rst: 0) = if timer == tick_length {
+    reg(clk) timer reset (rst: 0) = if timer == tick_length then {
         0
     } else {
         timer + 1
@@ -21,10 +21,10 @@ entity pong(clk: clk, rst: bool, tick_len: int<32>) -> int<8> {
         let direction = state#1;
 
         let new_direction =
-            if ball == board_end_left {
+            if ball == board_end_left then {
                 true
             }
-            else if ball == board_end_right {
+            else if ball == board_end_right then {
                 false
             }
             else {
@@ -32,8 +32,8 @@ entity pong(clk: clk, rst: bool, tick_len: int<32>) -> int<8> {
             };
 
         let new_ball =
-            if tick {
-                if direction {
+            if tick then {
+                if direction then {
                     ball >> 1
                 }
                 else {

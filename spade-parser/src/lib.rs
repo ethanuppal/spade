@@ -345,6 +345,9 @@ impl<'a> Parser<'a> {
         let start = peek_for!(self, &TokenKind::If);
 
         let cond = self.expression()?;
+
+        self.eat(&TokenKind::Then)?;
+
         let on_true = self.expression()?;
         self.eat(&TokenKind::Else)?;
         let (on_false, end_span) = self.expression()?.separate();
@@ -1401,7 +1404,7 @@ mod tests {
     #[test]
     fn if_expressions_work() {
         let code = r#"
-        if a {b} else {c}
+        if a then {b} else {c}
         "#;
 
         let expected = Expression::If(
@@ -1420,6 +1423,22 @@ mod tests {
                 }))
                 .nowhere(),
             ),
+        )
+        .nowhere();
+
+        check_parse!(code, expression, Ok(expected));
+    }
+
+    #[test]
+    fn if_expressions_do_not_require_blocks() {
+        let code = r#"
+        if a then b else c
+        "#;
+
+        let expected = Expression::If(
+            Box::new(Expression::Identifier(ast_path("a")).nowhere()),
+            Box::new(Expression::Identifier(ast_path("b")).nowhere()),
+            Box::new(Expression::Identifier(ast_path("c")).nowhere()),
         )
         .nowhere();
 

@@ -87,7 +87,7 @@ mod tests {
     fn if_expressions_have_correct_codegen() {
         let code = r#"
         entity name(c: bool, a: int<16>, b: int<16>) -> int<16> {
-            if c
+            if c then
                 a
             else
                 b
