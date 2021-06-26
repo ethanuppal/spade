@@ -2,6 +2,7 @@
 // https://www.youtube.com/watch?v=xJXcZp2vgLs
 
 use hir::{Argument, ParameterList};
+use hir::{ExecutableItem, ItemList, TypeDeclaration};
 use parse_tree_macros::trace_typechecker;
 use spade_common::{location_info::Loc, name::NameID};
 use spade_hir as hir;
@@ -28,6 +29,57 @@ use equation::{TypeEquations, TypeVar, TypedExpression};
 use result::{Error, Result};
 
 use self::result::{UnificationError, UnificationErrorExt, UnificationTrace};
+
+pub struct ProcessedEntity {
+    pub entity: Entity,
+    pub type_state: TypeState,
+}
+
+pub struct ProcessedPipeline {
+    pub pipeline: hir::Pipeline,
+    pub type_state: TypeState,
+}
+
+pub enum ProcessedItem {
+    Entity(ProcessedEntity),
+    Pipeline(ProcessedPipeline),
+}
+
+pub struct ItemListWithTypes {
+    pub executables: Vec<ProcessedItem>,
+    pub types: Vec<Loc<TypeDeclaration>>,
+}
+
+impl ItemListWithTypes {
+    pub fn typecheck(items: ItemList, symbol_table: &SymbolTable) -> Result<Self> {
+        Ok(Self {
+            executables: items
+                .executables
+                .into_iter()
+                .map(|item| {
+                    let mut type_state = TypeState::new();
+                    match item {
+                        ExecutableItem::Entity(entity) => {
+                            type_state.visit_entity(&entity, symbol_table)?;
+                            Ok(ProcessedItem::Entity(ProcessedEntity {
+                                entity: entity.inner,
+                                type_state,
+                            }))
+                        }
+                        ExecutableItem::Pipeline(pipeline) => {
+                            type_state.visit_pipeline(&pipeline, symbol_table)?;
+                            Ok(ProcessedItem::Pipeline(ProcessedPipeline {
+                                pipeline: pipeline.inner,
+                                type_state,
+                            }))
+                        }
+                    }
+                })
+                .collect::<Result<Vec<_>>>()?,
+            types: items.types,
+        })
+    }
+}
 
 pub struct TypeState {
     equations: TypeEquations,
@@ -254,10 +306,6 @@ impl TypeState {
             ExprKind::BoolLiteral(_) => {
                 self.unify_expression_generic_error(&expression, &t_bool(symtab))?;
             }
-            ExprKind::FnCall(_name, _params) => {
-                // TODO: Propper error handling
-                todo!("Type check function calls")
-            }
             ExprKind::TupleLiteral(inner) => {
                 let mut inner_types = vec![];
                 for expr in inner {
@@ -388,6 +436,19 @@ impl TypeState {
                 args,
             } => {
                 let head = symtab.pipeline_by_id(&name.inner);
+                // Unify the types of the arguments
+                self.visit_argument_list(args, &head.inputs, symtab)?;
+
+                let return_type = Self::type_var_from_hir(
+                    &head
+                        .output_type
+                        .as_ref()
+                        .expect("Unit return type from entity is unsupported"),
+                );
+                self.unify_expression_generic_error(expression, &return_type)?;
+            }
+            ExprKind::FnCall(name, args) => {
+                let head = symtab.function_by_id(&name.inner);
                 // Unify the types of the arguments
                 self.visit_argument_list(args, &head.inputs, symtab)?;
 

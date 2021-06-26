@@ -10,10 +10,10 @@ use spade_ast as ast;
 use spade_ast_lowering::{global_symbols, visit_entity};
 use spade_common::{error_reporting::CompilationError, id_tracker, name::Path};
 use spade_hir::symbol_table;
-use spade_hir_lowering::{ProcessedEntity, ProcessedItem, ProcessedPipeline};
 pub use spade_parser::lexer;
 use spade_parser::Parser;
 use spade_typeinference as typeinference;
+use spade_typeinference::{ProcessedEntity, ProcessedItem, ProcessedPipeline};
 
 mod golden;
 

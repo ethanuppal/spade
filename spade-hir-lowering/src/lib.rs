@@ -17,21 +17,6 @@ use spade_typeinference::{
 };
 use spade_types::{ConcreteType, PrimitiveType};
 
-pub struct ProcessedEntity {
-    pub entity: Entity,
-    pub type_state: TypeState,
-}
-
-pub struct ProcessedPipeline {
-    pub pipeline: Pipeline,
-    pub type_state: TypeState,
-}
-
-pub enum ProcessedItem {
-    Entity(ProcessedEntity),
-    Pipeline(ProcessedPipeline),
-}
-
 pub enum Error {
     UsingGenericType { expr: Loc<Expression>, t: TypeVar },
 }

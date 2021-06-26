@@ -7,6 +7,7 @@ pub mod types;
 
 use ast::ParameterList;
 use hir::util::path_from_ident;
+use hir::ExecutableItem;
 pub use spade_common::id_tracker;
 
 use std::collections::HashMap;
@@ -224,20 +225,19 @@ pub fn visit_item(
     namespace: &Path,
     symtab: &mut SymbolTable,
     idtracker: &mut IdTracker,
-) -> Result<Option<hir::Item>> {
+) -> Result<hir::Item> {
     match item {
-        ast::Item::Entity(e) => Ok(Some(hir::Item::Entity(visit_entity(
+        ast::Item::Entity(e) => Ok(hir::Item::Entity(visit_entity(
             e, namespace, symtab, idtracker,
-        )?))),
-        ast::Item::Pipeline(p) => Ok(Some(hir::Item::Pipeline(pipelines::visit_pipeline(
+        )?)),
+        ast::Item::Pipeline(p) => Ok(hir::Item::Pipeline(pipelines::visit_pipeline(
             p, namespace, symtab, idtracker,
-        )?))),
+        )?)),
         ast::Item::TraitDef(_) => {
-            // NOTE: Traits are invisible at the HIR stage, so we just ignore them
-            Ok(None)
+            todo!("Visit trait definitions")
         }
         ast::Item::Type(_) => {
-            todo!("Visit types")
+            todo!("Visit type declarations")
         }
     }
 }
@@ -247,17 +247,26 @@ pub fn visit_module_body(
     namespace: &Path,
     symtab: &mut SymbolTable,
     idtracker: &mut IdTracker,
-) -> Result<hir::ModuleBody> {
-    Ok(hir::ModuleBody {
-        members: module
-            .members
-            .iter()
-            .map(|i| visit_item(i, namespace, symtab, idtracker))
-            .collect::<Result<Vec<_>>>()?
-            .into_iter()
-            .filter_map(|x| x)
-            .collect::<Vec<_>>(),
-    })
+) -> Result<hir::ItemList> {
+    let all_items = module
+        .members
+        .iter()
+        .map(|i| visit_item(i, namespace, symtab, idtracker))
+        .collect::<Result<Vec<_>>>()?
+        .into_iter();
+
+    let mut executables = vec![];
+    let mut types = vec![];
+
+    for item in all_items {
+        match item {
+            hir::Item::Entity(e) => executables.push(ExecutableItem::Entity(e)),
+            hir::Item::Pipeline(p) => executables.push(ExecutableItem::Pipeline(p)),
+            hir::Item::Type(t) => types.push(t),
+        }
+    }
+
+    Ok(hir::ItemList { executables, types })
 }
 
 pub fn visit_statement(
@@ -1397,7 +1406,7 @@ mod item_visiting {
         crate::global_symbols::visit_item(&input, &namespace, &mut symtab).unwrap();
         assert_eq!(
             visit_item(&input, &namespace, &mut symtab, &mut idtracker),
-            Ok(Some(expected))
+            Ok(expected)
         );
     }
 }
@@ -1431,8 +1440,8 @@ mod module_visiting {
             )],
         };
 
-        let expected = hir::ModuleBody {
-            members: vec![hir::Item::Entity(
+        let expected = hir::ItemList {
+            executables: vec![hir::ExecutableItem::Entity(
                 hir::Entity {
                     name: name_id(0, "test"),
                     head: EntityHead {
@@ -1450,6 +1459,7 @@ mod module_visiting {
                 }
                 .nowhere(),
             )],
+            types: vec![],
         };
 
         let mut symtab = SymbolTable::new();

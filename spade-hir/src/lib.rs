@@ -178,16 +178,29 @@ pub struct Pipeline {
 }
 impl WithLocation for Pipeline {}
 
-/// Items are things typically present at the top level of a module such as
-/// entities, pipelines, submodules etc.
 #[derive(PartialEq, Debug, Clone)]
 pub enum Item {
     Entity(Loc<Entity>),
     Pipeline(Loc<Pipeline>),
+    Type(Loc<TypeDeclaration>),
 }
-impl WithLocation for Item {}
 
+/// Items which have associated code that can be executed. This is different from
+/// type declarations which are items, but which do not have code on their own
 #[derive(PartialEq, Debug, Clone)]
-pub struct ModuleBody {
-    pub members: Vec<Item>,
+pub enum ExecutableItem {
+    Entity(Loc<Entity>),
+    Pipeline(Loc<Pipeline>),
+}
+impl WithLocation for ExecutableItem {}
+
+/// A list of all the items present in the whole AST, flattened to remove module
+/// hirearchies.
+///
+/// That is, `mod a { mod b{ entity X {} } } will result in members containing `a::b::X`, but the
+/// modules will not be present
+#[derive(PartialEq, Debug, Clone)]
+pub struct ItemList {
+    pub executables: Vec<ExecutableItem>,
+    pub types: Vec<Loc<TypeDeclaration>>,
 }

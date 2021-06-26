@@ -17,6 +17,7 @@ mod tests {
         parse_typecheck_entity, parse_typecheck_module_body, parse_typecheck_pipeline,
         ParseTypececkResult,
     };
+    use spade_typeinference::ProcessedItem;
 
     pub trait ResultExt<T> {
         fn report_failure(self) -> T;
@@ -409,9 +410,9 @@ mod tests {
         let ParseTypececkResult { items, symtab } = parse_typecheck_module_body(code);
 
         let mut result = vec![];
-        for processed in items {
+        for processed in items.executables {
             match processed {
-                spade_hir_lowering::ProcessedItem::Entity(processed) => {
+                ProcessedItem::Entity(processed) => {
                     result.push(
                         generate_entity(&processed.entity, symtab.symtab(), &processed.type_state)
                             .report_failure(),
@@ -459,15 +460,15 @@ mod tests {
         let mut symtab = module.symtab;
 
         let mut result = vec![];
-        for processed in module.items {
+        for processed in module.items.executables {
             match processed {
-                spade_hir_lowering::ProcessedItem::Entity(processed) => {
+                ProcessedItem::Entity(processed) => {
                     result.push(
                         generate_entity(&processed.entity, symtab.symtab(), &processed.type_state)
                             .report_failure(),
                     );
                 }
-                spade_hir_lowering::ProcessedItem::Pipeline(processed) => {
+                ProcessedItem::Pipeline(processed) => {
                     result.push(
                         generate_pipeline(&processed.pipeline, &processed.type_state, &mut symtab)
                             .report_failure(),
@@ -577,5 +578,41 @@ mod tests {
         )
         .report_failure();
         assert_same_mir!(&result, &expected);
+    }
+
+    #[ignore]
+    #[test]
+    fn enum_instantiation_works() {
+        let code = r#"
+            enum X {
+                A(payload: bool),
+                B
+            }
+
+            entity test(payload: bool) -> X {
+                X::A(payload)
+            }
+        "#;
+
+        let ParseTypececkResult { items, symtab } = parse_typecheck_module_body(code);
+
+        let mut result = vec![];
+        for processed in items.executables {
+            match processed {
+                ProcessedItem::Entity(processed) => {
+                    result.push(
+                        generate_entity(&processed.entity, symtab.symtab(), &processed.type_state)
+                            .report_failure(),
+                    );
+                }
+                _ => panic!("expected an entity"),
+            }
+        }
+
+        let expected = todo!("Specify how enum instantiation should look at the MIR level");
+
+        // for (exp, res) in expected.into_iter().zip(result.into_iter()) {
+        //     assert_same_mir!(&res, &exp);
+        // }
     }
 }
