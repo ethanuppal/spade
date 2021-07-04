@@ -1,7 +1,7 @@
 // This algorithm is based off the excelent lecture here
 // https://www.youtube.com/watch?v=xJXcZp2vgLs
 
-use hir::{Argument, ParameterList};
+use hir::{Argument, ParameterList, TypeList};
 use hir::{ExecutableItem, ItemList, TypeDeclaration};
 use parse_tree_macros::trace_typechecker;
 use spade_common::{location_info::Loc, name::NameID};
@@ -10,7 +10,7 @@ use spade_hir::symbol_table::SymbolTable;
 use spade_hir::{
     expression::BinaryOperator, Block, Entity, ExprKind, Expression, Register, Statement,
 };
-use spade_types::{ConcreteType, KnownType, PrimitiveType};
+use spade_types::{ConcreteType, KnownType};
 use std::collections::HashMap;
 
 use colored::*;
@@ -47,7 +47,7 @@ pub enum ProcessedItem {
 
 pub struct ItemListWithTypes {
     pub executables: Vec<ProcessedItem>,
-    pub types: Vec<Loc<TypeDeclaration>>,
+    pub types: HashMap<NameID, Loc<TypeDeclaration>>,
 }
 
 impl ItemListWithTypes {
@@ -56,7 +56,7 @@ impl ItemListWithTypes {
             executables: items
                 .executables
                 .into_iter()
-                .map(|item| {
+                .map(|(_name, item)| {
                     let mut type_state = TypeState::new();
                     match item {
                         ExecutableItem::Entity(entity) => {
@@ -140,22 +140,27 @@ impl TypeState {
 
     /// Converts the specified type to a concrete type, returning None
     /// if it fails
-    pub fn ungenerify_type(var: &TypeVar, symtab: &SymbolTable) -> Option<ConcreteType> {
+    pub fn ungenerify_type(
+        var: &TypeVar,
+        symtab: &SymbolTable,
+        type_list: &TypeList,
+    ) -> Option<ConcreteType> {
         match var {
             TypeVar::Known(KnownType::Type(t), params, _) => {
                 let params = params
                     .iter()
-                    .map(|v| Self::ungenerify_type(v, symtab))
+                    .map(|v| Self::ungenerify_type(v, symtab, type_list))
                     .collect::<Option<Vec<_>>>()?;
 
-                // TODO: Do not hardcode paths here
-                let base = match t.1.as_strs().as_slice() {
-                    ["int"] => PrimitiveType::Int,
-                    ["clk"] => PrimitiveType::Clock,
-                    ["bool"] => PrimitiveType::Bool,
-                    _ => todo!("Implement support for non-primitive types"),
+                let base = match type_list.get(t) {
+                    Some(t) => match &t.kind {
+                        hir::TypeDeclKind::Enum(_) => todo!(),
+                        hir::TypeDeclKind::Primitive(primitive) => primitive.clone(),
+                    },
+                    None => {
+                        panic!("Missing type declaration for {:?}", t)
+                    }
                 };
-
                 Some(ConcreteType::Single { base: base, params })
             }
             TypeVar::Known(KnownType::Integer(size), params, _) => {
@@ -166,7 +171,7 @@ impl TypeState {
             TypeVar::Tuple(inner) => {
                 let inner = inner
                     .iter()
-                    .map(|v| Self::ungenerify_type(v, symtab))
+                    .map(|v| Self::ungenerify_type(v, symtab, type_list))
                     .collect::<Option<Vec<_>>>()?;
                 Some(ConcreteType::Tuple(inner))
             }
@@ -176,12 +181,18 @@ impl TypeState {
 
     /// Returns the type of the specified name as a concrete type. If the type is not known,
     /// or tye type is Generic, panics
-    pub fn type_of_name(&self, name: &NameID, symtab: &SymbolTable) -> ConcreteType {
+    pub fn type_of_name(
+        &self,
+        name: &NameID,
+        symtab: &SymbolTable,
+        type_list: &TypeList,
+    ) -> ConcreteType {
         Self::ungenerify_type(
             &self
                 .type_of(&TypedExpression::Name(name.clone()))
                 .expect("Expression had no specified type"),
             symtab,
+            type_list,
         )
         .expect("Expr had generic type")
     }
@@ -793,7 +804,7 @@ mod tests {
     fn int_literals_have_type_known_int() {
         let mut state = TypeState::new();
         let mut symtab = SymbolTable::new();
-        spade_ast_lowering::builtins::populate_symtab(&mut symtab);
+        spade_ast_lowering::builtins::populate_symtab(&mut symtab, &mut ItemList::new());
 
         let input = ExprKind::IntLiteral(0).with_id(0).nowhere();
 
@@ -806,7 +817,7 @@ mod tests {
     fn if_statements_have_correctly_infered_types() {
         let mut state = TypeState::new();
         let mut symtab = SymbolTable::new();
-        spade_ast_lowering::builtins::populate_symtab(&mut symtab);
+        spade_ast_lowering::builtins::populate_symtab(&mut symtab, &mut ItemList::new());
 
         let input = ExprKind::If(
             Box::new(Expression::ident(0, 0, "a").nowhere()),
@@ -850,7 +861,7 @@ mod tests {
     fn if_statements_get_correct_type_when_branches_are_of_known_type() {
         let mut state = TypeState::new();
         let mut symtab = SymbolTable::new();
-        spade_ast_lowering::builtins::populate_symtab(&mut symtab);
+        spade_ast_lowering::builtins::populate_symtab(&mut symtab, &mut ItemList::new());
 
         let input = ExprKind::If(
             Box::new(Expression::ident(0, 0, "a").nowhere()),
@@ -895,7 +906,7 @@ mod tests {
     fn type_inference_fails_if_if_branches_have_incompatible_types() {
         let mut state = TypeState::new();
         let mut symtab = SymbolTable::new();
-        spade_ast_lowering::builtins::populate_symtab(&mut symtab);
+        spade_ast_lowering::builtins::populate_symtab(&mut symtab, &mut ItemList::new());
 
         let input = ExprKind::If(
             Box::new(Expression::ident(0, 0, "a").nowhere()),
@@ -991,7 +1002,7 @@ mod tests {
     #[test]
     fn block_visiting_without_definitions_works() {
         let mut symtab = SymbolTable::new();
-        spade_ast_lowering::builtins::populate_symtab(&mut symtab);
+        spade_ast_lowering::builtins::populate_symtab(&mut symtab, &mut ItemList::new());
 
         let input = ExprKind::Block(Box::new(Block {
             statements: vec![],
@@ -1012,7 +1023,7 @@ mod tests {
     fn integer_literals_are_compatible_with_fixed_size_ints() {
         let mut state = TypeState::new();
         let mut symtab = SymbolTable::new();
-        spade_ast_lowering::builtins::populate_symtab(&mut symtab);
+        spade_ast_lowering::builtins::populate_symtab(&mut symtab, &mut ItemList::new());
 
         let input = ExprKind::If(
             Box::new(Expression::ident(0, 0, "a").nowhere()),
@@ -1056,7 +1067,7 @@ mod tests {
     #[test]
     fn registers_typecheck_correctly() {
         let mut symtab = SymbolTable::new();
-        spade_ast_lowering::builtins::populate_symtab(&mut symtab);
+        spade_ast_lowering::builtins::populate_symtab(&mut symtab, &mut ItemList::new());
 
         let input = hir::Register {
             name: name_id(0, "a"),
@@ -1086,7 +1097,7 @@ mod tests {
     #[test]
     fn self_referential_registers_typepcheck_correctly() {
         let mut symtab = SymbolTable::new();
-        spade_ast_lowering::builtins::populate_symtab(&mut symtab);
+        spade_ast_lowering::builtins::populate_symtab(&mut symtab, &mut ItemList::new());
 
         let input = hir::Register {
             name: name_id(0, "a"),
@@ -1116,7 +1127,7 @@ mod tests {
     #[test]
     fn registers_with_resets_typecheck_correctly() {
         let mut symtab = SymbolTable::new();
-        spade_ast_lowering::builtins::populate_symtab(&mut symtab);
+        spade_ast_lowering::builtins::populate_symtab(&mut symtab, &mut ItemList::new());
 
         let rst_cond = name_id(2, "rst").inner;
         let rst_value = name_id(3, "rst_value").inner;
@@ -1159,7 +1170,7 @@ mod tests {
     #[test]
     fn untyped_let_bindings_typecheck_correctly() {
         let mut symtab = SymbolTable::new();
-        spade_ast_lowering::builtins::populate_symtab(&mut symtab);
+        spade_ast_lowering::builtins::populate_symtab(&mut symtab, &mut ItemList::new());
 
         let input = hir::Statement::Binding(
             name_id(0, "a"),
@@ -1179,7 +1190,7 @@ mod tests {
     #[test]
     fn tuple_type_specs_propagate_correctly() {
         let mut symtab = SymbolTable::new();
-        spade_ast_lowering::builtins::populate_symtab(&mut symtab);
+        spade_ast_lowering::builtins::populate_symtab(&mut symtab, &mut ItemList::new());
 
         let input = Register {
             name: name_id(0, "test"),
@@ -1223,7 +1234,7 @@ mod tests {
     fn entity_type_inference_works() {
         // Add the head to the symtab
         let mut symtab = SymbolTable::new();
-        spade_ast_lowering::builtins::populate_symtab(&mut symtab);
+        spade_ast_lowering::builtins::populate_symtab(&mut symtab, &mut ItemList::new());
 
         // Add the entity to the symtab
         let entity = hir::EntityHead {
@@ -1302,7 +1313,7 @@ mod tests {
     fn pipeline_type_inference_works() {
         // Add the head to the symtab
         let mut symtab = SymbolTable::new();
-        spade_ast_lowering::builtins::populate_symtab(&mut symtab);
+        spade_ast_lowering::builtins::populate_symtab(&mut symtab, &mut ItemList::new());
 
         // Add the entity to the symtab
         let entity = hir::PipelineHead {

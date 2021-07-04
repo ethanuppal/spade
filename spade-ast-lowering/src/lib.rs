@@ -9,6 +9,7 @@ use ast::ParameterList;
 use hir::util::path_from_ident;
 use hir::ExecutableItem;
 pub use spade_common::id_tracker;
+use types::visit_typedecl;
 
 use std::collections::HashMap;
 
@@ -236,13 +237,14 @@ pub fn visit_item(
         ast::Item::TraitDef(_) => {
             todo!("Visit trait definitions")
         }
-        ast::Item::Type(_) => {
-            todo!("Visit type declarations")
-        }
+        ast::Item::Type(t) => Ok(hir::Item::Type(
+            visit_typedecl(t, namespace, symtab)?.at_loc(t),
+        )),
     }
 }
 
 pub fn visit_module_body(
+    mut item_list: hir::ItemList,
     module: &ast::ModuleBody,
     namespace: &Path,
     symtab: &mut SymbolTable,
@@ -255,18 +257,34 @@ pub fn visit_module_body(
         .collect::<Result<Vec<_>>>()?
         .into_iter();
 
-    let mut executables = vec![];
-    let mut types = vec![];
-
     for item in all_items {
+        // Insertion in hash maps return a value if duplicates are present (or not if try_insert is
+        // used) We need to get rid of that for the type of the match block here to work, and a macro
+        // hides those details
+        macro_rules! add_item {
+            ($map:expr, $name:expr, $item:expr) => {{
+                if let Some(_) = $map.insert($name.inner.clone(), $item) {
+                    panic!("Internal error: Multiple thigns named {}", $name.inner)
+                }
+            }};
+        }
+        use hir::Item::*;
         match item {
-            hir::Item::Entity(e) => executables.push(ExecutableItem::Entity(e)),
-            hir::Item::Pipeline(p) => executables.push(ExecutableItem::Pipeline(p)),
-            hir::Item::Type(t) => types.push(t),
+            Entity(e) => add_item!(
+                item_list.executables,
+                e.name,
+                ExecutableItem::Entity(e.clone())
+            ),
+            Pipeline(p) => add_item!(
+                item_list.executables,
+                p.name,
+                ExecutableItem::Pipeline(p.clone())
+            ),
+            Type(t) => add_item!(item_list.types, t.name, t.clone()),
         }
     }
 
-    Ok(hir::ItemList { executables, types })
+    Ok(item_list)
 }
 
 pub fn visit_statement(
@@ -1415,6 +1433,7 @@ mod item_visiting {
 mod module_visiting {
     use super::*;
 
+    use hir::ItemList;
     use spade_ast::testutil::ast_ident;
     use spade_common::location_info::WithLocation;
     use spade_common::name::testutil::name_id;
@@ -1441,25 +1460,30 @@ mod module_visiting {
         };
 
         let expected = hir::ItemList {
-            executables: vec![hir::ExecutableItem::Entity(
-                hir::Entity {
-                    name: name_id(0, "test"),
-                    head: EntityHead {
-                        output_type: None,
-                        inputs: hir::ParameterList(vec![]),
-                        type_params: vec![],
-                    },
-                    inputs: vec![],
-                    body: hir::ExprKind::Block(Box::new(hir::Block {
-                        statements: vec![],
-                        result: hir::ExprKind::IntLiteral(0).idless().nowhere(),
-                    }))
-                    .idless()
+            executables: vec![(
+                name_id(0, "test").inner,
+                hir::ExecutableItem::Entity(
+                    hir::Entity {
+                        name: name_id(0, "test"),
+                        head: EntityHead {
+                            output_type: None,
+                            inputs: hir::ParameterList(vec![]),
+                            type_params: vec![],
+                        },
+                        inputs: vec![],
+                        body: hir::ExprKind::Block(Box::new(hir::Block {
+                            statements: vec![],
+                            result: hir::ExprKind::IntLiteral(0).idless().nowhere(),
+                        }))
+                        .idless()
+                        .nowhere(),
+                    }
                     .nowhere(),
-                }
-                .nowhere(),
-            )],
-            types: vec![],
+                ),
+            )]
+            .into_iter()
+            .collect(),
+            types: vec![].into_iter().collect(),
         };
 
         let mut symtab = SymbolTable::new();
@@ -1467,7 +1491,13 @@ mod module_visiting {
         global_symbols::gather_symbols(&input, &Path(vec![]), &mut symtab)
             .expect("failed to collect global symbols");
         assert_eq!(
-            visit_module_body(&input, &Path(vec![]), &mut symtab, &mut idtracker),
+            visit_module_body(
+                ItemList::new(),
+                &input,
+                &Path(vec![]),
+                &mut symtab,
+                &mut idtracker
+            ),
             Ok(expected)
         );
     }

@@ -2,13 +2,14 @@ pub mod error_reporting;
 pub mod pipelines;
 pub mod substitution;
 
+use hir::TypeList;
 pub use pipelines::generate_pipeline;
 use substitution::Substitutions;
 
 use spade_common::{location_info::Loc, name::NameID};
+use spade_hir as hir;
 use spade_hir::{
-    expression::BinaryOperator, symbol_table::SymbolTable, Entity, ExprKind, Expression, Pipeline,
-    Statement,
+    expression::BinaryOperator, symbol_table::SymbolTable, Entity, ExprKind, Expression, Statement,
 };
 use spade_mir as mir;
 use spade_typeinference::{
@@ -33,18 +34,28 @@ impl Manglable for NameID {
 }
 
 trait TypeStateLocal {
-    fn expr_type(&self, expr: &Loc<Expression>, symtab: &SymbolTable) -> Result<ConcreteType>;
+    fn expr_type(
+        &self,
+        expr: &Loc<Expression>,
+        symtab: &SymbolTable,
+        types: &TypeList,
+    ) -> Result<ConcreteType>;
 }
 
 impl TypeStateLocal for TypeState {
     /// Returns the type of the expression as a concrete type. If the type is not
     /// fully ungenerified, returns an error
-    fn expr_type(&self, expr: &Loc<Expression>, symtab: &SymbolTable) -> Result<ConcreteType> {
+    fn expr_type(
+        &self,
+        expr: &Loc<Expression>,
+        symtab: &SymbolTable,
+        types: &TypeList,
+    ) -> Result<ConcreteType> {
         let t = self
             .type_of(&TypedExpression::Id(expr.id))
             .expect("Expression had no specified type");
 
-        if let Some(t) = Self::ungenerify_type(&t, symtab) {
+        if let Some(t) = Self::ungenerify_type(&t, symtab, types) {
             Ok(t)
         } else {
             Err(Error::UsingGenericType {
@@ -117,6 +128,7 @@ trait StatementLocal {
         symtab: &SymbolTable,
         types: &TypeState,
         subs: &Substitutions,
+        type_list: &TypeList,
     ) -> Result<Vec<mir::Statement>>;
 }
 impl StatementLocal for Statement {
@@ -125,32 +137,35 @@ impl StatementLocal for Statement {
         symtab: &SymbolTable,
         types: &TypeState,
         subs: &Substitutions,
+        type_list: &hir::TypeList,
     ) -> Result<Vec<mir::Statement>> {
         let mut result = vec![];
         match &self {
             Statement::Binding(name, _t, value) => {
-                result.append(&mut value.lower(symtab, types, subs)?);
+                result.append(&mut value.lower(symtab, types, subs, type_list)?);
 
                 result.push(mir::Statement::Binding(mir::Binding {
                     name: name.value_name(),
                     operator: mir::Operator::Alias,
                     operands: vec![value.variable(subs)],
-                    ty: types.type_of_name(name, symtab).to_mir_type(),
+                    ty: types.type_of_name(name, symtab, type_list).to_mir_type(),
                 }));
             }
             Statement::Register(register) => {
-                result.append(&mut register.clock.lower(symtab, types, subs)?);
+                result.append(&mut register.clock.lower(symtab, types, subs, type_list)?);
 
                 if let Some((trig, value)) = &register.reset {
-                    result.append(&mut trig.lower(symtab, types, subs)?);
-                    result.append(&mut value.lower(symtab, types, subs)?);
+                    result.append(&mut trig.lower(symtab, types, subs, type_list)?);
+                    result.append(&mut value.lower(symtab, types, subs, type_list)?);
                 }
 
-                result.append(&mut register.value.lower(symtab, types, subs)?);
+                result.append(&mut register.value.lower(symtab, types, subs, type_list)?);
 
                 result.push(mir::Statement::Register(mir::Register {
                     name: register.name.value_name(),
-                    ty: types.type_of_name(&register.name, symtab).to_mir_type(),
+                    ty: types
+                        .type_of_name(&register.name, symtab, type_list)
+                        .to_mir_type(),
                     clock: register.clock.variable(subs),
                     reset: register
                         .reset
@@ -176,6 +191,7 @@ trait ExprLocal {
         symtab: &SymbolTable,
         types: &TypeState,
         subs: &Substitutions,
+        type_list: &TypeList,
     ) -> Result<Vec<mir::Statement>>;
 }
 impl ExprLocal for Loc<Expression> {
@@ -213,10 +229,11 @@ impl ExprLocal for Loc<Expression> {
         symtab: &SymbolTable,
         types: &TypeState,
         subs: &Substitutions,
+        type_list: &TypeList,
     ) -> Result<Vec<mir::Statement>> {
         let mut result = vec![];
 
-        let self_type = types.expr_type(self, symtab)?.to_mir_type();
+        let self_type = types.expr_type(self, symtab, type_list)?.to_mir_type();
 
         match &self.kind {
             ExprKind::Identifier(_) => {
@@ -243,8 +260,8 @@ impl ExprLocal for Loc<Expression> {
             }
             ExprKind::BinaryOperator(lhs, op, rhs) => {
                 let binop_builder = |op| {
-                    result.append(&mut lhs.lower(symtab, types, subs)?);
-                    result.append(&mut rhs.lower(symtab, types, subs)?);
+                    result.append(&mut lhs.lower(symtab, types, subs, type_list)?);
+                    result.append(&mut rhs.lower(symtab, types, subs, type_list)?);
 
                     result.push(mir::Statement::Binding(mir::Binding {
                         name: self.variable(subs),
@@ -270,7 +287,7 @@ impl ExprLocal for Loc<Expression> {
             }
             ExprKind::TupleLiteral(elems) => {
                 for elem in elems {
-                    result.append(&mut elem.lower(symtab, types, subs)?)
+                    result.append(&mut elem.lower(symtab, types, subs, type_list)?)
                 }
 
                 result.push(mir::Statement::Binding(mir::Binding {
@@ -281,10 +298,10 @@ impl ExprLocal for Loc<Expression> {
                 }))
             }
             ExprKind::TupleIndex(tup, idx) => {
-                result.append(&mut tup.lower(symtab, types, subs)?);
+                result.append(&mut tup.lower(symtab, types, subs, type_list)?);
 
                 let types = if let mir::types::Type::Tuple(inner) =
-                    &types.expr_type(tup, symtab)?.to_mir_type()
+                    &types.expr_type(tup, symtab, type_list)?.to_mir_type()
                 {
                     inner.clone()
                 } else {
@@ -300,16 +317,16 @@ impl ExprLocal for Loc<Expression> {
             }
             ExprKind::Block(block) => {
                 for statement in &block.statements {
-                    result.append(&mut statement.lower(symtab, types, subs)?);
+                    result.append(&mut statement.lower(symtab, types, subs, type_list)?);
                 }
-                result.append(&mut block.result.lower(symtab, types, subs)?);
+                result.append(&mut block.result.lower(symtab, types, subs, type_list)?);
 
                 // Empty. The block result will always be the last expression
             }
             ExprKind::If(cond, on_true, on_false) => {
-                result.append(&mut cond.lower(symtab, types, subs)?);
-                result.append(&mut on_true.lower(symtab, types, subs)?);
-                result.append(&mut on_false.lower(symtab, types, subs)?);
+                result.append(&mut cond.lower(symtab, types, subs, type_list)?);
+                result.append(&mut on_true.lower(symtab, types, subs, type_list)?);
+                result.append(&mut on_false.lower(symtab, types, subs, type_list)?);
 
                 result.push(mir::Statement::Binding(mir::Binding {
                     name: self.variable(subs),
@@ -319,12 +336,12 @@ impl ExprLocal for Loc<Expression> {
                         on_true.variable(subs),
                         on_false.variable(subs),
                     ],
-                    ty: types.expr_type(self, symtab)?.to_mir_type(),
+                    ty: types.expr_type(self, symtab, type_list)?.to_mir_type(),
                 }));
             }
             ExprKind::EntityInstance(name, args) => {
                 for arg in args {
-                    result.append(&mut arg.value.lower(symtab, types, subs)?)
+                    result.append(&mut arg.value.lower(symtab, types, subs, type_list)?)
                 }
                 result.push(mir::Statement::Binding(mir::Binding {
                     name: self.variable(subs),
@@ -333,7 +350,7 @@ impl ExprLocal for Loc<Expression> {
                         .into_iter()
                         .map(|arg| arg.value.variable(subs))
                         .collect(),
-                    ty: types.expr_type(self, symtab)?.to_mir_type(),
+                    ty: types.expr_type(self, symtab, type_list)?.to_mir_type(),
                 }))
             }
             ExprKind::PipelineInstance {
@@ -342,7 +359,7 @@ impl ExprLocal for Loc<Expression> {
                 args,
             } => {
                 for arg in args {
-                    result.append(&mut arg.value.lower(symtab, types, subs)?)
+                    result.append(&mut arg.value.lower(symtab, types, subs, type_list)?)
                 }
                 result.push(mir::Statement::Binding(mir::Binding {
                     name: self.variable(subs),
@@ -351,7 +368,7 @@ impl ExprLocal for Loc<Expression> {
                         .into_iter()
                         .map(|arg| arg.value.variable(subs))
                         .collect(),
-                    ty: types.expr_type(self, symtab)?.to_mir_type(),
+                    ty: types.expr_type(self, symtab, type_list)?.to_mir_type(),
                 }))
             }
         }
@@ -363,6 +380,7 @@ pub fn generate_entity<'a>(
     entity: &Entity,
     symtab: &SymbolTable,
     types: &TypeState,
+    type_list: &TypeList,
 ) -> Result<mir::Entity> {
     let inputs = entity
         .inputs
@@ -370,15 +388,19 @@ pub fn generate_entity<'a>(
         .map(|(name_id, _)| {
             let name = format!("_i_{}", name_id.1.to_string());
             let val_name = name_id.value_name();
-            let ty = types.type_of_name(name_id, symtab).to_mir_type();
+            let ty = types.type_of_name(name_id, symtab, type_list).to_mir_type();
 
             (name, val_name, ty)
         })
         .collect();
 
-    let statements = entity.body.lower(symtab, types, &Substitutions::new())?;
+    let statements = entity
+        .body
+        .lower(symtab, types, &Substitutions::new(), type_list)?;
 
-    let output_t = types.expr_type(&entity.body, symtab)?.to_mir_type();
+    let output_t = types
+        .expr_type(&entity.body, symtab, type_list)?
+        .to_mir_type();
 
     let subs = Substitutions::new();
 

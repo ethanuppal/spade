@@ -111,6 +111,7 @@ mod tests {
 
     use crate::{ensure_same_type, get_type, HasType};
     use crate::{fixed_types::t_int, format_trace_stack, hir, kvar};
+    use hir::ItemList;
     use hir::{dtype, testutil::t_num, ExprKind, Expression, PipelineStage};
     use spade_ast::testutil::ast_path;
     use spade_common::location_info::WithLocation;
@@ -144,7 +145,7 @@ mod tests {
     fn pipelines_typecheck_correctly() {
         let mut symtab = SymbolTable::new();
 
-        spade_ast_lowering::builtins::populate_symtab(&mut symtab);
+        spade_ast_lowering::builtins::populate_symtab(&mut symtab, &mut ItemList::new());
 
         let input = Pipeline {
             name: name_id(0, "pipe"),
@@ -192,7 +193,7 @@ mod tests {
     fn pipeline_first_argument_is_clock() {
         // Add the head to the symtab
         let mut symtab = SymbolTable::new();
-        spade_ast_lowering::builtins::populate_symtab(&mut symtab);
+        spade_ast_lowering::builtins::populate_symtab(&mut symtab, &mut ItemList::new());
 
         // Add the entity to the symtab
         let pipeline = Pipeline {

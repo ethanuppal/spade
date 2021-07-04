@@ -2,21 +2,18 @@ use std::path::PathBuf;
 
 use logos::Logos;
 
-use spade_ast as ast;
-use spade_ast_lowering::{
-    global_symbols, pipelines::visit_pipeline, visit_entity, visit_module_body,
-};
+use spade_ast_lowering::{global_symbols, visit_module_body};
 use spade_common::{error_reporting::CompilationError, id_tracker::IdTracker, name::Path};
 use spade_hir::{
     symbol_table::{FrozenSymtab, SymbolTable},
-    ExecutableItem,
+    ItemList, TypeList,
 };
 use spade_parser::{self as parser, lexer};
 use spade_typeinference::{self as typeinference};
 use spade_typeinference::{ProcessedEntity, ProcessedItem, ProcessedPipeline};
 use typeinference::ItemListWithTypes;
 
-pub fn parse_typecheck_entity<'a>(input: &str) -> (ProcessedEntity, FrozenSymtab) {
+pub fn parse_typecheck_entity<'a>(input: &str) -> (ProcessedEntity, FrozenSymtab, TypeList) {
     let ParseTypececkResult { mut items, symtab } = parse_typecheck_module_body(input);
 
     if items.executables.is_empty() {
@@ -25,13 +22,13 @@ pub fn parse_typecheck_entity<'a>(input: &str) -> (ProcessedEntity, FrozenSymtab
         panic!("Found multiple items");
     } else {
         match items.executables.pop().unwrap() {
-            ProcessedItem::Entity(e) => (e, symtab),
+            ProcessedItem::Entity(e) => (e, symtab, items.types),
             ProcessedItem::Pipeline(_) => panic!("Found a pipeline, expected entity"),
         }
     }
 }
 
-pub fn parse_typecheck_pipeline<'a>(input: &str) -> (ProcessedPipeline, FrozenSymtab) {
+pub fn parse_typecheck_pipeline<'a>(input: &str) -> (ProcessedPipeline, FrozenSymtab, TypeList) {
     let mut result = parse_typecheck_module_body(input);
 
     if result.items.executables.is_empty() {
@@ -40,7 +37,7 @@ pub fn parse_typecheck_pipeline<'a>(input: &str) -> (ProcessedPipeline, FrozenSy
         panic!("Found multiple items");
     } else {
         match result.items.executables.pop().unwrap() {
-            ProcessedItem::Pipeline(p) => (p, result.symtab),
+            ProcessedItem::Pipeline(p) => (p, result.symtab, result.items.types),
             ProcessedItem::Entity(_) => panic!("Found entity, expected pipeline"),
         }
     }
@@ -69,7 +66,8 @@ pub fn parse_typecheck_module_body(input: &str) -> ParseTypececkResult {
     let module_ast = try_or_report!(parser.module_body());
 
     let mut symtab = SymbolTable::new();
-    spade_ast_lowering::builtins::populate_symtab(&mut symtab);
+    let mut item_list = ItemList::new();
+    spade_ast_lowering::builtins::populate_symtab(&mut symtab, &mut item_list);
     try_or_report!(global_symbols::gather_symbols(
         &module_ast,
         &Path(vec![]),
@@ -79,6 +77,7 @@ pub fn parse_typecheck_module_body(input: &str) -> ParseTypececkResult {
     let mut idtracker = IdTracker::new();
 
     let item_list = try_or_report!(visit_module_body(
+        item_list,
         &module_ast,
         &Path(vec![]),
         &mut symtab,

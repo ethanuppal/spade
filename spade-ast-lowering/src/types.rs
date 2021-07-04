@@ -69,7 +69,7 @@ mod tests {
         testutil::{ast_ident, ast_path},
         TypeParam,
     };
-    use hir::{dtype, hparams, testutil::t_num};
+    use hir::{dtype, hparams, testutil::t_num, ItemList};
     use spade_common::name::testutil::{name_id, name_id_p};
 
     use super::*;
@@ -117,7 +117,7 @@ mod tests {
 
         let namespace = Path(vec![]);
 
-        crate::builtins::populate_symtab(&mut symtab);
+        crate::builtins::populate_symtab(&mut symtab, &mut ItemList::new());
         crate::global_symbols::visit_type_declaration(&input, &namespace, &mut symtab)
             .expect("Failed to visit global symbol");
         crate::global_symbols::re_visit_type_declaration(&input, &namespace, &mut symtab)
@@ -173,7 +173,7 @@ mod tests {
 
         let namespace = Path(vec![]);
 
-        crate::builtins::populate_symtab(&mut symtab);
+        crate::builtins::populate_symtab(&mut symtab, &mut ItemList::new());
         crate::global_symbols::visit_type_declaration(&input, &namespace, &mut symtab)
             .expect("Failed to visit global symbol");
         crate::global_symbols::re_visit_type_declaration(&input, &namespace, &mut symtab)

@@ -60,9 +60,14 @@ mod tests {
 
     macro_rules! build_entity {
         ($code:expr) => {{
-            let (processed, symtab) = parse_typecheck_entity($code);
-            let result = generate_entity(&processed.entity, symtab.symtab(), &processed.type_state)
-                .report_failure();
+            let (processed, symtab, type_list) = parse_typecheck_entity($code);
+            let result = generate_entity(
+                &processed.entity,
+                symtab.symtab(),
+                &processed.type_state,
+                &type_list,
+            )
+            .report_failure();
             result
         }};
     }
@@ -395,7 +400,7 @@ mod tests {
             }
         "#;
 
-        let expected = vec![
+        let mut expected = vec![
             entity!("sub"; (
                     "_i_a", n(0, "a"), Type::Int(16)
                 ) -> Type::Int(16); {
@@ -414,13 +419,21 @@ mod tests {
             match processed {
                 ProcessedItem::Entity(processed) => {
                     result.push(
-                        generate_entity(&processed.entity, symtab.symtab(), &processed.type_state)
-                            .report_failure(),
+                        generate_entity(
+                            &processed.entity,
+                            symtab.symtab(),
+                            &processed.type_state,
+                            &items.types,
+                        )
+                        .report_failure(),
                     );
                 }
                 _ => panic!("expected an entity"),
             }
         }
+
+        expected.sort_by_key(|e| e.name.clone());
+        result.sort_by_key(|e| e.name.clone());
 
         for (exp, res) in expected.into_iter().zip(result.into_iter()) {
             assert_same_mir!(&res, &exp);
@@ -441,7 +454,7 @@ mod tests {
             }
         "#;
 
-        let expected = vec![
+        let mut expected = vec![
             entity!("sub"; (
                     "_i_clk", n(100, "clk"), Type::Bool,
                     "_i_a", n(0, "a"), Type::Int(16)
@@ -464,18 +477,31 @@ mod tests {
             match processed {
                 ProcessedItem::Entity(processed) => {
                     result.push(
-                        generate_entity(&processed.entity, symtab.symtab(), &processed.type_state)
-                            .report_failure(),
+                        generate_entity(
+                            &processed.entity,
+                            symtab.symtab(),
+                            &processed.type_state,
+                            &module.items.types,
+                        )
+                        .report_failure(),
                     );
                 }
                 ProcessedItem::Pipeline(processed) => {
                     result.push(
-                        generate_pipeline(&processed.pipeline, &processed.type_state, &mut symtab)
-                            .report_failure(),
+                        generate_pipeline(
+                            &processed.pipeline,
+                            &processed.type_state,
+                            &mut symtab,
+                            &module.items.types,
+                        )
+                        .report_failure(),
                     );
                 }
             }
         }
+
+        expected.sort_by_key(|e| e.name.clone());
+        result.sort_by_key(|e| e.name.clone());
 
         for (exp, res) in expected.into_iter().zip(result.into_iter()) {
             assert_same_mir!(&res, &exp);
@@ -526,12 +552,13 @@ mod tests {
             } => n(34, "res_s2")
         );
 
-        let (processed, mut symbol_tracker) = parse_typecheck_pipeline(code);
+        let (processed, mut symbol_tracker, type_list) = parse_typecheck_pipeline(code);
 
         let result = generate_pipeline(
             &processed.pipeline,
             &processed.type_state,
             &mut symbol_tracker,
+            &type_list,
         )
         .report_failure();
         assert_same_mir!(&result, &expected);
@@ -569,12 +596,13 @@ mod tests {
             } => e(3)
         );
 
-        let (processed, mut symbol_tracker) = parse_typecheck_pipeline(code);
+        let (processed, mut symbol_tracker, type_list) = parse_typecheck_pipeline(code);
 
         let result = generate_pipeline(
             &processed.pipeline,
             &processed.type_state,
             &mut symbol_tracker,
+            &type_list,
         )
         .report_failure();
         assert_same_mir!(&result, &expected);
@@ -601,15 +629,20 @@ mod tests {
             match processed {
                 ProcessedItem::Entity(processed) => {
                     result.push(
-                        generate_entity(&processed.entity, symtab.symtab(), &processed.type_state)
-                            .report_failure(),
+                        generate_entity(
+                            &processed.entity,
+                            symtab.symtab(),
+                            &processed.type_state,
+                            &items.types,
+                        )
+                        .report_failure(),
                     );
                 }
                 _ => panic!("expected an entity"),
             }
         }
 
-        let expected = todo!("Specify how enum instantiation should look at the MIR level");
+        // let expected = todo!("Specify how enum instantiation should look at the MIR level");
 
         // for (exp, res) in expected.into_iter().zip(result.into_iter()) {
         //     assert_same_mir!(&res, &exp);

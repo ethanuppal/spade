@@ -3,11 +3,14 @@ pub mod symbol_table;
 pub mod testutil;
 pub mod util;
 
+use std::collections::HashMap;
+
 pub use expression::{Argument, ArgumentKind, ExprKind, Expression};
 use spade_common::{
     location_info::{Loc, WithLocation},
     name::{Identifier, NameID},
 };
+use spade_types::PrimitiveType;
 
 /**
   Representation of the language with most language constructs still present, with
@@ -88,6 +91,7 @@ impl WithLocation for Enum {}
 #[derive(PartialEq, Debug, Clone)]
 pub enum TypeDeclKind {
     Enum(Loc<Enum>),
+    Primitive(PrimitiveType),
 }
 
 /// A declaration of a new type
@@ -194,6 +198,8 @@ pub enum ExecutableItem {
 }
 impl WithLocation for ExecutableItem {}
 
+pub type TypeList = HashMap<NameID, Loc<TypeDeclaration>>;
+
 /// A list of all the items present in the whole AST, flattened to remove module
 /// hirearchies.
 ///
@@ -201,6 +207,15 @@ impl WithLocation for ExecutableItem {}
 /// modules will not be present
 #[derive(PartialEq, Debug, Clone)]
 pub struct ItemList {
-    pub executables: Vec<ExecutableItem>,
-    pub types: Vec<Loc<TypeDeclaration>>,
+    pub executables: HashMap<NameID, ExecutableItem>,
+    pub types: TypeList,
+}
+
+impl ItemList {
+    pub fn new() -> Self {
+        Self {
+            executables: HashMap::new(),
+            types: TypeList::new(),
+        }
+    }
 }
