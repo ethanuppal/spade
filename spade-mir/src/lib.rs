@@ -51,6 +51,11 @@ pub enum Operator {
     Select,
     /// Construct a tuple from all the operand expressions
     ConstructTuple,
+    /// Construct the nth enum variant with the operand expressions as the payload
+    ConstructEnum {
+        variant: usize,
+        variant_count: usize,
+    },
     /// Get the `.0`th element of a tuple. The types of the elements are specified
     /// in the second argument
     IndexTuple(u64, Vec<Type>),
@@ -76,6 +81,10 @@ impl std::fmt::Display for Operator {
             Operator::LogicalOr => write!(f, "LogicalOr"),
             Operator::Select => write!(f, "Select"),
             Operator::LeftShift => write!(f, "LeftShift"),
+            Operator::ConstructEnum {
+                variant,
+                variant_count,
+            } => write!(f, "ConstructEnum({}, {})", variant, variant_count),
             Operator::ConstructTuple => write!(f, "ConstructTuple"),
             Operator::IndexTuple(idx, _) => write!(f, "IndexTuple({})", idx),
             Operator::Instance(name) => write!(f, "Instance({})", name),

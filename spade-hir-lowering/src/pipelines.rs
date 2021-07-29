@@ -4,7 +4,7 @@ use spade_common::{
 };
 use spade_hir::{
     symbol_table::{FrozenSymtab, SymbolTable},
-    Pipeline, PipelineBinding, PipelineStage, TypeList,
+    ItemList, Pipeline, PipelineBinding, PipelineStage,
 };
 use spade_mir as mir;
 use spade_typeinference::TypeState;
@@ -19,7 +19,7 @@ trait BindingLocal {
         types: &TypeState,
         live_vars: &mut Vec<NameID>,
         subs: &Substitutions,
-        type_list: &TypeList,
+        item_list: &ItemList,
     ) -> Result<Vec<mir::Statement>>;
 }
 
@@ -30,10 +30,10 @@ impl BindingLocal for PipelineBinding {
         types: &TypeState,
         live_vars: &mut Vec<NameID>,
         subs: &Substitutions,
-        type_list: &TypeList,
+        item_list: &ItemList,
     ) -> Result<Vec<mir::Statement>> {
         // Code for the expression itself
-        let mut result = self.value.lower(symtab, types, subs, type_list)?;
+        let mut result = self.value.lower(symtab, types, subs, item_list)?;
 
         // Add a let binding for this var
         result.push(mir::Statement::Binding(mir::Binding {
@@ -41,7 +41,7 @@ impl BindingLocal for PipelineBinding {
             operator: mir::Operator::Alias,
             operands: vec![self.value.variable(subs)],
             ty: types
-                .type_of_name(&self.name, symtab, type_list)
+                .type_of_name(&self.name, symtab, &item_list.types)
                 .to_mir_type(),
         }));
 
@@ -61,7 +61,7 @@ trait StageLocal {
         live_vars: &mut Vec<NameID>,
         clock: &NameID,
         subs: &mut Substitutions,
-        type_list: &TypeList,
+        item_list: &ItemList,
     ) -> Result<Vec<mir::Statement>>;
 }
 impl StageLocal for PipelineStage {
@@ -73,7 +73,7 @@ impl StageLocal for PipelineStage {
         live_vars: &mut Vec<NameID>,
         clock: &NameID,
         subs: &mut Substitutions,
-        type_list: &TypeList,
+        item_list: &ItemList,
     ) -> Result<Vec<mir::Statement>> {
         let mut result = vec![];
 
@@ -84,7 +84,7 @@ impl StageLocal for PipelineStage {
                 types,
                 live_vars,
                 subs,
-                type_list,
+                item_list,
             )?);
         }
 
@@ -98,7 +98,7 @@ impl StageLocal for PipelineStage {
             result.push(mir::Statement::Register(mir::Register {
                 name: new_name.value_name(),
                 ty: types
-                    .type_of_name(name, symtab.symtab(), type_list)
+                    .type_of_name(name, symtab.symtab(), &item_list.types)
                     .to_mir_type(),
                 clock: clock.value_name(),
                 reset: None,
@@ -116,7 +116,7 @@ pub fn generate_pipeline<'a>(
     pipeline: &Pipeline,
     types: &TypeState,
     symtab: &mut FrozenSymtab,
-    type_list: &TypeList,
+    item_list: &ItemList,
 ) -> Result<mir::Entity> {
     let Pipeline {
         name,
@@ -136,7 +136,7 @@ pub fn generate_pipeline<'a>(
             let name = format!("_i_{}", name_id.1.to_string());
             let val_name = name_id.value_name();
             let ty = types
-                .type_of_name(name_id, symtab.symtab(), type_list)
+                .type_of_name(name_id, symtab.symtab(), &item_list.types)
                 .to_mir_type();
 
             (name, val_name, ty)
@@ -153,16 +153,16 @@ pub fn generate_pipeline<'a>(
             &mut live_vars,
             &inputs[0].0,
             &mut subs,
-            type_list,
+            item_list,
         )?);
     }
 
-    statements.append(&mut result.lower(symtab.symtab(), types, &subs, type_list)?);
+    statements.append(&mut result.lower(symtab.symtab(), types, &subs, item_list)?);
 
     let output = result.variable(&subs);
 
     let output_type = types
-        .expr_type(&result, symtab.symtab(), type_list)?
+        .expr_type(&result, symtab.symtab(), &item_list.types)?
         .to_mir_type();
 
     Ok(mir::Entity {

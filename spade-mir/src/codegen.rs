@@ -79,6 +79,13 @@ fn statement_code(statement: &Statement) -> Code {
 
                     format!("{}[{}]", ops[0], index)
                 }
+                Operator::ConstructEnum {
+                    variant,
+                    variant_count,
+                } => {
+                    let variant_size = (*variant_count as f32).log2().ceil() as usize;
+                    format!("{{{}'{}, {}}}", variant_size, variant, ops.join(", "))
+                }
                 Operator::ConstructTuple => {
                     // To make index calculations easier, we will store tuples in "inverse order".
                     // i.e. the left-most element is stored to the right in the bit vector.
@@ -412,6 +419,20 @@ mod expression_tests {
             r#"
             wire[8:0] _e_0;
             assign _e_0 = {_e_1, _e_2};"#
+        );
+
+        assert_same_code!(&statement_code(&stmt).to_string(), expected);
+    }
+
+    #[test]
+    fn enum_construction_operator_works() {
+        let ty = Type::Enum(vec![vec![], vec![], vec![Type::Int(10), Type::Int(5)]]);
+        let stmt = statement!(e(0); ty; ConstructEnum({variant: 2, variant_count: 3}); e(1), e(2));
+
+        let expected = indoc!(
+            r#"
+            wire[16:0] _e_0;
+            assign _e_0 = {2'2, _e_1, _e_2};"#
         );
 
         assert_same_code!(&statement_code(&stmt).to_string(), expected);

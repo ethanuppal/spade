@@ -1,4 +1,4 @@
-use spade_common::name::{Identifier, NameID};
+use spade_common::name::NameID;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum PrimitiveType {
@@ -23,8 +23,7 @@ impl std::fmt::Display for PrimitiveType {
 pub enum ConcreteType {
     Tuple(Vec<ConcreteType>),
     Enum {
-        name: Identifier,
-        options: Vec<(Identifier, ConcreteType)>,
+        options: Vec<(NameID, Vec<ConcreteType>)>,
     },
     Single {
         base: PrimitiveType,
@@ -47,8 +46,22 @@ impl std::fmt::Display for ConcreteType {
                         .join(", ")
                 )
             }
-            ConcreteType::Enum { name, options: _ } => {
-                write!(f, "{}", name)
+            ConcreteType::Enum { options } => {
+                write!(f, "enum {{",)?;
+                let inner = options
+                    .iter()
+                    .map(|o| {
+                        let param_list =
+                            o.1.iter()
+                                .map(|t| format!("{}", t))
+                                .collect::<Vec<_>>()
+                                .join(",");
+                        format!("{} ( {} )", o.0 .0, param_list)
+                    })
+                    .collect::<Vec<_>>()
+                    .join(",");
+                write!(f, "{}", inner)?;
+                write!(f, "}}")
             }
             ConcreteType::Single { base, params } => {
                 let params_str = if params.is_empty() {

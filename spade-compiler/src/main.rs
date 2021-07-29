@@ -60,7 +60,12 @@ fn main() -> Result<()> {
 
     // First pass over the module to collect all global symbols
     for item in &module_ast.members {
-        try_or_report!(global_symbols::visit_item(&item, &namespace, &mut symtab));
+        try_or_report!(global_symbols::visit_item(
+            &item,
+            &namespace,
+            &mut symtab,
+            &mut item_list
+        ));
     }
 
     let mut idtracker = id_tracker::IdTracker::new();
@@ -84,7 +89,7 @@ fn main() -> Result<()> {
                     &e.inner,
                     frozen_symtab.symtab(),
                     &type_state,
-                    &item_list.types
+                    &item_list
                 ));
 
                 let code = spade_mir::codegen::entity_code(&mir);
@@ -99,13 +104,14 @@ fn main() -> Result<()> {
                     &p,
                     &type_state,
                     &mut frozen_symtab,
-                    &item_list.types
+                    &item_list
                 ));
 
                 let code = spade_mir::codegen::entity_code(&mir);
 
                 module_code.push(code.to_string());
             }
+            ExecutableItem::EnumInstance { .. } => {}
         }
     }
 

@@ -44,7 +44,7 @@ impl WithLocation for Register {}
 /// Type params have both an identifier and a NameID since they go through the
 /// ast lowering process in a few separate steps, and the identifier needs to be
 /// re-added to the symtab multiple times
-#[derive(PartialEq, Debug, Clone)]
+#[derive(PartialEq, Debug, Clone, Hash, Eq)]
 pub enum TypeParam {
     TypeName(Identifier, NameID),
     Integer(Identifier, NameID),
@@ -193,6 +193,7 @@ pub enum Item {
 /// type declarations which are items, but which do not have code on their own
 #[derive(PartialEq, Debug, Clone)]
 pub enum ExecutableItem {
+    EnumInstance { base_enum: NameID, variant: usize },
     Entity(Loc<Entity>),
     Pipeline(Loc<Pipeline>),
 }

@@ -1,16 +1,16 @@
 // This algorithm is based off the excelent lecture here
 // https://www.youtube.com/watch?v=xJXcZp2vgLs
 
-use hir::{Argument, ParameterList, TypeList};
-use hir::{ExecutableItem, ItemList, TypeDeclaration};
+use hir::{Argument, ParameterList};
+use hir::{ExecutableItem, ItemList};
 use parse_tree_macros::trace_typechecker;
-use spade_common::{location_info::Loc, name::NameID};
+use spade_common::location_info::Loc;
 use spade_hir as hir;
 use spade_hir::symbol_table::SymbolTable;
 use spade_hir::{
     expression::BinaryOperator, Block, Entity, ExprKind, Expression, Register, Statement,
 };
-use spade_types::{ConcreteType, KnownType};
+use spade_types::KnownType;
 use std::collections::HashMap;
 
 use colored::*;
@@ -18,6 +18,7 @@ use colored::*;
 pub mod equation;
 pub mod error_reporting;
 pub mod fixed_types;
+pub mod mir_type_lowering;
 pub mod pipeline;
 pub mod result;
 pub mod testutil;
@@ -41,24 +42,26 @@ pub struct ProcessedPipeline {
 }
 
 pub enum ProcessedItem {
+    EnumInstance,
     Entity(ProcessedEntity),
     Pipeline(ProcessedPipeline),
 }
 
-pub struct ItemListWithTypes {
+pub struct ProcessedItemList {
     pub executables: Vec<ProcessedItem>,
-    pub types: HashMap<NameID, Loc<TypeDeclaration>>,
 }
 
-impl ItemListWithTypes {
-    pub fn typecheck(items: ItemList, symbol_table: &SymbolTable) -> Result<Self> {
+impl ProcessedItemList {
+    pub fn typecheck(items: &ItemList, symbol_table: &SymbolTable) -> Result<Self> {
         Ok(Self {
             executables: items
                 .executables
+                .clone()
                 .into_iter()
                 .map(|(_name, item)| {
                     let mut type_state = TypeState::new();
                     match item {
+                        ExecutableItem::EnumInstance { .. } => Ok(ProcessedItem::EnumInstance),
                         ExecutableItem::Entity(entity) => {
                             type_state.visit_entity(&entity, symbol_table)?;
                             Ok(ProcessedItem::Entity(ProcessedEntity {
@@ -76,7 +79,6 @@ impl ItemListWithTypes {
                     }
                 })
                 .collect::<Result<Vec<_>>>()?,
-            types: items.types,
         })
     }
 }
@@ -136,65 +138,6 @@ impl TypeState {
             }
         }
         Err(Error::UnknownType(expr.clone()).into())
-    }
-
-    /// Converts the specified type to a concrete type, returning None
-    /// if it fails
-    pub fn ungenerify_type(
-        var: &TypeVar,
-        symtab: &SymbolTable,
-        type_list: &TypeList,
-    ) -> Option<ConcreteType> {
-        match var {
-            TypeVar::Known(KnownType::Type(t), params, _) => {
-                let params = params
-                    .iter()
-                    .map(|v| Self::ungenerify_type(v, symtab, type_list))
-                    .collect::<Option<Vec<_>>>()?;
-
-                let base = match type_list.get(t) {
-                    Some(t) => match &t.kind {
-                        hir::TypeDeclKind::Enum(_) => todo!(),
-                        hir::TypeDeclKind::Primitive(primitive) => primitive.clone(),
-                    },
-                    None => {
-                        panic!("Missing type declaration for {:?}", t)
-                    }
-                };
-                Some(ConcreteType::Single { base: base, params })
-            }
-            TypeVar::Known(KnownType::Integer(size), params, _) => {
-                assert!(params.len() == 0, "integers can not have type parameters");
-
-                Some(ConcreteType::Integer(*size))
-            }
-            TypeVar::Tuple(inner) => {
-                let inner = inner
-                    .iter()
-                    .map(|v| Self::ungenerify_type(v, symtab, type_list))
-                    .collect::<Option<Vec<_>>>()?;
-                Some(ConcreteType::Tuple(inner))
-            }
-            TypeVar::Unknown(_) => None,
-        }
-    }
-
-    /// Returns the type of the specified name as a concrete type. If the type is not known,
-    /// or tye type is Generic, panics
-    pub fn type_of_name(
-        &self,
-        name: &NameID,
-        symtab: &SymbolTable,
-        type_list: &TypeList,
-    ) -> ConcreteType {
-        Self::ungenerify_type(
-            &self
-                .type_of(&TypedExpression::Name(name.clone()))
-                .expect("Expression had no specified type"),
-            symtab,
-            type_list,
-        )
-        .expect("Expr had generic type")
     }
 
     pub fn new_generic_int(&mut self, symtab: &SymbolTable) -> TypeVar {

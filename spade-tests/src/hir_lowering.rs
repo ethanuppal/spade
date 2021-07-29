@@ -60,12 +60,12 @@ mod tests {
 
     macro_rules! build_entity {
         ($code:expr) => {{
-            let (processed, symtab, type_list) = parse_typecheck_entity($code);
+            let (processed, symtab, item_list) = parse_typecheck_entity($code);
             let result = generate_entity(
                 &processed.entity,
                 symtab.symtab(),
                 &processed.type_state,
-                &type_list,
+                &item_list,
             )
             .report_failure();
             result
@@ -412,10 +412,14 @@ mod tests {
             } => e(0)),
         ];
 
-        let ParseTypececkResult { items, symtab } = parse_typecheck_module_body(code);
+        let ParseTypececkResult {
+            items_with_types,
+            item_list,
+            symtab,
+        } = parse_typecheck_module_body(code);
 
         let mut result = vec![];
-        for processed in items.executables {
+        for processed in items_with_types.executables {
             match processed {
                 ProcessedItem::Entity(processed) => {
                     result.push(
@@ -423,7 +427,7 @@ mod tests {
                             &processed.entity,
                             symtab.symtab(),
                             &processed.type_state,
-                            &items.types,
+                            &item_list,
                         )
                         .report_failure(),
                     );
@@ -473,7 +477,7 @@ mod tests {
         let mut symtab = module.symtab;
 
         let mut result = vec![];
-        for processed in module.items.executables {
+        for processed in module.items_with_types.executables {
             match processed {
                 ProcessedItem::Entity(processed) => {
                     result.push(
@@ -481,7 +485,7 @@ mod tests {
                             &processed.entity,
                             symtab.symtab(),
                             &processed.type_state,
-                            &module.items.types,
+                            &module.item_list,
                         )
                         .report_failure(),
                     );
@@ -492,11 +496,12 @@ mod tests {
                             &processed.pipeline,
                             &processed.type_state,
                             &mut symtab,
-                            &module.items.types,
+                            &module.item_list,
                         )
                         .report_failure(),
                     );
                 }
+                ProcessedItem::EnumInstance => {}
             }
         }
 
@@ -608,7 +613,6 @@ mod tests {
         assert_same_mir!(&result, &expected);
     }
 
-    #[ignore]
     #[test]
     fn enum_instantiation_works() {
         let code = r#"
@@ -622,10 +626,14 @@ mod tests {
             }
         "#;
 
-        let ParseTypececkResult { items, symtab } = parse_typecheck_module_body(code);
+        let ParseTypececkResult {
+            items_with_types,
+            item_list,
+            symtab,
+        } = parse_typecheck_module_body(code);
 
         let mut result = vec![];
-        for processed in items.executables {
+        for processed in items_with_types.executables {
             match processed {
                 ProcessedItem::Entity(processed) => {
                     result.push(
@@ -633,11 +641,12 @@ mod tests {
                             &processed.entity,
                             symtab.symtab(),
                             &processed.type_state,
-                            &items.types,
+                            &item_list,
                         )
                         .report_failure(),
                     );
                 }
+                ProcessedItem::EnumInstance => {}
                 _ => panic!("expected an entity"),
             }
         }

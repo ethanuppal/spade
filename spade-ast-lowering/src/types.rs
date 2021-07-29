@@ -120,8 +120,13 @@ mod tests {
         crate::builtins::populate_symtab(&mut symtab, &mut ItemList::new());
         crate::global_symbols::visit_type_declaration(&input, &namespace, &mut symtab)
             .expect("Failed to visit global symbol");
-        crate::global_symbols::re_visit_type_declaration(&input, &namespace, &mut symtab)
-            .expect("Failed to re-visit global symbol");
+        crate::global_symbols::re_visit_type_declaration(
+            &input,
+            &namespace,
+            &mut symtab,
+            &mut ItemList::new(),
+        )
+        .expect("Failed to re-visit global symbol");
 
         let expected = hir::TypeDeclaration {
             name: name_id(0, "test"),
@@ -176,8 +181,13 @@ mod tests {
         crate::builtins::populate_symtab(&mut symtab, &mut ItemList::new());
         crate::global_symbols::visit_type_declaration(&input, &namespace, &mut symtab)
             .expect("Failed to visit global symbol");
-        crate::global_symbols::re_visit_type_declaration(&input, &namespace, &mut symtab)
-            .expect("Failed to visit global symbol");
+        crate::global_symbols::re_visit_type_declaration(
+            &input,
+            &namespace,
+            &mut symtab,
+            &mut ItemList::new(),
+        )
+        .expect("Failed to visit global symbol");
 
         let expected = hir::TypeDeclaration {
             name: name_id(0, "test"),

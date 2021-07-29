@@ -1,3 +1,4 @@
+use hir::ItemList;
 use spade_ast as ast;
 use spade_common::{
     location_info::{Loc, WithLocation},
@@ -14,6 +15,7 @@ pub fn gather_symbols(
     module: &ast::ModuleBody,
     namespace: &Path,
     symtab: &mut SymbolTable,
+    item_list: &mut ItemList,
 ) -> Result<(), Error> {
     // Start by visiting each item and adding types to the symtab. These are needed
     // for signatures of other things which is why this has to be done first
@@ -25,7 +27,7 @@ pub fn gather_symbols(
 
     // Then visit all the items adding their heads to the symtab
     for item in &module.members {
-        visit_item(item, namespace, symtab)?;
+        visit_item(item, namespace, symtab, item_list)?;
     }
 
     Ok(())
@@ -35,6 +37,7 @@ pub fn visit_item(
     item: &ast::Item,
     namespace: &Path,
     symtab: &mut SymbolTable,
+    item_list: &mut ItemList,
 ) -> Result<(), Error> {
     match item {
         ast::Item::Entity(e) => {
@@ -47,7 +50,7 @@ pub fn visit_item(
             todo!("Trait definitions are unsupported")
         }
         ast::Item::Type(t) => {
-            re_visit_type_declaration(t, namespace, symtab)?;
+            re_visit_type_declaration(t, namespace, symtab, item_list)?;
         }
     }
     Ok(())
@@ -115,6 +118,7 @@ pub fn re_visit_type_declaration(
     t: &Loc<ast::TypeDeclaration>,
     namespace: &Path,
     symtab: &mut SymbolTable,
+    items: &mut ItemList,
 ) -> Result<(), Error> {
     // Add the generic types declared here to the symtab
     for param in &t.generic_args {
@@ -142,7 +146,7 @@ pub fn re_visit_type_declaration(
                 "Failed to look up type {}. It was probably not added to the symtab",
                 path
             ));
-            for option in &e.options {
+            for (i, option) in e.options.iter().enumerate() {
                 let path = path.clone().push_ident(option.0.clone());
 
                 let parameter_list = option
@@ -164,7 +168,15 @@ pub fn re_visit_type_declaration(
                 }
                 .at_loc(&option.0);
 
-                symtab.add_thing(path.clone(), Thing::Function(head));
+                let function_name = symtab.add_thing(path.clone(), Thing::Function(head));
+
+                items.executables.insert(
+                    function_name,
+                    hir::ExecutableItem::EnumInstance {
+                        base_enum: id.clone(),
+                        variant: i,
+                    },
+                );
             }
         }
     }

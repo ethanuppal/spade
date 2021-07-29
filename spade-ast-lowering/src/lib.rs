@@ -280,7 +280,9 @@ pub fn visit_module_body(
                 p.name,
                 ExecutableItem::Pipeline(p.clone())
             ),
-            Type(t) => add_item!(item_list.types, t.name, t.clone()),
+            Type(t) => {
+                add_item!(item_list.types, t.name, t.clone())
+            }
         }
     }
 
@@ -1376,6 +1378,7 @@ mod register_visiting {
 mod item_visiting {
     use super::*;
 
+    use hir::ItemList;
     use spade_ast::testutil::ast_ident;
     use spade_common::location_info::WithLocation;
     use spade_common::name::testutil::name_id;
@@ -1421,7 +1424,8 @@ mod item_visiting {
         let mut symtab = SymbolTable::new();
         let mut idtracker = IdTracker::new();
         let namespace = Path(vec![]);
-        crate::global_symbols::visit_item(&input, &namespace, &mut symtab).unwrap();
+        crate::global_symbols::visit_item(&input, &namespace, &mut symtab, &mut ItemList::new())
+            .unwrap();
         assert_eq!(
             visit_item(&input, &namespace, &mut symtab, &mut idtracker),
             Ok(expected)
@@ -1488,7 +1492,7 @@ mod module_visiting {
 
         let mut symtab = SymbolTable::new();
         let mut idtracker = IdTracker::new();
-        global_symbols::gather_symbols(&input, &Path(vec![]), &mut symtab)
+        global_symbols::gather_symbols(&input, &Path(vec![]), &mut symtab, &mut ItemList::new())
             .expect("failed to collect global symbols");
         assert_eq!(
             visit_module_body(
