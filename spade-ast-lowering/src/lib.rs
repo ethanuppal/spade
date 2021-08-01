@@ -287,6 +287,23 @@ pub fn visit_module_body(
     Ok(item_list)
 }
 
+pub fn visit_pattern(p: &Loc<ast::Pattern>, symtab: &mut SymbolTable) -> Result<Loc<hir::Pattern>> {
+    match &p.inner {
+        ast::Pattern::Integer(_) => todo!(),
+        ast::Pattern::Bool(_) => todo!(),
+        ast::Pattern::Name(ident) => {
+            let name_id = symtab.add_thing(
+                path_from_ident(ident.clone()).inner,
+                Thing::Variable(ident.clone()),
+            );
+
+            Ok(hir::Pattern::Name(name_id.at_loc(&ident)).at(p))
+        }
+        ast::Pattern::Tuple(_) => todo!(),
+        ast::Pattern::Type(_, _) => todo!(),
+    }
+}
+
 pub fn visit_statement(
     s: &Loc<ast::Statement>,
     symtab: &mut SymbolTable,
@@ -294,23 +311,18 @@ pub fn visit_statement(
 ) -> Result<Loc<hir::Statement>> {
     let (s, span) = s.split_ref();
     match s {
-        ast::Statement::Binding(ident, t, expr) => {
+        ast::Statement::Binding(pattern, t, expr) => {
             let hir_type = if let Some(t) = t {
                 Some(t.try_map_ref(|t| visit_type_spec(t, symtab))?)
             } else {
                 None
             };
-            let name_id = symtab.add_thing(
-                path_from_ident(ident.clone()).inner,
-                Thing::Variable(ident.clone()),
-            );
+
+            let pat = visit_pattern(pattern, symtab)?;
 
             let expr = expr.try_visit(visit_expression, symtab, idtracker)?;
 
-            Ok(Loc::new(
-                hir::Statement::Binding(name_id.at_loc(ident), hir_type, expr),
-                span,
-            ))
+            Ok(Loc::new(hir::Statement::Binding(pat, hir_type, expr), span))
         }
         ast::Statement::Register(inner) => {
             let (result, span) = visit_register(&inner, symtab, idtracker)?.separate();
@@ -560,12 +572,7 @@ pub fn visit_register(
 ) -> Result<Loc<hir::Register>> {
     let (reg, loc) = reg.split_ref();
 
-    let name_id = symtab
-        .add_thing(
-            path_from_ident(reg.clone().name).inner,
-            Thing::Variable(reg.name.clone()),
-        )
-        .at_loc(&reg.name);
+    let pattern = visit_pattern(&reg.pattern, symtab)?;
 
     let clock = reg.clock.try_visit(visit_expression, symtab, idtracker)?;
 
@@ -588,7 +595,7 @@ pub fn visit_register(
 
     Ok(Loc::new(
         hir::Register {
-            name: name_id,
+            pattern,
             clock,
             reset,
             value,
@@ -619,7 +626,7 @@ mod entity_visiting {
             output_type: None,
             body: ast::Expression::Block(Box::new(ast::Block {
                 statements: vec![ast::Statement::Binding(
-                    ast_ident("var"),
+                    ast::Pattern::name("var"),
                     Some(ast::TypeSpec::Unit(().nowhere()).nowhere()),
                     ast::Expression::IntLiteral(0).nowhere(),
                 )
@@ -641,7 +648,7 @@ mod entity_visiting {
             inputs: vec![((name_id(1, "a").inner, hir::TypeSpec::unit().nowhere()))],
             body: hir::ExprKind::Block(Box::new(hir::Block {
                 statements: vec![hir::Statement::Binding(
-                    name_id(2, "var"),
+                    hir::Pattern::Name(name_id(2, "var")).nowhere(),
                     Some(hir::TypeSpec::unit().nowhere()),
                     hir::ExprKind::IntLiteral(0).idless().nowhere(),
                 )
@@ -745,14 +752,14 @@ mod statement_visiting {
         let mut idtracker = IdTracker::new();
 
         let input = ast::Statement::Binding(
-            ast_ident("a"),
+            ast::Pattern::name("a"),
             Some(ast::TypeSpec::Unit(().nowhere()).nowhere()),
             ast::Expression::IntLiteral(0).nowhere(),
         )
         .nowhere();
 
         let expected = hir::Statement::Binding(
-            name_id(0, "a"),
+            hir::Pattern::Name(name_id(0, "a")).nowhere(),
             Some(hir::TypeSpec::unit().nowhere()),
             hir::ExprKind::IntLiteral(0).idless().nowhere(),
         )
@@ -769,7 +776,7 @@ mod statement_visiting {
     fn registers_are_statements() {
         let input = ast::Statement::Register(
             ast::Register {
-                name: ast_ident("regname"),
+                pattern: ast::Pattern::name("regname"),
                 clock: ast::Expression::Identifier(ast_path("clk")).nowhere(),
                 reset: None,
                 value: ast::Expression::IntLiteral(0).nowhere(),
@@ -781,7 +788,7 @@ mod statement_visiting {
 
         let expected = hir::Statement::Register(
             hir::Register {
-                name: name_id(1, "regname"),
+                pattern: hir::Pattern::Name(name_id(1, "regname")).nowhere(),
                 clock: hir::ExprKind::Identifier(name_id(0, "clk").inner)
                     .with_id(0)
                     .nowhere(),
@@ -811,8 +818,8 @@ mod expression_visiting {
 
     use hir::{FunctionHead, PipelineHead};
     use spade_ast::testutil::{ast_ident, ast_path};
+    use spade_common::location_info::WithLocation;
     use spade_common::name::testutil::name_id;
-    use spade_common::{location_info::WithLocation, name::Identifier};
 
     #[test]
     fn int_literals_work() {
@@ -875,7 +882,7 @@ mod expression_visiting {
     fn blocks_work() {
         let input = ast::Expression::Block(Box::new(ast::Block {
             statements: vec![ast::Statement::Binding(
-                Identifier("a".to_string()).nowhere(),
+                ast::Pattern::name("a"),
                 None,
                 ast::Expression::IntLiteral(0).nowhere(),
             )
@@ -884,7 +891,7 @@ mod expression_visiting {
         }));
         let expected = hir::ExprKind::Block(Box::new(hir::Block {
             statements: vec![hir::Statement::Binding(
-                name_id(0, "a"),
+                hir::Pattern::Name(name_id(0, "a")).nowhere(),
                 None,
                 hir::ExprKind::IntLiteral(0).idless().nowhere(),
             )
@@ -1353,13 +1360,13 @@ mod register_visiting {
     use super::*;
 
     use spade_ast::testutil::{ast_ident, ast_path};
+    use spade_common::location_info::WithLocation;
     use spade_common::name::testutil::name_id;
-    use spade_common::{location_info::WithLocation, name::Identifier};
 
     #[test]
     fn register_visiting_works() {
         let input = ast::Register {
-            name: Identifier("test".to_string()).nowhere(),
+            pattern: ast::Pattern::name("test"),
             clock: ast::Expression::Identifier(ast_path("clk")).nowhere(),
             reset: Some((
                 ast::Expression::Identifier(ast_path("rst")).nowhere(),
@@ -1371,7 +1378,7 @@ mod register_visiting {
         .nowhere();
 
         let expected = hir::Register {
-            name: name_id(2, "test"),
+            pattern: hir::Pattern::Name(name_id(2, "test")).nowhere(),
             clock: hir::ExprKind::Identifier(name_id(0, "clk").inner)
                 .with_id(0)
                 .nowhere(),

@@ -460,7 +460,7 @@ impl TypeState {
     #[trace_typechecker]
     pub fn visit_statement(&mut self, stmt: &Loc<Statement>, symtab: &SymbolTable) -> Result<()> {
         match &stmt.inner {
-            Statement::Binding(name, t, value) => {
+            Statement::Binding(pattern, t, value) => {
                 self.visit_expression(value, symtab)?;
 
                 if t.is_some() {
@@ -468,13 +468,21 @@ impl TypeState {
                 }
 
                 let new_type = self.new_generic();
-                self.add_equation(TypedExpression::Name(name.clone().inner), new_type);
+                match &pattern.inner {
+                    hir::Pattern::Integer(_) => todo!(),
+                    hir::Pattern::Bool(_) => todo!(),
+                    hir::Pattern::Name(name) => {
+                        self.add_equation(TypedExpression::Name(name.clone().inner), new_type);
 
-                self.unify_expression_generic_error(
-                    &value,
-                    &TypedExpression::Name(name.clone().inner),
-                    symtab,
-                )?;
+                        self.unify_expression_generic_error(
+                            &value,
+                            &TypedExpression::Name(name.clone().inner),
+                            symtab,
+                        )?;
+                    }
+                    hir::Pattern::Tuple(_) => todo!(),
+                    hir::Pattern::Type(_, _) => todo!(),
+                }
 
                 Ok(())
             }
@@ -485,20 +493,31 @@ impl TypeState {
     #[trace_typechecker]
     pub fn visit_register(&mut self, reg: &Register, symtab: &SymbolTable) -> Result<()> {
         let new_type = self.new_generic();
-        self.add_equation(TypedExpression::Name(reg.name.clone().inner), new_type);
+        let name = match &reg.pattern.inner {
+            hir::Pattern::Integer(_) => todo!(),
+            hir::Pattern::Bool(_) => todo!(),
+            hir::Pattern::Name(name) => {
+                self.add_equation(TypedExpression::Name(name.clone().inner), new_type);
 
-        if let Some(t) = &reg.value_type {
-            self.unify_types(
-                &TypedExpression::Name(reg.name.inner.clone()),
-                &Self::type_var_from_hir(&t),
-                symtab,
-            )
-            .map_err(|(got, expected)| Error::UnspecifiedTypeError {
-                expected,
-                got,
-                loc: reg.name.loc(),
-            })?;
-        }
+                if let Some(t) = &reg.value_type {
+                    self.unify_types(
+                        &TypedExpression::Name(name.inner.clone()),
+                        &Self::type_var_from_hir(&t),
+                        symtab,
+                    )
+                    .map_err(|(got, expected)| {
+                        Error::UnspecifiedTypeError {
+                            expected,
+                            got,
+                            loc: name.loc(),
+                        }
+                    })?;
+                }
+                name
+            }
+            hir::Pattern::Tuple(_) => todo!(),
+            hir::Pattern::Type(_, _) => todo!(),
+        };
 
         self.visit_expression(&reg.clock, symtab)?;
         self.visit_expression(&reg.value, symtab)?;
@@ -532,7 +551,7 @@ impl TypeState {
 
         self.unify_expression_generic_error(
             &reg.value,
-            &TypedExpression::Name(reg.name.clone().inner),
+            &TypedExpression::Name(name.clone().inner),
             symtab,
         )?;
 
@@ -800,6 +819,7 @@ mod tests {
         fixed_types::t_clock,
         hir::{self, Block},
     };
+    use hir::Pattern;
     use hir::{dtype, testutil::t_num, Argument};
     use spade_ast::testutil::{ast_ident, ast_path};
     use spade_common::location_info::WithLocation;
@@ -1076,7 +1096,7 @@ mod tests {
         spade_ast_lowering::builtins::populate_symtab(&mut symtab, &mut ItemList::new());
 
         let input = hir::Register {
-            name: name_id(0, "a"),
+            pattern: Pattern::Name(name_id(0, "a")).nowhere(),
             clock: ExprKind::Identifier(name_id(1, "clk").inner)
                 .with_id(3)
                 .nowhere(),
@@ -1106,7 +1126,7 @@ mod tests {
         spade_ast_lowering::builtins::populate_symtab(&mut symtab, &mut ItemList::new());
 
         let input = hir::Register {
-            name: name_id(0, "a"),
+            pattern: Pattern::Name(name_id(0, "a")).nowhere(),
             clock: ExprKind::Identifier(name_id(1, "clk").inner)
                 .with_id(3)
                 .nowhere(),
@@ -1138,7 +1158,7 @@ mod tests {
         let rst_cond = name_id(2, "rst").inner;
         let rst_value = name_id(3, "rst_value").inner;
         let input = hir::Register {
-            name: name_id(0, "a"),
+            pattern: Pattern::Name(name_id(0, "a")).nowhere(),
             clock: ExprKind::Identifier(name_id(1, "clk").inner)
                 .with_id(3)
                 .nowhere(),
@@ -1179,7 +1199,7 @@ mod tests {
         spade_ast_lowering::builtins::populate_symtab(&mut symtab, &mut ItemList::new());
 
         let input = hir::Statement::Binding(
-            name_id(0, "a"),
+            Pattern::Name(name_id(0, "a")).nowhere(),
             None,
             ExprKind::IntLiteral(0).with_id(0).nowhere(),
         )
@@ -1199,7 +1219,7 @@ mod tests {
         spade_ast_lowering::builtins::populate_symtab(&mut symtab, &mut ItemList::new());
 
         let input = Register {
-            name: name_id(0, "test"),
+            pattern: Pattern::Name(name_id(0, "test")).nowhere(),
             clock: ExprKind::Identifier(name_id(1, "clk").inner)
                 .with_id(0)
                 .nowhere(),

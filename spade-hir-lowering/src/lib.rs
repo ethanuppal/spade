@@ -124,17 +124,25 @@ impl StatementLocal for Statement {
     ) -> Result<Vec<mir::Statement>> {
         let mut result = vec![];
         match &self {
-            Statement::Binding(name, _t, value) => {
+            Statement::Binding(pattern, _t, value) => {
                 result.append(&mut value.lower(symtab, types, subs, item_list)?);
 
-                result.push(mir::Statement::Binding(mir::Binding {
-                    name: name.value_name(),
-                    operator: mir::Operator::Alias,
-                    operands: vec![value.variable(subs)],
-                    ty: types
-                        .type_of_name(name, symtab, &item_list.types)
-                        .to_mir_type(),
-                }));
+                match &pattern.inner {
+                    hir::Pattern::Integer(_) => todo!(),
+                    hir::Pattern::Bool(_) => todo!(),
+                    hir::Pattern::Name(name) => {
+                        result.push(mir::Statement::Binding(mir::Binding {
+                            name: name.value_name(),
+                            operator: mir::Operator::Alias,
+                            operands: vec![value.variable(subs)],
+                            ty: types
+                                .type_of_name(name, symtab, &item_list.types)
+                                .to_mir_type(),
+                        }));
+                    }
+                    hir::Pattern::Tuple(_) => todo!(),
+                    hir::Pattern::Type(_, _) => todo!(),
+                }
             }
             Statement::Register(register) => {
                 result.append(&mut register.clock.lower(symtab, types, subs, item_list)?);
@@ -146,18 +154,26 @@ impl StatementLocal for Statement {
 
                 result.append(&mut register.value.lower(symtab, types, subs, item_list)?);
 
-                result.push(mir::Statement::Register(mir::Register {
-                    name: register.name.value_name(),
-                    ty: types
-                        .type_of_name(&register.name, symtab, &item_list.types)
-                        .to_mir_type(),
-                    clock: register.clock.variable(subs),
-                    reset: register
-                        .reset
-                        .as_ref()
-                        .map(|(value, trig)| (value.variable(subs), trig.variable(subs))),
-                    value: register.value.variable(subs),
-                }))
+                match &register.pattern.inner {
+                    hir::Pattern::Integer(_) => todo!(),
+                    hir::Pattern::Bool(_) => todo!(),
+                    hir::Pattern::Name(name) => {
+                        result.push(mir::Statement::Register(mir::Register {
+                            name: name.value_name(),
+                            ty: types
+                                .type_of_name(&name, symtab, &item_list.types)
+                                .to_mir_type(),
+                            clock: register.clock.variable(subs),
+                            reset: register
+                                .reset
+                                .as_ref()
+                                .map(|(value, trig)| (value.variable(subs), trig.variable(subs))),
+                            value: register.value.variable(subs),
+                        }))
+                    }
+                    hir::Pattern::Tuple(_) => todo!(),
+                    hir::Pattern::Type(_, _) => todo!(),
+                }
             }
         }
         Ok(result)

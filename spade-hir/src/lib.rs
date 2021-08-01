@@ -25,15 +25,32 @@ pub struct Block {
 impl WithLocation for Block {}
 
 #[derive(PartialEq, Debug, Clone)]
+pub enum ArgumentPattern {
+    Named(Vec<(Loc<NameID>, Loc<Pattern>)>),
+    Positional(Vec<Loc<Pattern>>),
+}
+impl WithLocation for ArgumentPattern {}
+
+#[derive(PartialEq, Debug, Clone)]
+pub enum Pattern {
+    Integer(u128),
+    Bool(bool),
+    Name(Loc<NameID>),
+    Tuple(Vec<Loc<Pattern>>),
+    Type(Loc<NameID>, ArgumentPattern),
+}
+impl WithLocation for Pattern {}
+
+#[derive(PartialEq, Debug, Clone)]
 pub enum Statement {
-    Binding(Loc<NameID>, Option<Loc<TypeSpec>>, Loc<Expression>),
+    Binding(Loc<Pattern>, Option<Loc<TypeSpec>>, Loc<Expression>),
     Register(Loc<Register>),
 }
 impl WithLocation for Statement {}
 
 #[derive(PartialEq, Debug, Clone)]
 pub struct Register {
-    pub name: Loc<NameID>,
+    pub pattern: Loc<Pattern>,
     pub clock: Loc<Expression>,
     pub reset: Option<(Loc<Expression>, Loc<Expression>)>,
     pub value: Loc<Expression>,

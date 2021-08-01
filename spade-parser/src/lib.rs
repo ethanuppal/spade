@@ -2,10 +2,10 @@ pub mod error_reporting;
 pub mod lexer;
 
 use spade_ast::{
-    ArgumentList, BinaryOperator, Block, Entity, Enum, Expression, FunctionDecl, Item, ModuleBody,
-    NamedArgument, ParameterList, Pipeline, PipelineBindModifier, PipelineBinding, PipelineStage,
-    Register, Statement, TraitDef, TypeDeclKind, TypeDeclaration, TypeExpression, TypeParam,
-    TypeSpec,
+    ArgumentList, ArgumentPattern, BinaryOperator, Block, Entity, Enum, Expression, FunctionDecl,
+    Item, ModuleBody, NamedArgument, ParameterList, Pattern, Pipeline, PipelineBindModifier,
+    PipelineBinding, PipelineStage, Register, Statement, TraitDef, TypeDeclKind, TypeDeclaration,
+    TypeExpression, TypeParam, TypeSpec,
 };
 use spade_common::{
     location_info::{lspan, Loc, WithLocation},
@@ -312,10 +312,8 @@ impl<'a> Parser<'a> {
             } else {
                 Ok(Expression::EntityInstance(name, args.clone()).between(&start.span, &args))
             }
-        } else if let Some(tok) = self.peek_and_eat(&TokenKind::True)? {
-            Ok(Expression::BoolLiteral(true).at(&tok.span))
-        } else if let Some(tok) = self.peek_and_eat(&TokenKind::False)? {
-            Ok(Expression::BoolLiteral(false).at(&tok.span))
+        } else if let Some(val) = self.bool_literal()? {
+            Ok(val.map(Expression::BoolLiteral))
         } else if let Some(val) = self.int_literal()? {
             Ok(val.map(Expression::IntLiteral))
         } else if let Some(block) = self.block()? {
@@ -381,6 +379,17 @@ impl<'a> Parser<'a> {
                 TokenKind::Integer(val) => Ok(Some(Loc::new(val, lspan(token.span)))),
                 _ => unreachable!(),
             }
+        } else {
+            Ok(None)
+        }
+    }
+
+    #[trace_parser]
+    fn bool_literal(&mut self) -> Result<Option<Loc<bool>>> {
+        if let Some(tok) = self.peek_and_eat(&TokenKind::True)? {
+            Ok(Some(true.at(&tok.span)))
+        } else if let Some(tok) = self.peek_and_eat(&TokenKind::False)? {
+            Ok(Some(false.at(&tok.span)))
         } else {
             Ok(None)
         }
@@ -488,13 +497,75 @@ impl<'a> Parser<'a> {
         Ok((name, t))
     }
 
+    #[trace_parser]
+    pub fn pattern(&mut self) -> Result<Loc<Pattern>> {
+        let result = self.first_successful(vec![
+            &|s| {
+                let start = peek_for!(s, &TokenKind::OpenParen);
+                let inner = s.comma_separated(Self::pattern, &TokenKind::CloseParen)?;
+                let end = s.eat(&TokenKind::CloseParen)?;
+
+                Ok(Some(Pattern::Tuple(inner).between(&start.span, &end.span)))
+            },
+            &|s| {
+                Ok(s.int_literal()?
+                    // Map option, then map Loc
+                    .map(|val| val.map(Pattern::Integer)))
+            },
+            &|s| {
+                Ok(s.bool_literal()?
+                    // Map option, then map Loc
+                    .map(|val| val.map(Pattern::Bool)))
+            },
+            &|s| {
+                let ident = s.identifier()?;
+
+                if let Some(start_paren) = s.peek_and_eat(&TokenKind::OpenParen)? {
+                    let inner = s.comma_separated(Self::pattern, &TokenKind::CloseParen)?;
+                    let end = s.eat(&TokenKind::CloseParen)?;
+
+                    Ok(Some(
+                        Pattern::Type(ident, ArgumentPattern::Positional(inner))
+                            .between(&start_paren.span, &end.span),
+                    ))
+                } else if let Some(start_brace) = s.peek_and_eat(&TokenKind::OpenBrace)? {
+                    let inner_parser = |s: &mut Self| {
+                        let lhs = s.identifier()?;
+                        s.eat(&TokenKind::Colon)?;
+                        let rhs = s.pattern()?;
+
+                        Ok((lhs, rhs))
+                    };
+                    let inner = s.comma_separated(inner_parser, &TokenKind::CloseBrace)?;
+                    let end = s.eat(&TokenKind::CloseBrace)?;
+
+                    Ok(Some(
+                        Pattern::Type(ident, ArgumentPattern::Named(inner))
+                            .between(&start_brace.span, &end.span),
+                    ))
+                } else {
+                    Ok(Some(Pattern::Name(ident.clone()).at(&ident)))
+                }
+            },
+        ])?;
+
+        if let Some(result) = result {
+            Ok(result)
+        } else {
+            Err(Error::UnexpectedToken {
+                got: self.eat_unconditional()?,
+                expected: vec!["Pattern"],
+            })
+        }
+    }
+
     // Statemenets
 
     #[trace_parser]
     pub fn binding(&mut self) -> Result<Option<Loc<Statement>>> {
         peek_for!(self, &TokenKind::Let);
 
-        let (ident, start_span) = self.identifier()?.separate();
+        let (pattern, start_span) = self.pattern()?.separate();
 
         let t = if self.peek_and_eat(&TokenKind::Colon)?.is_some() {
             Some(self.type_spec()?)
@@ -506,7 +577,7 @@ impl<'a> Parser<'a> {
         let (value, end_span) = self.expression()?.separate();
 
         Ok(Some(
-            Statement::Binding(ident, t, value).between(&start_span, &end_span),
+            Statement::Binding(pattern, t, value).between(&start_span, &end_span),
         ))
     }
 
@@ -535,7 +606,7 @@ impl<'a> Parser<'a> {
         let clock = clock.unwrap();
 
         // Name
-        let name = self.identifier()?;
+        let pattern = self.pattern()?;
 
         // Optional type
         let value_type = if self.peek_and_eat(&TokenKind::Colon)?.is_some() {
@@ -563,7 +634,7 @@ impl<'a> Parser<'a> {
         let span = lspan(start_token.span).merge(end_span);
         let result = Statement::Register(
             Register {
-                name,
+                pattern,
                 clock,
                 reset,
                 value,
@@ -1489,7 +1560,7 @@ mod tests {
 
         let expected = Block {
             statements: vec![Statement::Binding(
-                ast_ident("a"),
+                Pattern::Name(ast_ident("a")).nowhere(),
                 None,
                 Expression::IntLiteral(0).nowhere(),
             )
@@ -1512,7 +1583,7 @@ mod tests {
 
         let expected = Expression::Block(Box::new(Block {
             statements: vec![Statement::Binding(
-                ast_ident("a"),
+                Pattern::Name(ast_ident("a")).nowhere(),
                 None,
                 Expression::IntLiteral(0).nowhere(),
             )
@@ -1527,7 +1598,7 @@ mod tests {
     #[test]
     fn bindings_work() {
         let expected = Statement::Binding(
-            ast_ident("test"),
+            Pattern::Name(ast_ident("test")).nowhere(),
             None,
             Expression::IntLiteral(123).nowhere(),
         )
@@ -1538,7 +1609,7 @@ mod tests {
     #[test]
     fn bindings_with_types_work() {
         let expected = Statement::Binding(
-            ast_ident("test"),
+            Pattern::Name(ast_ident("test")).nowhere(),
             Some(TypeSpec::Named(ast_path("bool"), vec![]).nowhere()),
             Expression::IntLiteral(123).nowhere(),
         )
@@ -1556,13 +1627,13 @@ mod tests {
             body: Expression::Block(Box::new(Block {
                 statements: vec![
                     Statement::Binding(
-                        ast_ident("test"),
+                        Pattern::Name(ast_ident("test")).nowhere(),
                         None,
                         Expression::IntLiteral(123).nowhere(),
                     )
                     .nowhere(),
                     Statement::Binding(
-                        ast_ident("test2"),
+                        Pattern::Name(ast_ident("test2")).nowhere(),
                         None,
                         Expression::IntLiteral(123).nowhere(),
                     )
@@ -1625,7 +1696,7 @@ mod tests {
 
         let expected = Statement::Register(
             Register {
-                name: ast_ident("name"),
+                pattern: Pattern::Name(ast_ident("name")).nowhere(),
                 clock: Expression::Identifier(ast_path("clk")).nowhere(),
                 reset: None,
                 value: Expression::IntLiteral(1).nowhere(),
@@ -1644,7 +1715,7 @@ mod tests {
 
         let expected = Statement::Register(
             Register {
-                name: ast_ident("name"),
+                pattern: Pattern::Name(ast_ident("name")).nowhere(),
                 clock: Expression::Identifier(ast_path("clk")).nowhere(),
                 reset: Some((
                     Expression::Identifier(ast_path("rst")).nowhere(),
@@ -1666,7 +1737,7 @@ mod tests {
 
         let expected = Statement::Register(
             Register {
-                name: Identifier("name".to_string()).nowhere(),
+                pattern: Pattern::Name(ast_ident("name")).nowhere(),
                 clock: Expression::Identifier(ast_path("clk")).nowhere(),
                 reset: Some((
                     Expression::Identifier(ast_path("rst")).nowhere(),
@@ -2191,5 +2262,61 @@ mod tests {
         .nowhere();
 
         check_parse!(code, expression, Ok(expected));
+    }
+
+    #[test]
+    fn tuple_patterns_work() {
+        let code = "(x, y)";
+
+        let expected = Pattern::Tuple(vec![Pattern::name("x"), Pattern::name("y")]).nowhere();
+
+        check_parse!(code, pattern, Ok(expected));
+    }
+
+    #[test]
+    fn integer_patterns_work() {
+        let code = "1";
+
+        let expected = Pattern::Integer(1).nowhere();
+
+        check_parse!(code, pattern, Ok(expected));
+    }
+
+    #[test]
+    fn bool_patterns_work() {
+        let code = "true";
+
+        let expected = Pattern::Bool(true).nowhere();
+
+        check_parse!(code, pattern, Ok(expected));
+    }
+
+    #[test]
+    fn positional_type_patterns_work() {
+        let code = "SomeType(x, y)";
+
+        let expected = Pattern::Type(
+            ast_ident("SomeType"),
+            ArgumentPattern::Positional(vec![Pattern::name("x"), Pattern::name("y")]),
+        )
+        .nowhere();
+
+        check_parse!(code, pattern, Ok(expected));
+    }
+
+    #[test]
+    fn named_type_patterns_work() {
+        let code = "SomeType{x: a, y: b}";
+
+        let expected = Pattern::Type(
+            ast_ident("SomeType"),
+            ArgumentPattern::Named(vec![
+                (ast_ident("x"), Pattern::name("a")),
+                (ast_ident("y"), Pattern::name("b")),
+            ]),
+        )
+        .nowhere();
+
+        check_parse!(code, pattern, Ok(expected));
     }
 }

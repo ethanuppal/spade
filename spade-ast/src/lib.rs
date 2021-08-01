@@ -23,6 +23,30 @@ pub enum TypeSpec {
 impl WithLocation for TypeSpec {}
 
 #[derive(PartialEq, Debug, Clone)]
+pub enum ArgumentPattern {
+    Named(Vec<(Loc<Identifier>, Loc<Pattern>)>),
+    Positional(Vec<Loc<Pattern>>),
+}
+impl WithLocation for ArgumentPattern {}
+
+#[derive(PartialEq, Debug, Clone)]
+pub enum Pattern {
+    Integer(u128),
+    Bool(bool),
+    Name(Loc<Identifier>),
+    Tuple(Vec<Loc<Pattern>>),
+    Type(Loc<Identifier>, ArgumentPattern),
+}
+impl WithLocation for Pattern {}
+
+// Helper constructors for writing neater tests
+impl Pattern {
+    pub fn name(name: &str) -> Loc<Self> {
+        Pattern::Name(Identifier(name.to_string()).nowhere()).nowhere()
+    }
+}
+
+#[derive(PartialEq, Debug, Clone)]
 pub enum NamedArgument {
     Full(Loc<Identifier>, Loc<Expression>),
     /// Binds a local variable to an argument with the same name
@@ -80,7 +104,7 @@ impl WithLocation for Block {}
 
 #[derive(PartialEq, Debug, Clone)]
 pub enum Statement {
-    Binding(Loc<Identifier>, Option<Loc<TypeSpec>>, Loc<Expression>),
+    Binding(Loc<Pattern>, Option<Loc<TypeSpec>>, Loc<Expression>),
     Register(Loc<Register>),
 }
 impl WithLocation for Statement {}
@@ -166,7 +190,7 @@ impl WithLocation for FunctionDecl {}
 
 #[derive(PartialEq, Debug, Clone)]
 pub struct Register {
-    pub name: Loc<Identifier>,
+    pub pattern: Loc<Pattern>,
     pub clock: Loc<Expression>,
     pub reset: Option<(Loc<Expression>, Loc<Expression>)>,
     pub value: Loc<Expression>,
