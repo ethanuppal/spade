@@ -174,6 +174,8 @@ impl<'a> Parser<'a> {
                 TokenKind::Minus => BinaryOperator::Sub,
                 TokenKind::Asterisk => BinaryOperator::Mul,
                 TokenKind::Equals => BinaryOperator::Equals,
+                // We have to handle left and right shifts separately because otherwise
+                // their parsing interferes with generic arguments
                 TokenKind::Lt => BinaryOperator::Lt,
                 TokenKind::Gt => BinaryOperator::Gt,
                 TokenKind::RightShift => BinaryOperator::RightShift,
@@ -426,16 +428,34 @@ impl<'a> Parser<'a> {
 
             // Check if this type has generic params
             let (params, generic_span) = if self.peek_kind(&TokenKind::Lt)? {
-                let (type_expr, generic_span) = self.surrounded(
-                    &TokenKind::Lt,
-                    |s| s.type_expression().map(Some),
-                    &TokenKind::Gt,
-                )?;
+                let generic_start = self.eat_unconditional()?;
+                let type_expr = self.type_expression()?;
 
-                // Note: safe unwrap, if we got here, the expression must have matched
-                // and so the size is present, otherwise we'd return early above
-                let type_expr = type_expr.unwrap();
-                (vec![type_expr], generic_span.span)
+                let generic_end = if let Some(end) = self.peek_and_eat(&TokenKind::Gt)? {
+                    end
+                }
+                // We need to do some trickery to avoid problems with >> being lexed as right shift
+                else if let Some(end) = self.peek_and_eat(&TokenKind::RightShift)? {
+                    assert!(self.peeked.is_none());
+                    self.peeked = Some(Token {
+                        kind: TokenKind::Gt,
+                        span: end.span.clone(),
+                    });
+                    Token {
+                        kind: TokenKind::Gt,
+                        ..end
+                    }
+                } else {
+                    return Err(Error::UnmatchedPair {
+                        friend: generic_start,
+                        expected: TokenKind::Gt,
+                    });
+                };
+
+                (
+                    vec![type_expr],
+                    ().between(&generic_start.span, &generic_end.span).span,
+                )
             } else {
                 (vec![], span)
             };
@@ -1671,6 +1691,23 @@ mod tests {
         )
         .nowhere();
         check_parse!("uint<10>", type_spec, Ok(expected));
+    }
+
+    #[test]
+    fn nested_generics_work() {
+        let code = "Option<int<5>>";
+
+        let expected = TypeSpec::Named(
+            ast_path("Option"),
+            vec![TypeExpression::TypeSpec(Box::new(
+                TypeSpec::Named(ast_path("int"), vec![TypeExpression::Integer(5).nowhere()])
+                    .nowhere(),
+            ))
+            .nowhere()],
+        )
+        .nowhere();
+
+        check_parse!(code, type_spec, Ok(expected));
     }
 
     #[test]

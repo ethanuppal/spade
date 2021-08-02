@@ -63,7 +63,7 @@ pub fn parse_typecheck_module_body(input: &str) -> ParseTypececkResult {
             match $to_try {
                 Ok(result) => result,
                 Err(e) => {
-                    e.report(&PathBuf::new(), &"", true);
+                    e.report(&PathBuf::new(), &input, true);
                     panic!("Aborting due to previous error")
                 }
             }
