@@ -651,10 +651,69 @@ mod tests {
             }
         }
 
-        // let expected = todo!("Specify how enum instantiation should look at the MIR level");
+        let mir_enum = Type::Enum(vec![vec![Type::Bool], vec![]]);
 
-        // for (exp, res) in expected.into_iter().zip(result.into_iter()) {
-        //     assert_same_mir!(&res, &exp);
-        // }
+        let expected = vec![entity!("test"; (
+                "_i_payload", n(0, "payload"), Type::Bool,
+            ) -> mir_enum.clone(); {
+                (e(1); mir_enum; ConstructEnum({variant: 0, variant_count: 2}); n(0, "payload"));
+            } => e(1)
+        )];
+
+        for (exp, res) in expected.into_iter().zip(result.into_iter()) {
+            assert_same_mir!(&res, &exp);
+        }
+    }
+
+    #[test]
+    fn enum_instantiation_with_fixed_generics_works() {
+        let code = r#"
+            enum X {
+                A(payload: int<5>),
+                B
+            }
+
+            entity test(payload: int<5>) -> X {
+                X::A(payload)
+            }
+        "#;
+
+        let ParseTypececkResult {
+            items_with_types,
+            item_list,
+            symtab,
+        } = parse_typecheck_module_body(code);
+
+        let mut result = vec![];
+        for processed in items_with_types.executables {
+            match processed {
+                ProcessedItem::Entity(processed) => {
+                    result.push(
+                        generate_entity(
+                            &processed.entity,
+                            symtab.symtab(),
+                            &processed.type_state,
+                            &item_list,
+                        )
+                        .report_failure(),
+                    );
+                }
+                ProcessedItem::EnumInstance => {}
+                _ => panic!("expected an entity"),
+            }
+        }
+
+        let mir_enum = Type::Enum(vec![vec![Type::Int(5)], vec![]]);
+
+        let expected = vec![entity!("test"; (
+                "_i_payload", n(0, "payload"), Type::Int(5),
+            ) -> mir_enum.clone(); {
+                (e(1); mir_enum; ConstructEnum({variant: 0, variant_count: 2}); n(0, "payload"));
+            } => e(1)
+        )];
+
+        for (exp, res) in expected.into_iter().zip(result.into_iter()) {
+            assert_same_mir!(&res, &exp);
+        }
     }
 }

@@ -23,7 +23,7 @@ macro_rules! statement {
     (
         $name_kind:ident $name:tt;
         $type:expr;
-        $operator:ident $(($operator_args:tt))?;
+        $operator:ident $(($operator_args:tt))?$({$operator_struct_args:tt})?;
         $($arg_kind:ident $arg_name:tt),*
     ) => {
         spade_mir::Statement::Binding(spade_mir::Binding {

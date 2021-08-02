@@ -47,11 +47,15 @@ impl TypeState {
     pub fn type_spec_to_concrete(spec: &TypeSpec, type_list: &TypeList) -> ConcreteType {
         match spec {
             TypeSpec::Declared(name, params) => {
-                let params = if !params.is_empty() {
-                    todo!("Handle generics")
-                } else {
-                    vec![]
-                };
+                let params = params
+                    .iter()
+                    .map(|p| match &p.inner {
+                        hir::TypeExpression::Integer(val) => ConcreteType::Integer(*val),
+                        hir::TypeExpression::TypeSpec(inner) => {
+                            Self::type_spec_to_concrete(&inner, type_list)
+                        }
+                    })
+                    .collect();
 
                 let actual = type_list
                     .get(&name)
