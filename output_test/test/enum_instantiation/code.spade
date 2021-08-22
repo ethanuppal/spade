@@ -1,0 +1,13 @@
+enum Option<T> {
+    Some(inner: T),
+    None
+}
+
+entity uut(x: int<16>, valid: bool) -> Option<int<16>> {
+    if valid then {
+        Option::Some(x)
+    }
+    else {
+        Option::None()
+    }
+}

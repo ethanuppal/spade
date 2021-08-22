@@ -83,8 +83,33 @@ fn statement_code(statement: &Statement) -> Code {
                     variant,
                     variant_count,
                 } => {
-                    let variant_size = (*variant_count as f32).log2().ceil() as usize;
-                    format!("{{{}'{}, {}}}", variant_size, variant, ops.join(", "))
+                    let tag_size = (*variant_count as f32).log2().ceil() as usize;
+
+                    // Compute the amount of undefined bits to put at the end of the literal.
+                    // First compute the size of this variant
+                    let variant_member_size = match &binding.ty {
+                        crate::types::Type::Enum(options) => {
+                            options[*variant].iter().map(|t| t.size()).sum::<u64>()
+                        }
+                        _ => panic!("Attempted enum construction of non-enum"),
+                    };
+
+                    let padding_size =
+                        binding.ty.size() as usize - tag_size - variant_member_size as usize;
+
+                    let padding_text = if padding_size != 0 {
+                        format!(", {}'bX", padding_size)
+                    } else {
+                        String::new()
+                    };
+
+                    let ops_text = if ops.is_empty() {
+                        String::new()
+                    } else {
+                        format!(", {}", ops.join(", "))
+                    };
+
+                    format!("{{{}'d{}{}{}}}", tag_size, variant, ops_text, padding_text)
                 }
                 Operator::ConstructTuple => {
                     // To make index calculations easier, we will store tuples in "inverse order".
@@ -432,7 +457,25 @@ mod expression_tests {
         let expected = indoc!(
             r#"
             wire[16:0] _e_0;
-            assign _e_0 = {2'2, _e_1, _e_2};"#
+            assign _e_0 = {2'd2, _e_1, _e_2};"#
+        );
+
+        assert_same_code!(&statement_code(&stmt).to_string(), expected);
+    }
+
+    #[test]
+    fn enum_construction_inserts_padding_undef_where_needed() {
+        let ty = Type::Enum(vec![
+            vec![],
+            vec![Type::Int(5)],
+            vec![Type::Int(10), Type::Int(5)],
+        ]);
+        let stmt = statement!(e(0); ty; ConstructEnum({variant: 1, variant_count: 3}); e(1));
+
+        let expected = indoc!(
+            r#"
+            wire[16:0] _e_0;
+            assign _e_0 = {2'd1, _e_1, 10'bX};"#
         );
 
         assert_same_code!(&statement_code(&stmt).to_string(), expected);
