@@ -41,8 +41,6 @@ pub enum TokenKind {
     Reset,
     #[token("if")]
     If,
-    #[token("then")]
-    Then,
     #[token("else")]
     Else,
 
@@ -116,6 +114,8 @@ pub enum TokenKind {
     PathSeparator,
     #[token("#")]
     Hash,
+    #[token("$")]
+    Dollar,
 
     /// Ignoring whitespace
     #[regex("[ \t\n\r]", logos::skip)]
@@ -144,7 +144,6 @@ impl TokenKind {
             TokenKind::Instance => "inst",
             TokenKind::Reset => "reset",
             TokenKind::If => "if",
-            TokenKind::Then => "then",
             TokenKind::Else => "else",
             TokenKind::Trait => "trait",
             TokenKind::Function => "fn",
@@ -178,6 +177,7 @@ impl TokenKind {
             TokenKind::PathSeparator => "::",
 
             TokenKind::Hash => "#",
+            TokenKind::Dollar => "$",
 
             TokenKind::Whitespace => "whitespace",
             TokenKind::Comment => "comment",

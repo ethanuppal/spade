@@ -1,6 +1,6 @@
 entity actual_counter(clk: clk, rst: bool, max: int<8>) -> int<8> {
     reg(clk) value reset (rst: 0) =
-        if value == max then {
+        if value == max {
             0
         }
         else {
@@ -11,6 +11,6 @@ entity actual_counter(clk: clk, rst: bool, max: int<8>) -> int<8> {
 }
 
 entity counter(clk: clk, rst: bool, max: int<8>) -> int<8> {
-    inst actual_counter{clk, rst, max}
+    inst actual_counter$(clk, rst, max)
 }
 

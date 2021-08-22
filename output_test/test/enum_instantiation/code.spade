@@ -4,7 +4,7 @@ enum Option<T> {
 }
 
 entity uut(x: int<16>, valid: bool) -> Option<int<16>> {
-    if valid then {
+    if valid {
         Option::Some(x)
     }
     else {

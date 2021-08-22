@@ -242,25 +242,26 @@ impl<'a> Parser<'a> {
 
     #[trace_parser]
     fn argument_list(&mut self) -> Result<Option<Loc<ArgumentList>>> {
-        if let Some(open_paren) = self.peek_and_eat(&TokenKind::OpenParen)? {
-            let args = self.comma_separated(Self::expression, &TokenKind::CloseParen)?;
-            let end = self.eat(&TokenKind::CloseParen)?;
+        let is_named = self.peek_and_eat(&TokenKind::Dollar)?.is_some();
+        let opener = peek_for!(self, &TokenKind::OpenParen);
 
-            let span = lspan(open_paren.span.clone()).merge(lspan(end.span));
-
-            Ok(Some(ArgumentList::Positional(args).at(&span)))
-        } else if let Some(open_brace) = self.peek_and_eat(&TokenKind::OpenBrace)? {
+        if is_named {
             let args = self
-                .comma_separated(Self::named_argument, &TokenKind::CloseBrace)?
+                .comma_separated(Self::named_argument, &TokenKind::CloseParen)?
                 .into_iter()
                 .map(Loc::strip)
                 .collect();
-            let end = self.eat(&TokenKind::CloseBrace)?;
+            let end = self.eat(&TokenKind::CloseParen)?;
 
-            let span = lspan(open_brace.span).merge(lspan(end.span));
+            let span = lspan(opener.span).merge(lspan(end.span));
             Ok(Some(ArgumentList::Named(args).at(&span)))
         } else {
-            Ok(None)
+            let args = self.comma_separated(Self::expression, &TokenKind::CloseParen)?;
+            let end = self.eat(&TokenKind::CloseParen)?;
+
+            let span = lspan(opener.span.clone()).merge(lspan(end.span));
+
+            Ok(Some(ArgumentList::Positional(args).at(&span)))
         }
     }
 
@@ -361,8 +362,6 @@ impl<'a> Parser<'a> {
         let start = peek_for!(self, &TokenKind::If);
 
         let cond = self.expression()?;
-
-        self.eat(&TokenKind::Then)?;
 
         let on_true = self.expression()?;
         self.eat(&TokenKind::Else)?;
@@ -1438,7 +1437,7 @@ mod tests {
     #[test]
     fn if_expressions_work() {
         let code = r#"
-        if a then {b} else {c}
+        if a {b} else {c}
         "#;
 
         let expected = Expression::If(
@@ -1466,7 +1465,7 @@ mod tests {
     #[test]
     fn if_expressions_do_not_require_blocks() {
         let code = r#"
-        if a then b else c
+        if a b else c
         "#;
 
         let expected = Expression::If(
@@ -1923,7 +1922,7 @@ mod tests {
 
     #[test]
     fn entity_instanciation_with_a_named_arg() {
-        let code = "inst some_entity{z=a}";
+        let code = "inst some_entity$(z=a)";
 
         let expected = Expression::EntityInstance(
             ast_path("some_entity"),
@@ -2179,7 +2178,7 @@ mod tests {
 
     #[test]
     fn functions_with_named_arguments_work() {
-        let code = "test{a, b}";
+        let code = "test$(a, b)";
 
         let expected = Expression::FnCall(
             ast_path("test"),
