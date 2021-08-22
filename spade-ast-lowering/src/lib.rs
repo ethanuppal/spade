@@ -527,7 +527,7 @@ pub fn visit_expression(
             Ok(hir::ExprKind::FnCall(name_id.at_loc(callee), args))
         }
         ast::Expression::Identifier(path) => {
-            let id = symtab.lookup_id(path)?;
+            let id = symtab.lookup_variable(path)?;
 
             Ok(hir::ExprKind::Identifier(id))
         }
@@ -1317,6 +1317,33 @@ mod expression_visiting {
                 expected: 3,
                 got: 2.nowhere()
             })
+        );
+    }
+
+    // NOTE: This test should be removed once/if we introduce higher order functions
+    #[test]
+    fn functions_are_not_variables() {
+        let input = ast::Expression::Identifier(ast_path("test")).nowhere();
+
+        let mut symtab = SymbolTable::new();
+        let mut idtracker = IdTracker::new();
+
+        let head = Thing::Function(
+            FunctionHead {
+                inputs: hir::ParameterList(vec![]),
+                output_type: None,
+                type_params: vec![],
+            }
+            .nowhere(),
+        );
+        symtab.add_thing(ast_path("test").inner, head.clone());
+
+        assert_eq!(
+            visit_expression(&input, &mut symtab, &mut idtracker),
+            Err(Error::LookupError(hir::symbol_table::Error::NotAVariable(
+                ast_path("test"),
+                head
+            )))
         );
     }
 }
