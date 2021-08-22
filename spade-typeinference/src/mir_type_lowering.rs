@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use hir::symbol_table::SymbolTable;
 use hir::TypeSpec;
 use spade_common::name::NameID;
@@ -21,6 +23,13 @@ impl TypeState {
             "Too few type decl params"
         );
 
+        let generic_subs = decl
+            .generic_args
+            .iter()
+            .zip(params.iter())
+            .map(|(lhs, rhs)| (lhs.name_id(), rhs))
+            .collect::<HashMap<_, _>>();
+
         match &decl.kind {
             hir::TypeDeclKind::Enum(e) => {
                 let options = e
@@ -30,7 +39,9 @@ impl TypeState {
                         let args = args
                             .0
                             .iter()
-                            .map(|arg| Self::type_spec_to_concrete(&arg.1.inner, type_list))
+                            .map(|arg| {
+                                Self::type_spec_to_concrete(&arg.1.inner, type_list, &generic_subs)
+                            })
                             .collect();
                         (name.inner.clone(), args)
                     })
@@ -44,7 +55,11 @@ impl TypeState {
         }
     }
 
-    pub fn type_spec_to_concrete(spec: &TypeSpec, type_list: &TypeList) -> ConcreteType {
+    pub fn type_spec_to_concrete(
+        spec: &TypeSpec,
+        type_list: &TypeList,
+        generic_substitutions: &HashMap<NameID, &ConcreteType>,
+    ) -> ConcreteType {
         match spec {
             TypeSpec::Declared(name, params) => {
                 let params = params
@@ -52,7 +67,7 @@ impl TypeState {
                     .map(|p| match &p.inner {
                         hir::TypeExpression::Integer(val) => ConcreteType::Integer(*val),
                         hir::TypeExpression::TypeSpec(inner) => {
-                            Self::type_spec_to_concrete(&inner, type_list)
+                            Self::type_spec_to_concrete(&inner, type_list, generic_substitutions)
                         }
                     })
                     .collect();
@@ -63,11 +78,19 @@ impl TypeState {
 
                 Self::type_decl_to_concrete(actual, type_list, params)
             }
-            TypeSpec::Generic(_) => todo!("Handle generics"),
+            TypeSpec::Generic(name) => {
+                // Substitute the generic for the current substitution
+                (*generic_substitutions
+                    .get(&name)
+                    .expect(&format!("Expected a substitution for {}", name)))
+                .clone()
+            }
             TypeSpec::Tuple(t) => {
                 let inner = t
                     .iter()
-                    .map(|v| Self::type_spec_to_concrete(&v.inner, type_list))
+                    .map(|v| {
+                        Self::type_spec_to_concrete(&v.inner, type_list, &generic_substitutions)
+                    })
                     .collect::<Vec<_>>();
                 ConcreteType::Tuple(inner)
             }

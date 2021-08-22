@@ -26,6 +26,7 @@ impl TypeState {
         self.unify_expression_generic_error(
             &binding.value,
             &TypedExpression::Name(binding.name.clone().inner),
+            symtab,
         )?;
 
         Ok(())
@@ -65,6 +66,7 @@ impl TypeState {
         self.unify_types(
             &TypedExpression::Name(inputs[0].0.clone()),
             &t_clock(symtab),
+            symtab,
         )
         .map_err(|(got, expected)| Error::FirstPipelineArgNotClock {
             expected,
@@ -89,6 +91,7 @@ impl TypeState {
         self.unify_types(
             &TypedExpression::Id(result.inner.id),
             &Self::type_var_from_hir(output_type),
+            symtab,
         )
         .map_err(|(got, expected)| Error::EntityOutputTypeMismatch {
             expected,

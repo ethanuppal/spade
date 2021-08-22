@@ -133,6 +133,7 @@ impl SymbolTable {
         self.add_thing_with_id(id, name, item)
     }
 
+    /// Adds a thing to the scope at `current_scope - offset`. Panics if there is no such scope
     pub fn add_thing_at_offset(&mut self, offset: usize, name: Path, item: Thing) -> NameID {
         let id = self.id_tracker.next();
         self.add_thing_with_id_at_offset(offset, id, name, item)
@@ -186,6 +187,14 @@ impl SymbolTable {
                 "attempted to look up function {} but it was {:?}",
                 id, other
             ),
+            None => panic!("No thing entry for {:?}", id),
+        }
+    }
+    /// Get the type with the specified ID. Panics if no such entity is in the symtab
+    pub fn type_symbol_by_id(&self, id: &NameID) -> &Loc<TypeSymbol> {
+        match self.items.get(&id) {
+            Some(Thing::Type(t)) => t,
+            Some(other) => panic!("attempted to look up type {} but it was {:?}", id, other),
             None => panic!("No thing entry for {:?}", id),
         }
     }

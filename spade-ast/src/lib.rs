@@ -92,6 +92,14 @@ pub enum TypeParam {
     Integer(Loc<Identifier>),
 }
 impl WithLocation for TypeParam {}
+impl TypeParam {
+    pub fn name(&self) -> &Loc<Identifier> {
+        match self {
+            TypeParam::TypeName(n) => n,
+            TypeParam::Integer(n) => n,
+        }
+    }
+}
 
 #[derive(PartialEq, Debug, Clone)]
 pub struct ParameterList(pub Vec<(Loc<Identifier>, Loc<TypeSpec>)>);

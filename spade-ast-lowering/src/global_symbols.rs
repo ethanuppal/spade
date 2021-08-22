@@ -1,4 +1,4 @@
-use hir::ItemList;
+use hir::{ItemList, TypeExpression};
 use spade_ast as ast;
 use spade_common::{
     location_info::{Loc, WithLocation},
@@ -7,7 +7,7 @@ use spade_common::{
 use spade_hir as hir;
 use spade_hir::FunctionHead;
 
-use crate::Error;
+use crate::{visit_parameter_list, Result};
 use spade_hir::symbol_table::{GenericArg, SymbolTable, Thing, TypeSymbol};
 
 /// Collect global symbols as a first pass before generating HIR
@@ -16,7 +16,7 @@ pub fn gather_symbols(
     namespace: &Path,
     symtab: &mut SymbolTable,
     item_list: &mut ItemList,
-) -> Result<(), Error> {
+) -> Result<()> {
     // Start by visiting each item and adding types to the symtab. These are needed
     // for signatures of other things which is why this has to be done first
     for item in &module.members {
@@ -38,7 +38,7 @@ pub fn visit_item(
     namespace: &Path,
     symtab: &mut SymbolTable,
     item_list: &mut ItemList,
-) -> Result<(), Error> {
+) -> Result<()> {
     match item {
         ast::Item::Entity(e) => {
             visit_entity(&e, namespace, symtab)?;
@@ -60,7 +60,7 @@ pub fn visit_entity(
     e: &Loc<ast::Entity>,
     namespace: &Path,
     symtab: &mut SymbolTable,
-) -> Result<(), Error> {
+) -> Result<()> {
     let head = crate::entity_head(&e, symtab)?;
 
     let path = namespace.push_ident(e.name.clone());
@@ -74,7 +74,7 @@ pub fn visit_pipeline(
     p: &Loc<ast::Pipeline>,
     namespace: &Path,
     symtab: &mut SymbolTable,
-) -> Result<(), Error> {
+) -> Result<()> {
     let head = crate::pipelines::pipeline_head(&p, symtab)?;
 
     let path = namespace.push_ident(p.name.clone());
@@ -88,7 +88,7 @@ pub fn visit_type_declaration(
     t: &Loc<ast::TypeDeclaration>,
     namespace: &Path,
     symtab: &mut SymbolTable,
-) -> Result<(), Error> {
+) -> Result<()> {
     let path = namespace.push_ident(t.name.clone());
 
     let args = t
@@ -111,75 +111,270 @@ pub fn visit_type_declaration(
     Ok(())
 }
 
-/// Visit type declarations a second time, primarily to add enum variants to the symtab.
-/// This can not be done in the same pass as normal type declaration visiting as other types
-/// may be present in the declaration
+/// Visit type declarations a second time, this time adding the type to the item list
+/// as well as adding enum variants to the global scope.
+/// This needs to happen as a separate pass since other types need to be in scope when
+/// we check type declarations
 pub fn re_visit_type_declaration(
     t: &Loc<ast::TypeDeclaration>,
     namespace: &Path,
     symtab: &mut SymbolTable,
     items: &mut ItemList,
-) -> Result<(), Error> {
-    // Add the generic types declared here to the symtab
+) -> Result<()> {
+    // Process right hand side of type declarations
+    // The first visitor has already added the LHS to the symtab
+    // Look up the ID
+    let (declaration_id, _) = symtab
+        .lookup_type_symbol(&namespace.push_ident(t.name.clone()).at_loc(&t.name))
+        .expect("Expected type symbol to already be in symtab");
+    let declaration_id = declaration_id.at(&t.name);
+
+    // Add the generic parameters to a new symtab scope
+    symtab.new_scope();
     for param in &t.generic_args {
-        match &param.inner {
-            ast::TypeParam::TypeName(name) => {
-                symtab.add_thing(
-                    Path(vec![name.clone()]),
-                    Thing::Type(TypeSymbol::GenericArg.at_loc(&param)),
-                );
-            }
-            ast::TypeParam::Integer(name) => {
-                symtab.add_thing(
-                    Path(vec![name.clone()]),
-                    Thing::Type(TypeSymbol::GenericInt.at_loc(&param)),
-                );
-            }
-        }
+        let (name, symbol_type) = match &param.inner {
+            ast::TypeParam::TypeName(n) => (n, TypeSymbol::GenericArg),
+            ast::TypeParam::Integer(n) => (n, TypeSymbol::GenericInt),
+        };
+        symtab.add_thing(Path(vec![name.clone()]), Thing::Type(symbol_type.at(param)));
     }
 
-    // Add things like enum variants to the symtab
-    match &t.inner.kind {
-        ast::TypeDeclKind::Enum(e) => {
-            let path = namespace.push_ident(t.name.clone()).nowhere();
-            let (id, _) = symtab.lookup_type_symbol(&path).expect(&format!(
-                "Failed to look up type {}. It was probably not added to the symtab",
-                path
-            ));
-            for (i, option) in e.options.iter().enumerate() {
-                let path = path.clone().push_ident(option.0.clone());
+    // Generate TypeExprs and TypeParam vectors which are needed for building the
+    // hir::TypeDeclaration and for enum constructors
+    let mut output_type_exprs = vec![];
+    let mut type_params = vec![];
+    for arg in &t.generic_args {
+        let (name_id, _) = symtab
+            .lookup_type_symbol(&Path(vec![arg.name().clone()]).at(arg))
+            .expect("Expected generic param to be in symtab");
+        let expr =
+            TypeExpression::TypeSpec(hir::TypeSpec::Generic(name_id.clone().at(arg))).at(arg);
+        let param = match &arg.inner {
+            ast::TypeParam::TypeName(n) => {
+                hir::TypeParam::TypeName(n.inner.clone(), name_id.clone())
+            }
+            ast::TypeParam::Integer(n) => hir::TypeParam::Integer(n.inner.clone(), name_id.clone()),
+        };
+        output_type_exprs.push(expr);
+        type_params.push(param.at(arg))
+    }
 
+    let hir_kind = match &t.inner.kind {
+        ast::TypeDeclKind::Enum(e) => {
+            let mut hir_options = vec![];
+            for (i, option) in e.options.iter().enumerate() {
+                // Check the parameter list
                 let parameter_list = option
                     .1
                     .clone()
-                    .map(|l| crate::visit_parameter_list(&l, symtab))
+                    .map(|l| visit_parameter_list(&l, symtab))
                     .unwrap_or_else(|| Ok(hir::ParameterList(vec![])))?;
 
+                // Add option constructor to symtab at the outer scope
                 let head = FunctionHead {
-                    inputs: parameter_list,
+                    inputs: parameter_list.clone(),
                     output_type: Some(
-                        hir::TypeSpec::Declared(
-                            id.clone().at_loc(&t.name),
-                            vec![], // TODO: Handle generics
-                        )
-                        .at_loc(&t.name),
+                        hir::TypeSpec::Declared(declaration_id.clone(), output_type_exprs.clone())
+                            .at(t),
                     ),
-                    type_params: vec![], // TODO: Handle generics
-                }
-                .at_loc(&option.0);
-
-                let function_name = symtab.add_thing(path.clone(), Thing::Function(head));
-
+                    type_params: type_params.clone(),
+                };
+                let variant_path = namespace
+                    .push_ident(t.name.clone())
+                    .push_ident(option.0.clone());
+                let head_id = symtab.add_thing_at_offset(
+                    1,
+                    variant_path,
+                    Thing::Function(head.at(&option.0)),
+                );
+                // Add option constructor to item list
                 items.executables.insert(
-                    function_name,
+                    head_id.clone(),
                     hir::ExecutableItem::EnumInstance {
-                        base_enum: id.clone(),
+                        base_enum: declaration_id.inner.clone(),
                         variant: i,
                     },
                 );
+
+                // NOTE: it's kind of weird to push head_id here, since that's just
+                // the constructor. In the future, if we move forward with enum members
+                // being individual types, we should push that instead
+                hir_options.push((head_id.clone().at(&option.0), parameter_list))
             }
+
+            hir::TypeDeclKind::Enum(
+                hir::Enum {
+                    options: hir_options,
+                }
+                .at(e),
+            )
         }
+    };
+    // Close the symtab scope
+    symtab.close_scope();
+
+    // Add type to item list
+    let decl = hir::TypeDeclaration {
+        name: declaration_id.clone(),
+        kind: hir_kind,
+        generic_args: type_params,
     }
+    .at(t);
+    items.types.insert(declaration_id.inner, decl);
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use ast::{
+        aparams,
+        testutil::{ast_ident, ast_path},
+        TypeParam,
+    };
+    use hir::{dtype, hparams, testutil::t_num, ItemList};
+    use spade_common::name::testutil::{name_id, name_id_p};
+
+    use super::*;
+
+    #[test]
+    fn type_declaration_visiting_works() {
+        let input = ast::TypeDeclaration {
+            name: ast_ident("test"),
+            kind: ast::TypeDeclKind::Enum(
+                ast::Enum {
+                    name: ast_ident("test"),
+                    options: vec![
+                        // No arguments
+                        (ast_ident("A"), None),
+                        // Builtin type with no args
+                        (
+                            ast_ident("B"),
+                            Some(ast::ParameterList(vec![(
+                                ast_ident("x"),
+                                ast::TypeSpec::Named(ast_path("bool"), vec![]).nowhere(),
+                            )])),
+                        ),
+                        // Builtin type with no args
+                        (
+                            ast_ident("C"),
+                            Some(ast::ParameterList(vec![(
+                                ast_ident("x"),
+                                ast::TypeSpec::Named(
+                                    ast_path("int"),
+                                    vec![ast::TypeExpression::Integer(10).nowhere()],
+                                )
+                                .nowhere(),
+                            )])),
+                        ),
+                    ],
+                }
+                .nowhere(),
+            ),
+            generic_args: vec![],
+        }
+        .nowhere();
+
+        // Populate the symtab with builtins
+        let mut symtab = SymbolTable::new();
+
+        let namespace = Path(vec![]);
+
+        let mut items = ItemList::new();
+
+        crate::builtins::populate_symtab(&mut symtab, &mut ItemList::new());
+        crate::global_symbols::visit_type_declaration(&input, &namespace, &mut symtab)
+            .expect("Failed to visit global symbol");
+        crate::global_symbols::re_visit_type_declaration(
+            &input,
+            &namespace,
+            &mut symtab,
+            &mut items,
+        )
+        .expect("Failed to re-visit global symbol");
+
+        let result = items.types.get(&name_id(0, "test").inner).unwrap();
+
+        let expected = hir::TypeDeclaration {
+            name: name_id(0, "test"),
+            kind: hir::TypeDeclKind::Enum(
+                hir::Enum {
+                    options: vec![
+                        (name_id_p(1, &["test", "A"]), hir::ParameterList(vec![])),
+                        (
+                            name_id_p(2, &["test", "B"]),
+                            hparams![("x", dtype!(symtab => "bool"))],
+                        ),
+                        (
+                            name_id_p(3, &["test", "C"]),
+                            hparams![("x", dtype!(symtab => "int"; (t_num(10))))],
+                        ),
+                    ],
+                }
+                .nowhere(),
+            ),
+            generic_args: vec![],
+        };
+
+        assert_eq!(result.inner, expected);
+    }
+
+    #[test]
+    fn type_declarations_with_generics_work() {
+        let input = ast::TypeDeclaration {
+            name: ast_ident("test"),
+            kind: ast::TypeDeclKind::Enum(
+                ast::Enum {
+                    name: ast_ident("test"),
+                    options: vec![
+                        // Builtin type with no args
+                        (ast_ident("B"), Some(aparams!(("a", ast::tspec!("T"))))),
+                    ],
+                }
+                .nowhere(),
+            ),
+            generic_args: vec![TypeParam::TypeName(ast_ident("T")).nowhere()],
+        }
+        .nowhere();
+
+        // Populate the symtab with builtins
+        let mut symtab = SymbolTable::new();
+
+        let namespace = Path(vec![]);
+
+        let mut items = ItemList::new();
+
+        crate::builtins::populate_symtab(&mut symtab, &mut ItemList::new());
+        crate::global_symbols::visit_type_declaration(&input, &namespace, &mut symtab)
+            .expect("Failed to visit global symbol");
+        crate::global_symbols::re_visit_type_declaration(
+            &input,
+            &namespace,
+            &mut symtab,
+            &mut items,
+        )
+        .expect("Failed to visit global symbol");
+
+        let result = items.types.get(&name_id(0, "test").inner).unwrap();
+
+        let expected = hir::TypeDeclaration {
+            name: name_id(0, "test"),
+            kind: hir::TypeDeclKind::Enum(
+                hir::Enum {
+                    options: vec![(
+                        name_id_p(2, &["test", "B"]),
+                        hparams![("a", hir::TypeSpec::Generic(name_id(1, "T")).nowhere())],
+                    )],
+                }
+                .nowhere(),
+            ),
+            generic_args: vec![hir::TypeParam::TypeName(
+                ast_ident("T").inner,
+                name_id(1, "T").inner,
+            )
+            .nowhere()],
+        };
+
+        assert_eq!(result.inner, expected);
+    }
 }

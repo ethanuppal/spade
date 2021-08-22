@@ -9,7 +9,6 @@ use ast::ParameterList;
 use hir::util::path_from_ident;
 use hir::ExecutableItem;
 pub use spade_common::id_tracker;
-use types::visit_typedecl;
 
 use std::collections::HashMap;
 
@@ -226,20 +225,21 @@ pub fn visit_item(
     namespace: &Path,
     symtab: &mut SymbolTable,
     idtracker: &mut IdTracker,
-) -> Result<hir::Item> {
+) -> Result<Option<hir::Item>> {
     match item {
-        ast::Item::Entity(e) => Ok(hir::Item::Entity(visit_entity(
+        ast::Item::Entity(e) => Ok(Some(hir::Item::Entity(visit_entity(
             e, namespace, symtab, idtracker,
-        )?)),
-        ast::Item::Pipeline(p) => Ok(hir::Item::Pipeline(pipelines::visit_pipeline(
+        )?))),
+        ast::Item::Pipeline(p) => Ok(Some(hir::Item::Pipeline(pipelines::visit_pipeline(
             p, namespace, symtab, idtracker,
-        )?)),
+        )?))),
         ast::Item::TraitDef(_) => {
             todo!("Visit trait definitions")
         }
-        ast::Item::Type(t) => Ok(hir::Item::Type(
-            visit_typedecl(t, namespace, symtab)?.at_loc(t),
-        )),
+        ast::Item::Type(_) => {
+            // Global symbol lowering already visits type declarations
+            Ok(None)
+        }
     }
 }
 
@@ -270,19 +270,17 @@ pub fn visit_module_body(
         }
         use hir::Item::*;
         match item {
-            Entity(e) => add_item!(
+            Some(Entity(e)) => add_item!(
                 item_list.executables,
                 e.name,
                 ExecutableItem::Entity(e.clone())
             ),
-            Pipeline(p) => add_item!(
+            Some(Pipeline(p)) => add_item!(
                 item_list.executables,
                 p.name,
                 ExecutableItem::Pipeline(p.clone())
             ),
-            Type(t) => {
-                add_item!(item_list.types, t.name, t.clone())
-            }
+            None => {}
         }
     }
 
@@ -1428,7 +1426,7 @@ mod item_visiting {
             .unwrap();
         assert_eq!(
             visit_item(&input, &namespace, &mut symtab, &mut idtracker),
-            Ok(expected)
+            Ok(Some(expected))
         );
     }
 }

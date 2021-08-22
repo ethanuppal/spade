@@ -58,6 +58,13 @@ fn main() -> Result<()> {
     let mut item_list = ItemList::new();
     spade_ast_lowering::builtins::populate_symtab(&mut symtab, &mut item_list);
 
+    try_or_report!(global_symbols::gather_symbols(
+        &module_ast,
+        &Path(vec![]),
+        &mut symtab,
+        &mut item_list
+    ));
+
     // First pass over the module to collect all global symbols
     for item in &module_ast.members {
         try_or_report!(global_symbols::visit_item(

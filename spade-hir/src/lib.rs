@@ -50,6 +50,14 @@ pub enum TypeParam {
     Integer(Identifier, NameID),
 }
 impl WithLocation for TypeParam {}
+impl TypeParam {
+    pub fn name_id(&self) -> NameID {
+        match self {
+            TypeParam::TypeName(_, n) => n.clone(),
+            TypeParam::Integer(_, n) => n.clone(),
+        }
+    }
+}
 
 #[derive(PartialEq, Debug, Clone)]
 pub enum TypeExpression {
@@ -66,7 +74,7 @@ impl WithLocation for TypeExpression {}
 pub enum TypeSpec {
     /// The type is a declared type (struct, enum, typedef etc.) with n arguments
     Declared(Loc<NameID>, Vec<Loc<TypeExpression>>),
-    /// Tye type is a generic argument visible in the current scope
+    /// The type is a generic argument visible in the current scope
     Generic(Loc<NameID>),
     /// The type is a tuple of other variables
     Tuple(Vec<Loc<TypeSpec>>),
@@ -135,7 +143,7 @@ impl ParameterList {
 pub struct FunctionHead {
     pub inputs: ParameterList,
     pub output_type: Option<Loc<TypeSpec>>,
-    pub type_params: Vec<Identifier>,
+    pub type_params: Vec<Loc<TypeParam>>,
 }
 impl WithLocation for FunctionHead {}
 
@@ -143,7 +151,7 @@ impl WithLocation for FunctionHead {}
 pub struct EntityHead {
     pub inputs: ParameterList,
     pub output_type: Option<Loc<TypeSpec>>,
-    pub type_params: Vec<Identifier>,
+    pub type_params: Vec<Loc<TypeParam>>,
 }
 impl WithLocation for EntityHead {}
 
@@ -186,7 +194,6 @@ impl WithLocation for Pipeline {}
 pub enum Item {
     Entity(Loc<Entity>),
     Pipeline(Loc<Pipeline>),
-    Type(Loc<TypeDeclaration>),
 }
 
 /// Items which have associated code that can be executed. This is different from

@@ -93,7 +93,7 @@ pub fn parse_typecheck_module_body(input: &str) -> ParseTypececkResult {
     ));
 
     let items = try_or_report!(typeinference::ProcessedItemList::typecheck(
-        &item_list, &symtab
+        &item_list, &symtab, true
     ));
 
     ParseTypececkResult {

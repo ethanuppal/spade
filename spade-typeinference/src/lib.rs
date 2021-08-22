@@ -1,6 +1,7 @@
 // This algorithm is based off the excelent lecture here
 // https://www.youtube.com/watch?v=xJXcZp2vgLs
 
+use hir::symbol_table::TypeSymbol;
 use hir::{Argument, ParameterList};
 use hir::{ExecutableItem, ItemList};
 use parse_tree_macros::trace_typechecker;
@@ -52,7 +53,11 @@ pub struct ProcessedItemList {
 }
 
 impl ProcessedItemList {
-    pub fn typecheck(items: &ItemList, symbol_table: &SymbolTable) -> Result<Self> {
+    pub fn typecheck(
+        items: &ItemList,
+        symbol_table: &SymbolTable,
+        print_trace: bool,
+    ) -> Result<Self> {
         Ok(Self {
             executables: items
                 .executables
@@ -60,17 +65,35 @@ impl ProcessedItemList {
                 .into_iter()
                 .map(|(_name, item)| {
                     let mut type_state = TypeState::new();
+
+                    // To avoid borrowing type_state too early, we'll do a macro to build
+                    // closures. Kind of ugly, but it gets the job done
+                    macro_rules! err_processor {
+                        () => {
+                            |e| {
+                                if print_trace {
+                                    println!("{}", format_trace_stack(&type_state.trace_stack))
+                                }
+                                e
+                            }
+                        };
+                    }
+
                     match item {
                         ExecutableItem::EnumInstance { .. } => Ok(ProcessedItem::EnumInstance),
                         ExecutableItem::Entity(entity) => {
-                            type_state.visit_entity(&entity, symbol_table)?;
+                            type_state
+                                .visit_entity(&entity, symbol_table)
+                                .map_err(err_processor!())?;
                             Ok(ProcessedItem::Entity(ProcessedEntity {
                                 entity: entity.inner,
                                 type_state,
                             }))
                         }
                         ExecutableItem::Pipeline(pipeline) => {
-                            type_state.visit_pipeline(&pipeline, symbol_table)?;
+                            type_state
+                                .visit_pipeline(&pipeline, symbol_table)
+                                .map_err(err_processor!())?;
                             Ok(ProcessedItem::Pipeline(ProcessedPipeline {
                                 pipeline: pipeline.inner,
                                 type_state,
@@ -166,6 +189,7 @@ impl TypeState {
             self.unify_types(
                 &TypedExpression::Id(entity.body.inner.id),
                 &Self::type_var_from_hir(&output_type),
+                symtab,
             )
             .map_err(|(got, expected)| Error::EntityOutputTypeMismatch {
                 expected,
@@ -207,8 +231,8 @@ impl TypeState {
             let target_type = Self::type_var_from_hir(&params.arg_type(&target));
             self.visit_expression(&value, symtab)?;
 
-            self.unify_types(&target_type, value)
-                .map_err(|(expected, got)| match kind {
+            self.unify_types(&target_type, value, symtab).map_err(
+                |(expected, got)| match kind {
                     hir::ArgumentKind::Positional => Error::PositionalArgumentMismatch {
                         index: i,
                         expr: value.loc(),
@@ -226,7 +250,8 @@ impl TypeState {
                         expected,
                         got,
                     },
-                })?;
+                },
+            )?;
         }
 
         Ok(())
@@ -247,18 +272,19 @@ impl TypeState {
                 self.unify_expression_generic_error(
                     &expression,
                     &TypedExpression::Name(ident.clone()),
+                    symtab,
                 )?;
             }
             ExprKind::IntLiteral(_) => {
                 let t = self.new_generic_int(symtab);
-                self.unify_types(&t, &expression.inner)
+                self.unify_types(&t, &expression.inner, symtab)
                     .map_err(|(_, got)| Error::IntLiteralIncompatible {
                         got,
                         loc: expression.loc(),
                     })?;
             }
             ExprKind::BoolLiteral(_) => {
-                self.unify_expression_generic_error(&expression, &t_bool(symtab))?;
+                self.unify_expression_generic_error(&expression, &t_bool(symtab), symtab)?;
             }
             ExprKind::TupleLiteral(inner) => {
                 let mut inner_types = vec![];
@@ -270,7 +296,11 @@ impl TypeState {
                     inner_types.push(t);
                 }
 
-                self.unify_expression_generic_error(&expression, &TypeVar::Tuple(inner_types))?;
+                self.unify_expression_generic_error(
+                    &expression,
+                    &TypeVar::Tuple(inner_types),
+                    symtab,
+                )?;
             }
             ExprKind::TupleIndex(tup, index) => {
                 self.visit_expression(tup, symtab)?;
@@ -282,6 +312,7 @@ impl TypeState {
                             self.unify_expression_generic_error(
                                 &expression,
                                 &inner[index.inner as usize],
+                                symtab,
                             )?
                         } else {
                             return Err(Error::TupleIndexOutOfBounds {
@@ -306,7 +337,7 @@ impl TypeState {
                 self.visit_block(block, symtab)?;
 
                 // Unify the return type of the block with the type of this expression
-                self.unify_types(&expression.inner, &block.result.inner)
+                self.unify_types(&expression.inner, &block.result.inner, symtab)
                     // NOTE: We could be more specific about this error specifying
                     // that the type of the block must match the return type, though
                     // that might just be spammy.
@@ -321,19 +352,19 @@ impl TypeState {
                 self.visit_expression(&on_true, symtab)?;
                 self.visit_expression(&on_false, symtab)?;
 
-                self.unify_types(&cond.inner, &t_bool(symtab))
+                self.unify_types(&cond.inner, &t_bool(symtab), symtab)
                     .map_err(|(got, _)| Error::NonBooleanCondition {
                         got,
                         loc: cond.loc(),
                     })?;
-                self.unify_types(&on_true.inner, &on_false.inner)
+                self.unify_types(&on_true.inner, &on_false.inner, symtab)
                     .map_err(|(expected, got)| Error::IfConditionMismatch {
                         expected,
                         got,
                         first_branch: on_true.loc(),
                         incorrect_branch: on_false.loc(),
                     })?;
-                self.unify_types(expression, &on_false.inner)
+                self.unify_types(expression, &on_false.inner, symtab)
                     .map_err(|(got, expected)| Error::UnspecifiedTypeError {
                         expected,
                         got,
@@ -351,23 +382,23 @@ impl TypeState {
                     | BinaryOperator::RightShift => {
                         let int_type = self.new_generic_int(symtab);
                         // TODO: Make generic over types that can be added
-                        self.unify_expression_generic_error(&lhs, &int_type)?;
-                        self.unify_expression_generic_error(&lhs, &rhs.inner)?;
-                        self.unify_expression_generic_error(expression, &rhs.inner)?
+                        self.unify_expression_generic_error(&lhs, &int_type, symtab)?;
+                        self.unify_expression_generic_error(&lhs, &rhs.inner, symtab)?;
+                        self.unify_expression_generic_error(expression, &rhs.inner, symtab)?
                     }
                     BinaryOperator::Eq | BinaryOperator::Gt | BinaryOperator::Lt => {
                         let int_type = self.new_generic_int(symtab);
                         // TODO: Make generic over types that can be added
-                        self.unify_expression_generic_error(&lhs, &int_type)?;
-                        self.unify_expression_generic_error(&lhs, &rhs.inner)?;
-                        self.unify_expression_generic_error(expression, &t_bool(symtab))?
+                        self.unify_expression_generic_error(&lhs, &int_type, symtab)?;
+                        self.unify_expression_generic_error(&lhs, &rhs.inner, symtab)?;
+                        self.unify_expression_generic_error(expression, &t_bool(symtab), symtab)?
                     }
                     BinaryOperator::LogicalAnd | BinaryOperator::LogicalOr => {
                         // TODO: Make generic over types that can be ored
-                        self.unify_expression_generic_error(&lhs, &t_bool(symtab))?;
-                        self.unify_expression_generic_error(&lhs, &rhs.inner)?;
+                        self.unify_expression_generic_error(&lhs, &t_bool(symtab), symtab)?;
+                        self.unify_expression_generic_error(&lhs, &rhs.inner, symtab)?;
 
-                        self.unify_expression_generic_error(expression, &t_bool(symtab))?
+                        self.unify_expression_generic_error(expression, &t_bool(symtab), symtab)?
                     }
                 }
             }
@@ -382,7 +413,7 @@ impl TypeState {
                         .as_ref()
                         .expect("Unit return type from entity is unsupported"),
                 );
-                self.unify_expression_generic_error(expression, &return_type)?;
+                self.unify_expression_generic_error(expression, &return_type, symtab)?;
             }
             ExprKind::PipelineInstance {
                 depth: _,
@@ -399,7 +430,7 @@ impl TypeState {
                         .as_ref()
                         .expect("Unit return type from entity is unsupported"),
                 );
-                self.unify_expression_generic_error(expression, &return_type)?;
+                self.unify_expression_generic_error(expression, &return_type, symtab)?;
             }
             ExprKind::FnCall(name, args) => {
                 let head = symtab.function_by_id(&name.inner);
@@ -412,7 +443,7 @@ impl TypeState {
                         .as_ref()
                         .expect("Unit return type from entity is unsupported"),
                 );
-                self.unify_expression_generic_error(expression, &return_type)?;
+                self.unify_expression_generic_error(expression, &return_type, symtab)?;
             }
         }
         Ok(())
@@ -442,6 +473,7 @@ impl TypeState {
                 self.unify_expression_generic_error(
                     &value,
                     &TypedExpression::Name(name.clone().inner),
+                    symtab,
                 )?;
 
                 Ok(())
@@ -459,6 +491,7 @@ impl TypeState {
             self.unify_types(
                 &TypedExpression::Name(reg.name.inner.clone()),
                 &Self::type_var_from_hir(&t),
+                symtab,
             )
             .map_err(|(got, expected)| Error::UnspecifiedTypeError {
                 expected,
@@ -474,7 +507,7 @@ impl TypeState {
             self.visit_expression(&rst_cond, symtab)?;
             self.visit_expression(&rst_value, symtab)?;
             // Ensure cond is a boolean
-            self.unify_types(&rst_cond.inner, &t_bool(symtab))
+            self.unify_types(&rst_cond.inner, &t_bool(symtab), symtab)
                 .map_err(|(got, expected)| Error::NonBoolReset {
                     expected,
                     got,
@@ -482,7 +515,7 @@ impl TypeState {
                 })?;
 
             // Ensure the reset value has the same type as the register itself
-            self.unify_types(&rst_value.inner, &reg.value.inner)
+            self.unify_types(&rst_value.inner, &reg.value.inner, symtab)
                 .map_err(|(got, expected)| Error::RegisterResetMismatch {
                     expected,
                     got,
@@ -490,7 +523,7 @@ impl TypeState {
                 })?;
         }
 
-        self.unify_types(&reg.clock, &t_clock(symtab))
+        self.unify_types(&reg.clock, &t_clock(symtab), symtab)
             .map_err(|(got, expected)| Error::NonClockClock {
                 expected,
                 got,
@@ -500,6 +533,7 @@ impl TypeState {
         self.unify_expression_generic_error(
             &reg.value,
             &TypedExpression::Name(reg.name.clone().inner),
+            symtab,
         )?;
 
         Ok(())
@@ -507,7 +541,7 @@ impl TypeState {
 }
 
 // Private helper functions
-impl<'a> TypeState {
+impl TypeState {
     fn new_typeid(&mut self) -> u64 {
         let result = self.next_typeid;
         self.next_typeid += 1;
@@ -524,6 +558,7 @@ impl<'a> TypeState {
         &mut self,
         e1: &impl HasType,
         e2: &impl HasType,
+        symtab: &SymbolTable,
     ) -> std::result::Result<(), UnificationError> {
         let v1 = e1
             .get_type(self)
@@ -532,58 +567,81 @@ impl<'a> TypeState {
             .get_type(self)
             .expect("Tried to unify types but the rhs was not found");
 
+        self.trace_stack
+            .push(TraceStack::TryingUnify(v1.clone(), v2.clone()));
+
         // Used because we want to avoid borrowchecker errors when we add stuff to the
         // trace
         let v1cpy = v1.clone();
         let v2cpy = v2.clone();
+
+        let err_producer = || {
+            (
+                UnificationTrace::new(v1.clone()),
+                UnificationTrace::new(v2.clone()),
+            )
+        };
+        macro_rules! unify_if {
+            ($condition:expr, $new_type:expr, $replaced_type:expr) => {
+                if $condition {
+                    Ok(($new_type, $replaced_type))
+                } else {
+                    Err(err_producer())
+                }
+            };
+        }
+
         // Figure out the most general type, and take note if we need to
         // do any replacement of the types in the rest of the state
         let (new_type, replaced_type) = match (&v1, &v2) {
-            (TypeVar::Known(t1, p1, _), TypeVar::Known(t2, p2, _)) => {
-                if p1.len() != p2.len() {
-                    return Err((
-                        UnificationTrace::new(v1.clone()),
-                        UnificationTrace::new(v2.clone()),
-                    ));
+            (TypeVar::Known(t1, p1, _), TypeVar::Known(t2, p2, _)) => match (t1, t2) {
+                (KnownType::Integer(val1), KnownType::Integer(val2)) => {
+                    unify_if!(val1 == val2, v1, None)
                 }
+                (KnownType::Type(n1), KnownType::Type(n2)) => {
+                    match (
+                        &symtab.type_symbol_by_id(n1).inner,
+                        &symtab.type_symbol_by_id(n2).inner,
+                    ) {
+                        (TypeSymbol::Declared(ts1), TypeSymbol::Declared(ts2)) => {
+                            if p1.len() != p2.len() {
+                                return Err(err_producer());
+                            }
 
-                for (t1, t2) in p1.iter().zip(p2.iter()) {
-                    self.unify_types(t1, t2)
-                        .add_context(v1.clone(), v2.clone())?
-                }
+                            for (t1, t2) in p1.iter().zip(p2.iter()) {
+                                self.unify_types(t1, t2, symtab)
+                                    .add_context(v1.clone(), v2.clone())?
+                            }
 
-                if t1 == t2 {
-                    Ok((v1, None))
-                } else {
-                    Err((
-                        UnificationTrace::new(v1.clone()),
-                        UnificationTrace::new(v2.clone()),
-                    ))
+                            unify_if!(ts1 == ts2, v1, None)
+                        }
+                        (TypeSymbol::Declared(_), TypeSymbol::GenericArg) => Ok((v1, Some(v2))),
+                        (TypeSymbol::GenericArg, TypeSymbol::Declared(_)) => Ok((v2, Some(v1))),
+                        (TypeSymbol::GenericArg, TypeSymbol::GenericArg) => Ok((v1, Some(v2))),
+                        (TypeSymbol::Declared(_), TypeSymbol::GenericInt) => todo!(),
+                        (TypeSymbol::GenericArg, TypeSymbol::GenericInt) => todo!(),
+                        (TypeSymbol::GenericInt, TypeSymbol::Declared(_)) => todo!(),
+                        (TypeSymbol::GenericInt, TypeSymbol::GenericArg) => todo!(),
+                        (TypeSymbol::GenericInt, TypeSymbol::GenericInt) => todo!(),
+                    }
                 }
-            }
+                (KnownType::Integer(_), KnownType::Type(_)) => Err(err_producer()),
+                (KnownType::Type(_), KnownType::Integer(_)) => Err(err_producer()),
+            },
             (TypeVar::Tuple(i1), TypeVar::Tuple(i2)) => {
                 if i1.len() != i2.len() {
-                    return Err((
-                        UnificationTrace::new(v1.clone()),
-                        UnificationTrace::new(v2.clone()),
-                    ));
+                    return Err(err_producer());
                 }
 
                 for (t1, t2) in i1.iter().zip(i2.iter()) {
-                    self.unify_types(t1, t2)
+                    self.unify_types(t1, t2, symtab)
                         .add_context(v1.clone(), v2.clone())?
                 }
 
                 Ok((v1, None))
             }
-            (TypeVar::Known(_, _, _), TypeVar::Tuple(_)) => Err((
-                UnificationTrace::new(v1.clone()),
-                UnificationTrace::new(v2.clone()),
-            )),
-            (TypeVar::Tuple(_), TypeVar::Known(_, _, _)) => Err((
-                UnificationTrace::new(v1.clone()),
-                UnificationTrace::new(v2.clone()),
-            )),
+            (TypeVar::Known(_, _, _), TypeVar::Tuple(_)) => Err(err_producer()),
+            (TypeVar::Tuple(_), TypeVar::Known(_, _, _)) => Err(err_producer()),
             (TypeVar::Unknown(_), TypeVar::Unknown(_)) => Ok((v1, Some(v2))),
             (_other, TypeVar::Unknown(_)) => Ok((v1, Some(v2))),
             (TypeVar::Unknown(_), _other) => Ok((v2, Some(v1))),
@@ -625,8 +683,9 @@ impl<'a> TypeState {
         &mut self,
         expr: &Loc<Expression>,
         other: &impl HasType,
+        symtab: &SymbolTable,
     ) -> Result<()> {
-        self.unify_types(&expr.inner, other)
+        self.unify_types(&expr.inner, other, symtab)
             .map_err(|(got, expected)| Error::UnspecifiedTypeError {
                 got,
                 expected,
@@ -644,7 +703,7 @@ impl TypeState {
     }
 }
 
-pub trait HasType {
+pub trait HasType: std::fmt::Debug {
     fn get_type<'a>(&self, state: &TypeState) -> Result<TypeVar>;
 }
 
@@ -684,6 +743,7 @@ pub enum TraceStack {
     Enter(String),
     /// Exited the most recent visitor and the node had the specified type
     Exit,
+    TryingUnify(TypeVar, TypeVar),
     /// Unified .0 with .1 producing .2
     Unified(TypeVar, TypeVar, TypeVar),
     AddingEquation(TypedExpression, TypeVar),
@@ -705,6 +765,9 @@ pub fn format_trace_stack(stack: &[TraceStack]) -> String {
             }
             TraceStack::Unified(lhs, rhs, result) => {
                 format!("{} {}, {} -> {}", "unified".green(), lhs, rhs, result)
+            }
+            TraceStack::TryingUnify(lhs, rhs) => {
+                format!("{} of {} with {}", "trying unification".cyan(), lhs, rhs)
             }
             TraceStack::Exit => {
                 next_indent_amount -= 1;
