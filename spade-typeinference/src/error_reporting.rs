@@ -166,6 +166,18 @@ impl CompilationError for Error {
                         format!("Expected: {}", expected),
                         format!("     Got: {}", got),
                     ]),
+                Error::PatternTypeMissmatch {
+                    pattern,
+                    expected,
+                    got,
+                } => Diagnostic::error()
+                    .with_message("Pattern type missmatch")
+                    .with_labels(vec![Label::primary(file_id, pattern.span)
+                        .with_message(format!("expected {}", expected))])
+                    .with_notes(vec![
+                        format!("Expected: {}", expected),
+                        format!("     Got: {}", got),
+                    ]),
                 Error::FirstPipelineArgNotClock { expected, spec } => Diagnostic::error()
                     .with_message(format!(
                         "First pipeline argument must be a clock. Got {}",

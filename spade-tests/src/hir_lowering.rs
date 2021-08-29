@@ -319,6 +319,30 @@ mod tests {
     }
 
     #[test]
+    fn registers_with_tuple_patterns_work() {
+        let code = r#"
+        entity name(clk: clk, a: (int<16>, int<8>)) -> int<16> {
+            reg(clk) (x, y) = a;
+            x
+        }
+        "#;
+
+        let tup_inner = vec![Type::Int(16), Type::Int(8)];
+        let tup_type = Type::Tuple(tup_inner.clone());
+        let expected = entity! {"name"; (
+                "_i_clk", n(0, "clk"), Type::Bool,
+                "_i_a", n(1, "a"), tup_type.clone(),
+            ) -> Type::Int(16); {
+                (reg e(0); tup_type; clock(n(0, "clk")); n(1, "a"));
+                (n(2, "x"); Type::Int(16); IndexTuple((0, tup_inner.clone())); e(0));
+                (n(3, "y"); Type::Int(8); IndexTuple((1, tup_inner)); e(0));
+            } => n(2, "x")
+        };
+
+        assert_same_mir!(&build_entity!(code), &expected);
+    }
+
+    #[test]
     fn registers_with_reset_work() {
         let code = r#"
         entity name(clk: clk, rst: bool, a: int<16>) -> int<16> {
@@ -388,6 +412,28 @@ mod tests {
         assert_same_mir!(&build_entity!(code), &expected);
     }
 
+    #[test]
+    fn tuple_destructuring_works() {
+        let code = r#"
+        entity name(x: (int<16>, int<8>)) -> int<16> {
+            let (a, b) = x;
+            a
+        }
+        "#;
+
+        let tup_inner = vec![Type::Int(16), Type::Int(8)];
+        let tup_type = Type::Tuple(tup_inner.clone());
+        let expected = entity!("name"; (
+                "_i_x", n(0, "x"), tup_type.clone(),
+            ) -> Type::Int(16); {
+                (e(0); tup_type; Alias; n(0, "x"));
+                (n(1, "a"); Type::Int(16); IndexTuple((0, tup_inner.clone())); e(0));
+                (n(2, "b"); Type::Int(8); IndexTuple((1, tup_inner)); e(0))
+            } => n(1, "a")
+        );
+
+        assert_same_mir!(&build_entity!(code), &expected);
+    }
     #[test]
     fn entity_instanciation_works() {
         let code = r#"

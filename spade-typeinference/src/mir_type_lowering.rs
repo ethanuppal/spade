@@ -152,4 +152,17 @@ impl TypeState {
         )
         .expect("Expr had generic type")
     }
+
+    /// Returns the type of the specified name as a concrete type. If the type is not known,
+    /// or tye type is Generic, panics
+    pub fn type_of_id(&self, id: u64, symtab: &SymbolTable, type_list: &TypeList) -> ConcreteType {
+        Self::ungenerify_type(
+            &self
+                .type_of(&TypedExpression::Id(id))
+                .expect("Expression had no specified type"),
+            symtab,
+            type_list,
+        )
+        .expect("Expr had generic type")
+    }
 }

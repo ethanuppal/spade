@@ -16,10 +16,7 @@ entity pong(clk: clk, rst: bool, tick_len: int<32>) -> int<8> {
     let board_end_right = 0b0000_0001;
     let board_end_left = 0b1000_0000;
 
-    reg(clk) state: (int<8>, bool) reset (rst: (4, false)) = {
-        let ball = state#0;
-        let direction = state#1;
-
+    reg(clk) (ball, direction) reset (rst: (4, false)) = {
         let new_direction =
             if ball == board_end_left {
                 true
@@ -44,9 +41,8 @@ entity pong(clk: clk, rst: bool, tick_len: int<32>) -> int<8> {
                 ball
             };
 
-        // Should we be explicit about this last assignment being the actual register part?
         (new_ball, new_direction)
     };
 
-    state#0
+    ball
 }

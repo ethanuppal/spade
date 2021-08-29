@@ -2,7 +2,8 @@ pub mod error_reporting;
 pub mod pipelines;
 pub mod substitution;
 
-use hir::{ItemList, TypeList};
+use hir::{ItemList, Pattern, TypeList};
+use mir::ValueName;
 pub use pipelines::generate_pipeline;
 use substitution::Substitutions;
 
@@ -114,6 +115,71 @@ impl NameIDLocal for NameID {
 }
 
 #[local_impl]
+impl PatternLocal for Pattern {
+    /// Lower a pattern to its individual parts. Requires the `Pattern::id` to be
+    /// present in the code before this
+    fn lower(
+        &self,
+        symtab: &SymbolTable,
+        types: &TypeState,
+        subs: &Substitutions,
+        item_list: &hir::ItemList,
+    ) -> Result<Vec<mir::Statement>> {
+        let mut result = vec![];
+        match &self.kind {
+            hir::PatternKind::Integer(_) => todo!(),
+            hir::PatternKind::Bool(_) => todo!(),
+            hir::PatternKind::Name(_) => {}
+            hir::PatternKind::Tuple(inner) => {
+                let inner_types = if let mir::types::Type::Tuple(inner) = &types
+                    .type_of_id(self.id, symtab, &item_list.types)
+                    .to_mir_type()
+                {
+                    inner.clone()
+                } else {
+                    unreachable!("Tupel destructuring of non-tuple");
+                };
+
+                for (i, p) in inner.iter().enumerate() {
+                    result.push(mir::Statement::Binding(mir::Binding {
+                        name: p.value_name(),
+                        operator: mir::Operator::IndexTuple(i as u64, inner_types.clone()),
+                        operands: vec![self.value_name()],
+                        ty: types
+                            .type_of_id(p.id, symtab, &item_list.types)
+                            .to_mir_type(),
+                    }));
+
+                    result.append(&mut p.lower(symtab, types, subs, item_list)?)
+                }
+            }
+            hir::PatternKind::Type(_, _) => todo!(),
+        }
+
+        Ok(result)
+    }
+
+    /// Get the name which the whole pattern should be bound. In practice,
+    /// this will be the pattern ID unless the pattern is just a name, in
+    /// which case it will be a name
+    ///
+    /// This is done to avoid creating too many unnessecary ExprID variables
+    /// in the output code to make it more readable
+    fn value_name(&self) -> ValueName {
+        match &self.kind {
+            hir::PatternKind::Name(name) => return name.value_name(),
+            hir::PatternKind::Integer(_) => {}
+            hir::PatternKind::Bool(_) => {}
+            hir::PatternKind::Tuple(_) => {}
+            hir::PatternKind::Type(_, _) => {}
+        }
+        ValueName::Expr(self.id)
+    }
+}
+
+// TODO: Consider adding a proc-macro to add these local derives automatically
+
+#[local_impl]
 impl StatementLocal for Statement {
     fn lower(
         &self,
@@ -127,22 +193,15 @@ impl StatementLocal for Statement {
             Statement::Binding(pattern, _t, value) => {
                 result.append(&mut value.lower(symtab, types, subs, item_list)?);
 
-                match &pattern.inner {
-                    hir::Pattern::Integer(_) => todo!(),
-                    hir::Pattern::Bool(_) => todo!(),
-                    hir::Pattern::Name(name) => {
-                        result.push(mir::Statement::Binding(mir::Binding {
-                            name: name.value_name(),
-                            operator: mir::Operator::Alias,
-                            operands: vec![value.variable(subs)],
-                            ty: types
-                                .type_of_name(name, symtab, &item_list.types)
-                                .to_mir_type(),
-                        }));
-                    }
-                    hir::Pattern::Tuple(_) => todo!(),
-                    hir::Pattern::Type(_, _) => todo!(),
-                }
+                result.push(mir::Statement::Binding(mir::Binding {
+                    name: pattern.value_name(),
+                    operator: mir::Operator::Alias,
+                    operands: vec![value.variable(subs)],
+                    ty: types
+                        .type_of_id(pattern.id, symtab, &item_list.types)
+                        .to_mir_type(),
+                }));
+                result.append(&mut pattern.lower(symtab, types, subs, item_list)?);
             }
             Statement::Register(register) => {
                 result.append(&mut register.clock.lower(symtab, types, subs, item_list)?);
@@ -154,26 +213,20 @@ impl StatementLocal for Statement {
 
                 result.append(&mut register.value.lower(symtab, types, subs, item_list)?);
 
-                match &register.pattern.inner {
-                    hir::Pattern::Integer(_) => todo!(),
-                    hir::Pattern::Bool(_) => todo!(),
-                    hir::Pattern::Name(name) => {
-                        result.push(mir::Statement::Register(mir::Register {
-                            name: name.value_name(),
-                            ty: types
-                                .type_of_name(&name, symtab, &item_list.types)
-                                .to_mir_type(),
-                            clock: register.clock.variable(subs),
-                            reset: register
-                                .reset
-                                .as_ref()
-                                .map(|(value, trig)| (value.variable(subs), trig.variable(subs))),
-                            value: register.value.variable(subs),
-                        }))
-                    }
-                    hir::Pattern::Tuple(_) => todo!(),
-                    hir::Pattern::Type(_, _) => todo!(),
-                }
+                result.push(mir::Statement::Register(mir::Register {
+                    name: register.pattern.value_name(),
+                    ty: types
+                        .type_of_id(register.pattern.id, symtab, &item_list.types)
+                        .to_mir_type(),
+                    clock: register.clock.variable(subs),
+                    reset: register
+                        .reset
+                        .as_ref()
+                        .map(|(value, trig)| (value.variable(subs), trig.variable(subs))),
+                    value: register.value.variable(subs),
+                }));
+
+                result.append(&mut register.pattern.lower(symtab, types, subs, item_list)?);
             }
         }
         Ok(result)

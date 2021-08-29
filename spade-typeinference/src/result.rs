@@ -142,6 +142,13 @@ pub enum Error {
     #[error("Tuple index out of boudns")]
     TupleIndexOutOfBounds { index: Loc<u128>, actual_size: u128 },
 
+    #[error("Pattern type missmatch")]
+    PatternTypeMissmatch {
+        pattern: Loc<()>,
+        expected: UnificationTrace,
+        got: UnificationTrace,
+    },
+
     #[error("The first argument of a pipeline must be a clock")]
     FirstPipelineArgNotClock {
         expected: UnificationTrace,

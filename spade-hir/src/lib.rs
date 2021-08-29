@@ -32,14 +32,37 @@ pub enum ArgumentPattern {
 impl WithLocation for ArgumentPattern {}
 
 #[derive(PartialEq, Debug, Clone)]
-pub enum Pattern {
+pub enum PatternKind {
     Integer(u128),
     Bool(bool),
     Name(Loc<NameID>),
     Tuple(Vec<Loc<Pattern>>),
     Type(Loc<NameID>, ArgumentPattern),
 }
+
+#[derive(Debug, Clone)]
+pub struct Pattern {
+    // Unique ID of the pattern for use in type inference. Shared with expressions
+    // meaning there are no expression/pattern id collisions
+    pub id: u64,
+    pub kind: PatternKind,
+}
 impl WithLocation for Pattern {}
+
+impl PatternKind {
+    pub fn with_id(self, id: u64) -> Pattern {
+        Pattern { id, kind: self }
+    }
+
+    pub fn idless(self) -> Pattern {
+        Pattern { id: 0, kind: self }
+    }
+}
+impl PartialEq for Pattern {
+    fn eq(&self, other: &Self) -> bool {
+        self.kind == other.kind
+    }
+}
 
 #[derive(PartialEq, Debug, Clone)]
 pub enum Statement {

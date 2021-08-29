@@ -287,8 +287,12 @@ pub fn visit_module_body(
     Ok(item_list)
 }
 
-pub fn visit_pattern(p: &Loc<ast::Pattern>, symtab: &mut SymbolTable) -> Result<Loc<hir::Pattern>> {
-    match &p.inner {
+pub fn visit_pattern(
+    p: &Loc<ast::Pattern>,
+    symtab: &mut SymbolTable,
+    idtracker: &mut IdTracker,
+) -> Result<Loc<hir::Pattern>> {
+    let kind = match &p.inner {
         ast::Pattern::Integer(_) => todo!(),
         ast::Pattern::Bool(_) => todo!(),
         ast::Pattern::Name(ident) => {
@@ -297,11 +301,18 @@ pub fn visit_pattern(p: &Loc<ast::Pattern>, symtab: &mut SymbolTable) -> Result<
                 Thing::Variable(ident.clone()),
             );
 
-            Ok(hir::Pattern::Name(name_id.at_loc(&ident)).at(p))
+            hir::PatternKind::Name(name_id.at_loc(&ident))
         }
-        ast::Pattern::Tuple(_) => todo!(),
+        ast::Pattern::Tuple(pattern) => {
+            let inner = pattern
+                .iter()
+                .map(|p| visit_pattern(p, symtab, idtracker))
+                .collect::<Result<_>>()?;
+            hir::PatternKind::Tuple(inner)
+        }
         ast::Pattern::Type(_, _) => todo!(),
-    }
+    };
+    Ok(kind.with_id(idtracker.next()).at(p))
 }
 
 pub fn visit_statement(
@@ -318,7 +329,7 @@ pub fn visit_statement(
                 None
             };
 
-            let pat = visit_pattern(pattern, symtab)?;
+            let pat = visit_pattern(pattern, symtab, idtracker)?;
 
             let expr = expr.try_visit(visit_expression, symtab, idtracker)?;
 
@@ -572,7 +583,7 @@ pub fn visit_register(
 ) -> Result<Loc<hir::Register>> {
     let (reg, loc) = reg.split_ref();
 
-    let pattern = visit_pattern(&reg.pattern, symtab)?;
+    let pattern = visit_pattern(&reg.pattern, symtab, idtracker)?;
 
     let clock = reg.clock.try_visit(visit_expression, symtab, idtracker)?;
 
@@ -648,7 +659,7 @@ mod entity_visiting {
             inputs: vec![((name_id(1, "a").inner, hir::TypeSpec::unit().nowhere()))],
             body: hir::ExprKind::Block(Box::new(hir::Block {
                 statements: vec![hir::Statement::Binding(
-                    hir::Pattern::Name(name_id(2, "var")).nowhere(),
+                    hir::PatternKind::Name(name_id(2, "var")).idless().nowhere(),
                     Some(hir::TypeSpec::unit().nowhere()),
                     hir::ExprKind::IntLiteral(0).idless().nowhere(),
                 )
@@ -759,7 +770,7 @@ mod statement_visiting {
         .nowhere();
 
         let expected = hir::Statement::Binding(
-            hir::Pattern::Name(name_id(0, "a")).nowhere(),
+            hir::PatternKind::Name(name_id(0, "a")).idless().nowhere(),
             Some(hir::TypeSpec::unit().nowhere()),
             hir::ExprKind::IntLiteral(0).idless().nowhere(),
         )
@@ -788,7 +799,9 @@ mod statement_visiting {
 
         let expected = hir::Statement::Register(
             hir::Register {
-                pattern: hir::Pattern::Name(name_id(1, "regname")).nowhere(),
+                pattern: hir::PatternKind::Name(name_id(1, "regname"))
+                    .idless()
+                    .nowhere(),
                 clock: hir::ExprKind::Identifier(name_id(0, "clk").inner)
                     .with_id(0)
                     .nowhere(),
@@ -891,7 +904,7 @@ mod expression_visiting {
         }));
         let expected = hir::ExprKind::Block(Box::new(hir::Block {
             statements: vec![hir::Statement::Binding(
-                hir::Pattern::Name(name_id(0, "a")).nowhere(),
+                hir::PatternKind::Name(name_id(0, "a")).idless().nowhere(),
                 None,
                 hir::ExprKind::IntLiteral(0).idless().nowhere(),
             )
@@ -1378,7 +1391,9 @@ mod register_visiting {
         .nowhere();
 
         let expected = hir::Register {
-            pattern: hir::Pattern::Name(name_id(2, "test")).nowhere(),
+            pattern: hir::PatternKind::Name(name_id(2, "test"))
+                .idless()
+                .nowhere(),
             clock: hir::ExprKind::Identifier(name_id(0, "clk").inner)
                 .with_id(0)
                 .nowhere(),
