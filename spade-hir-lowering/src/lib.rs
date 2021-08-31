@@ -6,6 +6,7 @@ use hir::{ItemList, TypeList};
 pub use pipelines::generate_pipeline;
 use substitution::Substitutions;
 
+use parse_tree_macros::local_impl;
 use spade_common::{location_info::Loc, name::NameID};
 use spade_hir as hir;
 use spade_hir::{
@@ -33,15 +34,7 @@ impl Manglable for NameID {
     }
 }
 
-trait TypeStateLocal {
-    fn expr_type(
-        &self,
-        expr: &Loc<Expression>,
-        symtab: &SymbolTable,
-        types: &TypeList,
-    ) -> Result<ConcreteType>;
-}
-
+#[local_impl]
 impl TypeStateLocal for TypeState {
     /// Returns the type of the expression as a concrete type. If the type is not
     /// fully ungenerified, returns an error
@@ -66,9 +59,7 @@ impl TypeStateLocal for TypeState {
     }
 }
 
-trait ConcreteTypeLocal {
-    fn to_mir_type(&self) -> mir::types::Type;
-}
+#[local_impl]
 impl ConcreteTypeLocal for ConcreteType {
     fn to_mir_type(&self) -> mir::types::Type {
         use mir::types::Type;
@@ -114,9 +105,7 @@ impl ConcreteTypeLocal for ConcreteType {
     }
 }
 
-trait NameIDLocal {
-    fn value_name(&self) -> mir::ValueName;
-}
+#[local_impl]
 impl NameIDLocal for NameID {
     fn value_name(&self) -> mir::ValueName {
         let mangled = format!("{}", self.1.as_strs().join("_"));
@@ -124,17 +113,7 @@ impl NameIDLocal for NameID {
     }
 }
 
-// TODO: Consider adding a proc-macro to add these local derives automatically
-
-trait StatementLocal {
-    fn lower(
-        &self,
-        symtab: &SymbolTable,
-        types: &TypeState,
-        subs: &Substitutions,
-        item_list: &hir::ItemList,
-    ) -> Result<Vec<mir::Statement>>;
-}
+#[local_impl]
 impl StatementLocal for Statement {
     fn lower(
         &self,
@@ -185,21 +164,7 @@ impl StatementLocal for Statement {
     }
 }
 
-trait ExprLocal {
-    fn alias(&self, subs: &Substitutions) -> Option<mir::ValueName>;
-
-    // NOTE: this impl and a few others could be moved to a impl block that does not have
-    // the Loc requirement if desired
-    fn variable(&self, subs: &Substitutions) -> mir::ValueName;
-
-    fn lower(
-        &self,
-        symtab: &SymbolTable,
-        types: &TypeState,
-        subs: &Substitutions,
-        item_list: &ItemList,
-    ) -> Result<Vec<mir::Statement>>;
-}
+#[local_impl]
 impl ExprLocal for Loc<Expression> {
     /// If the verilog code for this expression is just an alias for another variable
     /// that is returned here. This allows us to skip generating wires that we don't

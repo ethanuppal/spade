@@ -1,3 +1,4 @@
+use parse_tree_macros::local_impl;
 use spade_common::{
     location_info::WithLocation,
     name::{Identifier, NameID},
@@ -12,17 +13,7 @@ use spade_typeinference::TypeState;
 use crate::{substitution::Substitutions, Result};
 use crate::{ConcreteTypeLocal, ExprLocal, NameIDLocal, TypeStateLocal};
 
-trait BindingLocal {
-    fn lower(
-        &self,
-        symtab: &SymbolTable,
-        types: &TypeState,
-        live_vars: &mut Vec<NameID>,
-        subs: &Substitutions,
-        item_list: &ItemList,
-    ) -> Result<Vec<mir::Statement>>;
-}
-
+#[local_impl]
 impl BindingLocal for PipelineBinding {
     fn lower(
         &self,
@@ -52,18 +43,7 @@ impl BindingLocal for PipelineBinding {
     }
 }
 
-trait StageLocal {
-    fn lower(
-        &self,
-        stage_num: usize,
-        symtab: &mut FrozenSymtab,
-        types: &TypeState,
-        live_vars: &mut Vec<NameID>,
-        clock: &NameID,
-        subs: &mut Substitutions,
-        item_list: &ItemList,
-    ) -> Result<Vec<mir::Statement>>;
-}
+#[local_impl]
 impl StageLocal for PipelineStage {
     fn lower(
         &self,

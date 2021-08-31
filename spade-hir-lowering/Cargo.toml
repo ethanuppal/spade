@@ -19,6 +19,7 @@ spade-types = {path = "../spade-types"}
 spade-hir = {path = "../spade-hir"}
 spade-mir = {path = "../spade-mir"}
 spade-typeinference = {path = "../spade-typeinference"}
+parse_tree_macros = {path = "../parse_tree_macros"}
 
 [dev-dependencies]
 prettydiff = "0.3.1"
