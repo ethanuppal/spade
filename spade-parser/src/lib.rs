@@ -1550,6 +1550,31 @@ mod tests {
     }
 
     #[test]
+    fn match_expressions_work() {
+        let code = r#"
+        match x {
+            (0, y) => y,
+            (x, y) => x,
+        }
+        "#;
+
+        let expected = Expression::Match {
+            expression: Box::new(Expression::Identifier(ast_path("x")).nowhere()),
+            patterns: vec![
+                (
+                    Pattern::Tuple(vec![
+                        Pattern::Integer(0).nowhere(),
+                        Pattern::Name(ast_ident("x")).nowhere()
+                    ]).nowhere(),
+                    Expression::Identifier(ast_path("x")).nowhere()
+                )
+            ]
+        }.nowhere();
+
+        check_parse!(code, expression, Ok(expected));
+    }
+
+    #[test]
     fn blocks_work() {
         let code = r#"
             {
@@ -1594,6 +1619,7 @@ mod tests {
 
         check_parse!(code, expression, Ok(expected));
     }
+
 
     #[test]
     fn bindings_work() {
