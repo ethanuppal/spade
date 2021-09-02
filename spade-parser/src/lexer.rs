@@ -43,6 +43,8 @@ pub enum TokenKind {
     If,
     #[token("else")]
     Else,
+    #[token("match")]
+    Match,
 
     #[token("pipeline")]
     Pipeline,
@@ -100,6 +102,8 @@ pub enum TokenKind {
     #[token("]")]
     CloseBracket,
 
+    #[token("=>")]
+    FatArrow,
     #[token("->")]
     SlimArrow,
     #[token(",")]
@@ -145,6 +149,7 @@ impl TokenKind {
             TokenKind::Reset => "reset",
             TokenKind::If => "if",
             TokenKind::Else => "else",
+            TokenKind::Match => "match",
             TokenKind::Trait => "trait",
             TokenKind::Function => "fn",
             TokenKind::Enum => "enum",
@@ -169,6 +174,7 @@ impl TokenKind {
             TokenKind::OpenBracket => "[",
             TokenKind::CloseBracket => "]",
 
+            TokenKind::FatArrow => "=>",
             TokenKind::SlimArrow => "->",
             TokenKind::Semi => ";",
             TokenKind::Colon => ":",

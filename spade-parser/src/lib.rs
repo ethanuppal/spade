@@ -320,6 +320,8 @@ impl<'a> Parser<'a> {
             Ok(block.map(Box::new).map(Expression::Block))
         } else if let Some(if_expr) = self.if_expression()? {
             Ok(if_expr)
+        } else if let Some(match_expr) = self.match_expression()? {
+            Ok(match_expr)
         } else {
             match self.path() {
                 Ok(path) => {
@@ -369,6 +371,28 @@ impl<'a> Parser<'a> {
             Expression::If(Box::new(cond), Box::new(on_true), Box::new(on_false))
                 .between(&start.span, &end_span),
         ))
+    }
+
+    #[trace_parser]
+    pub fn match_expression(&mut self) -> Result<Option<Loc<Expression>>> {
+        let start = peek_for!(self, &TokenKind::Match);
+
+        let expression = self.expression()?;
+
+        let (patterns, body_loc) = self.surrounded(&TokenKind::OpenBrace, |s| {
+            s.comma_separated(|s| {
+                let pattern = s.pattern()?;
+                s.eat(&TokenKind::FatArrow)?;
+                let value = s.expression()?;
+
+                Ok((pattern, value))
+            }, &TokenKind::CloseBrace)
+        }, &TokenKind::CloseBrace)?;
+
+        Ok(Some(Expression::Match {
+            expression: Box::new(expression),
+            patterns
+        }.between(&start.span, &body_loc)))
     }
 
     #[trace_parser]
@@ -1564,7 +1588,14 @@ mod tests {
                 (
                     Pattern::Tuple(vec![
                         Pattern::Integer(0).nowhere(),
-                        Pattern::Name(ast_ident("x")).nowhere()
+                        Pattern::Name(ast_ident("y")).nowhere()
+                    ]).nowhere(),
+                    Expression::Identifier(ast_path("y")).nowhere()
+                ),
+                (
+                    Pattern::Tuple(vec![
+                        Pattern::Name(ast_ident("x")).nowhere(),
+                        Pattern::Name(ast_ident("y")).nowhere()
                     ]).nowhere(),
                     Expression::Identifier(ast_path("x")).nowhere()
                 )
