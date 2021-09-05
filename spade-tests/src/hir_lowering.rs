@@ -72,6 +72,46 @@ mod tests {
         }};
     }
 
+    /// Builds mutliple entities and types from a source string, then compares the resulting
+    /// entities. $expected should be a vector of mir entities. If any pipelines or other
+    /// non-entities or types are included in $code, this panics
+    macro_rules! build_and_compare_entities {
+        ($code:expr, $expected:expr) => {
+            let ParseTypececkResult {
+                items_with_types,
+                item_list,
+                symtab,
+            } = parse_typecheck_module_body($code);
+
+            // TODO: This is copied from the above code, so it is fairly general. Perhaps
+            // we should macroify it
+            let mut result = vec![];
+            for processed in items_with_types.executables {
+                match processed {
+                    ProcessedItem::Entity(processed) => {
+                        result.push(
+                            generate_entity(
+                                &processed.entity,
+                                symtab.symtab(),
+                                &processed.type_state,
+                                &item_list,
+                            )
+                            .report_failure(),
+                        );
+                    }
+                    ProcessedItem::EnumInstance => {}
+                    _ => panic!("expected an entity"),
+                }
+            }
+
+            assert_eq!($expected.len(), result.len(), "Expected {} entities, found {}", $expected.len(), result.len());
+
+            for (exp, res) in $expected.into_iter().zip(result.into_iter()) {
+                assert_same_mir!(&res, &exp);
+            }
+        }
+    }
+
     #[test]
     fn entity_defintions_are_correct() {
         let code = r#"
@@ -672,31 +712,6 @@ mod tests {
             }
         "#;
 
-        let ParseTypececkResult {
-            items_with_types,
-            item_list,
-            symtab,
-        } = parse_typecheck_module_body(code);
-
-        let mut result = vec![];
-        for processed in items_with_types.executables {
-            match processed {
-                ProcessedItem::Entity(processed) => {
-                    result.push(
-                        generate_entity(
-                            &processed.entity,
-                            symtab.symtab(),
-                            &processed.type_state,
-                            &item_list,
-                        )
-                        .report_failure(),
-                    );
-                }
-                ProcessedItem::EnumInstance => {}
-                _ => panic!("expected an entity"),
-            }
-        }
-
         let mir_enum = Type::Enum(vec![vec![Type::Bool], vec![]]);
 
         let expected = vec![entity!("test"; (
@@ -706,9 +721,7 @@ mod tests {
             } => e(1)
         )];
 
-        for (exp, res) in expected.into_iter().zip(result.into_iter()) {
-            assert_same_mir!(&res, &exp);
-        }
+        build_and_compare_entities!(code, expected);
     }
 
     #[test]
@@ -724,31 +737,6 @@ mod tests {
             }
         "#;
 
-        let ParseTypececkResult {
-            items_with_types,
-            item_list,
-            symtab,
-        } = parse_typecheck_module_body(code);
-
-        let mut result = vec![];
-        for processed in items_with_types.executables {
-            match processed {
-                ProcessedItem::Entity(processed) => {
-                    result.push(
-                        generate_entity(
-                            &processed.entity,
-                            symtab.symtab(),
-                            &processed.type_state,
-                            &item_list,
-                        )
-                        .report_failure(),
-                    );
-                }
-                ProcessedItem::EnumInstance => {}
-                _ => panic!("expected an entity"),
-            }
-        }
-
         let mir_enum = Type::Enum(vec![vec![Type::Int(5)], vec![]]);
 
         let expected = vec![entity!("test"; (
@@ -758,9 +746,7 @@ mod tests {
             } => e(1)
         )];
 
-        for (exp, res) in expected.into_iter().zip(result.into_iter()) {
-            assert_same_mir!(&res, &exp);
-        }
+        build_and_compare_entities!(code, expected);
     }
 
     #[test]
@@ -776,30 +762,6 @@ mod tests {
             }
         "#;
 
-        let ParseTypececkResult {
-            items_with_types,
-            item_list,
-            symtab,
-        } = parse_typecheck_module_body(code);
-
-        let mut result = vec![];
-        for processed in items_with_types.executables {
-            match processed {
-                ProcessedItem::Entity(processed) => {
-                    result.push(
-                        generate_entity(
-                            &processed.entity,
-                            symtab.symtab(),
-                            &processed.type_state,
-                            &item_list,
-                        )
-                        .report_failure(),
-                    );
-                }
-                ProcessedItem::EnumInstance => {}
-                _ => panic!("expected an entity"),
-            }
-        }
 
         let mir_enum = Type::Enum(vec![vec![Type::Int(5)], vec![]]);
 
