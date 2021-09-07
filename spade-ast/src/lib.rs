@@ -33,16 +33,16 @@ impl WithLocation for ArgumentPattern {}
 pub enum Pattern {
     Integer(u128),
     Bool(bool),
-    Name(Loc<Identifier>),
+    Path(Loc<Path>),
     Tuple(Vec<Loc<Pattern>>),
-    Type(Loc<Identifier>, ArgumentPattern),
+    Type(Loc<Path>, ArgumentPattern),
 }
 impl WithLocation for Pattern {}
 
 // Helper constructors for writing neater tests
 impl Pattern {
     pub fn name(name: &str) -> Loc<Self> {
-        Pattern::Name(Identifier(name.to_string()).nowhere()).nowhere()
+        Pattern::Path(Path(vec![Identifier(name.to_string()).nowhere()]).nowhere()).nowhere()
     }
 }
 
@@ -87,10 +87,7 @@ pub enum Expression {
         Box<Loc<Expression>>,
         Box<Loc<Expression>>,
     ),
-    Match {
-        expression: Box<Loc<Expression>>,
-        patterns: Vec<(Loc<Pattern>, Loc<Expression>)>
-    },
+    Match(Box<Loc<Expression>>, Vec<(Loc<Pattern>, Loc<Expression>)>),
     FnCall(Loc<Path>, Loc<ArgumentList>),
     BinaryOperator(Box<Loc<Expression>>, BinaryOperator, Box<Loc<Expression>>),
     Block(Box<Block>),

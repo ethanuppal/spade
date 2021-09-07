@@ -371,6 +371,43 @@ impl TypeState {
                         loc: expression.loc(),
                     })?;
             }
+            ExprKind::Match(cond, branches) => {
+                self.visit_expression(&cond, symtab)?;
+
+                for (i, (pattern, result)) in branches.iter().enumerate() {
+                    self.visit_pattern(pattern, symtab)?;
+                    self.visit_expression(result, symtab)?;
+
+                    self.unify_types(&cond.inner, pattern, symtab)
+                        .map_err(|(expected, got)| {
+                            // TODO, Consider introducing a more specific error
+                            Error::UnspecifiedTypeError {
+                                expected,
+                                got,
+                                loc: pattern.loc()
+                            }
+                        })?;
+
+                    if i != 0 {
+                        self.unify_types(&branches[0].1, result, symtab)
+                            .map_err(|(expected, got)| {
+                                Error::MatchBranchMissmatch {
+                                    expected,
+                                    got,
+                                    first_branch: branches[0].1.loc(),
+                                    incorrect_branch: result.loc(),
+                                }
+                            })?;
+                    }
+                }
+
+                assert!(
+                    !branches.is_empty(),
+                    "Empty match statements should be checked by ast lowering"
+                );
+
+                self.unify_expression_generic_error(&branches[0].1, expression, symtab)?;
+            }
             ExprKind::BinaryOperator(lhs, op, rhs) => {
                 self.visit_expression(&lhs, symtab)?;
                 self.visit_expression(&rhs, symtab)?;
@@ -763,6 +800,16 @@ impl HasType for Loc<Expression> {
         state.type_of(&TypedExpression::Id(self.inner.id))
     }
 }
+impl HasType for Pattern {
+    fn get_type<'a>(&self, state: &TypeState) -> Result<TypeVar> {
+        state.type_of(&TypedExpression::Id(self.id))
+    }
+}
+impl HasType for Loc<Pattern> {
+    fn get_type<'a>(&self, state: &TypeState) -> Result<TypeVar> {
+        state.type_of(&TypedExpression::Id(self.inner.id))
+    }
+}
 impl HasType for KnownType {
     fn get_type<'a>(&self, _state: &TypeState) -> Result<TypeVar> {
         Ok(TypeVar::Known(self.clone(), vec![], None))
@@ -896,7 +943,7 @@ mod tests {
     }
 
     #[test]
-    fn if_statements_get_correct_type_when_branches_are_of_known_type() {
+    fn if_expressions_get_correct_type_when_branches_are_of_known_type() {
         let mut state = TypeState::new();
         let mut symtab = SymbolTable::new();
         spade_ast_lowering::builtins::populate_symtab(&mut symtab, &mut ItemList::new());
@@ -963,6 +1010,63 @@ mod tests {
         state.add_equation(expr_c.clone(), TVar::Known(t_clock(&symtab), vec![], None));
 
         assert_ne!(state.visit_expression(&input, &symtab), Ok(()));
+    }
+
+    #[test]
+    fn match_expressions_have_correctly_infered_types() {
+        let mut state = TypeState::new();
+        let mut symtab = SymbolTable::new();
+        spade_ast_lowering::builtins::populate_symtab(&mut symtab, &mut ItemList::new());
+
+        let first_pattern = PatternKind::Tuple(vec![
+            PatternKind::Name(name_id(10, "x1")).with_id(20).nowhere(),
+            PatternKind::Name(name_id(11, "x2")).with_id(21).nowhere(),
+        ]).with_id(22).nowhere();
+
+        let input = ExprKind::Match(
+            Box::new(Expression::ident(0, 0, "a").nowhere()),
+            vec![
+                (
+                    first_pattern,
+                    Expression::ident(1, 1, "b").nowhere()
+                ),
+                (
+                    PatternKind::Name(name_id(11, "y")).with_id(23).nowhere(),
+                    Expression::ident(2, 2, "c").nowhere()
+                )
+            ]
+        )
+        .with_id(3)
+        .nowhere();
+
+        // Add eqs for the literals
+        let expr_a = TExpr::Name(name_id(0, "a").inner);
+        let expr_b = TExpr::Name(name_id(1, "b").inner);
+        let expr_c = TExpr::Name(name_id(2, "c").inner);
+        state.add_equation(expr_a.clone(), TVar::Unknown(100));
+        state.add_equation(expr_b.clone(), unsized_int(101, &symtab));
+        state.add_equation(expr_c.clone(), TVar::Unknown(102));
+
+        state.visit_expression(&input, &symtab).unwrap();
+
+        let t3 = get_type!(state, &TExpr::Id(3));
+
+        let t22 = get_type!(state, &TExpr::Id(22));
+        let t23 = get_type!(state, &TExpr::Id(23));
+
+        let ta = get_type!(state, &expr_a);
+        let tb = get_type!(state, &expr_b);
+        let tc = get_type!(state, &expr_c);
+
+        // Ensure branches have the same type
+        ensure_same_type!(state, tb, tc);
+        // And that the match block has the same type
+        ensure_same_type!(state, tc, t3);
+
+
+        // Ensure patterns have same type as each other, and as the expression
+        ensure_same_type!(state, ta, t22);
+        ensure_same_type!(state, t22, t23);
     }
 
     #[ignore]

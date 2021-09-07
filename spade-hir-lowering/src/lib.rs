@@ -248,6 +248,7 @@ impl ExprLocal for Loc<Expression> {
             ExprKind::TupleIndex(_, _) => None,
             ExprKind::Block(block) => Some(block.result.variable(subs)),
             ExprKind::If(_, _, _) => None,
+            ExprKind::Match(_, _) => None,
             ExprKind::BinaryOperator(_, _, _) => None,
             ExprKind::EntityInstance(_, _) => None,
             ExprKind::PipelineInstance { .. } => None,
@@ -380,6 +381,9 @@ impl ExprLocal for Loc<Expression> {
                         .expr_type(self, symtab, &item_list.types)?
                         .to_mir_type(),
                 }));
+            }
+            ExprKind::Match(_, _) => {
+                todo![]
             }
             ExprKind::FnCall(name, params) => {
                 // Look up the name in the executable list to see if this is a type instantiation

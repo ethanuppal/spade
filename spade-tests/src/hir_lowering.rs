@@ -772,8 +772,33 @@ mod tests {
             } => e(1)
         )];
 
-        for (exp, res) in expected.into_iter().zip(result.into_iter()) {
-            assert_same_mir!(&res, &exp);
-        }
+        build_and_compare_entities!(code, expected);
+    }
+
+    #[test]
+    fn enum_match_works() {
+        let code = r#"
+            enum Option<T> {
+                Some(payload: T),
+                None
+            }
+
+            entity unwrap_or_0(e: Option<int<16>>) -> int<16> {
+                match e {
+                    Option::Some(x) => x,
+                    Option::None => 0
+                }
+            }
+        "#;
+
+        let mir_type = Type::Enum(vec![vec![Type::Int(16)], vec![]]);
+
+        let expected = vec![
+            entity!{"unwrap_or_0"; ("_i_e", n(0, "e"), mir_type) -> Type::Int(16); {
+
+            } => e(1)}
+        ];
+
+        build_and_compare_entities!(code, expected);
     }
 }

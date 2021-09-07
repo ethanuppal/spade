@@ -288,11 +288,11 @@ pub fn visit_module_body(
 }
 
 pub fn visit_pattern(
-    p: &Loc<ast::Pattern>,
+    p: &ast::Pattern,
     symtab: &mut SymbolTable,
     idtracker: &mut IdTracker,
-) -> Result<Loc<hir::Pattern>> {
-    let kind = match &p.inner {
+) -> Result<hir::Pattern> {
+    let kind = match &p {
         ast::Pattern::Integer(_) => todo!(),
         ast::Pattern::Bool(_) => todo!(),
         ast::Pattern::Name(ident) => {
@@ -306,13 +306,13 @@ pub fn visit_pattern(
         ast::Pattern::Tuple(pattern) => {
             let inner = pattern
                 .iter()
-                .map(|p| visit_pattern(p, symtab, idtracker))
+                .map(|p| p.try_visit(visit_pattern, symtab, idtracker))
                 .collect::<Result<_>>()?;
             hir::PatternKind::Tuple(inner)
         }
         ast::Pattern::Type(_, _) => todo!(),
     };
-    Ok(kind.with_id(idtracker.next()).at(p))
+    Ok(kind.with_id(idtracker.next()))
 }
 
 pub fn visit_statement(
@@ -329,7 +329,7 @@ pub fn visit_statement(
                 None
             };
 
-            let pat = visit_pattern(pattern, symtab, idtracker)?;
+            let pat = pattern.try_visit(visit_pattern, symtab, idtracker)?;
 
             let expr = expr.try_visit(visit_expression, symtab, idtracker)?;
 
@@ -538,6 +538,18 @@ pub fn visit_expression(
                 Box::new(onfalse),
             ))
         }
+        ast::Expression::Match(expression, branches) => {
+            let e = expression.try_visit(visit_expression, symtab, idtracker)?;
+
+            let b = branches.iter().map(|(pattern, result)| {
+                let p = pattern.try_visit(visit_pattern, symtab, idtracker)?;
+                let r = result.try_visit(visit_expression, symtab, idtracker)?;
+                Ok((p, r))
+            })
+            .collect::<Result<Vec<_>>>()?;
+
+            Ok(hir::ExprKind::Match(Box::new(e), b))
+        }
         ast::Expression::Block(block) => Ok(hir::ExprKind::Block(Box::new(visit_block(
             block, symtab, idtracker,
         )?))),
@@ -583,7 +595,7 @@ pub fn visit_register(
 ) -> Result<Loc<hir::Register>> {
     let (reg, loc) = reg.split_ref();
 
-    let pattern = visit_pattern(&reg.pattern, symtab, idtracker)?;
+    let pattern = reg.pattern.try_visit(visit_pattern, symtab, idtracker)?;
 
     let clock = reg.clock.try_visit(visit_expression, symtab, idtracker)?;
 
@@ -968,6 +980,30 @@ mod expression_visiting {
             visit_expression(&input, &mut symtab, &mut idtracker),
             Ok(expected)
         );
+    }
+
+    #[test]
+    fn match_expressions_work() {
+        let input = ast::Expression::Match (
+            Box::new(ast::Expression::IntLiteral(1).nowhere()),
+            vec![
+                (ast::Pattern::name("x"), ast::Expression::IntLiteral(2).nowhere())
+            ]
+        );
+
+        let expected = hir::ExprKind::Match(
+            Box::new(hir::ExprKind::IntLiteral(1).idless().nowhere()),
+            vec! [
+                (
+                    hir::PatternKind::Name(name_id(0, "x")).idless().nowhere(),
+                    hir::ExprKind::IntLiteral(2).idless().nowhere()
+                )
+            ]
+        ).idless();
+
+        let mut symtab = SymbolTable::new();
+        let mut idtracker = IdTracker::new();
+        assert_eq!(visit_expression(&input, &mut symtab, &mut idtracker), Ok(expected))
     }
 
     #[test]

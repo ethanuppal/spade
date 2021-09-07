@@ -379,20 +379,26 @@ impl<'a> Parser<'a> {
 
         let expression = self.expression()?;
 
-        let (patterns, body_loc) = self.surrounded(&TokenKind::OpenBrace, |s| {
-            s.comma_separated(|s| {
-                let pattern = s.pattern()?;
-                s.eat(&TokenKind::FatArrow)?;
-                let value = s.expression()?;
+        let (patterns, body_loc) = self.surrounded(
+            &TokenKind::OpenBrace,
+            |s| {
+                s.comma_separated(
+                    |s| {
+                        let pattern = s.pattern()?;
+                        s.eat(&TokenKind::FatArrow)?;
+                        let value = s.expression()?;
 
-                Ok((pattern, value))
-            }, &TokenKind::CloseBrace)
-        }, &TokenKind::CloseBrace)?;
+                        Ok((pattern, value))
+                    },
+                    &TokenKind::CloseBrace,
+                )
+            },
+            &TokenKind::CloseBrace,
+        )?;
 
-        Ok(Some(Expression::Match {
-            expression: Box::new(expression),
-            patterns
-        }.between(&start.span, &body_loc)))
+        Ok(Some(
+            Expression::Match(Box::new(expression), patterns).between(&start.span, &body_loc),
+        ))
     }
 
     #[trace_parser]
@@ -542,14 +548,14 @@ impl<'a> Parser<'a> {
                     .map(|val| val.map(Pattern::Bool)))
             },
             &|s| {
-                let ident = s.identifier()?;
+                let path = s.path()?;
 
                 if let Some(start_paren) = s.peek_and_eat(&TokenKind::OpenParen)? {
                     let inner = s.comma_separated(Self::pattern, &TokenKind::CloseParen)?;
                     let end = s.eat(&TokenKind::CloseParen)?;
 
                     Ok(Some(
-                        Pattern::Type(ident, ArgumentPattern::Positional(inner))
+                        Pattern::Type(path, ArgumentPattern::Positional(inner))
                             .between(&start_paren.span, &end.span),
                     ))
                 } else if let Some(start_brace) = s.peek_and_eat(&TokenKind::OpenBrace)? {
@@ -564,11 +570,11 @@ impl<'a> Parser<'a> {
                     let end = s.eat(&TokenKind::CloseBrace)?;
 
                     Ok(Some(
-                        Pattern::Type(ident, ArgumentPattern::Named(inner))
+                        Pattern::Type(path, ArgumentPattern::Named(inner))
                             .between(&start_brace.span, &end.span),
                     ))
                 } else {
-                    Ok(Some(Pattern::Name(ident.clone()).at(&ident)))
+                    Ok(Some(Pattern::Path(path.clone()).at(&path)))
                 }
             },
         ])?;
@@ -1582,25 +1588,28 @@ mod tests {
         }
         "#;
 
-        let expected = Expression::Match {
-            expression: Box::new(Expression::Identifier(ast_path("x")).nowhere()),
-            patterns: vec![
+        let expected = Expression::Match (
+            Box::new(Expression::Identifier(ast_path("x")).nowhere()),
+            vec![
                 (
                     Pattern::Tuple(vec![
                         Pattern::Integer(0).nowhere(),
-                        Pattern::Name(ast_ident("y")).nowhere()
-                    ]).nowhere(),
-                    Expression::Identifier(ast_path("y")).nowhere()
+                        Pattern::Name(ast_ident("y")).nowhere(),
+                    ])
+                    .nowhere(),
+                    Expression::Identifier(ast_path("y")).nowhere(),
                 ),
                 (
                     Pattern::Tuple(vec![
                         Pattern::Name(ast_ident("x")).nowhere(),
-                        Pattern::Name(ast_ident("y")).nowhere()
-                    ]).nowhere(),
-                    Expression::Identifier(ast_path("x")).nowhere()
-                )
-            ]
-        }.nowhere();
+                        Pattern::Name(ast_ident("y")).nowhere(),
+                    ])
+                    .nowhere(),
+                    Expression::Identifier(ast_path("x")).nowhere(),
+                ),
+            ],
+        )
+        .nowhere();
 
         check_parse!(code, expression, Ok(expected));
     }
@@ -1650,7 +1659,6 @@ mod tests {
 
         check_parse!(code, expression, Ok(expected));
     }
-
 
     #[test]
     fn bindings_work() {
@@ -2353,7 +2361,7 @@ mod tests {
         let code = "SomeType(x, y)";
 
         let expected = Pattern::Type(
-            ast_ident("SomeType"),
+            ast_path("SomeType"),
             ArgumentPattern::Positional(vec![Pattern::name("x"), Pattern::name("y")]),
         )
         .nowhere();
@@ -2366,7 +2374,7 @@ mod tests {
         let code = "SomeType{x: a, y: b}";
 
         let expected = Pattern::Type(
-            ast_ident("SomeType"),
+            ast_path("SomeType"),
             ArgumentPattern::Named(vec![
                 (ast_ident("x"), Pattern::name("a")),
                 (ast_ident("y"), Pattern::name("b")),

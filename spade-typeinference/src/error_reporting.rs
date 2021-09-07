@@ -83,6 +83,20 @@ impl CompilationError for Error {
                             .with_message(format!("But this one has type {}", got)),
                     ])
                     .with_notes(type_mismatch_notes(got, expected)),
+                Error::MatchBranchMissmatch {
+                    expected,
+                    got,
+                    first_branch,
+                    incorrect_branch,
+                } => Diagnostic::error()
+                    .with_message(format!("Match branches have incompatible type"))
+                    .with_labels(vec![
+                        Label::primary(file_id, first_branch.loc().span)
+                            .with_message(format!("This branch has type {}", expected)),
+                        Label::primary(file_id, incorrect_branch.loc().span)
+                            .with_message(format!("But this one has type {}", got)),
+                    ])
+                    .with_notes(type_mismatch_notes(got, expected)),
                 Error::NonClockClock { expected, got, loc } => Diagnostic::error()
                     .with_message("Register clock must be a type clock")
                     .with_labels(vec![Label::primary(file_id, loc.span)

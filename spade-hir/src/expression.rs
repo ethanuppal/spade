@@ -1,3 +1,5 @@
+use crate::Pattern;
+
 use super::{Block, NameID};
 use spade_common::{
     location_info::{Loc, WithLocation},
@@ -53,6 +55,7 @@ pub enum ExprKind {
     TupleIndex(Box<Loc<Expression>>, Loc<u128>),
     FnCall(Loc<NameID>, Vec<Argument>),
     BinaryOperator(Box<Loc<Expression>>, BinaryOperator, Box<Loc<Expression>>),
+    Match(Box<Loc<Expression>>, Vec<(Loc<Pattern>, Loc<Expression>)>),
     Block(Box<Block>),
     /// Instantiation of an entity. While the argument contains information about
     /// argument names, for codegen purposes, the arguments must be ordered in

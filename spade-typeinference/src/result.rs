@@ -95,6 +95,13 @@ pub enum Error {
         first_branch: Loc<()>,
         incorrect_branch: Loc<()>,
     },
+    #[error("Match branch missmatch")]
+    MatchBranchMissmatch {
+        expected: UnificationTrace,
+        got: UnificationTrace,
+        first_branch: Loc<()>,
+        incorrect_branch: Loc<()>,
+    },
     #[error("Non clock used as register clock")]
     NonClockClock {
         expected: UnificationTrace,
