@@ -25,6 +25,14 @@ impl Type {
             }
         }
     }
+
+    pub fn assume_enum(&self) -> &Vec<Vec<Type>> {
+        if let Type::Enum(inner) = self {
+            inner
+        } else {
+            panic!("Assumed enum for a type which was not")
+        }
+    }
 }
 
 impl std::fmt::Display for Type {

@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use logos::Logos;
 
 use spade_ast_lowering::{global_symbols, visit_module_body};
-use spade_common::{error_reporting::CompilationError, id_tracker::IdTracker, name::Path};
+use spade_common::{error_reporting::CompilationError, id_tracker::ExprIdTracker, name::Path};
 use spade_hir::{
     symbol_table::{FrozenSymtab, SymbolTable},
     ItemList,
@@ -13,9 +13,12 @@ use spade_typeinference::{self as typeinference};
 use spade_typeinference::{ProcessedEntity, ProcessedItem, ProcessedPipeline};
 use typeinference::ProcessedItemList;
 
-pub fn parse_typecheck_entity<'a>(input: &str) -> (ProcessedEntity, FrozenSymtab, ItemList) {
+pub fn parse_typecheck_entity<'a>(
+    input: &str,
+) -> (ProcessedEntity, FrozenSymtab, ExprIdTracker, ItemList) {
     let ParseTypececkResult {
         mut items_with_types,
+        idtracker,
         item_list,
         symtab,
     } = parse_typecheck_module_body(input);
@@ -26,14 +29,16 @@ pub fn parse_typecheck_entity<'a>(input: &str) -> (ProcessedEntity, FrozenSymtab
         panic!("Found multiple items");
     } else {
         match items_with_types.executables.pop().unwrap() {
-            ProcessedItem::Entity(e) => (e, symtab, item_list),
+            ProcessedItem::Entity(e) => (e, symtab, idtracker, item_list),
             ProcessedItem::Pipeline(_) => panic!("Found a pipeline, expected entity"),
             ProcessedItem::EnumInstance => panic!("Found enum instance, expected entity"),
         }
     }
 }
 
-pub fn parse_typecheck_pipeline<'a>(input: &str) -> (ProcessedPipeline, FrozenSymtab, ItemList) {
+pub fn parse_typecheck_pipeline<'a>(
+    input: &str,
+) -> (ProcessedPipeline, FrozenSymtab, ExprIdTracker, ItemList) {
     let mut result = parse_typecheck_module_body(input);
 
     if result.items_with_types.executables.is_empty() {
@@ -42,7 +47,7 @@ pub fn parse_typecheck_pipeline<'a>(input: &str) -> (ProcessedPipeline, FrozenSy
         panic!("Found multiple items");
     } else {
         match result.items_with_types.executables.pop().unwrap() {
-            ProcessedItem::Pipeline(p) => (p, result.symtab, result.item_list),
+            ProcessedItem::Pipeline(p) => (p, result.symtab, result.idtracker, result.item_list),
             ProcessedItem::Entity(_) => panic!("Found entity, expected pipeline"),
             ProcessedItem::EnumInstance => panic!("Found enum instance, expected pipeline"),
         }
@@ -52,6 +57,7 @@ pub fn parse_typecheck_pipeline<'a>(input: &str) -> (ProcessedPipeline, FrozenSy
 pub struct ParseTypececkResult {
     pub items_with_types: ProcessedItemList,
     pub item_list: ItemList,
+    pub idtracker: ExprIdTracker,
     pub symtab: FrozenSymtab,
 }
 
@@ -82,7 +88,7 @@ pub fn parse_typecheck_module_body(input: &str) -> ParseTypececkResult {
         &mut item_list
     ));
 
-    let mut idtracker = IdTracker::new();
+    let mut idtracker = ExprIdTracker::new();
 
     let item_list = try_or_report!(visit_module_body(
         item_list,
@@ -99,6 +105,7 @@ pub fn parse_typecheck_module_body(input: &str) -> ParseTypececkResult {
     ParseTypececkResult {
         items_with_types: items,
         item_list,
+        idtracker,
         symtab: symtab.freeze(),
     }
 }

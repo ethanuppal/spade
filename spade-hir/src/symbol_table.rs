@@ -1,6 +1,6 @@
-use crate::{EntityHead, FunctionHead, PipelineHead};
+use crate::{EntityHead, FunctionHead, ParameterList, PipelineHead, TypeParam, TypeSpec};
 use spade_common::{
-    id_tracker::IdTracker,
+    id_tracker::NameIdTracker,
     location_info::{Loc, WithLocation},
     name::{Identifier, NameID, Path},
 };
@@ -21,6 +21,27 @@ pub enum Error {
     NotAPipeline(Loc<Path>, Thing),
     #[error("Not a function")]
     NotAFunction(Loc<Path>, Thing),
+    #[error("Not an enum variant")]
+    NotAnEnumVariant(Loc<Path>, Thing),
+}
+
+#[derive(PartialEq, Debug, Clone)]
+pub struct EnumVariant {
+    pub output_type: Loc<TypeSpec>,
+    pub option: usize,
+    pub params: ParameterList,
+    pub type_params: Vec<Loc<TypeParam>>,
+}
+impl WithLocation for EnumVariant {}
+
+impl EnumVariant {
+    pub fn as_function_head(&self) -> FunctionHead {
+        FunctionHead {
+            inputs: self.params.clone(),
+            output_type: Some(self.output_type.clone()),
+            type_params: self.type_params.clone(),
+        }
+    }
 }
 
 /// Any named thing in the language
@@ -28,6 +49,7 @@ pub enum Error {
 pub enum Thing {
     /// Defintion of a named type
     Type(Loc<TypeSymbol>),
+    EnumVariant(Loc<EnumVariant>),
     Function(Loc<FunctionHead>),
     Entity(Loc<EntityHead>),
     Pipeline(Loc<PipelineHead>),
@@ -42,6 +64,7 @@ impl Thing {
             Thing::Variable(_) => "variable",
             Thing::Pipeline(_) => "pipeline",
             Thing::Function(_) => "function",
+            Thing::EnumVariant(_) => "enum variant",
         }
     }
 
@@ -52,6 +75,7 @@ impl Thing {
             Thing::Pipeline(i) => i.loc(),
             Thing::Variable(i) => i.loc(),
             Thing::Function(i) => i.loc(),
+            Thing::EnumVariant(i) => i.loc(),
         }
     }
 }
@@ -80,7 +104,7 @@ impl WithLocation for TypeSymbol {}
 pub struct SymbolTable {
     /// Each outer vec is a scope, inner vecs are symbols in that scope
     pub symbols: Vec<HashMap<Path, NameID>>,
-    id_tracker: IdTracker,
+    id_tracker: NameIdTracker,
     pub items: HashMap<NameID, Thing>,
 }
 
@@ -88,7 +112,7 @@ impl SymbolTable {
     pub fn new() -> Self {
         Self {
             symbols: vec![HashMap::new()],
-            id_tracker: IdTracker::new(),
+            id_tracker: NameIdTracker::new(),
             items: HashMap::new(),
         }
     }
@@ -140,7 +164,7 @@ impl SymbolTable {
     }
 
     pub fn freeze(self) -> FrozenSymtab {
-        let id_tracker = self.id_tracker.clone();
+        let id_tracker = self.id_tracker.make_clone();
         FrozenSymtab {
             inner: self,
             id_tracker,
@@ -160,45 +184,67 @@ impl SymbolTable {
             Thing::Variable(name),
         )
     }
+}
+macro_rules! item_accessors {
+    (
+        $(
+            $by_id_name:ident,
+            $lookup_name:ident,
+            $result:path,
+            $err:ident $(,)?
+            {$($thing:pat => $conversion:expr),*$(,)?}
+        ),*
+    ) => {
+        $(
+            /// Look up an item and panic if the item is not in the symtab or if it is the wrong
+            /// type
+            pub fn $by_id_name(&self, id: &NameID) -> Loc<$result> {
+                match self.items.get(&id) {
+                    $(Some($thing) => {$conversion})*
+                    Some(other) => panic!("attempted to look up {} but it was {:?}", stringify!($result), other),
+                    None => panic!("No thing entry found for {:?}", id)
+                }
+            }
 
-    /// Get the entity with the specified ID. Panics if no such entity is in the symtab
-    pub fn entity_by_id(&self, id: &NameID) -> &Loc<EntityHead> {
-        match self.items.get(&id) {
-            Some(Thing::Entity(head)) => head,
-            Some(other) => panic!("attempted to look up entity {} but it was {:?}", id, other),
-            None => panic!("No thing entry for {:?}", id),
-        }
-    }
-    pub fn pipeline_by_id(&self, id: &NameID) -> &Loc<PipelineHead> {
-        match self.items.get(&id) {
-            Some(Thing::Pipeline(head)) => head,
-            Some(other) => panic!(
-                "attempted to look up pipeline {} but it was {:?}",
-                id, other
-            ),
-            None => panic!("No thing entry for {:?}", id),
-        }
-    }
-    /// Get the function with the specified ID. Panics if no such entity is in the symtab
-    pub fn function_by_id(&self, id: &NameID) -> &Loc<FunctionHead> {
-        match self.items.get(&id) {
-            Some(Thing::Function(head)) => head,
-            Some(other) => panic!(
-                "attempted to look up function {} but it was {:?}",
-                id, other
-            ),
-            None => panic!("No thing entry for {:?}", id),
-        }
-    }
-    /// Get the type with the specified ID. Panics if no such entity is in the symtab
-    pub fn type_symbol_by_id(&self, id: &NameID) -> &Loc<TypeSymbol> {
-        match self.items.get(&id) {
-            Some(Thing::Type(t)) => t,
-            Some(other) => panic!("attempted to look up type {} but it was {:?}", id, other),
-            None => panic!("No thing entry for {:?}", id),
-        }
-    }
+            /// Look up an item, with errors if the item is not currently in scope, or is not
+            /// convertible to the return type.
+            pub fn $lookup_name(&self, name: &Loc<Path>) -> Result<(NameID, Loc<$result>), Error> {
+                let id = self.lookup_id(name)?;
 
+                match self.items.get(&id).unwrap() {
+                    $($thing => {Ok((id, $conversion))})*
+                    other => Err(Error::$err(name.clone(), other.clone())),
+                }
+            }
+        )*
+    }
+}
+
+impl SymbolTable {
+    // Define accessors for accessing items. *_by_id looks up things under the
+    // assumption that the name is in the symtab, and that it is the specified type.
+    // If this is not true, it panics.
+    //
+    // lookup_* looks up items by path, and returns the NameID and item if successful.
+    // If the path is not in scope, or the item is not the right kind, returns an error.
+    item_accessors! {
+        entity_by_id, lookup_entity, EntityHead, NotAnEntity {
+            Thing::Entity(head) => head.clone()
+        },
+        pipeline_by_id, lookup_pipeline, PipelineHead, NotAPipeline {
+            Thing::Pipeline(head) => head.clone()
+        },
+        function_by_id, lookup_function, FunctionHead, NotAFunction {
+            Thing::Function(head) => head.clone(),
+            Thing::EnumVariant(variant) => variant.as_function_head().at_loc(&variant),
+        },
+        type_symbol_by_id, lookup_type_symbol, TypeSymbol, NotATypeSymbol {
+            Thing::Type(t) => t.clone(),
+        },
+        enum_variant_by_id, lookup_enum_variant, EnumVariant, NotAnEnumVariant {
+            Thing::EnumVariant(variant) => variant.clone()
+        }
+    }
     pub fn has_symbol(&self, name: Path) -> bool {
         match self.lookup_id(&name.nowhere()) {
             Ok(_) => true,
@@ -208,18 +254,7 @@ impl SymbolTable {
             Err(Error::NotAnEntity(_, _)) => unreachable!(),
             Err(Error::NotAPipeline(_, _)) => unreachable!(),
             Err(Error::NotAFunction(_, _)) => unreachable!(),
-        }
-    }
-
-    pub fn lookup_type_symbol(
-        &self,
-        name: &Loc<Path>,
-    ) -> Result<(NameID, &Loc<TypeSymbol>), Error> {
-        let id = self.lookup_id(name)?;
-
-        match self.items.get(&id).unwrap() {
-            Thing::Type(t) => Ok((id, t)),
-            other => Err(Error::NotATypeSymbol(name.clone(), other.clone())),
+            Err(Error::NotAnEnumVariant(_, _)) => unreachable!(),
         }
     }
 
@@ -232,15 +267,6 @@ impl SymbolTable {
         }
     }
 
-    pub fn lookup_entity(&self, name: &Loc<Path>) -> Result<(NameID, &Loc<EntityHead>), Error> {
-        let id = self.lookup_id(name)?;
-
-        match self.items.get(&id).unwrap() {
-            Thing::Entity(head) => Ok((id, head)),
-            other => Err(Error::NotAnEntity(name.clone(), other.clone())),
-        }
-    }
-
     pub fn lookup_id(&self, name: &Loc<Path>) -> Result<NameID, Error> {
         for tab in self.symbols.iter().rev() {
             if let Some(id) = tab.get(&name) {
@@ -248,22 +274,6 @@ impl SymbolTable {
             }
         }
         Err(Error::NoSuchSymbol(name.clone()))
-    }
-    pub fn lookup_pipeline(&self, name: &Loc<Path>) -> Result<(NameID, &Loc<PipelineHead>), Error> {
-        let id = self.lookup_id(name)?;
-
-        match self.items.get(&id).unwrap() {
-            Thing::Pipeline(head) => Ok((id, head)),
-            other => Err(Error::NotAPipeline(name.clone(), other.clone())),
-        }
-    }
-    pub fn lookup_function(&self, name: &Loc<Path>) -> Result<(NameID, &Loc<FunctionHead>), Error> {
-        let id = self.lookup_id(name)?;
-
-        match self.items.get(&id).unwrap() {
-            Thing::Function(decl) => Ok((id, decl)),
-            other => Err(Error::NotAFunction(name.clone(), other.clone())),
-        }
     }
 }
 
@@ -274,7 +284,7 @@ impl SymbolTable {
 /// the symtab, thus avoiding collisions with things added using the Id tracker.
 pub struct FrozenSymtab {
     inner: SymbolTable,
-    pub id_tracker: IdTracker,
+    pub id_tracker: NameIdTracker,
 }
 
 impl FrozenSymtab {

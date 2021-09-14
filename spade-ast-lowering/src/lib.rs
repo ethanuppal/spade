@@ -15,7 +15,7 @@ use std::collections::HashMap;
 use thiserror::Error;
 
 use spade_ast as ast;
-use spade_common::id_tracker::IdTracker;
+use spade_common::id_tracker::ExprIdTracker;
 use spade_common::{
     location_info::{Loc, WithLocation},
     name::Path,
@@ -32,10 +32,10 @@ trait LocExt<T> {
         &self,
         visitor: V,
         symtab: &mut SymbolTable,
-        idtracker: &mut IdTracker,
+        idtracker: &mut ExprIdTracker,
     ) -> Result<Loc<U>>
     where
-        V: Fn(&T, &mut SymbolTable, &mut IdTracker) -> Result<U>;
+        V: Fn(&T, &mut SymbolTable, &mut ExprIdTracker) -> Result<U>;
 }
 
 impl<T> LocExt<T> for Loc<T> {
@@ -43,10 +43,10 @@ impl<T> LocExt<T> for Loc<T> {
         &self,
         visitor: V,
         symtab: &mut SymbolTable,
-        idtracker: &mut IdTracker,
+        idtracker: &mut ExprIdTracker,
     ) -> Result<Loc<U>>
     where
-        V: Fn(&T, &mut SymbolTable, &mut IdTracker) -> Result<U>,
+        V: Fn(&T, &mut SymbolTable, &mut ExprIdTracker) -> Result<U>,
     {
         self.map_ref(|t| visitor(&t, symtab, idtracker))
             .map_err(|e, _| e)
@@ -181,7 +181,7 @@ pub fn visit_entity(
     item: &Loc<ast::Entity>,
     namespace: &Path,
     symtab: &mut SymbolTable,
-    idtracker: &mut IdTracker,
+    idtracker: &mut ExprIdTracker,
 ) -> Result<Loc<hir::Entity>> {
     symtab.new_scope();
 
@@ -224,7 +224,7 @@ pub fn visit_item(
     item: &ast::Item,
     namespace: &Path,
     symtab: &mut SymbolTable,
-    idtracker: &mut IdTracker,
+    idtracker: &mut ExprIdTracker,
 ) -> Result<Option<hir::Item>> {
     match item {
         ast::Item::Entity(e) => Ok(Some(hir::Item::Entity(visit_entity(
@@ -248,7 +248,7 @@ pub fn visit_module_body(
     module: &ast::ModuleBody,
     namespace: &Path,
     symtab: &mut SymbolTable,
-    idtracker: &mut IdTracker,
+    idtracker: &mut ExprIdTracker,
 ) -> Result<hir::ItemList> {
     let all_items = module
         .members
@@ -290,18 +290,42 @@ pub fn visit_module_body(
 pub fn visit_pattern(
     p: &ast::Pattern,
     symtab: &mut SymbolTable,
-    idtracker: &mut IdTracker,
+    idtracker: &mut ExprIdTracker,
 ) -> Result<hir::Pattern> {
     let kind = match &p {
         ast::Pattern::Integer(_) => todo!(),
         ast::Pattern::Bool(_) => todo!(),
-        ast::Pattern::Name(ident) => {
-            let name_id = symtab.add_thing(
-                path_from_ident(ident.clone()).inner,
-                Thing::Variable(ident.clone()),
-            );
+        ast::Pattern::Path(path) => {
+            // TODO: Support paths with a single identifier refering to constants
+            // and types
+            match path.inner.0.as_slice() {
+                [ident] => {
+                    let name_id = symtab.add_thing(
+                        path_from_ident(ident.clone()).inner,
+                        Thing::Variable(ident.clone()),
+                    );
 
-            hir::PatternKind::Name(name_id.at_loc(&ident))
+                    hir::PatternKind::Name(name_id.at_loc(&ident))
+                }
+                [] => unreachable!(),
+                _ => match symtab.lookup_enum_variant(path) {
+                    Ok((name_id, variant)) => {
+                        if variant.inner.params.argument_num() != 0 {
+                            return Err(Error::PatternListLengthMismatch {
+                                expected: variant.inner.params.argument_num(),
+                                got: 0,
+                                at: path.loc(),
+                            });
+                        } else {
+                            hir::PatternKind::Type(name_id.at(path), vec![])
+                        }
+                    }
+                    Err(spade_hir::symbol_table::Error::NoSuchSymbol(_)) => {
+                        todo!("Handle new symbols")
+                    }
+                    Err(e) => return Err(e.into()),
+                },
+            }
         }
         ast::Pattern::Tuple(pattern) => {
             let inner = pattern
@@ -310,7 +334,48 @@ pub fn visit_pattern(
                 .collect::<Result<_>>()?;
             hir::PatternKind::Tuple(inner)
         }
-        ast::Pattern::Type(_, _) => todo!(),
+        ast::Pattern::Type(path, args) => {
+            // Look up the name to see if it's an enum variant.
+            match symtab.lookup_enum_variant(path) {
+                Ok((name_id, variant)) => {
+                    match &args.inner {
+                        ast::ArgumentPattern::Named(_) => {
+                            todo!("support positional enum destructuring")
+                        }
+                        ast::ArgumentPattern::Positional(patterns) => {
+                            // Ensure we have the correct amount of arguments
+                            if variant.inner.params.argument_num() != patterns.len() {
+                                return Err(Error::PatternListLengthMismatch {
+                                    expected: variant.inner.params.argument_num(),
+                                    got: patterns.len(),
+                                    at: args.loc(),
+                                });
+                            }
+
+                            let patterns = patterns
+                                .iter()
+                                .zip(variant.inner.params.0.iter())
+                                .map(|(p, arg)| {
+                                    let pat =
+                                        p.try_map_ref(|p| visit_pattern(p, symtab, idtracker))?;
+                                    Ok(hir::PatternArgument {
+                                        target: arg.0.clone(),
+                                        value: pat,
+                                        kind: hir::ArgumentKind::Positional,
+                                    })
+                                })
+                                .collect::<Result<Vec<_>>>()?;
+
+                            hir::PatternKind::Type(name_id.at(path), patterns)
+                        }
+                    }
+                }
+                Err(spade_hir::symbol_table::Error::NoSuchSymbol(_)) => {
+                    todo!("Handle new symbols")
+                }
+                Err(e) => return Err(e.into()),
+            }
+        }
     };
     Ok(kind.with_id(idtracker.next()))
 }
@@ -318,7 +383,7 @@ pub fn visit_pattern(
 pub fn visit_statement(
     s: &Loc<ast::Statement>,
     symtab: &mut SymbolTable,
-    idtracker: &mut IdTracker,
+    idtracker: &mut ExprIdTracker,
 ) -> Result<Loc<hir::Statement>> {
     let (s, span) = s.split_ref();
     match s {
@@ -346,7 +411,7 @@ fn visit_argument_list(
     arguments: &Loc<ast::ArgumentList>,
     inputs: &hir::ParameterList,
     symtab: &mut SymbolTable,
-    idtracker: &mut IdTracker,
+    idtracker: &mut ExprIdTracker,
 ) -> Result<Vec<hir::Argument>> {
     match &arguments.inner {
         ast::ArgumentList::Positional(args) => {
@@ -467,7 +532,7 @@ fn visit_argument_list(
 pub fn visit_expression(
     e: &ast::Expression,
     symtab: &mut SymbolTable,
-    idtracker: &mut IdTracker,
+    idtracker: &mut ExprIdTracker,
 ) -> Result<hir::Expression> {
     match e {
         ast::Expression::IntLiteral(val) => Ok(hir::ExprKind::IntLiteral(val.clone())),
@@ -541,12 +606,14 @@ pub fn visit_expression(
         ast::Expression::Match(expression, branches) => {
             let e = expression.try_visit(visit_expression, symtab, idtracker)?;
 
-            let b = branches.iter().map(|(pattern, result)| {
-                let p = pattern.try_visit(visit_pattern, symtab, idtracker)?;
-                let r = result.try_visit(visit_expression, symtab, idtracker)?;
-                Ok((p, r))
-            })
-            .collect::<Result<Vec<_>>>()?;
+            let b = branches
+                .iter()
+                .map(|(pattern, result)| {
+                    let p = pattern.try_visit(visit_pattern, symtab, idtracker)?;
+                    let r = result.try_visit(visit_expression, symtab, idtracker)?;
+                    Ok((p, r))
+                })
+                .collect::<Result<Vec<_>>>()?;
 
             Ok(hir::ExprKind::Match(Box::new(e), b))
         }
@@ -573,7 +640,7 @@ pub fn visit_expression(
 pub fn visit_block(
     b: &ast::Block,
     symtab: &mut SymbolTable,
-    idtracker: &mut IdTracker,
+    idtracker: &mut ExprIdTracker,
 ) -> Result<hir::Block> {
     symtab.new_scope();
     let mut statements = vec![];
@@ -591,7 +658,7 @@ pub fn visit_block(
 pub fn visit_register(
     reg: &Loc<ast::Register>,
     symtab: &mut SymbolTable,
-    idtracker: &mut IdTracker,
+    idtracker: &mut ExprIdTracker,
 ) -> Result<Loc<hir::Register>> {
     let (reg, loc) = reg.split_ref();
 
@@ -684,7 +751,7 @@ mod entity_visiting {
         .nowhere();
 
         let mut symtab = SymbolTable::new();
-        let mut idtracker = IdTracker::new();
+        let mut idtracker = ExprIdTracker::new();
         global_symbols::visit_entity(&input, &Path(vec![]), &mut symtab)
             .expect("Failed to collect global symbols");
 
@@ -749,7 +816,7 @@ mod entity_visiting {
         // };
 
         // let mut symtab = SymbolTable::new();
-        // let mut idtracker = IdTracker::new();
+        // let mut idtracker = ExprIdTracker::new();
 
         // let result = visit_entity(&input, &mut symtab, &mut idtracker);
 
@@ -772,7 +839,7 @@ mod statement_visiting {
     #[test]
     fn bindings_convert_correctly() {
         let mut symtab = SymbolTable::new();
-        let mut idtracker = IdTracker::new();
+        let mut idtracker = ExprIdTracker::new();
 
         let input = ast::Statement::Binding(
             ast::Pattern::name("a"),
@@ -826,7 +893,7 @@ mod statement_visiting {
         .nowhere();
 
         let mut symtab = SymbolTable::new();
-        let mut idtracker = IdTracker::new();
+        let mut idtracker = ExprIdTracker::new();
         let clk_id = symtab.add_local_variable(ast_ident("clk"));
         assert_eq!(clk_id.0, 0);
         assert_eq!(
@@ -841,6 +908,7 @@ mod statement_visiting {
 mod expression_visiting {
     use super::*;
 
+    use hir::symbol_table::EnumVariant;
     use hir::{FunctionHead, PipelineHead};
     use spade_ast::testutil::{ast_ident, ast_path};
     use spade_common::location_info::WithLocation;
@@ -849,7 +917,7 @@ mod expression_visiting {
     #[test]
     fn int_literals_work() {
         let mut symtab = SymbolTable::new();
-        let mut idtracker = IdTracker::new();
+        let mut idtracker = ExprIdTracker::new();
         let input = ast::Expression::IntLiteral(123);
         let expected = hir::ExprKind::IntLiteral(123).idless();
 
@@ -864,7 +932,7 @@ mod expression_visiting {
             #[test]
             fn $test_name() {
                 let mut symtab = SymbolTable::new();
-                let mut idtracker = IdTracker::new();
+                let mut idtracker = ExprIdTracker::new();
                 let input = ast::Expression::BinaryOperator(
                     Box::new(ast::Expression::IntLiteral(123).nowhere()),
                     spade_ast::BinaryOperator::$token,
@@ -892,7 +960,7 @@ mod expression_visiting {
     #[test]
     fn identifiers_cause_error_if_undefined() {
         let mut symtab = SymbolTable::new();
-        let mut idtracker = IdTracker::new();
+        let mut idtracker = ExprIdTracker::new();
         let input = ast::Expression::Identifier(ast_path("test"));
 
         assert_eq!(
@@ -926,7 +994,7 @@ mod expression_visiting {
         .idless();
 
         let mut symtab = SymbolTable::new();
-        let mut idtracker = IdTracker::new();
+        let mut idtracker = ExprIdTracker::new();
         assert_eq!(
             visit_expression(&input, &mut symtab, &mut idtracker),
             Ok(expected)
@@ -975,7 +1043,7 @@ mod expression_visiting {
         .idless();
 
         let mut symtab = SymbolTable::new();
-        let mut idtracker = IdTracker::new();
+        let mut idtracker = ExprIdTracker::new();
         assert_eq!(
             visit_expression(&input, &mut symtab, &mut idtracker),
             Ok(expected)
@@ -984,26 +1052,145 @@ mod expression_visiting {
 
     #[test]
     fn match_expressions_work() {
-        let input = ast::Expression::Match (
+        let input = ast::Expression::Match(
             Box::new(ast::Expression::IntLiteral(1).nowhere()),
-            vec![
-                (ast::Pattern::name("x"), ast::Expression::IntLiteral(2).nowhere())
-            ]
+            vec![(
+                ast::Pattern::name("x"),
+                ast::Expression::IntLiteral(2).nowhere(),
+            )],
         );
 
         let expected = hir::ExprKind::Match(
             Box::new(hir::ExprKind::IntLiteral(1).idless().nowhere()),
-            vec! [
-                (
-                    hir::PatternKind::Name(name_id(0, "x")).idless().nowhere(),
-                    hir::ExprKind::IntLiteral(2).idless().nowhere()
-                )
-            ]
-        ).idless();
+            vec![(
+                hir::PatternKind::Name(name_id(0, "x")).idless().nowhere(),
+                hir::ExprKind::IntLiteral(2).idless().nowhere(),
+            )],
+        )
+        .idless();
 
         let mut symtab = SymbolTable::new();
-        let mut idtracker = IdTracker::new();
-        assert_eq!(visit_expression(&input, &mut symtab, &mut idtracker), Ok(expected))
+        let mut idtracker = ExprIdTracker::new();
+        assert_eq!(
+            visit_expression(&input, &mut symtab, &mut idtracker),
+            Ok(expected)
+        )
+    }
+
+    #[test]
+    fn match_expressions_with_enum_members_works() {
+        let input = ast::Expression::Match(
+            Box::new(ast::Expression::IntLiteral(1).nowhere()),
+            vec![(
+                ast::Pattern::Type(
+                    ast_path("x"),
+                    ast::ArgumentPattern::Positional(vec![
+                        ast::Pattern::Path(ast_path("y")).nowhere()
+                    ])
+                    .nowhere(),
+                )
+                .nowhere(),
+                ast::Expression::Identifier(ast_path("y")).nowhere(),
+            )],
+        );
+
+        let expected = hir::ExprKind::Match(
+            Box::new(hir::ExprKind::IntLiteral(1).idless().nowhere()),
+            vec![(
+                hir::PatternKind::Type(
+                    name_id(100, "x"),
+                    vec![hir::PatternArgument {
+                        target: ast_ident("x"),
+                        value: hir::PatternKind::Name(name_id(0, "y")).idless().nowhere(),
+                        kind: hir::ArgumentKind::Positional,
+                    }],
+                )
+                .idless()
+                .nowhere(),
+                hir::ExprKind::Identifier(name_id(0, "y").inner)
+                    .idless()
+                    .nowhere(),
+            )],
+        )
+        .idless();
+
+        let mut symtab = SymbolTable::new();
+
+        let enum_variant = EnumVariant {
+            output_type: hir::TypeSpec::Unit(().nowhere()).nowhere(),
+            option: 0,
+            params: hir::ParameterList(vec![(
+                ast_ident("x"),
+                hir::TypeSpec::Unit(().nowhere()).nowhere(),
+            )]),
+            type_params: vec![],
+        }
+        .nowhere();
+
+        symtab.add_thing_with_id(100, ast_path("x").inner, Thing::EnumVariant(enum_variant));
+        let mut idtracker = ExprIdTracker::new();
+        assert_eq!(
+            visit_expression(&input, &mut symtab, &mut idtracker),
+            Ok(expected)
+        )
+    }
+
+    #[test]
+    fn match_expressions_with_0_argument_enum_works() {
+        let input = ast::Expression::Match(
+            Box::new(ast::Expression::IntLiteral(1).nowhere()),
+            vec![(
+                ast::Pattern::Type(
+                    ast_path("x"),
+                    ast::ArgumentPattern::Positional(vec![
+                        ast::Pattern::Path(ast_path("y")).nowhere()
+                    ])
+                    .nowhere(),
+                )
+                .nowhere(),
+                ast::Expression::Identifier(ast_path("y")).nowhere(),
+            )],
+        );
+
+        let expected = hir::ExprKind::Match(
+            Box::new(hir::ExprKind::IntLiteral(1).idless().nowhere()),
+            vec![(
+                hir::PatternKind::Type(
+                    name_id(100, "x"),
+                    vec![hir::PatternArgument {
+                        target: ast_ident("x"),
+                        value: hir::PatternKind::Name(name_id(0, "y")).idless().nowhere(),
+                        kind: hir::ArgumentKind::Positional,
+                    }],
+                )
+                .idless()
+                .nowhere(),
+                hir::ExprKind::Identifier(name_id(0, "y").inner)
+                    .idless()
+                    .nowhere(),
+            )],
+        )
+        .idless();
+
+        let mut symtab = SymbolTable::new();
+
+        let enum_variant = EnumVariant {
+            output_type: hir::TypeSpec::Unit(().nowhere()).nowhere(),
+            option: 0,
+            params: hir::ParameterList(vec![(
+                ast_ident("x"),
+                hir::TypeSpec::Unit(().nowhere()).nowhere(),
+            )]),
+            type_params: vec![],
+        }
+        .nowhere();
+
+        symtab.add_thing_with_id(100, ast_path("x").inner, Thing::EnumVariant(enum_variant));
+        let mut idtracker = ExprIdTracker::new();
+        assert_eq!(
+            visit_expression(&input, &mut symtab, &mut idtracker),
+            Ok(expected)
+        )
     }
 
     #[test]
@@ -1036,7 +1223,7 @@ mod expression_visiting {
         .idless();
 
         let mut symtab = SymbolTable::new();
-        let mut idtracker = IdTracker::new();
+        let mut idtracker = ExprIdTracker::new();
 
         symtab.add_thing(
             ast_path("test").inner,
@@ -1089,7 +1276,7 @@ mod expression_visiting {
         .idless();
 
         let mut symtab = SymbolTable::new();
-        let mut idtracker = IdTracker::new();
+        let mut idtracker = ExprIdTracker::new();
 
         symtab.add_thing(
             ast_path("test").inner,
@@ -1142,7 +1329,7 @@ mod expression_visiting {
         .idless();
 
         let mut symtab = SymbolTable::new();
-        let mut idtracker = IdTracker::new();
+        let mut idtracker = ExprIdTracker::new();
 
         symtab.add_thing(
             ast_path("test").inner,
@@ -1183,7 +1370,7 @@ mod expression_visiting {
                     ).nowhere();
 
                 let mut symtab = SymbolTable::new();
-                let mut idtracker = IdTracker::new();
+                let mut idtracker = ExprIdTracker::new();
 
                 symtab.add_thing(ast_path("test").inner, Thing::Entity(EntityHead {
                     inputs: hir::ParameterList(vec! [
@@ -1234,7 +1421,7 @@ mod expression_visiting {
                     ).nowhere();
 
                 let mut symtab = $symtab;
-                let mut idtracker = IdTracker::new();
+                let mut idtracker = ExprIdTracker::new();
 
                 symtab.add_thing(ast_path("test").inner, Thing::Entity(EntityHead {
                     inputs: hir::ParameterList(vec! [
@@ -1313,7 +1500,7 @@ mod expression_visiting {
         .idless();
 
         let mut symtab = SymbolTable::new();
-        let mut idtracker = IdTracker::new();
+        let mut idtracker = ExprIdTracker::new();
 
         symtab.add_thing(
             ast_path("test").inner,
@@ -1350,7 +1537,7 @@ mod expression_visiting {
         .nowhere();
 
         let mut symtab = SymbolTable::new();
-        let mut idtracker = IdTracker::new();
+        let mut idtracker = ExprIdTracker::new();
 
         symtab.add_thing(
             ast_path("test").inner,
@@ -1382,7 +1569,7 @@ mod expression_visiting {
         let input = ast::Expression::Identifier(ast_path("test")).nowhere();
 
         let mut symtab = SymbolTable::new();
-        let mut idtracker = IdTracker::new();
+        let mut idtracker = ExprIdTracker::new();
 
         let head = Thing::Function(
             FunctionHead {
@@ -1445,7 +1632,7 @@ mod register_visiting {
         .nowhere();
 
         let mut symtab = SymbolTable::new();
-        let mut idtracker = IdTracker::new();
+        let mut idtracker = ExprIdTracker::new();
         let clk_id = symtab.add_local_variable(ast_ident("clk"));
         assert_eq!(clk_id.0, 0);
         let rst_id = symtab.add_local_variable(ast_ident("rst"));
@@ -1505,7 +1692,7 @@ mod item_visiting {
         );
 
         let mut symtab = SymbolTable::new();
-        let mut idtracker = IdTracker::new();
+        let mut idtracker = ExprIdTracker::new();
         let namespace = Path(vec![]);
         crate::global_symbols::visit_item(&input, &namespace, &mut symtab, &mut ItemList::new())
             .unwrap();
@@ -1574,7 +1761,7 @@ mod module_visiting {
         };
 
         let mut symtab = SymbolTable::new();
-        let mut idtracker = IdTracker::new();
+        let mut idtracker = ExprIdTracker::new();
         global_symbols::gather_symbols(&input, &Path(vec![]), &mut symtab, &mut ItemList::new())
             .expect("failed to collect global symbols");
         assert_eq!(

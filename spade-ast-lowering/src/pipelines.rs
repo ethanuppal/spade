@@ -2,7 +2,7 @@ use std::collections::HashSet;
 
 use spade_ast as ast;
 use spade_common::{
-    id_tracker::IdTracker,
+    id_tracker::ExprIdTracker,
     location_info::{Loc, WithLocation},
     name::{NameID, Path},
 };
@@ -59,7 +59,7 @@ pub fn pipeline_head(input: &ast::Pipeline, symtab: &mut SymbolTable) -> Result<
 pub fn visit_pipeline_binding(
     binding: &ast::PipelineBinding,
     symtab: &mut SymbolTable,
-    idtracker: &mut IdTracker,
+    idtracker: &mut ExprIdTracker,
     pipeline_state: &mut PipelineState,
 ) -> Result<hir::PipelineBinding> {
     let ast::PipelineBinding {
@@ -96,7 +96,7 @@ pub fn visit_pipeline_binding(
 pub fn visit_stage(
     stage: &ast::PipelineStage,
     symtab: &mut SymbolTable,
-    idtracker: &mut IdTracker,
+    idtracker: &mut ExprIdTracker,
     pipeline_state: &mut PipelineState,
 ) -> Result<hir::PipelineStage> {
     let ast::PipelineStage { bindings } = stage;
@@ -119,7 +119,7 @@ pub fn visit_pipeline(
     pipeline: &Loc<ast::Pipeline>,
     namespace: &Path,
     symtab: &mut SymbolTable,
-    idtracker: &mut IdTracker,
+    idtracker: &mut ExprIdTracker,
 ) -> Result<Loc<hir::Pipeline>> {
     let ast::Pipeline {
         depth,
@@ -226,7 +226,7 @@ mod binding_visiting {
         // Scope for the local bindings
         symtab.new_scope();
 
-        let mut id_tracker = IdTracker::new();
+        let mut id_tracker = ExprIdTracker::new();
         let mut pipeline_state = PipelineState::new();
 
         let result =
@@ -271,7 +271,7 @@ mod binding_visiting {
         // Scope for the local bindings
         symtab.new_scope();
 
-        let mut id_tracker = IdTracker::new();
+        let mut id_tracker = ExprIdTracker::new();
         let mut pipeline_state = PipelineState::new();
 
         let result =
@@ -341,7 +341,7 @@ mod stage_visiting {
         // Scope for the pipeline-visible items
         symtab.new_scope();
 
-        let mut id_tracker = IdTracker::new();
+        let mut id_tracker = ExprIdTracker::new();
         let mut pipeline_state = PipelineState::new();
 
         let result = visit_stage(&input, &mut symtab, &mut id_tracker, &mut pipeline_state);
@@ -426,7 +426,7 @@ mod pipeline_visiting {
         .nowhere();
 
         let mut symtab = SymbolTable::new();
-        let mut id_tracker = IdTracker::new();
+        let mut id_tracker = ExprIdTracker::new();
 
         crate::global_symbols::visit_pipeline(&input, &Path(vec![]), &mut symtab)
             .expect("Failed to add pipeline to symtab");
@@ -455,7 +455,7 @@ mod pipeline_visiting {
         .nowhere();
 
         let mut symtab = SymbolTable::new();
-        let mut id_tracker = IdTracker::new();
+        let mut id_tracker = ExprIdTracker::new();
 
         crate::global_symbols::visit_pipeline(&input, &Path(vec![]), &mut symtab)
             .expect("Failed to add pipeline to symtab");
@@ -488,7 +488,7 @@ mod pipeline_visiting {
         .nowhere();
 
         let mut symtab = SymbolTable::new();
-        let mut id_tracker = IdTracker::new();
+        let mut id_tracker = ExprIdTracker::new();
 
         crate::global_symbols::visit_pipeline(&input, &Path(vec![]), &mut symtab)
             .expect("Failed to add pipeline to symtab");
@@ -514,7 +514,7 @@ mod pipeline_visiting {
         .nowhere();
 
         let mut symtab = SymbolTable::new();
-        let mut id_tracker = IdTracker::new();
+        let mut id_tracker = ExprIdTracker::new();
 
         crate::global_symbols::visit_pipeline(&input, &Path(vec![]), &mut symtab)
             .expect("Failed to add pipeline to symtab");

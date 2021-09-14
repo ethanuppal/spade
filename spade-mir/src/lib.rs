@@ -1,6 +1,7 @@
 pub mod codegen;
 pub mod diff;
 pub mod diff_printing;
+mod enum_util;
 pub mod macros;
 pub mod types;
 mod verilog;
@@ -49,12 +50,29 @@ pub enum Operator {
     LogicalOr,
     /// Select [1] if [0] else [2]
     Select,
+    /// Corresponds to a match statement. If value [0] is true, select [1], if [2] holds, select
+    /// [3] and so on. Values are priorotized in order, i.e. if both [0] and [2] hold, [1] is
+    /// selected
+    // NOTE: We may want to add a MatchUnique for cases where we can guarantee uniqueness,
+    // typically match statements with no wildcards
+    Match,
     /// Construct a tuple from all the operand expressions
     ConstructTuple,
     /// Construct the nth enum variant with the operand expressions as the payload
     ConstructEnum {
         variant: usize,
         variant_count: usize,
+    },
+    /// 1 if the input is the specified enum variant
+    IsEnumVariant {
+        variant: usize,
+        enum_type: Type,
+    },
+    /// Get the `member_index`th member of the `variant`th variant.
+    EnumMember {
+        enum_type: Type,
+        variant: usize,
+        member_index: usize,
     },
     /// Get the `.0`th element of a tuple. The types of the elements are specified
     /// in the second argument
@@ -80,11 +98,21 @@ impl std::fmt::Display for Operator {
             Operator::LogicalAnd => write!(f, "LogicalAnd"),
             Operator::LogicalOr => write!(f, "LogicalOr"),
             Operator::Select => write!(f, "Select"),
+            Operator::Match => write!(f, "Match"),
             Operator::LeftShift => write!(f, "LeftShift"),
             Operator::ConstructEnum {
                 variant,
                 variant_count,
             } => write!(f, "ConstructEnum({}, {})", variant, variant_count),
+            Operator::IsEnumVariant {
+                variant,
+                enum_type: _,
+            } => write!(f, "IsEnumVariant({})", variant),
+            Operator::EnumMember {
+                variant,
+                member_index,
+                enum_type: _,
+            } => write!(f, "EnumMember({} {})", variant, member_index),
             Operator::ConstructTuple => write!(f, "ConstructTuple"),
             Operator::IndexTuple(idx, _) => write!(f, "IndexTuple({})", idx),
             Operator::Instance(name) => write!(f, "Instance({})", name),

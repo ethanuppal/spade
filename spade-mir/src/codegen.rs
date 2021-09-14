@@ -1,4 +1,5 @@
 use crate::{
+    enum_util,
     verilog::{self, assign, logic, size_spec},
     ConstantValue, Entity, Operator, Statement, ValueName,
 };
@@ -50,6 +51,39 @@ fn statement_code(statement: &Statement) -> Code {
                 Operator::RightShift => binop!(">>"),
                 Operator::LogicalAnd => binop!("&&"),
                 Operator::LogicalOr => binop!("||"),
+                Operator::Match => {
+                    assert!(
+                        ops.len() % 2 == 0,
+                        "Match statements must have an even number of operands"
+                    );
+
+                    let num_branches = ops.len() / 2;
+
+                    let mut conditions = vec![];
+                    let mut cases = vec![];
+                    for i in 0..num_branches {
+                        let cond = &ops[i * 2];
+                        let result = &ops[i * 2 + 1];
+
+                        conditions.push(cond.clone());
+
+                        let zeros = (0..i).map(|_| '0').collect::<String>();
+                        let unknowns = (0..(num_branches - i - 1)).map(|_| '?').collect::<String>();
+                        cases.push(format!(
+                            "{}'b{}1{}: {} = {};",
+                            num_branches, zeros, unknowns, name, result
+                        ))
+                    }
+
+                    code! (
+                        [0] "always_comb begin";
+                        [1]     format!("unique casez ({{{}}})", conditions.join(", "));
+                        [2]         cases;
+                        [1]     "endcase";
+                        [0] "end";
+                    )
+                    .to_string()
+                }
                 Operator::Select => {
                     assert!(
                         binding.operands.len() == 3,
@@ -82,7 +116,7 @@ fn statement_code(statement: &Statement) -> Code {
                     variant,
                     variant_count,
                 } => {
-                    let tag_size = (*variant_count as f32).log2().ceil() as usize;
+                    let tag_size = enum_util::tag_size(*variant_count);
 
                     // Compute the amount of undefined bits to put at the end of the literal.
                     // First compute the size of this variant
@@ -110,9 +144,50 @@ fn statement_code(statement: &Statement) -> Code {
 
                     format!("{{{}'d{}{}{}}}", tag_size, variant, ops_text, padding_text)
                 }
+                Operator::IsEnumVariant { variant, enum_type } => {
+                    let tag_size = enum_util::tag_size(enum_type.assume_enum().len());
+                    let total_size = enum_type.size();
+
+                    let tag_end = total_size - 1;
+                    let tag_start = total_size - tag_size as u64;
+
+                    if tag_end == tag_start {
+                        format!("{}[{}] == {}'d{}", ops[0], tag_end, tag_size, variant)
+                    } else {
+                        format!(
+                            "{}[{}:{}] == {}'d{}",
+                            ops[0], tag_end, tag_start, tag_size, variant
+                        )
+                    }
+                }
+                Operator::EnumMember {
+                    variant,
+                    member_index,
+                    enum_type,
+                } => {
+                    let variant_list = enum_type.assume_enum();
+                    let tag_size = enum_util::tag_size(variant_list.len());
+                    let full_size = enum_type.size();
+
+                    let member_start = (tag_size as u64)
+                        + variant_list[*variant][0..*member_index]
+                            .iter()
+                            .map(|t| t.size() as u64)
+                            .sum::<u64>();
+
+                    let member_end = member_start + variant_list[*variant][*member_index].size();
+
+                    format!(
+                        "{}[{}:{}]",
+                        ops[0],
+                        full_size - member_start - 1,
+                        full_size - member_end
+                    )
+                }
                 Operator::ConstructTuple => {
                     // To make index calculations easier, we will store tuples in "inverse order".
                     // i.e. the left-most element is stored to the right in the bit vector.
+                    // TODO: is this comment even correct?
                     format!("{{{}}}", ops.join(", "))
                 }
                 Operator::Instance(_) => {
@@ -136,6 +211,7 @@ fn statement_code(statement: &Statement) -> Code {
 
                     format!("{} {}({});", module_name, instance_name, args)
                 }
+                Operator::Match => format!("{}", expression),
                 _ => format!("assign {} = {};", name, expression),
             };
 
@@ -422,6 +498,24 @@ mod expression_tests {
     }
 
     #[test]
+    fn match_operator_works() {
+        let stmt = statement!(e(0); Type::Int(2); Match; e(1), e(2), e(3), e(4));
+
+        let expected = indoc!(
+            r#"
+            logic[1:0] _e_0;
+            always_comb begin
+                unique casez ({_e_1, _e_3})
+                    2'b1?: _e_0 = _e_2;
+                    2'b01: _e_0 = _e_4;
+                endcase
+            end"#
+        );
+
+        assert_same_code!(&statement_code(&stmt).to_string(), expected);
+    }
+
+    #[test]
     fn boolean_constants_are_1_and_0() {
         let stmt = statement!(const 0; Type::Bool; ConstantValue::Bool(true));
 
@@ -457,6 +551,48 @@ mod expression_tests {
             r#"
             logic[16:0] _e_0;
             assign _e_0 = {2'd2, _e_1, _e_2};"#
+        );
+
+        assert_same_code!(&statement_code(&stmt).to_string(), expected);
+    }
+
+    #[test]
+    fn is_enum_variant_operator_works() {
+        let ty = Type::Enum(vec![vec![], vec![], vec![Type::Int(10), Type::Int(5)]]);
+        let stmt = statement!(e(0); Type::Bool; IsEnumVariant({variant: 2, enum_type: ty}); e(1));
+
+        let expected = indoc!(
+            r#"
+            logic _e_0;
+            assign _e_0 = _e_1[16:15] == 2'd2;"#
+        );
+
+        assert_same_code!(&statement_code(&stmt).to_string(), expected);
+    }
+
+    #[test]
+    fn is_enum_variant_operator_works_for_1_wide_tags() {
+        let ty = Type::Enum(vec![vec![], vec![Type::Int(10), Type::Int(5)]]);
+        let stmt = statement!(e(0); Type::Bool; IsEnumVariant({variant: 1, enum_type: ty}); e(1));
+
+        let expected = indoc!(
+            r#"
+            logic _e_0;
+            assign _e_0 = _e_1[15] == 1'd1;"#
+        );
+
+        assert_same_code!(&statement_code(&stmt).to_string(), expected);
+    }
+
+    #[test]
+    fn enum_member_access_operator_works() {
+        let ty = Type::Enum(vec![vec![], vec![], vec![Type::Int(10), Type::Int(5)]]);
+        let stmt = statement!(e(0); Type::Int(5); EnumMember({variant: 2, member_index: 1, enum_type: ty}); e(1));
+
+        let expected = indoc!(
+            r#"
+            logic[4:0] _e_0;
+            assign _e_0 = _e_1[4:0];"#
         );
 
         assert_same_code!(&statement_code(&stmt).to_string(), expected);

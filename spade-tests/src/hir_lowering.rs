@@ -60,10 +60,11 @@ mod tests {
 
     macro_rules! build_entity {
         ($code:expr) => {{
-            let (processed, symtab, item_list) = parse_typecheck_entity($code);
+            let (processed, mut symtab, mut idtracker, item_list) = parse_typecheck_entity($code);
             let result = generate_entity(
                 &processed.entity,
-                symtab.symtab(),
+                &mut symtab,
+                &mut idtracker,
                 &processed.type_state,
                 &item_list,
             )
@@ -80,7 +81,8 @@ mod tests {
             let ParseTypececkResult {
                 items_with_types,
                 item_list,
-                symtab,
+                mut symtab,
+                mut idtracker,
             } = parse_typecheck_module_body($code);
 
             // TODO: This is copied from the above code, so it is fairly general. Perhaps
@@ -92,7 +94,8 @@ mod tests {
                         result.push(
                             generate_entity(
                                 &processed.entity,
-                                symtab.symtab(),
+                                &mut symtab,
+                                &mut idtracker,
                                 &processed.type_state,
                                 &item_list,
                             )
@@ -104,12 +107,18 @@ mod tests {
                 }
             }
 
-            assert_eq!($expected.len(), result.len(), "Expected {} entities, found {}", $expected.len(), result.len());
+            assert_eq!(
+                $expected.len(),
+                result.len(),
+                "Expected {} entities, found {}",
+                $expected.len(),
+                result.len()
+            );
 
             for (exp, res) in $expected.into_iter().zip(result.into_iter()) {
                 assert_same_mir!(&res, &exp);
             }
-        }
+        };
     }
 
     #[test]
@@ -374,8 +383,8 @@ mod tests {
                 "_i_a", n(1, "a"), tup_type.clone(),
             ) -> Type::Int(16); {
                 (reg e(0); tup_type; clock(n(0, "clk")); n(1, "a"));
-                (n(2, "x"); Type::Int(16); IndexTuple((0, tup_inner.clone())); e(0));
-                (n(3, "y"); Type::Int(8); IndexTuple((1, tup_inner)); e(0));
+                (n(2, "x"); Type::Int(16); IndexTuple((0, tup_inner.clone())); n(1, "a"));
+                (n(3, "y"); Type::Int(8); IndexTuple((1, tup_inner)); n(1, "a"));
             } => n(2, "x")
         };
 
@@ -466,9 +475,12 @@ mod tests {
         let expected = entity!("name"; (
                 "_i_x", n(0, "x"), tup_type.clone(),
             ) -> Type::Int(16); {
+                // NOTE: This line techinically isn't required in this case as it is just an alias,
+                // but removing it seems a bit pointless as it would introduce a special case in
+                // the code
                 (e(0); tup_type; Alias; n(0, "x"));
-                (n(1, "a"); Type::Int(16); IndexTuple((0, tup_inner.clone())); e(0));
-                (n(2, "b"); Type::Int(8); IndexTuple((1, tup_inner)); e(0))
+                (n(1, "a"); Type::Int(16); IndexTuple((0, tup_inner.clone())); n(0, "x"));
+                (n(2, "b"); Type::Int(8); IndexTuple((1, tup_inner)); n(0, "x"))
             } => n(1, "a")
         );
 
@@ -501,7 +513,8 @@ mod tests {
         let ParseTypececkResult {
             items_with_types,
             item_list,
-            symtab,
+            mut idtracker,
+            mut symtab,
         } = parse_typecheck_module_body(code);
 
         let mut result = vec![];
@@ -511,7 +524,8 @@ mod tests {
                     result.push(
                         generate_entity(
                             &processed.entity,
-                            symtab.symtab(),
+                            &mut symtab,
+                            &mut idtracker,
                             &processed.type_state,
                             &item_list,
                         )
@@ -561,6 +575,7 @@ mod tests {
 
         let module = parse_typecheck_module_body(code);
         let mut symtab = module.symtab;
+        let mut idtracker = module.idtracker;
 
         let mut result = vec![];
         for processed in module.items_with_types.executables {
@@ -569,7 +584,8 @@ mod tests {
                     result.push(
                         generate_entity(
                             &processed.entity,
-                            symtab.symtab(),
+                            &mut symtab,
+                            &mut idtracker,
                             &processed.type_state,
                             &module.item_list,
                         )
@@ -582,6 +598,7 @@ mod tests {
                             &processed.pipeline,
                             &processed.type_state,
                             &mut symtab,
+                            &mut idtracker,
                             &module.item_list,
                         )
                         .report_failure(),
@@ -643,12 +660,14 @@ mod tests {
             } => n(34, "res_s2")
         );
 
-        let (processed, mut symbol_tracker, type_list) = parse_typecheck_pipeline(code);
+        let (processed, mut symbol_tracker, mut idtracker, type_list) =
+            parse_typecheck_pipeline(code);
 
         let result = generate_pipeline(
             &processed.pipeline,
             &processed.type_state,
             &mut symbol_tracker,
+            &mut idtracker,
             &type_list,
         )
         .report_failure();
@@ -687,12 +706,14 @@ mod tests {
             } => e(3)
         );
 
-        let (processed, mut symbol_tracker, type_list) = parse_typecheck_pipeline(code);
+        let (processed, mut symbol_tracker, mut idtracker, type_list) =
+            parse_typecheck_pipeline(code);
 
         let result = generate_pipeline(
             &processed.pipeline,
             &processed.type_state,
             &mut symbol_tracker,
+            &mut idtracker,
             &type_list,
         )
         .report_failure();
@@ -718,6 +739,33 @@ mod tests {
                 "_i_payload", n(0, "payload"), Type::Bool,
             ) -> mir_enum.clone(); {
                 (e(1); mir_enum; ConstructEnum({variant: 0, variant_count: 2}); n(0, "payload"));
+            } => e(1)
+        )];
+
+        build_and_compare_entities!(code, expected);
+    }
+
+    #[test]
+    fn enum_instantiation_with_subexpression_works() {
+        let code = r#"
+            enum X {
+                A(payload: int<16>),
+                B
+            }
+
+            entity test(payload: int<16>) -> X {
+                X::A(payload + 1)
+            }
+        "#;
+
+        let mir_enum = Type::Enum(vec![vec![Type::Int(16)], vec![]]);
+
+        let expected = vec![entity!("test"; (
+                "_i_payload", n(0, "payload"), Type::Int(16),
+            ) -> mir_enum.clone(); {
+                (const 3; Type::Int(16); ConstantValue::Int(1));
+                (e(2); Type::Int(16); Add; n(0, "payload"), e(3));
+                (e(1); mir_enum; ConstructEnum({variant: 0, variant_count: 2}); e(2));
             } => e(1)
         )];
 
@@ -762,7 +810,6 @@ mod tests {
             }
         "#;
 
-
         let mir_enum = Type::Enum(vec![vec![Type::Int(5)], vec![]]);
 
         let expected = vec![entity!("test"; (
@@ -786,7 +833,7 @@ mod tests {
             entity unwrap_or_0(e: Option<int<16>>) -> int<16> {
                 match e {
                     Option::Some(x) => x,
-                    Option::None => 0
+                    other => 0
                 }
             }
         "#;
@@ -794,9 +841,14 @@ mod tests {
         let mir_type = Type::Enum(vec![vec![Type::Int(16)], vec![]]);
 
         let expected = vec![
-            entity!{"unwrap_or_0"; ("_i_e", n(0, "e"), mir_type) -> Type::Int(16); {
-
-            } => e(1)}
+            entity! {"unwrap_or_0"; ("_i_e", n(0, "e"), mir_type.clone()) -> Type::Int(16); {
+                // Conditions for branches
+                (e(2); Type::Bool; IsEnumVariant({variant: 0, enum_type: mir_type.clone()}); n(0, "e"));
+                (n(1, "x"); Type::Int(16); EnumMember({variant: 0, member_index: 0, enum_type: mir_type}); n(0, "e"));
+                (const 3; Type::Bool; ConstantValue::Bool(true));
+                (const 5; Type::Int(16); ConstantValue::Int(0));
+                (e(6); Type::Int(16); Match; e(2), n(1, "x"), e(3), e(5));
+            } => e(6)},
         ];
 
         build_and_compare_entities!(code, expected);

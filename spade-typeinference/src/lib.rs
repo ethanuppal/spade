@@ -2,7 +2,7 @@
 // https://www.youtube.com/watch?v=xJXcZp2vgLs
 
 use hir::symbol_table::TypeSymbol;
-use hir::{Argument, ParameterList, Pattern};
+use hir::{Argument, ParameterList, Pattern, PatternArgument};
 use hir::{ExecutableItem, ItemList};
 use parse_tree_macros::trace_typechecker;
 use spade_common::location_info::Loc;
@@ -384,20 +384,19 @@ impl TypeState {
                             Error::UnspecifiedTypeError {
                                 expected,
                                 got,
-                                loc: pattern.loc()
+                                loc: pattern.loc(),
                             }
                         })?;
 
                     if i != 0 {
-                        self.unify_types(&branches[0].1, result, symtab)
-                            .map_err(|(expected, got)| {
-                                Error::MatchBranchMissmatch {
-                                    expected,
-                                    got,
-                                    first_branch: branches[0].1.loc(),
-                                    incorrect_branch: result.loc(),
-                                }
-                            })?;
+                        self.unify_types(&branches[0].1, result, symtab).map_err(
+                            |(expected, got)| Error::MatchBranchMissmatch {
+                                expected,
+                                got,
+                                first_branch: branches[0].1.loc(),
+                                incorrect_branch: result.loc(),
+                            },
+                        )?;
                     }
                 }
 
@@ -520,7 +519,52 @@ impl TypeState {
                 self.unify_types(&new_type, &tuple_type, symtab)
                     .expect("Unification of new_generic with tuple type can not fail");
             }
-            hir::PatternKind::Type(_, _) => todo!(),
+            hir::PatternKind::Type(name, args) => {
+                let enum_variant = symtab.enum_variant_by_id(name).inner;
+
+                let condition_type = Self::type_var_from_hir(&enum_variant.output_type);
+
+                self.unify_types(&new_type, &condition_type, symtab)
+                    .expect("Unification of new_generic with enum cna not fail");
+
+                for (
+                    i,
+                    (
+                        PatternArgument {
+                            target,
+                            value: pattern,
+                            kind,
+                        },
+                        (_, target_type),
+                    ),
+                ) in args.iter().zip(enum_variant.params.0.iter()).enumerate()
+                {
+                    self.visit_pattern(pattern, symtab)?;
+                    let target_type = Self::type_var_from_hir(&target_type);
+
+                    self.unify_types(&target_type, pattern, symtab).map_err(
+                        |(expected, got)| match kind {
+                            hir::ArgumentKind::Positional => Error::PositionalArgumentMismatch {
+                                index: i,
+                                expr: pattern.loc(),
+                                expected,
+                                got,
+                            },
+                            hir::ArgumentKind::Named => Error::NamedArgumentMismatch {
+                                name: target.clone(),
+                                expr: pattern.loc(),
+                                expected,
+                                got,
+                            },
+                            hir::ArgumentKind::ShortNamed => Error::ShortNamedArgumentMismatch {
+                                name: target.clone(),
+                                expected,
+                                got,
+                            },
+                        },
+                    )?;
+                }
+            }
         }
         Ok(())
     }
@@ -1021,20 +1065,19 @@ mod tests {
         let first_pattern = PatternKind::Tuple(vec![
             PatternKind::Name(name_id(10, "x1")).with_id(20).nowhere(),
             PatternKind::Name(name_id(11, "x2")).with_id(21).nowhere(),
-        ]).with_id(22).nowhere();
+        ])
+        .with_id(22)
+        .nowhere();
 
         let input = ExprKind::Match(
             Box::new(Expression::ident(0, 0, "a").nowhere()),
             vec![
-                (
-                    first_pattern,
-                    Expression::ident(1, 1, "b").nowhere()
-                ),
+                (first_pattern, Expression::ident(1, 1, "b").nowhere()),
                 (
                     PatternKind::Name(name_id(11, "y")).with_id(23).nowhere(),
-                    Expression::ident(2, 2, "c").nowhere()
-                )
-            ]
+                    Expression::ident(2, 2, "c").nowhere(),
+                ),
+            ],
         )
         .with_id(3)
         .nowhere();
@@ -1062,7 +1105,6 @@ mod tests {
         ensure_same_type!(state, tb, tc);
         // And that the match block has the same type
         ensure_same_type!(state, tc, t3);
-
 
         // Ensure patterns have same type as each other, and as the expression
         ensure_same_type!(state, ta, t22);

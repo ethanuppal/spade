@@ -75,7 +75,7 @@ fn main() -> Result<()> {
         ));
     }
 
-    let mut idtracker = id_tracker::IdTracker::new();
+    let mut idtracker = id_tracker::ExprIdTracker::new();
     let item_list = try_or_report!(visit_module_body(
         item_list,
         &module_ast,
@@ -94,7 +94,8 @@ fn main() -> Result<()> {
 
                 let mir = try_or_report!(spade_hir_lowering::generate_entity(
                     &e.inner,
-                    frozen_symtab.symtab(),
+                    &mut frozen_symtab,
+                    &mut idtracker,
                     &type_state,
                     &item_list
                 ));
@@ -111,6 +112,7 @@ fn main() -> Result<()> {
                     &p,
                     &type_state,
                     &mut frozen_symtab,
+                    &mut idtracker,
                     &item_list
                 ));
 

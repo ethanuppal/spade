@@ -555,7 +555,7 @@ impl<'a> Parser<'a> {
                     let end = s.eat(&TokenKind::CloseParen)?;
 
                     Ok(Some(
-                        Pattern::Type(path, ArgumentPattern::Positional(inner))
+                        Pattern::Type(path, ArgumentPattern::Positional(inner).nowhere())
                             .between(&start_paren.span, &end.span),
                     ))
                 } else if let Some(start_brace) = s.peek_and_eat(&TokenKind::OpenBrace)? {
@@ -570,7 +570,7 @@ impl<'a> Parser<'a> {
                     let end = s.eat(&TokenKind::CloseBrace)?;
 
                     Ok(Some(
-                        Pattern::Type(path, ArgumentPattern::Named(inner))
+                        Pattern::Type(path, ArgumentPattern::Named(inner).nowhere())
                             .between(&start_brace.span, &end.span),
                     ))
                 } else {
@@ -1588,23 +1588,16 @@ mod tests {
         }
         "#;
 
-        let expected = Expression::Match (
+        let expected = Expression::Match(
             Box::new(Expression::Identifier(ast_path("x")).nowhere()),
             vec![
                 (
-                    Pattern::Tuple(vec![
-                        Pattern::Integer(0).nowhere(),
-                        Pattern::Name(ast_ident("y")).nowhere(),
-                    ])
-                    .nowhere(),
+                    Pattern::Tuple(vec![Pattern::Integer(0).nowhere(), Pattern::name("y")])
+                        .nowhere(),
                     Expression::Identifier(ast_path("y")).nowhere(),
                 ),
                 (
-                    Pattern::Tuple(vec![
-                        Pattern::Name(ast_ident("x")).nowhere(),
-                        Pattern::Name(ast_ident("y")).nowhere(),
-                    ])
-                    .nowhere(),
+                    Pattern::Tuple(vec![Pattern::name("x"), Pattern::name("y")]).nowhere(),
                     Expression::Identifier(ast_path("x")).nowhere(),
                 ),
             ],
@@ -1625,7 +1618,7 @@ mod tests {
 
         let expected = Block {
             statements: vec![Statement::Binding(
-                Pattern::Name(ast_ident("a")).nowhere(),
+                Pattern::name("a"),
                 None,
                 Expression::IntLiteral(0).nowhere(),
             )
@@ -1648,7 +1641,7 @@ mod tests {
 
         let expected = Expression::Block(Box::new(Block {
             statements: vec![Statement::Binding(
-                Pattern::Name(ast_ident("a")).nowhere(),
+                Pattern::name("a"),
                 None,
                 Expression::IntLiteral(0).nowhere(),
             )
@@ -1663,7 +1656,7 @@ mod tests {
     #[test]
     fn bindings_work() {
         let expected = Statement::Binding(
-            Pattern::Name(ast_ident("test")).nowhere(),
+            Pattern::name("test"),
             None,
             Expression::IntLiteral(123).nowhere(),
         )
@@ -1674,7 +1667,7 @@ mod tests {
     #[test]
     fn bindings_with_types_work() {
         let expected = Statement::Binding(
-            Pattern::Name(ast_ident("test")).nowhere(),
+            Pattern::name("test"),
             Some(TypeSpec::Named(ast_path("bool"), vec![]).nowhere()),
             Expression::IntLiteral(123).nowhere(),
         )
@@ -1692,13 +1685,13 @@ mod tests {
             body: Expression::Block(Box::new(Block {
                 statements: vec![
                     Statement::Binding(
-                        Pattern::Name(ast_ident("test")).nowhere(),
+                        Pattern::name("test"),
                         None,
                         Expression::IntLiteral(123).nowhere(),
                     )
                     .nowhere(),
                     Statement::Binding(
-                        Pattern::Name(ast_ident("test2")).nowhere(),
+                        Pattern::name("test2"),
                         None,
                         Expression::IntLiteral(123).nowhere(),
                     )
@@ -1761,7 +1754,7 @@ mod tests {
 
         let expected = Statement::Register(
             Register {
-                pattern: Pattern::Name(ast_ident("name")).nowhere(),
+                pattern: Pattern::name("name"),
                 clock: Expression::Identifier(ast_path("clk")).nowhere(),
                 reset: None,
                 value: Expression::IntLiteral(1).nowhere(),
@@ -1780,7 +1773,7 @@ mod tests {
 
         let expected = Statement::Register(
             Register {
-                pattern: Pattern::Name(ast_ident("name")).nowhere(),
+                pattern: Pattern::name("name"),
                 clock: Expression::Identifier(ast_path("clk")).nowhere(),
                 reset: Some((
                     Expression::Identifier(ast_path("rst")).nowhere(),
@@ -1802,7 +1795,7 @@ mod tests {
 
         let expected = Statement::Register(
             Register {
-                pattern: Pattern::Name(ast_ident("name")).nowhere(),
+                pattern: Pattern::name("name"),
                 clock: Expression::Identifier(ast_path("clk")).nowhere(),
                 reset: Some((
                     Expression::Identifier(ast_path("rst")).nowhere(),
@@ -2362,7 +2355,7 @@ mod tests {
 
         let expected = Pattern::Type(
             ast_path("SomeType"),
-            ArgumentPattern::Positional(vec![Pattern::name("x"), Pattern::name("y")]),
+            ArgumentPattern::Positional(vec![Pattern::name("x"), Pattern::name("y")]).nowhere(),
         )
         .nowhere();
 
@@ -2378,7 +2371,8 @@ mod tests {
             ArgumentPattern::Named(vec![
                 (ast_ident("x"), Pattern::name("a")),
                 (ast_ident("y"), Pattern::name("b")),
-            ]),
+            ])
+            .nowhere(),
         )
         .nowhere();
 

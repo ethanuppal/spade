@@ -1,12 +1,10 @@
 use parse_tree_macros::local_impl;
 use spade_common::{
+    id_tracker::ExprIdTracker,
     location_info::WithLocation,
     name::{Identifier, NameID},
 };
-use spade_hir::{
-    symbol_table::{FrozenSymtab, SymbolTable},
-    ItemList, Pipeline, PipelineBinding, PipelineStage,
-};
+use spade_hir::{symbol_table::FrozenSymtab, ItemList, Pipeline, PipelineBinding, PipelineStage};
 use spade_mir as mir;
 use spade_typeinference::TypeState;
 
@@ -17,14 +15,17 @@ use crate::{ConcreteTypeLocal, ExprLocal, NameIDLocal, TypeStateLocal};
 impl BindingLocal for PipelineBinding {
     fn lower(
         &self,
-        symtab: &SymbolTable,
+        symtab: &mut FrozenSymtab,
+        idtracker: &mut ExprIdTracker,
         types: &TypeState,
         live_vars: &mut Vec<NameID>,
         subs: &Substitutions,
         item_list: &ItemList,
     ) -> Result<Vec<mir::Statement>> {
         // Code for the expression itself
-        let mut result = self.value.lower(symtab, types, subs, item_list)?;
+        let mut result = self
+            .value
+            .lower(symtab, idtracker, types, subs, item_list)?;
 
         // Add a let binding for this var
         result.push(mir::Statement::Binding(mir::Binding {
@@ -32,7 +33,7 @@ impl BindingLocal for PipelineBinding {
             operator: mir::Operator::Alias,
             operands: vec![self.value.variable(subs)],
             ty: types
-                .type_of_name(&self.name, symtab, &item_list.types)
+                .type_of_name(&self.name, symtab.symtab(), &item_list.types)
                 .to_mir_type(),
         }));
 
@@ -49,6 +50,7 @@ impl StageLocal for PipelineStage {
         &self,
         stage_num: usize,
         symtab: &mut FrozenSymtab,
+        idtracker: &mut ExprIdTracker,
         types: &TypeState,
         live_vars: &mut Vec<NameID>,
         clock: &NameID,
@@ -59,13 +61,8 @@ impl StageLocal for PipelineStage {
 
         // Generate the local expressions
         for binding in &self.bindings {
-            result.append(&mut binding.lower(
-                symtab.symtab(),
-                types,
-                live_vars,
-                subs,
-                item_list,
-            )?);
+            result
+                .append(&mut binding.lower(symtab, idtracker, types, live_vars, subs, item_list)?);
         }
 
         // Generate pipeline regs for previous live vars
@@ -96,6 +93,7 @@ pub fn generate_pipeline<'a>(
     pipeline: &Pipeline,
     types: &TypeState,
     symtab: &mut FrozenSymtab,
+    idtracker: &mut ExprIdTracker,
     item_list: &ItemList,
 ) -> Result<mir::Entity> {
     let Pipeline {
@@ -129,6 +127,7 @@ pub fn generate_pipeline<'a>(
         statements.append(&mut stage.lower(
             stage_num,
             symtab,
+            idtracker,
             types,
             &mut live_vars,
             &inputs[0].0,
@@ -137,7 +136,7 @@ pub fn generate_pipeline<'a>(
         )?);
     }
 
-    statements.append(&mut result.lower(symtab.symtab(), types, &subs, item_list)?);
+    statements.append(&mut result.lower(symtab, idtracker, types, &subs, item_list)?);
 
     let output = result.variable(&subs);
 

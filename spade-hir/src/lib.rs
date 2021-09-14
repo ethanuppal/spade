@@ -25,11 +25,12 @@ pub struct Block {
 impl WithLocation for Block {}
 
 #[derive(PartialEq, Debug, Clone)]
-pub enum ArgumentPattern {
-    Named(Vec<(Loc<NameID>, Loc<Pattern>)>),
-    Positional(Vec<Loc<Pattern>>),
+pub struct PatternArgument {
+    pub target: Loc<Identifier>,
+    pub value: Loc<Pattern>,
+    pub kind: ArgumentKind,
 }
-impl WithLocation for ArgumentPattern {}
+impl WithLocation for PatternArgument {}
 
 #[derive(PartialEq, Debug, Clone)]
 pub enum PatternKind {
@@ -37,7 +38,10 @@ pub enum PatternKind {
     Bool(bool),
     Name(Loc<NameID>),
     Tuple(Vec<Loc<Pattern>>),
-    Type(Loc<NameID>, ArgumentPattern),
+    /// Instantiation of an entity. While the argument contains information about
+    /// argument names, for codegen purposes, the arguments must be ordered in
+    /// the target order. I.e. they should all act as positioanl arguments
+    Type(Loc<NameID>, Vec<PatternArgument>),
 }
 
 #[derive(Debug, Clone)]
@@ -165,7 +169,11 @@ impl WithLocation for Entity {}
 pub struct ParameterList(pub Vec<(Loc<Identifier>, Loc<TypeSpec>)>);
 
 impl ParameterList {
-    // Look up the type of an argument. Panics if no such argument exists
+    pub fn argument_num(&self) -> usize {
+        self.0.len()
+    }
+
+    /// Look up the type of an argument. Panics if no such argument exists
     pub fn arg_type(&self, name: &Identifier) -> TypeSpec {
         for (arg, ty) in &self.0 {
             if &arg.inner == name {

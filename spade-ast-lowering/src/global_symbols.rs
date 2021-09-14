@@ -1,11 +1,10 @@
-use hir::{ItemList, TypeExpression};
+use hir::{symbol_table::EnumVariant, ItemList, TypeExpression};
 use spade_ast as ast;
 use spade_common::{
     location_info::{Loc, WithLocation},
     name::Path,
 };
 use spade_hir as hir;
-use spade_hir::FunctionHead;
 
 use crate::{visit_parameter_list, Result};
 use spade_hir::symbol_table::{GenericArg, SymbolTable, Thing, TypeSymbol};
@@ -170,22 +169,25 @@ pub fn re_visit_type_declaration(
                     .map(|l| visit_parameter_list(&l, symtab))
                     .unwrap_or_else(|| Ok(hir::ParameterList(vec![])))?;
 
-                // Add option constructor to symtab at the outer scope
-                let head = FunctionHead {
-                    inputs: parameter_list.clone(),
-                    output_type: Some(
-                        hir::TypeSpec::Declared(declaration_id.clone(), output_type_exprs.clone())
-                            .at(t),
-                    ),
+                let variant_thing = EnumVariant {
+                    output_type: hir::TypeSpec::Declared(
+                        declaration_id.clone(),
+                        output_type_exprs.clone(),
+                    )
+                    .at(t),
                     type_params: type_params.clone(),
+                    option: i,
+                    params: parameter_list.clone(),
                 };
+
+                // Add option constructor to symtab at the outer scope
                 let variant_path = namespace
                     .push_ident(t.name.clone())
                     .push_ident(option.0.clone());
                 let head_id = symtab.add_thing_at_offset(
                     1,
                     variant_path,
-                    Thing::Function(head.at(&option.0)),
+                    Thing::EnumVariant(variant_thing.at(&option.0)),
                 );
                 // Add option constructor to item list
                 items.executables.insert(

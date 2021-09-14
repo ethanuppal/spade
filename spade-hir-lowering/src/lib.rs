@@ -2,9 +2,12 @@ pub mod error_reporting;
 pub mod pipelines;
 pub mod substitution;
 
+use hir::symbol_table::FrozenSymtab;
 use hir::{ItemList, Pattern, TypeList};
+use mir::types::Type as MirType;
 use mir::ValueName;
 pub use pipelines::generate_pipeline;
+use spade_common::id_tracker::ExprIdTracker;
 use substitution::Substitutions;
 
 use parse_tree_macros::local_impl;
@@ -114,12 +117,19 @@ impl NameIDLocal for NameID {
     }
 }
 
+struct PatternCondition {
+    pub statements: Vec<mir::Statement>,
+    pub result_name: ValueName,
+}
+
 #[local_impl]
 impl PatternLocal for Pattern {
     /// Lower a pattern to its individual parts. Requires the `Pattern::id` to be
     /// present in the code before this
+    /// self_name is the name of the operand which this pattern matches
     fn lower(
         &self,
+        self_name: ValueName,
         symtab: &SymbolTable,
         types: &TypeState,
         subs: &Substitutions,
@@ -137,26 +147,104 @@ impl PatternLocal for Pattern {
                 {
                     inner.clone()
                 } else {
-                    unreachable!("Tupel destructuring of non-tuple");
+                    unreachable!("Tuple destructuring of non-tuple");
                 };
 
                 for (i, p) in inner.iter().enumerate() {
                     result.push(mir::Statement::Binding(mir::Binding {
                         name: p.value_name(),
                         operator: mir::Operator::IndexTuple(i as u64, inner_types.clone()),
-                        operands: vec![self.value_name()],
+                        operands: vec![self_name.clone()],
                         ty: types
                             .type_of_id(p.id, symtab, &item_list.types)
                             .to_mir_type(),
                     }));
 
-                    result.append(&mut p.lower(symtab, types, subs, item_list)?)
+                    result.append(&mut p.lower(p.value_name(), symtab, types, subs, item_list)?)
                 }
             }
-            hir::PatternKind::Type(_, _) => todo!(),
+            hir::PatternKind::Type(path, args) => {
+                let enum_variant = symtab.enum_variant_by_id(path);
+                let self_type = types
+                    .type_of_id(self.id, symtab, &item_list.types)
+                    .to_mir_type();
+
+                for (i, p) in args.iter().enumerate() {
+                    result.push(mir::Statement::Binding(mir::Binding {
+                        name: p.value.value_name(),
+                        operator: mir::Operator::EnumMember {
+                            variant: enum_variant.option,
+                            member_index: i,
+                            enum_type: self_type.clone(),
+                        },
+                        operands: vec![self_name.clone()],
+                        ty: types
+                            .type_of_id(p.value.id, symtab, &item_list.types)
+                            .to_mir_type(),
+                    }));
+
+                    result.append(&mut p.value.lower(
+                        p.value.value_name(),
+                        symtab,
+                        types,
+                        subs,
+                        item_list,
+                    )?)
+                }
+            }
         }
 
         Ok(result)
+    }
+
+    /// Returns MIR code for a condition that must hold for `expr` to satisfy
+    /// this pattern.
+    fn condition(
+        &self,
+        expr: &Loc<Expression>,
+        symtab: &FrozenSymtab,
+        idtracker: &mut ExprIdTracker,
+        types: &TypeState,
+        subs: &Substitutions,
+        item_list: &hir::ItemList,
+    ) -> Result<PatternCondition> {
+        let output_id = idtracker.next();
+        let result_name = ValueName::Expr(output_id);
+        match &self.kind {
+            hir::PatternKind::Integer(_) => todo!("Codegen for integer patterns"),
+            hir::PatternKind::Bool(_) => todo!("Codegen for bool patterns"),
+            hir::PatternKind::Name(_) => Ok(PatternCondition {
+                statements: vec![mir::Statement::Constant(
+                    output_id,
+                    MirType::Bool,
+                    mir::ConstantValue::Bool(true),
+                )],
+                result_name,
+            }),
+            hir::PatternKind::Tuple(_) => todo!("Codegen for tuple patterns"),
+            hir::PatternKind::Type(path, _args) => {
+                let enum_variant = symtab.symtab().enum_variant_by_id(&path);
+
+                let self_type = types
+                    .type_of_id(self.id, symtab.symtab(), &item_list.types)
+                    .to_mir_type();
+
+                let statement = mir::Statement::Binding(mir::Binding {
+                    name: result_name.clone(),
+                    operator: mir::Operator::IsEnumVariant {
+                        variant: enum_variant.option,
+                        enum_type: self_type,
+                    },
+                    operands: vec![expr.variable(subs)],
+                    ty: MirType::Bool,
+                });
+
+                Ok(PatternCondition {
+                    statements: vec![statement],
+                    result_name,
+                })
+            }
+        }
     }
 
     /// Get the name which the whole pattern should be bound. In practice,
@@ -175,15 +263,26 @@ impl PatternLocal for Pattern {
         }
         ValueName::Expr(self.id)
     }
-}
 
-// TODO: Consider adding a proc-macro to add these local derives automatically
+    /// Return true if this pattern is just an alias for another name. If this is not
+    /// the case, an alias from its true name to `value_name` must be generated
+    fn is_alias(&self) -> bool {
+        match self.kind {
+            hir::PatternKind::Name(_) => true,
+            hir::PatternKind::Integer(_) => false,
+            hir::PatternKind::Bool(_) => false,
+            hir::PatternKind::Tuple(_) => false,
+            hir::PatternKind::Type(_, _) => false,
+        }
+    }
+}
 
 #[local_impl]
 impl StatementLocal for Statement {
     fn lower(
         &self,
-        symtab: &SymbolTable,
+        symtab: &FrozenSymtab,
+        idtracker: &mut ExprIdTracker,
         types: &TypeState,
         subs: &Substitutions,
         item_list: &hir::ItemList,
@@ -191,32 +290,46 @@ impl StatementLocal for Statement {
         let mut result = vec![];
         match &self {
             Statement::Binding(pattern, _t, value) => {
-                result.append(&mut value.lower(symtab, types, subs, item_list)?);
+                result.append(&mut value.lower(symtab, idtracker, types, subs, item_list)?);
 
                 result.push(mir::Statement::Binding(mir::Binding {
                     name: pattern.value_name(),
                     operator: mir::Operator::Alias,
                     operands: vec![value.variable(subs)],
                     ty: types
-                        .type_of_id(pattern.id, symtab, &item_list.types)
+                        .type_of_id(pattern.id, symtab.symtab(), &item_list.types)
                         .to_mir_type(),
                 }));
-                result.append(&mut pattern.lower(symtab, types, subs, item_list)?);
+                result.append(&mut pattern.lower(
+                    value.variable(subs),
+                    symtab.symtab(),
+                    types,
+                    subs,
+                    item_list,
+                )?);
             }
             Statement::Register(register) => {
-                result.append(&mut register.clock.lower(symtab, types, subs, item_list)?);
+                result.append(
+                    &mut register
+                        .clock
+                        .lower(symtab, idtracker, types, subs, item_list)?,
+                );
 
                 if let Some((trig, value)) = &register.reset {
-                    result.append(&mut trig.lower(symtab, types, subs, item_list)?);
-                    result.append(&mut value.lower(symtab, types, subs, item_list)?);
+                    result.append(&mut trig.lower(symtab, idtracker, types, subs, item_list)?);
+                    result.append(&mut value.lower(symtab, idtracker, types, subs, item_list)?);
                 }
 
-                result.append(&mut register.value.lower(symtab, types, subs, item_list)?);
+                result.append(
+                    &mut register
+                        .value
+                        .lower(symtab, idtracker, types, subs, item_list)?,
+                );
 
                 result.push(mir::Statement::Register(mir::Register {
                     name: register.pattern.value_name(),
                     ty: types
-                        .type_of_id(register.pattern.id, symtab, &item_list.types)
+                        .type_of_id(register.pattern.id, symtab.symtab(), &item_list.types)
                         .to_mir_type(),
                     clock: register.clock.variable(subs),
                     reset: register
@@ -226,7 +339,13 @@ impl StatementLocal for Statement {
                     value: register.value.variable(subs),
                 }));
 
-                result.append(&mut register.pattern.lower(symtab, types, subs, item_list)?);
+                result.append(&mut register.pattern.lower(
+                    register.value.variable(subs),
+                    symtab.symtab(),
+                    types,
+                    subs,
+                    item_list,
+                )?);
             }
         }
         Ok(result)
@@ -267,7 +386,8 @@ impl ExprLocal for Loc<Expression> {
 
     fn lower(
         &self,
-        symtab: &SymbolTable,
+        symtab: &FrozenSymtab,
+        idtracker: &mut ExprIdTracker,
         types: &TypeState,
         subs: &Substitutions,
         item_list: &ItemList,
@@ -275,7 +395,7 @@ impl ExprLocal for Loc<Expression> {
         let mut result = vec![];
 
         let self_type = types
-            .expr_type(self, symtab, &item_list.types)?
+            .expr_type(self, symtab.symtab(), &item_list.types)?
             .to_mir_type();
 
         match &self.kind {
@@ -300,8 +420,8 @@ impl ExprLocal for Loc<Expression> {
             }
             ExprKind::BinaryOperator(lhs, op, rhs) => {
                 let binop_builder = |op| {
-                    result.append(&mut lhs.lower(symtab, types, subs, &item_list)?);
-                    result.append(&mut rhs.lower(symtab, types, subs, &item_list)?);
+                    result.append(&mut lhs.lower(symtab, idtracker, types, subs, &item_list)?);
+                    result.append(&mut rhs.lower(symtab, idtracker, types, subs, &item_list)?);
 
                     result.push(mir::Statement::Binding(mir::Binding {
                         name: self.variable(subs),
@@ -327,7 +447,7 @@ impl ExprLocal for Loc<Expression> {
             }
             ExprKind::TupleLiteral(elems) => {
                 for elem in elems {
-                    result.append(&mut elem.lower(symtab, types, subs, &item_list)?)
+                    result.append(&mut elem.lower(symtab, idtracker, types, subs, &item_list)?)
                 }
 
                 result.push(mir::Statement::Binding(mir::Binding {
@@ -338,10 +458,10 @@ impl ExprLocal for Loc<Expression> {
                 }))
             }
             ExprKind::TupleIndex(tup, idx) => {
-                result.append(&mut tup.lower(symtab, types, subs, &item_list)?);
+                result.append(&mut tup.lower(symtab, idtracker, types, subs, &item_list)?);
 
                 let types = if let mir::types::Type::Tuple(inner) = &types
-                    .expr_type(tup, symtab, &item_list.types)?
+                    .expr_type(tup, symtab.symtab(), &item_list.types)?
                     .to_mir_type()
                 {
                     inner.clone()
@@ -358,16 +478,20 @@ impl ExprLocal for Loc<Expression> {
             }
             ExprKind::Block(block) => {
                 for statement in &block.statements {
-                    result.append(&mut statement.lower(symtab, types, subs, item_list)?);
+                    result.append(&mut statement.lower(symtab, idtracker, types, subs, item_list)?);
                 }
-                result.append(&mut block.result.lower(symtab, types, subs, item_list)?);
+                result.append(
+                    &mut block
+                        .result
+                        .lower(symtab, idtracker, types, subs, item_list)?,
+                );
 
                 // Empty. The block result will always be the last expression
             }
             ExprKind::If(cond, on_true, on_false) => {
-                result.append(&mut cond.lower(symtab, types, subs, item_list)?);
-                result.append(&mut on_true.lower(symtab, types, subs, item_list)?);
-                result.append(&mut on_false.lower(symtab, types, subs, item_list)?);
+                result.append(&mut cond.lower(symtab, idtracker, types, subs, item_list)?);
+                result.append(&mut on_true.lower(symtab, idtracker, types, subs, item_list)?);
+                result.append(&mut on_false.lower(symtab, idtracker, types, subs, item_list)?);
 
                 result.push(mir::Statement::Binding(mir::Binding {
                     name: self.variable(subs),
@@ -378,16 +502,48 @@ impl ExprLocal for Loc<Expression> {
                         on_false.variable(subs),
                     ],
                     ty: types
-                        .expr_type(self, symtab, &item_list.types)?
+                        .expr_type(self, symtab.symtab(), &item_list.types)?
                         .to_mir_type(),
                 }));
             }
-            ExprKind::Match(_, _) => {
-                todo![]
+            ExprKind::Match(operand, branches) => {
+                let mut operands = vec![];
+                for (pat, result_expr) in branches {
+                    let mut cond =
+                        pat.condition(operand, symtab, idtracker, types, subs, item_list)?;
+                    result.append(&mut cond.statements);
+                    result
+                        .append(&mut result_expr.lower(symtab, idtracker, types, subs, item_list)?);
+                    result.append(&mut pat.lower(
+                        operand.variable(subs),
+                        symtab.symtab(),
+                        types,
+                        subs,
+                        item_list,
+                    )?);
+
+                    operands.push(cond.result_name);
+                    operands.push(result_expr.variable(subs));
+                }
+
+                result.push(mir::Statement::Binding(mir::Binding {
+                    name: self.variable(subs),
+                    operator: mir::Operator::Match,
+                    operands,
+                    ty: types
+                        .expr_type(self, symtab.symtab(), &item_list.types)?
+                        .to_mir_type(),
+                }))
             }
             ExprKind::FnCall(name, params) => {
+                for param in params {
+                    result.append(
+                        &mut param
+                            .value
+                            .lower(symtab, idtracker, types, subs, item_list)?,
+                    );
+                }
                 // Look up the name in the executable list to see if this is a type instantiation
-
                 match item_list.executables.get(name) {
                     Some(hir::ExecutableItem::EnumInstance { base_enum, variant }) => {
                         let variant_count = match item_list.types.get(base_enum) {
@@ -401,7 +557,7 @@ impl ExprLocal for Loc<Expression> {
                         result.push(mir::Statement::Binding(mir::Binding {
                             name: self.variable(subs),
                             ty: types
-                                .expr_type(self, symtab, &item_list.types)?
+                                .expr_type(self, symtab.symtab(), &item_list.types)?
                                 .to_mir_type(),
                             operator: mir::Operator::ConstructEnum {
                                 variant: *variant,
@@ -429,7 +585,7 @@ impl ExprLocal for Loc<Expression> {
             }
             ExprKind::EntityInstance(name, args) => {
                 for arg in args {
-                    result.append(&mut arg.value.lower(symtab, types, subs, item_list)?)
+                    result.append(&mut arg.value.lower(symtab, idtracker, types, subs, item_list)?)
                 }
                 result.push(mir::Statement::Binding(mir::Binding {
                     name: self.variable(subs),
@@ -439,7 +595,7 @@ impl ExprLocal for Loc<Expression> {
                         .map(|arg| arg.value.variable(subs))
                         .collect(),
                     ty: types
-                        .expr_type(self, symtab, &item_list.types)?
+                        .expr_type(self, symtab.symtab(), &item_list.types)?
                         .to_mir_type(),
                 }))
             }
@@ -449,7 +605,7 @@ impl ExprLocal for Loc<Expression> {
                 args,
             } => {
                 for arg in args {
-                    result.append(&mut arg.value.lower(symtab, types, subs, item_list)?)
+                    result.append(&mut arg.value.lower(symtab, idtracker, types, subs, item_list)?)
                 }
                 result.push(mir::Statement::Binding(mir::Binding {
                     name: self.variable(subs),
@@ -459,7 +615,7 @@ impl ExprLocal for Loc<Expression> {
                         .map(|arg| arg.value.variable(subs))
                         .collect(),
                     ty: types
-                        .expr_type(self, symtab, &item_list.types)?
+                        .expr_type(self, symtab.symtab(), &item_list.types)?
                         .to_mir_type(),
                 }))
             }
@@ -470,7 +626,8 @@ impl ExprLocal for Loc<Expression> {
 
 pub fn generate_entity<'a>(
     entity: &Entity,
-    symtab: &SymbolTable,
+    symtab: &mut FrozenSymtab,
+    idtracker: &mut ExprIdTracker,
     types: &TypeState,
     item_list: &ItemList,
 ) -> Result<mir::Entity> {
@@ -481,19 +638,20 @@ pub fn generate_entity<'a>(
             let name = format!("_i_{}", name_id.1.to_string());
             let val_name = name_id.value_name();
             let ty = types
-                .type_of_name(name_id, symtab, &item_list.types)
+                .type_of_name(name_id, symtab.symtab(), &item_list.types)
                 .to_mir_type();
 
             (name, val_name, ty)
         })
         .collect();
 
-    let statements = entity
-        .body
-        .lower(symtab, types, &Substitutions::new(), item_list)?;
+    let statements =
+        entity
+            .body
+            .lower(symtab, idtracker, types, &Substitutions::new(), item_list)?;
 
     let output_t = types
-        .expr_type(&entity.body, symtab, &item_list.types)?
+        .expr_type(&entity.body, symtab.symtab(), &item_list.types)?
         .to_mir_type();
 
     let subs = Substitutions::new();

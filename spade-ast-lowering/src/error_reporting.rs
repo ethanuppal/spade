@@ -73,7 +73,22 @@ impl CompilationError for Error {
                         got.kind_string()
                     )),
                 ]),
+            Error::LookupError(LookupError::NotAnEnumVariant(path, was)) => Diagnostic::error()
+                .with_message(format!("Expected {} to be an enum variant", path))
+                .with_labels(vec![
+                    Label::primary(file_id, path.span)
+                        .with_message(format!("Expected enum variant")),
+                    Label::secondary(file_id, was.loc().span).with_message(format!(
+                        "{} is a {}",
+                        path,
+                        was.kind_string()
+                    )),
+                ]),
             Error::ArgumentListLenghtMismatch { expected, got, at } => Diagnostic::error()
+                .with_message(format!("Expected {} arguments, got {}", expected, got))
+                .with_labels(vec![Label::primary(file_id, at.span)
+                    .with_message(format!("Expected {} arguments", expected))]),
+            Error::PatternListLengthMismatch { expected, got, at } => Diagnostic::error()
                 .with_message(format!("Expected {} arguments, got {}", expected, got))
                 .with_labels(vec![Label::primary(file_id, at.span)
                     .with_message(format!("Expected {} arguments", expected))]),

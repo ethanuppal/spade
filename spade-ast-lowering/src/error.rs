@@ -26,6 +26,12 @@ pub enum Error {
         got: usize,
         at: Loc<()>,
     },
+    #[error("Pattern list length missmatch, expected {expected} arguments, got {got}")]
+    PatternListLengthMismatch {
+        expected: usize,
+        got: usize,
+        at: Loc<()>,
+    },
     #[error("{new} was bound more than once")]
     DuplicateNamedBindings {
         new: Loc<Identifier>,
