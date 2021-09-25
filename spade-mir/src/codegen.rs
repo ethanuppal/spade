@@ -1,9 +1,8 @@
 use crate::{
-    code,
-    util::Code,
     verilog::{self, assign, logic, size_spec},
     ConstantValue, Entity, Operator, Statement, ValueName,
 };
+use nesty::{code, Code};
 
 impl ValueName {
     fn var_name(&self) -> String {

@@ -15,6 +15,7 @@ thiserror = "1.0"
 codespan = "0.9"
 colored = "2.0"
 indoc = "1.0.3"
+nesty = "0.1"
 prettydiff = "0.4"
 
 spade-common = {path = "../spade-common"}

@@ -3,7 +3,6 @@ pub mod diff;
 pub mod diff_printing;
 pub mod macros;
 pub mod types;
-mod util;
 mod verilog;
 
 use types::Type;
