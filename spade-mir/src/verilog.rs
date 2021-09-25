@@ -10,8 +10,8 @@ pub fn size_spec(size: u64) -> String {
     }
 }
 
-pub fn wire(name: &str, size: u64) -> String {
-    format!("wire{} {};", size_spec(size), name)
+pub fn logic(name: &str, size: u64) -> String {
+    format!("logic{} {};", size_spec(size), name)
 }
 pub fn reg(name: &str, size: u64) -> String {
     format!("reg{} {};", size_spec(size), name)

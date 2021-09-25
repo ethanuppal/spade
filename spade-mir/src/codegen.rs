@@ -1,7 +1,7 @@
 use crate::{
     code,
     util::Code,
-    verilog::{self, assign, size_spec, wire},
+    verilog::{self, assign, logic, size_spec},
     ConstantValue, Entity, Operator, Statement, ValueName,
 };
 
@@ -22,7 +22,7 @@ fn statement_code(statement: &Statement) -> Code {
     match statement {
         Statement::Binding(binding) => {
             let name = binding.name.var_name();
-            let declaration = wire(&name, binding.ty.size());
+            let declaration = logic(&name, binding.ty.size());
 
             let ops = &binding
                 .operands
@@ -175,7 +175,7 @@ fn statement_code(statement: &Statement) -> Code {
         }
         Statement::Constant(id, ty, value) => {
             let name = ValueName::Expr(*id).var_name();
-            let declaration = wire(&name, ty.size());
+            let declaration = logic(&name, ty.size());
 
             let expression = match value {
                 ConstantValue::Int(val) => format!("{}", val),
@@ -200,7 +200,7 @@ pub fn entity_code(entity: &Entity) -> Code {
         (
             format!("input{} {},", size_spec(size), input_name),
             code! {
-                [0] &wire(&value_name.var_name(), size);
+                [0] &logic(&value_name.var_name(), size);
                 [0] &assign(&value_name.var_name(), &name)
             },
         )
@@ -267,7 +267,7 @@ mod tests {
 
         let expected = indoc!(
             r#"
-            wire _e_0;
+            logic _e_0;
             assign _e_0 = _e_1 + _e_2;"#
         );
 
@@ -280,7 +280,7 @@ mod tests {
 
         let expected = indoc!(
             r#"
-            wire[4:0] _e_0;
+            logic[4:0] _e_0;
             assign _e_0 = _e_1 + _e_2;"#
         );
 
@@ -334,9 +334,9 @@ mod tests {
                     input[5:0] _i_op,
                     output[5:0] __output
                 );
-                wire[5:0] op_n0;
+                logic[5:0] op_n0;
                 assign op_n0 = _i_op;
-                wire[5:0] _e_0;
+                logic[5:0] _e_0;
                 assign _e_0 = op_n0 + _e_1;
                 assign __output = _e_0;
             endmodule"#
@@ -351,7 +351,7 @@ mod tests {
 
         let expected = indoc!(
             r#"
-            wire[9:0] _e_0;
+            logic[9:0] _e_0;
             assign _e_0 = 6;"#
         );
 
@@ -377,7 +377,7 @@ mod expression_tests {
 
                 let expected = formatdoc!(
                     r#"
-                    wire{} _e_0;
+                    logic{} _e_0;
                     assign _e_0 = _e_1 {} _e_2;"#, $verilog_ty, $verilog_op
                 );
 
@@ -415,7 +415,7 @@ mod expression_tests {
 
         let expected = indoc!(
             r#"
-            wire[1:0] _e_0;
+            logic[1:0] _e_0;
             assign _e_0 = _e_1 ? _e_2 : _e_3;"#
         );
 
@@ -428,7 +428,7 @@ mod expression_tests {
 
         let expected = indoc!(
             r#"
-            wire _e_0;
+            logic _e_0;
             assign _e_0 = 1;"#
         );
 
@@ -442,7 +442,7 @@ mod expression_tests {
 
         let expected = indoc!(
             r#"
-            wire[8:0] _e_0;
+            logic[8:0] _e_0;
             assign _e_0 = {_e_1, _e_2};"#
         );
 
@@ -456,7 +456,7 @@ mod expression_tests {
 
         let expected = indoc!(
             r#"
-            wire[16:0] _e_0;
+            logic[16:0] _e_0;
             assign _e_0 = {2'd2, _e_1, _e_2};"#
         );
 
@@ -474,7 +474,7 @@ mod expression_tests {
 
         let expected = indoc!(
             r#"
-            wire[16:0] _e_0;
+            logic[16:0] _e_0;
             assign _e_0 = {2'd1, _e_1, 10'bX};"#
         );
 
@@ -488,7 +488,7 @@ mod expression_tests {
 
         let expected = indoc!(
             r#"
-            wire[5:0] _e_0;
+            logic[5:0] _e_0;
             assign _e_0 = _e_1[8:3];"#
         );
 
@@ -501,7 +501,7 @@ mod expression_tests {
 
         let expected = indoc!(
             r#"
-            wire[5:0] _e_0;
+            logic[5:0] _e_0;
             assign _e_0 = _e_1[2:0];"#
         );
 
@@ -515,7 +515,7 @@ mod expression_tests {
 
         let expected = indoc!(
             r#"
-            wire _e_0;
+            logic _e_0;
             assign _e_0 = _e_1[3];"#
         );
 
@@ -528,7 +528,7 @@ mod expression_tests {
 
         let expected = indoc!(
             r#"
-            wire _e_0;
+            logic _e_0;
             test _instance_e_0(_e_1, _e_2, _e_0);"#
         );
 
