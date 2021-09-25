@@ -1,5 +1,5 @@
 entity tick_gen(clk: clk, rst: bool, tick_length: int<32>) -> bool {
-    reg(clk) timer reset (rst: 0) = if timer == tick_length then {
+    reg(clk) timer reset (rst: 0) = if timer == tick_length {
         0
     } else {
         timer + 1
@@ -23,10 +23,10 @@ entity pulse_led(clk: clk, rst: bool, tick_len: int<32>, max: int<8>, start: int
         let dir = state#1;
 
         let new_dir =
-            if duty == max then {
+            if duty == max {
                 true
             }
-            else if duty == 0 then {
+            else if duty == 0 {
                 false
             }
             else {
@@ -34,8 +34,8 @@ entity pulse_led(clk: clk, rst: bool, tick_len: int<32>, max: int<8>, start: int
             };
 
         let new_duty =
-            if tick then {
-                if dir then duty - 1 else duty + 1
+            if tick {
+                if dir duty - 1 else duty + 1
             }
             else {
                 duty
