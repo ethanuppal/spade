@@ -1,0 +1,71 @@
+enum Option<T> {
+    Some(val: T),
+    None
+}
+
+entity sync(clk: clk, signal: bool) -> bool {
+    reg(clk) out = signal;
+    out
+}
+entity negedge_detector(clk: clk, signal: bool) -> bool {
+    reg(clk) prev = signal;
+    // NOTE: == assumes inputs to be integers for now. This is clearly stupid
+    // so we should fix that and then get rid of this hack
+    prev && (if signal {false} else {true})
+}
+
+enum ReceiveState {
+    Waiting,
+    Bit(count: int<3>, data: int<8>),
+}
+
+entity spi_receiver(clk: clk, rst: bool, sclk: bool, mosi: bool) -> Option<int<8>> {
+    let sclk_op = inst negedge_detector(clk, sclk);
+
+    let mosi_int = if mosi {1} else {0};
+
+    reg(clk) reg_content reset (rst: (ReceiveState::Waiting(), Option::None())) = {
+        let (state, output) = reg_content;
+        if sclk_op {
+            match state {
+                ReceiveState::Waiting => {
+                    (ReceiveState::Bit(1, mosi_int), Option::None())
+                },
+                ReceiveState::Bit(count, data) => {
+                    let new_data = (data << 1) + mosi_int;
+                    if count == 7 {
+                        (ReceiveState::Waiting(), Option::Some(new_data))
+                    }
+                    else {
+                        (ReceiveState::Bit(count + 1, new_data), Option::None())
+                    }
+                }
+            }
+        }
+        else {
+            (state, Option::None())
+        }
+    };
+
+    let (state, output) = reg_content;
+    output
+}
+
+entity main(clk: clk, rst: bool, sclk_unsync: bool, mosi_unsync: bool) -> int<8> {
+    let sclk = inst sync(clk, sclk_unsync);
+    let mosi = inst sync(clk, mosi_unsync);
+
+    reg(clk) value reset (rst: 0) = match inst spi_receiver(clk, rst, sclk, mosi) {
+        Option::Some(new_val) => new_val,
+        Option::None => value
+    };
+
+    reg(clk) freq_div: int<27> reset (rst: 0) = if freq_div > 100_000_000 {
+        0
+    }
+    else {
+        freq_div + 1
+    };
+
+    value
+}
