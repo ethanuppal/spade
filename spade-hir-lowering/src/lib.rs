@@ -507,6 +507,7 @@ impl ExprLocal for Loc<Expression> {
                 }));
             }
             ExprKind::Match(operand, branches) => {
+                result.append(&mut operand.lower(symtab, idtracker, types, subs, item_list)?);
                 let mut operands = vec![];
                 for (pat, result_expr) in branches {
                     let mut cond =
