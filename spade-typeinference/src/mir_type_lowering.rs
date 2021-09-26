@@ -114,9 +114,7 @@ impl TypeState {
 
                 match type_list.get(t) {
                     Some(t) => Some(Self::type_decl_to_concrete(&t.inner, type_list, params)),
-                    None => {
-                        panic!("Missing type declaration for {:?}", t)
-                    }
+                    None => None,
                 }
             }
             TypeVar::Known(KnownType::Integer(size), params, _) => {
