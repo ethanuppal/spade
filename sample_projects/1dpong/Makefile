@@ -7,7 +7,7 @@ APIO_FILES=apio.ini pins.pcf
 
 IVERILOG_FLAGS=-g2012
 
-SPADEC=../target/debug/spade
+SPADEC=../../target/debug/spade
 
 VCDS=$(wildcard test/*)
 

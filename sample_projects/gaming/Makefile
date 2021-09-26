@@ -3,7 +3,7 @@ BUILD_DIR=build
 
 IVERILOG_FLAGS=-g2012
 
-SPADEC=../target/debug/spade
+SPADEC=../../target/debug/spade
 
 VCDS=$(wildcard test/*)
 
