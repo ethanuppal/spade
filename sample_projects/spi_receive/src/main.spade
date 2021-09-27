@@ -60,12 +60,5 @@ entity main(clk: clk, rst: bool, sclk_unsync: bool, mosi_unsync: bool) -> int<8>
         Option::None => value
     };
 
-    reg(clk) freq_div: int<27> reset (rst: 0) = if freq_div > 100_000_000 {
-        0
-    }
-    else {
-        freq_div + 1
-    };
-
     value
 }
