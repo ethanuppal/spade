@@ -443,6 +443,8 @@ impl ExprLocal for Loc<Expression> {
                     BinaryOperator::RightShift => binop_builder(RightShift)?,
                     BinaryOperator::LogicalAnd => binop_builder(LogicalAnd)?,
                     BinaryOperator::LogicalOr => binop_builder(LogicalOr)?,
+                    BinaryOperator::BitwiseAnd => binop_builder(BitwiseAnd)?,
+                    BinaryOperator::BitwiseOr => binop_builder(BitwiseOr)?,
                 };
             }
             ExprKind::TupleLiteral(elems) => {

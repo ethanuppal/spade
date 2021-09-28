@@ -310,6 +310,44 @@ mod tests {
     }
 
     #[test]
+    fn bitwise_and_operator_codegens_correctly() {
+        let code = r#"
+        entity name(a: int<16>, b: int<16>) -> int<16> {
+            a & b
+        }
+        "#;
+
+        let expected = entity!("name"; (
+                "_i_a", n(0, "a"), Type::Int(16),
+                "_i_b", n(1, "b"), Type::Int(16)
+            ) -> Type::Int(16); {
+                (e(0); Type::Int(16); BitwiseAnd; n(0, "a"), n(1, "b"))
+            } => e(0)
+        );
+
+        assert_same_mir!(&build_entity!(code), &expected);
+    }
+
+    #[test]
+    fn bitwise_or_operator_codegens_correctly() {
+        let code = r#"
+        entity name(a: int<16>, b: int<16>) -> int<16> {
+            a | b
+        }
+        "#;
+
+        let expected = entity!("name"; (
+                "_i_a", n(0, "a"), Type::Int(16),
+                "_i_b", n(1, "b"), Type::Int(16)
+            ) -> Type::Int(16); {
+                (e(0); Type::Int(16); BitwiseOr; n(0, "a"), n(1, "b"))
+            } => e(0)
+        );
+
+        assert_same_mir!(&build_entity!(code), &expected);
+    }
+
+    #[test]
     fn greater_than_operator_codegens_correctly() {
         let code = r#"
         entity name(a: int<16>, b: int<16>) -> bool {

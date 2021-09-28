@@ -182,6 +182,8 @@ impl<'a> Parser<'a> {
                 TokenKind::LeftShift => BinaryOperator::LeftShift,
                 TokenKind::LogicalOr => BinaryOperator::LogicalOr,
                 TokenKind::LogicalAnd => BinaryOperator::LogicalAnd,
+                TokenKind::BitwiseAnd => BinaryOperator::BitwiseAnd,
+                TokenKind::BitwiseOr => BinaryOperator::BitwiseOr,
                 x => unreachable!("{:?} ({}) is not an operator", x, x.as_str()),
             };
             Ok(Expression::BinaryOperator(Box::new(start), op, Box::new(rest)).at(&span))
@@ -217,6 +219,16 @@ impl<'a> Parser<'a> {
     operator_expr!(
         logical_and_expression,
         is_next_logical_and,
+        bitwise_or_expression
+    );
+    operator_expr!(
+        bitwise_or_expression,
+        is_next_bitwise_or,
+        bitwise_and_expression
+    );
+    operator_expr!(
+        bitwise_and_expression,
+        is_next_bitwise_and,
         comparison_operator
     );
     operator_expr!(
@@ -1058,49 +1070,27 @@ impl<'a> Parser<'a> {
     }
 }
 
+macro_rules! def_is_operators {
+    ($( $name:ident [ $($token_kind:ident),* ] ),*$(,)?) => {
+        $(fn $name(&mut self) -> Result<bool> {
+            Ok(match self.peek()?.map(|token| token.kind) {
+                $(Some(TokenKind::$token_kind) => true),*,
+                _ => false
+            })
+        })*
+    }
+}
 // Helper functions for checking the type of tokens
 impl<'a> Parser<'a> {
-    fn is_next_addition_operator(&mut self) -> Result<bool> {
-        Ok(match self.peek()?.map(|token| token.kind) {
-            Some(TokenKind::Plus) => true,
-            Some(TokenKind::Minus) => true,
-            _ => false,
-        })
-    }
-    fn is_next_shift_operator(&mut self) -> Result<bool> {
-        Ok(match self.peek()?.map(|token| token.kind) {
-            Some(TokenKind::LeftShift) => true,
-            Some(TokenKind::RightShift) => true,
-            _ => false,
-        })
-    }
-    fn is_next_multiplication_operator(&mut self) -> Result<bool> {
-        // NOTE: We currently have no multiplication-like operators but I'll leave this
-        // here in case I come up with a good way to support them
-        Ok(match self.peek()?.map(|token| token.kind) {
-            Some(TokenKind::Asterisk) => true,
-            _ => false,
-        })
-    }
-    fn is_next_comparison_operator(&mut self) -> Result<bool> {
-        Ok(match self.peek()?.map(|token| token.kind) {
-            Some(TokenKind::Equals) => true,
-            Some(TokenKind::Gt) => true,
-            Some(TokenKind::Lt) => true,
-            _ => false,
-        })
-    }
-    fn is_next_logical_and(&mut self) -> Result<bool> {
-        Ok(match self.peek()?.map(|token| token.kind) {
-            Some(TokenKind::LogicalAnd) => true,
-            _ => false,
-        })
-    }
-    fn is_next_logical_or(&mut self) -> Result<bool> {
-        Ok(match self.peek()?.map(|token| token.kind) {
-            Some(TokenKind::LogicalOr) => true,
-            _ => false,
-        })
+    def_is_operators! {
+        is_next_addition_operator [Plus, Minus],
+        is_next_shift_operator [LeftShift, RightShift],
+        is_next_multiplication_operator [Asterisk],
+        is_next_comparison_operator [Equals, Gt, Lt],
+        is_next_logical_and [LogicalAnd],
+        is_next_logical_or [LogicalOr],
+        is_next_bitwise_and [BitwiseAnd],
+        is_next_bitwise_or [BitwiseOr]
     }
 }
 
@@ -1397,6 +1387,30 @@ mod tests {
         .nowhere();
 
         check_parse!("a + b", expression, Ok(expected_value.clone()));
+    }
+
+    #[test]
+    fn bitwise_and_operatoins_are_expressions() {
+        let expected_value = Expression::BinaryOperator(
+            Box::new(Expression::Identifier(ast_path("a")).nowhere()),
+            BinaryOperator::BitwiseAnd,
+            Box::new(Expression::Identifier(ast_path("b")).nowhere()),
+        )
+        .nowhere();
+
+        check_parse!("a & b", expression, Ok(expected_value.clone()));
+    }
+
+    #[test]
+    fn bitwise_or_operatoins_are_expressions() {
+        let expected_value = Expression::BinaryOperator(
+            Box::new(Expression::Identifier(ast_path("a")).nowhere()),
+            BinaryOperator::BitwiseOr,
+            Box::new(Expression::Identifier(ast_path("b")).nowhere()),
+        )
+        .nowhere();
+
+        check_parse!("a | b", expression, Ok(expected_value.clone()));
     }
 
     #[ignore]

@@ -73,6 +73,8 @@ pub enum BinaryOperator {
     LogicalOr,
     LeftShift,
     RightShift,
+    BitwiseAnd,
+    BitwiseOr,
 }
 
 #[derive(PartialEq, Debug, Clone)]

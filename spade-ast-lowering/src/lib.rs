@@ -554,6 +554,8 @@ pub fn visit_expression(
                 ast::BinaryOperator::RightShift => Ok(operator(BinaryOperator::RightShift)),
                 ast::BinaryOperator::LogicalAnd => Ok(operator(BinaryOperator::LogicalAnd)),
                 ast::BinaryOperator::LogicalOr => Ok(operator(BinaryOperator::LogicalOr)),
+                ast::BinaryOperator::BitwiseOr => Ok(operator(BinaryOperator::BitwiseOr)),
+                ast::BinaryOperator::BitwiseAnd => Ok(operator(BinaryOperator::BitwiseAnd)),
             }
         }
         ast::Expression::EntityInstance(name, arg_list) => {
@@ -956,6 +958,8 @@ mod expression_visiting {
     binop_test!(additions, Add, Add);
     binop_test!(subtractions, Sub, Sub);
     binop_test!(equals, Equals, Eq);
+    binop_test!(bitwise_or, BitwiseOr, BitwiseOr);
+    binop_test!(bitwise_and, BitwiseAnd, BitwiseAnd);
 
     #[test]
     fn identifiers_cause_error_if_undefined() {

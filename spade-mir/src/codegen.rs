@@ -51,6 +51,8 @@ fn statement_code(statement: &Statement) -> Code {
                 Operator::RightShift => binop!(">>"),
                 Operator::LogicalAnd => binop!("&&"),
                 Operator::LogicalOr => binop!("||"),
+                Operator::BitwiseAnd => binop!("&"),
+                Operator::BitwiseOr => binop!("|"),
                 Operator::Match => {
                     assert!(
                         ops.len() % 2 == 0,

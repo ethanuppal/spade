@@ -48,6 +48,8 @@ pub enum Operator {
     RightShift,
     LogicalAnd,
     LogicalOr,
+    BitwiseAnd,
+    BitwiseOr,
     /// Select [1] if [0] else [2]
     Select,
     /// Corresponds to a match statement. If value [0] is true, select [1], if [2] holds, select
@@ -97,6 +99,8 @@ impl std::fmt::Display for Operator {
             Operator::RightShift => write!(f, "RightShift"),
             Operator::LogicalAnd => write!(f, "LogicalAnd"),
             Operator::LogicalOr => write!(f, "LogicalOr"),
+            Operator::BitwiseAnd => write!(f, "BitwiseAnd"),
+            Operator::BitwiseOr => write!(f, "BitwiseOr"),
             Operator::Select => write!(f, "Select"),
             Operator::Match => write!(f, "Match"),
             Operator::LeftShift => write!(f, "LeftShift"),

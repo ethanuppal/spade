@@ -415,6 +415,8 @@ impl TypeState {
                     | BinaryOperator::Sub
                     | BinaryOperator::Mul
                     | BinaryOperator::LeftShift
+                    | BinaryOperator::BitwiseAnd
+                    | BinaryOperator::BitwiseOr
                     | BinaryOperator::RightShift => {
                         let int_type = self.new_generic_int(symtab);
                         // TODO: Make generic over types that can be added

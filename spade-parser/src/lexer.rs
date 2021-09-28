@@ -82,6 +82,12 @@ pub enum TokenKind {
     LogicalOr,
     #[token("&&")]
     LogicalAnd,
+    #[token("&")]
+    BitwiseAnd,
+    #[token("|")]
+    BitwiseOr,
+    #[token("!")]
+    Not,
 
     // Other operators
     #[token("=")]
@@ -166,6 +172,9 @@ impl TokenKind {
             TokenKind::RightShift => ">>",
             TokenKind::LogicalOr => "||",
             TokenKind::LogicalAnd => "&&",
+            TokenKind::BitwiseAnd => "&",
+            TokenKind::BitwiseOr => "|",
+            TokenKind::Not => "!",
 
             TokenKind::OpenParen => "(",
             TokenKind::CloseParen => ")",
