@@ -46,11 +46,11 @@ https://gitlab.com/TheZoq2/spade-vim
 - [x] Strongly typed
 - [x] Compile time checked pipelines
     - [x] Basic pipeline definitions
-    - [ ] Pipeline instantiation
+    - [x] Pipeline instantiation
     - [ ] Type Dependent lengths
 - [ ] Traits and generics
 - [ ] Structs
-- [ ] Sum types and pattern matching
+- [x] Sum types and pattern matching
 - [ ] ...
 
 ## License
