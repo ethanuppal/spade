@@ -79,7 +79,7 @@ fn statement_code(statement: &Statement) -> Code {
 
                     code! (
                         [0] "always_comb begin";
-                        [1]     format!("unique casez ({{{}}})", conditions.join(", "));
+                        [1]     format!("priority casez ({{{}}})", conditions.join(", "));
                         [2]         cases;
                         [1]     "endcase";
                         [0] "end";
@@ -507,7 +507,7 @@ mod expression_tests {
             r#"
             logic[1:0] _e_0;
             always_comb begin
-                unique casez ({_e_1, _e_3})
+                priority casez ({_e_1, _e_3})
                     2'b1?: _e_0 = _e_2;
                     2'b01: _e_0 = _e_4;
                 endcase
