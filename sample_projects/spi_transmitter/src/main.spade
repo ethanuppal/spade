@@ -15,44 +15,72 @@ entity posedge_detector(clk: clk, signal: bool) -> bool {
 
 enum TxState {
     Waiting,
-    Transmit(num_transmitted: int<3>, data: int<8>),
+    Transmit(
+        // Number of clock cycles since the last bit was sent
+        last_bit: int<10>,
+        num_transmitted: int<3>,
+        data: int<8>
+    ),
+    LastCycle(time: int<10>)
 }
 
-entity spi_tx(clk: clk, rst: bool, sclk: bool, to_transmit: Option<int<8>>) -> bool {
-    let sclk_op = inst posedge_detector(clk, sclk);
+enum TxExternalState {
+    Ready,
+    Transmitting
+}
 
+// SPI transmitter module. Frequency is fixed to 100 KHz. If no bit is being
+// transmitted and to_transmit is Some(val), val will be transmitted.
+// Otherwise, to_transmit is ignored.
+// Return value is (sclk, mosi, waiting)
+entity spi_tx(clk: clk, rst: bool, to_transmit: Option<int<8>>) ->
+    (bool, bool, TxExternalState)
+{
     reg(clk) state reset (rst: TxState::Waiting()) = {
         match state {
             TxState::Waiting => {
                 match to_transmit {
-                    Option::Some(val) => TxState::Transmit(0, val),
+                    Option::Some(val) => TxState::Transmit(0, 0, val),
                     Option::None => TxState::Waiting()
                 }
             },
-            TxState::Transmit(num_transmitted, data) => {
+            TxState::Transmit(last_bit, num_transmitted, data) => {
+                let sclk_op = last_bit == 500;
+                let new_last_bit = last_bit + 1;
+
                 if sclk_op {
                     if num_transmitted == 7 {
-                        TxState::Waiting()
+                        TxState::LastCycle(0)
                     }
                     else {
-                        TxState::Transmit(num_transmitted + 1, data >> 1)
+                        TxState::Transmit(new_last_bit, num_transmitted + 1, data >> 1)
                     }
                 }
+                else if last_bit == 999 {
+                    TxState::Transmit(0, num_transmitted, data)
+                }
                 else {
-                    state
+                    TxState::Transmit(new_last_bit, num_transmitted, data)
+                }
+            },
+            TxState::LastCycle(time) => {
+                if time == 499 {
+                    TxState::Waiting()
+                }
+                else {
+                    TxState::LastCycle(time + 1)
                 }
             }
         }
     };
 
     match state {
-        TxState::Waiting() => true,
-        TxState::Transmit(_, data) => (data & 1) == 1
+        TxState::Waiting() => (true, true, TxExternalState::Ready()),
+        TxState::Transmit(last_bit, _, data) => {
+            ((last_bit < 500), (data & 1) == 1, TxExternalState::Transmitting())
+        },
+        TxState::LastCycle(_) => {
+            (false, true, TxExternalState::Transmitting())
+        }
     }
-}
-
-
-// Return type (sclk, mosi)
-entity main(clk: clk, rst: bool) -> (bool, bool) {
-    
 }

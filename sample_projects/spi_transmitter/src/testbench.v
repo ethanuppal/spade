@@ -1,13 +1,13 @@
 `include "../../output_test/vatch/main.v"
 
-module counter_tb();
+module spi_tx_tb();
     reg clk;
 
     `SETUP_TEST
 
     initial begin
         $dumpfile(`VCD_OUTPUT);
-        $dumpvars(0, counter_tb);
+        $dumpvars(0, spi_tx_tb);
         clk = 1;
         forever begin
             clk = ~clk;
@@ -17,179 +17,51 @@ module counter_tb();
 
 
     reg rst;
-    reg sclk;
-    reg mosi;
-    reg[7:0] result;
+    wire sclk;
+    wire mosi;
+    wire busy;
+    reg[8:0] to_transmit;
+
+    integer i;
 
     initial begin
-        mosi <= 1;
-        sclk <= 1;
-        rst <= 1;
-        #10
-        rst <= 0;
+        rst = 1;
+        to_transmit <= 9'b100000000;
+        #4
+        rst = 0;
 
-        @(negedge clk)
+        repeat (2000) @(negedge clk);
+        `ASSERT_EQ(busy, 0);
+        `ASSERT_EQ(sclk, 1);
 
-        // bit 1
-        sclk <= 0;
-        @(negedge clk)
-        @(negedge clk)
-        mosi <= 0;
-        sclk <= 1;
+        to_transmit <= 9'b0_1011_0010;
         @(negedge clk)
         @(negedge clk)
 
-        // bit 2
-        sclk <= 0;
-        @(negedge clk)
-        @(negedge clk)
-        mosi <= 0;
-        sclk <= 1;
-        @(negedge clk)
-        @(negedge clk)
+        for (i = 0; i < 8; i = i + 1) begin
+            // Clock should still be high and data set
+            `ASSERT_EQ(sclk, 1);
+            `ASSERT_EQ(mosi, to_transmit[i]);
+            repeat(500) @(negedge clk);
+            // Clock should have fallen
+            `ASSERT_EQ(sclk, 0);
+            repeat(500) @(negedge clk);
+        end
 
-        // bit 3
-        sclk <= 0;
-        @(negedge clk)
-        @(negedge clk)
-        mosi <= 1;
-        sclk <= 1;
-        @(negedge clk)
-        @(negedge clk)
-
-        // bit 4
-        sclk <= 0;
-        @(negedge clk)
-        @(negedge clk)
-        mosi <= 1;
-        sclk <= 1;
-        @(negedge clk)
-        @(negedge clk)
-
-        // bit 5
-        sclk <= 0;
-        @(negedge clk)
-        @(negedge clk)
-        mosi <= 1;
-        sclk <= 1;
-        @(negedge clk)
-        @(negedge clk)
-
-        // bit 6
-        sclk <= 0;
-        @(negedge clk)
-        @(negedge clk)
-        mosi <= 1;
-        sclk <= 1;
-        @(negedge clk)
-        @(negedge clk)
-
-        // bit 7
-        sclk <= 0;
-        @(negedge clk)
-        @(negedge clk)
-        mosi <= 1;
-        sclk <= 1;
-        @(negedge clk)
-        @(negedge clk)
-
-        // bit 8
-        sclk <= 0;
-        @(negedge clk)
-        @(negedge clk)
-        mosi <= 1;
-        sclk <= 1;
-        @(negedge clk)
-        @(negedge clk)
-
-        `ASSERT_EQ(result, 8'b10011111);
-
-        @(negedge clk)
-        // bit 1
-        sclk <= 0;
-        @(negedge clk)
-        @(negedge clk)
-        mosi <= 0;
-        sclk <= 1;
-        @(negedge clk)
-        @(negedge clk)
-
-        // bit 2
-        sclk <= 0;
-        @(negedge clk)
-        @(negedge clk)
-        mosi <= 0;
-        sclk <= 1;
-        @(negedge clk)
-        @(negedge clk)
-
-        // bit 3
-        sclk <= 0;
-        @(negedge clk)
-        @(negedge clk)
-        mosi <= 1;
-        sclk <= 1;
-        @(negedge clk)
-        @(negedge clk)
-
-        // bit 4
-        sclk <= 0;
-        @(negedge clk)
-        @(negedge clk)
-        mosi <= 1;
-        sclk <= 1;
-        @(negedge clk)
-        @(negedge clk)
-
-        // bit 5
-        sclk <= 0;
-        @(negedge clk)
-        @(negedge clk)
-        mosi <= 1;
-        sclk <= 1;
-        @(negedge clk)
-        @(negedge clk)
-
-        // bit 6
-        sclk <= 0;
-        @(negedge clk)
-        @(negedge clk)
-        mosi <= 1;
-        sclk <= 1;
-        @(negedge clk)
-        @(negedge clk)
-
-        // bit 7
-        sclk <= 0;
-        @(negedge clk)
-        @(negedge clk)
-        mosi <= 0;
-        sclk <= 1;
-        @(negedge clk)
-        @(negedge clk)
-
-        // bit 8
-        sclk <= 0;
-        @(negedge clk)
-        @(negedge clk)
-        sclk <= 1;
-        @(negedge clk)
-        @(negedge clk)
-
-        `ASSERT_EQ(result, 8'b10011110);
-
-        #10
+        `ASSERT_EQ(sclk, 1);
 
 
+        `ASSERT_EQ(busy, 0);
+
+        #100
 
         `END_TEST
     end
 
-    main main
+    spi_tx uut
         ( ._i_clk(clk)
         , ._i_rst(rst)
-        , ._i_sclk_unsync(sclk)
-        , ._i_mosi_unsync(mosi)
-        , .__output(result)
+        , ._i_to_transmit(to_transmit)
+        , .__output({sclk, mosi, busy})
         );
 endmodule
