@@ -1,0 +1,58 @@
+enum Option<T> {
+    Some(val: T),
+    None
+}
+
+entity sync(clk: clk, signal: bool) -> bool {
+    reg(clk) out = signal;
+    out
+}
+
+entity posedge_detector(clk: clk, signal: bool) -> bool {
+    reg(clk) prev = signal;
+    signal && (if prev {false} else {true})
+}
+
+enum TxState {
+    Waiting,
+    Transmit(num_transmitted: int<3>, data: int<8>),
+}
+
+entity spi_tx(clk: clk, rst: bool, sclk: bool, to_transmit: Option<int<8>>) -> bool {
+    let sclk_op = inst posedge_detector(clk, sclk);
+
+    reg(clk) state reset (rst: TxState::Waiting()) = {
+        match state {
+            TxState::Waiting => {
+                match to_transmit {
+                    Option::Some(val) => TxState::Transmit(0, val),
+                    Option::None => TxState::Waiting()
+                }
+            },
+            TxState::Transmit(num_transmitted, data) => {
+                if sclk_op {
+                    if num_transmitted == 7 {
+                        TxState::Waiting()
+                    }
+                    else {
+                        TxState::Transmit(num_transmitted + 1, data >> 1)
+                    }
+                }
+                else {
+                    state
+                }
+            }
+        }
+    };
+
+    match state {
+        TxState::Waiting() => true,
+        TxState::Transmit(_, data) => (data & 1) == 1
+    }
+}
+
+
+// Return type (sclk, mosi)
+entity main(clk: clk, rst: bool) -> (bool, bool) {
+    
+}
