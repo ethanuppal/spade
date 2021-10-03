@@ -84,3 +84,4 @@ entity spi_tx(clk: clk, rst: bool, to_transmit: Option<int<8>>) ->
         }
     }
 }
+

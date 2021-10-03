@@ -13,8 +13,6 @@ pub use spade_parser::lexer;
 use spade_parser::Parser;
 use spade_typeinference as typeinference;
 
-mod golden;
-
 #[derive(StructOpt)]
 #[structopt(name = "spade", about = "Compiler for the spade language")]
 struct Opt {
