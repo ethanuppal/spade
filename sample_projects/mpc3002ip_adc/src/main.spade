@@ -1,0 +1,167 @@
+enum Option<T> {
+    Some(val: T),
+    None
+}
+
+entity sync(clk: clk, signal: bool) -> bool {
+    reg(clk) out = signal;
+    out
+}
+
+enum TxState {
+    Waiting,
+    Transmit(
+        // Number of clock cycles since the last bit was sent
+        // Must fit sclk_cycles: 100 => 7 bits
+        last_bit: int<7>,
+        num_transmitted: int<4>,
+        tx_data: int<16>,
+        rx_data: int<16>
+    ),
+    LastCycle(time: int<7>)
+}
+
+enum TxExternalState {
+    Ready,
+    Transmitting
+}
+
+// SPI transmitter module. Frequency is fixed to 100 KHz. If no bit is being
+// transmitted and to_transmit is Some(val), val will be transmitted.
+// Otherwise, to_transmit is ignored.
+// Return value is (sclk, mosi, waiting, received_data)
+// Captures on falling edge
+entity spi(clk: clk, rst: bool, miso: bool, to_transmit: Option<int<16>>) ->
+    (bool, bool, TxExternalState, Option<int<16>>)
+{
+    // NOTE Note: we should support compile time arithmetic. For now, we'll use
+    // right shift for / 2 and let the verilog backend do constant folding
+    let sclk_cycles = 100;
+    let sclk_half_cycles = sclk_cycles >> 1;
+
+    let miso_int = if miso {1} else {0};
+
+
+    reg(clk) _state reset (rst: (TxState::Waiting(), Option::None())) = {
+        let (state, output_data) = _state;
+        match state {
+            TxState::Waiting => {
+                match to_transmit {
+                    Option::Some(val) => (TxState::Transmit(0, 0, val, miso_int), Option::None()),
+                    Option::None => (TxState::Waiting(), Option::None())
+                }
+            },
+            TxState::Transmit(last_bit, num_transmitted, tx_data, rx_data) => {
+                let sclk_op = last_bit == sclk_half_cycles;
+                let new_last_bit = last_bit + 1;
+
+                if sclk_op {
+                    let new_rx_data = (rx_data << 1) + miso_int;
+                    if num_transmitted == 15 {
+                        (TxState::LastCycle(0), Option::Some(new_rx_data))
+                    }
+                    else {
+                        (
+                            TxState::Transmit(
+                                new_last_bit,
+                                num_transmitted + 1,
+                                tx_data >> 1,
+                                new_rx_data
+                            ),
+                            Option::None()
+                        )
+                    }
+                }
+                else if last_bit == sclk_cycles - 1 {
+                    (TxState::Transmit(0, num_transmitted, tx_data, rx_data), Option::None())
+                }
+                else {
+                    (TxState::Transmit(new_last_bit, num_transmitted, tx_data, rx_data), Option::None())
+                }
+            },
+            TxState::LastCycle(time) => {
+                if time == sclk_half_cycles - 1{
+                    (TxState::Waiting(), Option::None())
+                }
+                else {
+                    (TxState::LastCycle(time + 1), Option::None())
+                }
+            }
+        }
+    };
+
+    let (state, output_data) = _state;
+
+    match state {
+        TxState::Waiting() => (true, true, TxExternalState::Ready(), output_data),
+        TxState::Transmit(last_bit, _, data, _) => {
+            ((last_bit < sclk_half_cycles), (data & 1) == 1, TxExternalState::Transmitting(), output_data)
+        },
+        TxState::LastCycle(_) => {
+            (false, true, TxExternalState::Transmitting(), output_data)
+        }
+    }
+}
+
+
+enum AdcState {
+    Waiting(time: int<10>),
+    CsLow(time: int<10>),
+    Reading(time: int<20>)
+}
+
+// Return value is (sclk, mosi, cs, last_sample)
+entity main(clk: clk, rst: bool, miso_unsync: bool) -> (bool, bool, bool, int<16>) {
+    let miso = inst sync(clk, miso_unsync);
+
+    let wait_time = 1000;
+    let read_time = 10_000;
+    let t_sucs = 10;
+
+     reg(clk) _state: (AdcState, Option<int<16>>) reset(rst: (AdcState::Waiting(0), Option::None())) = {
+         let (state, to_transmit) = _state;
+         match state {
+             AdcState::Waiting(time) => {
+                 if time > wait_time {
+                     (AdcState::CsLow(0), Option::None())
+                 }
+                 else {
+                     (AdcState::Waiting(time + 1), Option::None())
+                 }
+             },
+             AdcState::CsLow(time) => {
+                 if time > t_sucs {
+                     (AdcState::Reading(0), Option::Some(0b0000_0000_0000_1011))
+                 }
+                 else {
+                     (AdcState::CsLow(time + 1), Option::None())
+                 }
+             },
+             AdcState::Reading(time) => {
+                 if time > read_time {
+                     (AdcState::Waiting(0), Option::None())
+                 }
+                 else {
+                     (AdcState::Reading(time + 1), Option::None())
+                 }
+             }
+         }
+     };
+
+    let (state, to_transmit) = _state;
+
+    let cs = match state {
+        AdcState::Waiting(_) => true,
+        AdcState::CsLow(_) => false,
+        AdcState::Reading(_) => false,
+    };
+
+    let (sclk, mosi, waiting, received_value) = inst spi(clk, rst, miso, to_transmit);
+
+    reg(clk) current_value reset (rst: 0) = match received_value {
+        Option::Some(new) => new,
+        Option::None => current_value
+    };
+
+    (if sclk false else true, mosi, cs, current_value)
+}
