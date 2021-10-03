@@ -35,6 +35,8 @@ pub enum TokenKind {
     Reg,
     #[token("let")]
     Let,
+    #[token("decl")]
+    Decl,
     #[token("inst")]
     Instance,
     #[token("reset")]
@@ -148,6 +150,7 @@ impl TokenKind {
 
             TokenKind::Let => "let",
             TokenKind::Reg => "reg",
+            TokenKind::Decl => "decl",
             TokenKind::Entity => "entity",
             TokenKind::Pipeline => "pipeline",
             TokenKind::Stage => "stage",
@@ -205,14 +208,6 @@ impl TokenKind {
     }
     pub fn is_integer(&self) -> bool {
         matches!(self, TokenKind::Integer(_))
-    }
-
-    pub fn is_ident(&self) -> bool {
-        if let TokenKind::Identifier(_) = self {
-            true
-        } else {
-            false
-        }
     }
 }
 

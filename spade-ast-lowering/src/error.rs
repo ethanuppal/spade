@@ -14,7 +14,9 @@ pub enum ItemKind {
 #[derive(Error, Debug, PartialEq, Clone)]
 pub enum Error {
     #[error("Lookup error")]
-    LookupError(#[from] spade_hir::symbol_table::Error),
+    LookupError(#[from] spade_hir::symbol_table::LookupError),
+    #[error("Declaration error")]
+    DeclarationError(#[from] spade_hir::symbol_table::DeclarationError),
     #[error("Duplicate type variable")]
     DuplicateTypeVariable {
         found: Loc<Identifier>,
@@ -58,6 +60,18 @@ pub enum Error {
     PipelineDepthMissmatch { expected: usize, got: Loc<u128> },
     #[error("Pipeline missing clock")]
     MissingPipelineClock { at_loc: Loc<()> },
+
+    #[error("Declarations can only be defined by registers")]
+    DeclarationOfNonReg {
+        at: Loc<Identifier>,
+        declaration_location: Loc<()>,
+    },
+
+    #[error("Redefinition of declaration")]
+    RedefinitionOfDeclaration {
+        at: Loc<Identifier>,
+        previous: Loc<()>,
+    },
 
     // Type related errors
     #[error("Generic parameters for generic name")]

@@ -107,6 +107,7 @@ impl WithLocation for Block {}
 
 #[derive(PartialEq, Debug, Clone)]
 pub enum Statement {
+    Declaration(Vec<Loc<Identifier>>),
     Binding(Loc<Pattern>, Option<Loc<TypeSpec>>, Loc<Expression>),
     Register(Loc<Register>),
 }

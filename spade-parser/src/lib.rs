@@ -74,6 +74,9 @@ pub enum Error {
 
     #[error("Expected expression or stage")]
     ExpectedExpressionOrStage { got: Token },
+
+    #[error("Empty decl statement")]
+    EmptyDeclStatement { at: Loc<()> },
 }
 
 impl Error {
@@ -129,7 +132,7 @@ macro_rules! operator_expr {
 impl<'a> Parser<'a> {
     #[trace_parser]
     pub fn identifier(&mut self) -> Result<Loc<Identifier>> {
-        let token = self.eat_cond(TokenKind::is_ident, "Identifier")?;
+        let token = self.eat_cond(TokenKind::is_identifier, "Identifier")?;
 
         if let TokenKind::Identifier(name) = token.kind {
             Ok(Identifier(name).at(&token.span))
@@ -570,8 +573,10 @@ impl<'a> Parser<'a> {
                     Ok(Some(
                         Pattern::Type(
                             path,
-                            ArgumentPattern::Positional(inner).between(&start_paren.span, &end_paren.span)
-                        ).between(&path_span, &end_paren.span),
+                            ArgumentPattern::Positional(inner)
+                                .between(&start_paren.span, &end_paren.span),
+                        )
+                        .between(&path_span, &end_paren.span),
                     ))
                 } else if let Some(start_brace) = s.peek_and_eat(&TokenKind::OpenBrace)? {
                     let inner_parser = |s: &mut Self| {
@@ -587,8 +592,10 @@ impl<'a> Parser<'a> {
                     Ok(Some(
                         Pattern::Type(
                             path,
-                            ArgumentPattern::Named(inner).between(&start_brace.span, &end_brace.span)
-                        ).between(&path_span, &end_brace.span),
+                            ArgumentPattern::Named(inner)
+                                .between(&start_brace.span, &end_brace.span),
+                        )
+                        .between(&path_span, &end_brace.span),
                     ))
                 } else {
                     Ok(Some(Pattern::Path(path.clone()).at(&path)))
@@ -693,11 +700,38 @@ impl<'a> Parser<'a> {
         Ok(Some(result))
     }
 
+    #[trace_parser]
+    pub fn declaration(&mut self) -> Result<Option<Loc<Statement>>> {
+        let start_token = peek_for!(self, &TokenKind::Decl);
+
+        let mut identifiers = vec![];
+        while self.peek_cond(|t| t.is_identifier(), "expected identifier")? {
+            identifiers.push(self.identifier()?);
+
+            if self.peek_and_eat(&TokenKind::Comma)?.is_none() {
+                break;
+            }
+        }
+
+        if identifiers.is_empty() {
+            return Err(Error::EmptyDeclStatement {
+                at: ().at(&start_token.span),
+            });
+        }
+
+        let last_ident = identifiers.last().unwrap().clone();
+
+        Ok(Some(
+            Statement::Declaration(identifiers).between(&start_token.span, &last_ident),
+        ))
+    }
+
     /// If the next token is the start of a statement, return that statement,
     /// otherwise None
     #[trace_parser]
     pub fn statement(&mut self) -> Result<Option<Loc<Statement>>> {
-        let result = self.first_successful(vec![&Self::binding, &Self::register])?;
+        let result =
+            self.first_successful(vec![&Self::binding, &Self::register, &Self::declaration])?;
         if result.is_some() {
             self.eat(&TokenKind::Semi)?;
         }
@@ -1681,6 +1715,22 @@ mod tests {
         )
         .nowhere();
         check_parse!("let test = 123;", binding, Ok(Some(expected)));
+    }
+
+    #[test]
+    fn declarations_work() {
+        let expected = Statement::Declaration(vec![ast_ident("x"), ast_ident("y")]).nowhere();
+
+        check_parse!("decl x, y;", declaration, Ok(Some(expected)));
+    }
+
+    #[test]
+    fn empty_declaration_results_in_error() {
+        check_parse!(
+            "decl;",
+            declaration,
+            Err(Error::EmptyDeclStatement { at: ().nowhere() })
+        );
     }
 
     #[test]

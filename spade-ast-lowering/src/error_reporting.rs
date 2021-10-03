@@ -5,7 +5,7 @@ use codespan_reporting::diagnostic::{Diagnostic, Label};
 use codespan_reporting::files::SimpleFiles;
 use codespan_reporting::term::{self, termcolor::StandardStream};
 use spade_common::error_reporting::{codespan_config, color_choice, CompilationError};
-use spade_hir::symbol_table::Error as LookupError;
+use spade_hir::symbol_table::{DeclarationError, LookupError};
 
 impl CompilationError for Error {
     fn report(self, filename: &Path, file_content: &str, no_color: bool) {
@@ -85,20 +85,29 @@ impl CompilationError for Error {
                     )),
                 ]),
             Error::LookupError(LookupError::NotAValue(path, was)) => Diagnostic::error()
-                    .with_message(format!("Expected {} to be a value", path))
+                .with_message(format!("Expected {} to be a value", path))
+                .with_labels(vec![
+                    Label::primary(file_id, path.span).with_message(format!("Expected value")),
+                    Label::secondary(file_id, was.loc().span).with_message(format!(
+                        "{} is a {}",
+                        path,
+                        was.kind_string()
+                    )),
+                ])
+                .with_notes(vec![
+                    "Expected value".to_string(),
+                    format!("Found {}", was.kind_string().to_string()),
+                ]),
+            Error::DeclarationError(DeclarationError::DuplicateDeclaration { old, new }) => {
+                Diagnostic::error()
+                    .with_message(format!("A previous declaration of {} exists", new))
                     .with_labels(vec![
-                        Label::primary(file_id, path.span)
-                            .with_message(format!("Expected value")),
-                        Label::secondary(file_id, was.loc().span).with_message(format!(
-                            "{} is a {}",
-                            path,
-                            was.kind_string()
-                        )),
+                        Label::primary(file_id, new.span)
+                            .with_message(format!("{} was declared more than once", new)),
+                        Label::secondary(file_id, old.span)
+                            .with_message(format!("Previously declared here")),
                     ])
-                    .with_notes(vec![
-                        "Expected value".to_string(),
-                        format!("Found {}", was.kind_string().to_string()),
-                    ]),
+            }
             Error::ArgumentListLenghtMismatch { expected, got, at } => Diagnostic::error()
                 .with_message(format!("Expected {} arguments, got {}", expected, got))
                 .with_labels(vec![Label::primary(file_id, at.span)
@@ -180,6 +189,25 @@ impl CompilationError for Error {
                 .with_notes(vec![format!(
                     "A generic argument can not have generic types"
                 )]),
+            Error::DeclarationOfNonReg {
+                at,
+                declaration_location,
+            } => Diagnostic::error()
+                .with_message("Declared variables can only be defined by registers")
+                .with_labels(vec![
+                    Label::primary(file_id, at.span).with_message(format!("Not a register")),
+                    Label::secondary(file_id, declaration_location.span)
+                        .with_message(format!("{} declared here", at)),
+                ]),
+            Error::RedefinitionOfDeclaration { at, previous } => Diagnostic::error()
+                .with_message(format!("{} was already defined", at))
+                .with_labels(vec![
+                    Label::primary(file_id, at.span)
+                        .with_message(format!("{} was defined previously", at)),
+                    Label::secondary(file_id, previous.span)
+                        .with_message(format!("previous definition")),
+                ])
+                .with_notes(vec![format!("Declared variables can only be defined once")]),
         };
 
         let writer = StandardStream::stderr(color_choice(no_color));

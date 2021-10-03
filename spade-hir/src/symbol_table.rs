@@ -8,7 +8,7 @@ use std::collections::HashMap;
 use thiserror::Error;
 
 #[derive(Error, Debug, Clone, PartialEq)]
-pub enum Error {
+pub enum LookupError {
     #[error("No such symbol")]
     NoSuchSymbol(Loc<Path>),
     #[error("Not a type symbol")]
@@ -25,6 +25,15 @@ pub enum Error {
     NotAnEnumVariant(Loc<Path>, Thing),
     #[error("Not a value")]
     NotAValue(Loc<Path>, Thing),
+}
+
+#[derive(Error, Debug, Clone, PartialEq)]
+pub enum DeclarationError {
+    #[error("Duplicate declaration")]
+    DuplicateDeclaration {
+        new: Loc<Identifier>,
+        old: Loc<Identifier>,
+    },
 }
 
 #[derive(PartialEq, Debug, Clone)]
@@ -101,11 +110,19 @@ pub enum TypeSymbol {
 }
 impl WithLocation for TypeSymbol {}
 
+#[derive(Clone, PartialEq)]
+pub enum DeclarationState {
+    Undefined(NameID),
+    Defined(Loc<()>),
+}
+impl WithLocation for DeclarationState {}
+
 /// A table of the symbols known to the program in the current scope. Names
 /// are mapped to IDs which are then mapped to the actual things
 pub struct SymbolTable {
     /// Each outer vec is a scope, inner vecs are symbols in that scope
     pub symbols: Vec<HashMap<Path, NameID>>,
+    pub declarations: Vec<HashMap<Loc<Identifier>, DeclarationState>>,
     id_tracker: NameIdTracker,
     pub items: HashMap<NameID, Thing>,
 }
@@ -114,16 +131,19 @@ impl SymbolTable {
     pub fn new() -> Self {
         Self {
             symbols: vec![HashMap::new()],
+            declarations: vec![HashMap::new()],
             id_tracker: NameIdTracker::new(),
             items: HashMap::new(),
         }
     }
     pub fn new_scope(&mut self) {
-        self.symbols.push(HashMap::new())
+        self.symbols.push(HashMap::new());
+        self.declarations.push(HashMap::new());
     }
 
     pub fn close_scope(&mut self) {
         self.symbols.pop();
+        self.declarations.pop();
     }
 
     /// Adds a thing to the scope at `current_scope - offset`. Panics if there is no such scope
@@ -186,6 +206,39 @@ impl SymbolTable {
             Thing::Variable(name),
         )
     }
+
+    pub fn add_declaration(&mut self, ident: Loc<Identifier>) -> Result<NameID, DeclarationError> {
+        if let Some((old, _)) = self.declarations.last().unwrap().get_key_value(&ident) {
+            Err(DeclarationError::DuplicateDeclaration {
+                new: ident.clone(),
+                old: old.clone(),
+            })
+        } else {
+            let name_id = self.add_local_variable(ident.clone());
+            self.declarations
+                .last_mut()
+                .unwrap()
+                .insert(ident, DeclarationState::Undefined(name_id.clone()));
+            Ok(name_id)
+        }
+    }
+
+    pub fn get_declaration(&mut self, ident: &Loc<Identifier>) -> Option<Loc<DeclarationState>> {
+        self.declarations
+            .last()
+            .unwrap()
+            .get_key_value(ident)
+            .map(|(k, v)| v.clone().at(k))
+    }
+
+    pub fn mark_declaration_defined(&mut self, ident: Loc<Identifier>, definition_point: Loc<()>) {
+        *self
+            .declarations
+            .last_mut()
+            .unwrap()
+            .get_mut(&ident)
+            .unwrap() = DeclarationState::Defined(definition_point)
+    }
 }
 macro_rules! item_accessors {
     (
@@ -210,12 +263,12 @@ macro_rules! item_accessors {
 
             /// Look up an item, with errors if the item is not currently in scope, or is not
             /// convertible to the return type.
-            pub fn $lookup_name(&self, name: &Loc<Path>) -> Result<(NameID, Loc<$result>), Error> {
+            pub fn $lookup_name(&self, name: &Loc<Path>) -> Result<(NameID, Loc<$result>), LookupError> {
                 let id = self.lookup_id(name)?;
 
                 match self.items.get(&id).unwrap() {
                     $($thing => {Ok((id, $conversion))})*
-                    other => Err(Error::$err(name.clone(), other.clone())),
+                    other => Err(LookupError::$err(name.clone(), other.clone())),
                 }
             }
         )*
@@ -250,33 +303,33 @@ impl SymbolTable {
     pub fn has_symbol(&self, name: Path) -> bool {
         match self.lookup_id(&name.nowhere()) {
             Ok(_) => true,
-            Err(Error::NoSuchSymbol(_)) => false,
-            Err(Error::NotATypeSymbol(_, _)) => unreachable!(),
-            Err(Error::NotAVariable(_, _)) => unreachable!(),
-            Err(Error::NotAnEntity(_, _)) => unreachable!(),
-            Err(Error::NotAPipeline(_, _)) => unreachable!(),
-            Err(Error::NotAFunction(_, _)) => unreachable!(),
-            Err(Error::NotAnEnumVariant(_, _)) => unreachable!(),
-            Err(Error::NotAValue(_, _)) => unreachable!(),
+            Err(LookupError::NoSuchSymbol(_)) => false,
+            Err(LookupError::NotATypeSymbol(_, _)) => unreachable!(),
+            Err(LookupError::NotAVariable(_, _)) => unreachable!(),
+            Err(LookupError::NotAnEntity(_, _)) => unreachable!(),
+            Err(LookupError::NotAPipeline(_, _)) => unreachable!(),
+            Err(LookupError::NotAFunction(_, _)) => unreachable!(),
+            Err(LookupError::NotAnEnumVariant(_, _)) => unreachable!(),
+            Err(LookupError::NotAValue(_, _)) => unreachable!(),
         }
     }
 
-    pub fn lookup_variable(&self, name: &Loc<Path>) -> Result<NameID, Error> {
+    pub fn lookup_variable(&self, name: &Loc<Path>) -> Result<NameID, LookupError> {
         let id = self.lookup_id(name)?;
 
         match self.items.get(&id).unwrap() {
             Thing::Variable(_) => Ok(id),
-            other => Err(Error::NotAVariable(name.clone(), other.clone())),
+            other => Err(LookupError::NotAVariable(name.clone(), other.clone())),
         }
     }
 
-    pub fn lookup_id(&self, name: &Loc<Path>) -> Result<NameID, Error> {
+    pub fn lookup_id(&self, name: &Loc<Path>) -> Result<NameID, LookupError> {
         for tab in self.symbols.iter().rev() {
             if let Some(id) = tab.get(&name) {
                 return Ok(id.clone());
             }
         }
-        Err(Error::NoSuchSymbol(name.clone()))
+        Err(LookupError::NoSuchSymbol(name.clone()))
     }
 }
 

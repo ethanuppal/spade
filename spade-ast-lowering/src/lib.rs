@@ -6,6 +6,7 @@ pub mod pipelines;
 pub mod types;
 
 use ast::ParameterList;
+use hir::symbol_table::DeclarationState;
 use hir::util::path_from_ident;
 use hir::ExecutableItem;
 pub use spade_common::id_tracker;
@@ -22,7 +23,7 @@ use spade_common::{
 };
 use spade_hir as hir;
 use spade_hir::symbol_table::SymbolTable;
-use spade_hir::symbol_table::{Error as HirError, Thing, TypeSymbol};
+use spade_hir::symbol_table::{LookupError, Thing, TypeSymbol};
 use spade_hir::{expression::BinaryOperator, EntityHead};
 
 pub use error::{Error, Result};
@@ -291,6 +292,7 @@ pub fn visit_pattern(
     p: &ast::Pattern,
     symtab: &mut SymbolTable,
     idtracker: &mut ExprIdTracker,
+    allow_declarations: bool,
 ) -> Result<hir::Pattern> {
     let kind = match &p {
         ast::Pattern::Integer(_) => todo!(),
@@ -300,10 +302,33 @@ pub fn visit_pattern(
             // and types
             match path.inner.0.as_slice() {
                 [ident] => {
-                    let name_id = symtab.add_thing(
-                        path_from_ident(ident.clone()).inner,
-                        Thing::Variable(ident.clone()),
-                    );
+                    // Check if this is declaring a variable
+                    let name_id = if let Some(state) = symtab.get_declaration(ident) {
+                        if allow_declarations {
+                            match state.inner {
+                                DeclarationState::Undefined(id) => {
+                                    symtab.mark_declaration_defined(ident.clone(), ident.loc());
+                                    id
+                                }
+                                DeclarationState::Defined(previous) => {
+                                    return Err(Error::RedefinitionOfDeclaration {
+                                        at: ident.clone(),
+                                        previous: previous.loc(),
+                                    })
+                                }
+                            }
+                        } else {
+                            return Err(Error::DeclarationOfNonReg {
+                                at: ident.clone(),
+                                declaration_location: state.loc(),
+                            });
+                        }
+                    } else {
+                        symtab.add_thing(
+                            path_from_ident(ident.clone()).inner,
+                            Thing::Variable(ident.clone()),
+                        )
+                    };
 
                     hir::PatternKind::Name(name_id.at_loc(&ident))
                 }
@@ -320,7 +345,7 @@ pub fn visit_pattern(
                             hir::PatternKind::Type(name_id.at(path), vec![])
                         }
                     }
-                    Err(spade_hir::symbol_table::Error::NoSuchSymbol(_)) => {
+                    Err(spade_hir::symbol_table::LookupError::NoSuchSymbol(_)) => {
                         todo!("Handle new symbols")
                     }
                     Err(e) => return Err(e.into()),
@@ -330,7 +355,7 @@ pub fn visit_pattern(
         ast::Pattern::Tuple(pattern) => {
             let inner = pattern
                 .iter()
-                .map(|p| p.try_visit(visit_pattern, symtab, idtracker))
+                .map(|p| p.try_map_ref(|p| visit_pattern(p, symtab, idtracker, allow_declarations)))
                 .collect::<Result<_>>()?;
             hir::PatternKind::Tuple(inner)
         }
@@ -356,8 +381,9 @@ pub fn visit_pattern(
                                 .iter()
                                 .zip(variant.inner.params.0.iter())
                                 .map(|(p, arg)| {
-                                    let pat =
-                                        p.try_map_ref(|p| visit_pattern(p, symtab, idtracker))?;
+                                    let pat = p.try_map_ref(|p| {
+                                        visit_pattern(p, symtab, idtracker, allow_declarations)
+                                    })?;
                                     Ok(hir::PatternArgument {
                                         target: arg.0.clone(),
                                         value: pat,
@@ -370,7 +396,7 @@ pub fn visit_pattern(
                         }
                     }
                 }
-                Err(spade_hir::symbol_table::Error::NoSuchSymbol(_)) => {
+                Err(spade_hir::symbol_table::LookupError::NoSuchSymbol(_)) => {
                     todo!("Handle new symbols")
                 }
                 Err(e) => return Err(e.into()),
@@ -380,13 +406,39 @@ pub fn visit_pattern(
     Ok(kind.with_id(idtracker.next()))
 }
 
+/// Visit a pattern where definition of previously declared variables
+/// is an error
+pub fn visit_pattern_normal(
+    p: &ast::Pattern,
+    symtab: &mut SymbolTable,
+    idtracker: &mut ExprIdTracker,
+) -> Result<hir::Pattern> {
+    visit_pattern(p, symtab, idtracker, false)
+}
+
+/// Visit a pattern which can define previously declared variables
+pub fn visit_pattern_allow_declarations(
+    p: &ast::Pattern,
+    symtab: &mut SymbolTable,
+    idtracker: &mut ExprIdTracker,
+) -> Result<hir::Pattern> {
+    visit_pattern(p, symtab, idtracker, true)
+}
+
 pub fn visit_statement(
     s: &Loc<ast::Statement>,
     symtab: &mut SymbolTable,
     idtracker: &mut ExprIdTracker,
-) -> Result<Loc<hir::Statement>> {
+) -> Result<Option<Loc<hir::Statement>>> {
     let (s, span) = s.split_ref();
     match s {
+        ast::Statement::Declaration(names) => {
+            for name in names {
+                symtab.add_declaration(name.clone())?;
+            }
+
+            Ok(None)
+        }
         ast::Statement::Binding(pattern, t, expr) => {
             let hir_type = if let Some(t) = t {
                 Some(t.try_map_ref(|t| visit_type_spec(t, symtab))?)
@@ -394,15 +446,18 @@ pub fn visit_statement(
                 None
             };
 
-            let pat = pattern.try_visit(visit_pattern, symtab, idtracker)?;
+            let pat = pattern.try_visit(visit_pattern_normal, symtab, idtracker)?;
 
             let expr = expr.try_visit(visit_expression, symtab, idtracker)?;
 
-            Ok(Loc::new(hir::Statement::Binding(pat, hir_type, expr), span))
+            Ok(Some(Loc::new(
+                hir::Statement::Binding(pat, hir_type, expr),
+                span,
+            )))
         }
         ast::Statement::Register(inner) => {
             let (result, span) = visit_register(&inner, symtab, idtracker)?.separate();
-            Ok(Loc::new(hir::Statement::Register(result), span))
+            Ok(Some(Loc::new(hir::Statement::Register(result), span)))
         }
     }
 }
@@ -611,7 +666,7 @@ pub fn visit_expression(
             let b = branches
                 .iter()
                 .map(|(pattern, result)| {
-                    let p = pattern.try_visit(visit_pattern, symtab, idtracker)?;
+                    let p = pattern.try_visit(visit_pattern_normal, symtab, idtracker)?;
                     let r = result.try_visit(visit_expression, symtab, idtracker)?;
                     Ok((p, r))
                 })
@@ -632,12 +687,10 @@ pub fn visit_expression(
         }
         ast::Expression::Identifier(path) => {
             // If the identifier isn't a valid variable, report as "expected value".
-            let id = symtab
-                .lookup_variable(path)
-                .map_err(|err| match err {
-                    HirError::NotAVariable(path, was) => HirError::NotAValue(path, was),
-                    err => err,
-                })?;
+            let id = symtab.lookup_variable(path).map_err(|err| match err {
+                LookupError::NotAVariable(path, was) => LookupError::NotAValue(path, was),
+                err => err,
+            })?;
 
             Ok(hir::ExprKind::Identifier(id))
         }
@@ -651,10 +704,14 @@ pub fn visit_block(
     idtracker: &mut ExprIdTracker,
 ) -> Result<hir::Block> {
     symtab.new_scope();
-    let mut statements = vec![];
-    for statement in &b.statements {
-        statements.push(visit_statement(&statement, symtab, idtracker)?)
-    }
+    let statements = b
+        .statements
+        .iter()
+        .map(|statement| visit_statement(statement, symtab, idtracker))
+        .collect::<Result<Vec<_>>>()?
+        .into_iter()
+        .filter_map(|x| x)
+        .collect::<Vec<_>>();
 
     let result = b.result.try_visit(visit_expression, symtab, idtracker)?;
 
@@ -670,7 +727,9 @@ pub fn visit_register(
 ) -> Result<Loc<hir::Register>> {
     let (reg, loc) = reg.split_ref();
 
-    let pattern = reg.pattern.try_visit(visit_pattern, symtab, idtracker)?;
+    let pattern = reg
+        .pattern
+        .try_visit(visit_pattern_allow_declarations, symtab, idtracker)?;
 
     let clock = reg.clock.try_visit(visit_expression, symtab, idtracker)?;
 
@@ -840,6 +899,9 @@ mod entity_visiting {
 mod statement_visiting {
     use super::*;
 
+    use hir::symbol_table::DeclarationError;
+    use matches::assert_matches;
+    use pretty_assertions::assert_eq;
     use spade_ast::testutil::{ast_ident, ast_path};
     use spade_common::location_info::WithLocation;
     use spade_common::name::testutil::name_id;
@@ -865,7 +927,7 @@ mod statement_visiting {
 
         assert_eq!(
             visit_statement(&input, &mut symtab, &mut idtracker),
-            Ok(expected)
+            Ok(Some(expected))
         );
         assert_eq!(symtab.has_symbol(ast_path("a").inner), true);
     }
@@ -906,9 +968,121 @@ mod statement_visiting {
         assert_eq!(clk_id.0, 0);
         assert_eq!(
             visit_statement(&input, &mut symtab, &mut idtracker),
-            Ok(expected)
+            Ok(Some(expected))
         );
         assert_eq!(symtab.has_symbol(ast_path("regname").inner), true);
+    }
+
+    #[test]
+    fn declarations_declare_variables() {
+        let input = ast::Statement::Declaration(vec![ast_ident("x"), ast_ident("y")]).nowhere();
+
+        let expected = None;
+
+        let mut symtab = SymbolTable::new();
+        let mut idtracker = ExprIdTracker::new();
+        assert_eq!(
+            visit_statement(&input, &mut symtab, &mut idtracker),
+            Ok(expected)
+        );
+        assert_eq!(symtab.has_symbol(ast_path("x").inner), true);
+        assert_eq!(symtab.has_symbol(ast_path("y").inner), true);
+    }
+
+    #[test]
+    fn duplicate_declarations_cauases_error() {
+        let input = ast::Statement::Declaration(vec![ast_ident("x"), ast_ident("x")]).nowhere();
+
+        let mut symtab = SymbolTable::new();
+        let mut idtracker = ExprIdTracker::new();
+        assert_eq!(
+            visit_statement(&input, &mut symtab, &mut idtracker),
+            Err(Error::DeclarationError(
+                DeclarationError::DuplicateDeclaration {
+                    new: ast_ident("x"),
+                    old: ast_ident("x")
+                }
+            ))
+        );
+    }
+
+    #[test]
+    fn register_with_declaration_defines_declaration() {
+        let input = ast::Statement::Register(
+            ast::Register {
+                pattern: ast::Pattern::name("regname"),
+                clock: ast::Expression::Identifier(ast_path("clk")).nowhere(),
+                reset: None,
+                value: ast::Expression::IntLiteral(0).nowhere(),
+                value_type: None,
+            }
+            .nowhere(),
+        )
+        .nowhere();
+
+        let mut symtab = SymbolTable::new();
+        let mut idtracker = ExprIdTracker::new();
+
+        symtab.add_local_variable(ast_ident("clk"));
+        let id = symtab.add_declaration(ast_ident("regname")).unwrap();
+
+        let result = visit_statement(&input, &mut symtab, &mut idtracker)
+            .unwrap()
+            .unwrap();
+        match result.inner {
+            hir::Statement::Register(reg) => match reg.pattern.kind {
+                hir::PatternKind::Name(ref reg_id) => assert_eq!(id, reg_id.inner),
+                _ => panic!("Expected single name in register"),
+            },
+            other => panic!("Expected register, found {:?}", other),
+        }
+    }
+
+    #[test]
+    fn let_binding_declared_variables_is_not_allowed() {
+        let input = ast::Statement::Binding(
+            ast::Pattern::name("regname"),
+            None,
+            ast::Expression::IntLiteral(0).nowhere(),
+        )
+        .nowhere();
+
+        let mut symtab = SymbolTable::new();
+        let mut idtracker = ExprIdTracker::new();
+
+        symtab.add_local_variable(ast_ident("clk"));
+        symtab.add_declaration(ast_ident("regname")).unwrap();
+
+        let result = visit_statement(&input, &mut symtab, &mut idtracker);
+
+        assert_matches!(result, Err(Error::DeclarationOfNonReg { .. }));
+    }
+
+    #[test]
+    fn multiple_definitions_of_declared_variables_are_not_allowed() {
+        let input = ast::Statement::Register(
+            ast::Register {
+                pattern: ast::Pattern::name("regname"),
+                clock: ast::Expression::Identifier(ast_path("clk")).nowhere(),
+                reset: None,
+                value: ast::Expression::IntLiteral(0).nowhere(),
+                value_type: None,
+            }
+            .nowhere(),
+        )
+        .nowhere();
+
+        let mut symtab = SymbolTable::new();
+        let mut idtracker = ExprIdTracker::new();
+
+        symtab.add_local_variable(ast_ident("clk"));
+        symtab.add_declaration(ast_ident("regname")).unwrap();
+
+        visit_statement(&input, &mut symtab, &mut idtracker)
+            .unwrap()
+            .unwrap();
+        let result = visit_statement(&input, &mut symtab, &mut idtracker);
+        assert_matches!(result, Err(Error::RedefinitionOfDeclaration { .. }));
     }
 }
 
@@ -976,7 +1150,7 @@ mod expression_visiting {
         assert_eq!(
             visit_expression(&input, &mut symtab, &mut idtracker),
             Err(Error::LookupError(
-                spade_hir::symbol_table::Error::NoSuchSymbol(ast_path("test"))
+                spade_hir::symbol_table::LookupError::NoSuchSymbol(ast_path("test"))
             ))
         );
     }
@@ -1593,10 +1767,9 @@ mod expression_visiting {
 
         assert_eq!(
             visit_expression(&input, &mut symtab, &mut idtracker),
-            Err(Error::LookupError(hir::symbol_table::Error::NotAValue(
-                ast_path("test"),
-                head
-            )))
+            Err(Error::LookupError(
+                hir::symbol_table::LookupError::NotAValue(ast_path("test"), head)
+            ))
         );
     }
 
@@ -1612,10 +1785,9 @@ mod expression_visiting {
 
         assert_eq!(
             visit_expression(&input, &mut symtab, &mut idtracker),
-            Err(Error::LookupError(hir::symbol_table::Error::NotAValue(
-                ast_path("test"),
-                head
-            )))
+            Err(Error::LookupError(
+                hir::symbol_table::LookupError::NotAValue(ast_path("test"), head)
+            ))
         );
     }
 }
