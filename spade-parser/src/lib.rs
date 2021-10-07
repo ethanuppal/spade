@@ -561,14 +561,17 @@ impl<'a> Parser<'a> {
             },
             &|s| {
                 let path = s.path()?;
+                let path_span = path.span;
 
                 if let Some(start_paren) = s.peek_and_eat(&TokenKind::OpenParen)? {
                     let inner = s.comma_separated(Self::pattern, &TokenKind::CloseParen)?;
-                    let end = s.eat(&TokenKind::CloseParen)?;
+                    let end_paren = s.eat(&TokenKind::CloseParen)?;
 
                     Ok(Some(
-                        Pattern::Type(path, ArgumentPattern::Positional(inner).nowhere())
-                            .between(&start_paren.span, &end.span),
+                        Pattern::Type(
+                            path,
+                            ArgumentPattern::Positional(inner).between(&start_paren.span, &end_paren.span)
+                        ).between(&path_span, &end_paren.span),
                     ))
                 } else if let Some(start_brace) = s.peek_and_eat(&TokenKind::OpenBrace)? {
                     let inner_parser = |s: &mut Self| {
@@ -579,11 +582,13 @@ impl<'a> Parser<'a> {
                         Ok((lhs, rhs))
                     };
                     let inner = s.comma_separated(inner_parser, &TokenKind::CloseBrace)?;
-                    let end = s.eat(&TokenKind::CloseBrace)?;
+                    let end_brace = s.eat(&TokenKind::CloseBrace)?;
 
                     Ok(Some(
-                        Pattern::Type(path, ArgumentPattern::Named(inner).nowhere())
-                            .between(&start_brace.span, &end.span),
+                        Pattern::Type(
+                            path,
+                            ArgumentPattern::Named(inner).between(&start_brace.span, &end_brace.span)
+                        ).between(&path_span, &end_brace.span),
                     ))
                 } else {
                     Ok(Some(Pattern::Path(path.clone()).at(&path)))
