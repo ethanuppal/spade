@@ -23,6 +23,8 @@ pub enum Error {
     NotAFunction(Loc<Path>, Thing),
     #[error("Not an enum variant")]
     NotAnEnumVariant(Loc<Path>, Thing),
+    #[error("Not a value")]
+    NotAValue(Loc<Path>, Thing),
 }
 
 #[derive(PartialEq, Debug, Clone)]
@@ -255,6 +257,7 @@ impl SymbolTable {
             Err(Error::NotAPipeline(_, _)) => unreachable!(),
             Err(Error::NotAFunction(_, _)) => unreachable!(),
             Err(Error::NotAnEnumVariant(_, _)) => unreachable!(),
+            Err(Error::NotAValue(_, _)) => unreachable!(),
         }
     }
 

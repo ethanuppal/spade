@@ -22,7 +22,7 @@ use spade_common::{
 };
 use spade_hir as hir;
 use spade_hir::symbol_table::SymbolTable;
-use spade_hir::symbol_table::{Thing, TypeSymbol};
+use spade_hir::symbol_table::{Error as HirError, Thing, TypeSymbol};
 use spade_hir::{expression::BinaryOperator, EntityHead};
 
 pub use error::{Error, Result};
@@ -631,7 +631,13 @@ pub fn visit_expression(
             Ok(hir::ExprKind::FnCall(name_id.at_loc(callee), args))
         }
         ast::Expression::Identifier(path) => {
-            let id = symtab.lookup_variable(path)?;
+            // If the identifier isn't a valid variable, report as "expected value".
+            let id = symtab
+                .lookup_variable(path)
+                .map_err(|err| match err {
+                    HirError::NotAVariable(path, was) => HirError::NotAValue(path, was),
+                    err => err,
+                })?;
 
             Ok(hir::ExprKind::Identifier(id))
         }
@@ -1569,7 +1575,7 @@ mod expression_visiting {
 
     // NOTE: This test should be removed once/if we introduce higher order functions
     #[test]
-    fn functions_are_not_variables() {
+    fn functions_are_not_returnable_values() {
         let input = ast::Expression::Identifier(ast_path("test")).nowhere();
 
         let mut symtab = SymbolTable::new();
@@ -1587,7 +1593,26 @@ mod expression_visiting {
 
         assert_eq!(
             visit_expression(&input, &mut symtab, &mut idtracker),
-            Err(Error::LookupError(hir::symbol_table::Error::NotAVariable(
+            Err(Error::LookupError(hir::symbol_table::Error::NotAValue(
+                ast_path("test"),
+                head
+            )))
+        );
+    }
+
+    #[test]
+    fn types_are_not_returnable_values() {
+        let input = ast::Expression::Identifier(ast_path("test")).nowhere();
+
+        let mut symtab = SymbolTable::new();
+        let mut idtracker = ExprIdTracker::new();
+
+        let head = Thing::Type(TypeSymbol::Declared(vec![]).nowhere());
+        symtab.add_thing(ast_path("test").inner, head.clone());
+
+        assert_eq!(
+            visit_expression(&input, &mut symtab, &mut idtracker),
+            Err(Error::LookupError(hir::symbol_table::Error::NotAValue(
                 ast_path("test"),
                 head
             )))

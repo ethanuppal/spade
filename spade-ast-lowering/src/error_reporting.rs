@@ -84,6 +84,21 @@ impl CompilationError for Error {
                         was.kind_string()
                     )),
                 ]),
+            Error::LookupError(LookupError::NotAValue(path, was)) => Diagnostic::error()
+                    .with_message(format!("Expected {} to be a value", path))
+                    .with_labels(vec![
+                        Label::primary(file_id, path.span)
+                            .with_message(format!("Expected value")),
+                        Label::secondary(file_id, was.loc().span).with_message(format!(
+                            "{} is a {}",
+                            path,
+                            was.kind_string()
+                        )),
+                    ])
+                    .with_notes(vec![
+                        "Expected value".to_string(),
+                        format!("Found {}", was.kind_string().to_string()),
+                    ]),
             Error::ArgumentListLenghtMismatch { expected, got, at } => Diagnostic::error()
                 .with_message(format!("Expected {} arguments, got {}", expected, got))
                 .with_labels(vec![Label::primary(file_id, at.span)
