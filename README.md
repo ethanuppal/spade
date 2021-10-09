@@ -1,3 +1,5 @@
+<img src="misc/spadefish.svg" />
+
 # Spade
 
 A work in progress HDL that doesn't make you want to pull your hair out. Taking
