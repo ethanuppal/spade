@@ -1,18 +1,42 @@
 # image: "scorpil/rust:nightly"
 image: rust:latest
 
-test:cargo:
+before_script:
+    - rustup component add rustfmt
+
+
+build:
     script:
-        - git submodule init
-        - git submodule update
         - cargo build --color=always
+    cache:
+        # pull the old cache and push the new when done
+        policy: pull-push
+        paths:
+            - target/
+            - cargo/
+
+test:
+    needs: [build]
+    script:
         - cargo test --color=always
     cache:
+        # only pull the cache since the build pushes it
+        policy: pull
+        paths:
+            - target/
+            - cargo/
+
+test cargo-fmt:
+    script:
+        # pass --check to rustfmt to error if un-formatted
+        - cargo fmt -- --check
+    cache:
+        # only pull the cache since the build pushes it
+        policy: pull
         paths:
             - target/
             - cargo/
 
 variables:
     CARGO_HOME: $CI_PROJECT_DIR/cargo
-
-
+    GIT_SUBMODULE_STRATEGY: normal
