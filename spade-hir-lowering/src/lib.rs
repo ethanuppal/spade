@@ -139,7 +139,7 @@ impl PatternLocal for Pattern {
         match &self.kind {
             hir::PatternKind::Integer(_) => todo!(),
             hir::PatternKind::Bool(_) => todo!(),
-            hir::PatternKind::Name(_) => {}
+            hir::PatternKind::Name { .. } => {}
             hir::PatternKind::Tuple(inner) => {
                 let inner_types = if let mir::types::Type::Tuple(inner) = &types
                     .type_of_id(self.id, symtab, &item_list.types)
@@ -213,7 +213,7 @@ impl PatternLocal for Pattern {
         match &self.kind {
             hir::PatternKind::Integer(_) => todo!("Codegen for integer patterns"),
             hir::PatternKind::Bool(_) => todo!("Codegen for bool patterns"),
-            hir::PatternKind::Name(_) => Ok(PatternCondition {
+            hir::PatternKind::Name { .. } => Ok(PatternCondition {
                 statements: vec![mir::Statement::Constant(
                     output_id,
                     MirType::Bool,
@@ -255,7 +255,10 @@ impl PatternLocal for Pattern {
     /// in the output code to make it more readable
     fn value_name(&self) -> ValueName {
         match &self.kind {
-            hir::PatternKind::Name(name) => return name.value_name(),
+            hir::PatternKind::Name {
+                name,
+                pre_declared: _,
+            } => return name.value_name(),
             hir::PatternKind::Integer(_) => {}
             hir::PatternKind::Bool(_) => {}
             hir::PatternKind::Tuple(_) => {}
@@ -268,7 +271,7 @@ impl PatternLocal for Pattern {
     /// the case, an alias from its true name to `value_name` must be generated
     fn is_alias(&self) -> bool {
         match self.kind {
-            hir::PatternKind::Name(_) => true,
+            hir::PatternKind::Name { .. } => true,
             hir::PatternKind::Integer(_) => false,
             hir::PatternKind::Bool(_) => false,
             hir::PatternKind::Tuple(_) => false,
@@ -347,6 +350,7 @@ impl StatementLocal for Statement {
                     item_list,
                 )?);
             }
+            Statement::Declaration(_) => {}
         }
         Ok(result)
     }

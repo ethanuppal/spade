@@ -18,6 +18,8 @@ test/basic_pipeline: test/basic_pipeline/build/code.v.vcd .PHONY
 test/tuple_pipeline: test/tuple_pipeline/build/code.v.vcd .PHONY
 test/enum_instantiation: test/enum_instantiation/build/code.v.vcd .PHONY
 test/match: test/match/build/code.v.vcd .PHONY
+test/match: test/match/build/code.v.vcd .PHONY
+test/decl_based_feedback: test/decl_based_feedback/build/code.v.vcd .PHONY
 
 # Build verilog from the spade code
 test/%/build/code.v: test/%/code.spade $(SPADEC)

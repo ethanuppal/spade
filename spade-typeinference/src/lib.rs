@@ -502,8 +502,10 @@ impl TypeState {
         match &pattern.inner.kind {
             hir::PatternKind::Integer(_) => todo!(),
             hir::PatternKind::Bool(_) => todo!(),
-            hir::PatternKind::Name(name) => {
-                self.add_equation(TypedExpression::Name(name.clone().inner), new_type.clone());
+            hir::PatternKind::Name { name, pre_declared } => {
+                if !pre_declared {
+                    self.add_equation(TypedExpression::Name(name.clone().inner), new_type.clone());
+                }
             }
             hir::PatternKind::Tuple(subpatterns) => {
                 let tuple_type = TypeVar::Tuple(
@@ -593,6 +595,13 @@ impl TypeState {
                 Ok(())
             }
             Statement::Register(reg) => self.visit_register(reg, symtab),
+            Statement::Declaration(names) => {
+                for name in names {
+                    let new_type = self.new_generic();
+                    self.add_equation(TypedExpression::Name(name.clone().inner), new_type);
+                }
+                Ok(())
+            }
         }
     }
 
@@ -1065,8 +1074,8 @@ mod tests {
         spade_ast_lowering::builtins::populate_symtab(&mut symtab, &mut ItemList::new());
 
         let first_pattern = PatternKind::Tuple(vec![
-            PatternKind::Name(name_id(10, "x1")).with_id(20).nowhere(),
-            PatternKind::Name(name_id(11, "x2")).with_id(21).nowhere(),
+            PatternKind::name(name_id(10, "x1")).with_id(20).nowhere(),
+            PatternKind::name(name_id(11, "x2")).with_id(21).nowhere(),
         ])
         .with_id(22)
         .nowhere();
@@ -1076,7 +1085,7 @@ mod tests {
             vec![
                 (first_pattern, Expression::ident(1, 1, "b").nowhere()),
                 (
-                    PatternKind::Name(name_id(11, "y")).with_id(23).nowhere(),
+                    PatternKind::name(name_id(11, "y")).with_id(23).nowhere(),
                     Expression::ident(2, 2, "c").nowhere(),
                 ),
             ],
@@ -1256,7 +1265,7 @@ mod tests {
         spade_ast_lowering::builtins::populate_symtab(&mut symtab, &mut ItemList::new());
 
         let input = hir::Register {
-            pattern: PatternKind::Name(name_id(0, "a")).with_id(10).nowhere(),
+            pattern: PatternKind::name(name_id(0, "a")).with_id(10).nowhere(),
             clock: ExprKind::Identifier(name_id(1, "clk").inner)
                 .with_id(3)
                 .nowhere(),
@@ -1286,7 +1295,7 @@ mod tests {
         spade_ast_lowering::builtins::populate_symtab(&mut symtab, &mut ItemList::new());
 
         let input = hir::Register {
-            pattern: PatternKind::Name(name_id(0, "a")).with_id(10).nowhere(),
+            pattern: PatternKind::name(name_id(0, "a")).with_id(10).nowhere(),
             clock: ExprKind::Identifier(name_id(1, "clk").inner)
                 .with_id(3)
                 .nowhere(),
@@ -1318,7 +1327,7 @@ mod tests {
         let rst_cond = name_id(2, "rst").inner;
         let rst_value = name_id(3, "rst_value").inner;
         let input = hir::Register {
-            pattern: PatternKind::Name(name_id(0, "a")).with_id(10).nowhere(),
+            pattern: PatternKind::name(name_id(0, "a")).with_id(10).nowhere(),
             clock: ExprKind::Identifier(name_id(1, "clk").inner)
                 .with_id(3)
                 .nowhere(),
@@ -1359,7 +1368,7 @@ mod tests {
         spade_ast_lowering::builtins::populate_symtab(&mut symtab, &mut ItemList::new());
 
         let input = hir::Statement::Binding(
-            PatternKind::Name(name_id(0, "a")).with_id(10).nowhere(),
+            PatternKind::name(name_id(0, "a")).with_id(10).nowhere(),
             None,
             ExprKind::IntLiteral(0).with_id(0).nowhere(),
         )
@@ -1379,7 +1388,7 @@ mod tests {
         spade_ast_lowering::builtins::populate_symtab(&mut symtab, &mut ItemList::new());
 
         let input = Register {
-            pattern: PatternKind::Name(name_id(0, "test")).with_id(10).nowhere(),
+            pattern: PatternKind::name(name_id(0, "test")).with_id(10).nowhere(),
             clock: ExprKind::Identifier(name_id(1, "clk").inner)
                 .with_id(0)
                 .nowhere(),

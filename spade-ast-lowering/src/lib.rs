@@ -303,12 +303,13 @@ pub fn visit_pattern(
             match path.inner.0.as_slice() {
                 [ident] => {
                     // Check if this is declaring a variable
-                    let name_id = if let Some(state) = symtab.get_declaration(ident) {
+                    let (name_id, pre_declared) = if let Some(state) = symtab.get_declaration(ident)
+                    {
                         if allow_declarations {
                             match state.inner {
                                 DeclarationState::Undefined(id) => {
                                     symtab.mark_declaration_defined(ident.clone(), ident.loc());
-                                    id
+                                    (id, true)
                                 }
                                 DeclarationState::Defined(previous) => {
                                     return Err(Error::RedefinitionOfDeclaration {
@@ -324,13 +325,19 @@ pub fn visit_pattern(
                             });
                         }
                     } else {
-                        symtab.add_thing(
-                            path_from_ident(ident.clone()).inner,
-                            Thing::Variable(ident.clone()),
+                        (
+                            symtab.add_thing(
+                                path_from_ident(ident.clone()).inner,
+                                Thing::Variable(ident.clone()),
+                            ),
+                            false,
                         )
                     };
 
-                    hir::PatternKind::Name(name_id.at_loc(&ident))
+                    hir::PatternKind::Name {
+                        name: name_id.at_loc(&ident),
+                        pre_declared,
+                    }
                 }
                 [] => unreachable!(),
                 _ => match symtab.lookup_enum_variant(path) {
@@ -429,15 +436,21 @@ pub fn visit_statement(
     s: &Loc<ast::Statement>,
     symtab: &mut SymbolTable,
     idtracker: &mut ExprIdTracker,
-) -> Result<Option<Loc<hir::Statement>>> {
+) -> Result<Loc<hir::Statement>> {
     let (s, span) = s.split_ref();
     match s {
         ast::Statement::Declaration(names) => {
-            for name in names {
-                symtab.add_declaration(name.clone())?;
-            }
+            let names = names
+                .iter()
+                .map(|name| {
+                    symtab
+                        .add_declaration(name.clone())
+                        .map_err(Error::DeclarationError)
+                        .map(|id| id.at(name))
+                })
+                .collect::<Result<Vec<_>>>()?;
 
-            Ok(None)
+            Ok(Loc::new(hir::Statement::Declaration(names), span))
         }
         ast::Statement::Binding(pattern, t, expr) => {
             let hir_type = if let Some(t) = t {
@@ -450,14 +463,11 @@ pub fn visit_statement(
 
             let expr = expr.try_visit(visit_expression, symtab, idtracker)?;
 
-            Ok(Some(Loc::new(
-                hir::Statement::Binding(pat, hir_type, expr),
-                span,
-            )))
+            Ok(Loc::new(hir::Statement::Binding(pat, hir_type, expr), span))
         }
         ast::Statement::Register(inner) => {
             let (result, span) = visit_register(&inner, symtab, idtracker)?.separate();
-            Ok(Some(Loc::new(hir::Statement::Register(result), span)))
+            Ok(Loc::new(hir::Statement::Register(result), span))
         }
     }
 }
@@ -710,7 +720,6 @@ pub fn visit_block(
         .map(|statement| visit_statement(statement, symtab, idtracker))
         .collect::<Result<Vec<_>>>()?
         .into_iter()
-        .filter_map(|x| x)
         .collect::<Vec<_>>();
 
     let result = b.result.try_visit(visit_expression, symtab, idtracker)?;
@@ -805,7 +814,7 @@ mod entity_visiting {
             inputs: vec![((name_id(1, "a").inner, hir::TypeSpec::unit().nowhere()))],
             body: hir::ExprKind::Block(Box::new(hir::Block {
                 statements: vec![hir::Statement::Binding(
-                    hir::PatternKind::Name(name_id(2, "var")).idless().nowhere(),
+                    hir::PatternKind::name(name_id(2, "var")).idless().nowhere(),
                     Some(hir::TypeSpec::unit().nowhere()),
                     hir::ExprKind::IntLiteral(0).idless().nowhere(),
                 )
@@ -919,7 +928,7 @@ mod statement_visiting {
         .nowhere();
 
         let expected = hir::Statement::Binding(
-            hir::PatternKind::Name(name_id(0, "a")).idless().nowhere(),
+            hir::PatternKind::name(name_id(0, "a")).idless().nowhere(),
             Some(hir::TypeSpec::unit().nowhere()),
             hir::ExprKind::IntLiteral(0).idless().nowhere(),
         )
@@ -927,7 +936,7 @@ mod statement_visiting {
 
         assert_eq!(
             visit_statement(&input, &mut symtab, &mut idtracker),
-            Ok(Some(expected))
+            Ok(expected)
         );
         assert_eq!(symtab.has_symbol(ast_path("a").inner), true);
     }
@@ -948,7 +957,7 @@ mod statement_visiting {
 
         let expected = hir::Statement::Register(
             hir::Register {
-                pattern: hir::PatternKind::Name(name_id(1, "regname"))
+                pattern: hir::PatternKind::name(name_id(1, "regname"))
                     .idless()
                     .nowhere(),
                 clock: hir::ExprKind::Identifier(name_id(0, "clk").inner)
@@ -968,7 +977,7 @@ mod statement_visiting {
         assert_eq!(clk_id.0, 0);
         assert_eq!(
             visit_statement(&input, &mut symtab, &mut idtracker),
-            Ok(Some(expected))
+            Ok(expected)
         );
         assert_eq!(symtab.has_symbol(ast_path("regname").inner), true);
     }
@@ -977,13 +986,11 @@ mod statement_visiting {
     fn declarations_declare_variables() {
         let input = ast::Statement::Declaration(vec![ast_ident("x"), ast_ident("y")]).nowhere();
 
-        let expected = None;
-
         let mut symtab = SymbolTable::new();
         let mut idtracker = ExprIdTracker::new();
         assert_eq!(
             visit_statement(&input, &mut symtab, &mut idtracker),
-            Ok(expected)
+            Ok(hir::Statement::Declaration(vec![name_id(0, "x"), name_id(1, "y")]).nowhere())
         );
         assert_eq!(symtab.has_symbol(ast_path("x").inner), true);
         assert_eq!(symtab.has_symbol(ast_path("y").inner), true);
@@ -1026,12 +1033,13 @@ mod statement_visiting {
         symtab.add_local_variable(ast_ident("clk"));
         let id = symtab.add_declaration(ast_ident("regname")).unwrap();
 
-        let result = visit_statement(&input, &mut symtab, &mut idtracker)
-            .unwrap()
-            .unwrap();
+        let result = visit_statement(&input, &mut symtab, &mut idtracker).unwrap();
         match result.inner {
             hir::Statement::Register(reg) => match reg.pattern.kind {
-                hir::PatternKind::Name(ref reg_id) => assert_eq!(id, reg_id.inner),
+                hir::PatternKind::Name {
+                    name: ref reg_id,
+                    pre_declared: _,
+                } => assert_eq!(id, reg_id.inner),
                 _ => panic!("Expected single name in register"),
             },
             other => panic!("Expected register, found {:?}", other),
@@ -1078,9 +1086,7 @@ mod statement_visiting {
         symtab.add_local_variable(ast_ident("clk"));
         symtab.add_declaration(ast_ident("regname")).unwrap();
 
-        visit_statement(&input, &mut symtab, &mut idtracker)
-            .unwrap()
-            .unwrap();
+        visit_statement(&input, &mut symtab, &mut idtracker).unwrap();
         let result = visit_statement(&input, &mut symtab, &mut idtracker);
         assert_matches!(result, Err(Error::RedefinitionOfDeclaration { .. }));
     }
@@ -1168,7 +1174,7 @@ mod expression_visiting {
         }));
         let expected = hir::ExprKind::Block(Box::new(hir::Block {
             statements: vec![hir::Statement::Binding(
-                hir::PatternKind::Name(name_id(0, "a")).idless().nowhere(),
+                hir::PatternKind::name(name_id(0, "a")).idless().nowhere(),
                 None,
                 hir::ExprKind::IntLiteral(0).idless().nowhere(),
             )
@@ -1247,7 +1253,7 @@ mod expression_visiting {
         let expected = hir::ExprKind::Match(
             Box::new(hir::ExprKind::IntLiteral(1).idless().nowhere()),
             vec![(
-                hir::PatternKind::Name(name_id(0, "x")).idless().nowhere(),
+                hir::PatternKind::name(name_id(0, "x")).idless().nowhere(),
                 hir::ExprKind::IntLiteral(2).idless().nowhere(),
             )],
         )
@@ -1285,7 +1291,7 @@ mod expression_visiting {
                     name_id(100, "x"),
                     vec![hir::PatternArgument {
                         target: ast_ident("x"),
-                        value: hir::PatternKind::Name(name_id(0, "y")).idless().nowhere(),
+                        value: hir::PatternKind::name(name_id(0, "y")).idless().nowhere(),
                         kind: hir::ArgumentKind::Positional,
                     }],
                 )
@@ -1343,7 +1349,7 @@ mod expression_visiting {
                     name_id(100, "x"),
                     vec![hir::PatternArgument {
                         target: ast_ident("x"),
-                        value: hir::PatternKind::Name(name_id(0, "y")).idless().nowhere(),
+                        value: hir::PatternKind::name(name_id(0, "y")).idless().nowhere(),
                         kind: hir::ArgumentKind::Positional,
                     }],
                 )
@@ -1815,7 +1821,7 @@ mod register_visiting {
         .nowhere();
 
         let expected = hir::Register {
-            pattern: hir::PatternKind::Name(name_id(2, "test"))
+            pattern: hir::PatternKind::name(name_id(2, "test"))
                 .idless()
                 .nowhere(),
             clock: hir::ExprKind::Identifier(name_id(0, "clk").inner)

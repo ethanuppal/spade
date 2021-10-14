@@ -36,12 +36,23 @@ impl WithLocation for PatternArgument {}
 pub enum PatternKind {
     Integer(u128),
     Bool(bool),
-    Name(Loc<NameID>),
+    Name {
+        name: Loc<NameID>,
+        pre_declared: bool,
+    },
     Tuple(Vec<Loc<Pattern>>),
     /// Instantiation of an entity. While the argument contains information about
     /// argument names, for codegen purposes, the arguments must be ordered in
     /// the target order. I.e. they should all act as positioanl arguments
     Type(Loc<NameID>, Vec<PatternArgument>),
+}
+impl PatternKind {
+    pub fn name(name: Loc<NameID>) -> Self {
+        PatternKind::Name {
+            name,
+            pre_declared: false,
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -72,6 +83,7 @@ impl PartialEq for Pattern {
 pub enum Statement {
     Binding(Loc<Pattern>, Option<Loc<TypeSpec>>, Loc<Expression>),
     Register(Loc<Register>),
+    Declaration(Vec<Loc<NameID>>),
 }
 impl WithLocation for Statement {}
 
