@@ -60,6 +60,16 @@ pub enum Error {
         loc: Loc<()>,
     },
 
+    #[error("Unexpected end of comma separated list")]
+    UnexpectedEndOfCSList{got: Token, expected: Vec<TokenKind>},
+
+    // Acts mostly like UnexpectedToken but produced by the argument list parser
+    // if it encounters the UnexpectedEndOfSCListError, at which point more tokens
+    // are added to the returned error. This can not be done to the previous variant
+    // as recursive errors of the same kind would then add the token multiple times
+    #[error("Unexpected end of argument list")]
+    UnexpectedEndOfArgList{got: Token, expected: Vec<TokenKind>},
+
     #[error("Expected type, got {0:?}")]
     ExpectedType(Token),
 
@@ -361,7 +371,7 @@ impl<'a> Parser<'a> {
     fn named_argument(&mut self) -> Result<Loc<NamedArgument>> {
         // This is a named arg
         let name = self.identifier()?;
-        if self.peek_and_eat(&TokenKind::Assignment)?.is_some() {
+        if self.peek_and_eat(&TokenKind::Colon)?.is_some() {
             let value = self.expression()?;
 
             let span = name.span.merge(value.span);
@@ -1199,7 +1209,15 @@ impl<'a> Parser<'a> {
             if self.peek_kind(end_marker)? {
                 break;
             } else {
-                self.eat(&TokenKind::Comma)?;
+                if !self.peek_kind(&TokenKind::Comma)? {
+                    return Err(Error::UnexpectedEndOfCSList{
+                        got: self.eat_unconditional()?,
+                        expected: vec![TokenKind::Comma, end_marker.clone()]
+                    })
+                }
+                else {
+                    self.eat_unconditional()?;
+                }
             }
         }
         Ok(result)
@@ -2120,7 +2138,7 @@ mod tests {
 
     #[test]
     fn entity_instanciation_with_a_named_arg() {
-        let code = "inst some_entity$(z=a)";
+        let code = "inst some_entity$(z: a)";
 
         let expected = Expression::EntityInstance(
             ast_path("some_entity"),
@@ -2136,7 +2154,7 @@ mod tests {
     }
     #[test]
     fn named_args_work() {
-        let code = "x=a";
+        let code = "x: a";
 
         let expected = NamedArgument::Full(
             ast_ident("x"),
@@ -2145,6 +2163,20 @@ mod tests {
         .nowhere();
 
         check_parse!(code, named_argument, Ok(expected));
+    }
+
+    #[test]
+    fn incorrect_named_args_gives_good_error() {
+        let code = "$(x = a)";
+
+        check_parse!(
+            code,
+            argument_list,
+            Err(Error::UnexpectedEndOfArgList {
+                expected: vec![TokenKind::Colon, TokenKind::Comma, TokenKind::CloseParen],
+                got: Token{kind: TokenKind::Assignment, span: (0..0)}
+            })
+        );
     }
 
     #[test]

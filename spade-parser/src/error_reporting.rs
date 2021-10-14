@@ -1,11 +1,33 @@
 use std::path::Path;
 
-use crate::Error;
+use crate::{Error, Token};
 use codespan::Span;
 use codespan_reporting::diagnostic::{Diagnostic, Label};
 use codespan_reporting::files::SimpleFiles;
 use codespan_reporting::term::{self, termcolor::StandardStream};
 use spade_common::error_reporting::{codespan_config, color_choice, CompilationError};
+
+fn unexpected_token<'a>(file_id: usize, got: Token, expected: impl IntoIterator<Item = &'a str>) -> Diagnostic<usize> {
+    let expected_list = format!(
+        "[{}]",
+        expected
+            .into_iter()
+            .map(|s| s.to_string())
+            .collect::<Vec<_>>()
+            .join(", ")
+    );
+
+    let message = format!(
+        "Unexpected token. Got `{}`, expected one of {}",
+        got.kind.as_str(),
+        expected_list,
+    );
+
+    Diagnostic::error()
+        .with_message(message)
+        .with_labels(vec![Label::primary(file_id, got.span)
+            .with_message(format!("expected one of {}", expected_list))])
+}
 
 impl CompilationError for Error {
     fn report(self, filename: &Path, file_content: &str, no_color: bool) {
@@ -18,24 +40,13 @@ impl CompilationError for Error {
                     .with_message("Lexer error, unexpected symbol")
                     .with_labels(vec![Label::primary(file_id, location)]),
                 Error::UnexpectedToken { got, expected } => {
-                    let expected_list = format!(
-                        "[{}]",
-                        expected
-                            .iter()
-                            .map(|s| s.to_string())
-                            .collect::<Vec<_>>()
-                            .join(", ")
-                    );
-                    let message = format!(
-                        "Unexpected token. Got `{}`, expected one of {}",
-                        got.kind.as_str(),
-                        expected_list,
-                    );
-
-                    Diagnostic::error()
-                        .with_message(message)
-                        .with_labels(vec![Label::primary(file_id, got.span)
-                            .with_message(format!("expected one of {}", expected_list))])
+                    unexpected_token(file_id, got, expected)
+                }
+                Error::UnexpectedEndOfCSList{got, expected} => {
+                    unexpected_token(file_id, got, expected.iter().map(|tok| tok.as_str()))
+                }
+                Error::UnexpectedEndOfArgList{got, expected} => {
+                    unexpected_token(file_id, got, expected.iter().map(|tok| tok.as_str()))
                 }
                 Error::UnmatchedPair { friend, expected } => Diagnostic::error()
                     .with_message(format!("Expected closing {}", expected.as_str()))
