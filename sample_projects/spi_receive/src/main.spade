@@ -24,8 +24,7 @@ entity spi_receiver(clk: clk, rst: bool, sclk: bool, mosi: bool) -> Option<int<8
 
     let mosi_int = if mosi {1} else {0};
 
-    reg(clk) reg_content reset (rst: (ReceiveState::Waiting(), Option::None())) = {
-        let (state, output) = reg_content;
+    reg(clk) (state, output) reset (rst: (ReceiveState::Waiting(), Option::None())) = {
         if sclk_op {
             match state {
                 ReceiveState::Waiting => {
@@ -47,7 +46,6 @@ entity spi_receiver(clk: clk, rst: bool, sclk: bool, mosi: bool) -> Option<int<8
         }
     };
 
-    let (state, output) = reg_content;
     output
 }
 

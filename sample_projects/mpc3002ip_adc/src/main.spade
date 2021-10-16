@@ -42,8 +42,7 @@ entity spi(clk: clk, rst: bool, miso: bool, to_transmit: Option<int<16>>) ->
     let miso_int = if miso {1} else {0};
 
 
-    reg(clk) _state reset (rst: (TxState::Waiting(), Option::None())) = {
-        let (state, output_data) = _state;
+    reg(clk) (state, output_data) reset (rst: (TxState::Waiting(), Option::None())) = {
         match state {
             TxState::Waiting => {
                 match to_transmit {
@@ -90,8 +89,6 @@ entity spi(clk: clk, rst: bool, miso: bool, to_transmit: Option<int<16>>) ->
         }
     };
 
-    let (state, output_data) = _state;
-
     match state {
         TxState::Waiting() => (true, true, TxExternalState::Ready(), output_data),
         TxState::Transmit(last_bit, _, data, _) => {
@@ -118,37 +115,36 @@ entity main(clk: clk, rst: bool, miso_unsync: bool) -> (bool, bool, bool, int<16
     let read_time = 10_000;
     let t_sucs = 10;
 
-     reg(clk) _state: (AdcState, Option<int<16>>) reset(rst: (AdcState::Waiting(0), Option::None())) = {
-         let (state, to_transmit) = _state;
-         match state {
-             AdcState::Waiting(time) => {
-                 if time > wait_time {
-                     (AdcState::CsLow(0), Option::None())
-                 }
-                 else {
-                     (AdcState::Waiting(time + 1), Option::None())
-                 }
-             },
-             AdcState::CsLow(time) => {
-                 if time > t_sucs {
-                     (AdcState::Reading(0), Option::Some(0b0000_0000_0000_1011))
-                 }
-                 else {
-                     (AdcState::CsLow(time + 1), Option::None())
-                 }
-             },
-             AdcState::Reading(time) => {
-                 if time > read_time {
-                     (AdcState::Waiting(0), Option::None())
-                 }
-                 else {
-                     (AdcState::Reading(time + 1), Option::None())
-                 }
-             }
-         }
-     };
-
-    let (state, to_transmit) = _state;
+    reg(clk) (state, to_transmit): (AdcState, Option<int<16>>)
+        reset(rst: (AdcState::Waiting(0), Option::None())) =
+    {
+        match state {
+            AdcState::Waiting(time) => {
+                if time > wait_time {
+                    (AdcState::CsLow(0), Option::None())
+                }
+                else {
+                    (AdcState::Waiting(time + 1), Option::None())
+                }
+            },
+            AdcState::CsLow(time) => {
+                if time > t_sucs {
+                    (AdcState::Reading(0), Option::Some(0b0000_0000_0000_1011))
+                }
+                else {
+                    (AdcState::CsLow(time + 1), Option::None())
+                }
+            },
+            AdcState::Reading(time) => {
+                if time > read_time {
+                    (AdcState::Waiting(0), Option::None())
+                }
+                else {
+                    (AdcState::Reading(time + 1), Option::None())
+                }
+            }
+        }
+    };
 
     let cs = match state {
         AdcState::Waiting(_) => true,
