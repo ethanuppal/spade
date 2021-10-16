@@ -1,0 +1,10 @@
+enum ReceiveState {
+    Waiting,
+    Bit(count: int<3>, data: int<8>),
+}
+
+entity spi_receiver(clk: clk, rst: bool) -> int<8> {
+    reg(clk) (state, output): (int<8>, int<8>)  reset (rst: (0, 0)) = (state, 0);
+
+    state
+}

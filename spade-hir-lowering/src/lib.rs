@@ -343,7 +343,7 @@ impl StatementLocal for Statement {
                 }));
 
                 result.append(&mut register.pattern.lower(
-                    register.value.variable(subs),
+                    register.pattern.value_name(),
                     symtab.symtab(),
                     types,
                     subs,

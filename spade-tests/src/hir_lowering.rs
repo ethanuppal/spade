@@ -421,8 +421,8 @@ mod tests {
                 "_i_a", n(1, "a"), tup_type.clone(),
             ) -> Type::Int(16); {
                 (reg e(0); tup_type; clock(n(0, "clk")); n(1, "a"));
-                (n(2, "x"); Type::Int(16); IndexTuple((0, tup_inner.clone())); n(1, "a"));
-                (n(3, "y"); Type::Int(8); IndexTuple((1, tup_inner)); n(1, "a"));
+                (n(2, "x"); Type::Int(16); IndexTuple((0, tup_inner.clone())); e(0));
+                (n(3, "y"); Type::Int(8); IndexTuple((1, tup_inner)); e(0));
             } => n(2, "x")
         };
 

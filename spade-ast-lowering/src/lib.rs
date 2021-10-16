@@ -352,9 +352,6 @@ pub fn visit_pattern(
                             hir::PatternKind::Type(name_id.at(path), vec![])
                         }
                     }
-                    Err(spade_hir::symbol_table::LookupError::NoSuchSymbol(_)) => {
-                        todo!("Handle new symbols")
-                    }
                     Err(e) => return Err(e.into()),
                 },
             }
