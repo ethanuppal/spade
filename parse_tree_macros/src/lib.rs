@@ -56,6 +56,7 @@ pub fn local_impl(attrs: TokenStream, input: TokenStream) -> TokenStream {
 
     let input = parse_macro_input!(input as ItemImpl);
 
+    let (impl_generics, generics, where_clause) = input.generics.split_for_impl();
     let trait_name = input.trait_.clone().unwrap().1;
 
     let method_heads = input
@@ -73,14 +74,23 @@ pub fn local_impl(attrs: TokenStream, input: TokenStream) -> TokenStream {
         .collect::<Vec<_>>();
 
     let trait_def = quote!(
-        trait #trait_name {
+        pub(crate) trait #trait_name #generics #where_clause {
             #(#method_heads)*
         }
     );
 
+    let items = input.items;
+    let self_ty = input.self_ty;
+
+    let impl_block = quote!(
+        impl #impl_generics #trait_name #generics for #self_ty {
+            #(#items)*
+        }
+    );
+
     quote!(
-        #input
         #trait_def
+        #impl_block
     )
     .into_token_stream()
     .into()

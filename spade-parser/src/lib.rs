@@ -1,5 +1,8 @@
+pub mod error;
 pub mod error_reporting;
 pub mod lexer;
+
+use error::{CommaSeparatedResult, Error, Result};
 
 use spade_ast::{
     ArgumentList, ArgumentPattern, BinaryOperator, Block, Entity, Enum, Expression, FunctionDecl,
@@ -14,11 +17,13 @@ use spade_common::{
 
 use colored::*;
 use logos::Lexer;
-use thiserror::Error;
 
 use parse_tree_macros::trace_parser;
 
-use crate::lexer::TokenKind;
+use crate::{
+    error::{CSErrorTransformations, CommaSeparatedError},
+    lexer::TokenKind,
+};
 
 /// A token with location info
 #[derive(Clone, Debug, PartialEq)]
@@ -35,72 +40,6 @@ impl Token {
         }
     }
 }
-
-#[derive(Error, Debug, Clone, PartialEq)]
-pub enum Error {
-    #[error("End of file")]
-    Eof,
-    #[error("Lexer error at {}", 0.0)]
-    LexerError(codespan::Span),
-    #[error("Unexpected token. got {}, expected {expected:?}", got.kind.as_str())]
-    UnexpectedToken {
-        got: Token,
-        expected: Vec<&'static str>,
-    },
-    #[error("Expected to find a {} to match {friend:?}", expected.as_str())]
-    UnmatchedPair { friend: Token, expected: TokenKind },
-
-    #[error("Expected expression, got {got:?}")]
-    ExpectedExpression { got: Token },
-
-    #[error("Entity missing block for {for_what}")]
-    ExpectedBlock {
-        for_what: String,
-        got: Token,
-        loc: Loc<()>,
-    },
-
-    #[error("Unexpected end of comma separated list")]
-    UnexpectedEndOfCSList{got: Token, expected: Vec<TokenKind>},
-
-    // Acts mostly like UnexpectedToken but produced by the argument list parser
-    // if it encounters the UnexpectedEndOfSCListError, at which point more tokens
-    // are added to the returned error. This can not be done to the previous variant
-    // as recursive errors of the same kind would then add the token multiple times
-    #[error("Unexpected end of argument list")]
-    UnexpectedEndOfArgList{got: Token, expected: Vec<TokenKind>},
-
-    #[error("Expected type, got {0:?}")]
-    ExpectedType(Token),
-
-    #[error("Expected argument list for {0}")]
-    ExpectedArgumentList(Loc<Path>),
-
-    #[error("Missing tuple index")]
-    MissingTupleIndex { hash_loc: Loc<()> },
-
-    #[error("Expected pipeline depth")]
-    ExpectedPipelineDepth { got: Token },
-
-    #[error("Expected expression or stage")]
-    ExpectedExpressionOrStage { got: Token },
-
-    #[error("Empty decl statement")]
-    EmptyDeclStatement { at: Loc<()> },
-}
-
-impl Error {
-    /// If the error is UnexpectedToken, replace it with the type returned by the
-    /// provided closure. Otherwise, return the error unaffected
-    pub fn specify_unexpected_token(self, f: impl Fn(Token) -> Self) -> Self {
-        match self {
-            Error::UnexpectedToken { got, .. } => f(got),
-            other => other,
-        }
-    }
-}
-
-pub type Result<T> = std::result::Result<T, Error>;
 
 pub struct Parser<'a> {
     lex: Lexer<'a, TokenKind>,
@@ -272,7 +211,8 @@ impl<'a> Parser<'a> {
 
         if is_named {
             let args = self
-                .comma_separated(Self::named_argument, &TokenKind::CloseParen)?
+                .comma_separated(Self::named_argument, &TokenKind::CloseParen)
+                .extra_expected(vec![":"])?
                 .into_iter()
                 .map(Loc::strip)
                 .collect();
@@ -281,7 +221,9 @@ impl<'a> Parser<'a> {
             let span = lspan(opener.span).merge(lspan(end.span));
             Ok(Some(ArgumentList::Named(args).at(&span)))
         } else {
-            let args = self.comma_separated(Self::expression, &TokenKind::CloseParen)?;
+            let args = self
+                .comma_separated(Self::expression, &TokenKind::CloseParen)
+                .no_context()?;
             let end = self.eat(&TokenKind::CloseParen)?;
 
             let span = lspan(opener.span.clone()).merge(lspan(end.span));
@@ -293,7 +235,9 @@ impl<'a> Parser<'a> {
     #[trace_parser]
     pub fn base_expression(&mut self) -> Result<Loc<Expression>> {
         if self.peek_and_eat(&TokenKind::OpenParen)?.is_some() {
-            let mut inner = self.comma_separated(Self::expression, &TokenKind::CloseParen)?;
+            let mut inner = self
+                .comma_separated(Self::expression, &TokenKind::CloseParen)
+                .no_context()?;
             let result = if inner.is_empty() {
                 todo!("Implement unit literals")
             } else if inner.len() == 1 {
@@ -417,6 +361,7 @@ impl<'a> Parser<'a> {
                     },
                     &TokenKind::CloseBrace,
                 )
+                .no_context()
             },
             &TokenKind::CloseBrace,
         )?;
@@ -531,7 +476,9 @@ impl<'a> Parser<'a> {
     pub fn tuple_spec(&mut self) -> Result<Option<Loc<TypeSpec>>> {
         let start = peek_for!(self, &TokenKind::OpenParen);
 
-        let inner = self.comma_separated(Self::type_spec, &TokenKind::CloseParen)?;
+        let inner = self
+            .comma_separated(Self::type_spec, &TokenKind::CloseParen)
+            .no_context()?;
         let end = self.eat(&TokenKind::CloseParen)?;
 
         let span = lspan(start.span).merge(lspan(end.span));
@@ -557,7 +504,9 @@ impl<'a> Parser<'a> {
         let result = self.first_successful(vec![
             &|s| {
                 let start = peek_for!(s, &TokenKind::OpenParen);
-                let inner = s.comma_separated(Self::pattern, &TokenKind::CloseParen)?;
+                let inner = s
+                    .comma_separated(Self::pattern, &TokenKind::CloseParen)
+                    .no_context()?;
                 let end = s.eat(&TokenKind::CloseParen)?;
 
                 Ok(Some(Pattern::Tuple(inner).between(&start.span, &end.span)))
@@ -577,7 +526,9 @@ impl<'a> Parser<'a> {
                 let path_span = path.span;
 
                 if let Some(start_paren) = s.peek_and_eat(&TokenKind::OpenParen)? {
-                    let inner = s.comma_separated(Self::pattern, &TokenKind::CloseParen)?;
+                    let inner = s
+                        .comma_separated(Self::pattern, &TokenKind::CloseParen)
+                        .no_context()?;
                     let end_paren = s.eat(&TokenKind::CloseParen)?;
 
                     Ok(Some(
@@ -596,7 +547,9 @@ impl<'a> Parser<'a> {
 
                         Ok((lhs, rhs))
                     };
-                    let inner = s.comma_separated(inner_parser, &TokenKind::CloseBrace)?;
+                    let inner = s
+                        .comma_separated(inner_parser, &TokenKind::CloseBrace)
+                        .extra_expected(vec![":"])?;
                     let end_brace = s.eat(&TokenKind::CloseBrace)?;
 
                     Ok(Some(
@@ -772,10 +725,10 @@ impl<'a> Parser<'a> {
 
     #[trace_parser]
     pub fn parameter_list(&mut self) -> Result<ParameterList> {
-        Ok(ParameterList(self.comma_separated(
-            Self::name_and_type,
-            &TokenKind::CloseParen,
-        )?))
+        Ok(ParameterList(
+            self.comma_separated(Self::name_and_type, &TokenKind::CloseParen)
+                .no_context()?,
+        ))
     }
 
     // Entities
@@ -961,7 +914,9 @@ impl<'a> Parser<'a> {
     #[trace_parser]
     pub fn generics_list(&mut self) -> Result<Vec<Loc<TypeParam>>> {
         if let Some(lt) = self.peek_and_eat(&TokenKind::Lt)? {
-            let params = self.comma_separated(Self::type_param, &TokenKind::Gt)?;
+            let params = self
+                .comma_separated(Self::type_param, &TokenKind::Gt)
+                .no_context()?;
             self.eat(&TokenKind::Gt).map_err(|_| Error::UnmatchedPair {
                 friend: lt,
                 expected: TokenKind::Gt,
@@ -1074,7 +1029,10 @@ impl<'a> Parser<'a> {
 
         let (options, options_loc) = self.surrounded(
             &TokenKind::OpenBrace,
-            |s: &mut Self| s.comma_separated(Self::enum_option, &TokenKind::CloseBrace),
+            |s: &mut Self| {
+                s.comma_separated(Self::enum_option, &TokenKind::CloseBrace)
+                    .no_context()
+            },
             &TokenKind::CloseBrace,
         )?;
 
@@ -1186,7 +1144,9 @@ impl<'a> Parser<'a> {
         ))
     }
 
-    #[trace_parser]
+    // NOTE: This can not currently use #[trace_parser] as it returns an error which is not
+    // convertible into `Error`. If we end up with more functions like this, that
+    // macro should probably be made smarter
     pub fn comma_separated<T>(
         &mut self,
         inner: impl Fn(&mut Self) -> Result<T>,
@@ -1194,33 +1154,43 @@ impl<'a> Parser<'a> {
         // be whatever ends the collection that is searched. I.e. (a,b,c,) should have
         // `)`, and {} should have `}`
         end_marker: &TokenKind,
-    ) -> Result<Vec<T>> {
-        let mut result = vec![];
-
-        loop {
-            // The list might be empty
-            if self.peek_kind(end_marker)? {
-                break;
-            }
-            result.push(inner(self)?);
-
-            // Now we expect to either find a comma, in which case we resume the
-            // search, or an end marker, in which case we abort
-            if self.peek_kind(end_marker)? {
-                break;
-            } else {
-                if !self.peek_kind(&TokenKind::Comma)? {
-                    return Err(Error::UnexpectedEndOfCSList{
-                        got: self.eat_unconditional()?,
-                        expected: vec![TokenKind::Comma, end_marker.clone()]
-                    })
+    ) -> CommaSeparatedResult<Vec<T>> {
+        self.parse_stack
+            .push(ParseStackEntry::Enter("comma_separated".to_string()));
+        let ret = || -> CommaSeparatedResult<Vec<T>> {
+            let mut result = vec![];
+            loop {
+                // The list might be empty
+                if self.peek_kind(end_marker)? {
+                    break;
                 }
-                else {
-                    self.eat_unconditional()?;
+                result.push(inner(self)?);
+
+                // Now we expect to either find a comma, in which case we resume the
+                // search, or an end marker, in which case we abort
+                if self.peek_kind(end_marker)? {
+                    break;
+                } else {
+                    if !self.peek_kind(&TokenKind::Comma)? {
+                        return Err(CommaSeparatedError::UnexpectedToken {
+                            got: self.eat_unconditional()?,
+                            end_token: end_marker.clone(),
+                        });
+                    } else {
+                        self.eat_unconditional()?;
+                    }
                 }
             }
+            Ok(result)
+        }();
+        if let Err(e) = &ret {
+            self.parse_stack
+                .push(ParseStackEntry::ExitWithError(e.clone().no_context()));
+        } else {
+            self.parse_stack.push(ParseStackEntry::Exit);
         }
-        Ok(result)
+
+        ret
     }
 }
 
@@ -2172,9 +2142,12 @@ mod tests {
         check_parse!(
             code,
             argument_list,
-            Err(Error::UnexpectedEndOfArgList {
-                expected: vec![TokenKind::Colon, TokenKind::Comma, TokenKind::CloseParen],
-                got: Token{kind: TokenKind::Assignment, span: (0..0)}
+            Err(Error::UnexpectedToken {
+                expected: vec![":", ",", ")"],
+                got: Token {
+                    kind: TokenKind::Assignment,
+                    span: (4..5)
+                }
             })
         );
     }
