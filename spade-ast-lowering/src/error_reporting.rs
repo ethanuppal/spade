@@ -1,33 +1,30 @@
-use std::path::Path;
-
 use crate::Error;
-use codespan_reporting::diagnostic::{Diagnostic, Label};
-use codespan_reporting::files::SimpleFiles;
+use codespan_reporting::diagnostic::Diagnostic;
 use codespan_reporting::term::{self, termcolor::StandardStream};
-use spade_common::error_reporting::{codespan_config, color_choice, CompilationError};
+use spade_common::error_reporting::{
+    codespan_config, color_choice, AsLabel, CodeBundle, CompilationError,
+};
 use spade_hir::symbol_table::{DeclarationError, LookupError};
 
 impl CompilationError for Error {
-    fn report(self, filename: &Path, file_content: &str, no_color: bool) {
-        let mut files = SimpleFiles::new();
-        let file_id = files.add(filename.to_string_lossy(), file_content);
+    fn report(self, code: &CodeBundle, no_color: bool) {
         let diag = match self {
             Error::DuplicateTypeVariable { found, previously } => Diagnostic::error()
                 .with_message(format!("Duplicate typename: `{}`", found.inner))
                 .with_labels(vec![
-                    Label::primary(file_id, found.span).with_message("Duplicate typename"),
-                    Label::secondary(file_id, previously.span).with_message("Previously used here"),
+                    found.primary_label().with_message("Duplicate typename"),
+                    previously
+                        .secondary_label()
+                        .with_message("Previously used here"),
                 ]),
             Error::LookupError(LookupError::NoSuchSymbol(path)) => Diagnostic::error()
                 .with_message(format!("Use of undeclared name {}", path))
-                .with_labels(vec![
-                    Label::primary(file_id, path.span).with_message("Undeclared name")
-                ]),
+                .with_labels(vec![path.primary_label().with_message("Undeclared name")]),
             Error::LookupError(LookupError::NotATypeSymbol(path, got)) => Diagnostic::error()
                 .with_message(format!("Expected {} to be a type", path))
                 .with_labels(vec![
-                    Label::primary(file_id, path.span).with_message(format!("Expected type")),
-                    Label::secondary(file_id, got.loc().span).with_message(format!(
+                    path.primary_label().with_message(format!("Expected type")),
+                    got.loc().secondary_label().with_message(format!(
                         "{} is a {}",
                         path,
                         got.kind_string()
@@ -36,8 +33,9 @@ impl CompilationError for Error {
             Error::LookupError(LookupError::NotAVariable(path, got)) => Diagnostic::error()
                 .with_message(format!("Expected {} to be a variable", path))
                 .with_labels(vec![
-                    Label::primary(file_id, path.span).with_message(format!("Expected variable")),
-                    Label::secondary(file_id, got.loc().span).with_message(format!(
+                    path.primary_label()
+                        .with_message(format!("Expected variable")),
+                    got.loc().secondary_label().with_message(format!(
                         "{} is a {}",
                         path,
                         got.kind_string()
@@ -46,8 +44,9 @@ impl CompilationError for Error {
             Error::LookupError(LookupError::NotAnEntity(path, got)) => Diagnostic::error()
                 .with_message(format!("Expected {} to be an enity", path))
                 .with_labels(vec![
-                    Label::primary(file_id, path.span).with_message(format!("Expected entity")),
-                    Label::secondary(file_id, got.loc().span).with_message(format!(
+                    path.primary_label()
+                        .with_message(format!("Expected entity")),
+                    got.loc().secondary_label().with_message(format!(
                         "{} is a {}",
                         path,
                         got.kind_string()
@@ -56,8 +55,9 @@ impl CompilationError for Error {
             Error::LookupError(LookupError::NotAPipeline(path, got)) => Diagnostic::error()
                 .with_message(format!("Expected {} to be a pipeline", path))
                 .with_labels(vec![
-                    Label::primary(file_id, path.span).with_message(format!("Expected pipeline")),
-                    Label::secondary(file_id, got.loc().span).with_message(format!(
+                    path.primary_label()
+                        .with_message(format!("Expected pipeline")),
+                    got.loc().secondary_label().with_message(format!(
                         "{} is a {}",
                         path,
                         got.kind_string()
@@ -66,8 +66,9 @@ impl CompilationError for Error {
             Error::LookupError(LookupError::NotAFunction(path, got)) => Diagnostic::error()
                 .with_message(format!("Expected {} to be a function", path))
                 .with_labels(vec![
-                    Label::primary(file_id, path.span).with_message(format!("Expected function")),
-                    Label::secondary(file_id, got.loc().span).with_message(format!(
+                    path.primary_label()
+                        .with_message(format!("Expected function")),
+                    got.loc().secondary_label().with_message(format!(
                         "{} is a {}",
                         path,
                         got.kind_string()
@@ -76,9 +77,9 @@ impl CompilationError for Error {
             Error::LookupError(LookupError::NotAnEnumVariant(path, was)) => Diagnostic::error()
                 .with_message(format!("Expected {} to be an enum variant", path))
                 .with_labels(vec![
-                    Label::primary(file_id, path.span)
+                    path.primary_label()
                         .with_message(format!("Expected enum variant")),
-                    Label::secondary(file_id, was.loc().span).with_message(format!(
+                    was.loc().secondary_label().with_message(format!(
                         "{} is a {}",
                         path,
                         was.kind_string()
@@ -87,8 +88,8 @@ impl CompilationError for Error {
             Error::LookupError(LookupError::NotAValue(path, was)) => Diagnostic::error()
                 .with_message(format!("Expected {} to be a value", path))
                 .with_labels(vec![
-                    Label::primary(file_id, path.span).with_message(format!("Expected value")),
-                    Label::secondary(file_id, was.loc().span).with_message(format!(
+                    path.primary_label().with_message(format!("Expected value")),
+                    was.loc().secondary_label().with_message(format!(
                         "{} is a {}",
                         path,
                         was.kind_string()
@@ -102,29 +103,35 @@ impl CompilationError for Error {
                 Diagnostic::error()
                     .with_message(format!("A previous declaration of {} exists", new))
                     .with_labels(vec![
-                        Label::primary(file_id, new.span)
+                        new.primary_label()
                             .with_message(format!("{} was declared more than once", new)),
-                        Label::secondary(file_id, old.span)
+                        old.primary_label()
                             .with_message(format!("Previously declared here")),
                     ])
             }
             Error::ArgumentListLenghtMismatch { expected, got, at } => Diagnostic::error()
                 .with_message(format!("Expected {} arguments, got {}", expected, got))
-                .with_labels(vec![Label::primary(file_id, at.span)
+                .with_labels(vec![at
+                    .primary_label()
                     .with_message(format!("Expected {} arguments", expected))]),
             Error::PatternListLengthMismatch { expected, got, at } => Diagnostic::error()
                 .with_message(format!("Expected {} arguments, got {}", expected, got))
-                .with_labels(vec![Label::primary(file_id, at.span)
+                .with_labels(vec![at
+                    .primary_label()
                     .with_message(format!("Expected {} arguments", expected))]),
             Error::DuplicateNamedBindings { new, prev_loc } => Diagnostic::error()
                 .with_message(format!("Multiple bindings to {}", new))
-                .with_labels(vec![Label::primary(file_id, prev_loc.span)
-                    .with_message(format!("previously bound here"))]),
+                .with_labels(vec![
+                    new.primary_label().with_message("Previously bound"),
+                    prev_loc
+                        .secondary_label()
+                        .with_message(format!("previously bound here")),
+                ]),
             Error::NoSuchArgument { name } => Diagnostic::error()
                 .with_message(format!("{}: No such argument to", name))
-                .with_labels(vec![
-                    Label::primary(file_id, name.span).with_message(format!("No such argument"))
-                ]),
+                .with_labels(vec![name
+                    .primary_label()
+                    .with_message(format!("No such argument"))]),
             Error::MissingArguments { missing, at } => {
                 let plural = if missing.len() == 1 {
                     "argument"
@@ -141,15 +148,16 @@ impl CompilationError for Error {
                 Diagnostic::error()
                     .with_message(format!("Missing {}: {}", plural, arg_list))
                     .with_labels(vec![
-                        Label::primary(file_id, at.span)
+                        at.primary_label()
                             .with_message(format!("Missing {}", plural)),
-                        Label::secondary(file_id, at.span)
+                        at.secondary_label()
                             .with_message(format!("Missing {}", arg_list)),
                     ])
             }
             Error::NoPipelineStages { pipeline } => Diagnostic::error()
                 .with_message("Missing pipeline stages")
-                .with_labels(vec![Label::primary(file_id, pipeline.span)
+                .with_labels(vec![pipeline
+                    .primary_label()
                     .with_message(format!("Pipelien must have at least one stage"))]),
             Error::IncorrectStageCount {
                 got,
@@ -158,14 +166,17 @@ impl CompilationError for Error {
             } => Diagnostic::error()
                 .with_message(format!("Expected {} pipeline stages", expected))
                 .with_labels(vec![
-                    Label::primary(file_id, pipeline.span)
+                    pipeline
+                        .primary_label()
                         .with_message(format!("Found {} stages", got)),
-                    Label::secondary(file_id, expected.span)
+                    expected
+                        .secondary_label()
                         .with_message(format!("{} specified here", expected)),
                 ]),
             Error::EarlyPipelineReturn { expression } => Diagnostic::error()
                 .with_message(format!("Unexpected return expression"))
-                .with_labels(vec![Label::primary(file_id, expression.span)
+                .with_labels(vec![expression
+                    .primary_label()
                     .with_message(format!("Did not expect an value in this stage"))])
                 .with_notes(vec![format!(
                     "Only the last stage of a pipeline can return values"
@@ -175,16 +186,19 @@ impl CompilationError for Error {
                     "Pipeline depth mismatch. Expected {} got {}",
                     expected, got
                 ))
-                .with_labels(vec![Label::primary(file_id, got.span)
+                .with_labels(vec![got
+                    .primary_label()
                     .with_message(format!("Expected {}", expected))]),
             Error::MissingPipelineClock { at_loc } => Diagnostic::error()
                 .with_message(format!("Missing clock argument."))
-                .with_labels(vec![Label::primary(file_id, at_loc.span)
+                .with_labels(vec![at_loc
+                    .primary_label()
                     .with_message(format!("Expected clock argument"))])
                 .with_notes(vec![format!("All pipelines take a clock as an argument")]),
             Error::GenericsGivenForGeneric { at_loc, for_type } => Diagnostic::error()
                 .with_message("Generic arguments given for a generic type")
-                .with_labels(vec![Label::primary(file_id, at_loc.span)
+                .with_labels(vec![at_loc
+                    .primary_label()
                     .with_message(format!("{} is a generic type", for_type))])
                 .with_notes(vec![format!(
                     "A generic argument can not have generic types"
@@ -195,16 +209,18 @@ impl CompilationError for Error {
             } => Diagnostic::error()
                 .with_message("Declared variables can only be defined by registers")
                 .with_labels(vec![
-                    Label::primary(file_id, at.span).with_message(format!("Not a register")),
-                    Label::secondary(file_id, declaration_location.span)
+                    at.primary_label().with_message(format!("Not a register")),
+                    declaration_location
+                        .secondary_label()
                         .with_message(format!("{} declared here", at)),
                 ]),
             Error::RedefinitionOfDeclaration { at, previous } => Diagnostic::error()
                 .with_message(format!("{} was already defined", at))
                 .with_labels(vec![
-                    Label::primary(file_id, at.span)
+                    at.primary_label()
                         .with_message(format!("{} was defined previously", at)),
-                    Label::secondary(file_id, previous.span)
+                    previous
+                        .secondary_label()
                         .with_message(format!("previous definition")),
                 ])
                 .with_notes(vec![format!("Declared variables can only be defined once")]),
@@ -212,6 +228,6 @@ impl CompilationError for Error {
 
         let writer = StandardStream::stderr(color_choice(no_color));
 
-        term::emit(&mut writer.lock(), &codespan_config(), &files, &diag).unwrap();
+        term::emit(&mut writer.lock(), &codespan_config(), &code.files, &diag).unwrap();
     }
 }

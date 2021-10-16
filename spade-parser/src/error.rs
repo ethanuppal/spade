@@ -8,8 +8,8 @@ use crate::{lexer::TokenKind, Token};
 pub enum Error {
     #[error("End of file")]
     Eof,
-    #[error("Lexer error at {}", 0.0)]
-    LexerError(codespan::Span),
+    #[error("Lexer error at {} in file {}", 1.0, 0)]
+    LexerError(usize, codespan::Span),
     #[error("Unexpected token. got {}, expected {expected:?}", got.kind.as_str())]
     UnexpectedToken {
         got: Token,

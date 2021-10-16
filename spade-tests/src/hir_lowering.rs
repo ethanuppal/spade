@@ -1,9 +1,7 @@
 #[cfg(test)]
 mod tests {
-    use std::path::PathBuf;
-
     use colored::Colorize;
-    use spade_common::error_reporting::CompilationError;
+    use spade_common::error_reporting::{CodeBundle, CompilationError};
     use spade_hir_lowering::*;
     use spade_mir::{
         self,
@@ -27,7 +25,8 @@ mod tests {
             match self {
                 Ok(t) => t,
                 Err(e) => {
-                    e.report(&PathBuf::from(""), "", false);
+                    let code_bundle = CodeBundle::new("".to_string());
+                    e.report(&code_bundle, false);
                     panic!("Compilation error")
                 }
             }

@@ -126,7 +126,7 @@ pub fn re_visit_type_declaration(
     let (declaration_id, _) = symtab
         .lookup_type_symbol(&namespace.push_ident(t.name.clone()).at_loc(&t.name))
         .expect("Expected type symbol to already be in symtab");
-    let declaration_id = declaration_id.at(&t.name);
+    let declaration_id = declaration_id.at_loc(&t.name);
 
     // Add the generic parameters to a new symtab scope
     symtab.new_scope();
@@ -135,7 +135,10 @@ pub fn re_visit_type_declaration(
             ast::TypeParam::TypeName(n) => (n, TypeSymbol::GenericArg),
             ast::TypeParam::Integer(n) => (n, TypeSymbol::GenericInt),
         };
-        symtab.add_thing(Path(vec![name.clone()]), Thing::Type(symbol_type.at(param)));
+        symtab.add_thing(
+            Path(vec![name.clone()]),
+            Thing::Type(symbol_type.at_loc(param)),
+        );
     }
 
     // Generate TypeExprs and TypeParam vectors which are needed for building the
@@ -144,10 +147,10 @@ pub fn re_visit_type_declaration(
     let mut type_params = vec![];
     for arg in &t.generic_args {
         let (name_id, _) = symtab
-            .lookup_type_symbol(&Path(vec![arg.name().clone()]).at(arg))
+            .lookup_type_symbol(&Path(vec![arg.name().clone()]).at_loc(arg))
             .expect("Expected generic param to be in symtab");
-        let expr =
-            TypeExpression::TypeSpec(hir::TypeSpec::Generic(name_id.clone().at(arg))).at(arg);
+        let expr = TypeExpression::TypeSpec(hir::TypeSpec::Generic(name_id.clone().at_loc(arg)))
+            .at_loc(arg);
         let param = match &arg.inner {
             ast::TypeParam::TypeName(n) => {
                 hir::TypeParam::TypeName(n.inner.clone(), name_id.clone())
@@ -155,7 +158,7 @@ pub fn re_visit_type_declaration(
             ast::TypeParam::Integer(n) => hir::TypeParam::Integer(n.inner.clone(), name_id.clone()),
         };
         output_type_exprs.push(expr);
-        type_params.push(param.at(arg))
+        type_params.push(param.at_loc(arg))
     }
 
     let hir_kind = match &t.inner.kind {
@@ -174,7 +177,7 @@ pub fn re_visit_type_declaration(
                         declaration_id.clone(),
                         output_type_exprs.clone(),
                     )
-                    .at(t),
+                    .at_loc(t),
                     type_params: type_params.clone(),
                     option: i,
                     params: parameter_list.clone(),
@@ -187,7 +190,7 @@ pub fn re_visit_type_declaration(
                 let head_id = symtab.add_thing_at_offset(
                     1,
                     variant_path,
-                    Thing::EnumVariant(variant_thing.at(&option.0)),
+                    Thing::EnumVariant(variant_thing.at_loc(&option.0)),
                 );
                 // Add option constructor to item list
                 items.executables.insert(
@@ -201,14 +204,14 @@ pub fn re_visit_type_declaration(
                 // NOTE: it's kind of weird to push head_id here, since that's just
                 // the constructor. In the future, if we move forward with enum members
                 // being individual types, we should push that instead
-                hir_options.push((head_id.clone().at(&option.0), parameter_list))
+                hir_options.push((head_id.clone().at_loc(&option.0), parameter_list))
             }
 
             hir::TypeDeclKind::Enum(
                 hir::Enum {
                     options: hir_options,
                 }
-                .at(e),
+                .at_loc(e),
             )
         }
     };
@@ -221,7 +224,7 @@ pub fn re_visit_type_declaration(
         kind: hir_kind,
         generic_args: type_params,
     }
-    .at(t);
+    .at_loc(t);
     items.types.insert(declaration_id.inner, decl);
 
     Ok(())

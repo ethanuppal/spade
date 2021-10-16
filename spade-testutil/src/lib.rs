@@ -1,9 +1,11 @@
-use std::path::PathBuf;
-
 use logos::Logos;
 
 use spade_ast_lowering::{global_symbols, visit_module_body};
-use spade_common::{error_reporting::CompilationError, id_tracker::ExprIdTracker, name::Path};
+use spade_common::{
+    error_reporting::{CodeBundle, CompilationError},
+    id_tracker::ExprIdTracker,
+    name::Path,
+};
 use spade_hir::{
     symbol_table::{FrozenSymtab, SymbolTable},
     ItemList,
@@ -62,14 +64,16 @@ pub struct ParseTypececkResult {
 }
 
 pub fn parse_typecheck_module_body(input: &str) -> ParseTypececkResult {
-    let mut parser = parser::Parser::new(lexer::TokenKind::lexer(&input));
+    let mut parser = parser::Parser::new(lexer::TokenKind::lexer(&input), 0);
+
+    let code_bundle = CodeBundle::new(input.to_string());
 
     macro_rules! try_or_report {
         ($to_try:expr) => {
             match $to_try {
                 Ok(result) => result,
                 Err(e) => {
-                    e.report(&PathBuf::new(), &input, true);
+                    e.report(&code_bundle, true);
                     panic!("Aborting due to previous error")
                 }
             }

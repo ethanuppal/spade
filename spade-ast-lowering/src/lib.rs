@@ -122,7 +122,8 @@ pub fn visit_type_spec(t: &ast::TypeSpec, symtab: &mut SymbolTable) -> Result<hi
                     // can't have generic parameters
 
                     if !params.is_empty() {
-                        let at_loc = ().between(params.first().unwrap(), params.last().unwrap());
+                        let at_loc =
+                            ().between_locs(params.first().unwrap(), params.last().unwrap());
                         Err(Error::GenericsGivenForGeneric {
                             at_loc,
                             for_type: base_id.1.clone().at_loc(&t.loc()),
@@ -349,7 +350,7 @@ pub fn visit_pattern(
                                 at: path.loc(),
                             });
                         } else {
-                            hir::PatternKind::Type(name_id.at(path), vec![])
+                            hir::PatternKind::Type(name_id.at_loc(path), vec![])
                         }
                     }
                     Err(e) => return Err(e.into()),
@@ -396,7 +397,7 @@ pub fn visit_pattern(
                                 })
                                 .collect::<Result<Vec<_>>>()?;
 
-                            hir::PatternKind::Type(name_id.at(path), patterns)
+                            hir::PatternKind::Type(name_id.at_loc(path), patterns)
                         }
                     }
                 }
@@ -434,8 +435,7 @@ pub fn visit_statement(
     symtab: &mut SymbolTable,
     idtracker: &mut ExprIdTracker,
 ) -> Result<Loc<hir::Statement>> {
-    let (s, span) = s.split_ref();
-    match s {
+    match &s.inner {
         ast::Statement::Declaration(names) => {
             let names = names
                 .iter()
@@ -443,11 +443,11 @@ pub fn visit_statement(
                     symtab
                         .add_declaration(name.clone())
                         .map_err(Error::DeclarationError)
-                        .map(|id| id.at(name))
+                        .map(|id| id.at_loc(name))
                 })
                 .collect::<Result<Vec<_>>>()?;
 
-            Ok(Loc::new(hir::Statement::Declaration(names), span))
+            Ok(hir::Statement::Declaration(names).at_loc(&s))
         }
         ast::Statement::Binding(pattern, t, expr) => {
             let hir_type = if let Some(t) = t {
@@ -460,11 +460,11 @@ pub fn visit_statement(
 
             let expr = expr.try_visit(visit_expression, symtab, idtracker)?;
 
-            Ok(Loc::new(hir::Statement::Binding(pat, hir_type, expr), span))
+            Ok(hir::Statement::Binding(pat, hir_type, expr).at_loc(s))
         }
         ast::Statement::Register(inner) => {
-            let (result, span) = visit_register(&inner, symtab, idtracker)?.separate();
-            Ok(Loc::new(hir::Statement::Register(result), span))
+            let (result, span) = visit_register(&inner, symtab, idtracker)?.separate_loc();
+            Ok(hir::Statement::Register(result).at_loc(&span))
         }
     }
 }
@@ -731,7 +731,7 @@ pub fn visit_register(
     symtab: &mut SymbolTable,
     idtracker: &mut ExprIdTracker,
 ) -> Result<Loc<hir::Register>> {
-    let (reg, loc) = reg.split_ref();
+    let (reg, loc) = reg.split_loc_ref();
 
     let pattern = reg
         .pattern
@@ -756,16 +756,14 @@ pub fn visit_register(
         None
     };
 
-    Ok(Loc::new(
-        hir::Register {
-            pattern,
-            clock,
-            reset,
-            value,
-            value_type,
-        },
-        loc,
-    ))
+    Ok(hir::Register {
+        pattern,
+        clock,
+        reset,
+        value,
+        value_type,
+    }
+    .at_loc(&loc))
 }
 
 #[cfg(test)]

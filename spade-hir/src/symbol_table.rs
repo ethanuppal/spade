@@ -228,7 +228,7 @@ impl SymbolTable {
             .last()
             .unwrap()
             .get_key_value(ident)
-            .map(|(k, v)| v.clone().at(k))
+            .map(|(k, v)| v.clone().at_loc(k))
     }
 
     pub fn mark_declaration_defined(&mut self, ident: Loc<Identifier>, definition_point: Loc<()>) {

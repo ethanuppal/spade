@@ -1,4 +1,8 @@
+use std::ops::Range;
+
 use codespan::Span;
+
+use crate::error_reporting::AsLabel;
 
 pub trait HasCodespan {
     fn codespan(&self) -> Span;
@@ -20,27 +24,37 @@ impl HasCodespan for std::ops::Range<usize> {
 }
 
 pub trait WithLocation: Sized {
-    fn at(self, span: &impl HasCodespan) -> Loc<Self>
+    fn at(self, file_id: usize, span: &impl HasCodespan) -> Loc<Self>
     where
         Self: Sized,
     {
-        Loc::new(self, span.codespan())
+        Loc::new(self, span.codespan(), file_id)
     }
 
     /// Creates a new Loc from another Loc
     fn at_loc<T: Sized>(self, loc: &Loc<T>) -> Loc<Self> {
-        Loc::new(self, loc.span)
+        Loc::new(self, loc.span, loc.file_id)
     }
 
-    fn between(self, start: &impl HasCodespan, end: &impl HasCodespan) -> Loc<Self> {
-        Loc::new(self, start.codespan().merge(end.codespan()))
+    fn between(
+        self,
+        file_id: usize,
+        start: &impl HasCodespan,
+        end: &impl HasCodespan,
+    ) -> Loc<Self> {
+        Loc::new(self, start.codespan().merge(end.codespan()), file_id)
+    }
+
+    fn between_locs<T, Y>(self, start: &Loc<T>, end: &Loc<Y>) -> Loc<Self> {
+        assert!(start.file_id == end.file_id);
+        Loc::new(self, start.codespan().merge(end.codespan()), end.file_id())
     }
 
     fn nowhere(self) -> Loc<Self>
     where
         Self: Sized,
     {
-        self.at(&Span::new(0, 0))
+        self.at(0, &Span::new(0, 0))
     }
 }
 
@@ -60,18 +74,23 @@ pub fn dummy() -> Span {
     Span::new(0, 0)
 }
 
-#[derive(Clone, Copy, Eq)]
+#[derive(Clone, Copy)]
 pub struct Loc<T> {
     pub inner: T,
     pub span: Span,
+    pub file_id: usize,
 }
 
 impl<T> Loc<T> {
-    pub fn new(inner: T, span: Span) -> Self {
-        Self { inner, span }
+    pub fn new(inner: T, span: Span, file_id: usize) -> Self {
+        Self {
+            inner,
+            span,
+            file_id,
+        }
     }
     pub fn nowhere(inner: T) -> Self {
-        Self::new(inner, Span::new(0, 0))
+        Self::new(inner, Span::new(0, 0), 0)
     }
 
     pub fn strip(self) -> T {
@@ -87,6 +106,11 @@ impl<T> Loc<T> {
         (self, span)
     }
 
+    pub fn separate_loc(self) -> (Self, Loc<()>) {
+        let loc = self.loc();
+        (self, loc)
+    }
+
     pub fn split(self) -> (T, Span) {
         (self.inner, self.span)
     }
@@ -97,17 +121,23 @@ impl<T> Loc<T> {
         let loc = self.loc();
         (self.inner, loc)
     }
+    pub fn split_loc_ref(&self) -> (&T, Loc<()>) {
+        let loc = self.loc();
+        (&self.inner, loc)
+    }
 
     pub fn map<Y>(self, mut op: impl FnMut(T) -> Y) -> Loc<Y> {
         Loc {
             inner: op(self.inner),
             span: self.span,
+            file_id: self.file_id,
         }
     }
     pub fn map_ref<Y>(&self, mut op: impl FnMut(&T) -> Y) -> Loc<Y> {
         Loc {
             inner: op(&self.inner),
             span: self.span,
+            file_id: self.file_id,
         }
     }
     pub fn try_map_ref<Y, E, F>(&self, mut op: F) -> Result<Loc<Y>, E>
@@ -117,6 +147,7 @@ impl<T> Loc<T> {
         Ok(Loc {
             inner: op(&self.inner)?,
             span: self.span,
+            file_id: self.file_id,
         })
     }
 
@@ -124,7 +155,14 @@ impl<T> Loc<T> {
         Loc {
             inner: (),
             span: self.span,
+            file_id: self.file_id,
         }
+    }
+}
+
+impl<T> Into<Range<usize>> for Loc<T> {
+    fn into(self) -> Range<usize> {
+        self.span.into()
     }
 }
 
@@ -134,8 +172,9 @@ impl<T, E> Loc<Result<T, E>> {
             Ok(inner) => Ok(Loc {
                 inner,
                 span: self.span,
+                file_id: self.file_id,
             }),
-            Err(e) => Err(err_fn(e, ().at(&self.span))),
+            Err(e) => Err(err_fn(e, ().at(self.file_id, &self.span))),
         }
     }
 }
@@ -148,6 +187,8 @@ where
         self.inner == other.inner
     }
 }
+
+impl<T> Eq for Loc<T> where T: Eq {}
 
 impl<T> std::fmt::Display for Loc<T>
 where
@@ -192,5 +233,15 @@ impl<T> std::ops::Deref for Loc<T> {
 impl<T> std::ops::DerefMut for Loc<T> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.inner
+    }
+}
+
+impl<T> AsLabel for Loc<T> {
+    fn file_id(&self) -> usize {
+        self.file_id
+    }
+
+    fn span(&self) -> std::ops::Range<usize> {
+        self.span.into()
     }
 }

@@ -7,26 +7,15 @@ IVERILOG_FLAGS=-g2012
 SPADEC=../target/debug/spade
 
 TEST_DIRS=$(wildcard test/*)
+TEST_TARGETS=$(patsubst test/%, test/%/build/code.v.vcd, $(TEST_DIRS))
 
 # Main rule
-all: ${TEST_DIRS} .PHONY
+all: ${TEST_TARGETS} .PHONY
 
-test/saturating_adder: test/saturating_adder/build/code.v.vcd .PHONY
-test/counter: test/counter/build/code.v.vcd .PHONY
-test/multi_entity: test/multi_entity/build/code.v.vcd .PHONY
-test/basic_pipeline: test/basic_pipeline/build/code.v.vcd .PHONY
-test/tuple_pipeline: test/tuple_pipeline/build/code.v.vcd .PHONY
-test/enum_instantiation: test/enum_instantiation/build/code.v.vcd .PHONY
-test/match: test/match/build/code.v.vcd .PHONY
-test/match: test/match/build/code.v.vcd .PHONY
-test/decl_based_feedback: test/decl_based_feedback/build/code.v.vcd .PHONY
-test/match_destructuring: test/match_destructuring/build/code.v.vcd .PHONY
-
-# Build verilog from the spade code
-test/%/build/code.v: test/%/code.spade $(SPADEC)
+test/%/build/code.v: test/%/code.spade $(SPADEC) .PHONY
 	@mkdir -p ${@D}
 	@echo -e "[\033[0;34m${SPADEC}\033[0m] building $@"
-	@${SPADEC} $< -o $@
+	@${SPADEC} $(wildcard ${<D}/*.spade) -o $@ 
 
 # Build a test binary
 test/%/build/code.v.out: test/%/build/code.v

@@ -2,8 +2,9 @@ use std::fs::File;
 use std::io::prelude::*;
 use std::path::PathBuf;
 
-use anyhow::{anyhow, Result};
+use anyhow::{anyhow, Context, Result};
 use logos::Logos;
+use spade_common::error_reporting::CodeBundle;
 use structopt::StructOpt;
 
 use spade_ast_lowering::{global_symbols, visit_module_body};
@@ -18,6 +19,8 @@ use spade_typeinference as typeinference;
 struct Opt {
     #[structopt(name = "INPUT_FILE")]
     pub infile: PathBuf,
+    #[structopt(name = "EXTRA_FILES")]
+    pub extra_files: Vec<PathBuf>,
     #[structopt(short = "o")]
     pub outfile: PathBuf,
     /// Do not include color in the error report
@@ -26,64 +29,80 @@ struct Opt {
 }
 
 fn main() -> Result<()> {
-    let opts = Opt::from_args();
+    let mut opts = Opt::from_args();
 
-    // Read the input file
-    let mut file = File::open(&opts.infile)?;
-    let mut file_content = String::new();
-    file.read_to_string(&mut file_content)?;
+    let no_color = opts.no_color;
 
-    let mut parser = Parser::new(lexer::TokenKind::lexer(&file_content));
+    let mut infiles = vec![opts.infile];
+    infiles.append(&mut opts.extra_files);
 
-    // TODO: Namespace individual files
-    let namespace = Path(vec![]);
+    let mut symtab = symbol_table::SymbolTable::new();
+    let mut item_list = ItemList::new();
+    spade_ast_lowering::builtins::populate_symtab(&mut symtab, &mut item_list);
+
+    let mut code = CodeBundle::new("".to_string());
 
     macro_rules! try_or_report {
         ($to_try:expr) => {
             match $to_try {
                 Ok(result) => result,
                 Err(e) => {
-                    e.report(&opts.infile, &file_content, opts.no_color);
+                    e.report(&code, no_color);
                     return Err(anyhow!("aborting due to previous error"));
                 }
             }
         };
     }
 
-    let module_ast = try_or_report!(parser.module_body());
+    let mut module_asts = vec![];
+    // TODO: Namespace individual files
+    let namespace = Path(vec![]);
+    // Read and parse input files
+    for infile in infiles {
+        let mut file = File::open(&infile)
+            .with_context(|| format!("Failed to open {}", &infile.to_string_lossy()))?;
+        let mut file_content = String::new();
+        file.read_to_string(&mut file_content)?;
 
-    let mut symtab = symbol_table::SymbolTable::new();
-    let mut item_list = ItemList::new();
-    spade_ast_lowering::builtins::populate_symtab(&mut symtab, &mut item_list);
+        let file_id = code.add_file(infile, file_content.clone());
+        let mut parser = Parser::new(lexer::TokenKind::lexer(&file_content), file_id);
 
-    try_or_report!(global_symbols::gather_symbols(
-        &module_ast,
-        &Path(vec![]),
-        &mut symtab,
-        &mut item_list
-    ));
+        module_asts.push(try_or_report!(parser.module_body()));
+    }
 
-    // First pass over the module to collect all global symbols
-    for item in &module_ast.members {
-        try_or_report!(global_symbols::visit_item(
-            &item,
-            &namespace,
+    for module_ast in &module_asts {
+        try_or_report!(global_symbols::gather_symbols(
+            &module_ast,
+            &Path(vec![]),
             &mut symtab,
             &mut item_list
         ));
     }
 
     let mut idtracker = id_tracker::ExprIdTracker::new();
-    let item_list = try_or_report!(visit_module_body(
-        item_list,
-        &module_ast,
-        &namespace,
-        &mut symtab,
-        &mut idtracker
-    ));
 
-    let mut module_code = vec![];
+    for module_ast in &module_asts {
+        for item in &module_ast.members {
+            try_or_report!(global_symbols::visit_item(
+                &item,
+                &namespace,
+                &mut symtab,
+                &mut item_list
+            ));
+        }
+
+        item_list = try_or_report!(visit_module_body(
+            item_list,
+            &module_ast,
+            &namespace,
+            &mut symtab,
+            &mut idtracker
+        ));
+    }
+
     let mut frozen_symtab = symtab.freeze();
+    let mut module_code = vec![];
+
     for item in item_list.executables.values() {
         match item {
             ExecutableItem::Entity(e) => {

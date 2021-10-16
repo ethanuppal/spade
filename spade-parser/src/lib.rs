@@ -11,6 +11,7 @@ use spade_ast::{
     TypeExpression, TypeParam, TypeSpec,
 };
 use spade_common::{
+    error_reporting::AsLabel,
     location_info::{lspan, Loc, WithLocation},
     name::{Identifier, Path},
 };
@@ -30,14 +31,26 @@ use crate::{
 pub struct Token {
     pub kind: TokenKind,
     pub span: logos::Span,
+    pub file_id: usize,
 }
 
 impl Token {
-    pub fn new(kind: TokenKind, lexer: &Lexer<TokenKind>) -> Self {
+    pub fn new(kind: TokenKind, lexer: &Lexer<TokenKind>, file_id: usize) -> Self {
         Self {
             kind,
             span: lexer.span(),
+            file_id,
         }
+    }
+}
+
+impl AsLabel for Token {
+    fn file_id(&self) -> usize {
+        self.file_id
+    }
+
+    fn span(&self) -> std::ops::Range<usize> {
+        self.span.clone()
     }
 }
 
@@ -45,14 +58,16 @@ pub struct Parser<'a> {
     lex: Lexer<'a, TokenKind>,
     peeked: Option<Token>,
     pub parse_stack: Vec<ParseStackEntry>,
+    file_id: usize,
 }
 
 impl<'a> Parser<'a> {
-    pub fn new(lex: Lexer<'a, TokenKind>) -> Self {
+    pub fn new(lex: Lexer<'a, TokenKind>, file_id: usize) -> Self {
         Self {
             lex,
             peeked: None,
             parse_stack: vec![],
+            file_id,
         }
     }
 }
@@ -84,7 +99,7 @@ impl<'a> Parser<'a> {
         let token = self.eat_cond(TokenKind::is_identifier, "Identifier")?;
 
         if let TokenKind::Identifier(name) = token.kind {
-            Ok(Identifier(name).at(&token.span))
+            Ok(Identifier(name).at(self.file_id, &token.span))
         } else {
             unreachable!("eat_cond should have checked this");
         }
@@ -104,7 +119,7 @@ impl<'a> Parser<'a> {
         // in the loop must pus an identifier.
         let start = result.first().unwrap().span;
         let end = result.last().unwrap().span;
-        Ok(Path(result).between(&start, &end))
+        Ok(Path(result).between(self.file_id, &start, &end))
     }
 
     pub fn binary_operator(
@@ -138,7 +153,10 @@ impl<'a> Parser<'a> {
                 TokenKind::BitwiseOr => BinaryOperator::BitwiseOr,
                 x => unreachable!("{:?} ({}) is not an operator", x, x.as_str()),
             };
-            Ok(Expression::BinaryOperator(Box::new(start), op, Box::new(rest)).at(&span))
+            Ok(
+                Expression::BinaryOperator(Box::new(start), op, Box::new(rest))
+                    .at(self.file_id, &span),
+            )
         } else {
             Ok(start)
         }
@@ -152,10 +170,10 @@ impl<'a> Parser<'a> {
         if let Some(hash) = self.peek_and_eat(&TokenKind::Hash)? {
             if let Some(index) = self.int_literal()? {
                 let span = expr.span.merge(lspan(hash.span));
-                Ok(Expression::TupleIndex(Box::new(expr), index).at(&span))
+                Ok(Expression::TupleIndex(Box::new(expr), index).at(self.file_id, &span))
             } else {
                 Err(Error::MissingTupleIndex {
-                    hash_loc: Loc::new((), lspan(hash.span)),
+                    hash_loc: Loc::new((), lspan(hash.span), self.file_id),
                 })
             }
         } else {
@@ -219,7 +237,7 @@ impl<'a> Parser<'a> {
             let end = self.eat(&TokenKind::CloseParen)?;
 
             let span = lspan(opener.span).merge(lspan(end.span));
-            Ok(Some(ArgumentList::Named(args).at(&span)))
+            Ok(Some(ArgumentList::Named(args).at(self.file_id, &span)))
         } else {
             let args = self
                 .comma_separated(Self::expression, &TokenKind::CloseParen)
@@ -228,7 +246,7 @@ impl<'a> Parser<'a> {
 
             let span = lspan(opener.span.clone()).merge(lspan(end.span));
 
-            Ok(Some(ArgumentList::Positional(args).at(&span)))
+            Ok(Some(ArgumentList::Positional(args).at(self.file_id, &span)))
         }
     }
 
@@ -249,7 +267,7 @@ impl<'a> Parser<'a> {
                     .unwrap()
                     .span
                     .merge(inner.last().unwrap().span);
-                Ok(Expression::TupleLiteral(inner).at(&span))
+                Ok(Expression::TupleLiteral(inner).at(self.file_id, &span))
             };
             self.eat(&TokenKind::CloseParen)?;
             result
@@ -276,10 +294,19 @@ impl<'a> Parser<'a> {
                 .ok_or(Error::ExpectedArgumentList(name.clone()))?;
 
             if let Some(depth) = pipeline_depth {
-                Ok(Expression::PipelineInstance(depth, name, args.clone())
-                    .between(&start.span, &args))
+                Ok(
+                    Expression::PipelineInstance(depth, name, args.clone()).between(
+                        self.file_id,
+                        &start.span,
+                        &args,
+                    ),
+                )
             } else {
-                Ok(Expression::EntityInstance(name, args.clone()).between(&start.span, &args))
+                Ok(Expression::EntityInstance(name, args.clone()).between(
+                    self.file_id,
+                    &start.span,
+                    &args,
+                ))
             }
         } else if let Some(val) = self.bool_literal()? {
             Ok(val.map(Expression::BoolLiteral))
@@ -298,11 +325,11 @@ impl<'a> Parser<'a> {
                     // Check if this is a function call by looking for an argument list
                     if let Some(args) = self.argument_list()? {
                         // Doing this avoids cloning result and args
-                        let span = ().between(&path, &args);
+                        let span = ().between(self.file_id, &path, &args);
 
                         Ok(Expression::FnCall(path, args).at_loc(&span))
                     } else {
-                        Ok(Expression::Identifier(path).at(&span))
+                        Ok(Expression::Identifier(path).at(self.file_id, &span))
                     }
                 }
                 Err(Error::UnexpectedToken { got, .. }) => Err(Error::ExpectedExpression { got }),
@@ -320,9 +347,9 @@ impl<'a> Parser<'a> {
 
             let span = name.span.merge(value.span);
 
-            Ok(NamedArgument::Full(name, value).at(&span))
+            Ok(NamedArgument::Full(name, value).at(self.file_id, &span))
         } else {
-            Ok(NamedArgument::Short(name.clone()).at(&name))
+            Ok(NamedArgument::Short(name.clone()).at(self.file_id, &name))
         }
     }
 
@@ -337,8 +364,11 @@ impl<'a> Parser<'a> {
         let (on_false, end_span) = self.expression()?.separate();
 
         Ok(Some(
-            Expression::If(Box::new(cond), Box::new(on_true), Box::new(on_false))
-                .between(&start.span, &end_span),
+            Expression::If(Box::new(cond), Box::new(on_true), Box::new(on_false)).between(
+                self.file_id,
+                &start.span,
+                &end_span,
+            ),
         ))
     }
 
@@ -367,7 +397,11 @@ impl<'a> Parser<'a> {
         )?;
 
         Ok(Some(
-            Expression::Match(Box::new(expression), patterns).between(&start.span, &body_loc),
+            Expression::Match(Box::new(expression), patterns).between(
+                self.file_id,
+                &start.span,
+                &body_loc,
+            ),
         ))
     }
 
@@ -376,7 +410,7 @@ impl<'a> Parser<'a> {
         if self.peek_cond(TokenKind::is_integer, "integer")? {
             let token = self.eat_unconditional()?;
             match token.kind {
-                TokenKind::Integer(val) => Ok(Some(Loc::new(val, lspan(token.span)))),
+                TokenKind::Integer(val) => Ok(Some(Loc::new(val, lspan(token.span), self.file_id))),
                 _ => unreachable!(),
             }
         } else {
@@ -387,9 +421,9 @@ impl<'a> Parser<'a> {
     #[trace_parser]
     fn bool_literal(&mut self) -> Result<Option<Loc<bool>>> {
         if let Some(tok) = self.peek_and_eat(&TokenKind::True)? {
-            Ok(Some(true.at(&tok.span)))
+            Ok(Some(true.at(self.file_id, &tok.span)))
         } else if let Some(tok) = self.peek_and_eat(&TokenKind::False)? {
-            Ok(Some(false.at(&tok.span)))
+            Ok(Some(false.at(self.file_id, &tok.span)))
         } else {
             Ok(None)
         }
@@ -408,7 +442,7 @@ impl<'a> Parser<'a> {
                 statements,
                 result: output_value,
             }
-            .between(&start.span, &end.span),
+            .between(self.file_id, &start.span, &end.span),
         ))
     }
 
@@ -448,6 +482,7 @@ impl<'a> Parser<'a> {
                     self.peeked = Some(Token {
                         kind: TokenKind::Gt,
                         span: end.span.clone(),
+                        file_id: 0,
                     });
                     Token {
                         kind: TokenKind::Gt,
@@ -462,13 +497,14 @@ impl<'a> Parser<'a> {
 
                 (
                     vec![type_expr],
-                    ().between(&generic_start.span, &generic_end.span).span,
+                    ().between(self.file_id, &generic_start.span, &generic_end.span)
+                        .span,
                 )
             } else {
                 (vec![], span)
             };
 
-            Ok(TypeSpec::Named(path, params).between(&span, &generic_span))
+            Ok(TypeSpec::Named(path, params).between(self.file_id, &span, &generic_span))
         }
     }
 
@@ -483,7 +519,7 @@ impl<'a> Parser<'a> {
 
         let span = lspan(start.span).merge(lspan(end.span));
 
-        Ok(Some(TypeSpec::Tuple(inner).at(&span)))
+        Ok(Some(TypeSpec::Tuple(inner).at(self.file_id, &span)))
     }
 
     /// A name with an associated type, as used in argument definitions as well
@@ -509,7 +545,11 @@ impl<'a> Parser<'a> {
                     .no_context()?;
                 let end = s.eat(&TokenKind::CloseParen)?;
 
-                Ok(Some(Pattern::Tuple(inner).between(&start.span, &end.span)))
+                Ok(Some(Pattern::Tuple(inner).between(
+                    s.file_id,
+                    &start.span,
+                    &end.span,
+                )))
             },
             &|s| {
                 Ok(s.int_literal()?
@@ -534,10 +574,13 @@ impl<'a> Parser<'a> {
                     Ok(Some(
                         Pattern::Type(
                             path,
-                            ArgumentPattern::Positional(inner)
-                                .between(&start_paren.span, &end_paren.span),
+                            ArgumentPattern::Positional(inner).between(
+                                s.file_id,
+                                &start_paren.span,
+                                &end_paren.span,
+                            ),
                         )
-                        .between(&path_span, &end_paren.span),
+                        .between(s.file_id, &path_span, &end_paren.span),
                     ))
                 } else if let Some(start_brace) = s.peek_and_eat(&TokenKind::OpenBrace)? {
                     let inner_parser = |s: &mut Self| {
@@ -555,13 +598,16 @@ impl<'a> Parser<'a> {
                     Ok(Some(
                         Pattern::Type(
                             path,
-                            ArgumentPattern::Named(inner)
-                                .between(&start_brace.span, &end_brace.span),
+                            ArgumentPattern::Named(inner).between(
+                                s.file_id,
+                                &start_brace.span,
+                                &end_brace.span,
+                            ),
                         )
-                        .between(&path_span, &end_brace.span),
+                        .between(s.file_id, &path_span, &end_brace.span),
                     ))
                 } else {
-                    Ok(Some(Pattern::Path(path.clone()).at(&path)))
+                    Ok(Some(Pattern::Path(path.clone()).at(s.file_id, &path)))
                 }
             },
         ])?;
@@ -593,9 +639,11 @@ impl<'a> Parser<'a> {
         self.eat(&TokenKind::Assignment)?;
         let (value, end_span) = self.expression()?.separate();
 
-        Ok(Some(
-            Statement::Binding(pattern, t, value).between(&start_span, &end_span),
-        ))
+        Ok(Some(Statement::Binding(pattern, t, value).between(
+            self.file_id,
+            &start_span,
+            &end_span,
+        )))
     }
 
     #[trace_parser]
@@ -657,9 +705,9 @@ impl<'a> Parser<'a> {
                 value,
                 value_type,
             }
-            .at(&span),
+            .at(self.file_id, &span),
         )
-        .at(&span);
+        .at(self.file_id, &span);
         Ok(Some(result))
     }
 
@@ -678,15 +726,17 @@ impl<'a> Parser<'a> {
 
         if identifiers.is_empty() {
             return Err(Error::EmptyDeclStatement {
-                at: ().at(&start_token.span),
+                at: ().at(self.file_id, &start_token.span),
             });
         }
 
         let last_ident = identifiers.last().unwrap().clone();
 
-        Ok(Some(
-            Statement::Declaration(identifiers).between(&start_token.span, &last_ident),
-        ))
+        Ok(Some(Statement::Declaration(identifiers).between(
+            self.file_id,
+            &start_token.span,
+            &last_ident,
+        )))
     }
 
     /// If the next token is the start of a statement, return that statement,
@@ -717,7 +767,7 @@ impl<'a> Parser<'a> {
             "looking for self",
         )? {
             let tok = self.eat_unconditional()?;
-            Ok(Some(().at(&tok.span)))
+            Ok(Some(().at(self.file_id, &tok.span)))
         } else {
             Ok(None)
         }
@@ -767,7 +817,7 @@ impl<'a> Parser<'a> {
                 // if this is a { or not
                 for_what: "entity".to_string(),
                 got: self.peek()?.unwrap(),
-                loc: Loc::new((), lspan(start_token.span).merge(end_loc)),
+                loc: Loc::new((), lspan(start_token.span).merge(end_loc), self.file_id),
             });
         };
 
@@ -779,7 +829,7 @@ impl<'a> Parser<'a> {
                 body: block.map(|inner| Expression::Block(Box::new(inner))),
                 type_params,
             }
-            .between(&start_token.span, &block_span),
+            .between(self.file_id, &start_token.span, &block_span),
         ))
     }
 
@@ -788,7 +838,7 @@ impl<'a> Parser<'a> {
         let start = peek_for!(self, &TokenKind::Let);
 
         let modifier = if let Some(t) = self.peek_and_eat(&TokenKind::Reg)? {
-            Some(PipelineBindModifier::Reg.at(&t.span))
+            Some(PipelineBindModifier::Reg.at(self.file_id, &t.span))
         } else {
             None
         };
@@ -814,7 +864,7 @@ impl<'a> Parser<'a> {
                 type_spec,
                 value,
             }
-            .between(&start.span, &end.span),
+            .between(self.file_id, &start.span, &end.span),
         ))
     }
 
@@ -837,9 +887,11 @@ impl<'a> Parser<'a> {
             other => other,
         })?;
 
-        Ok(Some(
-            PipelineStage { bindings }.between(&start.span, &end.span),
-        ))
+        Ok(Some(PipelineStage { bindings }.between(
+            self.file_id,
+            &start.span,
+            &end.span,
+        )))
     }
 
     #[trace_parser]
@@ -895,7 +947,7 @@ impl<'a> Parser<'a> {
                 stages,
                 result,
             }
-            .between(&start.span, &end.span),
+            .between(self.file_id, &start.span, &end.span),
         ))
     }
 
@@ -904,10 +956,10 @@ impl<'a> Parser<'a> {
         // If this is a type level integer
         if let Some(hash) = self.peek_and_eat(&TokenKind::Hash)? {
             let (id, loc) = self.identifier()?.separate();
-            Ok(TypeParam::Integer(id).between(&hash.span, &loc))
+            Ok(TypeParam::Integer(id).between(self.file_id, &hash.span, &loc))
         } else {
             let (id, loc) = self.identifier()?.separate();
-            Ok(TypeParam::TypeName(id).at(&loc))
+            Ok(TypeParam::TypeName(id).at(self.file_id, &loc))
         }
     }
 
@@ -979,7 +1031,7 @@ impl<'a> Parser<'a> {
                 return_type,
                 type_params,
             }
-            .between(&start_token.span, &end_token.span),
+            .between(self.file_id, &start_token.span, &end_token.span),
         ))
     }
 
@@ -1001,7 +1053,11 @@ impl<'a> Parser<'a> {
         }
         let end_token = self.eat(&TokenKind::CloseBrace)?;
 
-        Ok(Some(result.between(&start_token.span, &end_token.span)))
+        Ok(Some(result.between(
+            self.file_id,
+            &start_token.span,
+            &end_token.span,
+        )))
     }
 
     #[trace_parser]
@@ -1038,12 +1094,14 @@ impl<'a> Parser<'a> {
 
         let result = TypeDeclaration {
             name: name.clone(),
-            kind: TypeDeclKind::Enum(
-                Enum { name, options }.between(&start_token.span, &options_loc),
-            ),
+            kind: TypeDeclKind::Enum(Enum { name, options }.between(
+                self.file_id,
+                &start_token.span,
+                &options_loc,
+            )),
             generic_args,
         }
-        .between(&start_token.span, &options_loc);
+        .between(self.file_id, &start_token.span, &options_loc);
 
         Ok(Some(result))
     }
@@ -1140,7 +1198,7 @@ impl<'a> Parser<'a> {
 
         Ok((
             result,
-            Loc::new((), lspan(opener.span).merge(lspan(end.span))),
+            Loc::new((), lspan(opener.span).merge(lspan(end.span)), self.file_id),
         ))
     }
 
@@ -1287,10 +1345,10 @@ impl<'a> Parser<'a> {
         let kind = self.lex.next().ok_or(Error::Eof)?;
 
         if let TokenKind::Error = kind {
-            Err(Error::LexerError(lspan(self.lex.span())))?
+            Err(Error::LexerError(self.file_id, lspan(self.lex.span())))?
         };
 
-        Ok(Token::new(kind, &self.lex))
+        Ok(Token::new(kind, &self.lex, self.file_id))
     }
 }
 
@@ -1375,7 +1433,7 @@ mod tests {
 
     macro_rules! check_parse {
         ($string:expr , $method:ident, $expected:expr) => {
-            let mut parser = Parser::new(TokenKind::lexer($string));
+            let mut parser = Parser::new(TokenKind::lexer($string), 0);
             let result = parser.$method();
             // This is needed because type inference fails for some unexpected reason
             let expected: Result<_> = $expected;
@@ -2068,7 +2126,7 @@ mod tests {
 
         let expected = Expression::TupleIndex(
             Box::new(Expression::Identifier(ast_path("a")).nowhere()),
-            Loc::new(0, ().nowhere().span),
+            Loc::new(0, ().nowhere().span, 0),
         )
         .nowhere();
 
@@ -2146,7 +2204,8 @@ mod tests {
                 expected: vec![":", ",", ")"],
                 got: Token {
                     kind: TokenKind::Assignment,
-                    span: (4..5)
+                    span: (4..5),
+                    file_id: 0,
                 }
             })
         );
@@ -2216,7 +2275,7 @@ mod tests {
         "#;
 
         let expected = Pipeline {
-            depth: Loc::new(2, lspan(0..0)),
+            depth: Loc::new(2, lspan(0..0), 0),
             name: ast_ident("test"),
             inputs: aparams![("a", tspec!("bool"))],
             output_type: Some(TypeSpec::Named(ast_path("bool"), vec![]).nowhere()),
@@ -2260,7 +2319,7 @@ mod tests {
         let expected = ModuleBody {
             members: vec![Item::Pipeline(
                 Pipeline {
-                    depth: Loc::new(2, lspan(0..0)),
+                    depth: Loc::new(2, lspan(0..0), 0),
                     name: ast_ident("test"),
                     inputs: aparams![("a", tspec!("bool"))],
                     output_type: Some(TypeSpec::Named(ast_path("bool"), vec![]).nowhere()),
