@@ -1,0 +1,14 @@
+entity counter(test_case: int<8>) -> int<8> {
+    let input = if test_case == 0 {
+        TestEnum::Lonely()
+    }
+    else {
+        TestEnum::Payload(test_case + 1)
+    };
+
+    match input {
+        TestEnum::Lonely => 0,
+        TestEnum::Payload(value) => value
+    }
+}
+
