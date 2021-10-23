@@ -471,33 +471,13 @@ impl<'a> Parser<'a> {
             // Check if this type has generic params
             let (params, generic_span) = if self.peek_kind(&TokenKind::Lt)? {
                 let generic_start = self.eat_unconditional()?;
-                let type_expr = self.type_expression()?;
-
-                let generic_end = if let Some(end) = self.peek_and_eat(&TokenKind::Gt)? {
-                    end
-                }
-                // We need to do some trickery to avoid problems with >> being lexed as right shift
-                else if let Some(end) = self.peek_and_eat(&TokenKind::RightShift)? {
-                    assert!(self.peeked.is_none());
-                    self.peeked = Some(Token {
-                        kind: TokenKind::Gt,
-                        span: end.span.clone(),
-                        file_id: 0,
-                    });
-                    Token {
-                        kind: TokenKind::Gt,
-                        ..end
-                    }
-                } else {
-                    return Err(Error::UnmatchedPair {
-                        friend: generic_start,
-                        expected: TokenKind::Gt,
-                        got: self.eat_unconditional()?,
-                    });
-                };
+                let type_exprs = self
+                    .comma_separated(Self::type_expression, &TokenKind::Gt)
+                    .extra_expected(vec!["type expression"])?;
+                let generic_end = self.eat(&TokenKind::Gt)?;
 
                 (
-                    vec![type_expr],
+                    type_exprs,
                     ().between(self.file_id, &generic_start.span, &generic_end.span)
                         .span,
                 )
@@ -966,19 +946,16 @@ impl<'a> Parser<'a> {
 
     #[trace_parser]
     pub fn generics_list(&mut self) -> Result<Vec<Loc<TypeParam>>> {
-        if let Some(lt) = self.peek_and_eat(&TokenKind::Lt)? {
-            let params = self
-                .comma_separated(Self::type_param, &TokenKind::Gt)
-                .no_context()?;
-            // NOTE: We probably need to parse for >> here too
-            let end = self.eat_unconditional()?;
-            if end.kind != TokenKind::Gt {
-                return Err(Error::UnmatchedPair {
-                    friend: lt,
-                    expected: TokenKind::Gt,
-                    got: end,
-                });
-            }
+        // TODO: Use surrounded
+        if self.peek_kind(&TokenKind::Lt)? {
+            let (params, _) = self.surrounded(
+                &TokenKind::Lt,
+                |s| {
+                    s.comma_separated(Self::type_param, &TokenKind::Gt)
+                        .extra_expected(vec!["type parameter"])
+                },
+                &TokenKind::Gt,
+            )?;
             Ok(params)
         } else {
             Ok(vec![])
@@ -1197,12 +1174,13 @@ impl<'a> Parser<'a> {
         let opener = self.eat(start)?;
         let result = inner(self)?;
         // TODO: Better error handling here. We are throwing away potential EOFs
-        let end = self.eat_unconditional()?;
-        if &end.kind != end_kind {
+        let end = if let Some(end) = self.peek_and_eat(end_kind)? {
+            end
+        } else {
             return Err(Error::UnmatchedPair {
                 friend: opener.clone(),
                 expected: end_kind.clone(),
-                got: end,
+                got: self.eat_unconditional()?,
             });
         };
 
@@ -1265,7 +1243,29 @@ impl<'a> Parser<'a> {
 // Helper functions for advancing the token stream
 impl<'a> Parser<'a> {
     fn eat(&mut self, expected: &TokenKind) -> Result<Token> {
-        self.eat_cond(|k| k == expected, expected.as_str())
+        self.parse_stack
+            .push(ParseStackEntry::EatingExpected(expected.clone()));
+        // Calling keep and eat in order to correctly handle >> as > > if desired
+        let next = self.eat_unconditional()?;
+        if &next.kind == expected {
+            Ok(next)
+        } else if expected == &TokenKind::Gt && next.kind == TokenKind::RightShift {
+            self.peeked = Some(Token {
+                kind: TokenKind::Gt,
+                span: next.span.start..next.span.start,
+                file_id: 0,
+            });
+            Ok(Token {
+                kind: TokenKind::Gt,
+                span: next.span.end..next.span.end,
+                file_id: next.file_id,
+            })
+        } else {
+            Err(Error::UnexpectedToken {
+                got: self.eat_unconditional()?,
+                expected: vec![expected.as_str()],
+            })
+        }
     }
 
     fn eat_cond(
@@ -1299,10 +1299,15 @@ impl<'a> Parser<'a> {
     }
 
     /// Peeks the next token. If it is the sepcified kind, returns that token, otherwise
-    /// returns None
+    /// returns None.
+    ///
+    /// If kind is > and the peeking is also done for >>, which if found, is split
+    /// into > which is returned, and > which populates the peek buffer
     fn peek_and_eat(&mut self, kind: &TokenKind) -> Result<Option<Token>> {
+        // peek_cond_no_tracing because peek_kind handles >> -> > > transformation
+        // which we don't want here
         if self.peek_kind(kind)? {
-            Ok(Some(self.eat_unconditional()?))
+            Ok(Some(self.eat(kind)?))
         } else {
             Ok(None)
         }
@@ -1323,7 +1328,10 @@ impl<'a> Parser<'a> {
     }
 
     fn peek_kind(&mut self, expected: &TokenKind) -> Result<bool> {
-        let result = self.peek_cond_no_tracing(|kind| kind == expected)?;
+        let mut result = self.peek_cond_no_tracing(|kind| kind == expected)?;
+        if expected == &TokenKind::Gt {
+            result |= self.peek_cond_no_tracing(|kind| kind == &TokenKind::RightShift)?
+        }
         self.parse_stack
             .push(ParseStackEntry::PeekingFor(expected.clone(), result));
         Ok(result)
@@ -1367,6 +1375,7 @@ pub enum ParseStackEntry {
     Ate(Token),
     PeekingWithCondition(String, bool),
     PeekingFor(TokenKind, bool),
+    EatingExpected(TokenKind),
     Exit,
     ExitWithError(Error),
 }
@@ -1406,6 +1415,13 @@ pub fn format_parse_stack(stack: &[ParseStackEntry]) -> String {
                     "𐄂".red()
                 }
             ),
+            ParseStackEntry::EatingExpected(kind) => {
+                format!(
+                    "{} {}",
+                    "eating expected".purple(),
+                    kind.as_str().bright_purple()
+                )
+            }
             ParseStackEntry::Exit => {
                 next_indent_amount -= 1;
                 format!("")
@@ -2151,6 +2167,28 @@ mod tests {
             TypeSpec::Named(ast_path("int"), vec![]).nowhere(),
             TypeSpec::Named(ast_path("bool"), vec![]).nowhere(),
         ])
+        .nowhere();
+
+        check_parse!(code, type_spec, Ok(expected));
+    }
+
+    #[test]
+    fn type_spec_with_multiple_generics_works() {
+        let code = "A<X, Y>";
+
+        let expected = TypeSpec::Named(
+            ast_path("A"),
+            vec![
+                TypeExpression::TypeSpec(Box::new(
+                    TypeSpec::Named(ast_path("X"), vec![]).nowhere(),
+                ))
+                .nowhere(),
+                TypeExpression::TypeSpec(Box::new(
+                    TypeSpec::Named(ast_path("Y"), vec![]).nowhere(),
+                ))
+                .nowhere(),
+            ],
+        )
         .nowhere();
 
         check_parse!(code, type_spec, Ok(expected));
