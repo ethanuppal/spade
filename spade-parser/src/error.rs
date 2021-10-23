@@ -15,8 +15,12 @@ pub enum Error {
         got: Token,
         expected: Vec<&'static str>,
     },
-    #[error("Expected to find a {} to match {friend:?}", expected.as_str())]
-    UnmatchedPair { friend: Token, expected: TokenKind },
+    #[error("Expected to find a {} to match {friend:?}, got {got:?}", expected.as_str())]
+    UnmatchedPair {
+        friend: Token,
+        expected: TokenKind,
+        got: Token,
+    },
 
     #[error("Expected expression, got {got:?}")]
     ExpectedExpression { got: Token },

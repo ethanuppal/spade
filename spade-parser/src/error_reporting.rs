@@ -54,11 +54,23 @@ impl CompilationError for Error {
             Error::UnexpectedEndOfArgList { got, expected } => {
                 unexpected_token(got.file_id, got, expected.iter().map(|tok| tok.as_str()))
             }
-            Error::UnmatchedPair { friend, expected } => Diagnostic::error()
-                .with_message(format!("Expected closing {}", expected.as_str()))
-                .with_labels(vec![friend
-                    .primary_label()
-                    .with_message(format!("to close this"))]),
+            Error::UnmatchedPair {
+                friend,
+                expected,
+                got,
+            } => Diagnostic::error()
+                .with_message(format!(
+                    "Expected closing `{}`, got `{}`",
+                    expected.as_str(),
+                    got.kind.as_str()
+                ))
+                .with_labels(vec![
+                    Label::primary(got.file_id, got.span)
+                        .with_message(format!("Expected `{}`", expected.as_str())),
+                    friend
+                        .secondary_label()
+                        .with_message(format!("to close this")),
+                ]),
             Error::ExpectedExpression { got } => {
                 let message = format!("Unexpected `{}`, expected expression", got.kind.as_str(),);
 

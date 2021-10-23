@@ -492,6 +492,7 @@ impl<'a> Parser<'a> {
                     return Err(Error::UnmatchedPair {
                         friend: generic_start,
                         expected: TokenKind::Gt,
+                        got: self.eat_unconditional()?,
                     });
                 };
 
@@ -969,10 +970,15 @@ impl<'a> Parser<'a> {
             let params = self
                 .comma_separated(Self::type_param, &TokenKind::Gt)
                 .no_context()?;
-            self.eat(&TokenKind::Gt).map_err(|_| Error::UnmatchedPair {
-                friend: lt,
-                expected: TokenKind::Gt,
-            })?;
+            // NOTE: We probably need to parse for >> here too
+            let end = self.eat_unconditional()?;
+            if end.kind != TokenKind::Gt {
+                return Err(Error::UnmatchedPair {
+                    friend: lt,
+                    expected: TokenKind::Gt,
+                    got: end,
+                });
+            }
             Ok(params)
         } else {
             Ok(vec![])
@@ -1186,15 +1192,19 @@ impl<'a> Parser<'a> {
         &mut self,
         start: &TokenKind,
         inner: impl Fn(&mut Self) -> Result<T>,
-        end: &TokenKind,
+        end_kind: &TokenKind,
     ) -> Result<(T, Loc<()>)> {
         let opener = self.eat(start)?;
         let result = inner(self)?;
         // TODO: Better error handling here. We are throwing away potential EOFs
-        let end = self.eat(end).map_err(|_| Error::UnmatchedPair {
-            friend: opener.clone(),
-            expected: end.clone(),
-        })?;
+        let end = self.eat_unconditional()?;
+        if &end.kind != end_kind {
+            return Err(Error::UnmatchedPair {
+                friend: opener.clone(),
+                expected: end_kind.clone(),
+                got: end,
+            });
+        };
 
         Ok((
             result,
