@@ -588,8 +588,19 @@ impl TypeState {
                         got,
                     })?;
 
-                if t.is_some() {
-                    todo!("Let bindings with fixed types are unsupported")
+                if let Some(t) = t {
+                    self.unify_types(
+                        &TypedExpression::Id(pattern.id),
+                        &Self::type_var_from_hir(&t),
+                        symtab,
+                    )
+                    .map_err(|(got, expected)| {
+                        Error::UnspecifiedTypeError {
+                            expected,
+                            got,
+                            loc: pattern.loc(),
+                        }
+                    })?;
                 }
 
                 Ok(())
@@ -1380,6 +1391,26 @@ mod tests {
 
         let ta = get_type!(state, &TExpr::Name(name_id(0, "a").inner));
         ensure_same_type!(state, ta, unsized_int(1, &symtab));
+    }
+
+    #[test]
+    fn typed_let_bindings_typecheck_correctly() {
+        let mut symtab = SymbolTable::new();
+        spade_ast_lowering::builtins::populate_symtab(&mut symtab, &mut ItemList::new());
+
+        let input = hir::Statement::Binding(
+            PatternKind::name(name_id(0, "a")).with_id(10).nowhere(),
+            Some(dtype!(symtab => "int"; (t_num(5)))),
+            ExprKind::IntLiteral(0).with_id(0).nowhere(),
+        )
+        .nowhere();
+
+        let mut state = TypeState::new();
+
+        state.visit_statement(&input, &symtab).unwrap();
+
+        let ta = get_type!(state, &TExpr::Name(name_id(0, "a").inner));
+        ensure_same_type!(state, ta, sized_int(5, &symtab));
     }
 
     #[test]
