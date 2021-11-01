@@ -7,14 +7,14 @@ mod hir_lowering;
 // mod typeinference;
 
 pub trait ResultExt<T> {
-    fn report_failure(self) -> T;
+    fn report_failure(self, code: &str) -> T;
 }
 impl<T> ResultExt<T> for spade_hir_lowering::Result<T> {
-    fn report_failure(self) -> T {
+    fn report_failure(self, code: &str) -> T {
         match self {
             Ok(t) => t,
             Err(e) => {
-                let code_bundle = CodeBundle::new("".to_string());
+                let code_bundle = CodeBundle::new(code.to_string());
                 e.report(&code_bundle, false);
                 panic!("Compilation error")
             }
@@ -33,7 +33,7 @@ macro_rules! build_entity {
             &processed.type_state,
             &item_list,
         )
-        .report_failure();
+        .report_failure($code);
         result
     }};
 }
@@ -62,7 +62,7 @@ fn build_items(code: &str) -> Vec<spade_mir::Entity> {
                         &processed.type_state,
                         &item_list,
                     )
-                    .report_failure(),
+                    .report_failure(code),
                 );
             }
             ProcessedItem::EnumInstance => {}

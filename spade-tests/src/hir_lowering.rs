@@ -487,7 +487,7 @@ mod tests {
                             &processed.type_state,
                             &item_list,
                         )
-                        .report_failure(),
+                        .report_failure(code),
                     );
                 }
                 _ => panic!("expected an entity"),
@@ -547,7 +547,7 @@ mod tests {
                             &processed.type_state,
                             &module.item_list,
                         )
-                        .report_failure(),
+                        .report_failure(code),
                     );
                 }
                 ProcessedItem::Pipeline(processed) => {
@@ -559,7 +559,7 @@ mod tests {
                             &mut idtracker,
                             &module.item_list,
                         )
-                        .report_failure(),
+                        .report_failure(code),
                     );
                 }
                 ProcessedItem::EnumInstance => {}
@@ -628,7 +628,7 @@ mod tests {
             &mut idtracker,
             &type_list,
         )
-        .report_failure();
+        .report_failure(code);
         assert_same_mir!(&result, &expected);
     }
 
@@ -674,7 +674,7 @@ mod tests {
             &mut idtracker,
             &type_list,
         )
-        .report_failure();
+        .report_failure(code);
         assert_same_mir!(&result, &expected);
     }
 
