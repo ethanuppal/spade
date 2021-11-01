@@ -4,7 +4,7 @@ use spade_testutil::{parse_typecheck_module_body, ParseTypececkResult};
 use spade_typeinference::ProcessedItem;
 
 mod hir_lowering;
-// mod typeinference;
+mod typeinference;
 
 pub trait ResultExt<T> {
     fn report_failure(self, code: &str) -> T;

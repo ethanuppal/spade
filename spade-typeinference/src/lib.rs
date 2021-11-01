@@ -701,6 +701,9 @@ impl TypeState {
             .get_type(self)
             .expect("Tried to unify types but the rhs was not found");
 
+
+        println!("u\n\t{:?} with\n\t{:?}", v1, v2);
+
         self.trace_stack
             .push(TraceStack::TryingUnify(v1.clone(), v2.clone()));
 
@@ -733,11 +736,15 @@ impl TypeState {
                     unify_if!(val1 == val2, v1, None)
                 }
                 (KnownType::Type(n1), KnownType::Type(n2)) => {
+                    println!("kwk {:?} {:?}", n1, n2);
+                    println!("kwk... {:?} {:?}", symtab.type_symbol_by_id(n1).inner, symtab.type_symbol_by_id(n2).inner);
                     match (
                         &symtab.type_symbol_by_id(n1).inner,
                         &symtab.type_symbol_by_id(n2).inner,
                     ) {
                         (TypeSymbol::Declared(ts1), TypeSymbol::Declared(ts2)) => {
+                            println!("decl decl {:?} {:?}", ts1, ts2);
+                            println!("\t {:?} {:?}", p1, p2);
                             if p1.len() != p2.len() {
                                 return Err(err_producer());
                             }
@@ -780,6 +787,9 @@ impl TypeState {
             (_other, TypeVar::Unknown(_)) => Ok((v1, Some(v2))),
             (TypeVar::Unknown(_), _other) => Ok((v2, Some(v1))),
         }?;
+
+        println!("-> with: {:?}", new_type);
+        println!("-> replaced: {:?}", replaced_type);
 
         if let Some(replaced_type) = replaced_type {
             for (_, rhs) in &mut self.equations {
@@ -828,7 +838,6 @@ impl TypeState {
     }
 }
 
-#[cfg(test)]
 impl TypeState {
     pub fn print_equations(&self) {
         for (lhs, rhs) in &self.equations {
@@ -1614,5 +1623,10 @@ mod tests {
         // Check the constraints added to the literals
         ensure_same_type!(state, t0, ta);
         ensure_same_type!(state, t1, tb);
+    }
+
+    #[test]
+    fn dont_forget_to_remove_test_spade() {
+        panic!("Test should fail until test.spade has been removed");
     }
 }

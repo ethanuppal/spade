@@ -13,6 +13,7 @@ use spade_hir::{symbol_table, ExecutableItem, ItemList};
 pub use spade_parser::lexer;
 use spade_parser::Parser;
 use spade_typeinference as typeinference;
+use typeinference::format_trace_stack;
 
 #[derive(StructOpt)]
 #[structopt(name = "spade", about = "Compiler for the spade language")]
@@ -26,6 +27,10 @@ struct Opt {
     /// Do not include color in the error report
     #[structopt(long = "no-color")]
     pub no_color: bool,
+
+    /// Print a traceback of the type inference process if type inference or hir lowering fails
+    #[structopt(long = "print-type-traceback")]
+    pub print_type_traceback: bool,
 }
 
 fn main() -> Result<()> {
@@ -43,10 +48,11 @@ fn main() -> Result<()> {
     let mut code = CodeBundle::new("".to_string());
 
     macro_rules! try_or_report {
-        ($to_try:expr) => {
+        ($to_try:expr$(, $extra_code:tt)?) => {
             match $to_try {
                 Ok(result) => result,
                 Err(e) => {
+                    $($extra_code();)?
                     e.report(&code, no_color);
                     return Err(anyhow!("aborting due to previous error"));
                 }
@@ -107,15 +113,28 @@ fn main() -> Result<()> {
         match item {
             ExecutableItem::Entity(e) => {
                 let mut type_state = typeinference::TypeState::new();
-                try_or_report!(type_state.visit_entity(&e, &frozen_symtab.symtab()));
+                try_or_report!(type_state.visit_entity(&e, &frozen_symtab.symtab()), {
+                    if opts.print_type_traceback {
+                        type_state.print_equations();
+                        println!("{}", format_trace_stack(&type_state.trace_stack))
+                    }
+                });
 
-                let mir = try_or_report!(spade_hir_lowering::generate_entity(
-                    &e.inner,
-                    &mut frozen_symtab,
-                    &mut idtracker,
-                    &type_state,
-                    &item_list
-                ));
+                let mir = try_or_report!(
+                    spade_hir_lowering::generate_entity(
+                        &e.inner,
+                        &mut frozen_symtab,
+                        &mut idtracker,
+                        &type_state,
+                        &item_list
+                    ),
+                    {
+                        if opts.print_type_traceback {
+                            type_state.print_equations();
+                            println!("{}", format_trace_stack(&type_state.trace_stack))
+                        }
+                    }
+                );
 
                 let code = spade_mir::codegen::entity_code(&mir);
 
@@ -123,15 +142,28 @@ fn main() -> Result<()> {
             }
             ExecutableItem::Pipeline(p) => {
                 let mut type_state = typeinference::TypeState::new();
-                try_or_report!(type_state.visit_pipeline(&p, &frozen_symtab.symtab()));
+                try_or_report!(type_state.visit_pipeline(&p, &frozen_symtab.symtab()), {
+                    if opts.print_type_traceback {
+                        type_state.print_equations();
+                        println!("{}", format_trace_stack(&type_state.trace_stack))
+                    }
+                });
 
-                let mir = try_or_report!(spade_hir_lowering::generate_pipeline(
-                    &p,
-                    &type_state,
-                    &mut frozen_symtab,
-                    &mut idtracker,
-                    &item_list
-                ));
+                let mir = try_or_report!(
+                    spade_hir_lowering::generate_pipeline(
+                        &p,
+                        &type_state,
+                        &mut frozen_symtab,
+                        &mut idtracker,
+                        &item_list
+                    ),
+                    {
+                        if opts.print_type_traceback {
+                            type_state.print_equations();
+                            println!("{}", format_trace_stack(&type_state.trace_stack))
+                        }
+                    }
+                );
 
                 let code = spade_mir::codegen::entity_code(&mir);
 
