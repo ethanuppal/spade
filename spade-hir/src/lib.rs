@@ -220,8 +220,36 @@ pub struct PipelineHead {
     pub depth: Loc<usize>,
     pub inputs: ParameterList,
     pub output_type: Option<Loc<TypeSpec>>,
+    pub type_params: Vec<Loc<TypeParam>>,
 }
 impl WithLocation for PipelineHead {}
+
+pub trait FunctionLike {
+    fn inputs<'a>(&'a self) -> &'a ParameterList;
+    fn output_type<'a>(&'a self) -> &'a Option<Loc<TypeSpec>>;
+    fn type_params<'a>(&'a self) -> &'a [Loc<TypeParam>];
+}
+
+macro_rules! impl_function_like {
+    ($($for:ident),*) => {
+        $(
+            impl FunctionLike for $for {
+                fn inputs<'a>(&'a self) -> &'a ParameterList {
+                    &self.inputs
+                }
+                fn output_type<'a>(&'a self) -> &'a Option<Loc<TypeSpec>> {
+                    &self.output_type
+                }
+                fn type_params<'a>(&'a self) -> &'a [Loc<TypeParam>] {
+                    &self.type_params
+                }
+            }
+        )*
+    }
+}
+
+impl_function_like!(EntityHead, FunctionHead, PipelineHead);
+
 
 #[derive(PartialEq, Debug, Clone)]
 pub struct PipelineBinding {

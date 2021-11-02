@@ -41,6 +41,9 @@ impl PipelineState {
 pub fn pipeline_head(input: &ast::Pipeline, symtab: &mut SymbolTable) -> Result<hir::PipelineHead> {
     let depth = input.depth.map(|u| u as usize);
 
+    // TODO: Support type params
+    let type_params = vec![];
+
     let inputs = crate::visit_parameter_list(&input.inputs, symtab)?;
 
     let output_type = if let Some(output_type) = &input.output_type {
@@ -53,6 +56,7 @@ pub fn pipeline_head(input: &ast::Pipeline, symtab: &mut SymbolTable) -> Result<
         depth,
         inputs,
         output_type,
+        type_params
     })
 }
 

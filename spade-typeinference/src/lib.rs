@@ -2,10 +2,11 @@
 // https://www.youtube.com/watch?v=xJXcZp2vgLs
 
 use hir::symbol_table::TypeSymbol;
-use hir::{Argument, ParameterList, Pattern, PatternArgument};
+use hir::{Argument, FunctionLike, ParameterList, Pattern, PatternArgument, TypeParam};
 use hir::{ExecutableItem, ItemList};
 use parse_tree_macros::trace_typechecker;
 use spade_common::location_info::Loc;
+use spade_common::name::NameID;
 use spade_hir as hir;
 use spade_hir::symbol_table::SymbolTable;
 use spade_hir::{
@@ -122,29 +123,33 @@ impl TypeState {
         }
     }
 
-    pub fn hir_type_expr_to_var(e: &hir::TypeExpression) -> TypeVar {
+    pub fn hir_type_expr_to_var(&mut self, e: &hir::TypeExpression, generic_list: &HashMap<NameID, TypeVar>) -> TypeVar {
         match e {
             hir::TypeExpression::Integer(i) => TypeVar::Known(KnownType::Integer(*i), vec![], None),
-            hir::TypeExpression::TypeSpec(spec) => Self::type_var_from_hir(spec),
+            hir::TypeExpression::TypeSpec(spec) => self.type_var_from_hir(spec, generic_list),
         }
     }
 
-    pub fn type_var_from_hir(hir_type: &crate::hir::TypeSpec) -> TypeVar {
+    pub fn type_var_from_hir(&mut self, hir_type: &crate::hir::TypeSpec, generic_list: &HashMap<NameID, TypeVar>) -> TypeVar {
         match hir_type {
             hir::TypeSpec::Declared(base, params) => {
                 let params = params
                     .into_iter()
-                    .map(|e| Self::hir_type_expr_to_var(e))
+                    .map(|e| self.hir_type_expr_to_var(e, generic_list))
                     .collect();
 
                 TypeVar::Known(KnownType::Type(base.inner.clone()), params, None)
             }
             hir::TypeSpec::Generic(name) => {
-                // NOTE: Should we care about this being generic here?
-                TypeVar::Known(KnownType::Type(name.inner.clone()), vec![], None)
+                match generic_list.get(name) {
+                    Some(t) => t.clone(),
+                    None => {
+                        panic!("No entry for {} in generic_list", name)
+                    }
+                }
             }
             hir::TypeSpec::Tuple(inner) => {
-                let inner = inner.iter().map(|t| Self::type_var_from_hir(t)).collect();
+                let inner = inner.iter().map(|t| self.type_var_from_hir(t, generic_list)).collect();
                 TypeVar::Tuple(inner)
             }
             hir::TypeSpec::Unit(_) => {
@@ -174,11 +179,19 @@ impl TypeState {
 
     #[trace_typechecker]
     pub fn visit_entity(&mut self, entity: &Entity, symtab: &SymbolTable) -> Result<()> {
+        let generic_list = if entity.head.type_params.is_empty() {
+            HashMap::new()
+        }
+        else {
+            todo!("Support entity definitions with generics")
+        };
+
         // Add equations for the inputs
         for (name, t) in &entity.inputs {
+            let tvar = self.type_var_from_hir(t, &generic_list);
             self.add_equation(
                 TypedExpression::Name(name.clone()),
-                Self::type_var_from_hir(t),
+                tvar,
             );
         }
 
@@ -186,9 +199,10 @@ impl TypeState {
 
         // Ensure that the output type matches what the user specified, and unit otherwise
         if let Some(output_type) = &entity.head.output_type {
+            let tvar = self.type_var_from_hir(&output_type, &generic_list);
             self.unify_types(
                 &TypedExpression::Id(entity.body.inner.id),
-                &Self::type_var_from_hir(&output_type),
+                &tvar,
                 symtab,
             )
             .map_err(|(got, expected)| Error::EntityOutputTypeMismatch {
@@ -218,6 +232,7 @@ impl TypeState {
         args: &[Argument],
         params: &ParameterList,
         symtab: &SymbolTable,
+        generic_list: &HashMap<NameID, TypeVar>
     ) -> Result<()> {
         for (
             i,
@@ -228,7 +243,7 @@ impl TypeState {
             },
         ) in args.iter().enumerate()
         {
-            let target_type = Self::type_var_from_hir(&params.arg_type(&target));
+            let target_type = self.type_var_from_hir(&params.arg_type(&target), generic_list);
             self.visit_expression(&value, symtab)?;
 
             self.unify_types(&target_type, value, symtab).map_err(
@@ -442,16 +457,7 @@ impl TypeState {
             }
             ExprKind::EntityInstance(name, args) => {
                 let head = symtab.entity_by_id(&name.inner);
-                // Unify the types of the arguments
-                self.visit_argument_list(args, &head.inputs, symtab)?;
-
-                let return_type = Self::type_var_from_hir(
-                    &head
-                        .output_type
-                        .as_ref()
-                        .expect("Unit return type from entity is unsupported"),
-                );
-                self.unify_expression_generic_error(expression, &return_type, symtab)?;
+                self.handle_function_like(expression, &head.inner, args, symtab)?;
             }
             ExprKind::PipelineInstance {
                 depth: _,
@@ -459,32 +465,53 @@ impl TypeState {
                 args,
             } => {
                 let head = symtab.pipeline_by_id(&name.inner);
-                // Unify the types of the arguments
-                self.visit_argument_list(args, &head.inputs, symtab)?;
-
-                let return_type = Self::type_var_from_hir(
-                    &head
-                        .output_type
-                        .as_ref()
-                        .expect("Unit return type from entity is unsupported"),
-                );
-                self.unify_expression_generic_error(expression, &return_type, symtab)?;
+                self.handle_function_like(expression, &head.inner, args, symtab)?;
             }
             ExprKind::FnCall(name, args) => {
                 let head = symtab.function_by_id(&name.inner);
-                // Unify the types of the arguments
-                self.visit_argument_list(args, &head.inputs, symtab)?;
-
-                let return_type = Self::type_var_from_hir(
-                    &head
-                        .output_type
-                        .as_ref()
-                        .expect("Unit return type from entity is unsupported"),
-                );
-                self.unify_expression_generic_error(expression, &return_type, symtab)?;
+                self.handle_function_like(expression, &head.inner, args, symtab)?;
             }
         }
         Ok(())
+    }
+
+    // Common handler for entities, functions and pipelines
+    fn handle_function_like(
+        &mut self,
+        expression: &Loc<Expression>,
+        head: &impl FunctionLike,
+        args: &[Argument],
+        symtab: &SymbolTable
+    ) -> Result<()> {
+        // Add new symbols for all the type parameters
+        let generic_list = self.create_generic_list(head.type_params());
+        // Unify the types of the arguments
+        self.visit_argument_list(args, &head.inputs(), symtab, &generic_list)?;
+
+        let return_type = self.type_var_from_hir(
+            &head
+                .output_type()
+                .as_ref()
+                .expect("Unit return type from entity is unsupported"),
+            &generic_list
+        );
+        self.unify_expression_generic_error(expression, &return_type, symtab)?;
+
+        Ok(())
+    }
+
+    fn create_generic_list(&mut self, params: &[Loc<TypeParam>]) -> HashMap<NameID, TypeVar> {
+        params.iter()
+            .map(|param| {
+                let name = match &param.inner {
+                    hir::TypeParam::TypeName(_, name) => name.clone(),
+                    hir::TypeParam::Integer(_, _) => todo!("Support generic integers"),
+                };
+
+                let t = self.new_generic();
+                (name, t)
+            })
+            .collect()
     }
 
     #[trace_typechecker]
@@ -525,8 +552,9 @@ impl TypeState {
             }
             hir::PatternKind::Type(name, args) => {
                 let enum_variant = symtab.enum_variant_by_id(name).inner;
+                let generic_list = self.create_generic_list(&enum_variant.type_params);
 
-                let condition_type = Self::type_var_from_hir(&enum_variant.output_type);
+                let condition_type = self.type_var_from_hir(&enum_variant.output_type, &generic_list);
 
                 self.unify_types(&new_type, &condition_type, symtab)
                     .expect("Unification of new_generic with enum cna not fail");
@@ -544,7 +572,7 @@ impl TypeState {
                 ) in args.iter().zip(enum_variant.params.0.iter()).enumerate()
                 {
                     self.visit_pattern(pattern, symtab)?;
-                    let target_type = Self::type_var_from_hir(&target_type);
+                    let target_type = self.type_var_from_hir(&target_type, &generic_list);
 
                     self.unify_types(&target_type, pattern, symtab).map_err(
                         |(expected, got)| match kind {
@@ -589,9 +617,10 @@ impl TypeState {
                     })?;
 
                 if let Some(t) = t {
+                    let tvar = self.type_var_from_hir(&t, &HashMap::new());
                     self.unify_types(
                         &TypedExpression::Id(pattern.id),
-                        &Self::type_var_from_hir(&t),
+                        &tvar,
                         symtab,
                     )
                     .map_err(|(got, expected)| {
@@ -658,9 +687,10 @@ impl TypeState {
             })?;
 
         if let Some(t) = &reg.value_type {
+            let tvar = self.type_var_from_hir(&t, &HashMap::new());
             self.unify_types(
                 &TypedExpression::Id(reg.pattern.id),
-                &Self::type_var_from_hir(&t),
+                &tvar,
                 symtab,
             )
             .map_err(|(got, expected)| Error::UnspecifiedTypeError {
@@ -807,6 +837,7 @@ impl TypeState {
         match in_var {
             TypeVar::Known(_, params, _) => {
                 for param in params {
+                    println!(">> Replacing {:?} with {:?}", param, replacement);
                     Self::replace_type_var(param, from, replacement.clone())
                 }
             }
@@ -1558,6 +1589,7 @@ mod tests {
                 (ast_ident("b"), dtype!(symtab => "int"; ( t_num(10) ))),
             ]),
             output_type: Some(dtype!(symtab => "int"; ( t_num(5) ))),
+            type_params: vec![]
         };
 
         let entity_name =
