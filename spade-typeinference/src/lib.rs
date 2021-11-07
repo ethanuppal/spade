@@ -123,14 +123,22 @@ impl TypeState {
         }
     }
 
-    pub fn hir_type_expr_to_var(&mut self, e: &hir::TypeExpression, generic_list: &HashMap<NameID, TypeVar>) -> TypeVar {
+    pub fn hir_type_expr_to_var(
+        &mut self,
+        e: &hir::TypeExpression,
+        generic_list: &HashMap<NameID, TypeVar>,
+    ) -> TypeVar {
         match e {
             hir::TypeExpression::Integer(i) => TypeVar::Known(KnownType::Integer(*i), vec![], None),
             hir::TypeExpression::TypeSpec(spec) => self.type_var_from_hir(spec, generic_list),
         }
     }
 
-    pub fn type_var_from_hir(&mut self, hir_type: &crate::hir::TypeSpec, generic_list: &HashMap<NameID, TypeVar>) -> TypeVar {
+    pub fn type_var_from_hir(
+        &mut self,
+        hir_type: &crate::hir::TypeSpec,
+        generic_list: &HashMap<NameID, TypeVar>,
+    ) -> TypeVar {
         match hir_type {
             hir::TypeSpec::Declared(base, params) => {
                 let params = params
@@ -140,16 +148,17 @@ impl TypeState {
 
                 TypeVar::Known(KnownType::Type(base.inner.clone()), params, None)
             }
-            hir::TypeSpec::Generic(name) => {
-                match generic_list.get(name) {
-                    Some(t) => t.clone(),
-                    None => {
-                        panic!("No entry for {} in generic_list", name)
-                    }
+            hir::TypeSpec::Generic(name) => match generic_list.get(name) {
+                Some(t) => t.clone(),
+                None => {
+                    panic!("No entry for {} in generic_list", name)
                 }
-            }
+            },
             hir::TypeSpec::Tuple(inner) => {
-                let inner = inner.iter().map(|t| self.type_var_from_hir(t, generic_list)).collect();
+                let inner = inner
+                    .iter()
+                    .map(|t| self.type_var_from_hir(t, generic_list))
+                    .collect();
                 TypeVar::Tuple(inner)
             }
             hir::TypeSpec::Unit(_) => {
@@ -181,18 +190,14 @@ impl TypeState {
     pub fn visit_entity(&mut self, entity: &Entity, symtab: &SymbolTable) -> Result<()> {
         let generic_list = if entity.head.type_params.is_empty() {
             HashMap::new()
-        }
-        else {
+        } else {
             todo!("Support entity definitions with generics")
         };
 
         // Add equations for the inputs
         for (name, t) in &entity.inputs {
             let tvar = self.type_var_from_hir(t, &generic_list);
-            self.add_equation(
-                TypedExpression::Name(name.clone()),
-                tvar,
-            );
+            self.add_equation(TypedExpression::Name(name.clone()), tvar);
         }
 
         self.visit_expression(&entity.body, symtab)?;
@@ -200,17 +205,13 @@ impl TypeState {
         // Ensure that the output type matches what the user specified, and unit otherwise
         if let Some(output_type) = &entity.head.output_type {
             let tvar = self.type_var_from_hir(&output_type, &generic_list);
-            self.unify_types(
-                &TypedExpression::Id(entity.body.inner.id),
-                &tvar,
-                symtab,
-            )
-            .map_err(|(got, expected)| Error::EntityOutputTypeMismatch {
-                expected,
-                got,
-                type_spec: output_type.loc(),
-                output_expr: entity.body.loc(),
-            })?;
+            self.unify_types(&TypedExpression::Id(entity.body.inner.id), &tvar, symtab)
+                .map_err(|(got, expected)| Error::EntityOutputTypeMismatch {
+                    expected,
+                    got,
+                    type_spec: output_type.loc(),
+                    output_expr: entity.body.loc(),
+                })?;
         } else {
             todo!("Support unit types")
             // self.unify_types(
@@ -232,7 +233,7 @@ impl TypeState {
         args: &[Argument],
         params: &ParameterList,
         symtab: &SymbolTable,
-        generic_list: &HashMap<NameID, TypeVar>
+        generic_list: &HashMap<NameID, TypeVar>,
     ) -> Result<()> {
         for (
             i,
@@ -481,27 +482,30 @@ impl TypeState {
         expression: &Loc<Expression>,
         head: &impl FunctionLike,
         args: &[Argument],
-        symtab: &SymbolTable
+        symtab: &SymbolTable,
     ) -> Result<()> {
         // Add new symbols for all the type parameters
         let generic_list = self.create_generic_list(head.type_params());
-        // Unify the types of the arguments
-        self.visit_argument_list(args, &head.inputs(), symtab, &generic_list)?;
 
         let return_type = self.type_var_from_hir(
             &head
                 .output_type()
                 .as_ref()
                 .expect("Unit return type from entity is unsupported"),
-            &generic_list
+            &generic_list,
         );
+        self.add_equation(TypedExpression::Id(expression.id), return_type.clone());
+
+        // Unify the types of the arguments
+        self.visit_argument_list(args, &head.inputs(), symtab, &generic_list)?;
         self.unify_expression_generic_error(expression, &return_type, symtab)?;
 
         Ok(())
     }
 
     fn create_generic_list(&mut self, params: &[Loc<TypeParam>]) -> HashMap<NameID, TypeVar> {
-        params.iter()
+        params
+            .iter()
             .map(|param| {
                 let name = match &param.inner {
                     hir::TypeParam::TypeName(_, name) => name.clone(),
@@ -554,7 +558,8 @@ impl TypeState {
                 let enum_variant = symtab.enum_variant_by_id(name).inner;
                 let generic_list = self.create_generic_list(&enum_variant.type_params);
 
-                let condition_type = self.type_var_from_hir(&enum_variant.output_type, &generic_list);
+                let condition_type =
+                    self.type_var_from_hir(&enum_variant.output_type, &generic_list);
 
                 self.unify_types(&new_type, &condition_type, symtab)
                     .expect("Unification of new_generic with enum cna not fail");
@@ -618,18 +623,12 @@ impl TypeState {
 
                 if let Some(t) = t {
                     let tvar = self.type_var_from_hir(&t, &HashMap::new());
-                    self.unify_types(
-                        &TypedExpression::Id(pattern.id),
-                        &tvar,
-                        symtab,
-                    )
-                    .map_err(|(got, expected)| {
-                        Error::UnspecifiedTypeError {
+                    self.unify_types(&TypedExpression::Id(pattern.id), &tvar, symtab)
+                        .map_err(|(got, expected)| Error::UnspecifiedTypeError {
                             expected,
                             got,
                             loc: pattern.loc(),
-                        }
-                    })?;
+                        })?;
                 }
 
                 Ok(())
@@ -688,16 +687,12 @@ impl TypeState {
 
         if let Some(t) = &reg.value_type {
             let tvar = self.type_var_from_hir(&t, &HashMap::new());
-            self.unify_types(
-                &TypedExpression::Id(reg.pattern.id),
-                &tvar,
-                symtab,
-            )
-            .map_err(|(got, expected)| Error::UnspecifiedTypeError {
-                expected,
-                got,
-                loc: reg.pattern.loc(),
-            })?;
+            self.unify_types(&TypedExpression::Id(reg.pattern.id), &tvar, symtab)
+                .map_err(|(got, expected)| Error::UnspecifiedTypeError {
+                    expected,
+                    got,
+                    loc: reg.pattern.loc(),
+                })?;
         }
 
         Ok(())
@@ -731,14 +726,11 @@ impl TypeState {
             .get_type(self)
             .expect("Tried to unify types but the rhs was not found");
 
-
-        println!("u\n\t{:?} with\n\t{:?}", v1, v2);
-
         self.trace_stack
             .push(TraceStack::TryingUnify(v1.clone(), v2.clone()));
 
-        // Used because we want to avoid borrowchecker errors when we add stuff to the
-        // trace
+        // Copy the original types so we can properly trace the progress of the
+        // unification
         let v1cpy = v1.clone();
         let v2cpy = v2.clone();
 
@@ -766,15 +758,11 @@ impl TypeState {
                     unify_if!(val1 == val2, v1, None)
                 }
                 (KnownType::Type(n1), KnownType::Type(n2)) => {
-                    println!("kwk {:?} {:?}", n1, n2);
-                    println!("kwk... {:?} {:?}", symtab.type_symbol_by_id(n1).inner, symtab.type_symbol_by_id(n2).inner);
                     match (
                         &symtab.type_symbol_by_id(n1).inner,
                         &symtab.type_symbol_by_id(n2).inner,
                     ) {
-                        (TypeSymbol::Declared(ts1), TypeSymbol::Declared(ts2)) => {
-                            println!("decl decl {:?} {:?}", ts1, ts2);
-                            println!("\t {:?} {:?}", p1, p2);
+                        (TypeSymbol::Declared(_), TypeSymbol::Declared(_)) => {
                             if p1.len() != p2.len() {
                                 return Err(err_producer());
                             }
@@ -784,7 +772,12 @@ impl TypeState {
                                     .add_context(v1.clone(), v2.clone())?
                             }
 
-                            unify_if!(ts1 == ts2, v1, None)
+                            let new_ts1 = symtab.type_symbol_by_id(n1).inner;
+                            let new_ts2 = symtab.type_symbol_by_id(n2).inner;
+                            let new_v1 = e1
+                                .get_type(self)
+                                .expect("Tried to unify types but the lhs was not found");
+                            unify_if!(new_ts1 == new_ts2, new_v1, None)
                         }
                         (TypeSymbol::Declared(_), TypeSymbol::GenericArg) => Ok((v1, Some(v2))),
                         (TypeSymbol::GenericArg, TypeSymbol::Declared(_)) => Ok((v2, Some(v1))),
@@ -818,9 +811,6 @@ impl TypeState {
             (TypeVar::Unknown(_), _other) => Ok((v2, Some(v1))),
         }?;
 
-        println!("-> with: {:?}", new_type);
-        println!("-> replaced: {:?}", replaced_type);
-
         if let Some(replaced_type) = replaced_type {
             for (_, rhs) in &mut self.equations {
                 Self::replace_type_var(rhs, &replaced_type, new_type.clone())
@@ -837,7 +827,6 @@ impl TypeState {
         match in_var {
             TypeVar::Known(_, params, _) => {
                 for param in params {
-                    println!(">> Replacing {:?} with {:?}", param, replacement);
                     Self::replace_type_var(param, from, replacement.clone())
                 }
             }
@@ -1589,7 +1578,7 @@ mod tests {
                 (ast_ident("b"), dtype!(symtab => "int"; ( t_num(10) ))),
             ]),
             output_type: Some(dtype!(symtab => "int"; ( t_num(5) ))),
-            type_params: vec![]
+            type_params: vec![],
         };
 
         let entity_name =
@@ -1655,10 +1644,5 @@ mod tests {
         // Check the constraints added to the literals
         ensure_same_type!(state, t0, ta);
         ensure_same_type!(state, t1, tb);
-    }
-
-    #[test]
-    fn dont_forget_to_remove_test_spade() {
-        panic!("Test should fail until test.spade has been removed");
     }
 }

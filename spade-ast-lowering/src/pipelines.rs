@@ -56,7 +56,7 @@ pub fn pipeline_head(input: &ast::Pipeline, symtab: &mut SymbolTable) -> Result<
         depth,
         inputs,
         output_type,
-        type_params
+        type_params,
     })
 }
 

@@ -1697,7 +1697,7 @@ mod expression_visiting {
                         (ast_ident("b"), hir::TypeSpec::unit().nowhere()),
                     ]),
                     output_type: None,
-                    type_params: vec![]
+                    type_params: vec![],
                 }
                 .nowhere(),
             ),
@@ -1735,7 +1735,7 @@ mod expression_visiting {
                         (ast_ident("b"), hir::TypeSpec::unit().nowhere()),
                     ]),
                     output_type: None,
-                    type_params: vec![]
+                    type_params: vec![],
                 }
                 .nowhere(),
             ),

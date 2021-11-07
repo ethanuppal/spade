@@ -250,7 +250,6 @@ macro_rules! impl_function_like {
 
 impl_function_like!(EntityHead, FunctionHead, PipelineHead);
 
-
 #[derive(PartialEq, Debug, Clone)]
 pub struct PipelineBinding {
     pub name: Loc<NameID>,

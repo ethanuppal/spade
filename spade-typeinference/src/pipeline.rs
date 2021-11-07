@@ -62,10 +62,7 @@ impl TypeState {
         let new_type = self.new_generic();
         self.add_equation(TypedExpression::Name(inputs[0].0.clone()), new_type);
         let input_tvar = self.type_var_from_hir(&inputs[0].1.inner, &HashMap::new());
-        self.add_equation(
-            TypedExpression::Name(inputs[0].0.clone()),
-            input_tvar,
-        );
+        self.add_equation(TypedExpression::Name(inputs[0].0.clone()), input_tvar);
         self.unify_types(
             &TypedExpression::Name(inputs[0].0.clone()),
             &t_clock(symtab),
@@ -79,10 +76,7 @@ impl TypeState {
         // Add equations for the inputs
         for (name, t) in inputs.iter().skip(1) {
             let tvar = self.type_var_from_hir(t, &HashMap::new());
-            self.add_equation(
-                TypedExpression::Name(name.clone()),
-                tvar,
-            );
+            self.add_equation(TypedExpression::Name(name.clone()), tvar);
         }
 
         // Go through the stages
@@ -93,17 +87,13 @@ impl TypeState {
         self.visit_expression(result, symtab)?;
 
         let tvar = self.type_var_from_hir(output_type, &HashMap::new());
-        self.unify_types(
-            &TypedExpression::Id(result.inner.id),
-            &tvar,
-            symtab,
-        )
-        .map_err(|(got, expected)| Error::EntityOutputTypeMismatch {
-            expected,
-            got,
-            type_spec: output_type.loc(),
-            output_expr: result.loc(),
-        })?;
+        self.unify_types(&TypedExpression::Id(result.inner.id), &tvar, symtab)
+            .map_err(|(got, expected)| Error::EntityOutputTypeMismatch {
+                expected,
+                got,
+                type_spec: output_type.loc(),
+                output_expr: result.loc(),
+            })?;
 
         Ok(())
     }
