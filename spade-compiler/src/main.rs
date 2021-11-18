@@ -65,6 +65,8 @@ fn main() -> Result<()> {
     let namespace = Path(vec![]);
     // Read and parse input files
     for infile in infiles {
+        println!("Parsing {:?}", infile);
+
         let mut file = File::open(&infile)
             .with_context(|| format!("Failed to open {}", &infile.to_string_lossy()))?;
         let mut file_content = String::new();
@@ -74,6 +76,14 @@ fn main() -> Result<()> {
         let mut parser = Parser::new(lexer::TokenKind::lexer(&file_content), file_id);
 
         module_asts.push(try_or_report!(parser.module_body()));
+    }
+
+    for module_ast in &module_asts {
+        try_or_report!(global_symbols::gather_types(
+            &module_ast,
+            &Path(vec![]),
+            &mut symtab,
+        ));
     }
 
     for module_ast in &module_asts {

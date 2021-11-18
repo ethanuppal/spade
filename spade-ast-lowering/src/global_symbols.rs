@@ -9,6 +9,19 @@ use spade_hir as hir;
 use crate::{visit_parameter_list, Result};
 use spade_hir::symbol_table::{GenericArg, SymbolTable, Thing, TypeSymbol};
 
+pub fn gather_types(
+    module: &ast::ModuleBody,
+    namespace: &Path,
+    symtab: &mut SymbolTable,
+) -> Result<()> {
+    for item in &module.members {
+        if let ast::Item::Type(t) = item {
+            visit_type_declaration(t, namespace, symtab)?;
+        }
+    }
+    Ok(())
+}
+
 /// Collect global symbols as a first pass before generating HIR
 pub fn gather_symbols(
     module: &ast::ModuleBody,
@@ -16,15 +29,6 @@ pub fn gather_symbols(
     symtab: &mut SymbolTable,
     item_list: &mut ItemList,
 ) -> Result<()> {
-    // Start by visiting each item and adding types to the symtab. These are needed
-    // for signatures of other things which is why this has to be done first
-    for item in &module.members {
-        if let ast::Item::Type(t) = item {
-            visit_type_declaration(t, namespace, symtab)?;
-        }
-    }
-
-    // Then visit all the items adding their heads to the symtab
     for item in &module.members {
         visit_item(item, namespace, symtab, item_list)?;
     }
