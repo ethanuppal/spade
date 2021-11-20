@@ -138,7 +138,7 @@ impl PatternLocal for Pattern {
         let mut result = vec![];
         match &self.kind {
             hir::PatternKind::Integer(_) => todo!(),
-            hir::PatternKind::Bool(_) => todo!(),
+            hir::PatternKind::Bool(_) => {},
             hir::PatternKind::Name { .. } => {}
             hir::PatternKind::Tuple(inner) => {
                 let inner_types = if let mir::types::Type::Tuple(inner) = &types
@@ -212,7 +212,21 @@ impl PatternLocal for Pattern {
         let result_name = ValueName::Expr(output_id);
         match &self.kind {
             hir::PatternKind::Integer(_) => todo!("Codegen for integer patterns"),
-            hir::PatternKind::Bool(_) => todo!("Codegen for bool patterns"),
+            hir::PatternKind::Bool(true) => {
+                Ok(PatternCondition{statements: vec![], result_name: expr.variable(subs)})
+            },
+            hir::PatternKind::Bool(false) => {
+                let statements = vec![
+                    mir::Statement::Binding(mir::Binding{
+                        name: result_name.clone(),
+                        ty: MirType::Bool,
+                        operator: mir::Operator::LogicalNot,
+                        operands: vec![expr.variable(subs)]
+                    })
+                ];
+
+                Ok(PatternCondition{statements, result_name})
+            }
             hir::PatternKind::Name { .. } => Ok(PatternCondition {
                 statements: vec![mir::Statement::Constant(
                     output_id,

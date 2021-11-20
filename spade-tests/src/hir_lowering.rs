@@ -811,4 +811,28 @@ mod tests {
 
         build_and_compare_entities!(code, expected);
     }
+
+    #[test]
+    fn boolean_patterns_work() {
+        let code = r#"
+            entity uwu(e: bool) -> bool {
+                match e {
+                    true => false,
+                    false => true
+                }
+            }
+        "#;
+
+        let expected = vec![
+            entity! {"uwu"; ("_i_e", n(0, "e"), Type::Bool) -> Type::Bool; {
+                // Conditions for branches
+                (const 3; Type::Bool; ConstantValue::Bool(false));
+                (e(2); Type::Bool; LogicalNot; n(0, "e"));
+                (const 4; Type::Bool; ConstantValue::Bool(true));
+                (e(6); Type::Bool; Match; n(0, "e"), e(3), e(2), e(4));
+            } => e(6)},
+        ];
+
+        build_and_compare_entities!(code, expected);
+    }
 }

@@ -532,7 +532,11 @@ impl TypeState {
         self.add_equation(TypedExpression::Id(pattern.inner.id), new_type.clone());
         match &pattern.inner.kind {
             hir::PatternKind::Integer(_) => todo!(),
-            hir::PatternKind::Bool(_) => todo!(),
+            hir::PatternKind::Bool(_) => {
+                self.unify_types(&new_type, &t_bool(symtab), symtab)
+                    // NOTE: We might need to report a good error here
+                    .expect("Expected boolean")
+            },
             hir::PatternKind::Name { name, pre_declared } => {
                 if !pre_declared {
                     self.add_equation(TypedExpression::Name(name.clone().inner), new_type.clone());

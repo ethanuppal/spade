@@ -51,6 +51,10 @@ fn statement_code(statement: &Statement) -> Code {
                 Operator::RightShift => binop!(">>"),
                 Operator::LogicalAnd => binop!("&&"),
                 Operator::LogicalOr => binop!("||"),
+                Operator::LogicalNot => {
+                    assert!(ops.len() == 1, "Expected exactly 1 operand to not operator");
+                    format!("!{}", ops[0])
+                }
                 Operator::BitwiseAnd => binop!("&"),
                 Operator::BitwiseOr => binop!("|"),
                 Operator::Match => {
@@ -494,6 +498,19 @@ mod expression_tests {
             r#"
             logic[1:0] _e_0;
             assign _e_0 = _e_1 ? _e_2 : _e_3;"#
+        );
+
+        assert_same_code!(&statement_code(&stmt).to_string(), expected);
+    }
+
+    #[test]
+    fn not_operator_works() {
+        let stmt = statement!(e(0); Type::Bool; LogicalNot; e(1));
+
+        let expected = indoc!(
+            r#"
+            logic _e_0;
+            assign _e_0 = !_e_1;"#
         );
 
         assert_same_code!(&statement_code(&stmt).to_string(), expected);

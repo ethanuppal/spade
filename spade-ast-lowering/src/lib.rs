@@ -296,8 +296,8 @@ pub fn visit_pattern(
     allow_declarations: bool,
 ) -> Result<hir::Pattern> {
     let kind = match &p {
-        ast::Pattern::Integer(_) => todo!(),
-        ast::Pattern::Bool(_) => todo!(),
+        ast::Pattern::Integer(val) => hir::PatternKind::Integer(*val),
+        ast::Pattern::Bool(val) => hir::PatternKind::Bool(*val),
         ast::Pattern::Path(path) => {
             // TODO: Support paths with a single identifier refering to constants
             // and types
@@ -401,9 +401,9 @@ pub fn visit_pattern(
                         }
                     }
                 }
-                Err(spade_hir::symbol_table::LookupError::NoSuchSymbol(_)) => {
-                    todo!("Handle new symbols")
-                }
+                // Err(spade_hir::symbol_table::LookupError::NoSuchSymbol(_)) => {
+                //     todo!("Handle new symbols")
+                // }
                 Err(e) => return Err(e.into()),
             }
         }
@@ -1792,6 +1792,37 @@ mod expression_visiting {
                 hir::symbol_table::LookupError::NotAValue(ast_path("test"), head)
             ))
         );
+    }
+}
+
+#[cfg(test)]
+mod pattern_visiting {
+    use hir::PatternKind;
+
+    use super::*;
+
+    #[test]
+    fn bool_patterns_work() {
+        let input = ast::Pattern::Bool(true);
+
+        let mut symtab = SymbolTable::new();
+        let mut idtracker = ExprIdTracker::new();
+
+        let result = visit_pattern_normal(&input, &mut symtab, &mut idtracker);
+
+        assert_eq!(result, Ok(PatternKind::Bool(true).idless()));
+    }
+
+    #[test]
+    fn int_patterns_work() {
+        let input = ast::Pattern::Integer(5);
+
+        let mut symtab = SymbolTable::new();
+        let mut idtracker = ExprIdTracker::new();
+
+        let result = visit_pattern_normal(&input, &mut symtab, &mut idtracker);
+
+        assert_eq!(result, Ok(PatternKind::Integer(5).idless()));
     }
 }
 

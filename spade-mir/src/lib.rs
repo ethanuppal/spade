@@ -48,6 +48,7 @@ pub enum Operator {
     RightShift,
     LogicalAnd,
     LogicalOr,
+    LogicalNot,
     BitwiseAnd,
     BitwiseOr,
     /// Select [1] if [0] else [2]
@@ -99,6 +100,7 @@ impl std::fmt::Display for Operator {
             Operator::RightShift => write!(f, "RightShift"),
             Operator::LogicalAnd => write!(f, "LogicalAnd"),
             Operator::LogicalOr => write!(f, "LogicalOr"),
+            Operator::LogicalNot => write!(f, "LogicalNot"),
             Operator::BitwiseAnd => write!(f, "BitwiseAnd"),
             Operator::BitwiseOr => write!(f, "BitwiseOr"),
             Operator::Select => write!(f, "Select"),
