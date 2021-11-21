@@ -548,8 +548,7 @@ impl TypeState {
                         .iter()
                         .map(|pattern| {
                             self.visit_pattern(pattern, symtab)?;
-                            let p_type = self.new_generic();
-                            self.add_equation(TypedExpression::Id(pattern.id), p_type.clone());
+                            let p_type = pattern.get_type(self)?;
                             Ok(p_type)
                         })
                         .collect::<Result<_>>()?,
@@ -767,6 +766,9 @@ impl TypeState {
                         &symtab.type_symbol_by_id(n2).inner,
                     ) {
                         (TypeSymbol::Declared(_), TypeSymbol::Declared(_)) => {
+                            if n1 != n2 {
+                                return Err(err_producer());
+                            }
                             if p1.len() != p2.len() {
                                 return Err(err_producer());
                             }
@@ -982,6 +984,7 @@ mod tests {
     use spade_ast::testutil::{ast_ident, ast_path};
     use spade_common::location_info::WithLocation;
     use spade_common::name::testutil::name_id;
+    use spade_common::name::Path;
     use spade_hir::symbol_table::{SymbolTable, Thing};
 
     #[test]
@@ -1164,6 +1167,79 @@ mod tests {
         // Ensure patterns have same type as each other, and as the expression
         ensure_same_type!(state, ta, t22);
         ensure_same_type!(state, t22, t23);
+    }
+
+    #[test]
+    fn patterns_constrain_expression_types() {
+        let mut state = TypeState::new();
+        let mut symtab = SymbolTable::new();
+        spade_ast_lowering::builtins::populate_symtab(&mut symtab, &mut ItemList::new());
+
+        let first_pattern = PatternKind::Tuple(vec![
+            PatternKind::Bool(true).with_id(20).nowhere(),
+            PatternKind::Bool(true).with_id(21).nowhere(),
+        ])
+        .with_id(22)
+        .nowhere();
+
+        let input = ExprKind::Match(
+            Box::new(Expression::ident(0, 0, "a").nowhere()),
+            vec![
+                (first_pattern, Expression::ident(1, 1, "b").nowhere()),
+                (
+                    PatternKind::name(name_id(11, "y")).with_id(23).nowhere(),
+                    Expression::ident(2, 2, "c").nowhere(),
+                ),
+            ],
+        )
+        .with_id(3)
+        .nowhere();
+
+        // Add eqs for the literals
+        let expr_a = TExpr::Name(name_id(0, "a").inner);
+        let expr_b = TExpr::Name(name_id(1, "b").inner);
+        let expr_c = TExpr::Name(name_id(2, "c").inner);
+        state.add_equation(expr_a.clone(), TVar::Unknown(100));
+        state.add_equation(expr_b.clone(), TVar::Unknown(101));
+        state.add_equation(expr_c.clone(), TVar::Unknown(102));
+
+        state.visit_expression(&input, &symtab).unwrap();
+
+        let ta = get_type!(state, &expr_a);
+
+        let expected_type = TVar::Tuple(vec![kvar!(t_bool(&symtab)), kvar!(t_bool(&symtab))]);
+
+        // Ensure patterns have same type as each other, and as the expression
+        ensure_same_type!(state, ta, expected_type);
+    }
+
+    #[test]
+    fn not_all_types_are_the_same() {
+        let mut state = TypeState::new();
+        let mut symtab = SymbolTable::new();
+        spade_ast_lowering::builtins::populate_symtab(&mut symtab, &mut ItemList::new());
+
+        let not_bool = symtab.add_thing_with_id(
+            100,
+            Path::from_strs(&vec!["not_bool"]),
+            Thing::Type(TypeSymbol::Declared(vec![]).nowhere()),
+        );
+
+        let lhs = PatternKind::name(name_id(0, "x")).with_id(22).nowhere();
+
+        state.add_equation(
+            TExpr::Name(name_id(1, "a").inner),
+            kvar!(KnownType::Type(not_bool)),
+        );
+
+        let input = Statement::Binding(
+            lhs,
+            Some(dtype!(symtab => "bool")),
+            Expression::ident(1, 1, "a").nowhere(),
+        )
+        .nowhere();
+
+        assert!(state.visit_statement(&input, &symtab).is_err());
     }
 
     #[ignore]
