@@ -138,7 +138,7 @@ impl PatternLocal for Pattern {
         let mut result = vec![];
         match &self.kind {
             hir::PatternKind::Integer(_) => todo!(),
-            hir::PatternKind::Bool(_) => {},
+            hir::PatternKind::Bool(_) => {}
             hir::PatternKind::Name { .. } => {}
             hir::PatternKind::Tuple(inner) => {
                 let inner_types = if let mir::types::Type::Tuple(inner) = &types
@@ -201,7 +201,7 @@ impl PatternLocal for Pattern {
     /// this pattern.
     fn condition(
         &self,
-        expr: &Loc<Expression>,
+        value_name: &ValueName,
         symtab: &FrozenSymtab,
         idtracker: &mut ExprIdTracker,
         types: &TypeState,
@@ -209,23 +209,25 @@ impl PatternLocal for Pattern {
         item_list: &hir::ItemList,
     ) -> Result<PatternCondition> {
         let output_id = idtracker.next();
-        let result_name = ValueName::Expr(output_id);
+        let mut result_name = ValueName::Expr(output_id);
         match &self.kind {
             hir::PatternKind::Integer(_) => todo!("Codegen for integer patterns"),
-            hir::PatternKind::Bool(true) => {
-                Ok(PatternCondition{statements: vec![], result_name: expr.variable(subs)})
-            },
+            hir::PatternKind::Bool(true) => Ok(PatternCondition {
+                statements: vec![],
+                result_name: value_name.clone(),
+            }),
             hir::PatternKind::Bool(false) => {
-                let statements = vec![
-                    mir::Statement::Binding(mir::Binding{
-                        name: result_name.clone(),
-                        ty: MirType::Bool,
-                        operator: mir::Operator::LogicalNot,
-                        operands: vec![expr.variable(subs)]
-                    })
-                ];
+                let statements = vec![mir::Statement::Binding(mir::Binding {
+                    name: result_name.clone(),
+                    ty: MirType::Bool,
+                    operator: mir::Operator::LogicalNot,
+                    operands: vec![value_name.clone()],
+                })];
 
-                Ok(PatternCondition{statements, result_name})
+                Ok(PatternCondition {
+                    statements,
+                    result_name,
+                })
             }
             hir::PatternKind::Name { .. } => Ok(PatternCondition {
                 statements: vec![mir::Statement::Constant(
@@ -235,7 +237,51 @@ impl PatternLocal for Pattern {
                 )],
                 result_name,
             }),
-            hir::PatternKind::Tuple(_) => todo!("Codegen for tuple patterns"),
+            hir::PatternKind::Tuple(branches) => {
+                assert!(
+                    !branches.is_empty(),
+                    "Tuple patterns without any subpatterns are unsupported"
+                );
+
+                let subpatterns = branches
+                    .iter()
+                    .map(|pat| {
+                        pat.condition(&pat.value_name(), symtab, idtracker, types, subs, item_list)
+                    })
+                    .collect::<Result<Vec<_>>>()?;
+
+                let mut conditions = subpatterns
+                    .iter()
+                    // Rev is not strictly nessecary but it makes conditions get generated
+                    // left to right
+                    .rev()
+                    .map(|sub| sub.result_name.clone())
+                    .collect::<Vec<_>>();
+
+                let mut statements = subpatterns
+                    .into_iter()
+                    .map(|sub| sub.statements.into_iter())
+                    .flatten()
+                    .collect::<Vec<_>>();
+
+                // NOTE: Safe unwrap, we're asserting !is_empty above
+                result_name = conditions.pop().unwrap();
+                for cond in conditions {
+                    let new_result_name = ValueName::Expr(idtracker.next());
+                    statements.push(mir::Statement::Binding(mir::Binding {
+                        name: new_result_name.clone(),
+                        ty: MirType::Bool,
+                        operator: mir::Operator::LogicalAnd,
+                        operands: vec![result_name, cond],
+                    }));
+                    result_name = new_result_name;
+                }
+
+                Ok(PatternCondition {
+                    statements,
+                    result_name,
+                })
+            }
             hir::PatternKind::Type(path, _args) => {
                 let enum_variant = symtab.symtab().enum_variant_by_id(&path);
 
@@ -249,7 +295,7 @@ impl PatternLocal for Pattern {
                         variant: enum_variant.option,
                         enum_type: self_type,
                     },
-                    operands: vec![expr.variable(subs)],
+                    operands: vec![value_name.clone()],
                     ty: MirType::Bool,
                 });
 
@@ -530,11 +576,6 @@ impl ExprLocal for Loc<Expression> {
                 result.append(&mut operand.lower(symtab, idtracker, types, subs, item_list)?);
                 let mut operands = vec![];
                 for (pat, result_expr) in branches {
-                    let mut cond =
-                        pat.condition(operand, symtab, idtracker, types, subs, item_list)?;
-                    result.append(&mut cond.statements);
-                    result
-                        .append(&mut result_expr.lower(symtab, idtracker, types, subs, item_list)?);
                     result.append(&mut pat.lower(
                         operand.variable(subs),
                         symtab.symtab(),
@@ -542,6 +583,19 @@ impl ExprLocal for Loc<Expression> {
                         subs,
                         item_list,
                     )?);
+
+                    let mut cond = pat.condition(
+                        &operand.variable(subs),
+                        symtab,
+                        idtracker,
+                        types,
+                        subs,
+                        item_list,
+                    )?;
+                    result.append(&mut cond.statements);
+
+                    result
+                        .append(&mut result_expr.lower(symtab, idtracker, types, subs, item_list)?);
 
                     operands.push(cond.result_name);
                     operands.push(result_expr.variable(subs));

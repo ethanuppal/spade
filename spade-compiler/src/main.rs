@@ -65,8 +65,6 @@ fn main() -> Result<()> {
     let namespace = Path(vec![]);
     // Read and parse input files
     for infile in infiles {
-        println!("Parsing {:?}", infile);
-
         let mut file = File::open(&infile)
             .with_context(|| format!("Failed to open {}", &infile.to_string_lossy()))?;
         let mut file_content = String::new();
