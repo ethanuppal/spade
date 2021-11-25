@@ -5,13 +5,18 @@ entity check_bit(signal: int<10>, bit_mask: int<10>) -> bool {
 // hsync, vsync, (r, g, b)
 entity main(clk: clk, rst: bool) -> (bool, bool, (bool, bool, bool)) {
     let state = inst vga_fsm$(clk, rst);
-
     let (hsync, vsync, pixel) = inst vga_output(state);
+    let vga_tick = inst vga_frame_done(state);
+
+    reg(clk) offset_counter reset (rst: 0) = {
+        if vga_tick { offset_counter + 1 } else { offset_counter }
+    };
+    let offset = offset_counter >> 2;
+
 
     let rgb_int = match pixel {
         Option::Some((x, y)) => {
-            (x >> 4) + (y >> 4)
-            // 0b111
+            ((x + offset) >> 4) + ((y + offset) >> 4)
         },
         Option::None => 0
     };

@@ -138,3 +138,17 @@ entity vga_output(vga_state: (VgaPartialState, VgaPartialState))
 
     (hsync, vsync, pixel)
 }
+
+entity vga_frame_done(state: (VgaPartialState, VgaPartialState)) -> bool {
+    match state {
+        (VgaPartialState::FrontPorch(x), VgaPartialState::FrontPorch(y)) => {
+            if x == 0 && y == 0 {
+                true
+            }
+            else {
+                false
+            }
+        },
+        _ => false
+    }
+}
