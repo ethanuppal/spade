@@ -23,8 +23,7 @@ entity counter(clk: clk, rst: bool, max: int<8>) -> int<8> {
 ```
 
 Spade is in its early stages, so everything is subject to change. For now,
-there are a few larger examples of what the language looks like in the `1dpong`
-and `gaming` directories.
+there are a few larger examples of what the language looks like in the `sample_projects` directory.
 
 
 ## Getting started
