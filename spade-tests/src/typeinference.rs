@@ -21,29 +21,13 @@ mod tests {
     }
 
     #[test]
-    #[should_panic]
-    fn tuple_pattern_type_missmatch_is_an_error() {
+    fn type_inference_works_for_int_patterns() {
         let code = r#"
-            entity name(x: int<16>) -> int<16> {
-                let (true, var) = (x, x);
-                0
+        entity name(x: int<16>) -> int<16> {
+            match x {
+                0 => 0
             }
-        "#;
-
-        build_items(code);
-    }
-
-    #[test]
-    #[should_panic]
-    fn tuple_pattern_type_missmatch_is_an_error_part2() {
-        let code = r#"
-            enum X {
-                Member
-            }
-            entity name(x: X) -> int<16> {
-                let a: bool = x;
-                0
-            }
+        }
         "#;
 
         build_items(code);

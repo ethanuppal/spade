@@ -837,6 +837,29 @@ mod tests {
     }
 
     #[test]
+    fn integer_patterns_work() {
+        let code = r#"
+            entity uwu(e: int<16>) -> bool {
+                match e {
+                    0 => true,
+                }
+            }
+        "#;
+
+        let expected = vec![
+            entity! {"uwu"; ("_i_e", n(0, "e"), Type::Int(16)) -> Type::Bool; {
+                // Conditions for branches
+                (const 1; Type::Int(16); ConstantValue::Int(0));
+                (e(2); Type::Bool; Eq; n(0, "e"), e(1));
+                (const 4; Type::Bool; ConstantValue::Bool(true));
+                (e(6); Type::Bool; Match; e(2), e(4));
+            } => e(6)},
+        ];
+
+        build_and_compare_entities!(code, expected);
+    }
+
+    #[test]
     fn tuple_patterns_conditions_work() {
         let code = r#"
             entity name(a: (bool, bool)) -> int<16> {

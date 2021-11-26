@@ -5,7 +5,7 @@ pub mod substitution;
 use hir::symbol_table::FrozenSymtab;
 use hir::{ItemList, Pattern, TypeList};
 use mir::types::Type as MirType;
-use mir::ValueName;
+use mir::{ConstantValue, ValueName};
 pub use pipelines::generate_pipeline;
 use spade_common::id_tracker::ExprIdTracker;
 use substitution::Substitutions;
@@ -137,7 +137,7 @@ impl PatternLocal for Pattern {
     ) -> Result<Vec<mir::Statement>> {
         let mut result = vec![];
         match &self.kind {
-            hir::PatternKind::Integer(_) => todo!(),
+            hir::PatternKind::Integer(_) => {}
             hir::PatternKind::Bool(_) => {}
             hir::PatternKind::Name { .. } => {}
             hir::PatternKind::Tuple(inner) => {
@@ -211,7 +211,28 @@ impl PatternLocal for Pattern {
         let output_id = idtracker.next();
         let mut result_name = ValueName::Expr(output_id);
         match &self.kind {
-            hir::PatternKind::Integer(_) => todo!("Codegen for integer patterns"),
+            hir::PatternKind::Integer(val) => {
+                let self_type = types.type_of_id(self.id, symtab.symtab(), &item_list.types);
+                let const_id = idtracker.next();
+                let statements = vec![
+                    mir::Statement::Constant(
+                        const_id,
+                        self_type.to_mir_type(),
+                        ConstantValue::Int(*val as u64),
+                    ),
+                    mir::Statement::Binding(mir::Binding {
+                        name: result_name.clone(),
+                        ty: MirType::Bool,
+                        operator: mir::Operator::Eq,
+                        operands: vec![value_name.clone(), ValueName::Expr(const_id)],
+                    }),
+                ];
+
+                Ok(PatternCondition {
+                    statements,
+                    result_name,
+                })
+            }
             hir::PatternKind::Bool(true) => Ok(PatternCondition {
                 statements: vec![],
                 result_name: value_name.clone(),

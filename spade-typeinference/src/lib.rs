@@ -531,12 +531,14 @@ impl TypeState {
         let new_type = self.new_generic();
         self.add_equation(TypedExpression::Id(pattern.inner.id), new_type.clone());
         match &pattern.inner.kind {
-            hir::PatternKind::Integer(_) => todo!(),
-            hir::PatternKind::Bool(_) => {
-                self.unify_types(&new_type, &t_bool(symtab), symtab)
-                    // NOTE: We might need to report a good error here
-                    .expect("Expected boolean")
+            hir::PatternKind::Integer(_) => {
+                let int_t = &self.new_generic_int(&symtab);
+                self.unify_types(&new_type, int_t, symtab)
+                    .expect("Failed to unify new_generic with int")
             }
+            hir::PatternKind::Bool(_) => self
+                .unify_types(&new_type, &t_bool(symtab), symtab)
+                .expect("Expected new_generic with boolean"),
             hir::PatternKind::Name { name, pre_declared } => {
                 if !pre_declared {
                     self.add_equation(TypedExpression::Name(name.clone().inner), new_type.clone());
