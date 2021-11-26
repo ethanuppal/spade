@@ -410,7 +410,11 @@ impl<'a> Parser<'a> {
         if self.peek_cond(TokenKind::is_integer, "integer")? {
             let token = self.eat_unconditional()?;
             match token.kind {
-                TokenKind::Integer(val) => Ok(Some(Loc::new(val, lspan(token.span), self.file_id))),
+                TokenKind::Integer(val)
+                | TokenKind::HexInteger(val)
+                | TokenKind::BinInteger(val) => {
+                    Ok(Some(Loc::new(val, lspan(token.span), self.file_id)))
+                }
                 _ => unreachable!(),
             }
         } else {
@@ -2134,6 +2138,28 @@ mod tests {
     }
 
     #[test]
+    fn dec_int_literals_work() {
+        let code = "1";
+        let expected = 1.nowhere();
+
+        check_parse!(code, int_literal, Ok(Some(expected)));
+    }
+    #[test]
+    fn hex_int_literals_work() {
+        let code = "0xff";
+        let expected = 255.nowhere();
+
+        check_parse!(code, int_literal, Ok(Some(expected)));
+    }
+    #[test]
+    fn bin_int_literals_work() {
+        let code = "0b101";
+        let expected = 5.nowhere();
+
+        check_parse!(code, int_literal, Ok(Some(expected)));
+    }
+
+    #[test]
     fn tuple_literals_parse() {
         let code = "(1, true)";
 
@@ -2517,6 +2543,24 @@ mod tests {
         let code = "1";
 
         let expected = Pattern::Integer(1).nowhere();
+
+        check_parse!(code, pattern, Ok(expected));
+    }
+
+    #[test]
+    fn hex_integer_patterns_work() {
+        let code = "0xff";
+
+        let expected = Pattern::Integer(255).nowhere();
+
+        check_parse!(code, pattern, Ok(expected));
+    }
+
+    #[test]
+    fn bin_integer_patterns_work() {
+        let code = "0b101";
+
+        let expected = Pattern::Integer(5).nowhere();
 
         check_parse!(code, pattern, Ok(expected));
     }

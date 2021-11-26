@@ -10,20 +10,24 @@ pub enum TokenKind {
     )"#, |lex| lex.slice().to_string())]
     Identifier(String),
 
-    #[regex(r"(0x|0b)?[0-9][0-9_]*", |lex| {
+    #[regex(r"[0-9][0-9_]*", |lex| {
         let without_under = lex.slice().replace("_", "");
 
-        if without_under.starts_with("0x") {
-            u128::from_str_radix(&without_under[2..], 16)
-        }
-        else if without_under.starts_with("0b") {
-            u128::from_str_radix(&without_under[2..], 2)
-        }
-        else {
-            u128::from_str_radix(&without_under, 10)
-        }
+        u128::from_str_radix(&without_under, 10)
     })]
     Integer(u128),
+    #[regex(r"0x[0-9A-z][0-9_A-z]*", |lex| {
+        let without_under = lex.slice().replace("_", "");
+
+        u128::from_str_radix(&without_under[2..], 16)
+    })]
+    HexInteger(u128),
+    #[regex(r"0b[0-1][0-1]*", |lex| {
+        let without_under = lex.slice().replace("_", "");
+
+        u128::from_str_radix(&without_under[2..], 2)
+    })]
+    BinInteger(u128),
 
     #[token("true")]
     True,
@@ -145,6 +149,8 @@ impl TokenKind {
         match self {
             TokenKind::Identifier(_) => "identifier",
             TokenKind::Integer(_) => "integer",
+            TokenKind::HexInteger(_) => "hexadecimal integer",
+            TokenKind::BinInteger(_) => "binary integer",
             TokenKind::True => "true",
             TokenKind::False => "false",
 
@@ -207,7 +213,10 @@ impl TokenKind {
         matches!(self, TokenKind::Identifier(_))
     }
     pub fn is_integer(&self) -> bool {
-        matches!(self, TokenKind::Integer(_))
+        matches!(
+            self,
+            TokenKind::Integer(_) | TokenKind::HexInteger(_) | TokenKind::BinInteger(_)
+        )
     }
 }
 
