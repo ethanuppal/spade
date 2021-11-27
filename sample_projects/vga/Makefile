@@ -17,7 +17,7 @@ SPADE_SOURCES=$(wildcard src/*.spade) $(wildcard ../../stdlib/*.spade)
 all: build/main.v.vcd
 
 # Build verilog from the spade code
-build/main.v: $(SPADE_SOURCES) $(SPADEC) Makefile
+build/main.v: $(SPADE_SOURCES) $(SPADEC) Makefile .PHONY
 	@mkdir -p ${@D}
 	@echo -e "[\033[0;34m${SPADEC}\033[0m] building $@"
 	${SPADEC} $(SPADE_SOURCES) -o $@
