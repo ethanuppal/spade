@@ -456,7 +456,7 @@ pub fn visit_statement(
                 None
             };
 
-            let pat = pattern.try_visit(visit_pattern_normal, symtab, idtracker)?;
+            let pat = pattern.try_visit(visit_pattern_allow_declarations, symtab, idtracker)?;
 
             let expr = expr.try_visit(visit_expression, symtab, idtracker)?;
 
