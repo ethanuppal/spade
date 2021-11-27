@@ -36,7 +36,12 @@ fn statement_code(statement: &Statement) -> Code {
                         binding.operands.len() == 2,
                         "expected 2 operands to binary operator"
                     );
-                    format!("{} {} {}", ops[0], $verilog, ops[1])
+                    if $verilog == ">" || $verilog == "<" {
+                        format!("$signed({}) {} $signed({})", ops[0], $verilog, ops[1])
+                    }
+                    else {
+                        format!("{} {} {}", ops[0], $verilog, ops[1])
+                    }
                 }};
             }
 
