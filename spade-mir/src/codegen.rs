@@ -38,8 +38,7 @@ fn statement_code(statement: &Statement) -> Code {
                     );
                     if $verilog == ">" || $verilog == "<" {
                         format!("$signed({}) {} $signed({})", ops[0], $verilog, ops[1])
-                    }
-                    else {
+                    } else {
                         format!("{} {} {}", ops[0], $verilog, ops[1])
                     }
                 }};
@@ -62,6 +61,7 @@ fn statement_code(statement: &Statement) -> Code {
                 }
                 Operator::BitwiseAnd => binop!("&"),
                 Operator::BitwiseOr => binop!("|"),
+                Operator::Xor => binop!("^"),
                 Operator::Match => {
                     assert!(
                         ops.len() % 2 == 0,
@@ -472,6 +472,23 @@ mod expression_tests {
         }
     }
 
+    macro_rules! signed_binop_test {
+        ($name:ident, $ty:expr, $verilog_ty:expr, $op:ident, $verilog_op:expr) => {
+            #[test]
+            fn $name() {
+                let stmt = statement!(e(0); $ty; $op; e(1), e(2));
+
+                let expected = formatdoc!(
+                    r#"
+                    logic{} _e_0;
+                    assign _e_0 = $signed(_e_1) {} $signed(_e_2);"#, $verilog_ty, $verilog_op
+                );
+
+                assert_same_code!(&statement_code(&stmt).to_string(), &expected)
+            }
+        }
+    }
+
     binop_test!(binop_add_works, Type::Int(2), "[1:0]", Add, "+");
     binop_test!(binop_sub_works, Type::Int(2), "[1:0]", Sub, "-");
     binop_test!(binop_mul_works, Type::Int(2), "[1:0]", Mul, "*");
@@ -490,10 +507,11 @@ mod expression_tests {
         ">>"
     );
     binop_test!(binop_eq_works, Type::Bool, "", Eq, "==");
-    binop_test!(binop_gt_works, Type::Bool, "", Gt, ">");
-    binop_test!(binop_lt_works, Type::Bool, "", Lt, "<");
+    signed_binop_test!(binop_gt_works, Type::Bool, "", Gt, ">");
+    signed_binop_test!(binop_lt_works, Type::Bool, "", Lt, "<");
     binop_test!(binop_logical_and_works, Type::Bool, "", LogicalAnd, "&&");
     binop_test!(binop_logical_or_works, Type::Bool, "", LogicalOr, "||");
+    binop_test!(xor_works, Type::Bool, "", Xor, "^");
 
     #[test]
     fn select_operator_works() {

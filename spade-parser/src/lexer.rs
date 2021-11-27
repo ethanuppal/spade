@@ -94,6 +94,8 @@ pub enum TokenKind {
     BitwiseOr,
     #[token("!")]
     Not,
+    #[token("^")]
+    Xor,
 
     // Other operators
     #[token("=")]
@@ -184,6 +186,7 @@ impl TokenKind {
             TokenKind::BitwiseAnd => "&",
             TokenKind::BitwiseOr => "|",
             TokenKind::Not => "!",
+            TokenKind::Xor => "^",
 
             TokenKind::OpenParen => "(",
             TokenKind::CloseParen => ")",

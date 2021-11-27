@@ -20,6 +20,7 @@ pub enum BinaryOperator {
     LogicalOr,
     BitwiseOr,
     BitwiseAnd,
+    Xor,
 }
 
 #[derive(PartialEq, Debug, Clone)]

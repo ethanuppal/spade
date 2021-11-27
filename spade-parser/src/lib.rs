@@ -151,6 +151,7 @@ impl<'a> Parser<'a> {
                 TokenKind::LogicalAnd => BinaryOperator::LogicalAnd,
                 TokenKind::BitwiseAnd => BinaryOperator::BitwiseAnd,
                 TokenKind::BitwiseOr => BinaryOperator::BitwiseOr,
+                TokenKind::Xor => BinaryOperator::Xor,
                 x => unreachable!("{:?} ({}) is not an operator", x, x.as_str()),
             };
             Ok(
@@ -191,11 +192,8 @@ impl<'a> Parser<'a> {
         is_next_logical_and,
         bitwise_or_expression
     );
-    operator_expr!(
-        bitwise_or_expression,
-        is_next_bitwise_or,
-        bitwise_and_expression
-    );
+    operator_expr!(bitwise_or_expression, is_next_bitwise_or, xor_expression);
+    operator_expr!(xor_expression, is_next_xor, bitwise_and_expression);
     operator_expr!(
         bitwise_and_expression,
         is_next_bitwise_and,
@@ -1142,7 +1140,8 @@ impl<'a> Parser<'a> {
         is_next_logical_and [LogicalAnd],
         is_next_logical_or [LogicalOr],
         is_next_bitwise_and [BitwiseAnd],
-        is_next_bitwise_or [BitwiseOr]
+        is_next_bitwise_or [BitwiseOr],
+        is_next_xor [Xor]
     }
 }
 

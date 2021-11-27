@@ -447,7 +447,9 @@ impl TypeState {
                         self.unify_expression_generic_error(&lhs, &rhs.inner, symtab)?;
                         self.unify_expression_generic_error(expression, &t_bool(symtab), symtab)?
                     }
-                    BinaryOperator::LogicalAnd | BinaryOperator::LogicalOr => {
+                    BinaryOperator::LogicalAnd
+                    | BinaryOperator::LogicalOr
+                    | BinaryOperator::Xor => {
                         // TODO: Make generic over types that can be ored
                         self.unify_expression_generic_error(&lhs, &t_bool(symtab), symtab)?;
                         self.unify_expression_generic_error(&lhs, &rhs.inner, symtab)?;

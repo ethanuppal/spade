@@ -618,6 +618,7 @@ pub fn visit_expression(
                 ast::BinaryOperator::LogicalOr => Ok(operator(BinaryOperator::LogicalOr)),
                 ast::BinaryOperator::BitwiseOr => Ok(operator(BinaryOperator::BitwiseOr)),
                 ast::BinaryOperator::BitwiseAnd => Ok(operator(BinaryOperator::BitwiseAnd)),
+                ast::BinaryOperator::Xor => Ok(operator(BinaryOperator::Xor)),
             }
         }
         ast::Expression::EntityInstance(name, arg_list) => {
