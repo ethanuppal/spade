@@ -218,7 +218,7 @@ fn statement_code(statement: &Statement) -> Code {
                     args += ", ";
                     args += &name;
 
-                    let instance_name = format!("_instance{}", name);
+                    let instance_name = format!("{}_{}", module_name, name);
 
                     format!("{} {}({});", module_name, instance_name, args)
                 }
@@ -706,7 +706,7 @@ mod expression_tests {
         let expected = indoc!(
             r#"
             logic _e_0;
-            test _instance_e_0(_e_1, _e_2, _e_0);"#
+            test test__e_0(_e_1, _e_2, _e_0);"#
         );
 
         assert_same_code!(&statement_code(&stmt).to_string(), expected);

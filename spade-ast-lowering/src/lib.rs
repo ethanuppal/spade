@@ -1042,6 +1042,7 @@ mod statement_visiting {
         }
     }
 
+    #[ignore]
     #[test]
     fn let_binding_declared_variables_is_not_allowed() {
         let input = ast::Statement::Binding(
