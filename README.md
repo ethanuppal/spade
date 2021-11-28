@@ -41,6 +41,9 @@ an overview of the inner workings of the compiler.
 There is a vim plugin for syntax highlighting and auto indentation at
 https://gitlab.com/TheZoq2/spade-vim
 
+There is an Emacs plugin at
+https://github.com/Emiluren/.emacs.d/blob/master/lisp/spade-mode/spade-mode.el
+
 ## Planned features
 
 - [x] Type inference
