@@ -612,6 +612,8 @@ pub fn visit_expression(
                 ast::BinaryOperator::Equals => Ok(operator(BinaryOperator::Eq)),
                 ast::BinaryOperator::Gt => Ok(operator(BinaryOperator::Gt)),
                 ast::BinaryOperator::Lt => Ok(operator(BinaryOperator::Lt)),
+                ast::BinaryOperator::Ge => Ok(operator(BinaryOperator::Ge)),
+                ast::BinaryOperator::Le => Ok(operator(BinaryOperator::Le)),
                 ast::BinaryOperator::LeftShift => Ok(operator(BinaryOperator::LeftShift)),
                 ast::BinaryOperator::RightShift => Ok(operator(BinaryOperator::RightShift)),
                 ast::BinaryOperator::LogicalAnd => Ok(operator(BinaryOperator::LogicalAnd)),

@@ -69,6 +69,8 @@ pub enum BinaryOperator {
     Equals,
     Lt,
     Gt,
+    Le,
+    Ge,
     LogicalAnd,
     LogicalOr,
     LeftShift,

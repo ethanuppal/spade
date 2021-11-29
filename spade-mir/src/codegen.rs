@@ -51,6 +51,8 @@ fn statement_code(statement: &Statement) -> Code {
                 Operator::Eq => binop!("=="),
                 Operator::Gt => binop!(">"),
                 Operator::Lt => binop!("<"),
+                Operator::Ge => binop!(">="),
+                Operator::Le => binop!("<="),
                 Operator::LeftShift => binop!("<<"),
                 Operator::RightShift => binop!(">>"),
                 Operator::LogicalAnd => binop!("&&"),
@@ -507,6 +509,8 @@ mod expression_tests {
         ">>"
     );
     binop_test!(binop_eq_works, Type::Bool, "", Eq, "==");
+    binop_test!(binop_ge_works, Type::Bool, "", Ge, ">=");
+    binop_test!(binop_le_works, Type::Bool, "", Le, "<=");
     signed_binop_test!(binop_gt_works, Type::Bool, "", Gt, ">");
     signed_binop_test!(binop_lt_works, Type::Bool, "", Lt, "<");
     binop_test!(binop_logical_and_works, Type::Bool, "", LogicalAnd, "&&");

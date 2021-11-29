@@ -440,7 +440,11 @@ impl TypeState {
                         self.unify_expression_generic_error(&lhs, &rhs.inner, symtab)?;
                         self.unify_expression_generic_error(expression, &rhs.inner, symtab)?
                     }
-                    BinaryOperator::Eq | BinaryOperator::Gt | BinaryOperator::Lt => {
+                    BinaryOperator::Eq
+                    | BinaryOperator::Gt
+                    | BinaryOperator::Lt
+                    | BinaryOperator::Ge
+                    | BinaryOperator::Le => {
                         let int_type = self.new_generic_int(symtab);
                         // TODO: Make generic over types that can be added
                         self.unify_expression_generic_error(&lhs, &int_type, symtab)?;

@@ -145,6 +145,8 @@ impl<'a> Parser<'a> {
                 // their parsing interferes with generic arguments
                 TokenKind::Lt => BinaryOperator::Lt,
                 TokenKind::Gt => BinaryOperator::Gt,
+                TokenKind::Le => BinaryOperator::Le,
+                TokenKind::Ge => BinaryOperator::Ge,
                 TokenKind::RightShift => BinaryOperator::RightShift,
                 TokenKind::LeftShift => BinaryOperator::LeftShift,
                 TokenKind::LogicalOr => BinaryOperator::LogicalOr,
@@ -1136,7 +1138,7 @@ impl<'a> Parser<'a> {
         is_next_addition_operator [Plus, Minus],
         is_next_shift_operator [LeftShift, RightShift],
         is_next_multiplication_operator [Asterisk],
-        is_next_comparison_operator [Equals, Gt, Lt],
+        is_next_comparison_operator [Equals, Gt, Lt, Ge, Le],
         is_next_logical_and [LogicalAnd],
         is_next_logical_or [LogicalOr],
         is_next_bitwise_and [BitwiseAnd],

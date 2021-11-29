@@ -325,6 +325,44 @@ mod tests {
     }
 
     #[test]
+    fn greater_than_or_equals_operator_codegens_correctly() {
+        let code = r#"
+        entity name(a: int<16>, b: int<16>) -> bool {
+            a >= b
+        }
+        "#;
+
+        let expected = entity!("name"; (
+                "_i_a", n(0, "a"), Type::Int(16),
+                "_i_b", n(1, "b"), Type::Int(16)
+            ) -> Type::Bool; {
+                (e(0); Type::Bool; Ge; n(0, "a"), n(1, "b"))
+            } => e(0)
+        );
+
+        assert_same_mir!(&build_entity!(code), &expected);
+    }
+
+    #[test]
+    fn less_than_or_equals_operator_codegens_correctly() {
+        let code = r#"
+        entity name(a: int<16>, b: int<16>) -> bool {
+            a <= b
+        }
+        "#;
+
+        let expected = entity!("name"; (
+                "_i_a", n(0, "a"), Type::Int(16),
+                "_i_b", n(1, "b"), Type::Int(16)
+            ) -> Type::Bool; {
+                (e(0); Type::Bool; Le; n(0, "a"), n(1, "b"))
+            } => e(0)
+        );
+
+        assert_same_mir!(&build_entity!(code), &expected);
+    }
+
+    #[test]
     fn registers_work() {
         let code = r#"
         entity name(clk: clk, a: int<16>) -> int<16> {
