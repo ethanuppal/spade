@@ -1587,6 +1587,7 @@ mod tests {
             ]),
             output_type: Some(dtype!(symtab => "int"; (t_num(5)))),
             type_params: vec![],
+            is_builtin: false,
         };
 
         let entity_name = symtab.add_thing(ast_path("test").inner, Thing::Entity(entity.nowhere()));

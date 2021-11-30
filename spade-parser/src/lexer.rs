@@ -139,6 +139,9 @@ pub enum TokenKind {
     #[token("$")]
     Dollar,
 
+    #[token("__builtin__")]
+    Builtin,
+
     /// Ignoring whitespace
     #[regex("[ \t\n\r]", logos::skip)]
     Whitespace,
@@ -211,6 +214,8 @@ impl TokenKind {
 
             TokenKind::Hash => "#",
             TokenKind::Dollar => "$",
+
+            TokenKind::Builtin => "__builtin__",
 
             TokenKind::Whitespace => "whitespace",
             TokenKind::Comment => "comment",

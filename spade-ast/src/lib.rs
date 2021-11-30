@@ -141,8 +141,8 @@ pub struct Entity {
     pub inputs: ParameterList,
     pub output_type: Option<Loc<TypeSpec>>,
     /// The body is an expression for ID assignment purposes, but semantic analysis
-    /// ensures that it is always a block.
-    pub body: Loc<Expression>,
+    /// ensures that it is always a block. If body is `None`, the entity is __builtin__
+    pub body: Option<Loc<Expression>>,
     pub type_params: Vec<Loc<TypeParam>>,
 }
 impl WithLocation for Entity {}

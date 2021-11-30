@@ -789,7 +789,12 @@ impl<'a> Parser<'a> {
 
         // Body (TODO: might want to make this a separate structure like a block)
         let (block, block_span) = if let Some(block) = self.block()? {
-            block.separate()
+            let (block, block_span) = block.separate();
+            (Some(block), block_span)
+        } else if self.peek_kind(&TokenKind::Builtin)? {
+            let tok = self.eat_unconditional()?;
+
+            (None, ().at(self.file_id, &tok.span).span)
         } else {
             // The end of the entity definition depends on wether or not
             // a type is present.
@@ -811,7 +816,7 @@ impl<'a> Parser<'a> {
                 name,
                 inputs,
                 output_type,
-                body: block.map(|inner| Expression::Block(Box::new(inner))),
+                body: block.map(|inner| inner.map(|inner| Expression::Block(Box::new(inner)))),
                 type_params,
             }
             .between(self.file_id, &start_token.span, &block_span),
@@ -1828,24 +1833,26 @@ mod tests {
             name: Identifier("no_inputs".to_string()).nowhere(),
             inputs: aparams![],
             output_type: None,
-            body: Expression::Block(Box::new(Block {
-                statements: vec![
-                    Statement::Binding(
-                        Pattern::name("test"),
-                        None,
-                        Expression::IntLiteral(123).nowhere(),
-                    )
-                    .nowhere(),
-                    Statement::Binding(
-                        Pattern::name("test2"),
-                        None,
-                        Expression::IntLiteral(123).nowhere(),
-                    )
-                    .nowhere(),
-                ],
-                result: Expression::Identifier(ast_path("test")).nowhere(),
-            }))
-            .nowhere(),
+            body: Some(
+                Expression::Block(Box::new(Block {
+                    statements: vec![
+                        Statement::Binding(
+                            Pattern::name("test"),
+                            None,
+                            Expression::IntLiteral(123).nowhere(),
+                        )
+                        .nowhere(),
+                        Statement::Binding(
+                            Pattern::name("test2"),
+                            None,
+                            Expression::IntLiteral(123).nowhere(),
+                        )
+                        .nowhere(),
+                    ],
+                    result: Expression::Identifier(ast_path("test")).nowhere(),
+                }))
+                .nowhere(),
+            ),
             type_params: vec![],
         }
         .nowhere();
@@ -1860,11 +1867,13 @@ mod tests {
             name: ast_ident("with_inputs"),
             inputs: aparams![("clk", tspec!("bool")), ("rst", tspec!("bool"))],
             output_type: Some(TypeSpec::Named(ast_path("bool"), vec![]).nowhere()),
-            body: Expression::Block(Box::new(Block {
-                statements: vec![],
-                result: Expression::Identifier(ast_path("clk")).nowhere(),
-            }))
-            .nowhere(),
+            body: Some(
+                Expression::Block(Box::new(Block {
+                    statements: vec![],
+                    result: Expression::Identifier(ast_path("clk")).nowhere(),
+                }))
+                .nowhere(),
+            ),
             type_params: vec![],
         }
         .nowhere();
@@ -1879,11 +1888,13 @@ mod tests {
             name: ast_ident("with_generics"),
             inputs: aparams![],
             output_type: None,
-            body: Expression::Block(Box::new(Block {
-                statements: vec![],
-                result: Expression::Identifier(ast_path("clk")).nowhere(),
-            }))
-            .nowhere(),
+            body: Some(
+                Expression::Block(Box::new(Block {
+                    statements: vec![],
+                    result: Expression::Identifier(ast_path("clk")).nowhere(),
+                }))
+                .nowhere(),
+            ),
             type_params: vec![
                 TypeParam::TypeName(ast_ident("X")).nowhere(),
                 TypeParam::Integer(ast_ident("Y")).nowhere(),
@@ -1992,11 +2003,13 @@ mod tests {
             name: Identifier("e1".to_string()).nowhere(),
             inputs: aparams![],
             output_type: None,
-            body: Expression::Block(Box::new(Block {
-                statements: vec![],
-                result: Expression::IntLiteral(0).nowhere(),
-            }))
-            .nowhere(),
+            body: Some(
+                Expression::Block(Box::new(Block {
+                    statements: vec![],
+                    result: Expression::IntLiteral(0).nowhere(),
+                }))
+                .nowhere(),
+            ),
             type_params: vec![],
         }
         .nowhere();
@@ -2005,11 +2018,13 @@ mod tests {
             name: Identifier("e2".to_string()).nowhere(),
             inputs: aparams![],
             output_type: None,
-            body: Expression::Block(Box::new(Block {
-                statements: vec![],
-                result: Expression::IntLiteral(1).nowhere(),
-            }))
-            .nowhere(),
+            body: Some(
+                Expression::Block(Box::new(Block {
+                    statements: vec![],
+                    result: Expression::IntLiteral(1).nowhere(),
+                }))
+                .nowhere(),
+            ),
             type_params: vec![],
         }
         .nowhere();
@@ -2219,6 +2234,24 @@ mod tests {
         .nowhere();
 
         check_parse!(code, type_spec, Ok(expected));
+    }
+
+    #[test]
+    fn builtin_entities_work() {
+        let code = "entity X() __builtin__";
+
+        let expected = Some(
+            Entity {
+                name: ast_ident("X"),
+                inputs: ParameterList(vec![]),
+                output_type: None,
+                body: None,
+                type_params: vec![],
+            }
+            .nowhere(),
+        );
+
+        check_parse!(code, entity, Ok(expected));
     }
 
     #[test]

@@ -161,10 +161,13 @@ fn visit_parameter_list(l: &ParameterList, symtab: &mut SymbolTable) -> Result<h
 
 /// Visit the head of an entity to generate an entity head
 pub fn entity_head(item: &ast::Entity, symtab: &mut SymbolTable) -> Result<EntityHead> {
-    let type_params = vec![];
-    if !item.type_params.is_empty() {
-        todo!("Handle generic type parameters in entities");
-    }
+    symtab.new_scope();
+
+    let type_params = item
+        .type_params
+        .iter()
+        .map(|p| p.try_map_ref(|p| visit_type_param(p, symtab)))
+        .collect::<Result<_>>()?;
 
     let output_type = if let Some(output_type) = &item.output_type {
         Some(output_type.try_map_ref(|t| visit_type_spec(t, symtab))?)
@@ -172,10 +175,13 @@ pub fn entity_head(item: &ast::Entity, symtab: &mut SymbolTable) -> Result<Entit
         None
     };
 
+    symtab.close_scope();
+
     Ok(EntityHead {
         inputs: visit_parameter_list(&item.inputs, symtab)?,
         output_type,
         type_params,
+        is_builtin: item.body.is_none(),
     })
 }
 
@@ -184,7 +190,12 @@ pub fn visit_entity(
     namespace: &Path,
     symtab: &mut SymbolTable,
     idtracker: &mut ExprIdTracker,
-) -> Result<Loc<hir::Entity>> {
+) -> Result<Option<Loc<hir::Entity>>> {
+    // If this is a builtin entity
+    if item.body.is_none() {
+        return Ok(None);
+    }
+
     symtab.new_scope();
 
     let path = namespace.push_ident(item.name.clone());
@@ -201,17 +212,23 @@ pub fn visit_entity(
         .map(|(ident, ty)| (symtab.add_local_variable(ident.clone()), ty.clone()))
         .collect();
 
-    let body = item.body.try_visit(visit_expression, symtab, idtracker)?;
+    let body = item
+        .body
+        .as_ref()
+        .unwrap()
+        .try_visit(visit_expression, symtab, idtracker)?;
 
     symtab.close_scope();
 
-    Ok(hir::Entity {
-        name: id.at_loc(&item.name),
-        head: head.clone().inner,
-        inputs,
-        body,
-    }
-    .at_loc(item))
+    Ok(Some(
+        hir::Entity {
+            name: id.at_loc(&item.name),
+            head: head.clone().inner,
+            inputs,
+            body,
+        }
+        .at_loc(item),
+    ))
 }
 
 // pub fn visit_trait_def(
@@ -229,9 +246,9 @@ pub fn visit_item(
     idtracker: &mut ExprIdTracker,
 ) -> Result<Option<hir::Item>> {
     match item {
-        ast::Item::Entity(e) => Ok(Some(hir::Item::Entity(visit_entity(
-            e, namespace, symtab, idtracker,
-        )?))),
+        ast::Item::Entity(e) => {
+            Ok(visit_entity(e, namespace, symtab, idtracker)?.map(hir::Item::Entity))
+        }
         ast::Item::Pipeline(p) => Ok(Some(hir::Item::Pipeline(pipelines::visit_pipeline(
             p, namespace, symtab, idtracker,
         )?))),
@@ -788,16 +805,18 @@ mod entity_visiting {
                 ast::TypeSpec::Unit(().nowhere()).nowhere(),
             )]),
             output_type: None,
-            body: ast::Expression::Block(Box::new(ast::Block {
-                statements: vec![ast::Statement::Binding(
-                    ast::Pattern::name("var"),
-                    Some(ast::TypeSpec::Unit(().nowhere()).nowhere()),
-                    ast::Expression::IntLiteral(0).nowhere(),
-                )
-                .nowhere()],
-                result: ast::Expression::IntLiteral(0).nowhere(),
-            }))
-            .nowhere(),
+            body: Some(
+                ast::Expression::Block(Box::new(ast::Block {
+                    statements: vec![ast::Statement::Binding(
+                        ast::Pattern::name("var"),
+                        Some(ast::TypeSpec::Unit(().nowhere()).nowhere()),
+                        ast::Expression::IntLiteral(0).nowhere(),
+                    )
+                    .nowhere()],
+                    result: ast::Expression::IntLiteral(0).nowhere(),
+                }))
+                .nowhere(),
+            ),
             type_params: vec![],
         }
         .nowhere();
@@ -808,6 +827,7 @@ mod entity_visiting {
                 inputs: hir::ParameterList(vec![(ast_ident("a"), hir::TypeSpec::unit().nowhere())]),
                 output_type: None,
                 type_params: vec![],
+                is_builtin: false,
             },
             inputs: vec![((name_id(1, "a").inner, hir::TypeSpec::unit().nowhere()))],
             body: hir::ExprKind::Block(Box::new(hir::Block {
@@ -831,7 +851,7 @@ mod entity_visiting {
 
         let result = visit_entity(&input, &Path(vec![]), &mut symtab, &mut idtracker);
 
-        assert_eq!(result, Ok(expected));
+        assert_eq!(result, Ok(Some(expected)));
 
         // But the local variables should not
         assert!(!symtab.has_symbol(ast_path("a").inner));
@@ -1424,6 +1444,7 @@ mod expression_visiting {
                     ]),
                     output_type: None,
                     type_params: vec![],
+                    is_builtin: false,
                 }
                 .nowhere(),
             ),
@@ -1477,6 +1498,7 @@ mod expression_visiting {
                     ]),
                     output_type: None,
                     type_params: vec![],
+                    is_builtin: false,
                 }
                 .nowhere(),
             ),
@@ -1569,6 +1591,7 @@ mod expression_visiting {
                     ]),
                     output_type: None,
                     type_params: vec![],
+                    is_builtin: false,
                 }.nowhere()));
 
                 matches::assert_matches!(
@@ -1620,6 +1643,7 @@ mod expression_visiting {
                     ]),
                     output_type: None,
                     type_params: vec![],
+                    is_builtin: false,
                 }.nowhere()));
 
                 matches::assert_matches!(
@@ -1901,11 +1925,13 @@ mod item_visiting {
                 name: ast_ident("test"),
                 output_type: None,
                 inputs: ParameterList(vec![]),
-                body: ast::Expression::Block(Box::new(ast::Block {
-                    statements: vec![],
-                    result: ast::Expression::IntLiteral(0).nowhere(),
-                }))
-                .nowhere(),
+                body: Some(
+                    ast::Expression::Block(Box::new(ast::Block {
+                        statements: vec![],
+                        result: ast::Expression::IntLiteral(0).nowhere(),
+                    }))
+                    .nowhere(),
+                ),
                 type_params: vec![],
             }
             .nowhere(),
@@ -1918,6 +1944,7 @@ mod item_visiting {
                     output_type: None,
                     inputs: hir::ParameterList(vec![]),
                     type_params: vec![],
+                    is_builtin: false,
                 },
                 inputs: vec![],
                 body: hir::ExprKind::Block(Box::new(hir::Block {
@@ -1961,11 +1988,13 @@ mod module_visiting {
                     name: ast_ident("test"),
                     output_type: None,
                     inputs: ParameterList(vec![]),
-                    body: ast::Expression::Block(Box::new(ast::Block {
-                        statements: vec![],
-                        result: ast::Expression::IntLiteral(0).nowhere(),
-                    }))
-                    .nowhere(),
+                    body: Some(
+                        ast::Expression::Block(Box::new(ast::Block {
+                            statements: vec![],
+                            result: ast::Expression::IntLiteral(0).nowhere(),
+                        }))
+                        .nowhere(),
+                    ),
                     type_params: vec![],
                 }
                 .nowhere(),
@@ -1982,6 +2011,7 @@ mod module_visiting {
                             output_type: None,
                             inputs: hir::ParameterList(vec![]),
                             type_params: vec![],
+                            is_builtin: false,
                         },
                         inputs: vec![],
                         body: hir::ExprKind::Block(Box::new(hir::Block {
