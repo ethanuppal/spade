@@ -640,6 +640,15 @@ pub fn visit_expression(
                 ast::BinaryOperator::Xor => Ok(operator(BinaryOperator::Xor)),
             }
         }
+        ast::Expression::UnaryOperator(operator, operand) => {
+            let operand = operand.try_visit(visit_expression, symtab, idtracker)?;
+
+            let unop = |op| hir::ExprKind::UnaryOperator(op, Box::new(operand));
+            match operator {
+                ast::UnaryOperator::Sub => Ok(unop(hir::expression::UnaryOperator::Sub)),
+                ast::UnaryOperator::Not => Ok(unop(hir::expression::UnaryOperator::Not)),
+            }
+        }
         ast::Expression::EntityInstance(name, arg_list) => {
             let (name_id, head) = symtab.lookup_entity(name)?;
             let head = head.clone();
@@ -1160,11 +1169,37 @@ mod expression_visiting {
         };
     }
 
+    macro_rules! unop_test {
+        ($test_name:ident, $token:ident, $op:ident) => {
+            #[test]
+            fn $test_name() {
+                let mut symtab = SymbolTable::new();
+                let mut idtracker = ExprIdTracker::new();
+                let input = ast::Expression::UnaryOperator(
+                    spade_ast::UnaryOperator::$token,
+                    Box::new(ast::Expression::IntLiteral(456).nowhere()),
+                );
+                let expected = hir::ExprKind::UnaryOperator(
+                    hir::expression::UnaryOperator::$op,
+                    Box::new(hir::ExprKind::IntLiteral(456).idless().nowhere()),
+                )
+                .idless();
+
+                assert_eq!(
+                    visit_expression(&input, &mut symtab, &mut idtracker),
+                    Ok(expected)
+                );
+            }
+        };
+    }
+
     binop_test!(additions, Add, Add);
     binop_test!(subtractions, Sub, Sub);
     binop_test!(equals, Equals, Eq);
     binop_test!(bitwise_or, BitwiseOr, BitwiseOr);
     binop_test!(bitwise_and, BitwiseAnd, BitwiseAnd);
+    unop_test!(usub, Sub, Sub);
+    unop_test!(not, Not, Not);
 
     #[test]
     fn identifiers_cause_error_if_undefined() {

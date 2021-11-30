@@ -81,6 +81,13 @@ pub enum BinaryOperator {
 }
 
 #[derive(PartialEq, Debug, Clone)]
+pub enum UnaryOperator {
+    Sub,
+    Not,
+}
+impl WithLocation for UnaryOperator {}
+
+#[derive(PartialEq, Debug, Clone)]
 pub enum Expression {
     Identifier(Loc<Path>),
     IntLiteral(u128),
@@ -94,6 +101,7 @@ pub enum Expression {
     ),
     Match(Box<Loc<Expression>>, Vec<(Loc<Pattern>, Loc<Expression>)>),
     FnCall(Loc<Path>, Loc<ArgumentList>),
+    UnaryOperator(UnaryOperator, Box<Loc<Expression>>),
     BinaryOperator(Box<Loc<Expression>>, BinaryOperator, Box<Loc<Expression>>),
     Block(Box<Block>),
     EntityInstance(Loc<Path>, Loc<ArgumentList>),

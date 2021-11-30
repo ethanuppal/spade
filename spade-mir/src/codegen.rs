@@ -44,6 +44,16 @@ fn statement_code(statement: &Statement) -> Code {
                 }};
             }
 
+            macro_rules! unop {
+                ($verilog:expr) => {{
+                    assert!(
+                        binding.operands.len() == 1,
+                        "expected 1 operands to binary operator"
+                    );
+                    format!("{}{}", $verilog, ops[0])
+                }};
+            }
+
             let expression = match &binding.operator {
                 Operator::Add => binop!("+"),
                 Operator::Sub => binop!("-"),
@@ -64,6 +74,8 @@ fn statement_code(statement: &Statement) -> Code {
                 Operator::BitwiseAnd => binop!("&"),
                 Operator::BitwiseOr => binop!("|"),
                 Operator::Xor => binop!("^"),
+                Operator::USub => unop!("-"),
+                Operator::Not => unop!("!"),
                 Operator::Match => {
                     assert!(
                         ops.len() % 2 == 0,
@@ -491,6 +503,23 @@ mod expression_tests {
         }
     }
 
+    macro_rules! unop_test {
+        ($name:ident, $ty:expr, $verilog_ty:expr, $op:ident, $verilog_op:expr) => {
+            #[test]
+            fn $name() {
+                let stmt = statement!(e(0); $ty; $op; e(1));
+
+                let expected = formatdoc!(
+                    r#"
+                    logic{} _e_0;
+                    assign _e_0 = {}_e_1;"#, $verilog_ty, $verilog_op
+                );
+
+                assert_same_code!(&statement_code(&stmt).to_string(), &expected)
+            }
+        }
+    }
+
     binop_test!(binop_add_works, Type::Int(2), "[1:0]", Add, "+");
     binop_test!(binop_sub_works, Type::Int(2), "[1:0]", Sub, "-");
     binop_test!(binop_mul_works, Type::Int(2), "[1:0]", Mul, "*");
@@ -516,6 +545,8 @@ mod expression_tests {
     binop_test!(binop_logical_and_works, Type::Bool, "", LogicalAnd, "&&");
     binop_test!(binop_logical_or_works, Type::Bool, "", LogicalOr, "||");
     binop_test!(xor_works, Type::Bool, "", Xor, "^");
+    unop_test!(not_works, Type::Bool, "", Not, "!");
+    unop_test!(usub_works, Type::Int(2), "[1:0]", USub, "-");
 
     #[test]
     fn select_operator_works() {

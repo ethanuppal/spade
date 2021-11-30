@@ -363,6 +363,42 @@ mod tests {
     }
 
     #[test]
+    fn usub_codegens_corectly() {
+        let code = r#"
+        entity name(a: int<16>) -> int<16> {
+            -a
+        }
+        "#;
+
+        let expected = entity!("name"; (
+                "_i_a", n(0, "a"), Type::Int(16),
+            ) -> Type::Int(16); {
+                (e(0); Type::Int(16); USub; n(0, "a"))
+            } => e(0)
+        );
+
+        assert_same_mir!(&build_entity!(code), &expected);
+    }
+
+    #[test]
+    fn not_codegens_corectly() {
+        let code = r#"
+        entity name(a: bool) -> bool {
+            !a
+        }
+        "#;
+
+        let expected = entity!("name"; (
+                "_i_a", n(0, "a"), Type::Bool,
+            ) -> Type::Bool; {
+                (e(0); Type::Bool; Not; n(0, "a"))
+            } => e(0)
+        );
+
+        assert_same_mir!(&build_entity!(code), &expected);
+    }
+
+    #[test]
     fn registers_work() {
         let code = r#"
         entity name(clk: clk, a: int<16>) -> int<16> {

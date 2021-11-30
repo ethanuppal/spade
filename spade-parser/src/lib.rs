@@ -8,7 +8,7 @@ use spade_ast::{
     ArgumentList, ArgumentPattern, BinaryOperator, Block, Entity, Enum, Expression, FunctionDecl,
     Item, ModuleBody, NamedArgument, ParameterList, Pattern, Pipeline, PipelineBindModifier,
     PipelineBinding, PipelineStage, Register, Statement, TraitDef, TypeDeclKind, TypeDeclaration,
-    TypeExpression, TypeParam, TypeSpec,
+    TypeExpression, TypeParam, TypeSpec, UnaryOperator,
 };
 use spade_common::{
     error_reporting::AsLabel,
@@ -165,6 +165,29 @@ impl<'a> Parser<'a> {
         }
     }
 
+    pub fn unary_operator(&mut self) -> Result<Option<Loc<Expression>>> {
+        let operator = self.peek()?.and_then(|t| match t.kind {
+            TokenKind::Minus => Some(UnaryOperator::Sub.at(self.file_id, &t.span)),
+            TokenKind::Not => Some(UnaryOperator::Not.at(self.file_id, &t.span)),
+            _ => None,
+        });
+
+        Ok(match operator {
+            Some(op) => {
+                self.eat_unconditional()?;
+                let expr = self.expression()?;
+                Some(
+                    Expression::UnaryOperator(op.inner.clone(), Box::new(expr.clone())).between(
+                        self.file_id,
+                        &op,
+                        &expr,
+                    ),
+                )
+            }
+            None => None,
+        })
+    }
+
     // Expression parsing
     #[trace_parser]
     pub fn expression(&mut self) -> Result<Loc<Expression>> {
@@ -318,6 +341,8 @@ impl<'a> Parser<'a> {
             Ok(if_expr)
         } else if let Some(match_expr) = self.match_expression()? {
             Ok(match_expr)
+        } else if let Some(operator) = self.unary_operator()? {
+            Ok(operator)
         } else {
             match self.path() {
                 Ok(path) => {
@@ -1508,6 +1533,28 @@ mod tests {
         .nowhere();
 
         check_parse!("a + b", expression, Ok(expected_value.clone()));
+    }
+
+    #[test]
+    fn unary_suptraction_works() {
+        let expected_value = Expression::UnaryOperator(
+            UnaryOperator::Sub,
+            Box::new(Expression::Identifier(ast_path("b")).nowhere()),
+        )
+        .nowhere();
+
+        check_parse!("- b", expression, Ok(expected_value.clone()));
+    }
+
+    #[test]
+    fn not_operator_works() {
+        let expected_value = Expression::UnaryOperator(
+            UnaryOperator::Not,
+            Box::new(Expression::Identifier(ast_path("b")).nowhere()),
+        )
+        .nowhere();
+
+        check_parse!("!b", expression, Ok(expected_value.clone()));
     }
 
     #[test]

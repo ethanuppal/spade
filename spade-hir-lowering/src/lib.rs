@@ -454,6 +454,7 @@ impl ExprLocal for Loc<Expression> {
             ExprKind::If(_, _, _) => None,
             ExprKind::Match(_, _) => None,
             ExprKind::BinaryOperator(_, _, _) => None,
+            ExprKind::UnaryOperator(_, _) => None,
             ExprKind::EntityInstance(_, _) => None,
             ExprKind::PipelineInstance { .. } => None,
         }
@@ -533,6 +534,24 @@ impl ExprLocal for Loc<Expression> {
                     BinaryOperator::LogicalOr => binop_builder(LogicalOr)?,
                     BinaryOperator::BitwiseAnd => binop_builder(BitwiseAnd)?,
                     BinaryOperator::BitwiseOr => binop_builder(BitwiseOr)?,
+                };
+            }
+            ExprKind::UnaryOperator(op, operand) => {
+                let binop_builder = |op| {
+                    result.append(&mut operand.lower(symtab, idtracker, types, subs, &item_list)?);
+
+                    result.push(mir::Statement::Binding(mir::Binding {
+                        name: self.variable(subs),
+                        operator: op,
+                        operands: vec![operand.variable(subs)],
+                        ty: self_type,
+                    }));
+                    Ok(())
+                };
+                use mir::Operator::*;
+                match op {
+                    hir::expression::UnaryOperator::Sub => binop_builder(USub)?,
+                    hir::expression::UnaryOperator::Not => binop_builder(Not)?,
                 };
             }
             ExprKind::TupleLiteral(elems) => {

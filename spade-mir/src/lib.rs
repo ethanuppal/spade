@@ -54,6 +54,8 @@ pub enum Operator {
     BitwiseAnd,
     BitwiseOr,
     Xor,
+    USub,
+    Not,
     /// Select [1] if [0] else [2]
     Select,
     /// Corresponds to a match statement. If value [0] is true, select [1], if [2] holds, select
@@ -109,6 +111,8 @@ impl std::fmt::Display for Operator {
             Operator::BitwiseAnd => write!(f, "BitwiseAnd"),
             Operator::BitwiseOr => write!(f, "BitwiseOr"),
             Operator::Xor => write!(f, "Xor"),
+            Operator::USub => write!(f, "USub"),
+            Operator::Not => write!(f, "Not"),
             Operator::Select => write!(f, "Select"),
             Operator::Match => write!(f, "Match"),
             Operator::LeftShift => write!(f, "LeftShift"),

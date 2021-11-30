@@ -24,6 +24,11 @@ pub enum BinaryOperator {
     BitwiseAnd,
     Xor,
 }
+#[derive(Clone, Copy, PartialEq, Debug)]
+pub enum UnaryOperator {
+    Sub,
+    Not,
+}
 
 #[derive(PartialEq, Debug, Clone)]
 pub enum NamedArgument {
@@ -60,6 +65,7 @@ pub enum ExprKind {
     TupleIndex(Box<Loc<Expression>>, Loc<u128>),
     FnCall(Loc<NameID>, Vec<Argument>),
     BinaryOperator(Box<Loc<Expression>>, BinaryOperator, Box<Loc<Expression>>),
+    UnaryOperator(UnaryOperator, Box<Loc<Expression>>),
     Match(Box<Loc<Expression>>, Vec<(Loc<Pattern>, Loc<Expression>)>),
     Block(Box<Block>),
     /// Instantiation of an entity. While the argument contains information about

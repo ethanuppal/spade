@@ -1,6 +1,7 @@
 // This algorithm is based off the excelent lecture here
 // https://www.youtube.com/watch?v=xJXcZp2vgLs
 
+use hir::expression::UnaryOperator;
 use hir::symbol_table::TypeSymbol;
 use hir::{Argument, FunctionLike, ParameterList, Pattern, PatternArgument, TypeParam};
 use hir::{ExecutableItem, ItemList};
@@ -459,6 +460,18 @@ impl TypeState {
                         self.unify_expression_generic_error(&lhs, &rhs.inner, symtab)?;
 
                         self.unify_expression_generic_error(expression, &t_bool(symtab), symtab)?
+                    }
+                }
+            }
+            ExprKind::UnaryOperator(op, operand) => {
+                self.visit_expression(&operand, symtab)?;
+                match op {
+                    UnaryOperator::Sub => {
+                        let int_type = self.new_generic_int(symtab);
+                        self.unify_expression_generic_error(operand, &int_type, symtab)?
+                    }
+                    UnaryOperator::Not => {
+                        self.unify_expression_generic_error(operand, &t_bool(symtab), symtab)?
                     }
                 }
             }
