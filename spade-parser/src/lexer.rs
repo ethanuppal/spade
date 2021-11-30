@@ -22,7 +22,7 @@ pub enum TokenKind {
         u128::from_str_radix(&without_under[2..], 16)
     })]
     HexInteger(u128),
-    #[regex(r"0b[0-1][0-1]*", |lex| {
+    #[regex(r"0b[0-1][0-1_]*", |lex| {
         let without_under = lex.slice().replace("_", "");
 
         u128::from_str_radix(&without_under[2..], 2)
