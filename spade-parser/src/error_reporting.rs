@@ -89,6 +89,11 @@ impl CompilationError for Error {
                         .with_message(format!("for this {}", for_what)),
                 ])
             }
+            Error::ExpectedItem { got } => Diagnostic::error()
+                .with_message(format!("Expected item, found {}", got.kind.as_str()))
+                .with_labels(vec![
+                    Label::primary(got.file_id, got.span).with_message("Expected item")
+                ]),
             Error::MissingTupleIndex { hash_loc } => {
                 let message = format!("Expected an index after #");
 

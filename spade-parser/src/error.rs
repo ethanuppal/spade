@@ -32,6 +32,9 @@ pub enum Error {
         loc: Loc<()>,
     },
 
+    #[error("Expected item, got: {got:?}")]
+    ExpectedItem { got: Token },
+
     // Acts mostly like UnexpectedToken but produced by the argument list parser
     // if it encounters the UnexpectedEndOfSCListError, at which point more tokens
     // are added to the returned error. This can not be done to the previous variant

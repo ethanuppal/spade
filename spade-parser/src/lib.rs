@@ -1148,7 +1148,11 @@ impl<'a> Parser<'a> {
         while let Some(item) = self.item()? {
             members.push(item)
         }
-        Ok(ModuleBody { members })
+        if let Some(tok) = self.peek()? {
+            Err(Error::ExpectedItem { got: tok })
+        } else {
+            Ok(ModuleBody { members })
+        }
     }
 }
 
@@ -2081,6 +2085,30 @@ mod tests {
         };
 
         check_parse!(code, module_body, Ok(expected));
+    }
+
+    #[test]
+    fn invaild_top_level_tokens_cause_errors() {
+        let code = r#"+ x() -> bool {
+            false
+        }
+
+        entity x() -> bool {
+            false
+        }
+        "#;
+
+        check_parse!(
+            code,
+            module_body,
+            Err(Error::ExpectedItem {
+                got: Token {
+                    kind: TokenKind::Plus,
+                    span: 0..1,
+                    file_id: 0
+                }
+            })
+        );
     }
 
     #[test]
