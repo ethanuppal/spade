@@ -17,6 +17,10 @@ impl WithLocation for TypeExpression {}
 #[derive(PartialEq, Debug, Clone)]
 pub enum TypeSpec {
     Tuple(Vec<Loc<TypeSpec>>),
+    Array {
+        inner: Box<Loc<TypeSpec>>,
+        size: Box<Loc<TypeExpression>>,
+    },
     Named(Loc<Path>, Vec<Loc<TypeExpression>>),
     Unit(Loc<()>),
 }

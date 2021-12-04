@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use hir::symbol_table::SymbolTable;
-use hir::TypeSpec;
+use hir::{TypeExpression, TypeSpec};
 use spade_common::name::NameID;
 use spade_hir as hir;
 use spade_hir::{TypeDeclaration, TypeList};
@@ -55,6 +55,19 @@ impl TypeState {
         }
     }
 
+    pub fn type_expr_to_concrete(
+        expr: &TypeExpression,
+        type_list: &TypeList,
+        generic_substitutions: &HashMap<NameID, &ConcreteType>,
+    ) -> ConcreteType {
+        match expr {
+            hir::TypeExpression::Integer(val) => ConcreteType::Integer(*val),
+            hir::TypeExpression::TypeSpec(inner) => {
+                Self::type_spec_to_concrete(&inner, type_list, generic_substitutions)
+            }
+        }
+    }
+
     pub fn type_spec_to_concrete(
         spec: &TypeSpec,
         type_list: &TypeList,
@@ -64,12 +77,7 @@ impl TypeState {
             TypeSpec::Declared(name, params) => {
                 let params = params
                     .iter()
-                    .map(|p| match &p.inner {
-                        hir::TypeExpression::Integer(val) => ConcreteType::Integer(*val),
-                        hir::TypeExpression::TypeSpec(inner) => {
-                            Self::type_spec_to_concrete(&inner, type_list, generic_substitutions)
-                        }
-                    })
+                    .map(|p| Self::type_expr_to_concrete(p, type_list, generic_substitutions))
                     .collect();
 
                 let actual = type_list
@@ -93,6 +101,28 @@ impl TypeState {
                     })
                     .collect::<Vec<_>>();
                 ConcreteType::Tuple(inner)
+            }
+            TypeSpec::Array { inner, size } => {
+                let size_type = Box::new(Self::type_expr_to_concrete(
+                    &size,
+                    type_list,
+                    &generic_substitutions,
+                ));
+
+                let size = if let ConcreteType::Integer(size) = size_type.as_ref() {
+                    *size
+                } else {
+                    panic!("Array size must be an integer")
+                };
+
+                ConcreteType::Array {
+                    inner: Box::new(Self::type_spec_to_concrete(
+                        &inner,
+                        type_list,
+                        &generic_substitutions,
+                    )),
+                    size,
+                }
             }
             TypeSpec::Unit(_) => todo!("Handle unit type"),
         }
@@ -121,6 +151,24 @@ impl TypeState {
                 assert!(params.len() == 0, "integers can not have type parameters");
 
                 Some(ConcreteType::Integer(*size))
+            }
+            TypeVar::Array { inner, size } => {
+                let inner = Self::ungenerify_type(inner, symtab, type_list);
+                let size = Self::ungenerify_type(&size, symtab, type_list).map(|t| {
+                    if let ConcreteType::Integer(size) = t {
+                        size
+                    } else {
+                        panic!("Array size must be an integer")
+                    }
+                });
+
+                match (inner, size) {
+                    (Some(inner), Some(size)) => Some(ConcreteType::Array {
+                        inner: Box::new(inner),
+                        size,
+                    }),
+                    _ => None,
+                }
             }
             TypeVar::Tuple(inner) => {
                 let inner = inner

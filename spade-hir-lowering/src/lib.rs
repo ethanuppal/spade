@@ -73,6 +73,9 @@ impl ConcreteTypeLocal for ConcreteType {
             CType::Tuple(inner) => {
                 Type::Tuple(inner.iter().map(ConcreteTypeLocal::to_mir_type).collect())
             }
+            CType::Array { inner, size } => {
+                todo!("Support arrays in MIR")
+            }
             CType::Single {
                 base: PrimitiveType::Bool,
                 params: _,

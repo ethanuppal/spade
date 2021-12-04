@@ -44,6 +44,12 @@ impl Token {
     }
 }
 
+impl spade_common::location_info::HasCodespan for Token {
+    fn codespan(&self) -> codespan::Span {
+        self.span().codespan()
+    }
+}
+
 impl AsLabel for Token {
     fn file_id(&self) -> usize {
         self.file_id
@@ -506,6 +512,8 @@ impl<'a> Parser<'a> {
     pub fn type_spec(&mut self) -> Result<Loc<TypeSpec>> {
         if let Some(tuple) = self.tuple_spec()? {
             Ok(tuple)
+        } else if let Some(array) = self.array_spec()? {
+            Ok(array)
         } else {
             let (path, span) = self
                 .path()
@@ -545,6 +553,27 @@ impl<'a> Parser<'a> {
         let span = lspan(start.span).merge(lspan(end.span));
 
         Ok(Some(TypeSpec::Tuple(inner).at(self.file_id, &span)))
+    }
+
+    #[trace_parser]
+    pub fn array_spec(&mut self) -> Result<Option<Loc<TypeSpec>>> {
+        let start = peek_for!(self, &TokenKind::OpenBracket);
+
+        let inner = self.type_spec()?;
+
+        self.eat(&TokenKind::Semi)?;
+
+        let size = self.type_expression()?;
+
+        let end = self.eat(&TokenKind::CloseBracket)?;
+
+        Ok(Some(
+            TypeSpec::Array {
+                inner: Box::new(inner),
+                size: Box::new(size),
+            }
+            .between(self.file_id, &start, &end),
+        ))
     }
 
     /// A name with an associated type, as used in argument definitions as well
@@ -2307,6 +2336,19 @@ mod tests {
             TypeSpec::Named(ast_path("int"), vec![]).nowhere(),
             TypeSpec::Named(ast_path("bool"), vec![]).nowhere(),
         ])
+        .nowhere();
+
+        check_parse!(code, type_spec, Ok(expected));
+    }
+
+    #[test]
+    fn array_type_specs_work() {
+        let code = "[int; 5]";
+
+        let expected = TypeSpec::Array {
+            inner: Box::new(TypeSpec::Named(ast_path("int"), vec![]).nowhere()),
+            size: Box::new(TypeExpression::Integer(5).nowhere()),
+        }
         .nowhere();
 
         check_parse!(code, type_spec, Ok(expected));

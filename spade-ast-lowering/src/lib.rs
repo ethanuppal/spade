@@ -137,6 +137,12 @@ pub fn visit_type_spec(t: &ast::TypeSpec, symtab: &mut SymbolTable) -> Result<hi
                 }
             }
         }
+        ast::TypeSpec::Array { inner, size } => {
+            let inner = Box::new(inner.try_map_ref(|i| visit_type_spec(i, symtab))?);
+            let size = Box::new(size.try_map_ref(|i| visit_type_expression(i, symtab))?);
+
+            Ok(hir::TypeSpec::Array { inner, size })
+        }
         ast::TypeSpec::Tuple(inner) => {
             let inner = inner
                 .iter()

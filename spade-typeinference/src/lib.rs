@@ -162,6 +162,12 @@ impl TypeState {
                     .collect();
                 TypeVar::Tuple(inner)
             }
+            hir::TypeSpec::Array { inner, size } => {
+                let inner = Box::new(self.type_var_from_hir(inner, generic_list));
+                let size = Box::new(self.hir_type_expr_to_var(size, generic_list));
+
+                TypeVar::Array { inner, size }
+            }
             hir::TypeSpec::Unit(_) => {
                 todo!("Support unit type in type inference")
             }
@@ -338,7 +344,7 @@ impl TypeState {
                             });
                         }
                     }
-                    Ok(t @ TypeVar::Known(_, _, _)) => {
+                    Ok(t @ TypeVar::Known(_, _, _) | t @ TypeVar::Array { .. }) => {
                         return Err(Error::TupleIndexOfNonTuple {
                             got: t.clone(),
                             loc: tup.loc(),
@@ -831,11 +837,31 @@ impl TypeState {
 
                 Ok((v1, None))
             }
-            (TypeVar::Known(_, _, _), TypeVar::Tuple(_)) => Err(err_producer()),
-            (TypeVar::Tuple(_), TypeVar::Known(_, _, _)) => Err(err_producer()),
+            (
+                TypeVar::Array {
+                    inner: i1,
+                    size: s1,
+                },
+                TypeVar::Array {
+                    inner: i2,
+                    size: s2,
+                },
+            ) => {
+                self.unify_types(i1.as_ref(), i2.as_ref(), symtab)
+                    .add_context(v1.clone(), v2.clone())?;
+                self.unify_types(s1.as_ref(), s2.as_ref(), symtab)
+                    .add_context(v1.clone(), v2.clone())?;
+                Ok((v1, None))
+            }
+            // Unknown with other
             (TypeVar::Unknown(_), TypeVar::Unknown(_)) => Ok((v1, Some(v2))),
             (_other, TypeVar::Unknown(_)) => Ok((v1, Some(v2))),
             (TypeVar::Unknown(_), _other) => Ok((v2, Some(v1))),
+            // Incompatibilities
+            (TypeVar::Known(_, _, _), _other) => Err(err_producer()),
+            (_other, TypeVar::Known(_, _, _)) => Err(err_producer()),
+            (TypeVar::Tuple(_), _other) => Err(err_producer()),
+            (_other, TypeVar::Tuple(_)) => Err(err_producer()),
         }?;
 
         if let Some(replaced_type) = replaced_type {
@@ -861,6 +887,10 @@ impl TypeState {
                 for t in inner {
                     Self::replace_type_var(t, from, replacement.clone())
                 }
+            }
+            TypeVar::Array { inner, size } => {
+                Self::replace_type_var(inner, from, replacement.clone());
+                Self::replace_type_var(size, from, replacement.clone());
             }
             TypeVar::Unknown(_) => {}
         }
@@ -1261,78 +1291,6 @@ mod tests {
         .nowhere();
 
         assert!(state.visit_statement(&input, &symtab).is_err());
-    }
-
-    #[ignore]
-    #[test]
-    fn type_inference_for_entities_works() {
-        todo!("Figure out how we handle built in types and name_ids");
-        // let input = Entity {
-        //     head: EntityHead {
-        //         inputs: vec![(
-        //             name_id(0, "input"),
-        //             hir::Type::Generic(
-        //                 Path::from_strs(&["int"]).nowhere(),
-        //                 vec![hir::TypeExpression::Integer(5).nowhere()],
-        //             )
-        //             .nowhere(),
-        //         )],
-        //         output_type: hir::Type::Generic(
-        //             Path::from_strs(&["int"]).nowhere(),
-        //             vec![hir::TypeExpression::Integer(5).nowhere()],
-        //         )
-        //         .nowhere(),
-        //         type_params: vec![],
-        //     },
-        //     body: ExprKind::Identifier(Path::from_strs(&["input"]).nowhere())
-        //         .with_id(0)
-        //         .nowhere(),
-        // };
-
-        // let mut state = TypeState::new();
-
-        // state.visit_entity(&input).unwrap();
-
-        // let t0 = get_type!(state, &TExpr::Id(0));
-        // ensure_same_type!(
-        //     state,
-        //     t0,
-        //     TypeVar::Known(
-        //         t_int(&symtab),
-        //         vec![TypeVar::Known(KnownType::Integer(5), vec![], None)],
-        //         None
-        //     )
-        // );
-    }
-
-    #[ignore]
-    #[test]
-    fn entity_return_types_must_match() {
-        todo!("Figure out how we handle built in types and name_ids");
-        // let input = Entity {
-        //     head: EntityHead {
-        //         inputs: vec![(
-        //             Identifier::Named("input".to_string()).nowhere(),
-        //             hir::Type::Generic(
-        //                 Path::from_strs(&["int"]).nowhere(),
-        //                 vec![hir::TypeExpression::Integer(5).nowhere()],
-        //             )
-        //             .nowhere(),
-        //         )],
-        //         output_type: hir::Type::Concrete(Path::from_strs(&["bool"])).nowhere(),
-        //         type_params: vec![],
-        //     },
-        //     body: ExprKind::Identifier(Path::from_strs(&["input"]).nowhere())
-        //         .with_id(0)
-        //         .nowhere(),
-        // };
-
-        // let mut state = TypeState::new();
-
-        // assert_matches!(
-        //     state.visit_entity(&input),
-        //     Err(Error::EntityOutputTypeMismatch { .. })
-        // );
     }
 
     #[test]

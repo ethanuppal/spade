@@ -134,6 +134,10 @@ pub enum TypeSpec {
     Generic(Loc<NameID>),
     /// The type is a tuple of other variables
     Tuple(Vec<Loc<TypeSpec>>),
+    Array {
+        inner: Box<Loc<TypeSpec>>,
+        size: Box<Loc<TypeExpression>>,
+    },
     Unit(Loc<()>),
 }
 impl WithLocation for TypeSpec {}

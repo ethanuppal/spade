@@ -22,6 +22,10 @@ impl std::fmt::Display for PrimitiveType {
 #[derive(Debug, Clone, PartialEq)]
 pub enum ConcreteType {
     Tuple(Vec<ConcreteType>),
+    Array {
+        inner: Box<ConcreteType>,
+        size: u128,
+    },
     Enum {
         options: Vec<(NameID, Vec<ConcreteType>)>,
     },
@@ -45,6 +49,9 @@ impl std::fmt::Display for ConcreteType {
                         .collect::<Vec<_>>()
                         .join(", ")
                 )
+            }
+            ConcreteType::Array { inner, size } => {
+                write!(f, "[{}; {}]", inner, size)
             }
             ConcreteType::Enum { options } => {
                 write!(f, "enum {{",)?;

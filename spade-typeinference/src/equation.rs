@@ -11,6 +11,10 @@ pub enum TypeVar {
     /// the user, that signature is the second argument, otherwise None
     Known(KnownType, Vec<TypeVar>, Option<Loc<()>>),
     Tuple(Vec<TypeVar>),
+    Array {
+        inner: Box<TypeVar>,
+        size: Box<TypeVar>,
+    },
     /// The type is completely unknown
     Unknown(u64),
 }
@@ -44,6 +48,9 @@ impl std::fmt::Display for TypeVar {
                         .join(", ")
                 )
             }
+            TypeVar::Array { inner, size } => {
+                write!(f, "[{}; {}]", inner, size)
+            }
             TypeVar::Unknown(id) => write!(f, "t{}", id),
         }
     }
@@ -56,8 +63,20 @@ impl PartialEq for TypeVar {
             (TypeVar::Known(_, _, _), TypeVar::Unknown(_)) => false,
             (TypeVar::Unknown(_), TypeVar::Known(_, _, _)) => false,
             (TypeVar::Tuple(i1), TypeVar::Tuple(i2)) => i1 == i2,
+            (
+                TypeVar::Array {
+                    inner: i1,
+                    size: s1,
+                },
+                TypeVar::Array {
+                    inner: i2,
+                    size: s2,
+                },
+            ) => i1 == i2 && s1 == s2,
             (TypeVar::Tuple(_), _) => false,
             (_, TypeVar::Tuple(_)) => false,
+            (TypeVar::Array { .. }, _) => false,
+            (_, TypeVar::Array { .. }) => false,
             (TypeVar::Unknown(t1), TypeVar::Unknown(t2)) => t1 == t2,
         }
     }
