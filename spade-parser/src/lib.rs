@@ -275,62 +275,10 @@ impl<'a> Parser<'a> {
 
     #[trace_parser]
     pub fn base_expression(&mut self) -> Result<Loc<Expression>> {
-        if self.peek_and_eat(&TokenKind::OpenParen)?.is_some() {
-            let mut inner = self
-                .comma_separated(Self::expression, &TokenKind::CloseParen)
-                .no_context()?;
-            let result = if inner.is_empty() {
-                todo!("Implement unit literals")
-            } else if inner.len() == 1 {
-                // NOTE: safe unwrap, we know the size of the array
-                Ok(inner.pop().unwrap())
-            } else {
-                let span = inner
-                    .first()
-                    .unwrap()
-                    .span
-                    .merge(inner.last().unwrap().span);
-                Ok(Expression::TupleLiteral(inner).at(self.file_id, &span))
-            };
-            self.eat(&TokenKind::CloseParen)?;
-            result
-        } else if let Some(start) = self.peek_and_eat(&TokenKind::Instance)? {
-            // TODO: Clean this up a bit
-            // Check if this is a pipeline or not
-            let pipeline_depth = if self.peek_and_eat(&TokenKind::OpenParen)?.is_some() {
-                if let Some(depth) = self.int_literal()? {
-                    self.eat(&TokenKind::CloseParen)?;
-                    Some(depth)
-                } else {
-                    return Err(Error::ExpectedPipelineDepth {
-                        got: self.eat_unconditional()?,
-                    });
-                }
-            } else {
-                None
-            };
-
-            let name = self.path()?;
-
-            let args = self
-                .argument_list()?
-                .ok_or(Error::ExpectedArgumentList(name.clone()))?;
-
-            if let Some(depth) = pipeline_depth {
-                Ok(
-                    Expression::PipelineInstance(depth, name, args.clone()).between(
-                        self.file_id,
-                        &start.span,
-                        &args,
-                    ),
-                )
-            } else {
-                Ok(Expression::EntityInstance(name, args.clone()).between(
-                    self.file_id,
-                    &start.span,
-                    &args,
-                ))
-            }
+        if let Some(tuple) = self.tuple_literal()? {
+            Ok(tuple)
+        } else if let Some(instance) = self.entity_instance()? {
+            Ok(instance)
         } else if let Some(val) = self.bool_literal()? {
             Ok(val.map(Expression::BoolLiteral))
         } else if let Some(val) = self.int_literal()? {
@@ -364,6 +312,30 @@ impl<'a> Parser<'a> {
     }
 
     #[trace_parser]
+    fn tuple_literal(&mut self) -> Result<Option<Loc<Expression>>> {
+        peek_for!(self, &TokenKind::OpenParen);
+
+        let mut inner = self
+            .comma_separated(Self::expression, &TokenKind::CloseParen)
+            .no_context()?;
+        let result = if inner.is_empty() {
+            todo!("Implement unit literals")
+        } else if inner.len() == 1 {
+            // NOTE: safe unwrap, we know the size of the array
+            Ok(inner.pop().unwrap())
+        } else {
+            let span = inner
+                .first()
+                .unwrap()
+                .span
+                .merge(inner.last().unwrap().span);
+            Ok(Expression::TupleLiteral(inner).at(self.file_id, &span))
+        };
+        self.eat(&TokenKind::CloseParen)?;
+        result.map(Some)
+    }
+
+    #[trace_parser]
     fn named_argument(&mut self) -> Result<Loc<NamedArgument>> {
         // This is a named arg
         let name = self.identifier()?;
@@ -375,6 +347,49 @@ impl<'a> Parser<'a> {
             Ok(NamedArgument::Full(name, value).at(self.file_id, &span))
         } else {
             Ok(NamedArgument::Short(name.clone()).at(self.file_id, &name))
+        }
+    }
+
+    #[trace_parser]
+    fn entity_instance(&mut self) -> Result<Option<Loc<Expression>>> {
+        let start = peek_for!(self, &TokenKind::Instance);
+        // TODO: Clean this up a bit
+        // Check if this is a pipeline or not
+        let pipeline_depth = if self.peek_and_eat(&TokenKind::OpenParen)?.is_some() {
+            if let Some(depth) = self.int_literal()? {
+                self.eat(&TokenKind::CloseParen)?;
+                Some(depth)
+            } else {
+                return Err(Error::ExpectedPipelineDepth {
+                    got: self.eat_unconditional()?,
+                });
+            }
+        } else {
+            None
+        };
+
+        let name = self.path()?;
+
+        let args = self
+            .argument_list()?
+            .ok_or(Error::ExpectedArgumentList(name.clone()))?;
+
+        if let Some(depth) = pipeline_depth {
+            Ok(Some(
+                Expression::PipelineInstance(depth, name, args.clone()).between(
+                    self.file_id,
+                    &start.span,
+                    &args,
+                ),
+            ))
+        } else {
+            Ok(Some(
+                Expression::EntityInstance(name, args.clone()).between(
+                    self.file_id,
+                    &start.span,
+                    &args,
+                ),
+            ))
         }
     }
 
