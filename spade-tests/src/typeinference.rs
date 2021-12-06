@@ -2,7 +2,20 @@
 
 #[cfg(test)]
 mod tests {
+    use spade_testutil::parse_typecheck_entity;
+
     use crate::build_items;
+
+    #[test]
+    fn type_inference_works_for_arrays() {
+        let code = r#"
+            entity x() -> [int<2>; 3] {
+                [0, 1, 2]
+            }
+        "#;
+
+        let (processed, _, _, _) = parse_typecheck_entity(code);
+    }
 
     #[test]
     fn type_inference_works_for_generics() {

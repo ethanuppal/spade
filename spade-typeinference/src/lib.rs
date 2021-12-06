@@ -356,6 +356,29 @@ impl TypeState {
                     Err(e) => return Err(e),
                 }
             }
+            ExprKind::ArrayLiteral(members) => {
+                let inner_type = self.new_generic();
+                for expr in members {
+                    self.visit_expression(expr, symtab)?;
+
+                    self.add_equation(TypedExpression::Id(expr.id), inner_type.clone());
+
+                    self.unify_types(expr, &inner_type, symtab)
+                        .map_err(|(expected, got)| Error::ArrayElementMissmatch {
+                            got,
+                            expected,
+                            loc: expr.loc(),
+                            first_element: members.first().unwrap().loc(),
+                        })?;
+                }
+                let size_type = kvar!(KnownType::Integer(members.len() as u128));
+                let result_type = TypeVar::Array {
+                    inner: Box::new(inner_type),
+                    size: Box::new(size_type),
+                };
+
+                self.unify_expression_generic_error(expression, &result_type, symtab)?;
+            }
             ExprKind::Block(block) => {
                 self.visit_block(block, symtab)?;
 
@@ -559,11 +582,12 @@ impl TypeState {
             hir::PatternKind::Integer(_) => {
                 let int_t = &self.new_generic_int(&symtab);
                 self.unify_types(&new_type, int_t, symtab)
-                    .expect("Failed to unify new_generic with int")
+                    .expect("Failed to unify new_generic with int");
             }
-            hir::PatternKind::Bool(_) => self
-                .unify_types(&new_type, &t_bool(symtab), symtab)
-                .expect("Expected new_generic with boolean"),
+            hir::PatternKind::Bool(_) => {
+                self.unify_types(&new_type, &t_bool(symtab), symtab)
+                    .expect("Expected new_generic with boolean");
+            }
             hir::PatternKind::Name { name, pre_declared } => {
                 if !pre_declared {
                     self.add_equation(TypedExpression::Name(name.clone().inner), new_type.clone());
@@ -748,7 +772,7 @@ impl TypeState {
         e1: &impl HasType,
         e2: &impl HasType,
         symtab: &SymbolTable,
-    ) -> std::result::Result<(), UnificationError> {
+    ) -> std::result::Result<TypeVar, UnificationError> {
         let v1 = e1
             .get_type(self)
             .expect("Tried to unify types but the lhs was not found");
@@ -802,7 +826,7 @@ impl TypeState {
 
                             for (t1, t2) in p1.iter().zip(p2.iter()) {
                                 self.unify_types(t1, t2, symtab)
-                                    .add_context(v1.clone(), v2.clone())?
+                                    .add_context(v1.clone(), v2.clone())?;
                             }
 
                             let new_ts1 = symtab.type_symbol_by_id(n1).inner;
@@ -832,7 +856,7 @@ impl TypeState {
 
                 for (t1, t2) in i1.iter().zip(i2.iter()) {
                     self.unify_types(t1, t2, symtab)
-                        .add_context(v1.clone(), v2.clone())?
+                        .add_context(v1.clone(), v2.clone())?;
                 }
 
                 Ok((v1, None))
@@ -847,11 +871,20 @@ impl TypeState {
                     size: s2,
                 },
             ) => {
-                self.unify_types(i1.as_ref(), i2.as_ref(), symtab)
+                let inner = self
+                    .unify_types(i1.as_ref(), i2.as_ref(), symtab)
                     .add_context(v1.clone(), v2.clone())?;
-                self.unify_types(s1.as_ref(), s2.as_ref(), symtab)
+                let size = self
+                    .unify_types(s1.as_ref(), s2.as_ref(), symtab)
                     .add_context(v1.clone(), v2.clone())?;
-                Ok((v1, None))
+
+                Ok((
+                    TypeVar::Array {
+                        inner: Box::new(inner),
+                        size: Box::new(size),
+                    },
+                    None,
+                ))
             }
             // Unknown with other
             (TypeVar::Unknown(_), TypeVar::Unknown(_)) => Ok((v1, Some(v2))),
@@ -872,7 +905,8 @@ impl TypeState {
 
         self.trace_stack
             .push(TraceStack::Unified(v1cpy, v2cpy, new_type.clone()));
-        Ok(())
+
+        Ok(new_type)
     }
 
     fn replace_type_var(in_var: &mut TypeVar, from: &TypeVar, replacement: TypeVar) {
@@ -912,6 +946,7 @@ impl TypeState {
                 expected,
                 loc: expr.loc(),
             })
+            .map(|_| ())
     }
 }
 

@@ -149,6 +149,27 @@ impl CompilationError for Error {
                     format!("     Index: {}", index),
                     format!("Tuple size: {}", actual_size),
                 ]),
+            Error::ArrayElementMissmatch {
+                expected,
+                got,
+                loc,
+                first_element,
+            } => Diagnostic::error()
+                .with_message(format!(
+                    "Array element type missmatch. Expected {}",
+                    expected
+                ))
+                .with_labels(vec![
+                    loc.primary_label()
+                        .with_message(format!("Expected {}", expected)),
+                    first_element
+                        .primary_label()
+                        .with_message(format!("To match this")),
+                ])
+                .with_notes(vec![
+                    format!("Expected: {}", expected),
+                    format!("     Got: {}", got),
+                ]),
             Error::NamedArgumentMismatch {
                 expr,
                 expected,

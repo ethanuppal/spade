@@ -62,6 +62,7 @@ pub enum ExprKind {
     IntLiteral(u128),
     BoolLiteral(bool),
     TupleLiteral(Vec<Loc<Expression>>),
+    ArrayLiteral(Vec<Loc<Expression>>),
     TupleIndex(Box<Loc<Expression>>, Loc<u128>),
     FnCall(Loc<NameID>, Vec<Argument>),
     BinaryOperator(Box<Loc<Expression>>, BinaryOperator, Box<Loc<Expression>>),

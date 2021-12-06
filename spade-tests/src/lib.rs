@@ -33,6 +33,13 @@ macro_rules! build_entity {
             &processed.type_state,
             &item_list,
         )
+        .map_err(|e| {
+            print!(
+                "{}",
+                spade_typeinference::format_trace_stack(&processed.type_state.trace_stack)
+            );
+            e
+        })
         .report_failure($code);
         result
     }};
@@ -40,6 +47,7 @@ macro_rules! build_entity {
 
 /// Builds mutliple entities and types from a source string. If any pipelines or other
 /// non-entities or types are included in $code, this panics
+#[cfg(test)]
 fn build_items(code: &str) -> Vec<spade_mir::Entity> {
     let ParseTypececkResult {
         items_with_types,
@@ -62,6 +70,10 @@ fn build_items(code: &str) -> Vec<spade_mir::Entity> {
                         &processed.type_state,
                         &item_list,
                     )
+                    .map_err(|e| {
+                        spade_typeinference::format_trace_stack(&processed.type_state.trace_stack);
+                        e
+                    })
                     .report_failure(code),
                 );
             }

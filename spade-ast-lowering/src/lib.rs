@@ -687,6 +687,13 @@ pub fn visit_expression(
                 .collect::<Result<Vec<_>>>()?;
             Ok(hir::ExprKind::TupleLiteral(exprs))
         }
+        ast::Expression::ArrayLiteral(exprs) => {
+            let exprs = exprs
+                .into_iter()
+                .map(|e| e.try_map_ref(|e| visit_expression(e, symtab, idtracker)))
+                .collect::<Result<Vec<_>>>()?;
+            Ok(hir::ExprKind::ArrayLiteral(exprs))
+        }
         ast::Expression::TupleIndex(tuple, index) => Ok(hir::ExprKind::TupleIndex(
             Box::new(tuple.try_visit(visit_expression, symtab, idtracker)?),
             index.clone(),

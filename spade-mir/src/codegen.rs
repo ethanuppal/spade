@@ -137,6 +137,9 @@ fn statement_code(statement: &Statement) -> Code {
 
                     format!("{}[{}]", ops[0], index)
                 }
+                Operator::ConstructArray => {
+                    todo!("Codegen for array construction")
+                }
                 Operator::ConstructEnum {
                     variant,
                     variant_count,

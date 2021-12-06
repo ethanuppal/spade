@@ -149,6 +149,14 @@ pub enum Error {
     #[error("Tuple index out of boudns")]
     TupleIndexOutOfBounds { index: Loc<u128>, actual_size: u128 },
 
+    #[error("Array element missmatch")]
+    ArrayElementMissmatch {
+        expected: UnificationTrace,
+        got: UnificationTrace,
+        loc: Loc<()>,
+        first_element: Loc<()>,
+    },
+
     #[error("Pattern type missmatch")]
     PatternTypeMissmatch {
         pattern: Loc<()>,

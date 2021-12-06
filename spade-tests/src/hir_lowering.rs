@@ -489,6 +489,29 @@ mod tests {
     }
 
     #[test]
+    fn array_literals_work() {
+        let code = r#"
+            entity x() -> [int<2>; 3] {
+                [0, 1, 2]
+            }
+        "#;
+
+        let array_type = Type::Array {
+            inner: Box::new(Type::Int(2)),
+            length: 3,
+        };
+
+        let expected = entity!("x"; () -> array_type.clone(); {
+            (const 0; Type::Int(2); ConstantValue::Int(0));
+            (const 1; Type::Int(2); ConstantValue::Int(1));
+            (const 2; Type::Int(2); ConstantValue::Int(2));
+            (e(4); array_type.clone(); ConstructArray; e(0), e(1), e(2));
+        } => e(4));
+
+        assert_same_mir!(&build_entity!(code), &expected);
+    }
+
+    #[test]
     fn tuple_indexing_and_creation_works() {
         let code = r#"
         entity name(a: int<16>, b: int<8>) -> int<8> {
@@ -537,6 +560,7 @@ mod tests {
 
         assert_same_mir!(&build_entity!(code), &expected);
     }
+
     #[test]
     fn entity_instanciation_works() {
         let code = r#"

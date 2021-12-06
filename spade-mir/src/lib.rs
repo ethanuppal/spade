@@ -64,6 +64,8 @@ pub enum Operator {
     // NOTE: We may want to add a MatchUnique for cases where we can guarantee uniqueness,
     // typically match statements with no wildcards
     Match,
+    /// Construct an array from the operand expressions
+    ConstructArray,
     /// Construct a tuple from all the operand expressions
     ConstructTuple,
     /// Construct the nth enum variant with the operand expressions as the payload
@@ -130,6 +132,7 @@ impl std::fmt::Display for Operator {
                 enum_type: _,
             } => write!(f, "EnumMember({} {})", variant, member_index),
             Operator::ConstructTuple => write!(f, "ConstructTuple"),
+            Operator::ConstructArray => write!(f, "ConstructArray"),
             Operator::IndexTuple(idx, _) => write!(f, "IndexTuple({})", idx),
             Operator::Instance(name) => write!(f, "Instance({})", name),
             Operator::Alias => write!(f, "Alias"),

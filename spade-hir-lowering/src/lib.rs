@@ -73,9 +73,10 @@ impl ConcreteTypeLocal for ConcreteType {
             CType::Tuple(inner) => {
                 Type::Tuple(inner.iter().map(ConcreteTypeLocal::to_mir_type).collect())
             }
-            CType::Array { inner, size } => {
-                todo!("Support arrays in MIR")
-            }
+            CType::Array { inner, size } => Type::Array {
+                inner: Box::new(inner.to_mir_type()),
+                length: *size as u64,
+            },
             CType::Single {
                 base: PrimitiveType::Bool,
                 params: _,
@@ -453,6 +454,7 @@ impl ExprLocal for Loc<Expression> {
             ExprKind::FnCall(_, _) => None,
             ExprKind::TupleLiteral(_) => None,
             ExprKind::TupleIndex(_, _) => None,
+            ExprKind::ArrayLiteral { .. } => None,
             ExprKind::Block(block) => Some(block.result.variable(subs)),
             ExprKind::If(_, _, _) => None,
             ExprKind::Match(_, _) => None,
@@ -585,6 +587,17 @@ impl ExprLocal for Loc<Expression> {
                     name: self.variable(subs),
                     operator: mir::Operator::IndexTuple(idx.inner as u64, types),
                     operands: vec![tup.variable(subs)],
+                    ty: self_type,
+                }))
+            }
+            ExprKind::ArrayLiteral(values) => {
+                for elem in values {
+                    result.append(&mut elem.lower(symtab, idtracker, types, subs, &item_list)?)
+                }
+                result.push(mir::Statement::Binding(mir::Binding {
+                    name: self.variable(subs),
+                    operator: mir::Operator::ConstructArray,
+                    operands: values.iter().map(|v| v.variable(subs)).collect(),
                     ty: self_type,
                 }))
             }

@@ -252,37 +252,11 @@ impl<'a> Parser<'a> {
     );
 
     #[trace_parser]
-    fn argument_list(&mut self) -> Result<Option<Loc<ArgumentList>>> {
-        let is_named = self.peek_and_eat(&TokenKind::Dollar)?.is_some();
-        let opener = peek_for!(self, &TokenKind::OpenParen);
-
-        if is_named {
-            let args = self
-                .comma_separated(Self::named_argument, &TokenKind::CloseParen)
-                .extra_expected(vec![":"])?
-                .into_iter()
-                .map(Loc::strip)
-                .collect();
-            let end = self.eat(&TokenKind::CloseParen)?;
-
-            let span = lspan(opener.span).merge(lspan(end.span));
-            Ok(Some(ArgumentList::Named(args).at(self.file_id, &span)))
-        } else {
-            let args = self
-                .comma_separated(Self::expression, &TokenKind::CloseParen)
-                .no_context()?;
-            let end = self.eat(&TokenKind::CloseParen)?;
-
-            let span = lspan(opener.span.clone()).merge(lspan(end.span));
-
-            Ok(Some(ArgumentList::Positional(args).at(self.file_id, &span)))
-        }
-    }
-
-    #[trace_parser]
     pub fn base_expression(&mut self) -> Result<Loc<Expression>> {
         if let Some(tuple) = self.tuple_literal()? {
             Ok(tuple)
+        } else if let Some(array) = self.array_literal()? {
+            Ok(array)
         } else if let Some(instance) = self.entity_instance()? {
             Ok(instance)
         } else if let Some(val) = self.bool_literal()? {
@@ -318,6 +292,23 @@ impl<'a> Parser<'a> {
     }
 
     #[trace_parser]
+    fn array_literal(&mut self) -> Result<Option<Loc<Expression>>> {
+        let start = peek_for!(self, &TokenKind::OpenBracket);
+
+        let inner = self
+            .comma_separated(Self::expression, &TokenKind::CloseBracket)
+            .no_context()?;
+
+        let end = self.eat(&TokenKind::CloseBracket)?;
+
+        Ok(Some(Expression::ArrayLiteral(inner).between(
+            self.file_id,
+            &start,
+            &end,
+        )))
+    }
+
+    #[trace_parser]
     fn tuple_literal(&mut self) -> Result<Option<Loc<Expression>>> {
         peek_for!(self, &TokenKind::OpenParen);
 
@@ -339,21 +330,6 @@ impl<'a> Parser<'a> {
         };
         self.eat(&TokenKind::CloseParen)?;
         result.map(Some)
-    }
-
-    #[trace_parser]
-    fn named_argument(&mut self) -> Result<Loc<NamedArgument>> {
-        // This is a named arg
-        let name = self.identifier()?;
-        if self.peek_and_eat(&TokenKind::Colon)?.is_some() {
-            let value = self.expression()?;
-
-            let span = name.span.merge(value.span);
-
-            Ok(NamedArgument::Full(name, value).at(self.file_id, &span))
-        } else {
-            Ok(NamedArgument::Short(name.clone()).at(self.file_id, &name))
-        }
     }
 
     #[trace_parser]
@@ -494,6 +470,48 @@ impl<'a> Parser<'a> {
             }
             .between(self.file_id, &start.span, &end.span),
         ))
+    }
+
+    #[trace_parser]
+    fn argument_list(&mut self) -> Result<Option<Loc<ArgumentList>>> {
+        let is_named = self.peek_and_eat(&TokenKind::Dollar)?.is_some();
+        let opener = peek_for!(self, &TokenKind::OpenParen);
+
+        if is_named {
+            let args = self
+                .comma_separated(Self::named_argument, &TokenKind::CloseParen)
+                .extra_expected(vec![":"])?
+                .into_iter()
+                .map(Loc::strip)
+                .collect();
+            let end = self.eat(&TokenKind::CloseParen)?;
+
+            let span = lspan(opener.span).merge(lspan(end.span));
+            Ok(Some(ArgumentList::Named(args).at(self.file_id, &span)))
+        } else {
+            let args = self
+                .comma_separated(Self::expression, &TokenKind::CloseParen)
+                .no_context()?;
+            let end = self.eat(&TokenKind::CloseParen)?;
+
+            let span = lspan(opener.span.clone()).merge(lspan(end.span));
+
+            Ok(Some(ArgumentList::Positional(args).at(self.file_id, &span)))
+        }
+    }
+    #[trace_parser]
+    fn named_argument(&mut self) -> Result<Loc<NamedArgument>> {
+        // This is a named arg
+        let name = self.identifier()?;
+        if self.peek_and_eat(&TokenKind::Colon)?.is_some() {
+            let value = self.expression()?;
+
+            let span = name.span.merge(value.span);
+
+            Ok(NamedArgument::Full(name, value).at(self.file_id, &span))
+        } else {
+            Ok(NamedArgument::Short(name.clone()).at(self.file_id, &name))
+        }
     }
 
     #[trace_parser]
@@ -2309,6 +2327,20 @@ mod tests {
         let expected = Expression::TupleLiteral(vec![
             Expression::IntLiteral(1).nowhere(),
             Expression::BoolLiteral(true).nowhere(),
+        ])
+        .nowhere();
+
+        check_parse!(code, expression, Ok(expected));
+    }
+
+    #[test]
+    fn array_literals_parse() {
+        let code = "[1, 2, 3]";
+
+        let expected = Expression::ArrayLiteral(vec![
+            Expression::IntLiteral(1).nowhere(),
+            Expression::IntLiteral(2).nowhere(),
+            Expression::IntLiteral(3).nowhere(),
         ])
         .nowhere();
 

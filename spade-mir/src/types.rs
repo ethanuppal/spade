@@ -3,6 +3,7 @@ pub enum Type {
     Int(u64),
     Bool,
     Tuple(Vec<Type>),
+    Array { inner: Box<Type>, length: u64 },
     Enum(Vec<Vec<Type>>),
 }
 
@@ -23,6 +24,7 @@ impl Type {
 
                 discriminant_size + members_size
             }
+            Type::Array { inner, length } => inner.size() * length,
         }
     }
 
@@ -47,6 +49,9 @@ impl std::fmt::Display for Type {
                     .collect::<Vec<_>>()
                     .join(", ");
                 write!(f, "({})", inner)
+            }
+            Type::Array { inner, length } => {
+                write!(f, "[{}; {}]", inner, length)
             }
             Type::Enum(inner) => {
                 let inner = inner
