@@ -1,6 +1,9 @@
 use spade_common::error_reporting::{CodeBundle, CompilationError};
+#[cfg(test)]
 use spade_hir_lowering::generate_entity;
+#[cfg(test)]
 use spade_testutil::{parse_typecheck_module_body, ParseTypececkResult};
+#[cfg(test)]
 use spade_typeinference::ProcessedItem;
 
 mod hir_lowering;

@@ -2,8 +2,6 @@
 
 #[cfg(test)]
 mod tests {
-    use spade_testutil::parse_typecheck_entity;
-
     use crate::build_items;
 
     #[test]
@@ -14,7 +12,7 @@ mod tests {
             }
         "#;
 
-        let (processed, _, _, _) = parse_typecheck_entity(code);
+        build_items(code);
     }
 
     #[test]

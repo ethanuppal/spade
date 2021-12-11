@@ -138,7 +138,7 @@ fn statement_code(statement: &Statement) -> Code {
                     format!("{}[{}]", ops[0], index)
                 }
                 Operator::ConstructArray => {
-                    todo!("Codegen for array construction")
+                    format!("{{{}}}", ops.join(", "))
                 }
                 Operator::ConstructEnum {
                     variant,
@@ -735,6 +735,23 @@ mod expression_tests {
         );
 
         assert_same_code!(&statement_code(&stmt).to_string(), expected);
+    }
+
+    #[test]
+    fn array_literals_work() {
+        let ty = Type::Array {
+            inner: Box::new(Type::Int(3)),
+            length: 3,
+        };
+        let statement = statement!(e(0); ty; ConstructArray; e(1), e(2), e(3));
+
+        let expected = indoc!(
+            r#"
+            logic[8:0] _e_0;
+            assign _e_0 = {_e_1, _e_2, _e_3};"#
+        );
+
+        assert_same_code!(&statement_code(&statement).to_string(), expected);
     }
 
     #[test]
