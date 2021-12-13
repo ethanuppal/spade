@@ -379,6 +379,9 @@ impl TypeState {
 
                 self.unify_expression_generic_error(expression, &result_type, symtab)?;
             }
+            ExprKind::Index(target, index) => {
+                todo!("Impl array indexing type check")
+            }
             ExprKind::Block(block) => {
                 self.visit_block(block, symtab)?;
 
@@ -1380,6 +1383,46 @@ mod tests {
         let ta = get_type!(state, &expr_a);
         let tb = get_type!(state, &expr_b);
         let tc = get_type!(state, &expr_c);
+
+        // Check the generic type variables
+        ensure_same_type!(state, t0, TVar::Known(t_bool(&symtab), vec![], None));
+        ensure_same_type!(state, t1, sized_int(5, &symtab));
+        ensure_same_type!(state, t2, sized_int(5, &symtab));
+        ensure_same_type!(state, t3, sized_int(5, &symtab));
+
+        // Check the constraints added to the literals
+        ensure_same_type!(state, t0, ta);
+        ensure_same_type!(state, t1, tb);
+        ensure_same_type!(state, t2, tc);
+    }
+
+    #[test]
+    fn array_indexing_constrains_index_to_integer() {
+        let mut state = TypeState::new();
+        let mut symtab = SymbolTable::new();
+        spade_ast_lowering::builtins::populate_symtab(&mut symtab, &mut ItemList::new());
+
+        let input = ExprKind::Index(
+            Box::new(ExprKind::Identifier(name_id(0, "a").inner).with_id(1).nowhere()),
+            Box::new(ExprKind::Identifier(name_id(1, "b").inner).with_id(2).nowhere()),
+        )
+        .with_id(3)
+        .nowhere();
+
+        // Add eqs for the literals
+        let expr_a = TExpr::Name(name_id(0, "a").inner);
+        let expr_b = TExpr::Name(name_id(1, "b").inner);
+        state.add_equation(expr_a.clone(), TVar::Unknown(100));
+        state.add_equation(expr_b.clone(), TVar::Unknown(101));
+
+        state.visit_expression(&input, &symtab).unwrap();
+
+        let t1 = get_type!(state, &TExpr::Id(1));
+        let t2 = get_type!(state, &TExpr::Id(2));
+        let t3 = get_type!(state, &TExpr::Id(3));
+
+        let ta = get_type!(state, &expr_a);
+        let tb = get_type!(state, &expr_b);
 
         // Check the generic type variables
         ensure_same_type!(state, t0, TVar::Known(t_bool(&symtab), vec![], None));

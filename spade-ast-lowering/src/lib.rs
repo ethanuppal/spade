@@ -694,6 +694,11 @@ pub fn visit_expression(
                 .collect::<Result<Vec<_>>>()?;
             Ok(hir::ExprKind::ArrayLiteral(exprs))
         }
+        ast::Expression::Index(target, index) => {
+            let target = target.try_visit(visit_expression, symtab, idtracker)?;
+            let index = index.try_visit(visit_expression, symtab, idtracker)?;
+            Ok(hir::ExprKind::Index(Box::new(target), Box::new(index)))
+        }
         ast::Expression::TupleIndex(tuple, index) => Ok(hir::ExprKind::TupleIndex(
             Box::new(tuple.try_visit(visit_expression, symtab, idtracker)?),
             index.clone(),
@@ -1226,6 +1231,24 @@ mod expression_visiting {
                 spade_hir::symbol_table::LookupError::NoSuchSymbol(ast_path("test"))
             ))
         );
+    }
+
+    #[test]
+    fn indexing_works() {
+        let mut symtab = SymbolTable::new();
+        let mut idtracker = ExprIdTracker::new();
+        let input = ast::Expression::Index(
+            Box::new(ast::Expression::IntLiteral(0).nowhere()),
+            Box::new(ast::Expression::IntLiteral(1).nowhere()),
+        );
+
+        let expected = hir::ExprKind::Index(
+            Box::new(hir::ExprKind::IntLiteral(0).idless().nowhere()),
+            Box::new(hir::ExprKind::IntLiteral(1).idless().nowhere()),
+        )
+        .idless();
+
+        assert_eq!(visit_expression(&input, &mut symtab, &mut idtracker), Ok(expected));
     }
 
     #[test]

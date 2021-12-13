@@ -208,6 +208,20 @@ impl<'a> Parser<'a> {
                     hash_loc: Loc::new((), lspan(hash.span), self.file_id),
                 })
             }
+        } else if self.peek_kind(&TokenKind::OpenBracket)? {
+            let (index, _) = self.surrounded(
+                &TokenKind::OpenBracket,
+                Self::expression,
+                &TokenKind::CloseBracket,
+            )?;
+
+            Ok(
+                Expression::Index(Box::new(expr.clone()), Box::new(index.clone())).between(
+                    self.file_id,
+                    &expr,
+                    &index,
+                ),
+            )
         } else {
             Ok(expr)
         }
@@ -1582,7 +1596,7 @@ mod tests {
                     "Expected".green(),
                     expected
                 );
-            }
+            };
         };
     }
 
@@ -2343,6 +2357,18 @@ mod tests {
             Expression::IntLiteral(3).nowhere(),
         ])
         .nowhere();
+
+        check_parse!(code, expression, Ok(expected));
+    }
+
+    #[test]
+    fn array_indexing_works() {
+        let code = "a[0]";
+
+        let expected = Expression::Index(
+            Box::new(Expression::Identifier(ast_path("a")).nowhere()),
+            Box::new(Expression::IntLiteral(0).nowhere())
+        ).nowhere();
 
         check_parse!(code, expression, Ok(expected));
     }
