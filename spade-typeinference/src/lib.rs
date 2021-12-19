@@ -25,6 +25,7 @@ pub mod mir_type_lowering;
 pub mod pipeline;
 pub mod result;
 pub mod testutil;
+pub mod expression;
 
 use crate::fixed_types::t_clock;
 use crate::fixed_types::{t_bool, t_int};
@@ -288,238 +289,21 @@ impl TypeState {
     ) -> Result<()> {
         let new_type = self.new_generic();
         self.add_equation(TypedExpression::Id(expression.inner.id), new_type);
+
         // Recurse down the expression
         match &expression.inner.kind {
-            ExprKind::Identifier(ident) => {
-                // Add an equation for the anonymous id
-                self.unify_expression_generic_error(
-                    &expression,
-                    &TypedExpression::Name(ident.clone()),
-                    symtab,
-                )?;
-            }
-            ExprKind::IntLiteral(_) => {
-                let t = self.new_generic_int(symtab);
-                self.unify_types(&t, &expression.inner, symtab)
-                    .map_err(|(_, got)| Error::IntLiteralIncompatible {
-                        got,
-                        loc: expression.loc(),
-                    })?;
-            }
-            ExprKind::BoolLiteral(_) => {
-                self.unify_expression_generic_error(&expression, &t_bool(symtab), symtab)?;
-            }
-            ExprKind::TupleLiteral(inner) => {
-                let mut inner_types = vec![];
-                for expr in inner {
-                    self.visit_expression(expr, symtab)?;
-                    // NOTE: safe unwrap, we know this expr has a type because we just visited
-                    let t = self.type_of(&TypedExpression::Id(expr.id)).unwrap();
-
-                    inner_types.push(t);
-                }
-
-                self.unify_expression_generic_error(
-                    &expression,
-                    &TypeVar::Tuple(inner_types),
-                    symtab,
-                )?;
-            }
-            ExprKind::TupleIndex(tup, index) => {
-                self.visit_expression(tup, symtab)?;
-                let t = self.type_of(&TypedExpression::Id(tup.id));
-
-                match t {
-                    Ok(TypeVar::Tuple(inner)) => {
-                        if (index.inner as usize) < inner.len() {
-                            self.unify_expression_generic_error(
-                                &expression,
-                                &inner[index.inner as usize],
-                                symtab,
-                            )?
-                        } else {
-                            return Err(Error::TupleIndexOutOfBounds {
-                                index: index.clone(),
-                                actual_size: inner.len() as u128,
-                            });
-                        }
-                    }
-                    Ok(t @ TypeVar::Known(_, _, _) | t @ TypeVar::Array { .. }) => {
-                        return Err(Error::TupleIndexOfNonTuple {
-                            got: t.clone(),
-                            loc: tup.loc(),
-                        })
-                    }
-                    Ok(TypeVar::Unknown(_)) => {
-                        return Err(Error::TupleIndexOfGeneric { loc: tup.loc() })
-                    }
-                    Err(e) => return Err(e),
-                }
-            }
-            ExprKind::ArrayLiteral(members) => {
-                let inner_type = self.new_generic();
-                for expr in members {
-                    self.visit_expression(expr, symtab)?;
-
-                    self.add_equation(TypedExpression::Id(expr.id), inner_type.clone());
-
-                    self.unify_types(expr, &inner_type, symtab)
-                        .map_err(|(expected, got)| Error::ArrayElementMissmatch {
-                            got,
-                            expected,
-                            loc: expr.loc(),
-                            first_element: members.first().unwrap().loc(),
-                        })?;
-                }
-                let size_type = kvar!(KnownType::Integer(members.len() as u128));
-                let result_type = TypeVar::Array {
-                    inner: Box::new(inner_type),
-                    size: Box::new(size_type),
-                };
-
-                self.unify_expression_generic_error(expression, &result_type, symtab)?;
-            }
-            ExprKind::Index(target, index) => {
-                // self.visit_expression(&target, symtab)?;
-                self.visit_expression(&index, symtab)?;
-
-                let int_type = self.new_generic_int(&symtab);
-                self.add_equation(TypedExpression::Id(index.id), int_type.clone());
-                self.unify_types(&index.inner, &int_type, symtab)
-                    .map_err(|(got, _)| {
-                        Error::IndexMustBeInteger{got, loc: index.loc()}
-                    })?;
-
-                // self.unify_expression_generic_error(expr, other, symtab)
-                // let inner_type = self.new_generic();
-
-                // todo!("Impl array indexing type check")
-            }
-            ExprKind::Block(block) => {
-                self.visit_block(block, symtab)?;
-
-                // Unify the return type of the block with the type of this expression
-                self.unify_types(&expression.inner, &block.result.inner, symtab)
-                    // NOTE: We could be more specific about this error specifying
-                    // that the type of the block must match the return type, though
-                    // that might just be spammy.
-                    .map_err(|(expected, got)| Error::UnspecifiedTypeError {
-                        expected,
-                        got,
-                        loc: block.result.loc(),
-                    })?;
-            }
-            ExprKind::If(cond, on_true, on_false) => {
-                self.visit_expression(&cond, symtab)?;
-                self.visit_expression(&on_true, symtab)?;
-                self.visit_expression(&on_false, symtab)?;
-
-                self.unify_types(&cond.inner, &t_bool(symtab), symtab)
-                    .map_err(|(got, _)| Error::NonBooleanCondition {
-                        got,
-                        loc: cond.loc(),
-                    })?;
-                self.unify_types(&on_true.inner, &on_false.inner, symtab)
-                    .map_err(|(expected, got)| Error::IfConditionMismatch {
-                        expected,
-                        got,
-                        first_branch: on_true.loc(),
-                        incorrect_branch: on_false.loc(),
-                    })?;
-                self.unify_types(expression, &on_false.inner, symtab)
-                    .map_err(|(got, expected)| Error::UnspecifiedTypeError {
-                        expected,
-                        got,
-                        loc: expression.loc(),
-                    })?;
-            }
-            ExprKind::Match(cond, branches) => {
-                self.visit_expression(&cond, symtab)?;
-
-                for (i, (pattern, result)) in branches.iter().enumerate() {
-                    self.visit_pattern(pattern, symtab)?;
-                    self.visit_expression(result, symtab)?;
-
-                    self.unify_types(&cond.inner, pattern, symtab)
-                        .map_err(|(expected, got)| {
-                            // TODO, Consider introducing a more specific error
-                            Error::UnspecifiedTypeError {
-                                expected,
-                                got,
-                                loc: pattern.loc(),
-                            }
-                        })?;
-
-                    if i != 0 {
-                        self.unify_types(&branches[0].1, result, symtab).map_err(
-                            |(expected, got)| Error::MatchBranchMissmatch {
-                                expected,
-                                got,
-                                first_branch: branches[0].1.loc(),
-                                incorrect_branch: result.loc(),
-                            },
-                        )?;
-                    }
-                }
-
-                assert!(
-                    !branches.is_empty(),
-                    "Empty match statements should be checked by ast lowering"
-                );
-
-                self.unify_expression_generic_error(&branches[0].1, expression, symtab)?;
-            }
-            ExprKind::BinaryOperator(lhs, op, rhs) => {
-                self.visit_expression(&lhs, symtab)?;
-                self.visit_expression(&rhs, symtab)?;
-                match *op {
-                    BinaryOperator::Add
-                    | BinaryOperator::Sub
-                    | BinaryOperator::Mul
-                    | BinaryOperator::LeftShift
-                    | BinaryOperator::BitwiseAnd
-                    | BinaryOperator::BitwiseOr
-                    | BinaryOperator::RightShift => {
-                        let int_type = self.new_generic_int(symtab);
-                        // TODO: Make generic over types that can be added
-                        self.unify_expression_generic_error(&lhs, &int_type, symtab)?;
-                        self.unify_expression_generic_error(&lhs, &rhs.inner, symtab)?;
-                        self.unify_expression_generic_error(expression, &rhs.inner, symtab)?
-                    }
-                    BinaryOperator::Eq
-                    | BinaryOperator::Gt
-                    | BinaryOperator::Lt
-                    | BinaryOperator::Ge
-                    | BinaryOperator::Le => {
-                        let int_type = self.new_generic_int(symtab);
-                        // TODO: Make generic over types that can be added
-                        self.unify_expression_generic_error(&lhs, &int_type, symtab)?;
-                        self.unify_expression_generic_error(&lhs, &rhs.inner, symtab)?;
-                        self.unify_expression_generic_error(expression, &t_bool(symtab), symtab)?
-                    }
-                    BinaryOperator::LogicalAnd
-                    | BinaryOperator::LogicalOr
-                    | BinaryOperator::Xor => {
-                        // TODO: Make generic over types that can be ored
-                        self.unify_expression_generic_error(&lhs, &t_bool(symtab), symtab)?;
-                        self.unify_expression_generic_error(&lhs, &rhs.inner, symtab)?;
-
-                        self.unify_expression_generic_error(expression, &t_bool(symtab), symtab)?
-                    }
-                }
-            }
-            ExprKind::UnaryOperator(op, operand) => {
-                self.visit_expression(&operand, symtab)?;
-                match op {
-                    UnaryOperator::Sub => {
-                        let int_type = self.new_generic_int(symtab);
-                        self.unify_expression_generic_error(operand, &int_type, symtab)?
-                    }
-                    UnaryOperator::Not => {
-                        self.unify_expression_generic_error(operand, &t_bool(symtab), symtab)?
-                    }
-                }
-            }
+            ExprKind::Identifier(_) => self.visit_identifier(expression, symtab)?,
+            ExprKind::IntLiteral(_) => self.visit_int_literal(expression, symtab)?,
+            ExprKind::BoolLiteral(_) => self.visit_bool_literal(expression, symtab)?,
+            ExprKind::TupleLiteral(_) => self.visit_tuple_literal(expression, symtab)?,
+            ExprKind::TupleIndex(_, _) => self.visit_tuple_index(expression, symtab)?,
+            ExprKind::ArrayLiteral(_) => self.visit_array_literal(expression, symtab)?,
+            ExprKind::Index(_, _) => self.visit_index(expression, symtab)?,
+            ExprKind::Block(_) => self.visit_block_expr(expression, symtab)?,
+            ExprKind::If(_, _, _) => self.visit_if(expression, symtab)?,
+            ExprKind::Match(_, _) => self.visit_match(expression, symtab)?,
+            ExprKind::BinaryOperator(_, _, _) => self.visit_binary_operator(expression, symtab)?,
+            ExprKind::UnaryOperator(_, _) => self.visit_unary_operator(expression, symtab)?,
             ExprKind::EntityInstance(name, args) => {
                 let head = symtab.entity_by_id(&name.inner);
                 self.handle_function_like(expression, &head.inner, args, symtab)?;
@@ -1425,17 +1209,17 @@ mod tests {
         // Add eqs for the literals
         let expr_a = TExpr::Name(name_id(0, "a").inner);
         let expr_b = TExpr::Name(name_id(1, "b").inner);
-        // state.add_equation(expr_a.clone(), TVar::Unknown(100));
+        state.add_equation(expr_a.clone(), TVar::Unknown(100));
         state.add_equation(expr_b.clone(), TVar::Unknown(101));
 
         state.visit_expression(&input, &symtab).unwrap();
 
-        let t3 = get_type!(state, &TExpr::Id(3));
+        // let t3 = get_type!(state, &TExpr::Id(3));
         // let ta = get_type!(state, &expr_a);
         let tb = get_type!(state, &expr_b);
 
         // The index should be an integer
-        ensure_same_type!(state, tb, unsized_int(0, &symtab));
+        ensure_same_type!(state, tb, unsized_int(1, &symtab));
         // The target should be an array
 
         // ensure_same_type!(
