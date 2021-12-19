@@ -380,7 +380,20 @@ impl TypeState {
                 self.unify_expression_generic_error(expression, &result_type, symtab)?;
             }
             ExprKind::Index(target, index) => {
-                todo!("Impl array indexing type check")
+                // self.visit_expression(&target, symtab)?;
+                self.visit_expression(&index, symtab)?;
+
+                let int_type = self.new_generic_int(&symtab);
+                self.add_equation(TypedExpression::Id(index.id), int_type.clone());
+                self.unify_types(&index.inner, &int_type, symtab)
+                    .map_err(|(got, _)| {
+                        Error::IndexMustBeInteger{got, loc: index.loc()}
+                    })?;
+
+                // self.unify_expression_generic_error(expr, other, symtab)
+                // let inner_type = self.new_generic();
+
+                // todo!("Impl array indexing type check")
             }
             ExprKind::Block(block) => {
                 self.visit_block(block, symtab)?;
@@ -1397,7 +1410,7 @@ mod tests {
     }
 
     #[test]
-    fn array_indexing_constrains_index_to_integer() {
+    fn array_indexing_infers_all_types_corectly() {
         let mut state = TypeState::new();
         let mut symtab = SymbolTable::new();
         spade_ast_lowering::builtins::populate_symtab(&mut symtab, &mut ItemList::new());
@@ -1412,28 +1425,27 @@ mod tests {
         // Add eqs for the literals
         let expr_a = TExpr::Name(name_id(0, "a").inner);
         let expr_b = TExpr::Name(name_id(1, "b").inner);
-        state.add_equation(expr_a.clone(), TVar::Unknown(100));
+        // state.add_equation(expr_a.clone(), TVar::Unknown(100));
         state.add_equation(expr_b.clone(), TVar::Unknown(101));
 
         state.visit_expression(&input, &symtab).unwrap();
 
-        let t1 = get_type!(state, &TExpr::Id(1));
-        let t2 = get_type!(state, &TExpr::Id(2));
         let t3 = get_type!(state, &TExpr::Id(3));
-
-        let ta = get_type!(state, &expr_a);
+        // let ta = get_type!(state, &expr_a);
         let tb = get_type!(state, &expr_b);
 
-        // Check the generic type variables
-        ensure_same_type!(state, t0, TVar::Known(t_bool(&symtab), vec![], None));
-        ensure_same_type!(state, t1, sized_int(5, &symtab));
-        ensure_same_type!(state, t2, sized_int(5, &symtab));
-        ensure_same_type!(state, t3, sized_int(5, &symtab));
+        // The index should be an integer
+        ensure_same_type!(state, tb, unsized_int(0, &symtab));
+        // The target should be an array
 
-        // Check the constraints added to the literals
-        ensure_same_type!(state, t0, ta);
-        ensure_same_type!(state, t1, tb);
-        ensure_same_type!(state, t2, tc);
+        // ensure_same_type!(
+        //     state,
+        //     ta,
+        //     TVar::Array{inner: Box::new(TVar::Unknown(0)), size: Box::new(TVar::Unknown(1))}
+        // );
+
+        // // The result should be the inner type
+        // ensure_same_type!(state, t3, TVar::Unknown(0));
     }
 
     #[test]

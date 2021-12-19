@@ -157,6 +157,12 @@ pub enum Error {
         first_element: Loc<()>,
     },
 
+    #[error("Index must be an integer")]
+    IndexMustBeInteger {
+        got: UnificationTrace,
+        loc: Loc<()>
+    },
+
     #[error("Pattern type missmatch")]
     PatternTypeMissmatch {
         pattern: Loc<()>,

@@ -170,6 +170,14 @@ impl CompilationError for Error {
                     format!("Expected: {}", expected),
                     format!("     Got: {}", got),
                 ]),
+            Error::IndexMustBeInteger{got, loc} => {
+                Diagnostic::error()
+                    .with_message(format!("Index must be an integer, got {}", got))
+                    .with_labels(vec![
+                        loc.primary_label()
+                            .with_message(format!("Expected integer"))
+                    ])
+            }
             Error::NamedArgumentMismatch {
                 expr,
                 expected,
