@@ -188,7 +188,9 @@ pub struct Pipeline {
     /// The body is a list of expression for ID assignment purposes, but semantic analysis
     /// ensures that it is always a block.
     pub stages: Vec<Loc<PipelineStage>>,
-    pub result: Loc<Expression>,
+    /// The resulting value. If the pipeline is __builtin__, this is None and stages must
+    /// be empty
+    pub result: Option<Loc<Expression>>,
 }
 impl WithLocation for Pipeline {}
 

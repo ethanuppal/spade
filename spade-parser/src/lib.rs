@@ -954,19 +954,27 @@ impl<'a> Parser<'a> {
             None
         };
 
-        self.eat(&TokenKind::OpenBrace)?;
-
-        let mut stages = vec![];
-        while let Some(stage) = self.pipeline_stage()? {
-            stages.push(stage)
+        let (stages, result, end) = if self.peek_kind(&TokenKind::Builtin)? {
+            let end = self.eat_unconditional()?;
+            (vec![], None, end)
         }
+        else {
+            self.eat(&TokenKind::OpenBrace)?;
+            let mut stages = vec![];
+            while let Some(stage) = self.pipeline_stage()? {
+                stages.push(stage)
+            }
 
-        let result = self.expression().map_err(|e| match e {
-            Error::ExpectedExpression { got } => Error::ExpectedExpressionOrStage { got },
-            other => other,
-        })?;
+            let result = self.expression().map_err(|e| match e {
+                Error::ExpectedExpression { got } => Error::ExpectedExpressionOrStage { got },
+                other => other,
+            })?;
 
-        let end = self.eat(&TokenKind::CloseBrace)?;
+            let end = self.eat(&TokenKind::CloseBrace)?;
+
+            (stages, Some(result), end)
+        };
+
 
         Ok(Some(
             Pipeline {
@@ -2345,6 +2353,25 @@ mod tests {
     }
 
     #[test]
+    fn builtin_pipelines_work() {
+        let code = "pipeline(1) X() __builtin__";
+
+        let expected = Some(
+            Pipeline {
+                name: ast_ident("X"),
+                inputs: ParameterList(vec![]),
+                output_type: None,
+                depth: 1.nowhere(),
+                stages: vec![],
+                result: None,
+            }
+            .nowhere(),
+        );
+
+        check_parse!(code, pipeline, Ok(expected));
+    }
+
+    #[test]
     fn entity_instanciation() {
         let code = "inst some_entity(x, y, z)";
 
@@ -2499,7 +2526,7 @@ mod tests {
                 }
                 .nowhere(),
             ],
-            result: Expression::IntLiteral(0).nowhere(),
+            result: Some(Expression::IntLiteral(0).nowhere()),
         }
         .nowhere();
 
@@ -2522,7 +2549,7 @@ mod tests {
                     inputs: aparams![("a", tspec!("bool"))],
                     output_type: Some(TypeSpec::Named(ast_path("bool"), vec![]).nowhere()),
                     stages: vec![],
-                    result: Expression::IntLiteral(0).nowhere(),
+                    result: Some(Expression::IntLiteral(0).nowhere()),
                 }
                 .nowhere(),
             )],

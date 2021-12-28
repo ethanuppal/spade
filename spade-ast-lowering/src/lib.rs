@@ -249,9 +249,9 @@ pub fn visit_item(
         ast::Item::Entity(e) => {
             Ok(visit_entity(e, namespace, symtab, idtracker)?.map(hir::Item::Entity))
         }
-        ast::Item::Pipeline(p) => Ok(Some(hir::Item::Pipeline(pipelines::visit_pipeline(
+        ast::Item::Pipeline(p) => Ok(pipelines::visit_pipeline(
             p, namespace, symtab, idtracker,
-        )?))),
+        )?.map(hir::Item::Pipeline)),
         ast::Item::TraitDef(_) => {
             todo!("Visit trait definitions")
         }

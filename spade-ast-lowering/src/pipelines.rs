@@ -124,7 +124,12 @@ pub fn visit_pipeline(
     namespace: &Path,
     symtab: &mut SymbolTable,
     idtracker: &mut ExprIdTracker,
-) -> Result<Loc<hir::Pipeline>> {
+) -> Result<Option<Loc<hir::Pipeline>>> {
+    // If this is a builtin entity
+    if pipeline.result.is_none() {
+        return Ok(None);
+    }
+
     let ast::Pipeline {
         depth,
         name: _,
@@ -177,7 +182,8 @@ pub fn visit_pipeline(
         });
     }
 
-    let result = result.try_visit(super::visit_expression, symtab, idtracker)?;
+    // NOTE: Safe unwrap, we check if this is None at the top of the function
+    let result = result.unwrap().try_visit(super::visit_expression, symtab, idtracker)?;
 
     let output_type = if let Some(t) = output_type {
         t.try_map_ref(|t| visit_type_spec(t, symtab))?
@@ -187,7 +193,7 @@ pub fn visit_pipeline(
 
     symtab.close_scope();
 
-    Ok(hir::Pipeline {
+    Ok(Some(hir::Pipeline {
         depth,
         name: id.at_loc(&pipeline.name),
         output_type,
@@ -195,7 +201,7 @@ pub fn visit_pipeline(
         body,
         result,
     }
-    .at_loc(pipeline))
+    .at_loc(pipeline)))
 }
 
 #[cfg(test)]
@@ -401,7 +407,7 @@ mod pipeline_visiting {
                 .nowhere(),
                 ast::PipelineStage { bindings: vec![] }.nowhere(),
             ],
-            result: ast::Expression::Identifier(ast_path("a")).nowhere(),
+            result: Some(ast::Expression::Identifier(ast_path("a")).nowhere()),
         }
         .nowhere();
 
@@ -437,7 +443,7 @@ mod pipeline_visiting {
 
         let result = visit_pipeline(&input, &Path(vec![]), &mut symtab, &mut id_tracker);
 
-        assert_eq!(result, Ok(expected));
+        assert_eq!(result, Ok(Some(expected)));
     }
 
     #[test]
@@ -454,7 +460,7 @@ mod pipeline_visiting {
                 ast::PipelineStage { bindings: vec![] }.nowhere(),
                 ast::PipelineStage { bindings: vec![] }.nowhere(),
             ],
-            result: ast::Expression::IntLiteral(0).nowhere(),
+            result: Some(ast::Expression::IntLiteral(0).nowhere()),
         }
         .nowhere();
 
@@ -487,7 +493,7 @@ mod pipeline_visiting {
             )]),
             output_type: Some(ast::TypeSpec::Unit(().nowhere()).nowhere()),
             stages: vec![],
-            result: ast::Expression::IntLiteral(0).nowhere(),
+            result: Some(ast::Expression::IntLiteral(0).nowhere()),
         }
         .nowhere();
 
@@ -513,7 +519,7 @@ mod pipeline_visiting {
                 ast::PipelineStage { bindings: vec![] }.nowhere(),
                 ast::PipelineStage { bindings: vec![] }.nowhere(),
             ],
-            result: ast::Expression::IntLiteral(0).nowhere(),
+            result: Some(ast::Expression::IntLiteral(0).nowhere()),
         }
         .nowhere();
 
