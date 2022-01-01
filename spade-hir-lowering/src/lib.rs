@@ -455,6 +455,7 @@ impl ExprLocal for Loc<Expression> {
             ExprKind::TupleLiteral(_) => None,
             ExprKind::TupleIndex(_, _) => None,
             ExprKind::ArrayLiteral { .. } => None,
+            ExprKind::Index(_, _) => None,
             ExprKind::Block(block) => Some(block.result.variable(subs)),
             ExprKind::If(_, _, _) => None,
             ExprKind::Match(_, _) => None,
@@ -598,6 +599,26 @@ impl ExprLocal for Loc<Expression> {
                     name: self.variable(subs),
                     operator: mir::Operator::ConstructArray,
                     operands: values.iter().map(|v| v.variable(subs)).collect(),
+                    ty: self_type,
+                }))
+            }
+            ExprKind::Index(target, index) => {
+                result.append(&mut target.lower(symtab, idtracker, types, subs, &item_list)?);
+                result.append(&mut index.lower(symtab, idtracker, types, subs, &item_list)?);
+
+                let inner_size = if let mir::types::Type::Array { inner, .. } = &types
+                    .expr_type(target, symtab.symtab(), &item_list.types)?
+                    .to_mir_type()
+                {
+                    inner.size()
+                } else {
+                    unreachable!("Array indexing of non array: {:?}", self_type);
+                };
+
+                result.push(mir::Statement::Binding(mir::Binding {
+                    name: self.variable(subs),
+                    operator: mir::Operator::IndexArray(inner_size as usize),
+                    operands: vec![target.variable(subs), index.variable(subs)],
                     ty: self_type,
                 }))
             }

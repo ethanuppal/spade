@@ -95,7 +95,7 @@ impl std::fmt::Display for TypedExpression {
                 write!(f, "%{}", i)
             }
             TypedExpression::Name(p) => {
-                write!(f, "{}", p)
+                write!(f, "{}#{}", p, p.0)
             }
         }
     }

@@ -512,6 +512,31 @@ mod tests {
     }
 
     #[test]
+    fn array_indexing_works() {
+        let code = r#"
+            entity x(a: [int<2>; 3]) -> int<2> {
+                let idx: int<8> = 2;
+                a[idx]
+            }
+        "#;
+
+        let array_type = Type::Array {
+            inner: Box::new(Type::Int(2)),
+            length: 3,
+        };
+
+        let expected = entity!("x"; (
+                "_i_a", n(0, "a"), array_type.clone(),
+        ) -> Type::Int(2); {
+            (const 0; Type::Int(8); ConstantValue::Int(2));
+            (n(1, "idx"); Type::Int(8); Alias; e(0));
+            (e(4); Type::Int(2); IndexArray((2)); n(0, "a"), n(1, "idx"));
+        } => e(4));
+
+        assert_same_mir!(&build_entity!(code), &expected);
+    }
+
+    #[test]
     fn tuple_indexing_and_creation_works() {
         let code = r#"
         entity name(a: int<16>, b: int<8>) -> int<8> {

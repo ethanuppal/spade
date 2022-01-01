@@ -140,6 +140,28 @@ fn statement_code(statement: &Statement) -> Code {
                 Operator::ConstructArray => {
                     format!("{{{}}}", ops.join(", "))
                 }
+                Operator::IndexArray(member_size) => {
+                    unimplemented!()
+                    // Compute the start index of the element we're looking for
+                    // let mut start_bit = 0;
+                    // for i in 0..*idx {
+                    //     start_bit += types[i as usize].size();
+                    // }
+
+                    // let target_width = types[*idx as usize].size();
+                    // let end_bit = start_bit + target_width;
+
+                    // let total_width: u64 = types.iter().map(crate::types::Type::size).sum();
+
+                    // // Check if this is a single bit, if so, index using just it
+                    // let index = if target_width == 1 {
+                    //     format!("{}", total_width - start_bit - 1)
+                    // } else {
+                    //     format!("{}:{}", total_width - start_bit - 1, total_width - end_bit)
+                    // };
+
+                    // format!("{}[{}]", ops[0], index)
+                }
                 Operator::ConstructEnum {
                     variant,
                     variant_count,

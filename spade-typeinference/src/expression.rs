@@ -141,13 +141,11 @@ impl TypeState {
         symtab: &SymbolTable,
     ) -> Result<()> {
         assuming_kind!(ExprKind::ArrayLiteral(members) = &expression => {
-            let inner_type = self.new_generic();
+            let mut inner_type = self.new_generic();
             for expr in members {
                 self.visit_expression(expr, symtab)?;
 
-                self.add_equation(TypedExpression::Id(expr.id), inner_type.clone());
-
-                self.unify_types(expr, &inner_type, symtab)
+                inner_type = self.unify_types(expr, &inner_type, symtab)
                     .map_err(|(expected, got)| Error::ArrayElementMissmatch {
                         got,
                         expected,
@@ -155,6 +153,7 @@ impl TypeState {
                         first_element: members.first().unwrap().loc(),
                     })?;
             }
+
             let size_type = kvar!(KnownType::Integer(members.len() as u128));
             let result_type = TypeVar::Array {
                 inner: Box::new(inner_type),
@@ -173,8 +172,19 @@ impl TypeState {
         symtab: &SymbolTable,
     ) -> Result<()> {
         assuming_kind!(ExprKind::Index(target, index) = &expression => {
-            // self.visit_expression(&target, symtab)?;
+            // Visit child nodes
+            self.visit_expression(&target, symtab)?;
             self.visit_expression(&index, symtab)?;
+
+            // Add constraints
+            let inner_type = self.new_generic();
+
+            // Unify inner type with this expression
+            let inner_type = self.unify_expression_generic_error(
+                &expression,
+                &inner_type,
+                symtab
+            )?;
 
             let int_type = self.new_generic_int(&symtab);
             // self.add_equation(TypedExpression::Id(index.id), int_type.clone());
@@ -183,10 +193,14 @@ impl TypeState {
                     Error::IndexMustBeInteger{got, loc: index.loc()}
                 })?;
 
-            // self.unify_expression_generic_error(expr, other, symtab)
-            // let inner_type = self.new_generic();
-
-            // todo!("Impl array indexing type check")
+            let array_type = TypeVar::Array{
+                inner: Box::new(inner_type.clone()),
+                size: Box::new(self.new_generic())
+            };
+            self.unify_types(&target.inner, &array_type, symtab)
+                .map_err(|(got, _)| {
+                    Error::IndexeeMustBeArray{got, loc: target.loc()}
+                })?;
         });
         Ok(())
     }

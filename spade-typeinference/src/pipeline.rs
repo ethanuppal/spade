@@ -59,8 +59,6 @@ impl TypeState {
         } = pipeline;
 
         // Add an equation for the clock
-        let new_type = self.new_generic();
-        self.add_equation(TypedExpression::Name(inputs[0].0.clone()), new_type);
         let input_tvar = self.type_var_from_hir(&inputs[0].1.inner, &HashMap::new());
         self.add_equation(TypedExpression::Name(inputs[0].0.clone()), input_tvar);
         self.unify_types(

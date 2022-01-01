@@ -1,7 +1,11 @@
 // This algorithm is based off the excelent lecture here
 // https://www.youtube.com/watch?v=xJXcZp2vgLs
+//
+// The basic idea is to go through every node in the HIR tree, for every typed thing,
+// add an equation indicating a constraint on that thing. This can only be done once
+// and should be done by the visitor for that node. The visitor should then unify
+// types according to the rules of the node.
 
-use hir::expression::UnaryOperator;
 use hir::symbol_table::TypeSymbol;
 use hir::{Argument, FunctionLike, ParameterList, Pattern, PatternArgument, TypeParam};
 use hir::{ExecutableItem, ItemList};
@@ -10,9 +14,7 @@ use spade_common::location_info::Loc;
 use spade_common::name::NameID;
 use spade_hir as hir;
 use spade_hir::symbol_table::SymbolTable;
-use spade_hir::{
-    expression::BinaryOperator, Block, Entity, ExprKind, Expression, Register, Statement,
-};
+use spade_hir::{Block, Entity, ExprKind, Expression, Register, Statement};
 use spade_types::KnownType;
 use std::collections::HashMap;
 
@@ -20,12 +22,12 @@ use colored::*;
 
 pub mod equation;
 pub mod error_reporting;
+pub mod expression;
 pub mod fixed_types;
 pub mod mir_type_lowering;
 pub mod pipeline;
 pub mod result;
 pub mod testutil;
-pub mod expression;
 
 use crate::fixed_types::t_clock;
 use crate::fixed_types::{t_bool, t_int};
@@ -112,6 +114,9 @@ impl ProcessedItemList {
 pub struct TypeState {
     equations: TypeEquations,
     next_typeid: u64,
+    // List of replacement that have been performed. Ideally this should
+    // not be used, but because of the generic_lsit mechanism, it has to be
+    replacements: HashMap<TypeVar, TypeVar>,
 
     pub trace_stack: Vec<TraceStack>,
 }
@@ -122,6 +127,7 @@ impl TypeState {
             equations: HashMap::new(),
             next_typeid: 0,
             trace_stack: vec![],
+            replacements: HashMap::new(),
         }
     }
 
@@ -252,8 +258,8 @@ impl TypeState {
             },
         ) in args.iter().enumerate()
         {
-            let target_type = self.type_var_from_hir(&params.arg_type(&target), generic_list);
             self.visit_expression(&value, symtab)?;
+            let target_type = self.type_var_from_hir(&params.arg_type(&target), generic_list);
 
             self.unify_types(&target_type, value, symtab).map_err(
                 |(expected, got)| match kind {
@@ -325,6 +331,7 @@ impl TypeState {
     }
 
     // Common handler for entities, functions and pipelines
+    #[trace_typechecker]
     fn handle_function_like(
         &mut self,
         expression: &Loc<Expression>,
@@ -342,7 +349,6 @@ impl TypeState {
                 .expect("Unit return type from entity is unsupported"),
             &generic_list,
         );
-        self.add_equation(TypedExpression::Id(expression.id), return_type.clone());
 
         // Unify the types of the arguments
         self.visit_argument_list(args, &head.inputs(), symtab, &generic_list)?;
@@ -564,7 +570,10 @@ impl TypeState {
     fn add_equation(&mut self, expression: TypedExpression, var: TypeVar) {
         self.trace_stack
             .push(TraceStack::AddingEquation(expression.clone(), var.clone()));
-        self.equations.insert(expression, var);
+        if let Some(prev) = self.equations.insert(expression.clone(), var.clone()) {
+            println!("{}", format_trace_stack(&self.trace_stack));
+            panic!("Adding equation for {} == {} but a previous eq exists.\n\tIt was previously bound to {}", expression, var, prev)
+        }
     }
 
     fn unify_types(
@@ -739,14 +748,13 @@ impl TypeState {
         expr: &Loc<Expression>,
         other: &impl HasType,
         symtab: &SymbolTable,
-    ) -> Result<()> {
+    ) -> Result<TypeVar> {
         self.unify_types(&expr.inner, other, symtab)
             .map_err(|(got, expected)| Error::UnspecifiedTypeError {
                 got,
                 expected,
                 loc: expr.loc(),
             })
-            .map(|_| ())
     }
 }
 
@@ -823,10 +831,10 @@ pub fn format_trace_stack(stack: &[TraceStack]) -> String {
         let message = match entry {
             TraceStack::Enter(function) => {
                 next_indent_amount += 1;
-                format!("{} `{}`", "visiting".white(), function.blue())
+                format!("{} `{}`", "call".white(), function.blue())
             }
             TraceStack::AddingEquation(expr, t) => {
-                format!("{} {:?} <- {:?}", "eq".yellow(), expr, t)
+                format!("{} {} <- {}", "eq".yellow(), expr, t)
             }
             TraceStack::Unified(lhs, rhs, result) => {
                 format!("{} {}, {} -> {}", "unified".green(), lhs, rhs, result)
@@ -1018,7 +1026,7 @@ mod tests {
             vec![
                 (first_pattern, Expression::ident(1, 1, "b").nowhere()),
                 (
-                    PatternKind::name(name_id(11, "y")).with_id(23).nowhere(),
+                    PatternKind::name(name_id(12, "y")).with_id(23).nowhere(),
                     Expression::ident(2, 2, "c").nowhere(),
                 ),
             ],
@@ -1200,8 +1208,16 @@ mod tests {
         spade_ast_lowering::builtins::populate_symtab(&mut symtab, &mut ItemList::new());
 
         let input = ExprKind::Index(
-            Box::new(ExprKind::Identifier(name_id(0, "a").inner).with_id(1).nowhere()),
-            Box::new(ExprKind::Identifier(name_id(1, "b").inner).with_id(2).nowhere()),
+            Box::new(
+                ExprKind::Identifier(name_id(0, "a").inner)
+                    .with_id(1)
+                    .nowhere(),
+            ),
+            Box::new(
+                ExprKind::Identifier(name_id(1, "b").inner)
+                    .with_id(2)
+                    .nowhere(),
+            ),
         )
         .with_id(3)
         .nowhere();
@@ -1214,22 +1230,25 @@ mod tests {
 
         state.visit_expression(&input, &symtab).unwrap();
 
-        // let t3 = get_type!(state, &TExpr::Id(3));
-        // let ta = get_type!(state, &expr_a);
+        let t3 = get_type!(state, &TExpr::Id(3));
+        let ta = get_type!(state, &expr_a);
         let tb = get_type!(state, &expr_b);
 
         // The index should be an integer
-        ensure_same_type!(state, tb, unsized_int(1, &symtab));
+        ensure_same_type!(state, tb, unsized_int(4, &symtab));
         // The target should be an array
 
-        // ensure_same_type!(
-        //     state,
-        //     ta,
-        //     TVar::Array{inner: Box::new(TVar::Unknown(0)), size: Box::new(TVar::Unknown(1))}
-        // );
+        ensure_same_type!(
+            state,
+            ta,
+            TVar::Array {
+                inner: Box::new(TVar::Unknown(0)),
+                size: Box::new(TVar::Unknown(5))
+            }
+        );
 
-        // // The result should be the inner type
-        // ensure_same_type!(state, t3, TVar::Unknown(0));
+        // The result should be the inner type
+        ensure_same_type!(state, t3, TVar::Unknown(0));
     }
 
     #[test]

@@ -2367,8 +2367,9 @@ mod tests {
 
         let expected = Expression::Index(
             Box::new(Expression::Identifier(ast_path("a")).nowhere()),
-            Box::new(Expression::IntLiteral(0).nowhere())
-        ).nowhere();
+            Box::new(Expression::IntLiteral(0).nowhere()),
+        )
+        .nowhere();
 
         check_parse!(code, expression, Ok(expected));
     }

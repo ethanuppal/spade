@@ -74,7 +74,12 @@ fn build_items(code: &str) -> Vec<spade_mir::Entity> {
                         &item_list,
                     )
                     .map_err(|e| {
-                        spade_typeinference::format_trace_stack(&processed.type_state.trace_stack);
+                        println!(
+                            "{}",
+                            spade_typeinference::format_trace_stack(
+                                &processed.type_state.trace_stack
+                            )
+                        );
                         e
                     })
                     .report_failure(code),

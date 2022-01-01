@@ -158,10 +158,9 @@ pub enum Error {
     },
 
     #[error("Index must be an integer")]
-    IndexMustBeInteger {
-        got: UnificationTrace,
-        loc: Loc<()>
-    },
+    IndexMustBeInteger { got: UnificationTrace, loc: Loc<()> },
+    #[error("Indexee must be an array")]
+    IndexeeMustBeArray { got: UnificationTrace, loc: Loc<()> },
 
     #[error("Pattern type missmatch")]
     PatternTypeMissmatch {

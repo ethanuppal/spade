@@ -22,9 +22,8 @@ mod tests {
             Some(value: T),
             None
         }
-        entity name() -> int<16> {
-            let x: Option<int<8>> = Option::Some(0);
-            0
+        entity name() -> Option<int<16>> {
+            Option::Some(0)
         }
         "#;
 

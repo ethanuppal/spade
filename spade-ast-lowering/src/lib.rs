@@ -1248,7 +1248,10 @@ mod expression_visiting {
         )
         .idless();
 
-        assert_eq!(visit_expression(&input, &mut symtab, &mut idtracker), Ok(expected));
+        assert_eq!(
+            visit_expression(&input, &mut symtab, &mut idtracker),
+            Ok(expected)
+        );
     }
 
     #[test]
