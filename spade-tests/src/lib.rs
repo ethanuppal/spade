@@ -37,6 +37,7 @@ macro_rules! build_entity {
             &item_list,
         )
         .map_err(|e| {
+            processed.type_state.print_equations();
             print!(
                 "{}",
                 spade_typeinference::format_trace_stack(&processed.type_state.trace_stack)
@@ -74,6 +75,7 @@ fn build_items(code: &str) -> Vec<spade_mir::Entity> {
                         &item_list,
                     )
                     .map_err(|e| {
+                        processed.type_state.print_equations();
                         println!(
                             "{}",
                             spade_typeinference::format_trace_stack(

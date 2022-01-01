@@ -37,6 +37,14 @@ use result::{Error, Result};
 
 use self::result::{UnificationError, UnificationErrorExt, UnificationTrace};
 
+// NOTE(allow) This is a debug macro which is not normally used but can come in handy
+#[allow(unused_macros)]
+macro_rules! add_trace {
+    ($self:expr, $($arg : tt) *) => {
+        $self.trace_stack.push(TraceStack::Message(format!($($arg)*)))
+    }
+}
+
 pub struct ProcessedEntity {
     pub entity: Entity,
     pub type_state: TypeState,
@@ -111,12 +119,20 @@ impl ProcessedItemList {
     }
 }
 
+// A token indicating the existence of a generic list in type TypeState. Used to
+// ensure that the generic list is dropped at an appropriate time and not aquired
+// later
+#[must_use]
+struct GenericListToken {
+    id: usize,
+}
+
 pub struct TypeState {
     equations: TypeEquations,
     next_typeid: u64,
-    // List of replacement that have been performed. Ideally this should
-    // not be used, but because of the generic_lsit mechanism, it has to be
-    replacements: HashMap<TypeVar, TypeVar>,
+    // List of the mapping between generic parameters and type vars. Managed here
+    // because unification must update *all* TypeVars in existence.
+    generic_lists: Vec<HashMap<NameID, TypeVar>>,
 
     pub trace_stack: Vec<TraceStack>,
 }
@@ -127,31 +143,40 @@ impl TypeState {
             equations: HashMap::new(),
             next_typeid: 0,
             trace_stack: vec![],
-            replacements: HashMap::new(),
+            generic_lists: vec![],
         }
     }
 
-    pub fn hir_type_expr_to_var(
+    // Get a generic list with a safe unwrap since a token is aquired
+    fn get_generic_list<'a>(
+        &'a self,
+        generic_list_token: &'a GenericListToken,
+    ) -> &'a HashMap<NameID, TypeVar> {
+        &self.generic_lists[generic_list_token.id]
+    }
+
+    fn hir_type_expr_to_var(
         &mut self,
         e: &hir::TypeExpression,
-        generic_list: &HashMap<NameID, TypeVar>,
+        generic_list_token: &GenericListToken,
     ) -> TypeVar {
         match e {
             hir::TypeExpression::Integer(i) => TypeVar::Known(KnownType::Integer(*i), vec![], None),
-            hir::TypeExpression::TypeSpec(spec) => self.type_var_from_hir(spec, generic_list),
+            hir::TypeExpression::TypeSpec(spec) => self.type_var_from_hir(spec, generic_list_token),
         }
     }
 
-    pub fn type_var_from_hir(
+    fn type_var_from_hir(
         &mut self,
         hir_type: &crate::hir::TypeSpec,
-        generic_list: &HashMap<NameID, TypeVar>,
+        generic_list_token: &GenericListToken,
     ) -> TypeVar {
+        let generic_list = self.get_generic_list(generic_list_token);
         match hir_type {
             hir::TypeSpec::Declared(base, params) => {
                 let params = params
                     .into_iter()
-                    .map(|e| self.hir_type_expr_to_var(e, generic_list))
+                    .map(|e| self.hir_type_expr_to_var(e, generic_list_token))
                     .collect();
 
                 TypeVar::Known(KnownType::Type(base.inner.clone()), params, None)
@@ -165,13 +190,13 @@ impl TypeState {
             hir::TypeSpec::Tuple(inner) => {
                 let inner = inner
                     .iter()
-                    .map(|t| self.type_var_from_hir(t, generic_list))
+                    .map(|t| self.type_var_from_hir(t, generic_list_token))
                     .collect();
                 TypeVar::Tuple(inner)
             }
             hir::TypeSpec::Array { inner, size } => {
-                let inner = Box::new(self.type_var_from_hir(inner, generic_list));
-                let size = Box::new(self.hir_type_expr_to_var(size, generic_list));
+                let inner = Box::new(self.type_var_from_hir(inner, generic_list_token));
+                let size = Box::new(self.hir_type_expr_to_var(size, generic_list_token));
 
                 TypeVar::Array { inner, size }
             }
@@ -203,7 +228,7 @@ impl TypeState {
     #[trace_typechecker]
     pub fn visit_entity(&mut self, entity: &Entity, symtab: &SymbolTable) -> Result<()> {
         let generic_list = if entity.head.type_params.is_empty() {
-            HashMap::new()
+            self.create_generic_list(&[])
         } else {
             todo!("Support entity definitions with generics")
         };
@@ -242,12 +267,12 @@ impl TypeState {
     }
 
     #[trace_typechecker]
-    pub fn visit_argument_list(
+    fn visit_argument_list(
         &mut self,
         args: &[Argument],
         params: &ParameterList,
         symtab: &SymbolTable,
-        generic_list: &HashMap<NameID, TypeVar>,
+        generic_list: &GenericListToken,
     ) -> Result<()> {
         for (
             i,
@@ -342,6 +367,9 @@ impl TypeState {
         // Add new symbols for all the type parameters
         let generic_list = self.create_generic_list(head.type_params());
 
+        // Unify the types of the arguments
+        self.visit_argument_list(args, &head.inputs(), symtab, &generic_list)?;
+
         let return_type = self.type_var_from_hir(
             &head
                 .output_type()
@@ -350,15 +378,14 @@ impl TypeState {
             &generic_list,
         );
 
-        // Unify the types of the arguments
-        self.visit_argument_list(args, &head.inputs(), symtab, &generic_list)?;
         self.unify_expression_generic_error(expression, &return_type, symtab)?;
 
         Ok(())
     }
 
-    fn create_generic_list(&mut self, params: &[Loc<TypeParam>]) -> HashMap<NameID, TypeVar> {
-        params
+    fn create_generic_list(&mut self, params: &[Loc<TypeParam>]) -> GenericListToken {
+        let id = self.generic_lists.len();
+        let new_list = params
             .iter()
             .map(|param| {
                 let name = match &param.inner {
@@ -369,7 +396,9 @@ impl TypeState {
                 let t = self.new_generic();
                 (name, t)
             })
-            .collect()
+            .collect();
+        self.generic_lists.push(new_list);
+        GenericListToken { id }
     }
 
     #[trace_typechecker]
@@ -482,7 +511,8 @@ impl TypeState {
                     })?;
 
                 if let Some(t) = t {
-                    let tvar = self.type_var_from_hir(&t, &HashMap::new());
+                    let generic_list = self.create_generic_list(&[]);
+                    let tvar = self.type_var_from_hir(&t, &generic_list);
                     self.unify_types(&TypedExpression::Id(pattern.id), &tvar, symtab)
                         .map_err(|(got, expected)| Error::UnspecifiedTypeError {
                             expected,
@@ -546,7 +576,8 @@ impl TypeState {
             })?;
 
         if let Some(t) = &reg.value_type {
-            let tvar = self.type_var_from_hir(&t, &HashMap::new());
+            let token = self.create_generic_list(&[]);
+            let tvar = self.type_var_from_hir(&t, &token);
             self.unify_types(&TypedExpression::Id(reg.pattern.id), &tvar, symtab)
                 .map_err(|(got, expected)| Error::UnspecifiedTypeError {
                     expected,
@@ -708,7 +739,12 @@ impl TypeState {
 
         if let Some(replaced_type) = replaced_type {
             for (_, rhs) in &mut self.equations {
-                Self::replace_type_var(rhs, &replaced_type, new_type.clone())
+                Self::replace_type_var(rhs, &replaced_type, &new_type)
+            }
+            for generic_list in &mut self.generic_lists {
+                for (_, lhs) in generic_list.iter_mut() {
+                    Self::replace_type_var(lhs, &replaced_type, &new_type)
+                }
             }
         }
 
@@ -718,28 +754,28 @@ impl TypeState {
         Ok(new_type)
     }
 
-    fn replace_type_var(in_var: &mut TypeVar, from: &TypeVar, replacement: TypeVar) {
+    fn replace_type_var(in_var: &mut TypeVar, from: &TypeVar, replacement: &TypeVar) {
         // First, do recursive replacement
         match in_var {
             TypeVar::Known(_, params, _) => {
                 for param in params {
-                    Self::replace_type_var(param, from, replacement.clone())
+                    Self::replace_type_var(param, from, replacement)
                 }
             }
             TypeVar::Tuple(inner) => {
                 for t in inner {
-                    Self::replace_type_var(t, from, replacement.clone())
+                    Self::replace_type_var(t, from, replacement)
                 }
             }
             TypeVar::Array { inner, size } => {
-                Self::replace_type_var(inner, from, replacement.clone());
-                Self::replace_type_var(size, from, replacement.clone());
+                Self::replace_type_var(inner, from, replacement);
+                Self::replace_type_var(size, from, replacement);
             }
             TypeVar::Unknown(_) => {}
         }
 
         if in_var == from {
-            *in_var = replacement;
+            *in_var = replacement.clone();
         }
     }
 
@@ -820,6 +856,8 @@ pub enum TraceStack {
     /// Unified .0 with .1 producing .2
     Unified(TypeVar, TypeVar, TypeVar),
     AddingEquation(TypedExpression, TypeVar),
+    /// Arbitrary message
+    Message(String),
 }
 
 pub fn format_trace_stack(stack: &[TraceStack]) -> String {
@@ -841,6 +879,9 @@ pub fn format_trace_stack(stack: &[TraceStack]) -> String {
             }
             TraceStack::TryingUnify(lhs, rhs) => {
                 format!("{} of {} with {}", "trying unification".cyan(), lhs, rhs)
+            }
+            TraceStack::Message(msg) => {
+                format!("{}: {}", "m".purple(), msg)
             }
             TraceStack::Exit => {
                 next_indent_amount -= 1;

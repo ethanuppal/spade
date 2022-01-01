@@ -1,5 +1,3 @@
-use std::collections::HashMap;
-
 use parse_tree_macros::trace_typechecker;
 use spade_common::location_info::WithLocation;
 use spade_hir::symbol_table::SymbolTable;
@@ -58,8 +56,10 @@ impl TypeState {
             output_type,
         } = pipeline;
 
+        let generic_list = self.create_generic_list(&[]);
+
         // Add an equation for the clock
-        let input_tvar = self.type_var_from_hir(&inputs[0].1.inner, &HashMap::new());
+        let input_tvar = self.type_var_from_hir(&inputs[0].1.inner, &generic_list);
         self.add_equation(TypedExpression::Name(inputs[0].0.clone()), input_tvar);
         self.unify_types(
             &TypedExpression::Name(inputs[0].0.clone()),
@@ -73,7 +73,7 @@ impl TypeState {
 
         // Add equations for the inputs
         for (name, t) in inputs.iter().skip(1) {
-            let tvar = self.type_var_from_hir(t, &HashMap::new());
+            let tvar = self.type_var_from_hir(t, &generic_list);
             self.add_equation(TypedExpression::Name(name.clone()), tvar);
         }
 
@@ -84,7 +84,7 @@ impl TypeState {
 
         self.visit_expression(result, symtab)?;
 
-        let tvar = self.type_var_from_hir(output_type, &HashMap::new());
+        let tvar = self.type_var_from_hir(output_type, &generic_list);
         self.unify_types(&TypedExpression::Id(result.inner.id), &tvar, symtab)
             .map_err(|(got, expected)| Error::EntityOutputTypeMismatch {
                 expected,
