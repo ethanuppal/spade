@@ -138,29 +138,23 @@ fn statement_code(statement: &Statement) -> Code {
                     format!("{}[{}]", ops[0], index)
                 }
                 Operator::ConstructArray => {
-                    format!("{{{}}}", ops.join(", "))
+                    // NOTE: Reversing because we declare the array as logic[SIZE:0] and
+                    // we want the [x*width+:width] indexing to work
+                    format!(
+                        "{{{}}}",
+                        ops.iter().cloned().rev().collect::<Vec<_>>().join(", ")
+                    )
                 }
                 Operator::IndexArray(member_size) => {
-                    unimplemented!()
-                    // Compute the start index of the element we're looking for
-                    // let mut start_bit = 0;
-                    // for i in 0..*idx {
-                    //     start_bit += types[i as usize].size();
-                    // }
+                    if *member_size == 1 {
+                        format!("{}[{}]", ops[0], ops[1])
+                    } else {
+                        let end_index = format!("{} * {}", ops[1], member_size);
+                        let offset = member_size;
 
-                    // let target_width = types[*idx as usize].size();
-                    // let end_bit = start_bit + target_width;
-
-                    // let total_width: u64 = types.iter().map(crate::types::Type::size).sum();
-
-                    // // Check if this is a single bit, if so, index using just it
-                    // let index = if target_width == 1 {
-                    //     format!("{}", total_width - start_bit - 1)
-                    // } else {
-                    //     format!("{}:{}", total_width - start_bit - 1, total_width - end_bit)
-                    // };
-
-                    // format!("{}[{}]", ops[0], index)
+                        // Strange indexing explained here https://stackoverflow.com/questions/18067571/indexing-vectors-and-arrays-with#18068296
+                        format!("{}[{}+:{}]", ops[0], end_index, offset)
+                    }
                 }
                 Operator::ConstructEnum {
                     variant,
@@ -770,7 +764,33 @@ mod expression_tests {
         let expected = indoc!(
             r#"
             logic[8:0] _e_0;
-            assign _e_0 = {_e_1, _e_2, _e_3};"#
+            assign _e_0 = {_e_3, _e_2, _e_1};"#
+        );
+
+        assert_same_code!(&statement_code(&statement).to_string(), expected);
+    }
+
+    #[test]
+    fn array_indexing_works() {
+        let statement = statement!(e(0); Type::Int(3); IndexArray((3)); e(1), e(2));
+
+        let expected = indoc!(
+            r#"
+            logic[2:0] _e_0;
+            assign _e_0 = _e_1[_e_2 * 3+:3];"#
+        );
+
+        assert_same_code!(&statement_code(&statement).to_string(), expected);
+    }
+
+    #[test]
+    fn array_indexing_works_for_1_bit_values() {
+        let statement = statement!(e(0); Type::Bool; IndexArray((1)); e(1), e(2));
+
+        let expected = indoc!(
+            r#"
+            logic _e_0;
+            assign _e_0 = _e_1[_e_2];"#
         );
 
         assert_same_code!(&statement_code(&statement).to_string(), expected);
