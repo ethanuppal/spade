@@ -13,7 +13,7 @@ use spade_hir::{symbol_table, ExecutableItem, ItemList};
 pub use spade_parser::lexer;
 use spade_parser::Parser;
 use spade_typeinference as typeinference;
-use typeinference::format_trace_stack;
+use typeinference::trace_stack::format_trace_stack;
 
 #[derive(StructOpt)]
 #[structopt(name = "spade", about = "Compiler for the spade language")]

@@ -1018,8 +1018,7 @@ impl<'a> Parser<'a> {
         let (stages, result, end) = if self.peek_kind(&TokenKind::Builtin)? {
             let end = self.eat_unconditional()?;
             (vec![], None, end)
-        }
-        else {
+        } else {
             self.eat(&TokenKind::OpenBrace)?;
             let mut stages = vec![];
             while let Some(stage) = self.pipeline_stage()? {
@@ -1035,7 +1034,6 @@ impl<'a> Parser<'a> {
 
             (stages, Some(result), end)
         };
-
 
         Ok(Some(
             Pipeline {

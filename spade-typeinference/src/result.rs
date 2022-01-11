@@ -1,6 +1,8 @@
 use thiserror::Error;
 
-use super::equation::{TypeVar, TypedExpression};
+use crate::equation::{FreeTypeVar, TypeVarRef};
+
+use super::equation::{InnerTypeVar, TypedExpression};
 use spade_common::{
     location_info::{Loc, WithLocation},
     name::Identifier,
@@ -14,8 +16,8 @@ use spade_common::{
 /// while if unifying `int<7>` with `bool`, inside would be `None`
 #[derive(Debug, PartialEq, Clone)]
 pub struct UnificationTrace {
-    pub failing: TypeVar,
-    pub inside: Option<TypeVar>,
+    pub failing: FreeTypeVar,
+    pub inside: Option<FreeTypeVar>,
 }
 impl WithLocation for UnificationTrace {}
 impl std::fmt::Display for UnificationTrace {
@@ -24,27 +26,35 @@ impl std::fmt::Display for UnificationTrace {
     }
 }
 impl UnificationTrace {
-    pub fn new(failing: TypeVar) -> Self {
+    pub fn new(failing: FreeTypeVar) -> Self {
         Self {
             failing,
             inside: None,
         }
     }
 
-    pub fn outer(&self) -> &TypeVar {
+    pub fn outer(&self) -> &FreeTypeVar {
         self.inside.as_ref().unwrap_or(&self.failing)
     }
 }
 pub trait UnificationErrorExt<T> {
-    fn add_context(self, lhs: TypeVar, rhs: TypeVar) -> std::result::Result<T, UnificationError>;
+    fn add_context<'a, 'b>(
+        self,
+        lhs: TypeVarRef<'a>,
+        rhs: TypeVarRef<'b>,
+    ) -> std::result::Result<T, UnificationError>;
 }
 impl<T> UnificationErrorExt<T> for std::result::Result<T, UnificationError> {
-    fn add_context(self, lhs: TypeVar, rhs: TypeVar) -> std::result::Result<T, UnificationError> {
+    fn add_context<'a, 'b>(
+        self,
+        lhs: TypeVarRef<'a>,
+        rhs: TypeVarRef<'b>,
+    ) -> std::result::Result<T, UnificationError> {
         match self {
             Ok(val) => Ok(val),
             Err((mut old_lhs, mut old_rhs)) => {
-                old_lhs.inside.replace(lhs);
-                old_rhs.inside.replace(rhs);
+                old_lhs.inside.replace(lhs.as_free());
+                old_rhs.inside.replace(rhs.as_free());
                 Err((old_lhs, old_rhs))
             }
         }
@@ -145,7 +155,7 @@ pub enum Error {
     #[error("Tuple index of generic argument")]
     TupleIndexOfGeneric { loc: Loc<()> },
     #[error("Tuple index of non-tuple")]
-    TupleIndexOfNonTuple { got: TypeVar, loc: Loc<()> },
+    TupleIndexOfNonTuple { got: InnerTypeVar, loc: Loc<()> },
     #[error("Tuple index out of boudns")]
     TupleIndexOutOfBounds { index: Loc<u128>, actual_size: u128 },
 

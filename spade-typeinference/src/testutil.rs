@@ -2,7 +2,7 @@ use spade_hir::symbol_table::SymbolTable;
 use spade_types::KnownType;
 
 use crate::fixed_types::t_int;
-use crate::TypeVar as TVar;
+use crate::InnerTypeVar as TVar;
 
 pub fn sized_int(size: u128, symtab: &SymbolTable) -> TVar {
     TVar::Known(
@@ -31,8 +31,12 @@ macro_rules! get_type {
 #[macro_export]
 macro_rules! ensure_same_type {
     ($state:ident, $t1:expr, $t2:expr) => {
-        let _t1 = $t1.get_type(&$state);
-        let _t2 = $t2.get_type(&$state);
+        // These let bindings are required for the values returned by
+        // get_type to live long enough
+        let t1 = $t1;
+        let t2 = $t2;
+        let _t1 = t1.get_type(&$state);
+        let _t2 = t2.get_type(&$state);
         if _t1 != _t2 {
             println!("{}", format_trace_stack(&$state.trace_stack));
             $state.print_equations();
@@ -52,6 +56,6 @@ macro_rules! ensure_same_type {
 #[macro_export]
 macro_rules! kvar {
     ($base:expr $(; ( $( $params:expr ),* ) )? ) => {
-        TypeVar::Known($base, vec![ $( $($params),* )? ], None)
+        InnerTypeVar::Known($base, vec![ $( $($params),* )? ], None)
     }
 }

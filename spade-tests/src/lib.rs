@@ -40,7 +40,9 @@ macro_rules! build_entity {
             processed.type_state.print_equations();
             print!(
                 "{}",
-                spade_typeinference::format_trace_stack(&processed.type_state.trace_stack)
+                spade_typeinference::trace_stack::format_trace_stack(
+                    &processed.type_state.trace_stack
+                )
             );
             e
         })
@@ -78,7 +80,7 @@ fn build_items(code: &str) -> Vec<spade_mir::Entity> {
                         processed.type_state.print_equations();
                         println!(
                             "{}",
-                            spade_typeinference::format_trace_stack(
+                            spade_typeinference::trace_stack::format_trace_stack(
                                 &processed.type_state.trace_stack
                             )
                         );

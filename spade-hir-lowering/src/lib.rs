@@ -8,6 +8,7 @@ use mir::types::Type as MirType;
 use mir::{ConstantValue, ValueName};
 pub use pipelines::generate_pipeline;
 use spade_common::id_tracker::ExprIdTracker;
+use spade_typeinference::equation::FreeTypeVar;
 use substitution::Substitutions;
 
 use parse_tree_macros::local_impl;
@@ -17,14 +18,14 @@ use spade_hir::{
     expression::BinaryOperator, symbol_table::SymbolTable, Entity, ExprKind, Expression, Statement,
 };
 use spade_mir as mir;
-use spade_typeinference::{
-    equation::{TypeVar, TypedExpression},
-    TypeState,
-};
+use spade_typeinference::{equation::TypedExpression, TypeState};
 use spade_types::{ConcreteType, PrimitiveType};
 
 pub enum Error {
-    UsingGenericType { expr: Loc<Expression>, t: TypeVar },
+    UsingGenericType {
+        expr: Loc<Expression>,
+        t: FreeTypeVar,
+    },
 }
 pub type Result<T> = std::result::Result<T, Error>;
 
@@ -50,7 +51,8 @@ impl TypeStateLocal for TypeState {
     ) -> Result<ConcreteType> {
         let t = self
             .type_of(&TypedExpression::Id(expr.id))
-            .expect("Expression had no specified type");
+            .expect("Expression had no specified type")
+            .as_free();
 
         if let Some(t) = Self::ungenerify_type(&t, symtab, types) {
             Ok(t)

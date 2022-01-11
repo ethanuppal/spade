@@ -183,7 +183,9 @@ pub fn visit_pipeline(
     }
 
     // NOTE: Safe unwrap, we check if this is None at the top of the function
-    let result = result.unwrap().try_visit(super::visit_expression, symtab, idtracker)?;
+    let result = result
+        .unwrap()
+        .try_visit(super::visit_expression, symtab, idtracker)?;
 
     let output_type = if let Some(t) = output_type {
         t.try_map_ref(|t| visit_type_spec(t, symtab))?
@@ -193,15 +195,17 @@ pub fn visit_pipeline(
 
     symtab.close_scope();
 
-    Ok(Some(hir::Pipeline {
-        depth,
-        name: id.at_loc(&pipeline.name),
-        output_type,
-        inputs,
-        body,
-        result,
-    }
-    .at_loc(pipeline)))
+    Ok(Some(
+        hir::Pipeline {
+            depth,
+            name: id.at_loc(&pipeline.name),
+            output_type,
+            inputs,
+            body,
+            result,
+        }
+        .at_loc(pipeline),
+    ))
 }
 
 #[cfg(test)]

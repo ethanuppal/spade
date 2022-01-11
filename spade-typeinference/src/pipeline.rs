@@ -5,7 +5,7 @@ use spade_hir::{Pipeline, PipelineBinding, PipelineStage};
 
 use crate::{equation::TypedExpression, fixed_types::t_clock, result::Error};
 
-use super::{Result, TraceStack, TypeState};
+use super::{Result, TraceStackEntry, TypeState};
 
 impl TypeState {
     #[trace_typechecker]
@@ -21,13 +21,15 @@ impl TypeState {
         }
 
         let new_type = self.new_generic();
-        self.add_equation(TypedExpression::Name(binding.name.clone().inner), new_type);
+        self.add_equation(TypedExpression::Name(binding.name.clone().inner), new_type)
+            .commit(self);
 
         self.unify_expression_generic_error(
             &binding.value,
             &TypedExpression::Name(binding.name.clone().inner),
             symtab,
-        )?;
+        )?
+        .commit(self);
 
         Ok(())
     }
@@ -60,8 +62,9 @@ impl TypeState {
 
         // Add an equation for the clock
         let input_tvar = self.type_var_from_hir(&inputs[0].1.inner, &generic_list);
-        self.add_equation(TypedExpression::Name(inputs[0].0.clone()), input_tvar);
-        self.unify_types(
+        self.add_equation(TypedExpression::Name(inputs[0].0.clone()), input_tvar)
+            .commit(self);
+        self.unify(
             &TypedExpression::Name(inputs[0].0.clone()),
             &t_clock(symtab),
             symtab,
@@ -69,12 +72,14 @@ impl TypeState {
         .map_err(|(got, expected)| Error::FirstPipelineArgNotClock {
             expected,
             spec: got.at_loc(&inputs[0].1.loc()),
-        })?;
+        })?
+        .commit(self);
 
         // Add equations for the inputs
         for (name, t) in inputs.iter().skip(1) {
             let tvar = self.type_var_from_hir(t, &generic_list);
-            self.add_equation(TypedExpression::Name(name.clone()), tvar);
+            self.add_equation(TypedExpression::Name(name.clone()), tvar)
+                .commit(self);
         }
 
         // Go through the stages
@@ -85,13 +90,14 @@ impl TypeState {
         self.visit_expression(result, symtab)?;
 
         let tvar = self.type_var_from_hir(output_type, &generic_list);
-        self.unify_types(&TypedExpression::Id(result.inner.id), &tvar, symtab)
+        self.unify(&TypedExpression::Id(result.inner.id), tvar.as_ref(), symtab)
             .map_err(|(got, expected)| Error::EntityOutputTypeMismatch {
                 expected,
                 got,
                 type_spec: output_type.loc(),
                 output_expr: result.loc(),
-            })?;
+            })?
+            .commit(self);
 
         Ok(())
     }
@@ -101,11 +107,12 @@ impl TypeState {
 mod tests {
     use super::*;
 
-    use crate::TypeVar as TVar;
-    use crate::TypeVar;
+    use crate::InnerTypeVar as TVar;
+    use crate::InnerTypeVar;
     use crate::TypedExpression as TExpr;
 
-    use crate::{ensure_same_type, get_type, HasType};
+    use crate::equation::TypeVarRef;
+    use crate::{ensure_same_type, HasType};
     use crate::{fixed_types::t_int, format_trace_stack, hir, kvar};
     use hir::ItemList;
     use hir::{dtype, testutil::t_num, ExprKind, Expression, PipelineStage};
@@ -127,14 +134,20 @@ mod tests {
         let symtab = SymbolTable::new();
 
         let expr_a = TExpr::Name(name_id(1, "b").inner);
-        state.add_equation(expr_a.clone(), TVar::Unknown(100));
+        state
+            .add_equation(
+                expr_a.clone(),
+                TypeVarRef::from_owned(TVar::Unknown(100), &state),
+            )
+            .commit(&mut state);
 
         state.visit_pipeline_binding(&input, &symtab).unwrap();
 
-        let t_a = get_type!(state, &TExpr::Name(name_id(0, "a").inner));
-        let t_b = get_type!(state, &TExpr::Name(name_id(1, "b").inner));
-
-        ensure_same_type!(state, t_a, t_b);
+        ensure_same_type!(
+            state,
+            TExpr::Name(name_id(1, "a").inner),
+            TExpr::Name(name_id(1, "b").inner)
+        );
     }
 
     #[test]
@@ -174,13 +187,9 @@ mod tests {
         let ret_type = kvar!( t_int(&symtab); ( kvar!( KnownType::Integer(8) ) ) );
         let clk_type = kvar!(t_clock(&symtab));
 
-        let t_b = get_type!(state, &TExpr::Name(name_id(1, "b").inner));
-        let t_ret = get_type!(state, &TExpr::Id(10));
-        let t_clk = get_type!(state, &TExpr::Name(name_id(10, "clk").inner));
-
-        ensure_same_type!(state, t_b, a_type);
-        ensure_same_type!(state, t_ret, ret_type);
-        ensure_same_type!(state, t_clk, clk_type);
+        ensure_same_type!(state, TExpr::Name(name_id(1, "b").inner), a_type);
+        ensure_same_type!(state, TExpr::Id(10), ret_type);
+        ensure_same_type!(state, TExpr::Name(name_id(10, "clk").inner), clk_type);
 
         // ensure_same_type!(state, t_a, t_b);
     }
