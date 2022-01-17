@@ -146,6 +146,45 @@ impl CompilationError for Error {
                 .with_labels(vec![at
                     .primary_label()
                     .with_message("decl doesn't declare anything")]),
+            Error::InstInFunction {at, fn_keyword} => Diagnostic::error()
+                .with_message("Entities or pipelines can not be instanciated in functions")
+                .with_labels(vec![
+                    at
+                        .primary_label()
+                        .with_message("inst not allowed here"),
+                    fn_keyword
+                        .secondary_label()
+                        .with_message("Because this is a function")
+                ])
+                .with_notes(vec![
+                    format!("Functions can only contain combinatorial logic"),
+                    format!("If you want to do this, make the function an entity")
+                ]),
+            Error::RegInFunction{at, fn_keyword} => Diagnostic::error()
+                .with_message("Functions can not contain registers")
+                .with_labels(vec![
+                    at
+                        .primary_label()
+                        .with_message("reg not allowed here"),
+                    fn_keyword
+                        .secondary_label()
+                        .with_message("Because this is a function")
+                ])
+                .with_notes(vec![
+                    format!("Functions can only contain combinatorial logic"),
+                    format!("If you want to do this, make the function an entity")
+                ]),
+
+            // Internal errors
+            Error::InternalExpectedItemContext{at} => Diagnostic::error()
+                .with_message("(Internal) Attempted to parse something which requires an item context with none existing")
+                .with_labels(vec![at.primary_label().with_message("Here")]),
+            Error::InternalOverwritingItemContext{at, prev} => Diagnostic::error()
+                .with_message("(Internal) Overwriting previously uncleared item_context")
+                .with_labels(vec![
+                    at.primary_label().with_message("New context set because of this"),
+                    prev.secondary_label().with_message("Previous context set here")
+                ])
         };
 
         let writer = StandardStream::stderr(color_choice(no_color));

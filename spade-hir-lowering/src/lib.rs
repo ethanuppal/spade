@@ -3,7 +3,7 @@ pub mod pipelines;
 pub mod substitution;
 
 use hir::symbol_table::FrozenSymtab;
-use hir::{ItemList, Pattern, TypeList};
+use hir::{Argument, ItemList, Pattern, TypeList};
 use mir::types::Type as MirType;
 use mir::{ConstantValue, ValueName};
 pub use pipelines::generate_pipeline;
@@ -692,8 +692,8 @@ impl ExprLocal for Loc<Expression> {
                         .to_mir_type(),
                 }))
             }
-            ExprKind::FnCall(name, params) => {
-                for param in params {
+            ExprKind::FnCall(name, args) => {
+                for param in args {
                     result.append(
                         &mut param
                             .value
@@ -720,7 +720,7 @@ impl ExprLocal for Loc<Expression> {
                                 variant: *variant,
                                 variant_count,
                             },
-                            operands: params
+                            operands: args
                                 .into_iter()
                                 .map(|arg| arg.value.variable(subs))
                                 .collect(),
@@ -740,43 +740,46 @@ impl ExprLocal for Loc<Expression> {
                     }
                 }
             }
-            ExprKind::EntityInstance(name, args) => {
-                for arg in args {
-                    result.append(&mut arg.value.lower(symtab, idtracker, types, subs, item_list)?)
-                }
-                result.push(mir::Statement::Binding(mir::Binding {
-                    name: self.variable(subs),
-                    operator: mir::Operator::Instance(name.1.to_string()),
-                    operands: args
-                        .into_iter()
-                        .map(|arg| arg.value.variable(subs))
-                        .collect(),
-                    ty: types
-                        .expr_type(self, symtab.symtab(), &item_list.types)?
-                        .to_mir_type(),
-                }))
-            }
+            ExprKind::EntityInstance(name, args) => result.append(
+                &mut self.handle_call(name, args, symtab, idtracker, types, subs, item_list)?,
+            ),
             ExprKind::PipelineInstance {
                 depth: _,
                 name,
                 args,
-            } => {
-                for arg in args {
-                    result.append(&mut arg.value.lower(symtab, idtracker, types, subs, item_list)?)
-                }
-                result.push(mir::Statement::Binding(mir::Binding {
-                    name: self.variable(subs),
-                    operator: mir::Operator::Instance(name.1.to_string()),
-                    operands: args
-                        .into_iter()
-                        .map(|arg| arg.value.variable(subs))
-                        .collect(),
-                    ty: types
-                        .expr_type(self, symtab.symtab(), &item_list.types)?
-                        .to_mir_type(),
-                }))
-            }
+            } => result.append(
+                &mut self.handle_call(name, args, symtab, idtracker, types, subs, item_list)?,
+            ),
         }
+        Ok(result)
+    }
+
+    fn handle_call(
+        &self,
+        name: &NameID,
+        args: &[Argument],
+        symtab: &FrozenSymtab,
+        idtracker: &mut ExprIdTracker,
+        types: &TypeState,
+        subs: &Substitutions,
+        item_list: &ItemList,
+    ) -> Result<Vec<mir::Statement>> {
+        let mut result = vec![];
+        for arg in args {
+            result.append(&mut arg.value.lower(symtab, idtracker, types, subs, item_list)?)
+        }
+        result.push(mir::Statement::Binding(mir::Binding {
+            name: self.variable(subs),
+            operator: mir::Operator::Instance(name.1.to_string()),
+            operands: args
+                .into_iter()
+                .map(|arg| arg.value.variable(subs))
+                .collect(),
+            ty: types
+                .expr_type(self, symtab.symtab(), &item_list.types)?
+                .to_mir_type(),
+        }));
+
         Ok(result)
     }
 }

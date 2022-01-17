@@ -55,13 +55,43 @@ impl EnumVariant {
     }
 }
 
+impl EntityHead {
+    pub fn as_function_head(&self) -> FunctionHead {
+        let EntityHead {
+            inputs,
+            type_params,
+            output_type,
+        } = self;
+        FunctionHead {
+            inputs: inputs.clone(),
+            type_params: type_params.clone(),
+            output_type: output_type.clone(),
+        }
+    }
+}
+
+impl FunctionHead {
+    pub fn as_entity_head(&self) -> EntityHead {
+        let FunctionHead {
+            inputs,
+            type_params,
+            output_type,
+        } = self;
+        EntityHead {
+            inputs: inputs.clone(),
+            type_params: type_params.clone(),
+            output_type: output_type.clone(),
+        }
+    }
+}
+
 /// Any named thing in the language
 #[derive(PartialEq, Debug, Clone)]
 pub enum Thing {
     /// Defintion of a named type
     Type(Loc<TypeSymbol>),
     EnumVariant(Loc<EnumVariant>),
-    Function(Loc<FunctionHead>),
+    Function(Loc<EntityHead>),
     Entity(Loc<EntityHead>),
     Pipeline(Loc<PipelineHead>),
     Variable(Loc<Identifier>),
@@ -290,7 +320,7 @@ impl SymbolTable {
             Thing::Pipeline(head) => head.clone()
         },
         function_by_id, lookup_function, FunctionHead, NotAFunction {
-            Thing::Function(head) => head.clone(),
+            Thing::Function(head) => head.as_function_head().at_loc(&head),
             Thing::EnumVariant(variant) => variant.as_function_head().at_loc(&variant),
         },
         type_symbol_by_id, lookup_type_symbol, TypeSymbol, NotATypeSymbol {

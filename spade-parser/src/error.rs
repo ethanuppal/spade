@@ -62,6 +62,18 @@ pub enum Error {
 
     #[error("Empty decl statement")]
     EmptyDeclStatement { at: Loc<()> },
+
+    #[error("Reg in function")]
+    RegInFunction { at: Loc<()>, fn_keyword: Loc<()> },
+
+    #[error("Inst in function")]
+    InstInFunction { at: Loc<()>, fn_keyword: Loc<()> },
+
+    #[error("(Internal) Expected an item context to be set")]
+    InternalExpectedItemContext { at: Loc<()> },
+
+    #[error("(Internal) Overwriting item context")]
+    InternalOverwritingItemContext { at: Loc<()>, prev: Loc<()> },
 }
 
 impl Error {

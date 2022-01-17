@@ -68,7 +68,11 @@ pub fn visit_entity(
 
     let path = namespace.push_ident(e.name.clone());
 
-    symtab.add_thing(path, Thing::Entity(head.at_loc(e)));
+    if e.is_function {
+        symtab.add_thing(path, Thing::Function(head.at_loc(e)));
+    } else {
+        symtab.add_thing(path, Thing::Entity(head.at_loc(e)));
+    }
 
     Ok(())
 }

@@ -187,7 +187,6 @@ pub fn entity_head(item: &ast::Entity, symtab: &mut SymbolTable) -> Result<Entit
         inputs: visit_parameter_list(&item.inputs, symtab)?,
         output_type,
         type_params,
-        is_builtin: item.body.is_none(),
     })
 }
 
@@ -206,7 +205,12 @@ pub fn visit_entity(
 
     let path = namespace.push_ident(item.name.clone());
     let (id, head) = symtab
-        .lookup_entity(&path.at_loc(&item.name))
+        .lookup_entity(&path.clone().at_loc(&item.name))
+        .or_else(|_| {
+            symtab
+                .lookup_function(&path.at_loc(&item.name))
+                .map(|(name, head)| (name, head.map(|i| i.as_entity_head())))
+        })
         .expect("Attempting to lower an entity that has not been added to the symtab previously");
     let head = head.clone(); // An offering to the borrow checker. May ferris have mercy on us all
 
@@ -826,6 +830,7 @@ mod entity_visiting {
     #[test]
     fn entity_visits_work() {
         let input = ast::Entity {
+            is_function: true,
             name: Identifier("test".to_string()).nowhere(),
             inputs: ParameterList(vec![(
                 ast_ident("a"),
@@ -854,7 +859,6 @@ mod entity_visiting {
                 inputs: hir::ParameterList(vec![(ast_ident("a"), hir::TypeSpec::unit().nowhere())]),
                 output_type: None,
                 type_params: vec![],
-                is_builtin: false,
             },
             inputs: vec![((name_id(1, "a").inner, hir::TypeSpec::unit().nowhere()))],
             body: hir::ExprKind::Block(Box::new(hir::Block {
@@ -1143,7 +1147,7 @@ mod expression_visiting {
     use super::*;
 
     use hir::symbol_table::EnumVariant;
-    use hir::{FunctionHead, PipelineHead};
+    use hir::PipelineHead;
     use spade_ast::testutil::{ast_ident, ast_path};
     use spade_common::location_info::WithLocation;
     use spade_common::name::testutil::name_id;
@@ -1518,7 +1522,6 @@ mod expression_visiting {
                     ]),
                     output_type: None,
                     type_params: vec![],
-                    is_builtin: false,
                 }
                 .nowhere(),
             ),
@@ -1572,7 +1575,6 @@ mod expression_visiting {
                     ]),
                     output_type: None,
                     type_params: vec![],
-                    is_builtin: false,
                 }
                 .nowhere(),
             ),
@@ -1619,7 +1621,7 @@ mod expression_visiting {
         symtab.add_thing(
             ast_path("test").inner,
             Thing::Function(
-                FunctionHead {
+                EntityHead {
                     inputs: hir::ParameterList(vec![
                         (ast_ident("a"), hir::TypeSpec::unit().nowhere()),
                         (ast_ident("b"), hir::TypeSpec::unit().nowhere()),
@@ -1665,7 +1667,6 @@ mod expression_visiting {
                     ]),
                     output_type: None,
                     type_params: vec![],
-                    is_builtin: false,
                 }.nowhere()));
 
                 matches::assert_matches!(
@@ -1717,7 +1718,6 @@ mod expression_visiting {
                     ]),
                     output_type: None,
                     type_params: vec![],
-                    is_builtin: false,
                 }.nowhere()));
 
                 matches::assert_matches!(
@@ -1861,7 +1861,7 @@ mod expression_visiting {
         let mut idtracker = ExprIdTracker::new();
 
         let head = Thing::Function(
-            FunctionHead {
+            EntityHead {
                 inputs: hir::ParameterList(vec![]),
                 output_type: None,
                 type_params: vec![],
@@ -1996,6 +1996,7 @@ mod item_visiting {
     pub fn item_entity_visiting_works() {
         let input = ast::Item::Entity(
             ast::Entity {
+                is_function: true,
                 name: ast_ident("test"),
                 output_type: None,
                 inputs: ParameterList(vec![]),
@@ -2018,7 +2019,6 @@ mod item_visiting {
                     output_type: None,
                     inputs: hir::ParameterList(vec![]),
                     type_params: vec![],
-                    is_builtin: false,
                 },
                 inputs: vec![],
                 body: hir::ExprKind::Block(Box::new(hir::Block {
@@ -2059,6 +2059,7 @@ mod module_visiting {
         let input = ast::ModuleBody {
             members: vec![ast::Item::Entity(
                 ast::Entity {
+                    is_function: true,
                     name: ast_ident("test"),
                     output_type: None,
                     inputs: ParameterList(vec![]),
@@ -2085,7 +2086,6 @@ mod module_visiting {
                             output_type: None,
                             inputs: hir::ParameterList(vec![]),
                             type_params: vec![],
-                            is_builtin: false,
                         },
                         inputs: vec![],
                         body: hir::ExprKind::Block(Box::new(hir::Block {

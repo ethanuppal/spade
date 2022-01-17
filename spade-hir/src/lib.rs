@@ -216,7 +216,6 @@ pub struct EntityHead {
     pub inputs: ParameterList,
     pub output_type: Option<Loc<TypeSpec>>,
     pub type_params: Vec<Loc<TypeParam>>,
-    pub is_builtin: bool,
 }
 impl WithLocation for EntityHead {}
 

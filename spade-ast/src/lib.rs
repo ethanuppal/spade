@@ -151,6 +151,9 @@ pub struct ParameterList(pub Vec<(Loc<Identifier>, Loc<TypeSpec>)>);
 
 #[derive(PartialEq, Debug, Clone)]
 pub struct Entity {
+    /// Since functions and entities are so similar, we'll make them share everything
+    /// and just have a bool here to indicate the type.
+    pub is_function: bool,
     pub name: Loc<Identifier>,
     pub inputs: ParameterList,
     pub output_type: Option<Loc<TypeSpec>>,

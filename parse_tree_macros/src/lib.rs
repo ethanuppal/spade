@@ -57,7 +57,7 @@ pub fn local_impl(attrs: TokenStream, input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as ItemImpl);
 
     let (impl_generics, generics, where_clause) = input.generics.split_for_impl();
-    let trait_name = input.trait_.clone().unwrap().1;
+    let trait_name = input.trait_.clone().expect("Expected a trait name").1;
 
     let method_heads = input
         .items

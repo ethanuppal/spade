@@ -1,5 +1,6 @@
 pub mod error;
 pub mod error_reporting;
+pub mod item_type;
 pub mod lexer;
 
 use error::{CommaSeparatedResult, Error, Result};
@@ -23,6 +24,7 @@ use parse_tree_macros::trace_parser;
 
 use crate::{
     error::{CSErrorTransformations, CommaSeparatedError},
+    item_type::{ItemType, ItemTypeLocal},
     lexer::TokenKind,
 };
 
@@ -65,6 +67,7 @@ pub struct Parser<'a> {
     peeked: Option<Token>,
     pub parse_stack: Vec<ParseStackEntry>,
     file_id: usize,
+    item_context: Option<Loc<ItemType>>,
 }
 
 impl<'a> Parser<'a> {
@@ -74,6 +77,7 @@ impl<'a> Parser<'a> {
             peeked: None,
             parse_stack: vec![],
             file_id,
+            item_context: None,
         }
     }
 }
@@ -349,6 +353,9 @@ impl<'a> Parser<'a> {
     #[trace_parser]
     fn entity_instance(&mut self) -> Result<Option<Loc<Expression>>> {
         let start = peek_for!(self, &TokenKind::Instance);
+
+        self.item_context
+            .allows_inst(().at(self.file_id, &start.span()))?;
         // TODO: Clean this up a bit
         // Check if this is a pipeline or not
         let pipeline_depth = if self.peek_and_eat(&TokenKind::OpenParen)?.is_some() {
@@ -745,6 +752,9 @@ impl<'a> Parser<'a> {
     pub fn register(&mut self) -> Result<Option<Loc<Statement>>> {
         let start_token = peek_for!(self, &TokenKind::Reg);
 
+        self.item_context
+            .allows_reg(().at(self.file_id, &start_token.span()))?;
+
         // Clock selection
         let (clock, _clock_paren_span) = self.surrounded(
             &TokenKind::OpenParen,
@@ -870,7 +880,15 @@ impl<'a> Parser<'a> {
     // Entities
     #[trace_parser]
     pub fn entity(&mut self) -> Result<Option<Loc<Entity>>> {
-        let start_token = peek_for!(self, &TokenKind::Entity);
+        let (is_function, start_token) = if let Some(s) = self.peek_and_eat(&TokenKind::Entity)? {
+            self.set_item_context(ItemType::Entity.at(self.file_id, &s.span()))?;
+            (false, s)
+        } else if let Some(s) = self.peek_and_eat(&TokenKind::Function)? {
+            self.set_item_context(ItemType::Function.at(self.file_id, &s.span()))?;
+            (true, s)
+        } else {
+            return Ok(None);
+        };
 
         let name = self.identifier()?;
 
@@ -912,8 +930,11 @@ impl<'a> Parser<'a> {
             });
         };
 
+        self.clear_item_context();
+
         Ok(Some(
             Entity {
+                is_function,
                 name,
                 inputs,
                 output_type,
@@ -989,6 +1010,8 @@ impl<'a> Parser<'a> {
     pub fn pipeline(&mut self) -> Result<Option<Loc<Pipeline>>> {
         let start = peek_for!(self, &TokenKind::Pipeline);
 
+        self.set_item_context(ItemType::Pipeline.at(self.file_id, &start.span()))?;
+
         // Depth
         self.eat(&TokenKind::OpenParen)?;
         let depth = if let Some(d) = self.int_literal()? {
@@ -1034,6 +1057,8 @@ impl<'a> Parser<'a> {
 
             (stages, Some(result), end)
         };
+
+        self.clear_item_context();
 
         Ok(Some(
             Pipeline {
@@ -1491,6 +1516,29 @@ impl<'a> Parser<'a> {
     }
 }
 
+impl<'a> Parser<'a> {
+    fn set_item_context(&mut self, context: Loc<ItemType>) -> Result<()> {
+        if let Some(prev) = &self.item_context {
+            Err(Error::InternalOverwritingItemContext {
+                at: context.loc(),
+                prev: prev.loc(),
+            })
+        } else {
+            self.item_context = Some(context);
+            Ok(())
+        }
+    }
+
+    fn clear_item_context(&mut self) {
+        self.item_context = None
+    }
+
+    #[cfg(test)]
+    fn set_parsing_entity(&mut self) {
+        self.set_item_context(ItemType::Entity.nowhere()).unwrap()
+    }
+}
+
 pub enum ParseStackEntry {
     Enter(String),
     Ate(Token),
@@ -1579,8 +1627,11 @@ mod tests {
     use spade_common::location_info::{Loc, WithLocation};
 
     macro_rules! check_parse {
-        ($string:expr , $method:ident, $expected:expr) => {
+        ($string:expr , $method:ident, $expected:expr$(, $run_on_parser:expr)?) => {
             let mut parser = Parser::new(TokenKind::lexer($string), 0);
+
+            $($run_on_parser(&mut parser);)?
+
             let result = parser.$method();
             // This is needed because type inference fails for some unexpected reason
             let expected: Result<_> = $expected;
@@ -1963,6 +2014,7 @@ mod tests {
     fn entity_without_inputs() {
         let code = include_str!("../parser_test_code/entity_without_inputs.sp");
         let expected = Entity {
+            is_function: false,
             name: Identifier("no_inputs".to_string()).nowhere(),
             inputs: aparams![],
             output_type: None,
@@ -1997,6 +2049,7 @@ mod tests {
     fn entity_with_inputs() {
         let code = include_str!("../parser_test_code/entity_with_inputs.sp");
         let expected = Entity {
+            is_function: false,
             name: ast_ident("with_inputs"),
             inputs: aparams![("clk", tspec!("bool")), ("rst", tspec!("bool"))],
             output_type: Some(TypeSpec::Named(ast_path("bool"), vec![]).nowhere()),
@@ -2018,6 +2071,7 @@ mod tests {
     fn entity_with_generics() {
         let code = include_str!("../parser_test_code/entity_with_generics.sp");
         let expected = Entity {
+            is_function: false,
             name: ast_ident("with_generics"),
             inputs: aparams![],
             output_type: None,
@@ -2054,7 +2108,12 @@ mod tests {
         )
         .nowhere();
 
-        check_parse!(code, statement, Ok(Some(expected)));
+        check_parse!(
+            code,
+            statement,
+            Ok(Some(expected)),
+            Parser::set_parsing_entity
+        );
     }
 
     #[test]
@@ -2076,7 +2135,12 @@ mod tests {
         )
         .nowhere();
 
-        check_parse!(code, statement, Ok(Some(expected)));
+        check_parse!(
+            code,
+            statement,
+            Ok(Some(expected)),
+            Parser::set_parsing_entity
+        );
     }
 
     #[test]
@@ -2098,7 +2162,12 @@ mod tests {
         )
         .nowhere();
 
-        check_parse!(code, statement, Ok(Some(expected)));
+        check_parse!(
+            code,
+            statement,
+            Ok(Some(expected)),
+            Parser::set_parsing_entity
+        );
     }
 
     #[test]
@@ -2133,6 +2202,7 @@ mod tests {
         let code = include_str!("../parser_test_code/multiple_entities.sp");
 
         let e1 = Entity {
+            is_function: false,
             name: Identifier("e1".to_string()).nowhere(),
             inputs: aparams![],
             output_type: None,
@@ -2148,6 +2218,7 @@ mod tests {
         .nowhere();
 
         let e2 = Entity {
+            is_function: false,
             name: Identifier("e2".to_string()).nowhere(),
             inputs: aparams![],
             output_type: None,
@@ -2439,6 +2510,7 @@ mod tests {
 
         let expected = Some(
             Entity {
+                is_function: false,
                 name: ast_ident("X"),
                 inputs: ParameterList(vec![]),
                 output_type: None,
@@ -2471,6 +2543,58 @@ mod tests {
     }
 
     #[test]
+    fn builtin_functions_work() {
+        let code = "fn X() __builtin__";
+
+        let expected = Some(
+            Entity {
+                is_function: true,
+                name: ast_ident("X"),
+                inputs: ParameterList(vec![]),
+                output_type: None,
+                body: None,
+                type_params: vec![],
+            }
+            .nowhere(),
+        );
+
+        check_parse!(code, entity, Ok(expected));
+    }
+
+    #[test]
+    fn functions_do_not_allow_regs() {
+        let code = "fn X() {
+            reg(clk) x;
+            true
+        }";
+
+        check_parse!(
+            code,
+            entity,
+            Err(Error::RegInFunction {
+                at: ().nowhere(),
+                fn_keyword: ().nowhere()
+            })
+        );
+    }
+
+    #[test]
+    fn functions_do_not_allow_inst() {
+        let code = "fn X() {
+            inst Y()
+        }";
+
+        check_parse!(
+            code,
+            entity,
+            Err(Error::InstInFunction {
+                at: ().nowhere(),
+                fn_keyword: ().nowhere()
+            })
+        );
+    }
+
+    #[test]
     fn entity_instanciation() {
         let code = "inst some_entity(x, y, z)";
 
@@ -2485,7 +2609,7 @@ mod tests {
         )
         .nowhere();
 
-        check_parse!(code, expression, Ok(expected));
+        check_parse!(code, expression, Ok(expected), Parser::set_parsing_entity);
     }
 
     #[test]
@@ -2502,7 +2626,7 @@ mod tests {
         )
         .nowhere();
 
-        check_parse!(code, expression, Ok(expected));
+        check_parse!(code, expression, Ok(expected), Parser::set_parsing_entity);
     }
     #[test]
     fn named_args_work() {
@@ -2673,7 +2797,7 @@ mod tests {
         )
         .nowhere();
 
-        check_parse!(code, expression, Ok(expected));
+        check_parse!(code, expression, Ok(expected), Parser::set_parsing_entity);
     }
 
     #[test]
