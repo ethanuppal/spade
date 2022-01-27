@@ -7,9 +7,9 @@ use error::{CommaSeparatedResult, Error, Result};
 
 use spade_ast::{
     ArgumentList, ArgumentPattern, BinaryOperator, Block, Entity, Enum, Expression, FunctionDecl,
-    Item, ModuleBody, NamedArgument, ParameterList, Pattern, Pipeline, PipelineBindModifier,
-    PipelineBinding, PipelineStage, Register, Statement, TraitDef, TypeDeclKind, TypeDeclaration,
-    TypeExpression, TypeParam, TypeSpec, UnaryOperator,
+    Item, Module, ModuleBody, NamedArgument, ParameterList, Pattern, Pipeline,
+    PipelineBindModifier, PipelineBinding, PipelineStage, Register, Statement, TraitDef,
+    TypeDeclKind, TypeDeclaration, TypeExpression, TypeParam, TypeSpec, UnaryOperator,
 };
 use spade_common::{
     error_reporting::AsLabel,
@@ -1240,12 +1240,35 @@ impl<'a> Parser<'a> {
     }
 
     #[trace_parser]
+    pub fn module(&mut self) -> Result<Option<Loc<Module>>> {
+        let start = peek_for!(self, &TokenKind::Mod);
+
+        let name = self.identifier()?;
+
+        let open_brace = self.peek()?;
+        let (body, end) = self.surrounded(
+            &TokenKind::OpenBrace,
+            Self::module_body,
+            &TokenKind::CloseBrace,
+        )?;
+
+        Ok(Some(
+            Module {
+                name,
+                body: body.between(self.file_id, &open_brace.unwrap().span, &end.span),
+            }
+            .between(self.file_id, &start, &end),
+        ))
+    }
+
+    #[trace_parser]
     pub fn item(&mut self) -> Result<Option<Item>> {
         self.first_successful(vec![
             &|s: &mut Self| s.entity().map(|e| e.map(Item::Entity)),
             &|s: &mut Self| s.trait_def().map(|e| e.map(Item::TraitDef)),
             &|s: &mut Self| s.pipeline().map(|e| e.map(Item::Pipeline)),
             &|s: &mut Self| s.type_declaration().map(|e| e.map(Item::Type)),
+            &|s: &mut Self| s.module().map(|e| e.map(Item::Module)),
         ])
     }
 
@@ -1255,10 +1278,19 @@ impl<'a> Parser<'a> {
         while let Some(item) = self.item()? {
             members.push(item)
         }
+        Ok(ModuleBody { members })
+    }
+
+    /// A module body which is not part of a `mod`. Errors if there is anything
+    /// but an item found after the last item
+    #[trace_parser]
+    pub fn top_level_module_body(&mut self) -> Result<ModuleBody> {
+        let result = self.module_body();
+
         if let Some(tok) = self.peek()? {
             Err(Error::ExpectedItem { got: tok })
         } else {
-            Ok(ModuleBody { members })
+            result
         }
     }
 }
@@ -2253,7 +2285,7 @@ mod tests {
 
         check_parse!(
             code,
-            module_body,
+            top_level_module_body,
             Err(Error::ExpectedItem {
                 got: Token {
                     kind: TokenKind::Plus,
@@ -2992,5 +3024,48 @@ mod tests {
                 },
             })
         );
+    }
+
+    #[test]
+    fn modules_can_be_empty() {
+        let code = r#"mod X {}"#;
+
+        let expected = ModuleBody {
+            members: vec![Item::Module(
+                Module {
+                    name: ast_ident("X"),
+                    body: ModuleBody { members: vec![] }.nowhere(),
+                }
+                .nowhere(),
+            )],
+        };
+
+        check_parse!(code, module_body, Ok(expected));
+    }
+
+    #[test]
+    fn modules_containing_items_work() {
+        let code = r#"mod X {mod Y {}}"#;
+
+        let expected = ModuleBody {
+            members: vec![Item::Module(
+                Module {
+                    name: ast_ident("X"),
+                    body: ModuleBody {
+                        members: vec![Item::Module(
+                            Module {
+                                name: ast_ident("Y"),
+                                body: ModuleBody { members: vec![] }.nowhere(),
+                            }
+                            .nowhere(),
+                        )],
+                    }
+                    .nowhere(),
+                }
+                .nowhere(),
+            )],
+        };
+
+        check_parse!(code, module_body, Ok(expected));
     }
 }

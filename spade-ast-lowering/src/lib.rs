@@ -254,20 +254,36 @@ pub fn visit_item(
     namespace: &Path,
     symtab: &mut SymbolTable,
     idtracker: &mut ExprIdTracker,
-) -> Result<Option<hir::Item>> {
+) -> Result<(Option<hir::Item>, Option<hir::ItemList>)> {
     match item {
-        ast::Item::Entity(e) => {
-            Ok(visit_entity(e, namespace, symtab, idtracker)?.map(hir::Item::Entity))
-        }
-        ast::Item::Pipeline(p) => Ok(
-            pipelines::visit_pipeline(p, namespace, symtab, idtracker)?.map(hir::Item::Pipeline)
-        ),
+        ast::Item::Entity(e) => Ok((
+            visit_entity(e, namespace, symtab, idtracker)?.map(hir::Item::Entity),
+            None,
+        )),
+        ast::Item::Pipeline(p) => Ok((
+            pipelines::visit_pipeline(p, namespace, symtab, idtracker)?.map(hir::Item::Pipeline),
+            None,
+        )),
         ast::Item::TraitDef(_) => {
             todo!("Visit trait definitions")
         }
         ast::Item::Type(_) => {
             // Global symbol lowering already visits type declarations
-            Ok(None)
+            Ok((None, None))
+        }
+        ast::Item::Module(m) => {
+            let namespace = namespace.push_ident(m.name.clone());
+            let new_item_list = hir::ItemList::new();
+            Ok((
+                None,
+                Some(visit_module_body(
+                    new_item_list,
+                    &m.body,
+                    &namespace,
+                    symtab,
+                    idtracker,
+                )?),
+            ))
         }
     }
 }
@@ -286,14 +302,14 @@ pub fn visit_module_body(
         .collect::<Result<Vec<_>>>()?
         .into_iter();
 
-    for item in all_items {
+    for (item, new_item_list) in all_items {
         // Insertion in hash maps return a value if duplicates are present (or not if try_insert is
         // used) We need to get rid of that for the type of the match block here to work, and a macro
         // hides those details
         macro_rules! add_item {
             ($map:expr, $name:expr, $item:expr) => {{
-                if let Some(_) = $map.insert($name.inner.clone(), $item) {
-                    panic!("Internal error: Multiple thigns named {}", $name.inner)
+                if let Some(_) = $map.insert($name, $item) {
+                    panic!("Internal error: Multiple thigns named {}", $name)
                 }
             }};
         }
@@ -301,14 +317,23 @@ pub fn visit_module_body(
         match item {
             Some(Entity(e)) => add_item!(
                 item_list.executables,
-                e.name,
+                e.name.inner.clone(),
                 ExecutableItem::Entity(e.clone())
             ),
             Some(Pipeline(p)) => add_item!(
                 item_list.executables,
-                p.name,
+                p.name.inner.clone(),
                 ExecutableItem::Pipeline(p.clone())
             ),
+            None => {}
+        }
+
+        match new_item_list {
+            Some(list) => {
+                for (name, executable) in list.executables {
+                    add_item!(item_list.executables, name.clone(), executable)
+                }
+            }
             None => {}
         }
     }
@@ -2038,7 +2063,7 @@ mod item_visiting {
             .unwrap();
         assert_eq!(
             visit_item(&input, &namespace, &mut symtab, &mut idtracker),
-            Ok(Some(expected))
+            Ok((Some(expected), None))
         );
     }
 }

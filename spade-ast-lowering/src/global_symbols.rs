@@ -55,6 +55,10 @@ pub fn visit_item(
         ast::Item::Type(t) => {
             re_visit_type_declaration(t, namespace, symtab, item_list)?;
         }
+        ast::Item::Module(m) => {
+            let namespace = namespace.push_ident(m.name.clone());
+            gather_symbols(&m.body, &namespace, symtab, item_list)?;
+        }
     }
     Ok(())
 }

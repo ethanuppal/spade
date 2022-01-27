@@ -262,8 +262,16 @@ pub enum Item {
     Pipeline(Loc<Pipeline>),
     TraitDef(Loc<TraitDef>),
     Type(Loc<TypeDeclaration>),
+    Module(Loc<Module>),
 }
 impl WithLocation for Item {}
+
+#[derive(PartialEq, Debug, Clone)]
+pub struct Module {
+    pub name: Loc<Identifier>,
+    pub body: Loc<ModuleBody>,
+}
+impl WithLocation for Module {}
 
 #[derive(PartialEq, Debug, Clone)]
 pub struct ModuleBody {

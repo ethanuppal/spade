@@ -7,6 +7,7 @@ use spade_testutil::{parse_typecheck_module_body, ParseTypececkResult};
 use spade_typeinference::ProcessedItem;
 
 mod hir_lowering;
+mod integration;
 mod typeinference;
 
 pub trait ResultExt<T> {

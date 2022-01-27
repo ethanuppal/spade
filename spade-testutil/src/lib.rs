@@ -80,7 +80,7 @@ pub fn parse_typecheck_module_body(input: &str) -> ParseTypececkResult {
         };
     }
 
-    let module_ast = try_or_report!(parser.module_body());
+    let module_ast = try_or_report!(parser.top_level_module_body());
 
     let mut symtab = SymbolTable::new();
     let mut item_list = ItemList::new();

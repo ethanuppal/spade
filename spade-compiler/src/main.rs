@@ -73,7 +73,7 @@ fn main() -> Result<()> {
         let file_id = code.add_file(infile, file_content.clone());
         let mut parser = Parser::new(lexer::TokenKind::lexer(&file_content), file_id);
 
-        module_asts.push(try_or_report!(parser.module_body()));
+        module_asts.push(try_or_report!(parser.top_level_module_body()));
     }
 
     for module_ast in &module_asts {
