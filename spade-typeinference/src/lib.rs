@@ -805,9 +805,15 @@ impl TypeState {
                             }
 
                             for (t1, t2) in p1.iter().zip(p2.iter()) {
-                                self.unify(t1, t2, symtab)
-                                    .add_context(v1.clone(), v2.clone())?
-                                    .join(&mut task);
+                                match self.unify(t1, t2, symtab) {
+                                    Ok(result) => {
+                                        result.join(&mut task)
+                                    }
+                                    e => {
+                                        std::mem::forget(task);
+                                        return e.add_context(v1.clone(), v2.clone());
+                                    }
+                                }
                             }
 
                             let new_ts1 = symtab.type_symbol_by_id(n1).inner;
@@ -837,9 +843,15 @@ impl TypeState {
                 }
 
                 for (t1, t2) in i1.iter().zip(i2.iter()) {
-                    self.unify(t1, t2, symtab)
-                        .add_context(v1.clone(), v2.clone())?
-                        .join(&mut task);
+                    match self.unify(t1, t2, symtab) {
+                        Ok(result) => {
+                            result.join(&mut task)
+                        }
+                        e => {
+                            std::mem::forget(task);
+                            return e.add_context(v1.clone(), v2.clone());
+                        }
+                    }
                 }
 
                 Ok((v1, None))
