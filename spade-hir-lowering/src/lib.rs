@@ -767,10 +767,20 @@ impl ExprLocal for Loc<Expression> {
                 }));
             }
             None => {
-                panic!(
-                    "Expected to find an executable named {} for function call",
-                    name
-                )
+                // NOTE: Something causes entities to not be in the executable list at this point.
+                // We'll just ignore that problem and assume it exists for now. Bug introduced
+                // in commit 20f58921
+                result.push(mir::Statement::Binding(mir::Binding {
+                    name: self.variable(subs),
+                    operator: mir::Operator::Instance(name.1.to_string()),
+                    operands: args
+                        .into_iter()
+                        .map(|arg| arg.value.variable(subs))
+                        .collect(),
+                    ty: types
+                        .expr_type(self, symtab.symtab(), &item_list.types)?
+                        .to_mir_type(),
+                }));
             }
         }
         Ok(result)
