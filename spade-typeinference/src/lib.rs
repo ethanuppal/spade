@@ -784,7 +784,7 @@ impl TypeState {
 
         // Figure out the most general type, and take note if we need to
         // do any replacement of the types in the rest of the state
-        let (new_type, replaced_type) = match (&v1.as_ref(), &v2.as_ref()) {
+        let result = match (&v1.as_ref(), &v2.as_ref()) {
             (InnerTypeVar::Known(t1, p1, _), InnerTypeVar::Known(t2, p2, _)) => match (t1, t2) {
                 (KnownType::Integer(val1), KnownType::Integer(val2)) => {
                     unify_if!(val1 == val2, v1, None)
@@ -894,7 +894,15 @@ impl TypeState {
             (_other, InnerTypeVar::Known(_, _, _)) => Err(err_producer()),
             (InnerTypeVar::Tuple(_), _other) => Err(err_producer()),
             (_other, InnerTypeVar::Tuple(_)) => Err(err_producer()),
-        }?;
+        };
+
+        let (new_type, replaced_type) = match result {
+            Ok(result) => result,
+            Err(e) => {
+                std::mem::forget(task);
+                return Err(e);
+            }
+        };
 
         task.tasks.push((
             new_type.as_ref().clone(),
