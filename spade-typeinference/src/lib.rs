@@ -782,6 +782,18 @@ impl TypeState {
 
         let mut task = UnificationTask { tasks: vec![] };
 
+        macro_rules! try_with_context {
+            ($value: expr) => {
+                match $value {
+                    Ok(result) => result,
+                    e => {
+                        std::mem::forget(task);
+                        return e.add_context(v1.clone(), v2.clone());
+                    }
+                }
+            };
+        }
+
         // Figure out the most general type, and take note if we need to
         // do any replacement of the types in the rest of the state
         let result = match (&v1.as_ref(), &v2.as_ref()) {
@@ -805,15 +817,7 @@ impl TypeState {
                             }
 
                             for (t1, t2) in p1.iter().zip(p2.iter()) {
-                                match self.unify(t1, t2, symtab) {
-                                    Ok(result) => {
-                                        result.join(&mut task)
-                                    }
-                                    e => {
-                                        std::mem::forget(task);
-                                        return e.add_context(v1.clone(), v2.clone());
-                                    }
-                                }
+                                try_with_context!(self.unify(t1, t2, symtab)).join(&mut task);
                             }
 
                             let new_ts1 = symtab.type_symbol_by_id(n1).inner;
@@ -843,15 +847,7 @@ impl TypeState {
                 }
 
                 for (t1, t2) in i1.iter().zip(i2.iter()) {
-                    match self.unify(t1, t2, symtab) {
-                        Ok(result) => {
-                            result.join(&mut task)
-                        }
-                        e => {
-                            std::mem::forget(task);
-                            return e.add_context(v1.clone(), v2.clone());
-                        }
-                    }
+                    try_with_context!(self.unify(t1, t2, symtab)).join(&mut task);
                 }
 
                 Ok((v1, None))
@@ -866,14 +862,10 @@ impl TypeState {
                     size: s2,
                 },
             ) => {
-                let inner_task = self
-                    .unify(i1.as_ref(), i2.as_ref(), symtab)
-                    .add_context(v1.clone(), v2.clone())?;
+                let inner_task = try_with_context!(self.unify(i1.as_ref(), i2.as_ref(), symtab));
                 let inner = inner_task.last_result_type();
                 inner_task.join(&mut task);
-                let size_task = self
-                    .unify(s1.as_ref(), s2.as_ref(), symtab)
-                    .add_context(v1.clone(), v2.clone())?;
+                let size_task = try_with_context!(self.unify(s1.as_ref(), s2.as_ref(), symtab));
                 let size = size_task.last_result_type();
                 size_task.join(&mut task);
 
