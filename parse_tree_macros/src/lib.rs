@@ -52,9 +52,20 @@ pub fn trace_typechecker(attrs: TokenStream, input: TokenStream) -> TokenStream 
 
 #[proc_macro_attribute]
 pub fn local_impl(attrs: TokenStream, input: TokenStream) -> TokenStream {
-    parse_macro_input!(attrs as parse::Nothing);
+    let mut orig_input = input.clone();
 
-    let input = parse_macro_input!(input as ItemImpl);
+    local_impl_impl(attrs.into(), input.into()).map_or_else(
+        |err| {
+            orig_input.extend::<proc_macro::TokenStream>(err.to_compile_error().into());
+            orig_input
+        },
+        Into::into,
+    )
+}
+
+fn local_impl_impl(attrs: TokenStream2, input: TokenStream2) -> Result<TokenStream2> {
+    let _ = parse2::<parse::Nothing>(attrs)?;
+    let input = parse2::<ItemImpl>(input)?;
 
     let (impl_generics, generics, where_clause) = input.generics.split_for_impl();
     let trait_name = input.trait_.clone().expect("Expected a trait name").1;
@@ -88,10 +99,10 @@ pub fn local_impl(attrs: TokenStream, input: TokenStream) -> TokenStream {
         }
     );
 
-    quote!(
+    Ok(quote!(
         #trait_def
         #impl_block
     )
     .into_token_stream()
-    .into()
+    .into())
 }

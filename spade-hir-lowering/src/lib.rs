@@ -692,54 +692,9 @@ impl ExprLocal for Loc<Expression> {
                         .to_mir_type(),
                 }))
             }
-            ExprKind::FnCall(name, args) => {
-                for param in args {
-                    result.append(
-                        &mut param
-                            .value
-                            .lower(symtab, idtracker, types, subs, item_list)?,
-                    );
-                }
-                // Look up the name in the executable list to see if this is a type instantiation
-                match item_list.executables.get(name) {
-                    Some(hir::ExecutableItem::EnumInstance { base_enum, variant }) => {
-                        let variant_count = match item_list.types.get(base_enum) {
-                            Some(type_decl) => match &type_decl.kind {
-                                hir::TypeDeclKind::Enum(e) => e.inner.options.len(),
-                                _ => panic!("Instantiating enum of type which is not an enum"),
-                            },
-                            None => panic!("No type declaration found for {}", base_enum),
-                        };
-
-                        result.push(mir::Statement::Binding(mir::Binding {
-                            name: self.variable(subs),
-                            ty: types
-                                .expr_type(self, symtab.symtab(), &item_list.types)?
-                                .to_mir_type(),
-                            operator: mir::Operator::ConstructEnum {
-                                variant: *variant,
-                                variant_count,
-                            },
-                            operands: args
-                                .into_iter()
-                                .map(|arg| arg.value.variable(subs))
-                                .collect(),
-                        }))
-                    }
-                    Some(hir::ExecutableItem::Pipeline(_)) => {
-                        panic!("Expected function definition, found pipeline")
-                    }
-                    Some(hir::ExecutableItem::Entity(_)) => {
-                        panic!("Expected function definition, found entity")
-                    }
-                    None => {
-                        panic!(
-                            "Expected to find an executable named {} for function call",
-                            name
-                        )
-                    }
-                }
-            }
+            ExprKind::FnCall(name, args) => result.append(
+                &mut self.handle_call(name, args, symtab, idtracker, types, subs, item_list)?,
+            ),
             ExprKind::EntityInstance(name, args) => result.append(
                 &mut self.handle_call(name, args, symtab, idtracker, types, subs, item_list)?,
             ),
@@ -765,21 +720,59 @@ impl ExprLocal for Loc<Expression> {
         item_list: &ItemList,
     ) -> Result<Vec<mir::Statement>> {
         let mut result = vec![];
-        for arg in args {
-            result.append(&mut arg.value.lower(symtab, idtracker, types, subs, item_list)?)
+        for param in args {
+            result.append(
+                &mut param
+                    .value
+                    .lower(symtab, idtracker, types, subs, item_list)?,
+            );
         }
-        result.push(mir::Statement::Binding(mir::Binding {
-            name: self.variable(subs),
-            operator: mir::Operator::Instance(name.1.to_string()),
-            operands: args
-                .into_iter()
-                .map(|arg| arg.value.variable(subs))
-                .collect(),
-            ty: types
-                .expr_type(self, symtab.symtab(), &item_list.types)?
-                .to_mir_type(),
-        }));
+        // Look up the name in the executable list to see if this is a type instantiation
+        match item_list.executables.get(name) {
+            Some(hir::ExecutableItem::EnumInstance { base_enum, variant }) => {
+                let variant_count = match item_list.types.get(base_enum) {
+                    Some(type_decl) => match &type_decl.kind {
+                        hir::TypeDeclKind::Enum(e) => e.inner.options.len(),
+                        _ => panic!("Instantiating enum of type which is not an enum"),
+                    },
+                    None => panic!("No type declaration found for {}", base_enum),
+                };
 
+                result.push(mir::Statement::Binding(mir::Binding {
+                    name: self.variable(subs),
+                    ty: types
+                        .expr_type(self, symtab.symtab(), &item_list.types)?
+                        .to_mir_type(),
+                    operator: mir::Operator::ConstructEnum {
+                        variant: *variant,
+                        variant_count,
+                    },
+                    operands: args
+                        .into_iter()
+                        .map(|arg| arg.value.variable(subs))
+                        .collect(),
+                }))
+            }
+            Some(hir::ExecutableItem::Pipeline(_)) | Some(hir::ExecutableItem::Entity(_)) => {
+                result.push(mir::Statement::Binding(mir::Binding {
+                    name: self.variable(subs),
+                    operator: mir::Operator::Instance(name.1.to_string()),
+                    operands: args
+                        .into_iter()
+                        .map(|arg| arg.value.variable(subs))
+                        .collect(),
+                    ty: types
+                        .expr_type(self, symtab.symtab(), &item_list.types)?
+                        .to_mir_type(),
+                }));
+            }
+            None => {
+                panic!(
+                    "Expected to find an executable named {} for function call",
+                    name
+                )
+            }
+        }
         Ok(result)
     }
 }

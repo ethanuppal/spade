@@ -659,31 +659,6 @@ pub fn visit_expression(
                 ast::UnaryOperator::Not => Ok(unop(hir::expression::UnaryOperator::Not)),
             }
         }
-        ast::Expression::EntityInstance(name, arg_list) => {
-            let (name_id, head) = symtab.lookup_entity(name)?;
-            let head = head.clone();
-
-            let args = visit_argument_list(arg_list, &head.inputs, symtab, idtracker)?;
-            Ok(hir::ExprKind::EntityInstance(name_id.at_loc(name), args))
-        }
-        ast::Expression::PipelineInstance(depth, name, arg_list) => {
-            let (name_id, head) = symtab.lookup_pipeline(name)?;
-            let head = head.clone();
-
-            if head.depth.inner != depth.inner as usize {
-                return Err(Error::PipelineDepthMissmatch {
-                    expected: head.depth.inner,
-                    got: depth.clone(),
-                });
-            }
-
-            let args = visit_argument_list(arg_list, &head.inputs, symtab, idtracker)?;
-            Ok(hir::ExprKind::PipelineInstance {
-                depth: depth.clone(),
-                name: name_id.at_loc(name),
-                args,
-            })
-        }
         ast::Expression::TupleLiteral(exprs) => {
             let exprs = exprs
                 .into_iter()
@@ -742,6 +717,31 @@ pub fn visit_expression(
             let args = visit_argument_list(args, &head.inputs, symtab, idtracker)?;
 
             Ok(hir::ExprKind::FnCall(name_id.at_loc(callee), args))
+        }
+        ast::Expression::EntityInstance(name, arg_list) => {
+            let (name_id, head) = symtab.lookup_entity(name)?;
+            let head = head.clone();
+
+            let args = visit_argument_list(arg_list, &head.inputs, symtab, idtracker)?;
+            Ok(hir::ExprKind::EntityInstance(name_id.at_loc(name), args))
+        }
+        ast::Expression::PipelineInstance(depth, name, arg_list) => {
+            let (name_id, head) = symtab.lookup_pipeline(name)?;
+            let head = head.clone();
+
+            if head.depth.inner != depth.inner as usize {
+                return Err(Error::PipelineDepthMissmatch {
+                    expected: head.depth.inner,
+                    got: depth.clone(),
+                });
+            }
+
+            let args = visit_argument_list(arg_list, &head.inputs, symtab, idtracker)?;
+            Ok(hir::ExprKind::PipelineInstance {
+                depth: depth.clone(),
+                name: name_id.at_loc(name),
+                args,
+            })
         }
         ast::Expression::Identifier(path) => {
             // If the identifier isn't a valid variable, report as "expected value".
