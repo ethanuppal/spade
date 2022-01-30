@@ -247,9 +247,12 @@ fn statement_code(statement: &Statement) -> Code {
                 Operator::Instance(module_name) => {
                     // Input args
                     let mut args = ops.join(", ");
-                    // Output arg
-                    args += ", ";
-                    args += &name;
+
+                    if !ops.is_empty() {
+                        // Output arg
+                        args += ", ";
+                        args += &name;
+                    }
 
                     let instance_name = format!("{}_{}", module_name, name);
 
