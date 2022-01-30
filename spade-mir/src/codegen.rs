@@ -251,8 +251,8 @@ fn statement_code(statement: &Statement) -> Code {
                     if !ops.is_empty() {
                         // Output arg
                         args += ", ";
-                        args += &name;
                     }
+                    args += &name;
 
                     let instance_name = format!("{}_{}", module_name, name);
 
