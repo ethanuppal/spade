@@ -1408,7 +1408,7 @@ impl<'a> Parser<'a> {
             })
         } else {
             Err(Error::UnexpectedToken {
-                got: self.eat_unconditional()?,
+                got: next,
                 expected: vec![expected.as_str()],
             })
         }
@@ -2976,5 +2976,21 @@ mod tests {
         .nowhere();
 
         check_parse!(code, pattern, Ok(expected));
+    }
+
+    #[test]
+    fn missing_semicolon_error_points_to_correct_token() {
+        check_parse!(
+            "let a = 1 let b = 2;",
+            statements,
+            Err(Error::UnexpectedToken {
+                expected: vec![";"],
+                got: Token {
+                    kind: TokenKind::Let,
+                    span: 10..13,
+                    file_id: 0,
+                },
+            })
+        );
     }
 }
