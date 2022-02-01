@@ -16,7 +16,7 @@ pub enum TokenKind {
         u128::from_str_radix(&without_under, 10)
     })]
     Integer(u128),
-    #[regex(r"0x[0-9A-z][0-9_A-z]*", |lex| {
+    #[regex(r"0x[0-9A-Fa-f][0-9_A-Fa-f]*", |lex| {
         let without_under = lex.slice().replace("_", "");
 
         u128::from_str_radix(&without_under[2..], 16)
@@ -253,6 +253,23 @@ mod tests {
         let mut lex = TokenKind::lexer("123");
 
         assert_eq!(lex.next(), Some(TokenKind::Integer(123)));
+        assert_eq!(lex.next(), None);
+    }
+
+    #[test]
+    fn hex_array() {
+        let mut lex = TokenKind::lexer("[0x45]");
+        assert_eq!(lex.next(), Some(TokenKind::OpenBracket));
+        assert_eq!(lex.next(), Some(TokenKind::HexInteger(0x45)));
+        assert_eq!(lex.next(), Some(TokenKind::CloseBracket));
+        assert_eq!(lex.next(), None);
+    }
+
+    #[test]
+    fn invalid_hex_is_not_hex() {
+        let mut lex = TokenKind::lexer("0xg");
+        assert_eq!(lex.next(), Some(TokenKind::Integer(0)));
+        assert_eq!(lex.next(), Some(TokenKind::Identifier("xg".to_string())));
         assert_eq!(lex.next(), None);
     }
 }
