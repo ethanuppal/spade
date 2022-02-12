@@ -95,6 +95,7 @@ pub enum Thing {
     Entity(Loc<EntityHead>),
     Pipeline(Loc<PipelineHead>),
     Variable(Loc<Identifier>),
+    Alias(Loc<Path>),
 }
 
 impl Thing {
@@ -106,6 +107,7 @@ impl Thing {
             Thing::Pipeline(_) => "pipeline",
             Thing::Function(_) => "function",
             Thing::EnumVariant(_) => "enum variant",
+            Thing::Alias(_) => "alias",
         }
     }
 
@@ -117,6 +119,7 @@ impl Thing {
             Thing::Variable(i) => i.loc(),
             Thing::Function(i) => i.loc(),
             Thing::EnumVariant(i) => i.loc(),
+            Thing::Alias(i) => i.loc(),
         }
     }
 }
@@ -285,7 +288,7 @@ macro_rules! item_accessors {
             /// type
             pub fn $by_id_name(&self, id: &NameID) -> Loc<$result> {
                 match self.items.get(&id) {
-                    $(Some($thing) => {$conversion})*
+                    $(Some($thing) => {$conversion})*,
                     Some(other) => panic!("attempted to look up {} but it was {:?}", stringify!($result), other),
                     None => panic!("No thing entry found for {:?}", id)
                 }
@@ -297,7 +300,8 @@ macro_rules! item_accessors {
                 let id = self.lookup_id(name)?;
 
                 match self.items.get(&id).unwrap() {
-                    $($thing => {Ok((id, $conversion))})*
+                    $($thing => {Ok((id, $conversion))})*,
+                    Thing::Alias(alias) => self.$lookup_name(alias),
                     other => Err(LookupError::$err(name.clone(), other.clone())),
                 }
             }

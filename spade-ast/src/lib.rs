@@ -254,6 +254,13 @@ pub struct TypeDeclaration {
 }
 impl WithLocation for TypeDeclaration {}
 
+#[derive(PartialEq, Debug, Clone)]
+pub struct UseStatement {
+    pub path: Loc<Path>,
+    pub alias: Option<Loc<Identifier>>,
+}
+impl WithLocation for UseStatement {}
+
 /// Items are things typically present at the top level of a module such as
 /// entities, pipelines, submodules etc.
 #[derive(PartialEq, Debug, Clone)]
@@ -263,6 +270,7 @@ pub enum Item {
     TraitDef(Loc<TraitDef>),
     Type(Loc<TypeDeclaration>),
     Module(Loc<Module>),
+    Use(Loc<UseStatement>),
 }
 impl WithLocation for Item {}
 

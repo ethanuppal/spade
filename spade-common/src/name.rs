@@ -37,6 +37,14 @@ impl Path {
         result.0.push(ident);
         result
     }
+
+    pub fn join(&self, other: Path) -> Path {
+        let mut result = self.clone();
+        for ident in other.0 {
+            result = result.push_ident(ident);
+        }
+        return result;
+    }
 }
 
 impl std::fmt::Display for Path {

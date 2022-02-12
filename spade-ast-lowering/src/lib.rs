@@ -285,6 +285,7 @@ pub fn visit_item(
                 )?),
             ))
         }
+        ast::Item::Use(_) => Ok((None, None)),
     }
 }
 

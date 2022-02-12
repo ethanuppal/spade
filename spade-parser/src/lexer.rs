@@ -66,6 +66,10 @@ pub enum TokenKind {
     Enum,
     #[token("mod")]
     Mod,
+    #[token("use")]
+    Use,
+    #[token("as")]
+    As,
 
     // Math operators
     #[token("+")]
@@ -180,6 +184,8 @@ impl TokenKind {
             TokenKind::Function => "fn",
             TokenKind::Enum => "enum",
             TokenKind::Mod => "mod",
+            TokenKind::As => "as",
+            TokenKind::Use => "use",
 
             TokenKind::Assignment => "=",
             TokenKind::Plus => "+",

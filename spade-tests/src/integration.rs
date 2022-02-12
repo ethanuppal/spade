@@ -39,4 +39,65 @@ mod namespace_tests {
 
         build_items(code);
     }
+
+    #[test]
+    fn use_statements_work() {
+        let code = r#"
+            mod X {
+                entity x() -> int<2> {
+                    1
+                }
+            }
+
+            use X::x;
+
+            entity top() -> int<2> {
+                inst x()
+            }
+            "#;
+
+        build_items(code);
+    }
+
+    #[test]
+    fn renaming_use_statements_work() {
+        let code = r#"
+            mod X {
+                entity x() -> int<2> {
+                    1
+                }
+            }
+
+            use X::x as a;
+
+            entity top() -> int<2> {
+                inst a()
+            }
+            "#;
+
+        build_items(code);
+    }
+
+    /// NOTE This test fails currently
+    #[test]
+    fn recursive_use_statements_work() {
+        let code = r#"
+            mod X {
+                mod Y {
+                    entity x() -> int<2> {
+                        1
+                    }
+                }
+                use Y::x;
+            }
+
+            use X::x as a;
+
+            entity top() -> int<2> {
+                inst a()
+            }
+        "#;
+
+        build_items(code);
+    }
 }

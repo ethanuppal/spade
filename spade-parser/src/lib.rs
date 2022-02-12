@@ -10,6 +10,7 @@ use spade_ast::{
     Item, Module, ModuleBody, NamedArgument, ParameterList, Pattern, Pipeline,
     PipelineBindModifier, PipelineBinding, PipelineStage, Register, Statement, TraitDef,
     TypeDeclKind, TypeDeclaration, TypeExpression, TypeParam, TypeSpec, UnaryOperator,
+    UseStatement,
 };
 use spade_common::{
     error_reporting::AsLabel,
@@ -1262,6 +1263,27 @@ impl<'a> Parser<'a> {
     }
 
     #[trace_parser]
+    pub fn r#use(&mut self) -> Result<Option<Loc<UseStatement>>> {
+        let start = peek_for!(self, &TokenKind::Use);
+
+        let path = self.path()?;
+
+        let alias = if let Some(_) = self.peek_and_eat(&TokenKind::As)? {
+            Some(self.identifier()?)
+        } else {
+            None
+        };
+
+        let end = self.eat(&TokenKind::Semi)?;
+
+        Ok(Some(UseStatement { path, alias }.between(
+            self.file_id,
+            &start.span(),
+            &end.span(),
+        )))
+    }
+
+    #[trace_parser]
     pub fn item(&mut self) -> Result<Option<Item>> {
         self.first_successful(vec![
             &|s: &mut Self| s.entity().map(|e| e.map(Item::Entity)),
@@ -1269,6 +1291,7 @@ impl<'a> Parser<'a> {
             &|s: &mut Self| s.pipeline().map(|e| e.map(Item::Pipeline)),
             &|s: &mut Self| s.type_declaration().map(|e| e.map(Item::Type)),
             &|s: &mut Self| s.module().map(|e| e.map(Item::Module)),
+            &|s: &mut Self| s.r#use().map(|e| e.map(Item::Use)),
         ])
     }
 
@@ -3067,5 +3090,35 @@ mod tests {
         };
 
         check_parse!(code, module_body, Ok(expected));
+    }
+
+    #[test]
+    fn simple_use_statement_parses() {
+        let code = r#"use X::y;"#;
+
+        let expected = Item::Use(
+            UseStatement {
+                path: Path::from_strs(&["X", "y"]).nowhere(),
+                alias: None,
+            }
+            .nowhere(),
+        );
+
+        check_parse!(code, item, Ok(Some(expected)));
+    }
+
+    #[test]
+    fn use_statement_with_alias_works() {
+        let code = r#"use X::y as z;"#;
+
+        let expected = Item::Use(
+            UseStatement {
+                path: Path::from_strs(&["X", "y"]).nowhere(),
+                alias: Some(ast_ident("z")),
+            }
+            .nowhere(),
+        );
+
+        check_parse!(code, item, Ok(Some(expected)));
     }
 }

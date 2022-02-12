@@ -59,6 +59,17 @@ pub fn visit_item(
             let namespace = namespace.push_ident(m.name.clone());
             gather_symbols(&m.body, &namespace, symtab, item_list)?;
         }
+        ast::Item::Use(u) => {
+            let new_name = match &u.alias {
+                Some(name) => name.clone(),
+                None => u.path.0.last().unwrap().clone(),
+            };
+
+            let this_path = namespace.push_ident(new_name);
+            let target_path = namespace.join(u.path.clone().inner).at_loc(&u.path);
+
+            symtab.add_thing(this_path, Thing::Alias(target_path));
+        }
     }
     Ok(())
 }
