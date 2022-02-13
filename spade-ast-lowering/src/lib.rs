@@ -10,8 +10,9 @@ use hir::symbol_table::DeclarationState;
 use hir::util::path_from_ident;
 use hir::ExecutableItem;
 pub use spade_common::id_tracker;
+use spade_common::name::Identifier;
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use thiserror::Error;
 
@@ -156,8 +157,16 @@ pub fn visit_type_spec(t: &ast::TypeSpec, symtab: &mut SymbolTable) -> Result<hi
 }
 
 fn visit_parameter_list(l: &ParameterList, symtab: &mut SymbolTable) -> Result<hir::ParameterList> {
+    let mut arg_names: HashSet<Loc<Identifier>> = HashSet::new();
     let mut result = vec![];
     for (name, input_type) in &l.0 {
+        if let Some(prev) = arg_names.get(name) {
+            return Err(Error::DuplicateArgument {
+                new: name.clone(),
+                prev: prev.clone(),
+            });
+        }
+        arg_names.insert(name.clone());
         let t = input_type.try_map_ref(|t| visit_type_spec(t, symtab))?;
 
         result.push((name.clone(), t));

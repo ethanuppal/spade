@@ -1,0 +1,3 @@
+entity a(a: bool, a: bool) -> bool {
+    true
+}

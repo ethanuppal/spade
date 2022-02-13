@@ -22,6 +22,16 @@ pub enum Error {
         found: Loc<Identifier>,
         previously: Loc<Identifier>,
     },
+    #[error("Duplicate argument")]
+    DuplicateArgument {
+        new: Loc<Identifier>,
+        prev: Loc<Identifier>,
+    },
+    #[error("Duplicate enum option")]
+    DuplicateEnumOption {
+        new: Loc<Identifier>,
+        prev: Loc<Identifier>,
+    },
     #[error("Argument list length mismatch, expected {expected} got {got}")]
     ArgumentListLenghtMismatch {
         expected: usize,

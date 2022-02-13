@@ -125,6 +125,22 @@ impl CompilationError for Error {
                             .with_message(format!("Previously declared here")),
                     ])
             }
+            Error::DuplicateArgument { new, prev } => Diagnostic::error()
+                .with_message(format!("Multiple arguments called {}", new))
+                .with_labels(vec![
+                    new.primary_label()
+                        .with_message(format!("{} is an argument more than once", new)),
+                    prev.secondary_label()
+                        .with_message(format!("Previously declared here")),
+                ]),
+            Error::DuplicateEnumOption { new, prev } => Diagnostic::error()
+                .with_message(format!("Multiple options called {}", new))
+                .with_labels(vec![
+                    new.primary_label()
+                        .with_message(format!("{} is an option more than once", new)),
+                    prev.secondary_label()
+                        .with_message(format!("Previously declared here")),
+                ]),
             Error::ArgumentListLenghtMismatch { expected, got, at } => Diagnostic::error()
                 .with_message(format!("Expected {} arguments, got {}", expected, got))
                 .with_labels(vec![at

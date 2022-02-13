@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use hir::{
     symbol_table::{EnumVariant, StructCallable},
     ItemList, TypeExpression,
@@ -5,11 +7,11 @@ use hir::{
 use spade_ast as ast;
 use spade_common::{
     location_info::{Loc, WithLocation},
-    name::Path,
+    name::{Identifier, Path},
 };
 use spade_hir as hir;
 
-use crate::{visit_parameter_list, Result};
+use crate::{visit_parameter_list, Error, Result};
 use spade_hir::symbol_table::{GenericArg, SymbolTable, Thing, TypeSymbol};
 
 pub fn gather_types(
@@ -188,8 +190,16 @@ pub fn re_visit_type_declaration(
 
     let hir_kind = match &t.inner.kind {
         ast::TypeDeclKind::Enum(e) => {
+            let mut member_names = HashSet::<Loc<Identifier>>::new();
             let mut hir_options = vec![];
             for (i, option) in e.options.iter().enumerate() {
+                if let Some(prev) = member_names.get(&option.0) {
+                    return Err(Error::DuplicateEnumOption {
+                        new: option.0.clone(),
+                        prev: prev.clone(),
+                    });
+                }
+                member_names.insert(option.0.clone());
                 // Check the parameter list
                 let parameter_list = option
                     .1
