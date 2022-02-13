@@ -28,7 +28,7 @@ impl WithLocation for TypeSpec {}
 
 #[derive(PartialEq, Debug, Clone)]
 pub enum ArgumentPattern {
-    Named(Vec<(Loc<Identifier>, Loc<Pattern>)>),
+    Named(Vec<(Loc<Identifier>, Option<Loc<Pattern>>)>),
     Positional(Vec<Loc<Pattern>>),
 }
 impl WithLocation for ArgumentPattern {}

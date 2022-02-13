@@ -431,8 +431,69 @@ pub fn visit_pattern(
             match symtab.lookup_patternable_type(path) {
                 Ok((name_id, p)) => {
                     match &args.inner {
-                        ast::ArgumentPattern::Named(_) => {
-                            todo!("support positional enum destructuring")
+                        ast::ArgumentPattern::Named(patterns) => {
+                            let mut bound = HashSet::<Loc<Identifier>>::new();
+                            let mut unbound = p
+                                .params
+                                .0
+                                .iter()
+                                .map(|(ident, _)| ident.inner.clone())
+                                .collect::<HashSet<_>>();
+
+                            let mut patterns = patterns
+                                .iter()
+                                .map(|(target, pattern)| {
+                                    let ast_pattern =
+                                        pattern.as_ref().map(|i| i.clone()).unwrap_or_else(|| {
+                                            ast::Pattern::Path(
+                                                Path(vec![target.clone()]).at_loc(&target),
+                                            )
+                                            .at_loc(&target)
+                                        });
+                                    let new_pattern = visit_pattern(
+                                        &ast_pattern,
+                                        symtab,
+                                        idtracker,
+                                        allow_declarations,
+                                    )?;
+                                    // Check if this is a new binding
+                                    if let Some(prev) = bound.get(target) {
+                                        return Err(Error::DuplicateNamedBindings {
+                                            new: target.clone(),
+                                            prev_loc: prev.loc(),
+                                        });
+                                    }
+                                    bound.insert(target.clone());
+                                    if let None = unbound.take(target) {
+                                        return Err(Error::NoSuchArgument {
+                                            name: target.clone(),
+                                        });
+                                    }
+
+                                    let kind = match pattern {
+                                        Some(_) => hir::ArgumentKind::Named,
+                                        None => hir::ArgumentKind::ShortNamed,
+                                    };
+
+                                    Ok(hir::PatternArgument {
+                                        target: target.clone(),
+                                        value: new_pattern.at_loc(&ast_pattern),
+                                        kind,
+                                    })
+                                })
+                                .collect::<Result<Vec<_>>>()?;
+
+                            if !unbound.is_empty() {
+                                return Err(Error::MissingArguments {
+                                    missing: unbound.into_iter().collect(),
+                                    at: args.loc(),
+                                });
+                            }
+
+                            patterns
+                                .sort_by_cached_key(|arg| p.params.arg_index(&arg.target).unwrap());
+
+                            hir::PatternKind::Type(name_id.at_loc(path), patterns)
                         }
                         ast::ArgumentPattern::Positional(patterns) => {
                             // Ensure we have the correct amount of arguments
@@ -1959,7 +2020,15 @@ mod expression_visiting {
 
 #[cfg(test)]
 mod pattern_visiting {
-    use hir::PatternKind;
+    use ast::{
+        testutil::{ast_ident, ast_path},
+        ArgumentPattern,
+    };
+    use hir::{
+        symbol_table::{StructCallable, TypeDeclKind},
+        PatternKind,
+    };
+    use spade_common::name::testutil::name_id;
 
     use super::*;
 
@@ -1985,6 +2054,183 @@ mod pattern_visiting {
         let result = visit_pattern_normal(&input, &mut symtab, &mut idtracker);
 
         assert_eq!(result, Ok(PatternKind::Integer(5).idless()));
+    }
+
+    #[test]
+    fn named_struct_patterns_work() {
+        let input = ast::Pattern::Type(
+            ast_path("a"),
+            ArgumentPattern::Named(vec![
+                (ast_ident("x"), None),
+                (ast_ident("y"), Some(ast::Pattern::Integer(0).nowhere())),
+            ])
+            .nowhere(),
+        );
+
+        let mut symtab = SymbolTable::new();
+        let mut idtracker = ExprIdTracker::new();
+
+        let type_name = symtab.add_type(
+            ast_path("a").inner,
+            TypeSymbol::Declared(vec![], TypeDeclKind::Struct).nowhere(),
+        );
+
+        symtab.add_thing_with_name_id(
+            type_name.clone(),
+            Thing::Struct(
+                StructCallable {
+                    self_type: hir::TypeSpec::Declared(type_name.clone().nowhere(), vec![])
+                        .nowhere(),
+                    params: hir::ParameterList(vec![
+                        (ast_ident("x"), hir::TypeSpec::unit().nowhere()),
+                        (ast_ident("y"), hir::TypeSpec::unit().nowhere()),
+                    ]),
+                    type_params: vec![],
+                }
+                .nowhere(),
+            ),
+        );
+
+        let result = visit_pattern_normal(&input, &mut symtab, &mut idtracker);
+
+        let expected = PatternKind::Type(
+            type_name.nowhere(),
+            vec![
+                hir::PatternArgument {
+                    target: ast_ident("x"),
+                    value: hir::PatternKind::name(name_id(1, "x")).idless().nowhere(),
+                    kind: hir::ArgumentKind::ShortNamed,
+                },
+                hir::PatternArgument {
+                    target: ast_ident("y"),
+                    value: hir::PatternKind::Integer(0).idless().nowhere(),
+                    kind: hir::ArgumentKind::Named,
+                },
+            ],
+        )
+        .idless();
+
+        assert_eq!(result, Ok(expected))
+    }
+
+    #[test]
+    fn named_struct_patterns_errors_if_missing_bindings() {
+        let input = ast::Pattern::Type(
+            ast_path("a"),
+            ArgumentPattern::Named(vec![(ast_ident("x"), None)]).nowhere(),
+        );
+
+        let mut symtab = SymbolTable::new();
+        let mut idtracker = ExprIdTracker::new();
+
+        let type_name = symtab.add_type(
+            ast_path("a").inner,
+            TypeSymbol::Declared(vec![], TypeDeclKind::Struct).nowhere(),
+        );
+
+        symtab.add_thing_with_name_id(
+            type_name.clone(),
+            Thing::Struct(
+                StructCallable {
+                    self_type: hir::TypeSpec::Declared(type_name.clone().nowhere(), vec![])
+                        .nowhere(),
+                    params: hir::ParameterList(vec![
+                        (ast_ident("x"), hir::TypeSpec::unit().nowhere()),
+                        (ast_ident("y"), hir::TypeSpec::unit().nowhere()),
+                    ]),
+                    type_params: vec![],
+                }
+                .nowhere(),
+            ),
+        );
+
+        let result = visit_pattern_normal(&input, &mut symtab, &mut idtracker);
+
+        match result {
+            Ok(x) => panic!("Expected error, got {:?}", x),
+            Err(Error::MissingArguments { .. }) => {}
+            Err(e) => panic!("Wrong error: {:?}", e),
+        }
+    }
+
+    #[test]
+    fn named_struct_patterns_errors_if_binding_to_undefined_name() {
+        let input = ast::Pattern::Type(
+            ast_path("a"),
+            ArgumentPattern::Named(vec![(ast_ident("x"), None), (ast_ident("a"), None)]).nowhere(),
+        );
+
+        let mut symtab = SymbolTable::new();
+        let mut idtracker = ExprIdTracker::new();
+
+        let type_name = symtab.add_type(
+            ast_path("a").inner,
+            TypeSymbol::Declared(vec![], TypeDeclKind::Struct).nowhere(),
+        );
+
+        symtab.add_thing_with_name_id(
+            type_name.clone(),
+            Thing::Struct(
+                StructCallable {
+                    self_type: hir::TypeSpec::Declared(type_name.clone().nowhere(), vec![])
+                        .nowhere(),
+                    params: hir::ParameterList(vec![
+                        (ast_ident("x"), hir::TypeSpec::unit().nowhere()),
+                        (ast_ident("y"), hir::TypeSpec::unit().nowhere()),
+                    ]),
+                    type_params: vec![],
+                }
+                .nowhere(),
+            ),
+        );
+
+        let result = visit_pattern_normal(&input, &mut symtab, &mut idtracker);
+
+        match result {
+            Ok(x) => panic!("Expected error, got {:?}", x),
+            Err(Error::NoSuchArgument { .. }) => {}
+            Err(e) => panic!("Wrong error: {:?}", e),
+        }
+    }
+
+    #[test]
+    fn named_struct_patterns_errors_if_multiple_bindings_to_same_name() {
+        let input = ast::Pattern::Type(
+            ast_path("a"),
+            ArgumentPattern::Named(vec![(ast_ident("x"), None), (ast_ident("x"), None)]).nowhere(),
+        );
+
+        let mut symtab = SymbolTable::new();
+        let mut idtracker = ExprIdTracker::new();
+
+        let type_name = symtab.add_type(
+            ast_path("a").inner,
+            TypeSymbol::Declared(vec![], TypeDeclKind::Struct).nowhere(),
+        );
+
+        symtab.add_thing_with_name_id(
+            type_name.clone(),
+            Thing::Struct(
+                StructCallable {
+                    self_type: hir::TypeSpec::Declared(type_name.clone().nowhere(), vec![])
+                        .nowhere(),
+                    params: hir::ParameterList(vec![
+                        (ast_ident("x"), hir::TypeSpec::unit().nowhere()),
+                        (ast_ident("y"), hir::TypeSpec::unit().nowhere()),
+                    ]),
+                    type_params: vec![],
+                }
+                .nowhere(),
+            ),
+        );
+
+        let result = visit_pattern_normal(&input, &mut symtab, &mut idtracker);
+
+        match result {
+            Ok(x) => panic!("Expected error, got {:?}", x),
+            Err(Error::DuplicateNamedBindings { .. }) => {}
+            Err(e) => panic!("Wrong error: {:?}", e),
+        }
     }
 }
 

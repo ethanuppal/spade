@@ -1108,4 +1108,30 @@ mod tests {
 
         build_and_compare_entities!(code, expected);
     }
+
+    #[test]
+    fn registers_with_struct_patterns_with_named_bindings_work() {
+        let code = r#"
+        struct X(a: int<16>, b: int<8>)
+
+        entity name(clk: clk, a: X) -> int<16> {
+            reg(clk) X$(b: y, a: x) = a;
+            x
+        }
+        "#;
+
+        let tup_inner = vec![Type::Int(16), Type::Int(8)];
+        let tup_type = Type::Tuple(tup_inner.clone());
+        let expected = vec![entity! {"name"; (
+                "_i_clk", n(0, "clk"), Type::Bool,
+                "_i_a", n(1, "a"), tup_type.clone(),
+            ) -> Type::Int(16); {
+                (reg e(0); tup_type; clock(n(0, "clk")); n(1, "a"));
+                (n(2, "x"); Type::Int(16); IndexTuple((0, tup_inner.clone())); e(0));
+                (n(3, "y"); Type::Int(8); IndexTuple((1, tup_inner)); e(0));
+            } => n(2, "x")
+        }];
+
+        build_and_compare_entities!(code, expected);
+    }
 }
