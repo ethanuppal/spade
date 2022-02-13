@@ -23,6 +23,8 @@ pub enum LookupError {
     NotAFunction(Loc<Path>, Thing),
     #[error("Not an enum variant")]
     NotAnEnumVariant(Loc<Path>, Thing),
+    #[error("Not a patternable type")]
+    NotAPatternableType(Loc<Path>, Thing),
     #[error("Not a struct")]
     NotAStruct(Loc<Path>, Thing),
     #[error("Not a value")]
@@ -145,6 +147,18 @@ impl Thing {
         }
     }
 }
+
+#[derive(PartialEq, Debug, Clone)]
+pub enum PatternableKind {
+    Struct,
+    Enum,
+}
+#[derive(PartialEq, Debug, Clone)]
+pub struct Patternable {
+    pub kind: PatternableKind,
+    pub params: ParameterList,
+}
+impl WithLocation for Patternable {}
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum GenericArg {
@@ -392,6 +406,16 @@ impl SymbolTable {
         enum_variant_by_id, lookup_enum_variant, EnumVariant, NotAnEnumVariant {
             Thing::EnumVariant(variant) => variant.clone()
         },
+        patternable_type_by_id, lookup_patternable_type, Patternable, NotAPatternableType {
+            Thing::EnumVariant(variant) => Patternable{
+                kind: PatternableKind::Enum,
+                params: variant.params.clone()
+            }.at_loc(&variant),
+            Thing::Struct(variant) => Patternable {
+                kind: PatternableKind::Struct,
+                params: variant.params.clone()
+            }.at_loc(&variant),
+        },
         struct_by_id, lookup_struct, StructCallable, NotAStruct {
             Thing::Struct(s) => s.clone()
         }
@@ -403,6 +427,7 @@ impl SymbolTable {
             None => panic!("No thing entry found for {:?}", id),
         }
     }
+
     pub fn lookup_type_symbol(
         &self,
         name: &Loc<Path>,
@@ -428,6 +453,7 @@ impl SymbolTable {
             Err(LookupError::NotAnEntity(_, _)) => unreachable!(),
             Err(LookupError::NotAPipeline(_, _)) => unreachable!(),
             Err(LookupError::NotAFunction(_, _)) => unreachable!(),
+            Err(LookupError::NotAPatternableType(_, _)) => unreachable!(),
             Err(LookupError::NotAnEnumVariant(_, _)) => unreachable!(),
             Err(LookupError::NotAStruct(_, _)) => unreachable!(),
             Err(LookupError::NotAValue(_, _)) => unreachable!(),

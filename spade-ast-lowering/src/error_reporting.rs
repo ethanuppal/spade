@@ -63,6 +63,20 @@ impl CompilationError for Error {
                         got.kind_string()
                     )),
                 ]),
+            Error::LookupError(LookupError::NotAPatternableType(path, got)) => Diagnostic::error()
+                .with_message(format!(
+                    "{} can not be used as a pattern",
+                    got.kind_string()
+                ))
+                .with_labels(vec![
+                    path.primary_label()
+                        .with_message(format!("Expected pattern")),
+                    got.loc().secondary_label().with_message(format!(
+                        "{} is a {}",
+                        path,
+                        got.kind_string()
+                    )),
+                ]),
             Error::LookupError(LookupError::NotAFunction(path, got)) => Diagnostic::error()
                 .with_message(format!("Expected {} to be a function", path))
                 .with_labels(vec![

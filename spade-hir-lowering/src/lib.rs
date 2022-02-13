@@ -2,8 +2,8 @@ pub mod error_reporting;
 pub mod pipelines;
 pub mod substitution;
 
-use hir::symbol_table::FrozenSymtab;
-use hir::{Argument, ItemList, Pattern, TypeList};
+use hir::symbol_table::{FrozenSymtab, PatternableKind};
+use hir::{Argument, ItemList, Pattern, PatternArgument, TypeList};
 use mir::types::Type as MirType;
 use mir::{ConstantValue, ValueName};
 pub use pipelines::generate_pipeline;
@@ -174,32 +174,75 @@ impl PatternLocal for Pattern {
                 }
             }
             hir::PatternKind::Type(path, args) => {
-                let enum_variant = symtab.enum_variant_by_id(path);
-                let self_type = types
-                    .type_of_id(self.id, symtab, &item_list.types)
-                    .to_mir_type();
+                let patternable = symtab.patternable_type_by_id(path);
+                match patternable.kind {
+                    PatternableKind::Struct => {
+                        let s = symtab.struct_by_id(path);
 
-                for (i, p) in args.iter().enumerate() {
-                    result.push(mir::Statement::Binding(mir::Binding {
-                        name: p.value.value_name(),
-                        operator: mir::Operator::EnumMember {
-                            variant: enum_variant.option,
-                            member_index: i,
-                            enum_type: self_type.clone(),
-                        },
-                        operands: vec![self_name.clone()],
-                        ty: types
-                            .type_of_id(p.value.id, symtab, &item_list.types)
-                            .to_mir_type(),
-                    }));
+                        let inner_types = if let mir::types::Type::Tuple(inner) = &types
+                            .type_of_id(self.id, symtab, &item_list.types)
+                            .to_mir_type()
+                        {
+                            inner.clone()
+                        } else {
+                            unreachable!("Struct destructuring of non-tuple");
+                        };
 
-                    result.append(&mut p.value.lower(
-                        p.value.value_name(),
-                        symtab,
-                        types,
-                        subs,
-                        item_list,
-                    )?)
+                        for PatternArgument {
+                            target,
+                            value,
+                            kind: _,
+                        } in args
+                        {
+                            let i = s.params.arg_index(target).unwrap();
+
+                            result.push(mir::Statement::Binding(mir::Binding {
+                                name: value.value_name(),
+                                operator: mir::Operator::IndexTuple(i as u64, inner_types.clone()),
+                                operands: vec![self_name.clone()],
+                                ty: types
+                                    .type_of_id(value.id, symtab, &item_list.types)
+                                    .to_mir_type(),
+                            }));
+
+                            result.append(&mut value.lower(
+                                value.value_name(),
+                                symtab,
+                                types,
+                                subs,
+                                item_list,
+                            )?)
+                        }
+                    }
+                    PatternableKind::Enum => {
+                        let enum_variant = symtab.enum_variant_by_id(path);
+                        let self_type = types
+                            .type_of_id(self.id, symtab, &item_list.types)
+                            .to_mir_type();
+
+                        for (i, p) in args.iter().enumerate() {
+                            result.push(mir::Statement::Binding(mir::Binding {
+                                name: p.value.value_name(),
+                                operator: mir::Operator::EnumMember {
+                                    variant: enum_variant.option,
+                                    member_index: i,
+                                    enum_type: self_type.clone(),
+                                },
+                                operands: vec![self_name.clone()],
+                                ty: types
+                                    .type_of_id(p.value.id, symtab, &item_list.types)
+                                    .to_mir_type(),
+                            }));
+
+                            result.append(&mut p.value.lower(
+                                p.value.value_name(),
+                                symtab,
+                                types,
+                                subs,
+                                item_list,
+                            )?)
+                        }
+                    }
                 }
             }
         }

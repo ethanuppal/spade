@@ -428,17 +428,17 @@ pub fn visit_pattern(
         }
         ast::Pattern::Type(path, args) => {
             // Look up the name to see if it's an enum variant.
-            match symtab.lookup_enum_variant(path) {
-                Ok((name_id, variant)) => {
+            match symtab.lookup_patternable_type(path) {
+                Ok((name_id, p)) => {
                     match &args.inner {
                         ast::ArgumentPattern::Named(_) => {
                             todo!("support positional enum destructuring")
                         }
                         ast::ArgumentPattern::Positional(patterns) => {
                             // Ensure we have the correct amount of arguments
-                            if variant.inner.params.argument_num() != patterns.len() {
+                            if p.params.argument_num() != patterns.len() {
                                 return Err(Error::PatternListLengthMismatch {
-                                    expected: variant.inner.params.argument_num(),
+                                    expected: p.params.argument_num(),
                                     got: patterns.len(),
                                     at: args.loc(),
                                 });
@@ -446,7 +446,7 @@ pub fn visit_pattern(
 
                             let patterns = patterns
                                 .iter()
-                                .zip(variant.inner.params.0.iter())
+                                .zip(p.params.0.iter())
                                 .map(|(p, arg)| {
                                     let pat = p.try_map_ref(|p| {
                                         visit_pattern(p, symtab, idtracker, allow_declarations)

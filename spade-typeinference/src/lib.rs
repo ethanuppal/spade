@@ -6,7 +6,7 @@
 // and should be done by the visitor for that node. The visitor should then unify
 // types according to the rules of the node.
 
-use hir::symbol_table::TypeSymbol;
+use hir::symbol_table::{Patternable, PatternableKind, TypeSymbol};
 use hir::{Argument, FunctionLike, ParameterList, Pattern, PatternArgument, TypeParam};
 use hir::{ExecutableItem, ItemList};
 use parse_tree_macros::trace_typechecker;
@@ -495,11 +495,33 @@ impl TypeState {
                     .commit(self);
             }
             hir::PatternKind::Type(name, args) => {
-                let enum_variant = symtab.enum_variant_by_id(name).inner;
-                let generic_list = self.create_generic_list(&enum_variant.type_params);
+                let (condition_type, params, generic_list) =
+                    match symtab.patternable_type_by_id(name).inner {
+                        Patternable {
+                            kind: PatternableKind::Enum,
+                            params: _,
+                        } => {
+                            let enum_variant = symtab.enum_variant_by_id(name).inner;
+                            let generic_list = self.create_generic_list(&enum_variant.type_params);
 
-                let condition_type =
-                    self.type_var_from_hir(&enum_variant.output_type, &generic_list);
+                            let condition_type =
+                                self.type_var_from_hir(&enum_variant.output_type, &generic_list);
+
+                            (condition_type, enum_variant.params, generic_list)
+                        }
+                        Patternable {
+                            kind: PatternableKind::Struct,
+                            params: _,
+                        } => {
+                            let s = symtab.struct_by_id(name).inner;
+                            let generic_list = self.create_generic_list(&s.type_params);
+
+                            let condition_type =
+                                self.type_var_from_hir(&s.self_type, &generic_list);
+
+                            (condition_type, s.params, generic_list)
+                        }
+                    };
 
                 self.unify(pattern, condition_type.as_ref(), symtab)
                     .expect("Unification of new_generic with enum can not fail")
@@ -515,7 +537,7 @@ impl TypeState {
                         },
                         (_, target_type),
                     ),
-                ) in args.iter().zip(enum_variant.params.0.iter()).enumerate()
+                ) in args.iter().zip(params.0.iter()).enumerate()
                 {
                     self.visit_pattern(pattern, symtab)?;
                     let target_type = self.type_var_from_hir(&target_type, &generic_list);

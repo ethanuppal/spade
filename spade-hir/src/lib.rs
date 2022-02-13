@@ -190,6 +190,7 @@ impl WithLocation for Entity {}
 
 #[derive(PartialEq, Debug, Clone)]
 pub struct ParameterList(pub Vec<(Loc<Identifier>, Loc<TypeSpec>)>);
+impl WithLocation for ParameterList {}
 
 impl ParameterList {
     pub fn argument_num(&self) -> usize {
@@ -207,6 +208,29 @@ impl ParameterList {
             "Tried to get type of an argument which is not part of the entity. {}",
             name
         )
+    }
+
+    pub fn arg_index(&self, target: &Identifier) -> Option<usize> {
+        let indices = self
+            .0
+            .iter()
+            .enumerate()
+            .filter_map(
+                |(i, (name, _))| {
+                    if &name.inner == target {
+                        Some(i)
+                    } else {
+                        None
+                    }
+                },
+            )
+            .collect::<Vec<_>>();
+
+        if indices.len() > 1 {
+            panic!("Duplicate arguments with the same name")
+        } else {
+            indices.first().cloned()
+        }
     }
 }
 
