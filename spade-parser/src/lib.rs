@@ -8,7 +8,7 @@ use error::{CommaSeparatedResult, Error, Result};
 use spade_ast::{
     ArgumentList, ArgumentPattern, BinaryOperator, Block, Entity, Enum, Expression, FunctionDecl,
     Item, Module, ModuleBody, NamedArgument, ParameterList, Pattern, Pipeline,
-    PipelineBindModifier, PipelineBinding, PipelineStage, Register, Statement, TraitDef,
+    PipelineBindModifier, PipelineBinding, PipelineStage, Register, Statement, Struct, TraitDef,
     TypeDeclKind, TypeDeclaration, TypeExpression, TypeParam, TypeSpec, UnaryOperator,
     UseStatement,
 };
@@ -1232,12 +1232,40 @@ impl<'a> Parser<'a> {
     }
 
     #[trace_parser]
+    pub fn struct_declaration(&mut self) -> Result<Option<Loc<TypeDeclaration>>> {
+        let start_token = peek_for!(self, &TokenKind::Struct);
+
+        let name = self.identifier()?;
+
+        let generic_args = self.generics_list()?;
+
+        let (members, members_loc) = self.surrounded(
+            &TokenKind::OpenParen,
+            Self::parameter_list,
+            &TokenKind::CloseParen,
+        )?;
+
+        let result = TypeDeclaration {
+            name: name.clone(),
+            kind: TypeDeclKind::Struct(Struct { name, members }.between(
+                self.file_id,
+                &start_token.span,
+                &members_loc,
+            )),
+            generic_args,
+        }
+        .between(self.file_id, &start_token.span, &members_loc);
+
+        Ok(Some(result))
+    }
+
+    #[trace_parser]
     pub fn type_declaration(&mut self) -> Result<Option<Loc<TypeDeclaration>>> {
         // The head of all type declarations will be `(enum|struct|type...) Name<T, S, ...>`
         // since we want access to the name and type params, we'll parse all those three, then
         // defer to parsing the rest.
 
-        self.first_successful(vec![&Self::enum_declaration])
+        self.first_successful(vec![&Self::enum_declaration, &Self::struct_declaration])
     }
 
     #[trace_parser]
@@ -2856,7 +2884,7 @@ mod tests {
     }
 
     #[test]
-    fn enums_declarations_parse() {
+    fn enum_declarations_parse() {
         let code = "enum State {
             First,
             Second(a: bool),
@@ -2889,7 +2917,7 @@ mod tests {
     }
 
     #[test]
-    fn enums_declarations_with_type_args_parse() {
+    fn enum_declarations_with_type_args_parse() {
         let code = "enum State<T, #N> {
             First,
             Second(a: T),
@@ -2917,6 +2945,28 @@ mod tests {
                     TypeParam::TypeName(ast_ident("T")).nowhere(),
                     TypeParam::Integer(ast_ident("N")).nowhere(),
                 ],
+            }
+            .nowhere(),
+        );
+
+        check_parse!(code, item, Ok(Some(expected)));
+    }
+
+    #[test]
+    fn struct_declarations_parse() {
+        let code = "struct State ( a: bool, b: bool )";
+
+        let expected = Item::Type(
+            TypeDeclaration {
+                name: ast_ident("State"),
+                kind: TypeDeclKind::Struct(
+                    Struct {
+                        name: ast_ident("State"),
+                        members: aparams![("a", tspec!("bool")), ("b", tspec!("bool"))],
+                    }
+                    .nowhere(),
+                ),
+                generic_args: vec![],
             }
             .nowhere(),
         );

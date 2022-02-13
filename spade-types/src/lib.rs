@@ -22,6 +22,9 @@ impl std::fmt::Display for PrimitiveType {
 #[derive(Debug, Clone, PartialEq)]
 pub enum ConcreteType {
     Tuple(Vec<ConcreteType>),
+    Struct {
+        members: Vec<ConcreteType>,
+    },
     Array {
         inner: Box<ConcreteType>,
         size: u128,
@@ -44,6 +47,17 @@ impl std::fmt::Display for ConcreteType {
                     f,
                     "({})",
                     inner
+                        .iter()
+                        .map(|p| format!("{}", p))
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                )
+            }
+            ConcreteType::Struct { members } => {
+                write!(
+                    f,
+                    "struct {{{}}}",
+                    members
                         .iter()
                         .map(|p| format!("{}", p))
                         .collect::<Vec<_>>()

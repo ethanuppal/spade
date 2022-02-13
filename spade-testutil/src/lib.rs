@@ -34,6 +34,7 @@ pub fn parse_typecheck_entity<'a>(
             ProcessedItem::Entity(e) => (e, symtab, idtracker, item_list),
             ProcessedItem::Pipeline(_) => panic!("Found a pipeline, expected entity"),
             ProcessedItem::EnumInstance => panic!("Found enum instance, expected entity"),
+            ProcessedItem::StructInstance => panic!("Found struct instance, expected entity"),
         }
     }
 }
@@ -52,6 +53,7 @@ pub fn parse_typecheck_pipeline<'a>(
             ProcessedItem::Pipeline(p) => (p, result.symtab, result.idtracker, result.item_list),
             ProcessedItem::Entity(_) => panic!("Found entity, expected pipeline"),
             ProcessedItem::EnumInstance => panic!("Found enum instance, expected pipeline"),
+            ProcessedItem::StructInstance => panic!("Found struct instance, expected pipeline"),
         }
     }
 }

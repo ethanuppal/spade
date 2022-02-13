@@ -157,9 +157,16 @@ pub struct Enum {
 impl WithLocation for Enum {}
 
 #[derive(PartialEq, Debug, Clone)]
+pub struct Struct {
+    pub members: ParameterList,
+}
+impl WithLocation for Struct {}
+
+#[derive(PartialEq, Debug, Clone)]
 pub enum TypeDeclKind {
     Enum(Loc<Enum>),
     Primitive(PrimitiveType),
+    Struct(Loc<Struct>),
 }
 
 /// A declaration of a new type
@@ -292,6 +299,7 @@ pub enum Item {
 #[derive(PartialEq, Debug, Clone)]
 pub enum ExecutableItem {
     EnumInstance { base_enum: NameID, variant: usize },
+    StructInstance,
     Entity(Loc<Entity>),
     Pipeline(Loc<Pipeline>),
 }

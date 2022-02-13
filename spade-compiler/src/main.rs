@@ -178,6 +178,7 @@ fn main() -> Result<()> {
                 module_code.push(code.to_string());
             }
             ExecutableItem::EnumInstance { .. } => {}
+            ExecutableItem::StructInstance { .. } => {}
         }
     }
 

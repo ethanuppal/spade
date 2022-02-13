@@ -59,6 +59,7 @@ pub struct ProcessedPipeline {
 
 pub enum ProcessedItem {
     EnumInstance,
+    StructInstance,
     Entity(ProcessedEntity),
     Pipeline(ProcessedPipeline),
 }
@@ -96,6 +97,7 @@ impl ProcessedItemList {
 
                     match item {
                         ExecutableItem::EnumInstance { .. } => Ok(ProcessedItem::EnumInstance),
+                        ExecutableItem::StructInstance { .. } => Ok(ProcessedItem::StructInstance),
                         ExecutableItem::Entity(entity) => {
                             type_state
                                 .visit_entity(&entity, symbol_table)
@@ -1242,10 +1244,10 @@ mod tests {
         let mut symtab = SymbolTable::new();
         spade_ast_lowering::builtins::populate_symtab(&mut symtab, &mut ItemList::new());
 
-        let not_bool = symtab.add_thing_with_id(
+        let not_bool = symtab.add_type_with_id(
             100,
             Path::from_strs(&vec!["not_bool"]),
-            Thing::Type(TypeSymbol::Declared(vec![]).nowhere()),
+            TypeSymbol::Declared(vec![]).nowhere(),
         );
 
         let lhs = PatternKind::name(name_id(0, "x")).with_id(22).nowhere();

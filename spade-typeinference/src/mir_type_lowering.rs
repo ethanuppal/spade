@@ -48,6 +48,16 @@ impl TypeState {
                     .collect();
                 ConcreteType::Enum { options }
             }
+            hir::TypeDeclKind::Struct(s) => {
+                let members = s
+                    .members
+                    .0
+                    .iter()
+                    .map(|arg| Self::type_spec_to_concrete(&arg.1.inner, type_list, &generic_subs))
+                    .collect();
+
+                ConcreteType::Struct { members }
+            }
             hir::TypeDeclKind::Primitive(primitive) => ConcreteType::Single {
                 base: primitive.clone(),
                 params,

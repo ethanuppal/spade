@@ -99,6 +99,11 @@ impl CompilationError for Error {
                     "Expected value".to_string(),
                     format!("Found {}", was.kind_string().to_string()),
                 ]),
+            Error::LookupError(LookupError::IsAType(path)) => Diagnostic::error()
+                .with_message(format!("Unexpected type {}", path))
+                .with_labels(vec![path
+                    .primary_label()
+                    .with_message(format!("Unexpected type"))]),
             Error::DeclarationError(DeclarationError::DuplicateDeclaration { old, new }) => {
                 Diagnostic::error()
                     .with_message(format!("A previous declaration of {} exists", new))

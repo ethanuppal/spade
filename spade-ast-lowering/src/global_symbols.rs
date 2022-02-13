@@ -1,4 +1,7 @@
-use hir::{symbol_table::EnumVariant, ItemList, TypeExpression};
+use hir::{
+    symbol_table::{EnumVariant, StructCallable},
+    ItemList, TypeExpression,
+};
 use spade_ast as ast;
 use spade_common::{
     location_info::{Loc, WithLocation},
@@ -125,10 +128,7 @@ pub fn visit_type_declaration(
         })
         .collect();
 
-    symtab.add_thing(
-        path.clone(),
-        Thing::Type(TypeSymbol::Declared(args).at_loc(&t)),
-    );
+    symtab.add_type(path.clone(), TypeSymbol::Declared(args).at_loc(&t));
 
     Ok(())
 }
@@ -158,10 +158,7 @@ pub fn re_visit_type_declaration(
             ast::TypeParam::TypeName(n) => (n, TypeSymbol::GenericArg),
             ast::TypeParam::Integer(n) => (n, TypeSymbol::GenericInt),
         };
-        symtab.add_thing(
-            Path(vec![name.clone()]),
-            Thing::Type(symbol_type.at_loc(param)),
-        );
+        symtab.add_type(Path(vec![name.clone()]), symbol_type.at_loc(param));
     }
 
     // Generate TypeExprs and TypeParam vectors which are needed for building the
@@ -236,6 +233,33 @@ pub fn re_visit_type_declaration(
                 }
                 .at_loc(e),
             )
+        }
+        ast::TypeDeclKind::Struct(s) => {
+            let members = visit_parameter_list(&s.members, symtab)?;
+
+            let self_type =
+                hir::TypeSpec::Declared(declaration_id.clone(), output_type_exprs.clone())
+                    .at_loc(s);
+
+            symtab.add_thing_with_name_id(
+                declaration_id.inner.clone(),
+                Thing::Struct(
+                    StructCallable {
+                        self_type,
+                        params: members.clone(),
+                        type_params: type_params.clone(),
+                    }
+                    .at_loc(s),
+                ),
+            );
+
+            items.executables.insert(
+                declaration_id.inner.clone(),
+                hir::ExecutableItem::StructInstance,
+            );
+
+            // We don't do any special processing of structs here
+            hir::TypeDeclKind::Struct(hir::Struct { members }.at_loc(s))
         }
     };
     // Close the symtab scope

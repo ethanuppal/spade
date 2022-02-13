@@ -91,6 +91,7 @@ fn build_items(code: &str) -> Vec<spade_mir::Entity> {
                 );
             }
             ProcessedItem::EnumInstance => {}
+            ProcessedItem::StructInstance => {}
             _ => panic!("expected an entity"),
         }
     }

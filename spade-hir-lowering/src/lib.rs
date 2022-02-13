@@ -111,6 +111,10 @@ impl ConcreteTypeLocal for ConcreteType {
                     .collect();
                 Type::Enum(inner)
             }
+            CType::Struct { members } => {
+                let members = members.iter().map(|t| t.to_mir_type()).collect();
+                Type::Struct { members }
+            }
         }
     }
 }
@@ -746,6 +750,29 @@ impl ExprLocal for Loc<Expression> {
                     operator: mir::Operator::ConstructEnum {
                         variant: *variant,
                         variant_count,
+                    },
+                    operands: args
+                        .into_iter()
+                        .map(|arg| arg.value.variable(subs))
+                        .collect(),
+                }))
+            }
+            Some(hir::ExecutableItem::StructInstance) => {
+                let members = match item_list.types.get(name) {
+                    Some(type_decl) => match &type_decl.kind {
+                        hir::TypeDeclKind::Struct(s) => &s.inner.members,
+                        _ => panic!("Instanciating struct of type which is not a struct"),
+                    },
+                    None => panic!("No type declaration found for {}", name),
+                };
+
+                result.push(mir::Statement::Binding(mir::Binding {
+                    name: self.variable(subs),
+                    ty: types
+                        .expr_type(self, symtab.symtab(), &item_list.types)?
+                        .to_mir_type(),
+                    operator: mir::Operator::ConstructStruct {
+                        member_count: members.0.len(),
                     },
                     operands: args
                         .into_iter()

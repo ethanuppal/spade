@@ -1,4 +1,4 @@
-use hir::symbol_table::{SymbolTable, Thing, TypeSymbol};
+use hir::symbol_table::{SymbolTable, TypeSymbol};
 use spade_ast as ast;
 use spade_common::{location_info::WithLocation, name::Path};
 use spade_hir as hir;
@@ -15,15 +15,15 @@ pub fn lower_type_declaration(
     for param in &decl.generic_args {
         match &param.inner {
             ast::TypeParam::TypeName(name) => {
-                symtab.add_thing(
+                symtab.add_type(
                     Path(vec![name.clone()]),
-                    Thing::Type(TypeSymbol::GenericArg.at_loc(&param)),
+                    TypeSymbol::GenericArg.at_loc(&param),
                 );
             }
             ast::TypeParam::Integer(name) => {
-                symtab.add_thing(
+                symtab.add_type(
                     Path(vec![name.clone()]),
-                    Thing::Type(TypeSymbol::GenericInt.at_loc(&param)),
+                    TypeSymbol::GenericInt.at_loc(&param),
                 );
             }
         }
@@ -69,6 +69,13 @@ pub fn lower_type_declaration(
                     .collect::<Result<Vec<_>>>()?;
 
                 Ok(hir::Enum { options })
+            })?)
+        }
+        ast::TypeDeclKind::Struct(s) => {
+            hir::TypeDeclKind::Struct(s.try_map_ref::<_, crate::Error, _>(|s| {
+                let ast::Struct { name: _, members } = s;
+                let members = crate::visit_parameter_list(members, symtab)?;
+                Ok(hir::Struct { members })
             })?)
         }
     };

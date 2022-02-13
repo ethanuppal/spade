@@ -5,6 +5,7 @@ pub enum Type {
     Tuple(Vec<Type>),
     Array { inner: Box<Type>, length: u64 },
     Enum(Vec<Vec<Type>>),
+    Struct { members: Vec<Type> },
 }
 
 impl Type {
@@ -24,6 +25,7 @@ impl Type {
 
                 discriminant_size + members_size
             }
+            Type::Struct { members } => members.iter().map(|t| t.size()).sum(),
             Type::Array { inner, length } => inner.size() * length,
         }
     }
@@ -68,6 +70,14 @@ impl std::fmt::Display for Type {
                     .join(", ");
 
                 write!(f, "enum {}", inner)
+            }
+            Type::Struct { members } => {
+                let inner = members
+                    .iter()
+                    .map(|t| format!("{}", t))
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                write!(f, "struct {{{inner}}}")
             }
         }
     }

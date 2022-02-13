@@ -63,17 +63,17 @@ pub fn visit_type_param(
 ) -> Result<hir::TypeParam> {
     match &param {
         ast::TypeParam::TypeName(ident) => {
-            let name_id = symtab.add_thing(
+            let name_id = symtab.add_type(
                 Path(vec![ident.clone()]),
-                Thing::Type(TypeSymbol::GenericArg.at_loc(&ident)),
+                TypeSymbol::GenericArg.at_loc(&ident),
             );
 
             Ok(hir::TypeParam::TypeName(ident.inner.clone(), name_id))
         }
         ast::TypeParam::Integer(ident) => {
-            let name_id = symtab.add_thing(
+            let name_id = symtab.add_type(
                 Path(vec![ident.clone()]),
-                Thing::Type(TypeSymbol::GenericArg.at_loc(&ident)),
+                TypeSymbol::GenericArg.at_loc(&ident),
             );
 
             Ok(hir::TypeParam::Integer(ident.inner.clone(), name_id))
@@ -1911,14 +1911,14 @@ mod expression_visiting {
         let mut symtab = SymbolTable::new();
         let mut idtracker = ExprIdTracker::new();
 
-        let head = Thing::Type(TypeSymbol::Declared(vec![]).nowhere());
-        symtab.add_thing(ast_path("test").inner, head.clone());
+        let head = TypeSymbol::Declared(vec![]).nowhere();
+        symtab.add_type(ast_path("test").inner, head.clone());
 
         assert_eq!(
             visit_expression(&input, &mut symtab, &mut idtracker),
-            Err(Error::LookupError(
-                hir::symbol_table::LookupError::NotAValue(ast_path("test"), head)
-            ))
+            Err(Error::LookupError(hir::symbol_table::LookupError::IsAType(
+                ast_path("test")
+            )))
         );
     }
 }

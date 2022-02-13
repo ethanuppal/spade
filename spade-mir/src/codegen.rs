@@ -228,6 +228,9 @@ fn statement_code(statement: &Statement) -> Code {
                         full_size - member_end
                     )
                 }
+                Operator::ConstructStruct { .. } => {
+                    format!("{{{}}}", ops.join(", "))
+                }
                 Operator::ConstructTuple => {
                     // To make index calculations easier, we will store tuples in "inverse order".
                     // i.e. the left-most element is stored to the right in the bit vector.
@@ -650,6 +653,22 @@ mod expression_tests {
             r#"
             logic[16:0] _e_0;
             assign _e_0 = {2'd2, _e_1, _e_2};"#
+        );
+
+        assert_same_code!(&statement_code(&stmt).to_string(), expected);
+    }
+
+    #[test]
+    fn struct_construction_operator_works() {
+        let ty = Type::Struct {
+            members: vec![Type::Int(10), Type::Int(5)],
+        };
+        let stmt = statement!(e(0); ty; ConstructStruct({member_count: 2}); e(1), e(2));
+
+        let expected = indoc!(
+            r#"
+            logic[14:0] _e_0;
+            assign _e_0 = {_e_1, _e_2};"#
         );
 
         assert_same_code!(&statement_code(&stmt).to_string(), expected);

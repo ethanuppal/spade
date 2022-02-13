@@ -3,7 +3,7 @@ use spade_common::{
     name::{Identifier, Path},
 };
 use spade_hir::{
-    symbol_table::{GenericArg, SymbolTable, Thing, TypeSymbol},
+    symbol_table::{GenericArg, SymbolTable, TypeSymbol},
     TypeDeclaration,
 };
 use spade_hir::{ItemList, TypeParam};
@@ -17,10 +17,10 @@ pub fn populate_symtab(symtab: &mut SymbolTable, item_list: &mut ItemList) {
 
     let mut add_type = |path: &[&str], args: Vec<Loc<GenericArg>>, primitive: PrimitiveType| {
         let name = symtab
-            .add_thing_with_id(
+            .add_type_with_id(
                 id,
                 Path::from_strs(path),
-                Thing::Type(TypeSymbol::Declared(args.clone()).nowhere()),
+                TypeSymbol::Declared(args.clone()).nowhere(),
             )
             .nowhere();
         id -= 1;
@@ -31,18 +31,18 @@ pub fn populate_symtab(symtab: &mut SymbolTable, item_list: &mut ItemList) {
             .map(|arg| {
                 let result = match &arg.inner {
                     GenericArg::TypeName(a) => {
-                        let id = symtab.add_thing_with_id(
+                        let id = symtab.add_type_with_id(
                             id,
                             Path(vec![a.clone().nowhere()]),
-                            Thing::Type(TypeSymbol::GenericArg.nowhere()),
+                            TypeSymbol::GenericArg.nowhere(),
                         );
                         TypeParam::TypeName(a.clone(), id)
                     }
                     GenericArg::Number(a) => {
-                        let id = symtab.add_thing_with_id(
+                        let id = symtab.add_type_with_id(
                             id,
                             Path(vec![a.clone().nowhere()]),
-                            Thing::Type(TypeSymbol::GenericInt.nowhere()),
+                            TypeSymbol::GenericInt.nowhere(),
                         );
                         TypeParam::Integer(a.clone(), id)
                     }

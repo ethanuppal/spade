@@ -705,6 +705,7 @@ mod tests {
                     );
                 }
                 ProcessedItem::EnumInstance => {}
+                ProcessedItem::StructInstance => {}
             }
         }
 
@@ -818,6 +819,30 @@ mod tests {
         )
         .report_failure(code);
         assert_same_mir!(&result, &expected);
+    }
+
+    #[test]
+    fn struct_instantiation_works() {
+        let code = r#"
+            struct X (payload: bool)
+
+            entity test(payload: bool) -> X {
+                X$(payload)
+            }
+        "#;
+
+        let mir_struct = Type::Struct {
+            members: vec![Type::Bool],
+        };
+
+        let expected = vec![entity!("test"; (
+                "_i_payload", n(0, "payload"), Type::Bool,
+            ) -> mir_struct.clone(); {
+                (e(1); mir_struct; ConstructStruct({member_count: 1}); n(0, "payload"));
+            } => e(1)
+        )];
+
+        build_and_compare_entities!(code, expected);
     }
 
     #[test]

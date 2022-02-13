@@ -241,8 +241,16 @@ pub struct Enum {
 impl WithLocation for Enum {}
 
 #[derive(PartialEq, Debug, Clone)]
+pub struct Struct {
+    pub name: Loc<Identifier>,
+    pub members: ParameterList,
+}
+impl WithLocation for Struct {}
+
+#[derive(PartialEq, Debug, Clone)]
 pub enum TypeDeclKind {
     Enum(Loc<Enum>),
+    Struct(Loc<Struct>),
 }
 
 /// A declaration of a new type
