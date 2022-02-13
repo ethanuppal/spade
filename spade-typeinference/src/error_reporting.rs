@@ -180,6 +180,49 @@ impl CompilationError for Error {
                 .with_labels(vec![loc
                     .primary_label()
                     .with_message(format!("Expected array"))]),
+            Error::FieldAccessOnEnum { loc, actual_type } => Diagnostic::error()
+                .with_message(format!("Field access on an enum type"))
+                .with_labels(vec![
+                    loc.primary_label().with_message("Expected a struct"),
+                    loc.secondary_label()
+                        .with_message(format!("Expression has type {}", actual_type)),
+                ])
+                .with_notes(vec!["Field access is only allowed on structs".to_string()]),
+            Error::FieldAccessOnPrimitive { loc, actual_type } => Diagnostic::error()
+                .with_message(format!("Field access on a primitive type"))
+                .with_labels(vec![
+                    loc.primary_label().with_message("Expected a struct"),
+                    loc.secondary_label()
+                        .with_message(format!("Expression has type {}", actual_type)),
+                ])
+                .with_notes(vec!["Field access is only allowed on structs".to_string()]),
+            Error::FieldAccessOnGeneric { loc, name } => Diagnostic::error()
+                .with_message(format!("Field access on a generic type"))
+                .with_labels(vec![
+                    loc.primary_label().with_message("Expected a struct"),
+                    loc.secondary_label()
+                        .with_message(format!("Expression has type {}", name)),
+                ])
+                .with_notes(vec!["Field access is only allowed on structs".to_string()]),
+            Error::FieldAccessOnInteger { loc } => Diagnostic::error()
+                .with_message(format!("Field access on a type level integer"))
+                .with_labels(vec![
+                    loc.primary_label().with_message("Expected a struct"),
+                    loc.secondary_label()
+                        .with_message(format!("Expression is a type level integer")),
+                ])
+                .with_notes(vec!["Field access is only allowed on structs".to_string()]),
+            Error::FieldAccessOnIncomplete { loc } => Diagnostic::error()
+                .with_message(format!("Field access on incomplete type"))
+                .with_labels(vec![loc.primary_label().with_message("Incomplete type")])
+                .with_notes(vec![
+                    "Try specifiying the type of the expression".to_string()
+                ]),
+            Error::FieldAccessOnNonStruct { loc, got } => Diagnostic::error()
+                .with_message(format!("Field access on {} which is not a struct", got))
+                .with_labels(vec![loc
+                    .primary_label()
+                    .with_message(format!("Expected strcut, found {}", got))]),
             Error::NamedArgumentMismatch {
                 expr,
                 expected,

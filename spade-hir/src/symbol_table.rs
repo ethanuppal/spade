@@ -23,6 +23,8 @@ pub enum LookupError {
     NotAFunction(Loc<Path>, Thing),
     #[error("Not an enum variant")]
     NotAnEnumVariant(Loc<Path>, Thing),
+    #[error("Not a struct")]
+    NotAStruct(Loc<Path>, Thing),
     #[error("Not a value")]
     NotAValue(Loc<Path>, Thing),
     #[error("Looked up target which is a type")]
@@ -151,12 +153,19 @@ pub enum GenericArg {
 }
 impl WithLocation for GenericArg {}
 
+#[derive(Clone, Debug, PartialEq)]
+pub enum TypeDeclKind {
+    Struct,
+    Enum,
+    Primitive,
+}
+
 /// A previously declared type symbol
 #[derive(Clone, Debug, PartialEq)]
 pub enum TypeSymbol {
     /// A fixed type that has been declared, like a typedef, enum or struct with the
     /// specified generic arguments
-    Declared(Vec<Loc<GenericArg>>),
+    Declared(Vec<Loc<GenericArg>>, TypeDeclKind),
     /// A generic type present in the current scope
     GenericArg,
     GenericInt,
@@ -382,6 +391,9 @@ impl SymbolTable {
         },
         enum_variant_by_id, lookup_enum_variant, EnumVariant, NotAnEnumVariant {
             Thing::EnumVariant(variant) => variant.clone()
+        },
+        struct_by_id, lookup_struct, StructCallable, NotAStruct {
+            Thing::Struct(s) => s.clone()
         }
     }
 
@@ -417,6 +429,7 @@ impl SymbolTable {
             Err(LookupError::NotAPipeline(_, _)) => unreachable!(),
             Err(LookupError::NotAFunction(_, _)) => unreachable!(),
             Err(LookupError::NotAnEnumVariant(_, _)) => unreachable!(),
+            Err(LookupError::NotAStruct(_, _)) => unreachable!(),
             Err(LookupError::NotAValue(_, _)) => unreachable!(),
             Err(LookupError::IsAType(_)) => unreachable!(),
         }

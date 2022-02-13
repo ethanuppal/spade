@@ -85,6 +85,17 @@ impl CompilationError for Error {
                         was.kind_string()
                     )),
                 ]),
+            Error::LookupError(LookupError::NotAStruct(path, was)) => Diagnostic::error()
+                .with_message(format!("Expected {} to be an struct", path))
+                .with_labels(vec![
+                    path.primary_label()
+                        .with_message(format!("Expected struct")),
+                    was.loc().secondary_label().with_message(format!(
+                        "{} is a {}",
+                        path,
+                        was.kind_string()
+                    )),
+                ]),
             Error::LookupError(LookupError::NotAValue(path, was)) => Diagnostic::error()
                 .with_message(format!("Expected {} to be a value", path))
                 .with_labels(vec![

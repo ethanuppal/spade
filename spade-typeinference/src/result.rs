@@ -5,7 +5,7 @@ use crate::equation::{FreeTypeVar, TypeVarRef};
 use super::equation::{InnerTypeVar, TypedExpression};
 use spade_common::{
     location_info::{Loc, WithLocation},
-    name::Identifier,
+    name::{Identifier, NameID},
 };
 
 /// A trace of a unification error. The `failing` field indicates which exact type failed to unify,
@@ -156,8 +156,21 @@ pub enum Error {
     TupleIndexOfGeneric { loc: Loc<()> },
     #[error("Tuple index of non-tuple")]
     TupleIndexOfNonTuple { got: InnerTypeVar, loc: Loc<()> },
-    #[error("Tuple index out of boudns")]
+    #[error("Tuple index out of bounds")]
     TupleIndexOutOfBounds { index: Loc<u128>, actual_size: u128 },
+
+    #[error("Field access on incomplete")]
+    FieldAccessOnIncomplete { loc: Loc<()> },
+    #[error("Field access on generic")]
+    FieldAccessOnGeneric { loc: Loc<()>, name: NameID },
+    #[error("Field access on non-struct")]
+    FieldAccessOnNonStruct { loc: Loc<()>, got: InnerTypeVar },
+    #[error("Field access on integer")]
+    FieldAccessOnInteger { loc: Loc<()> },
+    #[error("Field access on enum")]
+    FieldAccessOnEnum { loc: Loc<()>, actual_type: NameID },
+    #[error("Field access on primitive type")]
+    FieldAccessOnPrimitive { loc: Loc<()>, actual_type: NameID },
 
     #[error("Array element missmatch")]
     ArrayElementMissmatch {

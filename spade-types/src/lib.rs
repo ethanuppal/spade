@@ -1,4 +1,4 @@
-use spade_common::name::NameID;
+use spade_common::name::{Identifier, NameID};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum PrimitiveType {
@@ -23,7 +23,7 @@ impl std::fmt::Display for PrimitiveType {
 pub enum ConcreteType {
     Tuple(Vec<ConcreteType>),
     Struct {
-        members: Vec<ConcreteType>,
+        members: Vec<(Identifier, ConcreteType)>,
     },
     Array {
         inner: Box<ConcreteType>,
@@ -59,7 +59,7 @@ impl std::fmt::Display for ConcreteType {
                     "struct {{{}}}",
                     members
                         .iter()
-                        .map(|p| format!("{}", p))
+                        .map(|(name, t)| format!("{}: {}", name, t))
                         .collect::<Vec<_>>()
                         .join(", ")
                 )

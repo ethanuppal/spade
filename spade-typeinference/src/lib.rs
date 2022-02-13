@@ -127,7 +127,7 @@ impl ProcessedItemList {
 // ensure that the generic list is dropped at an appropriate time and not aquired
 // later
 #[must_use]
-struct GenericListToken {
+pub struct GenericListToken {
     id: usize,
 }
 
@@ -253,7 +253,7 @@ impl TypeState {
                 .commit(self);
         }
 
-        self.visit_expression(&entity.body, symtab)?;
+        self.visit_expression(&entity.body, symtab, &generic_list)?;
 
         // Ensure that the output type matches what the user specified, and unit otherwise
         if let Some(output_type) = &entity.head.output_type {
@@ -302,7 +302,7 @@ impl TypeState {
             },
         ) in args.iter().enumerate()
         {
-            self.visit_expression(&value, symtab)?;
+            self.visit_expression(&value, symtab, generic_list)?;
             let target_type = self.type_var_from_hir(&params.arg_type(&target), generic_list);
 
             self.unify(target_type.as_ref(), value, symtab)
@@ -336,6 +336,7 @@ impl TypeState {
         &mut self,
         expression: &Loc<Expression>,
         symtab: &SymbolTable,
+        generic_list: &GenericListToken,
     ) -> Result<()> {
         let new_type = self.new_generic();
         self.add_equation(TypedExpression::Id(expression.inner.id), new_type)
@@ -346,15 +347,28 @@ impl TypeState {
             ExprKind::Identifier(_) => self.visit_identifier(expression, symtab)?,
             ExprKind::IntLiteral(_) => self.visit_int_literal(expression, symtab)?,
             ExprKind::BoolLiteral(_) => self.visit_bool_literal(expression, symtab)?,
-            ExprKind::TupleLiteral(_) => self.visit_tuple_literal(expression, symtab)?,
-            ExprKind::TupleIndex(_, _) => self.visit_tuple_index(expression, symtab)?,
-            ExprKind::ArrayLiteral(_) => self.visit_array_literal(expression, symtab)?,
-            ExprKind::Index(_, _) => self.visit_index(expression, symtab)?,
-            ExprKind::Block(_) => self.visit_block_expr(expression, symtab)?,
-            ExprKind::If(_, _, _) => self.visit_if(expression, symtab)?,
-            ExprKind::Match(_, _) => self.visit_match(expression, symtab)?,
-            ExprKind::BinaryOperator(_, _, _) => self.visit_binary_operator(expression, symtab)?,
-            ExprKind::UnaryOperator(_, _) => self.visit_unary_operator(expression, symtab)?,
+            ExprKind::TupleLiteral(_) => {
+                self.visit_tuple_literal(expression, symtab, generic_list)?
+            }
+            ExprKind::TupleIndex(_, _) => {
+                self.visit_tuple_index(expression, symtab, generic_list)?
+            }
+            ExprKind::ArrayLiteral(_) => {
+                self.visit_array_literal(expression, symtab, generic_list)?
+            }
+            ExprKind::FieldAccess(_, _) => {
+                self.visit_field_access(expression, symtab, generic_list)?
+            }
+            ExprKind::Index(_, _) => self.visit_index(expression, symtab, generic_list)?,
+            ExprKind::Block(_) => self.visit_block_expr(expression, symtab, generic_list)?,
+            ExprKind::If(_, _, _) => self.visit_if(expression, symtab, generic_list)?,
+            ExprKind::Match(_, _) => self.visit_match(expression, symtab, generic_list)?,
+            ExprKind::BinaryOperator(_, _, _) => {
+                self.visit_binary_operator(expression, symtab, generic_list)?
+            }
+            ExprKind::UnaryOperator(_, _) => {
+                self.visit_unary_operator(expression, symtab, generic_list)?
+            }
             ExprKind::EntityInstance(name, args) => {
                 let head = symtab.entity_by_id(&name.inner);
                 self.handle_function_like(expression, &head.inner, args, symtab)?;
@@ -424,11 +438,16 @@ impl TypeState {
     }
 
     #[trace_typechecker]
-    pub fn visit_block(&mut self, block: &Block, symtab: &SymbolTable) -> Result<()> {
+    pub fn visit_block(
+        &mut self,
+        block: &Block,
+        symtab: &SymbolTable,
+        generic_list: &GenericListToken,
+    ) -> Result<()> {
         for statement in &block.statements {
-            self.visit_statement(statement, symtab)?
+            self.visit_statement(statement, symtab, generic_list)?
         }
-        self.visit_expression(&block.result, symtab)
+        self.visit_expression(&block.result, symtab, generic_list)
     }
 
     #[trace_typechecker]
@@ -529,10 +548,15 @@ impl TypeState {
     }
 
     #[trace_typechecker]
-    pub fn visit_statement(&mut self, stmt: &Loc<Statement>, symtab: &SymbolTable) -> Result<()> {
+    pub fn visit_statement(
+        &mut self,
+        stmt: &Loc<Statement>,
+        symtab: &SymbolTable,
+        generic_list: &GenericListToken,
+    ) -> Result<()> {
         match &stmt.inner {
             Statement::Binding(pattern, t, value) => {
-                self.visit_expression(value, symtab)?;
+                self.visit_expression(value, symtab, generic_list)?;
 
                 self.visit_pattern(pattern, symtab)?;
 
@@ -558,7 +582,7 @@ impl TypeState {
 
                 Ok(())
             }
-            Statement::Register(reg) => self.visit_register(reg, symtab),
+            Statement::Register(reg) => self.visit_register(reg, symtab, generic_list),
             Statement::Declaration(names) => {
                 for name in names {
                     let new_type = self.new_generic();
@@ -571,15 +595,20 @@ impl TypeState {
     }
 
     #[trace_typechecker]
-    pub fn visit_register(&mut self, reg: &Register, symtab: &SymbolTable) -> Result<()> {
+    pub fn visit_register(
+        &mut self,
+        reg: &Register,
+        symtab: &SymbolTable,
+        generic_list: &GenericListToken,
+    ) -> Result<()> {
         self.visit_pattern(&reg.pattern, symtab)?;
 
-        self.visit_expression(&reg.clock, symtab)?;
-        self.visit_expression(&reg.value, symtab)?;
+        self.visit_expression(&reg.clock, symtab, generic_list)?;
+        self.visit_expression(&reg.value, symtab, generic_list)?;
 
         if let Some((rst_cond, rst_value)) = &reg.reset {
-            self.visit_expression(&rst_cond, symtab)?;
-            self.visit_expression(&rst_value, symtab)?;
+            self.visit_expression(&rst_cond, symtab, generic_list)?;
+            self.visit_expression(&rst_value, symtab, generic_list)?;
             // Ensure cond is a boolean
             self.unify(&rst_cond.inner, &t_bool(symtab), symtab)
                 .map_err(|(got, expected)| Error::NonBoolReset {
@@ -808,7 +837,7 @@ impl TypeState {
                         &symtab.type_symbol_by_id(n1).inner,
                         &symtab.type_symbol_by_id(n2).inner,
                     ) {
-                        (TypeSymbol::Declared(_), TypeSymbol::Declared(_)) => {
+                        (TypeSymbol::Declared(_, _), TypeSymbol::Declared(_, _)) => {
                             if n1 != n2 {
                                 std::mem::forget(task);
                                 return Err(err_producer());
@@ -829,12 +858,12 @@ impl TypeState {
                                 .expect("Tried to unify types but the lhs was not found");
                             unify_if!(new_ts1 == new_ts2, new_v1, None)
                         }
-                        (TypeSymbol::Declared(_), TypeSymbol::GenericArg) => Ok((v1, Some(v2))),
-                        (TypeSymbol::GenericArg, TypeSymbol::Declared(_)) => Ok((v2, Some(v1))),
+                        (TypeSymbol::Declared(_, _), TypeSymbol::GenericArg) => Ok((v1, Some(v2))),
+                        (TypeSymbol::GenericArg, TypeSymbol::Declared(_, _)) => Ok((v2, Some(v1))),
                         (TypeSymbol::GenericArg, TypeSymbol::GenericArg) => Ok((v1, Some(v2))),
-                        (TypeSymbol::Declared(_), TypeSymbol::GenericInt) => todo!(),
+                        (TypeSymbol::Declared(_, _), TypeSymbol::GenericInt) => todo!(),
                         (TypeSymbol::GenericArg, TypeSymbol::GenericInt) => todo!(),
-                        (TypeSymbol::GenericInt, TypeSymbol::Declared(_)) => todo!(),
+                        (TypeSymbol::GenericInt, TypeSymbol::Declared(_, _)) => todo!(),
                         (TypeSymbol::GenericInt, TypeSymbol::GenericArg) => todo!(),
                         (TypeSymbol::GenericInt, TypeSymbol::GenericInt) => todo!(),
                     }
@@ -1025,6 +1054,7 @@ mod tests {
         fixed_types::t_clock,
         hir::{self, Block},
     };
+    use hir::symbol_table::TypeDeclKind;
     use hir::PatternKind;
     use hir::{dtype, testutil::t_num, Argument};
     use spade_ast::testutil::{ast_ident, ast_path};
@@ -1037,11 +1067,14 @@ mod tests {
     fn int_literals_have_type_known_int() {
         let mut state = TypeState::new();
         let mut symtab = SymbolTable::new();
+        let generic_list = state.create_generic_list(&vec![]);
         spade_ast_lowering::builtins::populate_symtab(&mut symtab, &mut ItemList::new());
 
         let input = ExprKind::IntLiteral(0).with_id(0).nowhere();
 
-        state.visit_expression(&input, &symtab).expect("Type error");
+        state
+            .visit_expression(&input, &symtab, &generic_list)
+            .expect("Type error");
 
         ensure_same_type!(state, TExpr::Id(0), unsized_int(1, &symtab));
     }
@@ -1068,7 +1101,10 @@ mod tests {
         state.add_eq_from_tvar(expr_b.clone(), TVar::Unknown(101));
         state.add_eq_from_tvar(expr_c.clone(), TVar::Unknown(102));
 
-        state.visit_expression(&input, &symtab).unwrap();
+        let generic_list = state.create_generic_list(&vec![]);
+        state
+            .visit_expression(&input, &symtab, &generic_list)
+            .unwrap();
 
         // Check the generic type variables
         ensure_same_type!(
@@ -1107,7 +1143,10 @@ mod tests {
         state.add_eq_from_tvar(expr_b.clone(), unsized_int(101, &symtab));
         state.add_eq_from_tvar(expr_c.clone(), TVar::Unknown(102));
 
-        state.visit_expression(&input, &symtab).unwrap();
+        let generic_list = state.create_generic_list(&vec![]);
+        state
+            .visit_expression(&input, &symtab, &generic_list)
+            .unwrap();
 
         // Check the generic type variables
         ensure_same_type!(
@@ -1147,7 +1186,11 @@ mod tests {
         state.add_eq_from_tvar(expr_b.clone(), unsized_int(101, &symtab));
         state.add_eq_from_tvar(expr_c.clone(), TVar::Known(t_clock(&symtab), vec![], None));
 
-        assert_ne!(state.visit_expression(&input, &symtab), Ok(()));
+        let generic_list = state.create_generic_list(&vec![]);
+        assert_ne!(
+            state.visit_expression(&input, &symtab, &generic_list),
+            Ok(())
+        );
     }
 
     #[test]
@@ -1184,7 +1227,10 @@ mod tests {
         state.add_eq_from_tvar(expr_b.clone(), unsized_int(101, &symtab));
         state.add_eq_from_tvar(expr_c.clone(), TVar::Unknown(102));
 
-        state.visit_expression(&input, &symtab).unwrap();
+        let generic_list = state.create_generic_list(&vec![]);
+        state
+            .visit_expression(&input, &symtab, &generic_list)
+            .unwrap();
 
         // Ensure branches have the same type
         ensure_same_type!(state, expr_b, &expr_c);
@@ -1230,7 +1276,10 @@ mod tests {
         state.add_eq_from_tvar(expr_b.clone(), TVar::Unknown(101));
         state.add_eq_from_tvar(expr_c.clone(), TVar::Unknown(102));
 
-        state.visit_expression(&input, &symtab).unwrap();
+        let generic_list = state.create_generic_list(&vec![]);
+        state
+            .visit_expression(&input, &symtab, &generic_list)
+            .unwrap();
 
         let expected_type = TVar::Tuple(vec![kvar!(t_bool(&symtab)), kvar!(t_bool(&symtab))]);
 
@@ -1247,7 +1296,7 @@ mod tests {
         let not_bool = symtab.add_type_with_id(
             100,
             Path::from_strs(&vec!["not_bool"]),
-            TypeSymbol::Declared(vec![]).nowhere(),
+            TypeSymbol::Declared(vec![], TypeDeclKind::Enum).nowhere(),
         );
 
         let lhs = PatternKind::name(name_id(0, "x")).with_id(22).nowhere();
@@ -1264,7 +1313,10 @@ mod tests {
         )
         .nowhere();
 
-        assert!(state.visit_statement(&input, &symtab).is_err());
+        let generic_list = state.create_generic_list(&vec![]);
+        assert!(state
+            .visit_statement(&input, &symtab, &generic_list)
+            .is_err());
     }
 
     #[test]
@@ -1281,7 +1333,10 @@ mod tests {
 
         let mut state = TypeState::new();
 
-        state.visit_expression(&input, &symtab).unwrap();
+        let generic_list = state.create_generic_list(&vec![]);
+        state
+            .visit_expression(&input, &symtab, &generic_list)
+            .unwrap();
 
         ensure_same_type!(state, TExpr::Id(0), unsized_int(2, &symtab));
         ensure_same_type!(state, TExpr::Id(1), unsized_int(2, &symtab));
@@ -1309,7 +1364,10 @@ mod tests {
         state.add_eq_from_tvar(expr_b.clone(), unsized_int(101, &symtab));
         state.add_eq_from_tvar(expr_c.clone(), sized_int(5, &symtab));
 
-        state.visit_expression(&input, &symtab).unwrap();
+        let generic_list = state.create_generic_list(&vec![]);
+        state
+            .visit_expression(&input, &symtab, &generic_list)
+            .unwrap();
 
         // Check the generic type variables
         ensure_same_type!(
@@ -1354,7 +1412,10 @@ mod tests {
         state.add_eq_from_tvar(expr_a.clone(), TVar::Unknown(100));
         state.add_eq_from_tvar(expr_b.clone(), TVar::Unknown(101));
 
-        state.visit_expression(&input, &symtab).unwrap();
+        let generic_list = state.create_generic_list(&vec![]);
+        state
+            .visit_expression(&input, &symtab, &generic_list)
+            .unwrap();
 
         // The index should be an integer
         ensure_same_type!(state, expr_b, unsized_int(4, &symtab));
@@ -1393,7 +1454,10 @@ mod tests {
         let expr_clk = TExpr::Name(name_id(1, "clk").inner);
         state.add_eq_from_tvar(expr_clk.clone(), TVar::Unknown(100));
 
-        state.visit_register(&input, &symtab).unwrap();
+        let generic_list = state.create_generic_list(&vec![]);
+        state
+            .visit_register(&input, &symtab, &generic_list)
+            .unwrap();
 
         ensure_same_type!(state, TExpr::Id(0), unsized_int(3, &symtab));
         ensure_same_type!(
@@ -1426,7 +1490,10 @@ mod tests {
         let expr_clk = TExpr::Name(name_id(1, "clk").inner);
         state.add_eq_from_tvar(expr_clk.clone(), TVar::Unknown(100));
 
-        state.visit_register(&input, &symtab).unwrap();
+        let generic_list = state.create_generic_list(&vec![]);
+        state
+            .visit_register(&input, &symtab, &generic_list)
+            .unwrap();
 
         ensure_same_type!(state, TExpr::Name(name_id(0, "a").inner), TVar::Unknown(2));
         ensure_same_type!(state, expr_clk, t_clock(&symtab));
@@ -1461,7 +1528,10 @@ mod tests {
         state.add_eq_from_tvar(expr_rst_cond.clone(), TVar::Unknown(101));
         state.add_eq_from_tvar(expr_rst_value.clone(), TVar::Unknown(102));
 
-        state.visit_register(&input, &symtab).unwrap();
+        let generic_list = state.create_generic_list(&vec![]);
+        state
+            .visit_register(&input, &symtab, &generic_list)
+            .unwrap();
 
         let t0 = get_type!(state, &TExpr::Id(0));
         let ta = get_type!(state, &TExpr::Name(name_id(0, "a").inner));
@@ -1489,7 +1559,10 @@ mod tests {
 
         let mut state = TypeState::new();
 
-        state.visit_statement(&input, &symtab).unwrap();
+        let generic_list = state.create_generic_list(&vec![]);
+        state
+            .visit_statement(&input, &symtab, &generic_list)
+            .unwrap();
 
         let ta = get_type!(state, &TExpr::Name(name_id(0, "a").inner));
         ensure_same_type!(state, ta.as_ref(), unsized_int(1, &symtab));
@@ -1509,7 +1582,10 @@ mod tests {
 
         let mut state = TypeState::new();
 
-        state.visit_statement(&input, &symtab).unwrap();
+        let generic_list = state.create_generic_list(&vec![]);
+        state
+            .visit_statement(&input, &symtab, &generic_list)
+            .unwrap();
 
         let ta = get_type!(state, &TExpr::Name(name_id(0, "a").inner));
         ensure_same_type!(state, ta.as_ref(), sized_int(5, &symtab));
@@ -1546,7 +1622,10 @@ mod tests {
         let expr_clk = TExpr::Name(name_id(1, "clk").inner);
         state.add_eq_from_tvar(expr_clk.clone(), TVar::Unknown(100));
 
-        state.visit_register(&input, &symtab).unwrap();
+        let generic_list = state.create_generic_list(&vec![]);
+        state
+            .visit_register(&input, &symtab, &generic_list)
+            .unwrap();
 
         let ttup = get_type!(state, &TExpr::Id(3));
         let reg = get_type!(state, &TExpr::Name(name_id(0, "test").inner));
@@ -1602,7 +1681,10 @@ mod tests {
         state.add_eq_from_tvar(expr_a.clone(), TVar::Unknown(100));
         state.add_eq_from_tvar(expr_b.clone(), TVar::Unknown(101));
 
-        state.visit_expression(&input, &symtab).unwrap();
+        let generic_list = state.create_generic_list(&vec![]);
+        state
+            .visit_expression(&input, &symtab, &generic_list)
+            .unwrap();
 
         let t0 = get_type!(state, &TExpr::Id(0));
         let t1 = get_type!(state, &TExpr::Id(1));
@@ -1688,7 +1770,10 @@ mod tests {
         state.add_eq_from_tvar(expr_a.clone(), TVar::Unknown(100));
         state.add_eq_from_tvar(expr_b.clone(), TVar::Unknown(101));
 
-        state.visit_expression(&input, &symtab).unwrap();
+        let generic_list = state.create_generic_list(&vec![]);
+        state
+            .visit_expression(&input, &symtab, &generic_list)
+            .unwrap();
 
         // Check the generic type variables
         ensure_same_type!(

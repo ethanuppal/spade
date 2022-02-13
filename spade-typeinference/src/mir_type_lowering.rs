@@ -53,7 +53,12 @@ impl TypeState {
                     .members
                     .0
                     .iter()
-                    .map(|arg| Self::type_spec_to_concrete(&arg.1.inner, type_list, &generic_subs))
+                    .map(|(ident, t)| {
+                        (
+                            ident.inner.clone(),
+                            Self::type_spec_to_concrete(&t, type_list, &generic_subs),
+                        )
+                    })
                     .collect();
 
                 ConcreteType::Struct { members }

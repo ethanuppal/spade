@@ -213,6 +213,16 @@ impl<'a> Parser<'a> {
                     hash_loc: Loc::new((), lspan(hash.span), self.file_id),
                 })
             }
+        } else if let Some(_) = self.peek_and_eat(&TokenKind::Dot)? {
+            let field = self.identifier()?;
+
+            Ok(
+                Expression::FieldAccess(Box::new(expr.clone()), field.clone()).between(
+                    self.file_id,
+                    &expr,
+                    &field,
+                ),
+            )
         } else if self.peek_kind(&TokenKind::OpenBracket)? {
             let (index, _) = self.surrounded(
                 &TokenKind::OpenBracket,
@@ -2533,6 +2543,18 @@ mod tests {
         let expected = Expression::TupleIndex(
             Box::new(Expression::Identifier(ast_path("a")).nowhere()),
             Loc::new(0, ().nowhere().span, 0),
+        )
+        .nowhere();
+
+        check_parse!(code, expression, Ok(expected));
+    }
+
+    #[test]
+    fn field_access_parses() {
+        let code = "a.b";
+        let expected = Expression::FieldAccess(
+            Box::new(Expression::Identifier(ast_path("a")).nowhere()),
+            ast_ident("b"),
         )
         .nowhere();
 

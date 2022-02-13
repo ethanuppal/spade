@@ -831,18 +831,42 @@ mod tests {
             }
         "#;
 
-        let mir_struct = Type::Struct {
-            members: vec![Type::Bool],
-        };
+        let mir_struct = Type::Tuple(vec![Type::Bool]);
 
         let expected = vec![entity!("test"; (
                 "_i_payload", n(0, "payload"), Type::Bool,
             ) -> mir_struct.clone(); {
-                (e(1); mir_struct; ConstructStruct({member_count: 1}); n(0, "payload"));
+                (e(1); mir_struct; ConstructTuple; n(0, "payload"));
             } => e(1)
         )];
 
         build_and_compare_entities!(code, expected);
+    }
+
+    #[test]
+    fn struct_field_access_and_creation_works() {
+        let code = r#"
+        struct X (a: int<16>, b: int<8>)
+
+        entity name(a: int<16>, b: int<8>) -> int<8> {
+            let compound = X$(a, b);
+            compound.b
+        }
+        "#;
+
+        let tup_inner = vec![Type::Int(16), Type::Int(8)];
+        let tup_type = Type::Tuple(tup_inner.clone());
+        let expected = vec![entity!("name"; (
+                "_i_a", n(0, "a"), Type::Int(16),
+                "_i_b", n(1, "b"), Type::Int(8),
+            ) -> Type::Int(8); {
+                (e(1); tup_type.clone(); ConstructTuple; n(0, "a"), n(1, "b"));
+                (n(2, "compound"); tup_type; Alias; e(1));
+                (e(0); Type::Int(8); IndexTuple((1, tup_inner)); n(2, "compound"));
+            } => e(0)
+        )];
+
+        build_and_compare_entities!(code, &expected);
     }
 
     #[test]

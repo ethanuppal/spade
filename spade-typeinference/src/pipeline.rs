@@ -3,6 +3,7 @@ use spade_common::location_info::WithLocation;
 use spade_hir::symbol_table::SymbolTable;
 use spade_hir::{Pipeline, PipelineBinding, PipelineStage};
 
+use crate::GenericListToken;
 use crate::{equation::TypedExpression, fixed_types::t_clock, result::Error};
 
 use super::{Result, TraceStackEntry, TypeState};
@@ -13,8 +14,9 @@ impl TypeState {
         &mut self,
         binding: &PipelineBinding,
         symtab: &SymbolTable,
+        generic_list: &GenericListToken,
     ) -> Result<()> {
-        self.visit_expression(&binding.value, symtab)?;
+        self.visit_expression(&binding.value, symtab, generic_list)?;
 
         if binding.type_spec.is_some() {
             todo!("Let bindings with fixed types are unsupported")
@@ -39,10 +41,11 @@ impl TypeState {
         &mut self,
         stage: &PipelineStage,
         symtab: &SymbolTable,
+        generic_list: &GenericListToken,
     ) -> Result<()> {
         for binding in &stage.bindings {
             // Add a type eq for the name
-            self.visit_pipeline_binding(binding, symtab)?;
+            self.visit_pipeline_binding(binding, symtab, generic_list)?;
         }
         Ok(())
     }
@@ -84,10 +87,10 @@ impl TypeState {
 
         // Go through the stages
         for stage in body {
-            self.visit_pipeline_stage(stage, symtab)?
+            self.visit_pipeline_stage(stage, symtab, &generic_list)?
         }
 
-        self.visit_expression(result, symtab)?;
+        self.visit_expression(result, symtab, &generic_list)?;
 
         let tvar = self.type_var_from_hir(output_type, &generic_list);
         self.unify(&TypedExpression::Id(result.inner.id), tvar.as_ref(), symtab)
@@ -141,7 +144,10 @@ mod tests {
             )
             .commit(&mut state);
 
-        state.visit_pipeline_binding(&input, &symtab).unwrap();
+        let generic_list = state.create_generic_list(&vec![]);
+        state
+            .visit_pipeline_binding(&input, &symtab, &generic_list)
+            .unwrap();
 
         ensure_same_type!(
             state,

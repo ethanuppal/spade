@@ -112,8 +112,8 @@ impl ConcreteTypeLocal for ConcreteType {
                 Type::Enum(inner)
             }
             CType::Struct { members } => {
-                let members = members.iter().map(|t| t.to_mir_type()).collect();
-                Type::Struct { members }
+                let members = members.iter().map(|(_, t)| t.to_mir_type()).collect();
+                Type::Tuple(members)
             }
         }
     }
@@ -460,6 +460,7 @@ impl ExprLocal for Loc<Expression> {
             ExprKind::FnCall(_, _) => None,
             ExprKind::TupleLiteral(_) => None,
             ExprKind::TupleIndex(_, _) => None,
+            ExprKind::FieldAccess(_, _) => None,
             ExprKind::ArrayLiteral { .. } => None,
             ExprKind::Index(_, _) => None,
             ExprKind::Block(block) => Some(block.result.variable(subs)),
@@ -587,13 +588,58 @@ impl ExprLocal for Loc<Expression> {
                 {
                     inner.clone()
                 } else {
-                    unreachable!("Tupel indexing of non-tuple: {:?}", self_type);
+                    unreachable!("Tuple indexing of non-tuple: {:?}", self_type);
                 };
 
                 result.push(mir::Statement::Binding(mir::Binding {
                     name: self.variable(subs),
                     operator: mir::Operator::IndexTuple(idx.inner as u64, types),
                     operands: vec![tup.variable(subs)],
+                    ty: self_type,
+                }))
+            }
+            ExprKind::FieldAccess(target, field) => {
+                result.append(&mut target.lower(symtab, idtracker, types, subs, &item_list)?);
+
+                let ctype = types.expr_type(target, symtab.symtab(), &item_list.types)?;
+
+                let member_types = if let mir::types::Type::Tuple(members) = &ctype.to_mir_type() {
+                    members.clone()
+                } else {
+                    unreachable!("Field access on non-struct {:?}", self_type)
+                };
+
+                let field_index = if let ConcreteType::Struct { members } = ctype {
+                    let field_indices = members
+                        .iter()
+                        .enumerate()
+                        .filter_map(
+                            |(i, (name, _))| {
+                                if name == &field.inner {
+                                    Some(i)
+                                } else {
+                                    None
+                                }
+                            },
+                        )
+                        .collect::<Vec<_>>();
+
+                    assert_eq!(
+                        field_indices.len(),
+                        1,
+                        "Expected exactly 1 field with the name {}",
+                        field
+                    );
+
+                    *field_indices.first().unwrap()
+                } else {
+                    unreachable!("Field access on non-struct {:?}", self_type)
+                };
+
+                result.push(mir::Statement::Binding(mir::Binding {
+                    name: self.variable(subs),
+                    operator: mir::Operator::IndexTuple(field_index as u64, member_types),
+                    operands: vec![target.variable(subs)],
                     ty: self_type,
                 }))
             }
@@ -758,22 +804,12 @@ impl ExprLocal for Loc<Expression> {
                 }))
             }
             Some(hir::ExecutableItem::StructInstance) => {
-                let members = match item_list.types.get(name) {
-                    Some(type_decl) => match &type_decl.kind {
-                        hir::TypeDeclKind::Struct(s) => &s.inner.members,
-                        _ => panic!("Instanciating struct of type which is not a struct"),
-                    },
-                    None => panic!("No type declaration found for {}", name),
-                };
-
                 result.push(mir::Statement::Binding(mir::Binding {
                     name: self.variable(subs),
                     ty: types
                         .expr_type(self, symtab.symtab(), &item_list.types)?
                         .to_mir_type(),
-                    operator: mir::Operator::ConstructStruct {
-                        member_count: members.0.len(),
-                    },
+                    operator: mir::Operator::ConstructTuple,
                     operands: args
                         .into_iter()
                         .map(|arg| arg.value.variable(subs))

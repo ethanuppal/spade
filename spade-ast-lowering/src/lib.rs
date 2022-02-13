@@ -106,7 +106,7 @@ pub fn visit_type_spec(t: &ast::TypeSpec, symtab: &mut SymbolTable) -> Result<hi
 
             // Check if the type is a declared type or a generic argument.
             match &t.inner {
-                TypeSymbol::Declared(_) => {
+                TypeSymbol::Declared(_, _) => {
                     // We'll defer checking the validity of generic args to the type checker,
                     // but we still have to visit them now
                     let params = params
@@ -708,6 +708,10 @@ pub fn visit_expression(
             Box::new(tuple.try_visit(visit_expression, symtab, idtracker)?),
             index.clone(),
         )),
+        ast::Expression::FieldAccess(target, field) => Ok(hir::ExprKind::FieldAccess(
+            Box::new(target.try_visit(visit_expression, symtab, idtracker)?),
+            field.clone(),
+        )),
         ast::Expression::If(cond, ontrue, onfalse) => {
             let cond = cond.try_visit(visit_expression, symtab, idtracker)?;
             let ontrue = ontrue.try_visit(visit_expression, symtab, idtracker)?;
@@ -1275,6 +1279,27 @@ mod expression_visiting {
         let expected = hir::ExprKind::Index(
             Box::new(hir::ExprKind::IntLiteral(0).idless().nowhere()),
             Box::new(hir::ExprKind::IntLiteral(1).idless().nowhere()),
+        )
+        .idless();
+
+        assert_eq!(
+            visit_expression(&input, &mut symtab, &mut idtracker),
+            Ok(expected)
+        );
+    }
+
+    #[test]
+    fn field_access_works() {
+        let mut symtab = SymbolTable::new();
+        let mut idtracker = ExprIdTracker::new();
+        let input = ast::Expression::FieldAccess(
+            Box::new(ast::Expression::IntLiteral(0).nowhere()),
+            ast_ident("a"),
+        );
+
+        let expected = hir::ExprKind::FieldAccess(
+            Box::new(hir::ExprKind::IntLiteral(0).idless().nowhere()),
+            ast_ident("a"),
         )
         .idless();
 
@@ -1911,7 +1936,7 @@ mod expression_visiting {
         let mut symtab = SymbolTable::new();
         let mut idtracker = ExprIdTracker::new();
 
-        let head = TypeSymbol::Declared(vec![]).nowhere();
+        let head = TypeSymbol::Declared(vec![], hir::symbol_table::TypeDeclKind::Struct).nowhere();
         symtab.add_type(ast_path("test").inner, head.clone());
 
         assert_eq!(

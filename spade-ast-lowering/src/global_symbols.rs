@@ -128,7 +128,12 @@ pub fn visit_type_declaration(
         })
         .collect();
 
-    symtab.add_type(path.clone(), TypeSymbol::Declared(args).at_loc(&t));
+    let kind = match t.kind {
+        ast::TypeDeclKind::Enum(_) => hir::symbol_table::TypeDeclKind::Enum,
+        ast::TypeDeclKind::Struct(_) => hir::symbol_table::TypeDeclKind::Struct,
+    };
+
+    symtab.add_type(path.clone(), TypeSymbol::Declared(args, kind).at_loc(&t));
 
     Ok(())
 }

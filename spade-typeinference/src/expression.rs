@@ -1,15 +1,15 @@
 use parse_tree_macros::trace_typechecker;
 use spade_common::location_info::Loc;
 use spade_hir::expression::{BinaryOperator, UnaryOperator};
-use spade_hir::symbol_table::SymbolTable;
+use spade_hir::symbol_table::{SymbolTable, TypeDeclKind, TypeSymbol};
 use spade_hir::{ExprKind, Expression};
 use spade_types::KnownType;
 
 use crate::equation::{InnerTypeVar, TypeVarRef, TypedExpression};
 use crate::fixed_types::t_bool;
 use crate::result::Error;
-use crate::TypeState;
 use crate::{kvar, Result};
+use crate::{GenericListToken, TypeState};
 use crate::{HasType, TraceStackEntry};
 
 macro_rules! assuming_kind {
@@ -74,10 +74,11 @@ impl TypeState {
         &mut self,
         expression: &Loc<Expression>,
         symtab: &SymbolTable,
+        generic_list: &GenericListToken,
     ) -> Result<()> {
         assuming_kind!(ExprKind::TupleLiteral(inner) = &expression => {
             for expr in inner {
-                self.visit_expression(expr, symtab)?;
+                self.visit_expression(expr, symtab, generic_list)?;
                 // NOTE: safe unwrap, we know this expr has a type because we just visited
             }
 
@@ -102,9 +103,10 @@ impl TypeState {
         &mut self,
         expression: &Loc<Expression>,
         symtab: &SymbolTable,
+        generic_list: &GenericListToken,
     ) -> Result<()> {
         assuming_kind!(ExprKind::TupleIndex(tup, index) = &expression => {
-            self.visit_expression(tup, symtab)?;
+            self.visit_expression(tup, symtab, generic_list)?;
             let t = self.type_of(&TypedExpression::Id(tup.id));
 
             match t.as_ref().map(|t| t.as_ref()) {
@@ -138,14 +140,80 @@ impl TypeState {
     }
 
     #[trace_typechecker]
+    pub fn visit_field_access(
+        &mut self,
+        expression: &Loc<Expression>,
+        symtab: &SymbolTable,
+        generic_list: &GenericListToken,
+    ) -> Result<()> {
+        assuming_kind!(ExprKind::FieldAccess(target, field) = &expression => {
+            self.visit_expression(&target, symtab, generic_list)?;
+
+            let t = self.type_of(&TypedExpression::Id(target.id));
+
+            match t.as_ref().map(|t| t.as_ref()) {
+                Ok(InnerTypeVar::Known(inner, _, _)) => {
+                    // Look up the type of the known var
+                    match inner {
+                        KnownType::Type(inner) => {
+                            // Check if we're dealing with a struct
+                            match symtab.type_symbol_by_id(inner).inner {
+                                TypeSymbol::Declared(_, TypeDeclKind::Struct) => {}
+                                TypeSymbol::Declared(_, TypeDeclKind::Enum) => {
+                                    return Err(Error::FieldAccessOnEnum{
+                                        loc: target.loc(),
+                                        actual_type: inner.clone()
+                                    })
+                                }
+                                TypeSymbol::Declared(_, TypeDeclKind::Primitive) => {
+                                    return Err(Error::FieldAccessOnPrimitive {
+                                        loc: target.loc(),
+                                        actual_type: inner.clone()
+                                    })
+                                }
+                                TypeSymbol::GenericArg | TypeSymbol::GenericInt => {
+                                    return Err(Error::FieldAccessOnGeneric{
+                                        loc: target.loc(),
+                                        name: inner.clone()
+                                    })
+                                }
+                            }
+
+                            // Get the struct, find the type of the field and unify
+                            let s = symtab.struct_by_id(inner);
+
+                            let field_type = self.type_var_from_hir(&s.params.arg_type(field), generic_list);
+
+                            self.unify_expression_generic_error(expression, field_type.as_ref(), symtab)?
+                                .commit(self);
+                        },
+                        KnownType::Integer(_) => {
+                            return Err(Error::FieldAccessOnInteger{loc: expression.loc()})
+                        },
+                    }
+                }
+                Ok(InnerTypeVar::Unknown(_)) => {
+                    return Err(Error::FieldAccessOnIncomplete{loc: expression.loc()})
+                }
+                Ok(other) => {
+                    return Err(Error::FieldAccessOnNonStruct{ loc: expression.loc(), got: other.clone() })
+                }
+                Err(e) => return Err(e.clone())
+            }
+        });
+        Ok(())
+    }
+
+    #[trace_typechecker]
     pub fn visit_array_literal(
         &mut self,
         expression: &Loc<Expression>,
         symtab: &SymbolTable,
+        generic_list: &GenericListToken,
     ) -> Result<()> {
         assuming_kind!(ExprKind::ArrayLiteral(members) = &expression => {
             for expr in members {
-                self.visit_expression(expr, symtab)?;
+                self.visit_expression(expr, symtab, generic_list)?;
             }
 
             for (l, r) in members.iter().zip(members.iter().skip(1)) {
@@ -181,11 +249,12 @@ impl TypeState {
         &mut self,
         expression: &Loc<Expression>,
         symtab: &SymbolTable,
+        generic_list: &GenericListToken,
     ) -> Result<()> {
         assuming_kind!(ExprKind::Index(target, index) = &expression => {
             // Visit child nodes
-            self.visit_expression(&target, symtab)?;
-            self.visit_expression(&index, symtab)?;
+            self.visit_expression(&target, symtab, generic_list)?;
+            self.visit_expression(&index, symtab, generic_list)?;
 
             // Add constraints
             let inner_type = self.new_generic();
@@ -221,9 +290,10 @@ impl TypeState {
         &mut self,
         expression: &Loc<Expression>,
         symtab: &SymbolTable,
+        generic_list: &GenericListToken,
     ) -> Result<()> {
         assuming_kind!(ExprKind::Block(block) = &expression => {
-            self.visit_block(block, symtab)?;
+            self.visit_block(block, symtab, generic_list)?;
 
             // Unify the return type of the block with the type of this expression
             self.unify(&expression.inner, &block.result.inner, symtab)
@@ -240,11 +310,16 @@ impl TypeState {
     }
 
     #[trace_typechecker]
-    pub fn visit_if(&mut self, expression: &Loc<Expression>, symtab: &SymbolTable) -> Result<()> {
+    pub fn visit_if(
+        &mut self,
+        expression: &Loc<Expression>,
+        symtab: &SymbolTable,
+        generic_list: &GenericListToken,
+    ) -> Result<()> {
         assuming_kind!(ExprKind::If(cond, on_true, on_false) = &expression => {
-            self.visit_expression(&cond, symtab)?;
-            self.visit_expression(&on_true, symtab)?;
-            self.visit_expression(&on_false, symtab)?;
+            self.visit_expression(&cond, symtab, generic_list)?;
+            self.visit_expression(&on_true, symtab, generic_list)?;
+            self.visit_expression(&on_false, symtab, generic_list)?;
 
             self.unify(&cond.inner, &t_bool(symtab), symtab)
                 .map_err(|(got, _)| Error::NonBooleanCondition {
@@ -273,13 +348,14 @@ impl TypeState {
         &mut self,
         expression: &Loc<Expression>,
         symtab: &SymbolTable,
+        generic_list: &GenericListToken,
     ) -> Result<()> {
         assuming_kind!(ExprKind::Match(cond, branches) = &expression => {
-            self.visit_expression(&cond, symtab)?;
+            self.visit_expression(&cond, symtab, generic_list)?;
 
             for (i, (pattern, result)) in branches.iter().enumerate() {
                 self.visit_pattern(pattern, symtab)?;
-                self.visit_expression(result, symtab)?;
+                self.visit_expression(result, symtab, generic_list)?;
 
                 self.unify(&cond.inner, pattern, symtab)
                     .map_err(|(expected, got)| {
@@ -318,10 +394,11 @@ impl TypeState {
         &mut self,
         expression: &Loc<Expression>,
         symtab: &SymbolTable,
+        generic_list: &GenericListToken,
     ) -> Result<()> {
         assuming_kind!(ExprKind::BinaryOperator(lhs, op, rhs) = &expression => {
-            self.visit_expression(&lhs, symtab)?;
-            self.visit_expression(&rhs, symtab)?;
+            self.visit_expression(&lhs, symtab, generic_list)?;
+            self.visit_expression(&rhs, symtab, generic_list)?;
             match *op {
                 BinaryOperator::Add
                 | BinaryOperator::Sub
@@ -366,9 +443,10 @@ impl TypeState {
         &mut self,
         expression: &Loc<Expression>,
         symtab: &SymbolTable,
+        generic_list: &GenericListToken,
     ) -> Result<()> {
         assuming_kind!(ExprKind::UnaryOperator(op, operand) = &expression => {
-            self.visit_expression(&operand, symtab)?;
+            self.visit_expression(&operand, symtab, generic_list)?;
             match op {
                 UnaryOperator::Sub => {
                     let int_type = self.new_generic_int(symtab);

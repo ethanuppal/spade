@@ -3,7 +3,7 @@ use spade_common::{
     name::{Identifier, Path},
 };
 use spade_hir::{
-    symbol_table::{GenericArg, SymbolTable, TypeSymbol},
+    symbol_table::{GenericArg, SymbolTable, TypeDeclKind, TypeSymbol},
     TypeDeclaration,
 };
 use spade_hir::{ItemList, TypeParam};
@@ -20,7 +20,7 @@ pub fn populate_symtab(symtab: &mut SymbolTable, item_list: &mut ItemList) {
             .add_type_with_id(
                 id,
                 Path::from_strs(path),
-                TypeSymbol::Declared(args.clone()).nowhere(),
+                TypeSymbol::Declared(args.clone(), TypeDeclKind::Primitive).nowhere(),
             )
             .nowhere();
         id -= 1;

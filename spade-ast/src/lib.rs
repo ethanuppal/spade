@@ -100,6 +100,7 @@ pub enum Expression {
     Index(Box<Loc<Expression>>, Box<Loc<Expression>>),
     TupleLiteral(Vec<Loc<Expression>>),
     TupleIndex(Box<Loc<Expression>>, Loc<u128>),
+    FieldAccess(Box<Loc<Expression>>, Loc<Identifier>),
     If(
         Box<Loc<Expression>>,
         Box<Loc<Expression>>,

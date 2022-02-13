@@ -86,9 +86,6 @@ pub enum Operator {
         variant: usize,
         member_index: usize,
     },
-    ConstructStruct {
-        member_count: usize,
-    },
     /// Get the `.0`th element of a tuple. The types of the elements are specified
     /// in the second argument
     IndexTuple(u64, Vec<Type>),
@@ -138,9 +135,6 @@ impl std::fmt::Display for Operator {
             } => write!(f, "EnumMember({} {})", variant, member_index),
             Operator::ConstructTuple => write!(f, "ConstructTuple"),
             Operator::ConstructArray => write!(f, "ConstructArray"),
-            Operator::ConstructStruct { member_count } => {
-                write!(f, "ConstructStruct({member_count})")
-            }
             Operator::IndexArray(member_size) => write!(f, "IndexArray({})", member_size),
             Operator::IndexTuple(idx, _) => write!(f, "IndexTuple({})", idx),
             Operator::Instance(name) => write!(f, "Instance({})", name),
