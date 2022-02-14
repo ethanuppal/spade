@@ -20,8 +20,18 @@ pub fn gather_types(
     symtab: &mut SymbolTable,
 ) -> Result<()> {
     for item in &module.members {
-        if let ast::Item::Type(t) = item {
-            visit_type_declaration(t, namespace, symtab)?;
+        match item {
+            ast::Item::Type(t) => {
+                visit_type_declaration(t, namespace, symtab)?;
+            }
+            ast::Item::Module(m) => {
+                let namespace = namespace.push_ident(m.name.clone());
+                gather_types(&m.body, &namespace, symtab)?;
+            }
+            ast::Item::Entity(_) => {}
+            ast::Item::Pipeline(_) => {}
+            ast::Item::TraitDef(_) => {}
+            ast::Item::Use(_) => {}
         }
     }
     Ok(())
