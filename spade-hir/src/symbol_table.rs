@@ -195,6 +195,11 @@ impl WithLocation for DeclarationState {}
 
 /// A table of the symbols known to the program in the current scope. Names
 /// are mapped to IDs which are then mapped to the actual things
+///
+/// Modules are managed by a special variable in the symtab. All names in the
+/// symtab are absolute paths, that is `X` in `mod A{mod B {fn X}}` will only be
+/// stored as `A::B::X`. All variables inside X will also have the full path
+/// appended to them. This should however be invisilbe to the user.
 pub struct SymbolTable {
     /// Each outer vec is a scope, inner vecs are symbols in that scope
     pub symbols: Vec<HashMap<Path, NameID>>,
@@ -202,6 +207,10 @@ pub struct SymbolTable {
     id_tracker: NameIdTracker,
     pub types: HashMap<NameID, Loc<TypeSymbol>>,
     pub things: HashMap<NameID, Thing>,
+    /// The namespace which we are currently in. When looking up and adding symbols, this namespace
+    /// is added to the start of the path, thus ensuring all paths are absolute. If a path is not
+    /// found that path is also looked up in the global namespace
+    namespace: Path,
 }
 
 impl SymbolTable {
@@ -212,6 +221,7 @@ impl SymbolTable {
             id_tracker: NameIdTracker::new(),
             types: HashMap::new(),
             things: HashMap::new(),
+            namespace: Path(vec![]),
         }
     }
     pub fn new_scope(&mut self) {
@@ -224,6 +234,19 @@ impl SymbolTable {
         self.declarations.pop();
     }
 
+    /// Push an identifier onto the current namespace
+    pub fn push_namespace(&mut self, new_ident: Loc<Identifier>) {
+        self.namespace = self.namespace.push_ident(new_ident);
+    }
+
+    pub fn pop_namespace(&mut self) {
+        self.namespace = self.namespace.pop();
+    }
+
+    pub fn current_namespace(&self) -> &Path {
+        &self.namespace
+    }
+
     /// Adds a thing to the scope at `current_scope - offset`. Panics if there is no such scope
     pub fn add_thing_with_id_at_offset(
         &mut self,
@@ -232,7 +255,9 @@ impl SymbolTable {
         name: Path,
         item: Thing,
     ) -> NameID {
-        let name_id = NameID(id, name.clone());
+        let full_name = self.namespace.join(name);
+
+        let name_id = NameID(id, full_name.clone());
         if self.things.contains_key(&name_id) {
             panic!("Duplicate nameID inserted, {}", id);
         }
@@ -243,7 +268,7 @@ impl SymbolTable {
         }
 
         let index = self.symbols.len() - 1 - offset;
-        self.symbols[index].insert(name, name_id.clone());
+        self.symbols[index].insert(full_name, name_id.clone());
 
         name_id
     }
@@ -264,7 +289,8 @@ impl SymbolTable {
     }
 
     pub fn add_type_with_id(&mut self, id: u64, name: Path, t: Loc<TypeSymbol>) -> NameID {
-        let name_id = NameID(id, name.clone());
+        let full_name = self.namespace.join(name);
+        let name_id = NameID(id, full_name.clone());
         if self.types.contains_key(&name_id) {
             panic!("Duplicate nameID for types, {}", id)
         }
@@ -272,7 +298,7 @@ impl SymbolTable {
         self.symbols
             .last_mut()
             .unwrap()
-            .insert(name, name_id.clone());
+            .insert(full_name, name_id.clone());
         name_id
     }
 
@@ -296,17 +322,12 @@ impl SymbolTable {
     }
 
     pub fn add_local_variable(&mut self, name: Loc<Identifier>) -> NameID {
-        self.add_thing(
-            crate::util::path_from_ident(name.clone()).inner,
-            Thing::Variable(name),
-        )
+        let path = Path(vec![name.clone()]);
+        self.add_thing(path, Thing::Variable(name))
     }
     pub fn add_local_variable_at_offset(&mut self, offset: usize, name: Loc<Identifier>) -> NameID {
-        self.add_thing_at_offset(
-            offset,
-            crate::util::path_from_ident(name.clone()).inner,
-            Thing::Variable(name),
-        )
+        let path = Path(vec![name.clone()]);
+        self.add_thing_at_offset(offset, path, Thing::Variable(name))
     }
 
     pub fn add_declaration(&mut self, ident: Loc<Identifier>) -> Result<NameID, DeclarationError> {
@@ -475,10 +496,18 @@ impl SymbolTable {
     }
 
     pub fn lookup_id(&self, name: &Loc<Path>) -> Result<NameID, LookupError> {
+        // Look up things in the current namespace first
+        let local_path = self.namespace.join(name.inner.clone());
         for tab in self.symbols.iter().rev() {
-            if let Some(id) = tab.get(&name) {
+            if let Some(id) = tab.get(&local_path) {
                 return Ok(id.clone());
             }
+        }
+
+        // Then look up things in the absolute namespace. This is only needed at the
+        // top scope as that's where all top level will be defined
+        if let Some(id) = self.symbols.first().unwrap().get(name) {
+            return Ok(id.clone());
         }
         Err(LookupError::NoSuchSymbol(name.clone()))
     }

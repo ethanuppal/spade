@@ -7,7 +7,6 @@ pub mod types;
 
 use ast::ParameterList;
 use hir::symbol_table::DeclarationState;
-use hir::util::path_from_ident;
 use hir::ExecutableItem;
 pub use spade_common::id_tracker;
 use spade_common::name::Identifier;
@@ -65,7 +64,7 @@ pub fn visit_type_param(
     match &param {
         ast::TypeParam::TypeName(ident) => {
             let name_id = symtab.add_type(
-                Path(vec![ident.clone()]),
+                Path::ident(ident.clone()),
                 TypeSymbol::GenericArg.at_loc(&ident),
             );
 
@@ -73,7 +72,7 @@ pub fn visit_type_param(
         }
         ast::TypeParam::Integer(ident) => {
             let name_id = symtab.add_type(
-                Path(vec![ident.clone()]),
+                Path::ident(ident.clone()),
                 TypeSymbol::GenericArg.at_loc(&ident),
             );
 
@@ -201,7 +200,6 @@ pub fn entity_head(item: &ast::Entity, symtab: &mut SymbolTable) -> Result<Entit
 
 pub fn visit_entity(
     item: &Loc<ast::Entity>,
-    namespace: &Path,
     symtab: &mut SymbolTable,
     idtracker: &mut ExprIdTracker,
 ) -> Result<Option<Loc<hir::Entity>>> {
@@ -212,12 +210,12 @@ pub fn visit_entity(
 
     symtab.new_scope();
 
-    let path = namespace.push_ident(item.name.clone());
+    let path = Path(vec![item.name.clone()]).at_loc(&item.name.loc());
     let (id, head) = symtab
-        .lookup_entity(&path.clone().at_loc(&item.name))
+        .lookup_entity(&path)
         .or_else(|_| {
             symtab
-                .lookup_function(&path.at_loc(&item.name))
+                .lookup_function(&path)
                 .map(|(name, head)| (name, head.map(|i| i.as_entity_head())))
         })
         .expect("Attempting to lower an entity that has not been added to the symtab previously");
@@ -250,27 +248,18 @@ pub fn visit_entity(
     ))
 }
 
-// pub fn visit_trait_def(
-//     item: ast::TraitDef,
-//     symtab: &mut SymbolTable,
-//     idtracker: &mut IdTracker,
-// ) -> Result<hir::TraitDef> {
-//     unimplemented!{}
-// }
-
 pub fn visit_item(
     item: &ast::Item,
-    namespace: &Path,
     symtab: &mut SymbolTable,
     idtracker: &mut ExprIdTracker,
 ) -> Result<(Option<hir::Item>, Option<hir::ItemList>)> {
     match item {
         ast::Item::Entity(e) => Ok((
-            visit_entity(e, namespace, symtab, idtracker)?.map(hir::Item::Entity),
+            visit_entity(e, symtab, idtracker)?.map(hir::Item::Entity),
             None,
         )),
         ast::Item::Pipeline(p) => Ok((
-            pipelines::visit_pipeline(p, namespace, symtab, idtracker)?.map(hir::Item::Pipeline),
+            pipelines::visit_pipeline(p, symtab, idtracker)?.map(hir::Item::Pipeline),
             None,
         )),
         ast::Item::TraitDef(_) => {
@@ -281,18 +270,19 @@ pub fn visit_item(
             Ok((None, None))
         }
         ast::Item::Module(m) => {
-            let namespace = namespace.push_ident(m.name.clone());
+            symtab.push_namespace(m.name.clone());
             let new_item_list = hir::ItemList::new();
-            Ok((
+            let result = Ok((
                 None,
                 Some(visit_module_body(
                     new_item_list,
                     &m.body,
-                    &namespace,
                     symtab,
                     idtracker,
                 )?),
-            ))
+            ));
+            symtab.pop_namespace();
+            result
         }
         ast::Item::Use(_) => Ok((None, None)),
     }
@@ -301,14 +291,13 @@ pub fn visit_item(
 pub fn visit_module_body(
     mut item_list: hir::ItemList,
     module: &ast::ModuleBody,
-    namespace: &Path,
     symtab: &mut SymbolTable,
     idtracker: &mut ExprIdTracker,
 ) -> Result<hir::ItemList> {
     let all_items = module
         .members
         .iter()
-        .map(|i| visit_item(i, namespace, symtab, idtracker))
+        .map(|i| visit_item(i, symtab, idtracker))
         .collect::<Result<Vec<_>>>()?
         .into_iter();
 
@@ -390,7 +379,7 @@ pub fn visit_pattern(
                     } else {
                         (
                             symtab.add_thing(
-                                path_from_ident(ident.clone()).inner,
+                                Path::ident(ident.clone()),
                                 Thing::Variable(ident.clone()),
                             ),
                             false,
@@ -977,10 +966,10 @@ mod entity_visiting {
 
         let mut symtab = SymbolTable::new();
         let mut idtracker = ExprIdTracker::new();
-        global_symbols::visit_entity(&input, &Path(vec![]), &mut symtab)
+        global_symbols::visit_entity(&input, &mut symtab)
             .expect("Failed to collect global symbols");
 
-        let result = visit_entity(&input, &Path(vec![]), &mut symtab, &mut idtracker);
+        let result = visit_entity(&input, &mut symtab, &mut idtracker);
 
         assert_eq!(result, Ok(Some(expected)));
 
@@ -2339,11 +2328,9 @@ mod item_visiting {
 
         let mut symtab = SymbolTable::new();
         let mut idtracker = ExprIdTracker::new();
-        let namespace = Path(vec![]);
-        crate::global_symbols::visit_item(&input, &namespace, &mut symtab, &mut ItemList::new())
-            .unwrap();
+        crate::global_symbols::visit_item(&input, &mut symtab, &mut ItemList::new()).unwrap();
         assert_eq!(
-            visit_item(&input, &namespace, &mut symtab, &mut idtracker),
+            visit_item(&input, &mut symtab, &mut idtracker),
             Ok((Some(expected), None))
         );
     }
@@ -2411,16 +2398,10 @@ mod module_visiting {
 
         let mut symtab = SymbolTable::new();
         let mut idtracker = ExprIdTracker::new();
-        global_symbols::gather_symbols(&input, &Path(vec![]), &mut symtab, &mut ItemList::new())
+        global_symbols::gather_symbols(&input, &mut symtab, &mut ItemList::new())
             .expect("failed to collect global symbols");
         assert_eq!(
-            visit_module_body(
-                ItemList::new(),
-                &input,
-                &Path(vec![]),
-                &mut symtab,
-                &mut idtracker
-            ),
+            visit_module_body(ItemList::new(), &input, &mut symtab, &mut idtracker),
             Ok(expected)
         );
     }

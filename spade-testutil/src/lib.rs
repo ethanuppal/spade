@@ -4,7 +4,6 @@ use spade_ast_lowering::{global_symbols, visit_module_body};
 use spade_common::{
     error_reporting::{CodeBundle, CompilationError},
     id_tracker::ExprIdTracker,
-    name::Path,
 };
 use spade_hir::{
     symbol_table::{FrozenSymtab, SymbolTable},
@@ -87,14 +86,9 @@ pub fn parse_typecheck_module_body(input: &str) -> ParseTypececkResult {
     let mut symtab = SymbolTable::new();
     let mut item_list = ItemList::new();
     spade_ast_lowering::builtins::populate_symtab(&mut symtab, &mut item_list);
-    try_or_report!(global_symbols::gather_types(
-        &module_ast,
-        &Path(vec![]),
-        &mut symtab,
-    ));
+    try_or_report!(global_symbols::gather_types(&module_ast, &mut symtab,));
     try_or_report!(global_symbols::gather_symbols(
         &module_ast,
-        &Path(vec![]),
         &mut symtab,
         &mut item_list
     ));
@@ -104,7 +98,6 @@ pub fn parse_typecheck_module_body(input: &str) -> ParseTypececkResult {
     let item_list = try_or_report!(visit_module_body(
         item_list,
         &module_ast,
-        &Path(vec![]),
         &mut symtab,
         &mut idtracker
     ));

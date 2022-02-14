@@ -1,4 +1,4 @@
-# Spade Compiler Architecture
+ Spade Compiler Architecture
 
 Spade is split into several crates with the `main` function residing in
 `spade-compiler`. However, this crate is mainly glue code for the code in the
@@ -80,6 +80,23 @@ recursively traversing the AST, replacing identifiers and paths with `NameID`'s.
 
 Here, the names used are checked to be the right "kind" (`entity`, `type`, `variable`)
 by looking them up in the symtab.
+
+AST lowering is done in 3 passes over the AST. The first two collect global symbols,
+i.e. symbols visible at the top level of the program and is done in `global_symbols.rs`
+
+The first pass collects the "left hand sides" of all declarations, i.e. it adds the names
+of types and function-like items to the symtab. 
+
+The second pass visit the "right hand side" of the items. Here: enum members are added,
+type definitions are lowered to their HIR counterparts, function-likes are visited to
+create "heads", containing the declaration but not the implementation
+
+In the third pass, function-like items are visited and fully expanded to their HIR
+counterparts.
+
+#### Symbols, names and modules
+
+
 
 ### Type inference
 

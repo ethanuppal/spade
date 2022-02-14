@@ -8,7 +8,7 @@ use spade_common::error_reporting::CodeBundle;
 use structopt::StructOpt;
 
 use spade_ast_lowering::{global_symbols, visit_module_body};
-use spade_common::{error_reporting::CompilationError, id_tracker, name::Path};
+use spade_common::{error_reporting::CompilationError, id_tracker};
 use spade_hir::{symbol_table, ExecutableItem, ItemList};
 pub use spade_parser::lexer;
 use spade_parser::Parser;
@@ -62,7 +62,6 @@ fn main() -> Result<()> {
 
     let mut module_asts = vec![];
     // TODO: Namespace individual files
-    let namespace = Path(vec![]);
     // Read and parse input files
     for infile in infiles {
         let mut file = File::open(&infile)
@@ -77,17 +76,12 @@ fn main() -> Result<()> {
     }
 
     for module_ast in &module_asts {
-        try_or_report!(global_symbols::gather_types(
-            &module_ast,
-            &Path(vec![]),
-            &mut symtab,
-        ));
+        try_or_report!(global_symbols::gather_types(&module_ast, &mut symtab,));
     }
 
     for module_ast in &module_asts {
         try_or_report!(global_symbols::gather_symbols(
             &module_ast,
-            &Path(vec![]),
             &mut symtab,
             &mut item_list
         ));
@@ -99,7 +93,6 @@ fn main() -> Result<()> {
         for item in &module_ast.members {
             try_or_report!(global_symbols::visit_item(
                 &item,
-                &namespace,
                 &mut symtab,
                 &mut item_list
             ));
@@ -108,7 +101,6 @@ fn main() -> Result<()> {
         item_list = try_or_report!(visit_module_body(
             item_list,
             &module_ast,
-            &namespace,
             &mut symtab,
             &mut idtracker
         ));

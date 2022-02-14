@@ -32,9 +32,19 @@ impl Path {
         )
     }
 
+    pub fn ident(ident: Loc<Identifier>) -> Self {
+        Self(vec![ident])
+    }
+
     pub fn push_ident(&self, ident: Loc<Identifier>) -> Path {
         let mut result = self.clone();
         result.0.push(ident);
+        result
+    }
+
+    pub fn pop(&self) -> Self {
+        let mut result = self.clone();
+        result.0.pop().expect("Failed to pop identifier from path");
         result
     }
 

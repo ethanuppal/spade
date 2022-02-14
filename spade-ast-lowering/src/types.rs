@@ -7,27 +7,28 @@ use crate::{visit_type_param, Result};
 
 pub fn lower_type_declaration(
     decl: &ast::TypeDeclaration,
-    namespace: &Path,
     symtab: &mut SymbolTable,
 ) -> Result<hir::TypeDeclaration> {
     symtab.new_scope();
+    symtab.push_namespace(decl.name.clone());
     // Add the generic types declared here to the symtab
     for param in &decl.generic_args {
         match &param.inner {
             ast::TypeParam::TypeName(name) => {
                 symtab.add_type(
-                    Path(vec![name.clone()]),
+                    Path::ident(name.clone()),
                     TypeSymbol::GenericArg.at_loc(&param),
                 );
             }
             ast::TypeParam::Integer(name) => {
                 symtab.add_type(
-                    Path(vec![name.clone()]),
+                    Path::ident(name.clone()),
                     TypeSymbol::GenericInt.at_loc(&param),
                 );
             }
         }
     }
+    symtab.pop_namespace();
 
     let ast::TypeDeclaration {
         name,
@@ -35,7 +36,7 @@ pub fn lower_type_declaration(
         generic_args,
     } = decl;
 
-    let this_path = namespace.push_ident(name.clone());
+    let this_path = Path(vec![name.clone()]);
 
     let (id, _) = symtab.lookup_type_symbol(&this_path.clone().at_loc(&name))
         .expect("Found no entry for typedecl in symtab. Was it not visited during global symbol collection?");

@@ -100,4 +100,31 @@ mod namespace_tests {
 
         build_items(code);
     }
+
+    #[test]
+    fn using_names_in_namespaces_works() {
+        let code = r#"
+            mod X {
+                enum A {X(a: bool)}
+
+                entity x() -> A {
+                    A::X(true)
+                }
+            }
+            "#;
+
+        build_items(code);
+    }
+
+    #[test]
+    fn using_names_of_types_in_namespaces_works() {
+        let code = r#"
+            mod X {
+                struct A ()
+                struct B(a: A)
+            }
+            "#;
+
+        build_items(code);
+    }
 }

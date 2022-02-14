@@ -1082,7 +1082,6 @@ mod tests {
     use spade_ast::testutil::{ast_ident, ast_path};
     use spade_common::location_info::WithLocation;
     use spade_common::name::testutil::name_id;
-    use spade_common::name::Path;
     use spade_hir::symbol_table::{SymbolTable, Thing};
 
     #[test]
@@ -1317,7 +1316,7 @@ mod tests {
 
         let not_bool = symtab.add_type_with_id(
             100,
-            Path::from_strs(&vec!["not_bool"]),
+            ast_path("not_bool").inner,
             TypeSymbol::Declared(vec![], TypeDeclKind::Enum).nowhere(),
         );
 

@@ -121,7 +121,6 @@ pub fn visit_stage(
 
 pub fn visit_pipeline(
     pipeline: &Loc<ast::Pipeline>,
-    namespace: &Path,
     symtab: &mut SymbolTable,
     idtracker: &mut ExprIdTracker,
 ) -> Result<Option<Loc<hir::Pipeline>>> {
@@ -142,9 +141,8 @@ pub fn visit_pipeline(
     symtab.new_scope();
 
     // TODO: We should probably unify this code with the entity code at some point
-    let path = namespace.push_ident(pipeline.name.clone());
     let (id, head) = symtab
-        .lookup_pipeline(&path.at_loc(&pipeline.name))
+        .lookup_pipeline(&Path(vec![pipeline.name.clone()]).at_loc(&pipeline.name.loc()))
         .expect("Attempting to lower a pipeline that has not been added to the symtab previously");
     let head = head.clone(); // An offering to the borrow checker. May ferris have mercy on us all
 
@@ -442,10 +440,10 @@ mod pipeline_visiting {
         let mut symtab = SymbolTable::new();
         let mut id_tracker = ExprIdTracker::new();
 
-        crate::global_symbols::visit_pipeline(&input, &Path(vec![]), &mut symtab)
+        crate::global_symbols::visit_pipeline(&input, &mut symtab)
             .expect("Failed to add pipeline to symtab");
 
-        let result = visit_pipeline(&input, &Path(vec![]), &mut symtab, &mut id_tracker);
+        let result = visit_pipeline(&input, &mut symtab, &mut id_tracker);
 
         assert_eq!(result, Ok(Some(expected)));
     }
@@ -471,10 +469,10 @@ mod pipeline_visiting {
         let mut symtab = SymbolTable::new();
         let mut id_tracker = ExprIdTracker::new();
 
-        crate::global_symbols::visit_pipeline(&input, &Path(vec![]), &mut symtab)
+        crate::global_symbols::visit_pipeline(&input, &mut symtab)
             .expect("Failed to add pipeline to symtab");
 
-        let result = visit_pipeline(&input, &Path(vec![]), &mut symtab, &mut id_tracker);
+        let result = visit_pipeline(&input, &mut symtab, &mut id_tracker);
 
         assert_eq!(
             result,
@@ -504,10 +502,10 @@ mod pipeline_visiting {
         let mut symtab = SymbolTable::new();
         let mut id_tracker = ExprIdTracker::new();
 
-        crate::global_symbols::visit_pipeline(&input, &Path(vec![]), &mut symtab)
+        crate::global_symbols::visit_pipeline(&input, &mut symtab)
             .expect("Failed to add pipeline to symtab");
 
-        let result = visit_pipeline(&input, &Path(vec![]), &mut symtab, &mut id_tracker);
+        let result = visit_pipeline(&input, &mut symtab, &mut id_tracker);
 
         assert_eq!(result, Err(Error::NoPipelineStages { pipeline: input }));
     }
@@ -530,10 +528,10 @@ mod pipeline_visiting {
         let mut symtab = SymbolTable::new();
         let mut id_tracker = ExprIdTracker::new();
 
-        crate::global_symbols::visit_pipeline(&input, &Path(vec![]), &mut symtab)
+        crate::global_symbols::visit_pipeline(&input, &mut symtab)
             .expect("Failed to add pipeline to symtab");
 
-        let result = visit_pipeline(&input, &Path(vec![]), &mut symtab, &mut id_tracker);
+        let result = visit_pipeline(&input, &mut symtab, &mut id_tracker);
 
         assert_eq!(
             result,

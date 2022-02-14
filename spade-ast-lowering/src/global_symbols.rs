@@ -14,19 +14,16 @@ use spade_hir as hir;
 use crate::{visit_parameter_list, Error, Result};
 use spade_hir::symbol_table::{GenericArg, SymbolTable, Thing, TypeSymbol};
 
-pub fn gather_types(
-    module: &ast::ModuleBody,
-    namespace: &Path,
-    symtab: &mut SymbolTable,
-) -> Result<()> {
+pub fn gather_types(module: &ast::ModuleBody, symtab: &mut SymbolTable) -> Result<()> {
     for item in &module.members {
         match item {
             ast::Item::Type(t) => {
-                visit_type_declaration(t, namespace, symtab)?;
+                visit_type_declaration(t, symtab)?;
             }
             ast::Item::Module(m) => {
-                let namespace = namespace.push_ident(m.name.clone());
-                gather_types(&m.body, &namespace, symtab)?;
+                symtab.push_namespace(m.name.clone());
+                gather_types(&m.body, symtab)?;
+                symtab.pop_namespace();
             }
             ast::Item::Entity(_) => {}
             ast::Item::Pipeline(_) => {}
@@ -40,12 +37,11 @@ pub fn gather_types(
 /// Collect global symbols as a first pass before generating HIR
 pub fn gather_symbols(
     module: &ast::ModuleBody,
-    namespace: &Path,
     symtab: &mut SymbolTable,
     item_list: &mut ItemList,
 ) -> Result<()> {
     for item in &module.members {
-        visit_item(item, namespace, symtab, item_list)?;
+        visit_item(item, symtab, item_list)?;
     }
 
     Ok(())
@@ -53,26 +49,26 @@ pub fn gather_symbols(
 
 pub fn visit_item(
     item: &ast::Item,
-    namespace: &Path,
     symtab: &mut SymbolTable,
     item_list: &mut ItemList,
 ) -> Result<()> {
     match item {
         ast::Item::Entity(e) => {
-            visit_entity(&e, namespace, symtab)?;
+            visit_entity(&e, symtab)?;
         }
         ast::Item::Pipeline(p) => {
-            visit_pipeline(&p, namespace, symtab)?;
+            visit_pipeline(&p, symtab)?;
         }
         ast::Item::TraitDef(_) => {
             todo!("Trait definitions are unsupported")
         }
         ast::Item::Type(t) => {
-            re_visit_type_declaration(t, namespace, symtab, item_list)?;
+            re_visit_type_declaration(t, symtab, item_list)?;
         }
         ast::Item::Module(m) => {
-            let namespace = namespace.push_ident(m.name.clone());
-            gather_symbols(&m.body, &namespace, symtab, item_list)?;
+            symtab.push_namespace(m.name.clone());
+            gather_symbols(&m.body, symtab, item_list)?;
+            symtab.pop_namespace();
         }
         ast::Item::Use(u) => {
             let new_name = match &u.alias {
@@ -80,54 +76,41 @@ pub fn visit_item(
                 None => u.path.0.last().unwrap().clone(),
             };
 
-            let this_path = namespace.push_ident(new_name);
-            let target_path = namespace.join(u.path.clone().inner).at_loc(&u.path);
+            let target_path = symtab
+                .current_namespace()
+                .join(u.path.clone().inner)
+                .at_loc(&u.path);
 
-            symtab.add_thing(this_path, Thing::Alias(target_path));
+            symtab.add_thing(Path::ident(new_name), Thing::Alias(target_path));
         }
     }
     Ok(())
 }
 
-pub fn visit_entity(
-    e: &Loc<ast::Entity>,
-    namespace: &Path,
-    symtab: &mut SymbolTable,
-) -> Result<()> {
+pub fn visit_entity(e: &Loc<ast::Entity>, symtab: &mut SymbolTable) -> Result<()> {
     let head = crate::entity_head(&e, symtab)?;
 
-    let path = namespace.push_ident(e.name.clone());
-
     if e.is_function {
-        symtab.add_thing(path, Thing::Function(head.at_loc(e)));
+        symtab.add_thing(Path::ident(e.name.clone()), Thing::Function(head.at_loc(e)));
     } else {
-        symtab.add_thing(path, Thing::Entity(head.at_loc(e)));
+        symtab.add_thing(Path::ident(e.name.clone()), Thing::Entity(head.at_loc(e)));
     }
 
     Ok(())
 }
 
-pub fn visit_pipeline(
-    p: &Loc<ast::Pipeline>,
-    namespace: &Path,
-    symtab: &mut SymbolTable,
-) -> Result<()> {
+pub fn visit_pipeline(p: &Loc<ast::Pipeline>, symtab: &mut SymbolTable) -> Result<()> {
     let head = crate::pipelines::pipeline_head(&p, symtab)?;
 
-    let path = namespace.push_ident(p.name.clone());
-
-    symtab.add_thing(path, Thing::Pipeline(head.at_loc(p)));
+    symtab.add_thing(Path::ident(p.name.clone()), Thing::Pipeline(head.at_loc(p)));
 
     Ok(())
 }
 
 pub fn visit_type_declaration(
     t: &Loc<ast::TypeDeclaration>,
-    namespace: &Path,
     symtab: &mut SymbolTable,
 ) -> Result<()> {
-    let path = namespace.push_ident(t.name.clone());
-
     let args = t
         .generic_args
         .iter()
@@ -145,7 +128,10 @@ pub fn visit_type_declaration(
         ast::TypeDeclKind::Struct(_) => hir::symbol_table::TypeDeclKind::Struct,
     };
 
-    symtab.add_type(path.clone(), TypeSymbol::Declared(args, kind).at_loc(&t));
+    symtab.add_type(
+        Path::ident(t.name.clone()),
+        TypeSymbol::Declared(args, kind).at_loc(&t),
+    );
 
     Ok(())
 }
@@ -156,7 +142,6 @@ pub fn visit_type_declaration(
 /// we check type declarations
 pub fn re_visit_type_declaration(
     t: &Loc<ast::TypeDeclaration>,
-    namespace: &Path,
     symtab: &mut SymbolTable,
     items: &mut ItemList,
 ) -> Result<()> {
@@ -164,7 +149,7 @@ pub fn re_visit_type_declaration(
     // The first visitor has already added the LHS to the symtab
     // Look up the ID
     let (declaration_id, _) = symtab
-        .lookup_type_symbol(&namespace.push_ident(t.name.clone()).at_loc(&t.name))
+        .lookup_type_symbol(&Path(vec![t.name.clone()]).at_loc(&t.name))
         .expect("Expected type symbol to already be in symtab");
     let declaration_id = declaration_id.at_loc(&t.name);
 
@@ -175,7 +160,7 @@ pub fn re_visit_type_declaration(
             ast::TypeParam::TypeName(n) => (n, TypeSymbol::GenericArg),
             ast::TypeParam::Integer(n) => (n, TypeSymbol::GenericInt),
         };
-        symtab.add_type(Path(vec![name.clone()]), symbol_type.at_loc(param));
+        symtab.add_type(Path::ident(name.clone()), symbol_type.at_loc(param));
     }
 
     // Generate TypeExprs and TypeParam vectors which are needed for building the
@@ -202,6 +187,7 @@ pub fn re_visit_type_declaration(
         ast::TypeDeclKind::Enum(e) => {
             let mut member_names = HashSet::<Loc<Identifier>>::new();
             let mut hir_options = vec![];
+
             for (i, option) in e.options.iter().enumerate() {
                 if let Some(prev) = member_names.get(&option.0) {
                     return Err(Error::DuplicateEnumOption {
@@ -229,12 +215,9 @@ pub fn re_visit_type_declaration(
                 };
 
                 // Add option constructor to symtab at the outer scope
-                let variant_path = namespace
-                    .push_ident(t.name.clone())
-                    .push_ident(option.0.clone());
                 let head_id = symtab.add_thing_at_offset(
                     1,
-                    variant_path,
+                    Path(vec![e.name.clone(), option.0.clone()]),
                     Thing::EnumVariant(variant_thing.at_loc(&option.0)),
                 );
                 // Add option constructor to item list
@@ -355,20 +338,13 @@ mod tests {
         // Populate the symtab with builtins
         let mut symtab = SymbolTable::new();
 
-        let namespace = Path(vec![]);
-
         let mut items = ItemList::new();
 
         crate::builtins::populate_symtab(&mut symtab, &mut ItemList::new());
-        crate::global_symbols::visit_type_declaration(&input, &namespace, &mut symtab)
+        crate::global_symbols::visit_type_declaration(&input, &mut symtab)
             .expect("Failed to visit global symbol");
-        crate::global_symbols::re_visit_type_declaration(
-            &input,
-            &namespace,
-            &mut symtab,
-            &mut items,
-        )
-        .expect("Failed to re-visit global symbol");
+        crate::global_symbols::re_visit_type_declaration(&input, &mut symtab, &mut items)
+            .expect("Failed to re-visit global symbol");
 
         let result = items.types.get(&name_id(0, "test").inner).unwrap();
 
@@ -417,20 +393,13 @@ mod tests {
         // Populate the symtab with builtins
         let mut symtab = SymbolTable::new();
 
-        let namespace = Path(vec![]);
-
         let mut items = ItemList::new();
 
         crate::builtins::populate_symtab(&mut symtab, &mut ItemList::new());
-        crate::global_symbols::visit_type_declaration(&input, &namespace, &mut symtab)
+        crate::global_symbols::visit_type_declaration(&input, &mut symtab)
             .expect("Failed to visit global symbol");
-        crate::global_symbols::re_visit_type_declaration(
-            &input,
-            &namespace,
-            &mut symtab,
-            &mut items,
-        )
-        .expect("Failed to visit global symbol");
+        crate::global_symbols::re_visit_type_declaration(&input, &mut symtab, &mut items)
+            .expect("Failed to visit global symbol");
 
         let result = items.types.get(&name_id(0, "test").inner).unwrap();
 
