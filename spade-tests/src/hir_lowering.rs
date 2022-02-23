@@ -722,13 +722,13 @@ mod tests {
         let code = r#"
             pipeline(3) pl(clk: clk, a: int<16>) -> int<16> {
                 stage {
-                    let reg x = a + a;
+                    let x = a + a;
                 }
                 stage {
-                    let reg y = x + a;
+                    let y = x + a;
                 }
                 stage {
-                    let reg res = y + y;
+                    let res = y + y;
                 }
                 res
             }

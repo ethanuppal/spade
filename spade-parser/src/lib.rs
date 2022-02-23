@@ -7,10 +7,9 @@ use error::{CommaSeparatedResult, Error, Result};
 
 use spade_ast::{
     ArgumentList, ArgumentPattern, BinaryOperator, Block, Entity, Enum, Expression, FunctionDecl,
-    Item, Module, ModuleBody, NamedArgument, ParameterList, Pattern, Pipeline,
-    PipelineBindModifier, PipelineBinding, PipelineStage, Register, Statement, Struct, TraitDef,
-    TypeDeclKind, TypeDeclaration, TypeExpression, TypeParam, TypeSpec, UnaryOperator,
-    UseStatement,
+    Item, Module, ModuleBody, NamedArgument, ParameterList, Pattern, Pipeline, PipelineBinding,
+    PipelineStage, Register, Statement, Struct, TraitDef, TypeDeclKind, TypeDeclaration,
+    TypeExpression, TypeParam, TypeSpec, UnaryOperator, UseStatement,
 };
 use spade_common::{
     error_reporting::AsLabel,
@@ -964,13 +963,7 @@ impl<'a> Parser<'a> {
     pub fn pipeline_binding(&mut self) -> Result<Option<Loc<PipelineBinding>>> {
         let start = peek_for!(self, &TokenKind::Let);
 
-        let modifier = if let Some(t) = self.peek_and_eat(&TokenKind::Reg)? {
-            Some(PipelineBindModifier::Reg.at(self.file_id, &t.span))
-        } else {
-            None
-        };
-
-        let name = self.identifier()?;
+        let pat = self.pattern()?;
 
         let type_spec = if self.peek_and_eat(&TokenKind::Colon)?.is_some() {
             Some(self.type_spec()?)
@@ -986,8 +979,7 @@ impl<'a> Parser<'a> {
 
         Ok(Some(
             PipelineBinding {
-                name,
-                modifier,
+                pat,
                 type_spec,
                 value,
             }
@@ -2782,30 +2774,27 @@ mod tests {
         let code = r#"
             stage {
                 let y = 0;
-                let reg x = 0;
-                let reg x: bool = 0;
+                let x = 0;
+                let x: bool = 0;
             }
             "#;
 
         let expected = PipelineStage {
             bindings: vec![
                 PipelineBinding {
-                    name: ast_ident("y"),
-                    modifier: None,
+                    pat: Pattern::name("y"),
                     type_spec: None,
                     value: Expression::IntLiteral(0).nowhere(),
                 }
                 .nowhere(),
                 PipelineBinding {
-                    name: ast_ident("x"),
-                    modifier: Some(PipelineBindModifier::Reg.nowhere()),
+                    pat: Pattern::name("x"),
                     type_spec: None,
                     value: Expression::IntLiteral(0).nowhere(),
                 }
                 .nowhere(),
                 PipelineBinding {
-                    name: ast_ident("x"),
-                    modifier: Some(PipelineBindModifier::Reg.nowhere()),
+                    pat: Pattern::name("x"),
                     type_spec: Some(TypeSpec::Named(ast_path("bool"), vec![]).nowhere()),
                     value: Expression::IntLiteral(0).nowhere(),
                 }
@@ -2822,7 +2811,7 @@ mod tests {
         let code = r#"
             pipeline(2) test(a: bool) -> bool {
                 stage {
-                    let reg b = 0;
+                    let b = 0;
                 }
                 stage {
                     let c = 0;
@@ -2839,8 +2828,7 @@ mod tests {
             stages: vec![
                 PipelineStage {
                     bindings: vec![PipelineBinding {
-                        name: ast_ident("b"),
-                        modifier: Some(PipelineBindModifier::Reg.nowhere()),
+                        pat: Pattern::name("b"),
                         type_spec: None,
                         value: Expression::IntLiteral(0).nowhere(),
                     }
@@ -2849,8 +2837,7 @@ mod tests {
                 .nowhere(),
                 PipelineStage {
                     bindings: vec![PipelineBinding {
-                        name: ast_ident("c"),
-                        modifier: None,
+                        pat: Pattern::name("c"),
                         type_spec: None,
                         value: Expression::IntLiteral(0).nowhere(),
                     }

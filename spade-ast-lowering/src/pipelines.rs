@@ -10,7 +10,7 @@ use spade_hir as hir;
 
 use crate::{
     error::{Error, Result},
-    visit_type_spec, LocExt,
+    visit_pattern, visit_type_spec, LocExt,
 };
 use spade_hir::symbol_table::SymbolTable;
 
@@ -27,10 +27,6 @@ impl PipelineState {
             stage_count: 0,
             regs: HashSet::new(),
         }
-    }
-
-    pub fn is_reg(&self, name: &NameID) -> bool {
-        self.regs.contains(name)
     }
 
     pub fn add_reg(&mut self, name: NameID) {
@@ -67,8 +63,7 @@ pub fn visit_pipeline_binding(
     pipeline_state: &mut PipelineState,
 ) -> Result<hir::PipelineBinding> {
     let ast::PipelineBinding {
-        name,
-        modifier,
+        pat,
         type_spec,
         value,
     } = &binding;
@@ -81,17 +76,23 @@ pub fn visit_pipeline_binding(
         None
     };
 
-    let name = if let Some(ast::PipelineBindModifier::Reg) = modifier.as_ref().map(|m| &m.inner) {
-        let name = symtab.add_local_variable_at_offset(1, name.clone());
-        pipeline_state.add_reg(name.clone());
-        name
-    } else {
-        symtab.add_local_variable(name.clone())
+    let pat = pat.try_map_ref(|p| visit_pattern(p, symtab, idtracker, false))?;
+
+    for name in pat.get_names() {
+        pipeline_state.add_reg(name)
     }
-    .at_loc(name);
+
+    // let name = if let Some(ast::PipelineBindModifier::Reg) = modifier.as_ref().map(|m| &m.inner) {
+    //     let name = symtab.add_local_variable_at_offset(1, name.clone());
+    //     pipeline_state.add_reg(name.clone());
+    //     name
+    // } else {
+    //     symtab.add_local_variable(name.clone())
+    // }
+    // .at_loc(name);
 
     Ok(hir::PipelineBinding {
-        name,
+        pat,
         type_spec,
         value,
     })
@@ -105,7 +106,7 @@ pub fn visit_stage(
 ) -> Result<hir::PipelineStage> {
     let ast::PipelineStage { bindings } = stage;
 
-    symtab.new_scope();
+    // symtab.new_scope();
 
     let bindings = bindings
         .iter()
@@ -114,7 +115,7 @@ pub fn visit_stage(
         })
         .collect::<Result<Vec<_>>>()?;
 
-    symtab.close_scope();
+    // symtab.close_scope();
 
     Ok(hir::PipelineStage { bindings })
 }
@@ -217,14 +218,13 @@ mod binding_visiting {
     #[test]
     fn local_pipeline_binding_visiting_works() {
         let input = ast::PipelineBinding {
-            name: ast_ident("a"),
-            modifier: None,
+            pat: ast::Pattern::name("a"),
             type_spec: Some(ast::TypeSpec::Unit(().nowhere()).nowhere()),
             value: ast::Expression::Identifier(ast_path("b")).nowhere(),
         };
 
         let expected = hir::PipelineBinding {
-            name: name_id(1, "a"),
+            pat: hir::PatternKind::name(name_id(1, "a")).idless().nowhere(),
             type_spec: Some(hir::TypeSpec::Unit(().nowhere()).nowhere()),
             value: hir::Expression::ident(0, 0, "b").nowhere(),
         };
@@ -256,20 +256,18 @@ mod binding_visiting {
             !symtab.has_symbol(ast_path("a").inner),
             "Local name was added to the wrong scope"
         );
-        assert!(!pipeline_state.is_reg(&name_id(1, "a").inner))
     }
 
     #[test]
     fn reg_pipeline_binding_visiting_works() {
         let input = ast::PipelineBinding {
-            name: ast_ident("a"),
-            modifier: Some(ast::PipelineBindModifier::Reg.nowhere()),
+            pat: ast::Pattern::name("a"),
             type_spec: None,
             value: ast::Expression::Identifier(ast_path("b")).nowhere(),
         };
 
         let expected = hir::PipelineBinding {
-            name: name_id(1, "a"),
+            pat: hir::PatternKind::name(name_id(1, "a")).idless().nowhere(),
             type_spec: None,
             value: hir::Expression::ident(0, 0, "b").nowhere(),
         };
@@ -278,11 +276,6 @@ mod binding_visiting {
 
         symtab.add_local_variable(ast_ident("b"));
 
-        // Scope for the pipeline-visible items
-        symtab.new_scope();
-        // Scope for the local bindings
-        symtab.new_scope();
-
         let mut id_tracker = ExprIdTracker::new();
         let mut pipeline_state = PipelineState::new();
 
@@ -290,15 +283,6 @@ mod binding_visiting {
             visit_pipeline_binding(&input, &mut symtab, &mut id_tracker, &mut pipeline_state);
 
         assert_eq!(result, Ok(expected));
-
-        // Ensure that the binding was added to the corect scope
-        symtab.close_scope();
-        assert!(
-            symtab.has_symbol(ast_path("a").inner),
-            "Reg name was not added correctly"
-        );
-        // Ensure that the variable is marked as a pipeline variable
-        assert!(pipeline_state.is_reg(&name_id(1, "a").inner))
     }
 }
 
@@ -306,7 +290,6 @@ mod binding_visiting {
 mod stage_visiting {
     use super::*;
 
-    use spade_ast::testutil::{ast_ident, ast_path};
     use spade_common::location_info::WithLocation;
     use spade_common::name::testutil::name_id;
 
@@ -315,15 +298,13 @@ mod stage_visiting {
         let input = ast::PipelineStage {
             bindings: vec![
                 ast::PipelineBinding {
-                    name: ast_ident("a"),
-                    modifier: Some(ast::PipelineBindModifier::Reg.nowhere()),
+                    pat: ast::Pattern::name("a"),
                     type_spec: None,
                     value: ast::Expression::IntLiteral(0).nowhere(),
                 }
                 .nowhere(),
                 ast::PipelineBinding {
-                    name: ast_ident("b"),
-                    modifier: None,
+                    pat: ast::Pattern::name("b"),
                     type_spec: None,
                     value: ast::Expression::IntLiteral(0).nowhere(),
                 }
@@ -334,13 +315,13 @@ mod stage_visiting {
         let expected = hir::PipelineStage {
             bindings: vec![
                 hir::PipelineBinding {
-                    name: name_id(0, "a"),
+                    pat: hir::PatternKind::name(name_id(0, "a")).idless().nowhere(),
                     type_spec: None,
                     value: hir::ExprKind::IntLiteral(0).with_id(0).nowhere(),
                 }
                 .nowhere(),
                 hir::PipelineBinding {
-                    name: name_id(1, "b"),
+                    pat: hir::PatternKind::name(name_id(1, "b")).idless().nowhere(),
                     type_spec: None,
                     value: hir::ExprKind::IntLiteral(0).with_id(1).nowhere(),
                 }
@@ -350,26 +331,12 @@ mod stage_visiting {
 
         let mut symtab = SymbolTable::new();
 
-        // Scope for the pipeline-visible items
-        symtab.new_scope();
-
         let mut id_tracker = ExprIdTracker::new();
         let mut pipeline_state = PipelineState::new();
 
         let result = visit_stage(&input, &mut symtab, &mut id_tracker, &mut pipeline_state);
 
         assert_eq!(result, Ok(expected));
-
-        // Ensure that the binding was added to the corect scope
-        assert!(
-            symtab.has_symbol(ast_path("a").inner),
-            "Reg name was not added correctly"
-        );
-        // And that local names are not visible
-        assert!(
-            !symtab.has_symbol(ast_path("b").inner),
-            "Local reg was incorrectly visible to the outside world"
-        );
     }
 }
 
@@ -399,8 +366,7 @@ mod pipeline_visiting {
             stages: vec![
                 ast::PipelineStage {
                     bindings: vec![ast::PipelineBinding {
-                        name: ast_ident("a"),
-                        modifier: Some(ast::PipelineBindModifier::Reg.nowhere()),
+                        pat: ast::Pattern::name("a"),
                         type_spec: None,
                         value: ast::Expression::IntLiteral(0).nowhere(),
                     }
@@ -422,7 +388,7 @@ mod pipeline_visiting {
             body: vec![
                 hir::PipelineStage {
                     bindings: vec![hir::PipelineBinding {
-                        name: name_id(3, "a"),
+                        pat: hir::PatternKind::name(name_id(3, "a")).idless().nowhere(),
                         type_spec: None,
                         value: hir::ExprKind::IntLiteral(0).with_id(0).nowhere(),
                     }

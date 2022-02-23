@@ -54,6 +54,15 @@ impl PatternKind {
         }
     }
 }
+impl PatternKind {
+    pub fn with_id(self, id: u64) -> Pattern {
+        Pattern { id, kind: self }
+    }
+
+    pub fn idless(self) -> Pattern {
+        Pattern { id: 0, kind: self }
+    }
+}
 
 #[derive(Debug, Clone)]
 pub struct Pattern {
@@ -64,15 +73,25 @@ pub struct Pattern {
 }
 impl WithLocation for Pattern {}
 
-impl PatternKind {
-    pub fn with_id(self, id: u64) -> Pattern {
-        Pattern { id, kind: self }
-    }
-
-    pub fn idless(self) -> Pattern {
-        Pattern { id: 0, kind: self }
+impl Pattern {
+    pub fn get_names(&self) -> Vec<NameID> {
+        match &self.kind {
+            PatternKind::Integer(_) => vec![],
+            PatternKind::Bool(_) => vec![],
+            PatternKind::Name {
+                name,
+                pre_declared: _,
+            } => vec![name.inner.clone()],
+            PatternKind::Tuple(inner) => inner.iter().map(|i| i.get_names()).flatten().collect(),
+            PatternKind::Type(_, args) => args
+                .iter()
+                .map(|arg| arg.value.get_names())
+                .flatten()
+                .collect(),
+        }
     }
 }
+
 impl PartialEq for Pattern {
     fn eq(&self, other: &Self) -> bool {
         self.kind == other.kind
@@ -287,7 +306,7 @@ impl_function_like!(EntityHead, FunctionHead, PipelineHead);
 
 #[derive(PartialEq, Debug, Clone)]
 pub struct PipelineBinding {
-    pub name: Loc<NameID>,
+    pub pat: Loc<Pattern>,
     pub type_spec: Option<Loc<TypeSpec>>,
     pub value: Loc<Expression>,
 }

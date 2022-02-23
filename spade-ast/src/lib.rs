@@ -175,8 +175,7 @@ impl WithLocation for PipelineBindModifier {}
 /// to standard bindings
 #[derive(PartialEq, Debug, Clone)]
 pub struct PipelineBinding {
-    pub name: Loc<Identifier>,
-    pub modifier: Option<Loc<PipelineBindModifier>>,
+    pub pat: Loc<Pattern>,
     pub type_spec: Option<Loc<TypeSpec>>,
     pub value: Loc<Expression>,
 }

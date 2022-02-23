@@ -9,7 +9,7 @@ use spade_mir as mir;
 use spade_typeinference::TypeState;
 
 use crate::{substitution::Substitutions, Result};
-use crate::{ConcreteTypeLocal, ExprLocal, NameIDLocal, TypeStateLocal};
+use crate::{ConcreteTypeLocal, ExprLocal, NameIDLocal, PatternLocal, TypeStateLocal};
 
 #[local_impl]
 impl BindingLocal for PipelineBinding {
@@ -29,16 +29,18 @@ impl BindingLocal for PipelineBinding {
 
         // Add a let binding for this var
         result.push(mir::Statement::Binding(mir::Binding {
-            name: self.name.value_name(),
+            name: self.pat.value_name(),
             operator: mir::Operator::Alias,
             operands: vec![self.value.variable(subs)],
             ty: types
-                .type_of_name(&self.name, symtab.symtab(), &item_list.types)
+                .type_of_id(self.pat.id, symtab.symtab(), &item_list.types)
                 .to_mir_type(),
         }));
 
         // Add this variable to the live vars list
-        live_vars.push(self.name.inner.clone());
+        for name in self.pat.get_names() {
+            live_vars.push(name.clone());
+        }
 
         Ok(result)
     }

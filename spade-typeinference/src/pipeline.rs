@@ -22,16 +22,15 @@ impl TypeState {
             todo!("Let bindings with fixed types are unsupported")
         }
 
-        let new_type = self.new_generic();
-        self.add_equation(TypedExpression::Name(binding.name.clone().inner), new_type)
-            .commit(self);
+        self.visit_pattern(&binding.pat, symtab)?;
 
-        self.unify_expression_generic_error(
-            &binding.value,
-            &TypedExpression::Name(binding.name.clone().inner),
-            symtab,
-        )?
-        .commit(self);
+        self.unify(&TypedExpression::Id(binding.pat.id), &binding.value, symtab)
+            .map_err(|(expected, got)| Error::PatternTypeMissmatch {
+                pattern: binding.pat.loc(),
+                expected,
+                got,
+            })?
+            .commit(self);
 
         Ok(())
     }
@@ -118,6 +117,7 @@ mod tests {
     use crate::{ensure_same_type, HasType};
     use crate::{fixed_types::t_int, format_trace_stack, hir, kvar};
     use hir::ItemList;
+    use hir::PatternKind;
     use hir::{dtype, testutil::t_num, ExprKind, Expression, PipelineStage};
     use spade_ast::testutil::ast_path;
     use spade_common::location_info::WithLocation;
@@ -128,7 +128,7 @@ mod tests {
     #[test]
     fn pipeline_bindings_fixes_type_of_name() {
         let input = PipelineBinding {
-            name: name_id(0, "a"),
+            pat: hir::PatternKind::name(name_id(0, "a")).idless().nowhere(),
             type_spec: None,
             value: Expression::ident(1, 1, "b").nowhere(),
         };
@@ -171,7 +171,7 @@ mod tests {
             body: vec![
                 PipelineStage {
                     bindings: vec![PipelineBinding {
-                        name: name_id(3, "b"),
+                        pat: hir::PatternKind::name(name_id(3, "b")).idless().nowhere(),
                         type_spec: None,
                         value: Expression::ident(2, 1, "a").nowhere(),
                     }
@@ -213,7 +213,7 @@ mod tests {
             body: vec![
                 PipelineStage {
                     bindings: vec![PipelineBinding {
-                        name: name_id(3, "b"),
+                        pat: PatternKind::name(name_id(3, "b")).idless().nowhere(),
                         type_spec: None,
                         value: Expression::ident(2, 1, "a").nowhere(),
                     }
