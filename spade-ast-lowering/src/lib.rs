@@ -188,11 +188,12 @@ pub fn entity_head(item: &ast::Entity, symtab: &mut SymbolTable) -> Result<Entit
     } else {
         None
     };
+    let inputs = visit_parameter_list(&item.inputs, symtab)?;
 
     symtab.close_scope();
 
     Ok(EntityHead {
-        inputs: visit_parameter_list(&item.inputs, symtab)?,
+        inputs,
         output_type,
         type_params,
     })
