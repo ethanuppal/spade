@@ -425,7 +425,7 @@ impl TypeState {
             .map(|param| {
                 let name = match &param.inner {
                     hir::TypeParam::TypeName(_, name) => name.clone(),
-                    hir::TypeParam::Integer(_, _) => todo!("Support generic integers"),
+                    hir::TypeParam::Integer(_, name) => name.clone(),
                 };
 
                 let t = self.new_generic();

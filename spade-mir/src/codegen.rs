@@ -1,8 +1,10 @@
 use crate::{
+    aliasing::flatten_aliases,
     enum_util,
     verilog::{self, assign, logic, size_spec},
     ConstantValue, Entity, Operator, Statement, ValueName,
 };
+use itertools::Itertools;
 use nesty::{code, Code};
 
 impl ValueName {
@@ -22,7 +24,18 @@ fn statement_code(statement: &Statement) -> Code {
     match statement {
         Statement::Binding(binding) => {
             let name = binding.name.var_name();
-            let declaration = logic(&name, binding.ty.size());
+
+            let declaration = match &binding.ty {
+                crate::types::Type::Memory { inner, length } => {
+                    let inner_w = inner.size();
+                    if inner_w > 1 {
+                        format!("logic[{inner_w}-1:0] {name}[{length}-1:0];")
+                    } else {
+                        logic(&name, binding.ty.size())
+                    }
+                }
+                _ => logic(&name, binding.ty.size()),
+            };
 
             let ops = &binding
                 .operands
@@ -137,7 +150,7 @@ fn statement_code(statement: &Statement) -> Code {
 
                     format!("{}[{}]", ops[0], index)
                 }
-                Operator::ConstructArray => {
+                Operator::ConstructArray { .. } => {
                     // NOTE: Reversing because we declare the array as logic[SIZE:0] and
                     // we want the [x*width+:width] indexing to work
                     format!(
@@ -155,6 +168,61 @@ fn statement_code(statement: &Statement) -> Code {
                         // Strange indexing explained here https://stackoverflow.com/questions/18067571/indexing-vectors-and-arrays-with#18068296
                         format!("{}[{}+:{}]", ops[0], end_index, offset)
                     }
+                }
+                Operator::IndexMemory => {
+                    format!("{}[{}]", ops[0], ops[1])
+                }
+                Operator::DeclClockedMemory {
+                    write_ports,
+                    addr_w,
+                    inner_w,
+                    elems: _,
+                } => {
+                    let full_port_width = 1 + addr_w + inner_w;
+                    let update_blocks = (0..*write_ports)
+                        .map(|port| {
+                            let we_index = full_port_width * (port + 1) - 1;
+
+                            let addr_start = full_port_width * port + inner_w;
+                            let addr = if *addr_w == 1 {
+                                format!("{}[{}]", ops[1], addr_start)
+                            } else {
+                                format!("{}[{}:{}]", ops[1], addr_start + addr_w - 1, addr_start)
+                            };
+
+                            let write_value_start = port * full_port_width;
+                            let (write_index, write_value) = if *inner_w == 1 {
+                                (
+                                    format!("{}[{addr}]", name),
+                                    format!("{}[{write_value_start}]", ops[1]),
+                                )
+                            } else {
+                                (
+                                    format!("{}[{addr}]", name),
+                                    format!(
+                                        "{}[{end}:{write_value_start}]",
+                                        ops[1],
+                                        end = write_value_start + inner_w - 1
+                                    ),
+                                )
+                            };
+                            let we_signal = format!("{}[{we_index}]", ops[1]);
+
+                            code! {
+                                [0] format!("if ({we_signal}) begin");
+                                [1]     format!("{write_index} <= {write_value};");
+                                [0] "end"
+                            }
+                            .to_string()
+                        })
+                        .join("\n");
+
+                    code! {
+                        [0] format!("always @(posedge {clk}) begin", clk = ops[0]);
+                        [1]     update_blocks;
+                        [0] "end";
+                    }
+                    .to_string()
                 }
                 Operator::ConstructEnum {
                     variant,
@@ -238,7 +306,8 @@ fn statement_code(statement: &Statement) -> Code {
                     format!("") // NOTE: dummy. Set in the next match statement
                 }
                 Operator::Alias => {
-                    format!("{}", ops[0])
+                    // NOTE Dummy. Set in the next match statement
+                    format!("") //format!("{}", ops[0])
                 }
             };
 
@@ -258,7 +327,14 @@ fn statement_code(statement: &Statement) -> Code {
 
                     format!("{} {}({});", module_name, instance_name, args)
                 }
+                Operator::Alias => match binding.ty {
+                    crate::types::Type::Memory { .. } => {
+                        format!("`define {} {}", name, ops[0])
+                    }
+                    _ => format!("assign {} = {};", name, ops[0]),
+                },
                 Operator::Match => format!("{}", expression),
+                Operator::DeclClockedMemory { .. } => format!("{}", expression),
                 _ => format!("assign {} = {};", name, expression),
             };
 
@@ -314,7 +390,9 @@ fn statement_code(statement: &Statement) -> Code {
     }
 }
 
-pub fn entity_code(entity: &Entity) -> Code {
+pub fn entity_code(mut entity: Entity) -> Code {
+    flatten_aliases(&mut entity);
+
     // Inputs are named _i_{name} and then translated to the name_id name for later use
     let inputs = entity.inputs.iter().map(|(name, value_name, ty)| {
         let input_name = format!("{}", name);
@@ -464,7 +542,7 @@ mod tests {
             endmodule"#
         );
 
-        assert_same_code!(&entity_code(&input).to_string(), expected);
+        assert_same_code!(&entity_code(input.clone()).to_string(), expected);
     }
 
     #[test]
@@ -807,6 +885,76 @@ mod expression_tests {
             r#"
             logic _e_0;
             test test__e_0(_e_1, _e_2, _e_0);"#
+        );
+
+        assert_same_code!(&statement_code(&stmt).to_string(), expected);
+    }
+
+    #[test]
+    fn decl_clocked_array_works() {
+        let t = Type::Array {
+            inner: Box::new(Type::Int(6)),
+            length: 4,
+        };
+        let stmt = statement!(e(0); t; DeclClockedMemory({write_ports: 2, addr_w: 4, inner_w: 6, elems: 16}); e(1), e(2));
+
+        // Total write array length: 2 * (1 + 4 + 6)
+
+        let expected = indoc!(
+            r#"
+            logic[23:0] _e_0;
+            always @(posedge _e_1) begin
+                if (_e_2[10]) begin
+                    _e_0[_e_2[9:6]] <= _e_2[5:0];
+                end
+                if (_e_2[21]) begin
+                    _e_0[_e_2[20:17]] <= _e_2[16:11];
+                end
+            end"#
+        );
+
+        assert_same_code!(&statement_code(&stmt).to_string(), expected);
+    }
+
+    #[test]
+    fn decl_clocked_array_with_1_bit_address_works() {
+        let t = Type::Array {
+            inner: Box::new(Type::Int(6)),
+            length: 4,
+        };
+        let stmt = statement!(e(0); t; DeclClockedMemory({write_ports: 1, addr_w: 1, inner_w: 6, elems: 16}); e(1), e(2));
+
+        let expected = indoc!(
+            r#"
+            logic[23:0] _e_0;
+            always @(posedge _e_1) begin
+                if (_e_2[7]) begin
+                    _e_0[_e_2[6]] <= _e_2[5:0];
+                end
+            end"#
+        );
+
+        assert_same_code!(&statement_code(&stmt).to_string(), expected);
+    }
+
+    #[test]
+    fn decl_clocked_array_with_1_bit_data_works() {
+        let t = Type::Array {
+            inner: Box::new(Type::Bool),
+            length: 4,
+        };
+        let stmt = statement!(e(0); t; DeclClockedMemory({write_ports: 1, addr_w: 4, inner_w: 1, elems: 16}); e(1), e(2));
+
+        // Total write array length: 2 * (1 + 4 + 6)
+
+        let expected = indoc!(
+            r#"
+            logic[3:0] _e_0;
+            always @(posedge _e_1) begin
+                if (_e_2[5]) begin
+                    _e_0[_e_2[4:1]] <= _e_2[0];
+                end
+            end"#
         );
 
         assert_same_code!(&statement_code(&stmt).to_string(), expected);

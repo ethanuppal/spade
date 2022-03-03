@@ -17,6 +17,7 @@ colored = "2.0"
 indoc = "1.0.3"
 nesty = "0.1"
 prettydiff = "0.4"
+itertools = "0.10.3"
 
 spade-common = {path = "../spade-common"}
 parse_tree_macros = {path = "../parse_tree_macros"}

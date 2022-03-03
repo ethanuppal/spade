@@ -69,6 +69,14 @@ pub fn populate_symtab(symtab: &mut SymbolTable, item_list: &mut ItemList) {
         vec![GenericArg::Number(Identifier("size".into())).nowhere()],
         PrimitiveType::Int,
     );
+    add_type(
+        &["Memory"],
+        vec![
+            GenericArg::TypeName(Identifier("D".into())).nowhere(),
+            GenericArg::Number(Identifier("AddrWidth".into())).nowhere(),
+        ],
+        PrimitiveType::Memory,
+    );
     add_type(&["clk"], vec![], PrimitiveType::Clock);
     add_type(&["bool"], vec![], PrimitiveType::Bool);
 }

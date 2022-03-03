@@ -15,7 +15,7 @@ all: ${TEST_TARGETS} .PHONY
 test/%/build/code.v: test/%/code.spade $(SPADEC) .PHONY
 	@mkdir -p ${@D}
 	@echo -e "[\033[0;34m${SPADEC}\033[0m] building $@"
-	@${SPADEC} $(wildcard ${<D}/*.spade) -o $@ 
+	@${SPADEC} $(wildcard ${<D}/*.spade) $(wildcard ../stdlib/*.spade) -o $@ 
 
 # Build a test binary
 test/%/build/code.v.out: test/%/build/code.v

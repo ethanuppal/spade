@@ -90,14 +90,6 @@ fn main() -> Result<()> {
     let mut idtracker = id_tracker::ExprIdTracker::new();
 
     for module_ast in &module_asts {
-        for item in &module_ast.members {
-            try_or_report!(global_symbols::visit_item(
-                &item,
-                &mut symtab,
-                &mut item_list
-            ));
-        }
-
         item_list = try_or_report!(visit_module_body(
             item_list,
             &module_ast,
@@ -136,7 +128,7 @@ fn main() -> Result<()> {
                     }
                 );
 
-                let code = spade_mir::codegen::entity_code(&mir);
+                let code = spade_mir::codegen::entity_code(mir);
 
                 module_code.push(code.to_string());
             }
@@ -165,7 +157,7 @@ fn main() -> Result<()> {
                     }
                 );
 
-                let code = spade_mir::codegen::entity_code(&mir);
+                let code = spade_mir::codegen::entity_code(mir);
 
                 module_code.push(code.to_string());
             }

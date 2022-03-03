@@ -1,3 +1,4 @@
+mod aliasing;
 pub mod codegen;
 pub mod diff;
 pub mod diff_printing;
@@ -25,7 +26,7 @@ impl std::fmt::Display for ConstantValue {
 
 /// A name of a value. Can either come from the NameID of the underlying
 /// variable, or the id of the underlying expression
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Clone, PartialEq, Debug, Hash, Eq)]
 pub enum ValueName {
     /// A named value in the code with with an index to make that name globally unique
     /// In the resulting verilog, this is translated as _n_$id_$name
@@ -66,8 +67,21 @@ pub enum Operator {
     Match,
     /// Construct an array from the operand expressions
     ConstructArray,
+    /// Create a mutable array which is modified on the rising edge of the first argument.
+    /// the second argument is an array of (write enable, write address, write data) tuples
+    /// which update the array.
+    DeclClockedMemory {
+        write_ports: u64,
+        /// Width of the write address
+        addr_w: u64,
+        /// Number of elements in the array
+        inner_w: u64,
+        /// Number of elements in the array
+        elems: u64,
+    },
     /// Index an array with elements of the specified size
     IndexArray(usize),
+    IndexMemory,
     /// Construct a tuple from all the operand expressions
     ConstructTuple,
     /// Construct the nth enum variant with the operand expressions as the payload
@@ -135,8 +149,18 @@ impl std::fmt::Display for Operator {
             } => write!(f, "EnumMember({} {})", variant, member_index),
             Operator::ConstructTuple => write!(f, "ConstructTuple"),
             Operator::ConstructArray => write!(f, "ConstructArray"),
+            Operator::DeclClockedMemory {
+                write_ports,
+                addr_w,
+                inner_w,
+                elems,
+            } => write!(
+                f,
+                "DeclClockedMemory({write_ports}, {addr_w}, {inner_w}, {elems})"
+            ),
             Operator::IndexArray(member_size) => write!(f, "IndexArray({})", member_size),
             Operator::IndexTuple(idx, _) => write!(f, "IndexTuple({})", idx),
+            Operator::IndexMemory => write!(f, "IndexMemory"),
             Operator::Instance(name) => write!(f, "Instance({})", name),
             Operator::Alias => write!(f, "Alias"),
         }

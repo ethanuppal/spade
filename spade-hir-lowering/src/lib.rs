@@ -8,6 +8,8 @@ use mir::types::Type as MirType;
 use mir::{ConstantValue, ValueName};
 pub use pipelines::generate_pipeline;
 use spade_common::id_tracker::ExprIdTracker;
+use spade_common::location_info::WithLocation;
+use spade_common::name::{Identifier, Path};
 use spade_typeinference::equation::FreeTypeVar;
 use substitution::Substitutions;
 
@@ -100,6 +102,16 @@ impl ConcreteTypeLocal for ConcreteType {
             } => match params.as_slice() {
                 [CType::Integer(val)] => Type::Int(*val as u64),
                 t => unreachable!("{:?} is an invalid generic parameter for an integer", t),
+            },
+            CType::Single {
+                base: PrimitiveType::Memory,
+                params,
+            } => match params.as_slice() {
+                [inner, CType::Integer(length)] => Type::Memory {
+                    inner: Box::new(inner.to_mir_type()),
+                    length: *length as u64,
+                },
+                t => unreachable!("{:?} is an invalid generic parameter for a memory", t),
             },
             CType::Integer(_) => {
                 unreachable!("Found an integer at the base level of a type")
@@ -820,6 +832,48 @@ impl ExprLocal for Loc<Expression> {
                     .lower(symtab, idtracker, types, subs, item_list)?,
             );
         }
+
+        // Check if this is a standard library function which we are supposed to
+        // handle
+        macro_rules! handle_special_functions {
+            ($([$($path:expr),*] => $handler:expr),*) => {
+                $(
+                    let path = Path(vec![$(Identifier($path.to_string()).nowhere()),*]).nowhere();
+                    if symtab.symtab()
+                        .try_lookup_final_id(&path)
+                        .map(|n| &n == name)
+                        .unwrap_or(false)
+                    {
+                        $handler
+                    };
+                )*
+            }
+        }
+
+        handle_special_functions! {
+            ["std", "mem", "clocked_memory"] => {
+                return self.handle_clocked_memory_decl(
+                    result,
+                    args,
+                    symtab,
+                    types,
+                    subs,
+                    item_list,
+                )
+            },
+            ["std", "mem", "read_mem"] => {
+                return self.handle_read_memory(
+                    result,
+                    args,
+                    symtab,
+                    idtracker,
+                    types,
+                    subs,
+                    item_list,
+                )
+            }
+        }
+
         // Look up the name in the executable list to see if this is a type instantiation
         match item_list.executables.get(name) {
             Some(hir::ExecutableItem::EnumInstance { base_enum, variant }) => {
@@ -890,6 +944,105 @@ impl ExprLocal for Loc<Expression> {
             }
         }
         Ok(result)
+    }
+
+    /// Result is the initial statement list to expand and return
+    fn handle_clocked_memory_decl(
+        &self,
+        result: Vec<mir::Statement>,
+        args: &[Argument],
+        symtab: &FrozenSymtab,
+        types: &TypeState,
+        subs: &Substitutions,
+        item_list: &ItemList,
+    ) -> Result<Vec<mir::Statement>> {
+        // The localimpl macro is a bit stupid
+        let mut result = result;
+
+        let elem_count = if let ConcreteType::Single {
+            base: PrimitiveType::Memory,
+            params,
+        } = types.expr_type(&self, symtab.symtab(), &item_list.types)?
+        {
+            if let ConcreteType::Integer(size) = params[1] {
+                size
+            } else {
+                panic!("Second param of memory declaration type was not integer")
+            }
+        } else {
+            panic!("Decl memory declares a non-memory")
+        };
+
+        // Figure out the sizes of the operands
+        let port_t = types.expr_type(&args[1].value, symtab.symtab(), &item_list.types)?;
+        if let ConcreteType::Array { inner, size } = port_t {
+            if let ConcreteType::Tuple(tup_inner) = *inner {
+                assert!(
+                    tup_inner.len() == 3,
+                    "Expected exactly 3 types in write port tuple"
+                );
+                let write_ports = size as u64;
+                let addr_w = tup_inner[1].to_mir_type().size();
+                let inner_w = tup_inner[2].to_mir_type().size();
+
+                result.push(mir::Statement::Binding(mir::Binding {
+                    name: self.variable(subs),
+                    operator: mir::Operator::DeclClockedMemory {
+                        addr_w,
+                        inner_w,
+                        write_ports,
+                        elems: elem_count as u64,
+                    },
+                    operands: args
+                        .into_iter()
+                        .map(|arg| arg.value.variable(subs))
+                        .collect(),
+                    ty: types
+                        .expr_type(self, symtab.symtab(), &item_list.types)?
+                        .to_mir_type(),
+                }))
+            } else {
+                panic!("Clocked array write port inner was not tuple")
+            }
+        } else {
+            panic!("Clocked array write ports were not array")
+        }
+
+        return Ok(result);
+    }
+
+    /// Result is the initial statement list to expand and return
+    fn handle_read_memory(
+        &self,
+        result: Vec<mir::Statement>,
+        args: &[Argument],
+        symtab: &FrozenSymtab,
+        idtracker: &mut ExprIdTracker,
+        types: &TypeState,
+        subs: &Substitutions,
+        item_list: &ItemList,
+    ) -> Result<Vec<mir::Statement>> {
+        // The localimpl macro is a bit stupid
+        let mut result = result;
+
+        let target = &args[0].value;
+        let index = &args[1].value;
+
+        result.append(&mut target.lower(symtab, idtracker, types, subs, &item_list)?);
+        result.append(&mut index.lower(symtab, idtracker, types, subs, &item_list)?);
+
+        let self_type = types
+            .expr_type(self, symtab.symtab(), &item_list.types)?
+            .to_mir_type();
+
+        result.push(mir::Statement::Binding(mir::Binding {
+            name: self.variable(subs),
+            operator: mir::Operator::IndexMemory,
+            operands: vec![target.variable(subs), index.variable(subs)],
+            ty: self_type,
+        }));
+
+        return Ok(result);
     }
 }
 

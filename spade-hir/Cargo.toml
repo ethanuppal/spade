@@ -13,3 +13,4 @@ doctest = false
 spade-common = {path = "../spade-common"}
 spade-types = {path = "../spade-types"}
 thiserror = "1.0"
+colored = "2.0"

@@ -1,4 +1,5 @@
 use crate::{EntityHead, FunctionHead, ParameterList, PipelineHead, TypeParam, TypeSpec};
+use colored::Colorize;
 use spade_common::{
     id_tracker::NameIdTracker,
     location_info::{Loc, WithLocation},
@@ -496,20 +497,77 @@ impl SymbolTable {
     }
 
     pub fn lookup_id(&self, name: &Loc<Path>) -> Result<NameID, LookupError> {
+        self.try_lookup_id(name)
+            .ok_or_else(|| LookupError::NoSuchSymbol(name.clone()))
+    }
+
+    /// Returns the name ID of the provided path if that path exists and resolving
+    /// all aliases along the way.
+    pub fn try_lookup_final_id(&self, name: &Loc<Path>) -> Option<NameID> {
+        let id = self.try_lookup_id(name);
+        if let Some(id) = id {
+            match self.things.get(&id) {
+                Some(Thing::Alias(alias)) => self.try_lookup_final_id(alias),
+                _ => Some(id),
+            }
+        } else {
+            None
+        }
+    }
+
+    pub fn try_lookup_id(&self, name: &Loc<Path>) -> Option<NameID> {
         // Look up things in the current namespace first
         let local_path = self.namespace.join(name.inner.clone());
         for tab in self.symbols.iter().rev() {
             if let Some(id) = tab.get(&local_path) {
-                return Ok(id.clone());
+                return Some(id.clone());
             }
         }
 
         // Then look up things in the absolute namespace. This is only needed at the
         // top scope as that's where all top level will be defined
         if let Some(id) = self.symbols.first().unwrap().get(name) {
-            return Ok(id.clone());
+            return Some(id.clone());
         }
-        Err(LookupError::NoSuchSymbol(name.clone()))
+        None
+    }
+
+    pub fn print_symbols(&self) {
+        println!("=============================================================");
+        println!("                      Symtab dump");
+        println!("=============================================================");
+        for (level, scope) in self.symbols.iter().enumerate() {
+            let indent = (1..level + 1).map(|_| "\t").collect::<Vec<_>>().join("");
+            println!(">>> new_scope",);
+
+            for (path, name) in scope {
+                println!(
+                    "{indent}{path} => {name}",
+                    path = format!("{path}").cyan(),
+                    name = format!("{name:?}").yellow()
+                );
+            }
+        }
+
+        println!("Things:");
+        for (name, thing) in &self.things {
+            print!("{}: ", format!("{name:?}").purple());
+            match thing {
+                Thing::Struct(_) => println!("struct"),
+                Thing::EnumVariant(_) => println!("enum variant"),
+                Thing::Function(_) => println!("function"),
+                Thing::Entity(_) => println!("entity"),
+                Thing::Pipeline(_) => println!("pipeline"),
+                Thing::Variable(_) => println!("variable"),
+                Thing::Alias(to) => println!("{}", format!("alias => {to}").green()),
+            }
+        }
+
+        println!("Types:");
+        for (name, _) in &self.types {
+            print!("{}: ", format!("{name:?}").purple());
+            println!("type");
+        }
     }
 }
 
