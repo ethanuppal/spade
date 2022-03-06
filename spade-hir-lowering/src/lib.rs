@@ -28,6 +28,10 @@ pub enum Error {
         expr: Loc<Expression>,
         t: FreeTypeVar,
     },
+    CastToLarger {
+        from: Loc<u64>,
+        to: Loc<u64>,
+    },
 }
 pub type Result<T> = std::result::Result<T, Error>;
 
@@ -871,6 +875,26 @@ impl ExprLocal for Loc<Expression> {
                     subs,
                     item_list,
                 )
+            },
+            ["std", "conv", "trunc"] => {
+                return self.handle_trunc(
+                    result,
+                    args,
+                    symtab,
+                    types,
+                    subs,
+                    item_list,
+                )
+            },
+            ["std", "conv", "sext"] => {
+                return self.handle_sext(
+                    result,
+                    args,
+                    symtab,
+                    types,
+                    subs,
+                    item_list,
+                )
             }
         }
 
@@ -1042,7 +1066,83 @@ impl ExprLocal for Loc<Expression> {
             ty: self_type,
         }));
 
-        return Ok(result);
+        Ok(result)
+    }
+
+    fn handle_trunc(
+        &self,
+        result: Vec<mir::Statement>,
+        args: &[Argument],
+        symtab: &FrozenSymtab,
+        types: &TypeState,
+        subs: &Substitutions,
+        item_list: &ItemList,
+    ) -> Result<Vec<mir::Statement>> {
+        let mut result = result;
+
+        let self_type = types
+            .expr_type(self, symtab.symtab(), &item_list.types)?
+            .to_mir_type();
+
+        let input_type = types
+            .expr_type(&args[0].value, symtab.symtab(), &item_list.types)?
+            .to_mir_type();
+
+        if self_type.size() > input_type.size() {
+            return Err(Error::CastToLarger {
+                to: self_type.size().at_loc(self),
+                from: input_type.size().at_loc(&args[0].value),
+            });
+        }
+
+        result.push(mir::Statement::Binding(mir::Binding {
+            name: self.variable(subs),
+            operator: mir::Operator::Truncate,
+            operands: vec![args[0].value.variable(subs)],
+            ty: types
+                .expr_type(self, symtab.symtab(), &item_list.types)?
+                .to_mir_type(),
+        }));
+
+        Ok(result)
+    }
+
+    fn handle_sext(
+        &self,
+        result: Vec<mir::Statement>,
+        args: &[Argument],
+        symtab: &FrozenSymtab,
+        types: &TypeState,
+        subs: &Substitutions,
+        item_list: &ItemList,
+    ) -> Result<Vec<mir::Statement>> {
+        let mut result = result;
+
+        let self_type = types
+            .expr_type(self, symtab.symtab(), &item_list.types)?
+            .to_mir_type();
+
+        let input_type = types
+            .expr_type(&args[0].value, symtab.symtab(), &item_list.types)?
+            .to_mir_type();
+
+        let extra_bits = if self_type.size() > input_type.size() {
+            self_type.size() - input_type.size()
+        } else {
+            0
+        };
+
+        result.push(mir::Statement::Binding(mir::Binding {
+            name: self.variable(subs),
+            operator: mir::Operator::SignExtend {
+                extra_bits,
+                operand_size: input_type.size(),
+            },
+            operands: vec![args[0].value.variable(subs)],
+            ty: self_type,
+        }));
+
+        Ok(result)
     }
 }
 

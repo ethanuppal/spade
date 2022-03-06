@@ -1,0 +1,12 @@
+mod std {
+// Functions for converting between byte lengths
+mod conv {
+    /// Truncate the high order bits of the supplied integer. If the result is
+    /// larger than the input, an error is emitted
+    fn trunc<#N, #M>(x: int<N>) -> int<M> __builtin__
+
+    /// Sign extend the provided integer. Has no effect if the the output is smaller
+    /// than the input
+    fn sext<#N, #M>(x: int<N>) -> int<M> __builtin__
+}
+}

@@ -89,6 +89,26 @@ fn statement_code(statement: &Statement) -> Code {
                 Operator::Xor => binop!("^"),
                 Operator::USub => unop!("-"),
                 Operator::Not => unop!("!"),
+                Operator::Truncate => {
+                    format!("{}[{}:0]", ops[0], binding.ty.size() - 1)
+                }
+                Operator::SignExtend {
+                    extra_bits,
+                    operand_size,
+                } => match extra_bits {
+                    0 => format!("{}", ops[0]),
+                    1 => format!("{{{}[{}], {}}}", ops[0], operand_size - 1, ops[0]),
+                    2.. => format!(
+                        "#[#[ {extra_bits} #[ {op}[{last_index}] #]#], {op}#]",
+                        op = ops[0],
+                        last_index = operand_size - 1,
+                    )
+                    // For readability with the huge amount of braces that both
+                    // rust and verilog want here, we'll insert them at the end
+                    // like this
+                    .replace("#[", "{")
+                    .replace("#]", "}"),
+                },
                 Operator::Match => {
                     assert!(
                         ops.len() % 2 == 0,
@@ -956,6 +976,59 @@ mod expression_tests {
                 end
             end"#
         );
+
+        assert_same_code!(&statement_code(&stmt).to_string(), expected);
+    }
+
+    #[test]
+    fn truncate_works() {
+        let stmt = statement!(e(0); Type::Int(5); Truncate; e(1));
+
+        let expected = indoc! {
+            r#"
+            logic[4:0] _e_0;
+            assign _e_0 = _e_1[4:0];"#
+        };
+
+        assert_same_code!(&statement_code(&stmt).to_string(), expected);
+    }
+
+    #[test]
+    fn sext_works_for_many_bits() {
+        let stmt =
+            statement!(e(0); Type::Int(5); SignExtend({extra_bits: 2, operand_size: 3}); e(1));
+
+        let expected = indoc! {
+            r#"
+            logic[4:0] _e_0;
+            assign _e_0 = {{ 2 { _e_1[2] }}, _e_1};"#
+        };
+
+        assert_same_code!(&statement_code(&stmt).to_string(), expected);
+    }
+    #[test]
+    fn sext_works_for_one_bits() {
+        let stmt =
+            statement!(e(0); Type::Int(4); SignExtend({extra_bits: 1, operand_size: 3}); e(1));
+
+        let expected = indoc! {
+            r#"
+            logic[3:0] _e_0;
+            assign _e_0 = {_e_1[2], _e_1};"#
+        };
+
+        assert_same_code!(&statement_code(&stmt).to_string(), expected);
+    }
+    #[test]
+    fn sext_works_for_zero_bits() {
+        let stmt =
+            statement!(e(0); Type::Int(3); SignExtend({extra_bits: 0, operand_size: 3}); e(1));
+
+        let expected = indoc! {
+            r#"
+            logic[2:0] _e_0;
+            assign _e_0 = _e_1;"#
+        };
 
         assert_same_code!(&statement_code(&stmt).to_string(), expected);
     }

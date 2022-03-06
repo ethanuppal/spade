@@ -57,6 +57,14 @@ pub enum Operator {
     Xor,
     USub,
     Not,
+    /// Sign extend the first operand with the provided amount of extra bits
+    SignExtend {
+        extra_bits: u64,
+        operand_size: u64,
+    },
+    /// Truncate the first operand to fit the size of the target operand.
+    /// Should not be used on operands which are smaller than the target
+    Truncate,
     /// Select [1] if [0] else [2]
     Select,
     /// Corresponds to a match statement. If value [0] is true, select [1], if [2] holds, select
@@ -134,6 +142,11 @@ impl std::fmt::Display for Operator {
             Operator::Select => write!(f, "Select"),
             Operator::Match => write!(f, "Match"),
             Operator::LeftShift => write!(f, "LeftShift"),
+            Operator::SignExtend {
+                extra_bits,
+                operand_size,
+            } => write!(f, "SignExtend({extra_bits}, {operand_size})"),
+            Operator::Truncate => write!(f, "Truncate"),
             Operator::ConstructEnum {
                 variant,
                 variant_count,

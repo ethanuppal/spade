@@ -14,6 +14,15 @@ impl CompilationError for Error {
                     .primary_label()
                     .with_message(format!("Incomplete type"))])
                 .with_notes(vec![format!("Found incomplete type: {}", t)]),
+            Error::CastToLarger { from, to } => Diagnostic::error()
+                .with_message(format!("Truncating to a larger value"))
+                .with_labels(vec![
+                    from.primary_label()
+                        .with_message(format!("This value isas {from} bytes")),
+                    to.secondary_label()
+                        .with_message(format!("But it is truncated to {to} bytes")),
+                ])
+                .with_notes(vec![format!("Truncation can only remove bits")]),
         };
 
         let writer = StandardStream::stderr(color_choice(no_color));
