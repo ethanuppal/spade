@@ -18,7 +18,7 @@ impl CompilationError for Error {
                 .with_message(format!("Truncating to a larger value"))
                 .with_labels(vec![
                     from.primary_label()
-                        .with_message(format!("This value isas {from} bytes")),
+                        .with_message(format!("This value is {from} bytes")),
                     to.secondary_label()
                         .with_message(format!("But it is truncated to {to} bytes")),
                 ])
