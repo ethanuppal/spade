@@ -7,6 +7,7 @@ pub mod macros;
 pub mod types;
 mod verilog;
 
+use itertools::Itertools;
 use types::Type;
 
 #[derive(Clone, PartialEq, Debug)]
@@ -18,8 +19,8 @@ pub enum ConstantValue {
 impl std::fmt::Display for ConstantValue {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            ConstantValue::Int(val) => write!(f, "{}", val),
-            ConstantValue::Bool(val) => write!(f, "{}", val),
+            ConstantValue::Int(val) => write!(f, "{val}"),
+            ConstantValue::Bool(val) => write!(f, "{val}"),
         }
     }
 }
@@ -34,6 +35,15 @@ pub enum ValueName {
     // TODO: Consider renaming this since it's now used for both patterns and expressions
     /// An un-named expression. In the resulting verilog, this is called _e_$id
     Expr(u64),
+}
+
+impl std::fmt::Display for ValueName {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ValueName::Named(id, s) => write!(f, "{s}_n{id}"),
+            ValueName::Expr(id) => write!(f, "e{id}"),
+        }
+    }
 }
 
 #[derive(Clone, PartialEq, Debug)]
@@ -188,6 +198,22 @@ pub struct Binding {
     pub ty: Type,
 }
 
+impl std::fmt::Display for Binding {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let Binding {
+            name,
+            operator,
+            operands,
+            ty,
+        } = self;
+        write!(
+            f,
+            "let {name}: {ty} = {operator}({})",
+            operands.iter().map(|op| format!("{op}")).join(", ")
+        )
+    }
+}
+
 #[derive(Clone, PartialEq, Debug)]
 pub struct Register {
     pub name: ValueName,
@@ -197,12 +223,41 @@ pub struct Register {
     pub value: ValueName,
 }
 
+impl std::fmt::Display for Register {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let Register {
+            name,
+            ty,
+            clock,
+            reset,
+            value,
+        } = self;
+
+        let reset = reset
+            .as_ref()
+            .map(|(trig, val)| format!("({trig}, {val})"))
+            .unwrap_or_else(|| String::new());
+
+        write!(f, "reg({clock}) {name}: {ty}{reset} = {value}")
+    }
+}
+
 #[derive(Clone, PartialEq, Debug)]
 pub enum Statement {
     Binding(Binding),
     Register(Register),
     /// A constant expression with the specified ID and value
     Constant(u64, Type, ConstantValue),
+}
+
+impl std::fmt::Display for Statement {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Statement::Binding(b) => write!(f, "{b}"),
+            Statement::Register(r) => write!(f, "{r}"),
+            Statement::Constant(id, ty, val) => write!(f, "const e{id}: {ty} = {val}"),
+        }
+    }
 }
 
 #[derive(Clone, PartialEq, Debug)]
@@ -214,4 +269,27 @@ pub struct Entity {
     pub output: ValueName,
     pub output_type: Type,
     pub statements: Vec<Statement>,
+}
+
+impl std::fmt::Display for Entity {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let Entity {
+            name,
+            inputs,
+            output,
+            output_type,
+            statements,
+        } = self;
+
+        let inputs = inputs
+            .iter()
+            .map(|(name, val, ty)| format!("({name}, {val}, {ty})"))
+            .join(", ");
+
+        let statements = statements.iter().map(|s| format!("\t{s}\n")).join("");
+
+        write!(f, "entity {name}({inputs}) -> {output_type} {{\n")?;
+        write!(f, "{statements}")?;
+        write!(f, "}} => {output}")
+    }
 }

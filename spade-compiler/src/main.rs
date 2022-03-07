@@ -24,6 +24,9 @@ struct Opt {
     pub extra_files: Vec<PathBuf>,
     #[structopt(short = "o")]
     pub outfile: PathBuf,
+    /// File to output the MIR for the generated modules. Primarily for debug purposes
+    #[structopt(long)]
+    pub mir_output: Option<PathBuf>,
     /// Do not include color in the error report
     #[structopt(long = "no-color")]
     pub no_color: bool,
@@ -100,6 +103,7 @@ fn main() -> Result<()> {
 
     let mut frozen_symtab = symtab.freeze();
     let mut module_code = vec![];
+    let mut mir_code = vec![];
 
     for item in item_list.executables.values() {
         match item {
@@ -127,6 +131,7 @@ fn main() -> Result<()> {
                         }
                     }
                 );
+                mir_code.push(format!("{mir}"));
 
                 let code = spade_mir::codegen::entity_code(mir);
 
@@ -157,6 +162,8 @@ fn main() -> Result<()> {
                     }
                 );
 
+                mir_code.push(format!("{mir}"));
+
                 let code = spade_mir::codegen::entity_code(mir);
 
                 module_code.push(code.to_string());
@@ -167,6 +174,9 @@ fn main() -> Result<()> {
     }
 
     std::fs::write(opts.outfile, module_code.join("\n\n"))?;
+    if let Some(mir_output) = opts.mir_output {
+        std::fs::write(mir_output, mir_code.join("\n\n"))?;
+    }
 
     Ok(())
 }
