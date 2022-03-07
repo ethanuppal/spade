@@ -870,7 +870,6 @@ impl ExprLocal for Loc<Expression> {
                     result,
                     args,
                     symtab,
-                    idtracker,
                     types,
                     subs,
                     item_list,
@@ -1041,7 +1040,6 @@ impl ExprLocal for Loc<Expression> {
         result: Vec<mir::Statement>,
         args: &[Argument],
         symtab: &FrozenSymtab,
-        idtracker: &mut ExprIdTracker,
         types: &TypeState,
         subs: &Substitutions,
         item_list: &ItemList,
@@ -1051,9 +1049,6 @@ impl ExprLocal for Loc<Expression> {
 
         let target = &args[0].value;
         let index = &args[1].value;
-
-        result.append(&mut target.lower(symtab, idtracker, types, subs, &item_list)?);
-        result.append(&mut index.lower(symtab, idtracker, types, subs, &item_list)?);
 
         let self_type = types
             .expr_type(self, symtab.symtab(), &item_list.types)?

@@ -51,8 +51,6 @@ pub fn flatten_aliases(entity: &mut Entity) {
         })
         .collect::<HashMap<_, _>>();
 
-    println!("{aliases:?}");
-
     // Remove any aliases that are now inlined
     entity.statements.retain(|stmt| {
         if let Statement::Binding(binding) = stmt {

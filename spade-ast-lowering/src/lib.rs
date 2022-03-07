@@ -709,6 +709,8 @@ pub fn visit_expression(
     symtab: &mut SymbolTable,
     idtracker: &mut ExprIdTracker,
 ) -> Result<hir::Expression> {
+    let new_id = idtracker.next();
+
     match e {
         ast::Expression::IntLiteral(val) => Ok(hir::ExprKind::IntLiteral(val.clone())),
         ast::Expression::BoolLiteral(val) => Ok(hir::ExprKind::BoolLiteral(*val)),
@@ -843,7 +845,7 @@ pub fn visit_expression(
             Ok(hir::ExprKind::Identifier(id))
         }
     }
-    .map(|kind| kind.with_id(idtracker.next()))
+    .map(|kind| kind.with_id(new_id))
 }
 
 pub fn visit_block(
