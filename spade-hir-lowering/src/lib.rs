@@ -1152,7 +1152,7 @@ pub fn generate_entity<'a>(
         .inputs
         .iter()
         .map(|(name_id, _)| {
-            let name = format!("_i_{}", name_id.1.to_string());
+            let name = name_id.1.to_string();
             let val_name = name_id.value_name();
             let ty = types
                 .type_of_name(name_id, symtab.symtab(), &item_list.types)

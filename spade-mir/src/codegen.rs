@@ -20,6 +20,18 @@ impl ValueName {
     }
 }
 
+fn escape_path(path: String) -> String {
+    path.replace("::", "_")
+}
+
+fn mangle_entity(module: &str) -> String {
+    format!("e_{}", module)
+}
+
+fn mangle_input(input: &str) -> String {
+    format!("_i_{}", input)
+}
+
 fn statement_code(statement: &Statement) -> Code {
     match statement {
         Statement::Binding(binding) => {
@@ -343,9 +355,16 @@ fn statement_code(statement: &Statement) -> Code {
                     }
                     args += &name;
 
+                    let module_name = escape_path(module_name.to_string());
+
                     let instance_name = format!("{}_{}", module_name, name);
 
-                    format!("{} {}({});", module_name, instance_name, args)
+                    format!(
+                        "{} {}({});",
+                        mangle_entity(&module_name),
+                        instance_name,
+                        args
+                    )
                 }
                 Operator::Alias => match binding.ty {
                     crate::types::Type::Memory { .. } => {
@@ -413,12 +432,21 @@ fn statement_code(statement: &Statement) -> Code {
 pub fn entity_code(mut entity: Entity) -> Code {
     flatten_aliases(&mut entity);
 
-    // Inputs are named _i_{name} and then translated to the name_id name for later use
-    let inputs = entity.inputs.iter().map(|(name, value_name, ty)| {
-        let input_name = format!("{}", name);
+    let entity_name = mangle_entity(&escape_path(entity.name));
+
+    let inputs: Vec<_> = entity
+        .inputs
+        .into_iter()
+        .map(|(name, value_name, ty)| {
+            let name = mangle_input(&escape_path(name));
+            (name, value_name, ty)
+        })
+        .collect();
+
+    let inputs = inputs.iter().map(|(name, value_name, ty)| {
         let size = ty.size();
         (
-            format!("input{} {},", size_spec(size), input_name),
+            format!("input{} {},", size_spec(size), name),
             code! {
                 [0] &logic(&value_name.var_name(), size);
                 [0] &assign(&value_name.var_name(), &name)
@@ -439,7 +467,7 @@ pub fn entity_code(mut entity: Entity) -> Code {
     }
 
     code! {
-        [0] &format!("module {} (", entity.name);
+        [0] &format!("module {} (", entity_name);
                 [2] &inputs;
                 [2] &output_definition;
             [1] &");";
@@ -544,13 +572,13 @@ mod tests {
 
     #[test]
     fn entity_codegen_works() {
-        let input = entity!("pong"; ("_i_op", n(0, "op"), Type::Int(6)) -> Type::Int(6); {
+        let input = entity!("pong"; ("op", n(0, "op"), Type::Int(6)) -> Type::Int(6); {
             (e(0); Type::Int(6); Add; n(0, "op"), e(1))
         } => e(0));
 
         let expected = indoc!(
             r#"
-            module pong (
+            module e_pong (
                     input[5:0] _i_op,
                     output[5:0] __output
                 );
@@ -904,7 +932,7 @@ mod expression_tests {
         let expected = indoc!(
             r#"
             logic _e_0;
-            test test__e_0(_e_1, _e_2, _e_0);"#
+            e_test test__e_0(_e_1, _e_2, _e_0);"#
         );
 
         assert_same_code!(&statement_code(&stmt).to_string(), expected);
