@@ -201,7 +201,7 @@ impl<'a> Parser<'a> {
     // Expression parsing
     #[trace_parser]
     pub fn expression(&mut self) -> Result<Loc<Expression>> {
-        let expr = self.logical_or_expression()?;
+        let expr = self.custom_infix_operator(Self::logical_or_expression)?;
 
         if let Some(hash) = self.peek_and_eat(&TokenKind::Hash)? {
             if let Some(index) = self.int_literal()? {
@@ -238,6 +238,35 @@ impl<'a> Parser<'a> {
             )
         } else {
             Ok(expr)
+        }
+    }
+
+    pub fn custom_infix_operator(
+        &mut self,
+        lhs: impl Fn(&mut Self) -> Result<Loc<Expression>>,
+    ) -> Result<Loc<Expression>> {
+        let lhs_val = lhs(self)?;
+
+        if self.peek_kind(&TokenKind::InfixOperatorSeparator)? {
+            let (name, _) = self.surrounded(
+                &TokenKind::InfixOperatorSeparator,
+                Self::path,
+                &TokenKind::InfixOperatorSeparator,
+            )?;
+
+            let rhs_val = self.custom_infix_operator(lhs)?;
+
+            Ok(Expression::FnCall(
+                name,
+                ArgumentList::Positional(vec![lhs_val.clone(), rhs_val.clone()]).between(
+                    self.file_id,
+                    &lhs_val,
+                    &rhs_val,
+                ),
+            )
+            .between(self.file_id, &lhs_val, &rhs_val))
+        } else {
+            Ok(lhs_val)
         }
     }
 
@@ -3183,5 +3212,24 @@ mod tests {
         );
 
         check_parse!(code, item, Ok(Some(expected)));
+    }
+
+    #[test]
+    fn infix_operators_work() {
+        let code = r#"
+            1 `infix` 2
+            "#;
+
+        let expected = Expression::FnCall(
+            ast_path("infix"),
+            ArgumentList::Positional(vec![
+                Expression::IntLiteral(1).nowhere(),
+                Expression::IntLiteral(2).nowhere(),
+            ])
+            .nowhere(),
+        )
+        .nowhere();
+
+        check_parse!(code, expression, Ok(expected));
     }
 }

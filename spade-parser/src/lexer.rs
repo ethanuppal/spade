@@ -108,6 +108,8 @@ pub enum TokenKind {
     Not,
     #[token("^")]
     Xor,
+    #[token("`")]
+    InfixOperatorSeparator,
 
     // Other operators
     #[token("=")]
@@ -208,6 +210,7 @@ impl TokenKind {
             TokenKind::BitwiseOr => "|",
             TokenKind::Not => "!",
             TokenKind::Xor => "^",
+            TokenKind::InfixOperatorSeparator => "`",
 
             TokenKind::OpenParen => "(",
             TokenKind::CloseParen => ")",
