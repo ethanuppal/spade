@@ -32,7 +32,7 @@ module counter_tb();
         `END_TEST
     end
 
-    spi_receiver uut
+    e_spi_receiver uut
         ( ._i_clk(clk)
         , ._i_rst(rst)
         , .__output(result)

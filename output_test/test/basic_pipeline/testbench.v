@@ -40,7 +40,7 @@ module pipeline_tb();
         `END_TEST
     end
 
-    delay_3 delay_3
+    e_delay_3 delay_3
         ( ._i_clk(clk)
         , ._i_input(in_val)
         , .__output(result)

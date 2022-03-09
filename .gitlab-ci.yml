@@ -3,6 +3,8 @@ image: rust:latest
 
 before_script:
     - rustup component add rustfmt
+    - apt update
+    - apt install -y iverilog
 
 
 build:
@@ -22,6 +24,16 @@ test:
     cache:
         # only pull the cache since the build pushes it
         policy: pull
+        paths:
+            - target/
+            - cargo/
+
+output_test:
+    needs: [build]
+    script:
+        - cd output_test && make
+    cache:
+        # only pull the cache since the build pushes it
         paths:
             - target/
             - cargo/

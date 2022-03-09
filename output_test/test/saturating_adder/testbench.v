@@ -29,7 +29,7 @@ module saturating_adder_tb();
         `END_TEST
     end
 
-    saturating_adder uut
+    e_saturating_adder uut
         ( ._i_a(a)
         , ._i_b(b)
         , ._i_max(max)

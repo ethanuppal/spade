@@ -46,7 +46,7 @@ module counter_tb();
         `END_TEST
     end
 
-    counter counter
+    e_counter counter
         ( ._i_clk(clk)
         , ._i_rst(rst)
         , .__output({x, y})
