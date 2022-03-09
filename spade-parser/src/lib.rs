@@ -3232,4 +3232,39 @@ mod tests {
 
         check_parse!(code, expression, Ok(expected));
     }
+
+    #[test]
+    fn infix_operator_precedence_is_unchanged() {
+        // NOTE: the exact ordering here is somewhat unimportant, in general one
+        // should probably put parentheses around infix operators anyway. The main
+        // purpose of this test is to prevent accidental changes to the order in the future
+        let code = r#"
+            0 || 1 `infix` 2 `infix` 3
+            "#;
+
+        let expected = Expression::FnCall(
+            ast_path("infix"),
+            ArgumentList::Positional(vec![
+                Expression::BinaryOperator(
+                    Box::new(Expression::IntLiteral(0).nowhere()),
+                    BinaryOperator::LogicalOr,
+                    Box::new(Expression::IntLiteral(1).nowhere()),
+                )
+                .nowhere(),
+                Expression::FnCall(
+                    ast_path("infix"),
+                    ArgumentList::Positional(vec![
+                        Expression::IntLiteral(2).nowhere(),
+                        Expression::IntLiteral(3).nowhere(),
+                    ])
+                    .nowhere(),
+                )
+                .nowhere(),
+            ])
+            .nowhere(),
+        )
+        .nowhere();
+
+        check_parse!(code, expression, Ok(expected));
+    }
 }
