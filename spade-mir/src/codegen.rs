@@ -104,6 +104,9 @@ fn statement_code(statement: &Statement) -> Code {
                 Operator::Truncate => {
                     format!("{}[{}:0]", ops[0], binding.ty.size() - 1)
                 }
+                Operator::Concat => {
+                    format!("{{{}}}", ops.iter().map(|op| format!("{op}")).join(", "))
+                }
                 Operator::SignExtend {
                     extra_bits,
                     operand_size,
@@ -1056,6 +1059,19 @@ mod expression_tests {
             r#"
             logic[2:0] _e_0;
             assign _e_0 = _e_1;"#
+        };
+
+        assert_same_code!(&statement_code(&stmt).to_string(), expected);
+    }
+
+    #[test]
+    fn concat_works() {
+        let stmt = statement!(e(0); Type::Int(8); Concat; e(1), e(2));
+
+        let expected = indoc! {
+            r#"
+            logic[7:0] _e_0;
+            assign _e_0 = {_e_1, _e_2};"#
         };
 
         assert_same_code!(&statement_code(&stmt).to_string(), expected);

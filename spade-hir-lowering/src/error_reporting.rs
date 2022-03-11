@@ -23,6 +23,24 @@ impl CompilationError for Error {
                         .with_message(format!("But it is truncated to {to} bytes")),
                 ])
                 .with_notes(vec![format!("Truncation can only remove bits")]),
+            Error::ConcatSizeMismatch {
+                lhs,
+                rhs,
+                result,
+                expected,
+            } => Diagnostic::error()
+                .with_message(format!(
+                    "Concatenation produces {result} bits, expected {expected}"
+                ))
+                .with_labels(vec![
+                    result
+                        .primary_label()
+                        .with_message(format!("Expected {expected} bits")),
+                    lhs.secondary_label()
+                        .with_message(format!("This has {lhs} bits")),
+                    rhs.secondary_label()
+                        .with_message(format!("This has {rhs} bits")),
+                ]),
         };
 
         let writer = StandardStream::stderr(color_choice(no_color));

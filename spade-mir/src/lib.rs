@@ -75,6 +75,8 @@ pub enum Operator {
     /// Truncate the first operand to fit the size of the target operand.
     /// Should not be used on operands which are smaller than the target
     Truncate,
+    /// Concatenate the bits of all input operands
+    Concat,
     /// Select [1] if [0] else [2]
     Select,
     /// Corresponds to a match statement. If value [0] is true, select [1], if [2] holds, select
@@ -157,6 +159,7 @@ impl std::fmt::Display for Operator {
                 operand_size,
             } => write!(f, "SignExtend({extra_bits}, {operand_size})"),
             Operator::Truncate => write!(f, "Truncate"),
+            Operator::Concat => write!(f, "Concat"),
             Operator::ConstructEnum {
                 variant,
                 variant_count,

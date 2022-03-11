@@ -32,6 +32,12 @@ pub enum Error {
         from: Loc<u64>,
         to: Loc<u64>,
     },
+    ConcatSizeMismatch {
+        lhs: Loc<u64>,
+        rhs: Loc<u64>,
+        result: Loc<u64>,
+        expected: u64,
+    },
 }
 pub type Result<T> = std::result::Result<T, Error>;
 
@@ -894,6 +900,16 @@ impl ExprLocal for Loc<Expression> {
                     subs,
                     item_list,
                 )
+            },
+            ["std", "conv", "concat"] => {
+                return self.handle_concat(
+                    result,
+                    args,
+                    symtab,
+                    types,
+                    subs,
+                    item_list,
+                )
             }
         }
 
@@ -1138,6 +1154,47 @@ impl ExprLocal for Loc<Expression> {
         }));
 
         Ok(result)
+    }
+
+    fn handle_concat(
+        &self,
+        result: Vec<mir::Statement>,
+        args: &[Argument],
+        symtab: &FrozenSymtab,
+        types: &TypeState,
+        subs: &Substitutions,
+        item_list: &ItemList,
+    ) -> Result<Vec<mir::Statement>> {
+        let mut result = result;
+
+        let arg0_type = types
+            .expr_type(&args[0].value, symtab.symtab(), &item_list.types)?
+            .to_mir_type();
+        let arg1_type = types
+            .expr_type(&args[1].value, symtab.symtab(), &item_list.types)?
+            .to_mir_type();
+
+        let self_type = types
+            .expr_type(self, symtab.symtab(), &item_list.types)?
+            .to_mir_type();
+
+        if self_type.size() != arg0_type.size() + arg1_type.size() {
+            Err(Error::ConcatSizeMismatch {
+                lhs: arg0_type.size().at_loc(&args[0].value),
+                rhs: arg1_type.size().at_loc(&args[1].value),
+                expected: arg0_type.size() + arg1_type.size(),
+                result: self_type.size().at_loc(self),
+            })
+        } else {
+            result.push(mir::Statement::Binding(mir::Binding {
+                name: self.variable(subs),
+                operator: mir::Operator::Concat,
+                operands: vec![args[0].value.variable(subs), args[1].value.variable(subs)],
+                ty: self_type,
+            }));
+
+            Ok(result)
+        }
     }
 }
 
