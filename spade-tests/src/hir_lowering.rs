@@ -1158,4 +1158,27 @@ mod tests {
 
         build_and_compare_entities!(code, expected);
     }
+
+    #[test]
+    fn zero_extend_works() {
+        // TODO: Figure out a nice way to include the stdlib in tests
+        let code = r#"
+            mod std{mod conv{ 
+                fn zext<#N, #M>(x: int<N>) -> int<M> __builtin__
+            }}
+            use std::conv::zext;
+            entity name(a: int<16>) -> int<24> {
+                zext(a)
+            }
+        "#;
+
+        let expected = vec![entity! {"name"; (
+                "a", n(0, "a"), Type::Int(16),
+            ) -> Type::Int(24); {
+                (e(0); Type::Int(24); ZeroExtend({extra_bits: 8}); n(0, "a"))
+            } => e(0)
+        }];
+
+        build_and_compare_entities!(code, expected);
+    }
 }

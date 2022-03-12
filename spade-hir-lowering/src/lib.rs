@@ -901,6 +901,16 @@ impl ExprLocal for Loc<Expression> {
                     item_list,
                 )
             },
+            ["std", "conv", "zext"] => {
+                return self.handle_zext(
+                    result,
+                    args,
+                    symtab,
+                    types,
+                    subs,
+                    item_list,
+                )
+            },
             ["std", "conv", "concat"] => {
                 return self.handle_concat(
                     result,
@@ -1149,6 +1159,41 @@ impl ExprLocal for Loc<Expression> {
                 extra_bits,
                 operand_size: input_type.size(),
             },
+            operands: vec![args[0].value.variable(subs)],
+            ty: self_type,
+        }));
+
+        Ok(result)
+    }
+
+    fn handle_zext(
+        &self,
+        result: Vec<mir::Statement>,
+        args: &[Argument],
+        symtab: &FrozenSymtab,
+        types: &TypeState,
+        subs: &Substitutions,
+        item_list: &ItemList,
+    ) -> Result<Vec<mir::Statement>> {
+        let mut result = result;
+
+        let self_type = types
+            .expr_type(self, symtab.symtab(), &item_list.types)?
+            .to_mir_type();
+
+        let input_type = types
+            .expr_type(&args[0].value, symtab.symtab(), &item_list.types)?
+            .to_mir_type();
+
+        let extra_bits = if self_type.size() > input_type.size() {
+            self_type.size() - input_type.size()
+        } else {
+            0
+        };
+
+        result.push(mir::Statement::Binding(mir::Binding {
+            name: self.variable(subs),
+            operator: mir::Operator::ZeroExtend { extra_bits },
             operands: vec![args[0].value.variable(subs)],
             ty: self_type,
         }));

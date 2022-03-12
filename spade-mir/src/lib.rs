@@ -72,6 +72,9 @@ pub enum Operator {
         extra_bits: u64,
         operand_size: u64,
     },
+    ZeroExtend {
+        extra_bits: u64,
+    },
     /// Truncate the first operand to fit the size of the target operand.
     /// Should not be used on operands which are smaller than the target
     Truncate,
@@ -158,6 +161,7 @@ impl std::fmt::Display for Operator {
                 extra_bits,
                 operand_size,
             } => write!(f, "SignExtend({extra_bits}, {operand_size})"),
+            Operator::ZeroExtend { extra_bits } => write!(f, "ZeroExtend({extra_bits})"),
             Operator::Truncate => write!(f, "Truncate"),
             Operator::Concat => write!(f, "Concat"),
             Operator::ConstructEnum {

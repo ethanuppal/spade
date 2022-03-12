@@ -124,6 +124,10 @@ fn statement_code(statement: &Statement) -> Code {
                     .replace("#[", "{")
                     .replace("#]", "}"),
                 },
+                Operator::ZeroExtend { extra_bits } => match extra_bits {
+                    0 => format!("{}", ops[0]),
+                    1.. => format!("{{{}'b0, {}}}", extra_bits, ops[0]),
+                },
                 Operator::Match => {
                     assert!(
                         ops.len() % 2 == 0,
@@ -1054,6 +1058,43 @@ mod expression_tests {
     fn sext_works_for_zero_bits() {
         let stmt =
             statement!(e(0); Type::Int(3); SignExtend({extra_bits: 0, operand_size: 3}); e(1));
+
+        let expected = indoc! {
+            r#"
+            logic[2:0] _e_0;
+            assign _e_0 = _e_1;"#
+        };
+
+        assert_same_code!(&statement_code(&stmt).to_string(), expected);
+    }
+
+    #[test]
+    fn zext_works_for_many_bits() {
+        let stmt = statement!(e(0); Type::Int(5); ZeroExtend({extra_bits: 2}); e(1));
+
+        let expected = indoc! {
+            r#"
+            logic[4:0] _e_0;
+            assign _e_0 = {2'b0, _e_1};"#
+        };
+
+        assert_same_code!(&statement_code(&stmt).to_string(), expected);
+    }
+    #[test]
+    fn zext_works_for_one_bits() {
+        let stmt = statement!(e(0); Type::Int(4); ZeroExtend({extra_bits: 1}); e(1));
+
+        let expected = indoc! {
+            r#"
+            logic[3:0] _e_0;
+            assign _e_0 = {1'b0, _e_1};"#
+        };
+
+        assert_same_code!(&statement_code(&stmt).to_string(), expected);
+    }
+    #[test]
+    fn zext_works_for_zero_bits() {
+        let stmt = statement!(e(0); Type::Int(3); ZeroExtend({extra_bits: 0}); e(1));
 
         let expected = indoc! {
             r#"
