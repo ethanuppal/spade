@@ -964,13 +964,14 @@ impl<'a> Parser<'a> {
                 .map(|t| t.loc().span)
                 .unwrap_or_else(|| lspan(close_paren.span));
 
-            return Err(Error::ExpectedBlock {
-                // NOTE: Unwrap should be safe becase we have already checked
-                // if this is a { or not
-                for_what: "entity".to_string(),
-                got: self.peek()?.unwrap(),
-                loc: Loc::new((), lspan(start_token.span).merge(end_loc), self.file_id),
-            });
+            return match self.peek()? {
+                Some(got) => Err(Error::ExpectedBlock {
+                    for_what: "entity".to_string(),
+                    got,
+                    loc: Loc::new((), lspan(start_token.span).merge(end_loc), self.file_id),
+                }),
+                None => Err(Error::Eof),
+            };
         };
 
         self.clear_item_context();
