@@ -34,6 +34,9 @@ struct Opt {
     /// Print a traceback of the type inference process if type inference or hir lowering fails
     #[structopt(long = "print-type-traceback")]
     pub print_type_traceback: bool,
+    /// Print a traceback of the parser if parsing fails
+    #[structopt(long = "print-parse-traceback")]
+    pub print_parse_traceback: bool,
 }
 
 fn main() -> Result<()> {
@@ -75,7 +78,11 @@ fn main() -> Result<()> {
         let file_id = code.add_file(infile, file_content.clone());
         let mut parser = Parser::new(lexer::TokenKind::lexer(&file_content), file_id);
 
-        module_asts.push(try_or_report!(parser.top_level_module_body()));
+        module_asts.push(try_or_report!(parser.top_level_module_body(), {
+            if opts.print_parse_traceback {
+                println!("{}", spade_parser::format_parse_stack(&parser.parse_stack));
+            }
+        }));
     }
 
     for module_ast in &module_asts {

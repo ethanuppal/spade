@@ -74,6 +74,9 @@ pub enum Error {
 
     #[error("(Internal) Overwriting item context")]
     InternalOverwritingItemContext { at: Loc<()>, prev: Loc<()> },
+
+    #[error("Expected array size")]
+    ExpectedArraySize { array: Loc<()> },
 }
 
 impl Error {

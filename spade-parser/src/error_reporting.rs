@@ -184,7 +184,11 @@ impl CompilationError for Error {
                 .with_labels(vec![
                     at.primary_label().with_message("New context set because of this"),
                     prev.secondary_label().with_message("Previous context set here")
-                ])
+                ]),
+            Error::ExpectedArraySize{array} => Diagnostic::error()
+                .with_message("Expected array size")
+                .with_labels(vec![array.primary_label().with_message("This array type")])
+                .with_notes(vec![format!("Array types need a specified size")]),
         };
 
         let writer = StandardStream::stderr(color_choice(no_color));

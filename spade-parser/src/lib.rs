@@ -82,7 +82,7 @@ impl<'a> Parser<'a> {
     }
 }
 
-/// Peek the next token. If it matches the specified token, return that token
+/// Peek the next token. If it matches the specified token, get that token
 /// otherwise return Ok(none)
 macro_rules! peek_for {
     ($self:expr, $token:expr) => {
@@ -638,6 +638,12 @@ impl<'a> Parser<'a> {
         let start = peek_for!(self, &TokenKind::OpenBracket);
 
         let inner = self.type_spec()?;
+
+        if let Some(end) = self.peek_and_eat(&TokenKind::CloseBracket)? {
+            return Err(Error::ExpectedArraySize {
+                array: ().between(self.file_id, &start, &end),
+            });
+        }
 
         self.eat(&TokenKind::Semi)?;
 
@@ -1372,12 +1378,12 @@ impl<'a> Parser<'a> {
     /// but an item found after the last item
     #[trace_parser]
     pub fn top_level_module_body(&mut self) -> Result<ModuleBody> {
-        let result = self.module_body();
+        let result = self.module_body()?;
 
         if let Some(tok) = self.peek()? {
             Err(Error::ExpectedItem { got: tok })
         } else {
-            result
+            Ok(result)
         }
     }
 }
@@ -1563,7 +1569,7 @@ impl<'a> Parser<'a> {
         Ok(food)
     }
 
-    /// Peeks the next token. If it is the sepcified kind, returns that token, otherwise
+    /// Peeks the next token. If it is the specified kind, returns that token, otherwise
     /// returns None.
     ///
     /// If kind is > and the peeking is also done for >>, which if found, is split
