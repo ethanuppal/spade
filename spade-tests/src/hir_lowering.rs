@@ -399,6 +399,24 @@ mod tests {
     }
 
     #[test]
+    fn bitwise_not_codegens_correctly() {
+        let code = r#"
+        entity name(a: int<8>) -> int<8> {
+            ~a
+        }
+        "#;
+
+        let expected = entity!("name"; (
+                "a", n(0, "a"), Type::Int(8),
+            ) -> Type::Int(8); {
+                (e(0); (Type::Int(8)); BitwiseNot; n(0, "a"))
+            } => e(0)
+        );
+
+        assert_same_mir!(&build_entity!(code), &expected);
+    }
+
+    #[test]
     fn registers_work() {
         let code = r#"
         entity name(clk: clk, a: int<16>) -> int<16> {

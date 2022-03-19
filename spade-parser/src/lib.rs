@@ -179,6 +179,7 @@ impl<'a> Parser<'a> {
         let operator = self.peek()?.and_then(|t| match t.kind {
             TokenKind::Minus => Some(UnaryOperator::Sub.at(self.file_id, &t.span)),
             TokenKind::Not => Some(UnaryOperator::Not.at(self.file_id, &t.span)),
+            TokenKind::BitwiseNot => Some(UnaryOperator::BitwiseNot.at(self.file_id, &t.span)),
             _ => None,
         });
 

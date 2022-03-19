@@ -745,6 +745,9 @@ pub fn visit_expression(
             match operator {
                 ast::UnaryOperator::Sub => Ok(unop(hir::expression::UnaryOperator::Sub)),
                 ast::UnaryOperator::Not => Ok(unop(hir::expression::UnaryOperator::Not)),
+                ast::UnaryOperator::BitwiseNot => {
+                    Ok(unop(hir::expression::UnaryOperator::BitwiseNot))
+                }
             }
         }
         ast::Expression::TupleLiteral(exprs) => {

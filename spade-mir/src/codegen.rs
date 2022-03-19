@@ -96,6 +96,13 @@ fn statement_code(statement: &Statement) -> Code {
                     assert!(ops.len() == 1, "Expected exactly 1 operand to not operator");
                     format!("!{}", ops[0])
                 }
+                Operator::BitwiseNot => {
+                    assert!(
+                        ops.len() == 1,
+                        "Expected exactly 1 operand to bitwise not operator"
+                    );
+                    format!("~{}", ops[0])
+                }
                 Operator::BitwiseAnd => binop!("&"),
                 Operator::BitwiseOr => binop!("|"),
                 Operator::Xor => binop!("^"),

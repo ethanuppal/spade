@@ -88,6 +88,7 @@ pub enum BinaryOperator {
 pub enum UnaryOperator {
     Sub,
     Not,
+    BitwiseNot,
 }
 impl WithLocation for UnaryOperator {}
 

@@ -67,6 +67,7 @@ pub enum Operator {
     Xor,
     USub,
     Not,
+    BitwiseNot,
     /// Sign extend the first operand with the provided amount of extra bits
     SignExtend {
         extra_bits: u64,
@@ -151,6 +152,7 @@ impl std::fmt::Display for Operator {
             Operator::LogicalNot => write!(f, "LogicalNot"),
             Operator::BitwiseAnd => write!(f, "BitwiseAnd"),
             Operator::BitwiseOr => write!(f, "BitwiseOr"),
+            Operator::BitwiseNot => write!(f, "BitwiseNot"),
             Operator::Xor => write!(f, "Xor"),
             Operator::USub => write!(f, "USub"),
             Operator::Not => write!(f, "Not"),

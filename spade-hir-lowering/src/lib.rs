@@ -630,6 +630,7 @@ impl ExprLocal for Loc<Expression> {
                 match op {
                     hir::expression::UnaryOperator::Sub => binop_builder(USub)?,
                     hir::expression::UnaryOperator::Not => binop_builder(Not)?,
+                    hir::expression::UnaryOperator::BitwiseNot => binop_builder(BitwiseNot)?,
                 };
             }
             ExprKind::TupleLiteral(elems) => {

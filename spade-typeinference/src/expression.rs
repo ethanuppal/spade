@@ -448,7 +448,7 @@ impl TypeState {
         assuming_kind!(ExprKind::UnaryOperator(op, operand) = &expression => {
             self.visit_expression(&operand, symtab, generic_list)?;
             match op {
-                UnaryOperator::Sub => {
+                UnaryOperator::Sub | UnaryOperator::BitwiseNot => {
                     let int_type = self.new_generic_int(symtab);
                     self.unify_expression_generic_error(operand, int_type.as_ref(), symtab)?.commit(self)
                 }
