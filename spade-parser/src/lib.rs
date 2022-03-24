@@ -202,44 +202,7 @@ impl<'a> Parser<'a> {
     // Expression parsing
     #[trace_parser]
     pub fn expression(&mut self) -> Result<Loc<Expression>> {
-        let expr = self.custom_infix_operator(Self::logical_or_expression)?;
-
-        if let Some(hash) = self.peek_and_eat(&TokenKind::Hash)? {
-            if let Some(index) = self.int_literal()? {
-                let span = expr.span.merge(lspan(hash.span));
-                Ok(Expression::TupleIndex(Box::new(expr), index).at(self.file_id, &span))
-            } else {
-                Err(Error::MissingTupleIndex {
-                    hash_loc: Loc::new((), lspan(hash.span), self.file_id),
-                })
-            }
-        } else if let Some(_) = self.peek_and_eat(&TokenKind::Dot)? {
-            let field = self.identifier()?;
-
-            Ok(
-                Expression::FieldAccess(Box::new(expr.clone()), field.clone()).between(
-                    self.file_id,
-                    &expr,
-                    &field,
-                ),
-            )
-        } else if self.peek_kind(&TokenKind::OpenBracket)? {
-            let (index, _) = self.surrounded(
-                &TokenKind::OpenBracket,
-                Self::expression,
-                &TokenKind::CloseBracket,
-            )?;
-
-            Ok(
-                Expression::Index(Box::new(expr.clone()), Box::new(index.clone())).between(
-                    self.file_id,
-                    &expr,
-                    &index,
-                ),
-            )
-        } else {
-            Ok(expr)
-        }
+        self.custom_infix_operator(Self::logical_or_expression)
     }
 
     pub fn custom_infix_operator(
@@ -311,7 +274,7 @@ impl<'a> Parser<'a> {
 
     #[trace_parser]
     pub fn base_expression(&mut self) -> Result<Loc<Expression>> {
-        if let Some(tuple) = self.tuple_literal()? {
+        let expr = if let Some(tuple) = self.tuple_literal()? {
             Ok(tuple)
         } else if let Some(array) = self.array_literal()? {
             Ok(array)
@@ -346,7 +309,51 @@ impl<'a> Parser<'a> {
                 Err(Error::UnexpectedToken { got, .. }) => Err(Error::ExpectedExpression { got }),
                 Err(e) => Err(e),
             }
-        }
+        }?;
+
+        self.expression_suffix(expr)
+    }
+
+    #[trace_parser]
+    fn expression_suffix(&mut self, expr: Loc<Expression>) -> Result<Loc<Expression>> {
+        let base = if let Some(hash) = self.peek_and_eat(&TokenKind::Hash)? {
+            if let Some(index) = self.int_literal()? {
+                let span = expr.span.merge(lspan(hash.span));
+                Ok(Expression::TupleIndex(Box::new(expr), index).at(self.file_id, &span))
+            } else {
+                Err(Error::MissingTupleIndex {
+                    hash_loc: Loc::new((), lspan(hash.span), self.file_id),
+                })
+            }
+        } else if let Some(_) = self.peek_and_eat(&TokenKind::Dot)? {
+            let field = self.identifier()?;
+
+            Ok(
+                Expression::FieldAccess(Box::new(expr.clone()), field.clone()).between(
+                    self.file_id,
+                    &expr,
+                    &field,
+                ),
+            )
+        } else if self.peek_kind(&TokenKind::OpenBracket)? {
+            let (index, _) = self.surrounded(
+                &TokenKind::OpenBracket,
+                Self::expression,
+                &TokenKind::CloseBracket,
+            )?;
+
+            Ok(
+                Expression::Index(Box::new(expr.clone()), Box::new(index.clone())).between(
+                    self.file_id,
+                    &expr,
+                    &index,
+                ),
+            )
+        } else {
+            return Ok(expr);
+        }?;
+
+        self.expression_suffix(base)
     }
 
     #[trace_parser]
@@ -3270,6 +3277,64 @@ mod tests {
                 .nowhere(),
             ])
             .nowhere(),
+        )
+        .nowhere();
+
+        check_parse!(code, expression, Ok(expected));
+    }
+
+    #[test]
+    fn field_access_operator_does_not_require_parens() {
+        let code = r#"x.y.z"#;
+
+        let expected = Expression::FieldAccess(
+            Box::new(
+                Expression::FieldAccess(
+                    Box::new(Expression::Identifier(ast_path("x")).nowhere()),
+                    ast_ident("y"),
+                )
+                .nowhere(),
+            ),
+            ast_ident("z"),
+        )
+        .nowhere();
+
+        check_parse!(code, expression, Ok(expected));
+    }
+
+    #[test]
+    fn array_index_operator_precedence_is_correct() {
+        let code = r#"x && y[z]"#;
+
+        let expected = Expression::BinaryOperator(
+            Box::new(Expression::Identifier(ast_path("x")).nowhere()),
+            BinaryOperator::LogicalAnd,
+            Box::new(
+                Expression::Index(
+                    Box::new(Expression::Identifier(ast_path("y")).nowhere()),
+                    Box::new(Expression::Identifier(ast_path("z")).nowhere()),
+                )
+                .nowhere(),
+            ),
+        )
+        .nowhere();
+
+        check_parse!(code, expression, Ok(expected));
+    }
+
+    #[test]
+    fn tuple_index_operator_precedence_is_correct() {
+        let code = r#"y#1#2"#;
+
+        let expected = Expression::TupleIndex(
+            Box::new(
+                Expression::TupleIndex(
+                    Box::new(Expression::Identifier(ast_path("y")).nowhere()),
+                    1u128.nowhere(),
+                )
+                .nowhere(),
+            ),
+            2.nowhere(),
         )
         .nowhere();
 
