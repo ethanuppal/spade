@@ -650,6 +650,7 @@ impl<'a> Parser<'a> {
         if let Some(end) = self.peek_and_eat(&TokenKind::CloseBracket)? {
             return Err(Error::ExpectedArraySize {
                 array: ().between(self.file_id, &start, &end),
+                inner,
             });
         }
 

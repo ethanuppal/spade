@@ -11,8 +11,8 @@ doctest = false
 
 [dependencies]
 thiserror = "1.0"
-codespan = "0.9"
-codespan-reporting = "0.9"
+codespan = "0.11.1"
+codespan-reporting = "0.11.1"
 
 spade-common = {path = "../spade-common"}
 spade-ast = {path = "../spade-ast"}

@@ -1,6 +1,6 @@
 use crate::lexer::TokenKind;
 use crate::{Error, Token};
-use codespan_reporting::diagnostic::{Diagnostic, Label};
+use codespan_reporting::diagnostic::{Diagnostic, Label, Suggestion};
 use codespan_reporting::term::{self, termcolor::StandardStream};
 use spade_common::error_reporting::{
     codespan_config, color_choice, AsLabel, CodeBundle, CompilationError,
@@ -158,8 +158,13 @@ impl CompilationError for Error {
                 ])
                 .with_notes(vec![
                     format!("Functions can only contain combinatorial logic"),
-                    format!("If you want to do this, make the function an entity")
-                ]),
+                ])
+                .with_suggestions(vec![Suggestion {
+                    file_id: fn_keyword.file_id,
+                    range: fn_keyword.span.into(),
+                    replacement: format!("entity"),
+                    message: format!("Consider making the function an entity"),
+                }]),
             Error::RegInFunction{at, fn_keyword} => Diagnostic::error()
                 .with_message("Functions can not contain registers")
                 .with_labels(vec![
@@ -185,10 +190,16 @@ impl CompilationError for Error {
                     at.primary_label().with_message("New context set because of this"),
                     prev.secondary_label().with_message("Previous context set here")
                 ]),
-            Error::ExpectedArraySize{array} => Diagnostic::error()
+            Error::ExpectedArraySize{array, inner} => Diagnostic::error()
                 .with_message("Expected array size")
                 .with_labels(vec![array.primary_label().with_message("This array type")])
-                .with_notes(vec![format!("Array types need a specified size")]),
+                .with_notes(vec![format!("Array types need a specified size")])
+                .with_suggestions(vec![Suggestion {
+                    file_id: array.file_id,
+                    range: inner.span.end().to_usize()..inner.span.end().to_usize(),
+                    replacement: format!("; N"),
+                    message: format!("Insert a size here")
+                }]),
         };
 
         let writer = StandardStream::stderr(color_choice(no_color));

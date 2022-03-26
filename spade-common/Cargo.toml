@@ -10,6 +10,6 @@ edition = "2018"
 doctest = false
 
 [dependencies]
-codespan = "0.9"
-codespan-reporting = "0.9"
+codespan = "0.11.1"
+codespan-reporting = "0.11.1"
 logos = "0.11.4"

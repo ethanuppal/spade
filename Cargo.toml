@@ -15,3 +15,7 @@ members = [
     "spade-ast",
     "parse_tree_macros"
 ]
+
+[patch.crates-io]
+codespan = { git = "https://github.com/sornas/codespan.git" }
+codespan-reporting = { git = "https://github.com/sornas/codespan.git" }

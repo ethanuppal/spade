@@ -12,8 +12,8 @@ doctest = false
 [dependencies]
 colored = "2.0"
 thiserror = "1.0.20"
-codespan-reporting = "0.9"
-codespan = "0.9"
+codespan-reporting = "0.11.1"
+codespan = "0.11.1"
 
 spade-common = {path = "../spade-common"}
 spade-types = {path = "../spade-types"}

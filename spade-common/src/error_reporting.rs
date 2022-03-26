@@ -2,8 +2,7 @@ use std::path::PathBuf;
 
 use codespan_reporting::diagnostic::Label;
 use codespan_reporting::files::SimpleFiles;
-use codespan_reporting::term::termcolor::ColorChoice;
-use codespan_reporting::term::termcolor::{Color, ColorSpec};
+use codespan_reporting::term::termcolor::{Color, ColorChoice, ColorSpec};
 
 use crate::location_info::Loc;
 

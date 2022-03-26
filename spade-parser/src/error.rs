@@ -2,7 +2,7 @@ use parse_tree_macros::local_impl;
 use spade_common::{location_info::Loc, name::Path};
 use thiserror::Error;
 
-use crate::{lexer::TokenKind, Token};
+use crate::{lexer::TokenKind, Token, TypeSpec};
 
 #[derive(Error, Debug, Clone, PartialEq)]
 pub enum Error {
@@ -76,7 +76,10 @@ pub enum Error {
     InternalOverwritingItemContext { at: Loc<()>, prev: Loc<()> },
 
     #[error("Expected array size")]
-    ExpectedArraySize { array: Loc<()> },
+    ExpectedArraySize {
+        array: Loc<()>,
+        inner: Loc<TypeSpec>,
+    },
 }
 
 impl Error {
