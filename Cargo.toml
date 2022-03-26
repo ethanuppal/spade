@@ -17,5 +17,5 @@ members = [
 ]
 
 [patch.crates-io]
-codespan = { git = "https://github.com/sornas/codespan.git" }
-codespan-reporting = { git = "https://github.com/sornas/codespan.git" }
+codespan = { git = "https://gitlab.com/spade-lang/codespan.git" }
+codespan-reporting = { git = "https://gitlab.com/spade-lang/codespan.git" }
