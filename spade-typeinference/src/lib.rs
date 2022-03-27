@@ -597,7 +597,7 @@ impl TypeState {
                         .map_err(|(got, expected)| Error::UnspecifiedTypeError {
                             expected,
                             got,
-                            loc: pattern.loc(),
+                            loc: value.loc(),
                         })?
                         .commit(self);
                 }

@@ -55,7 +55,7 @@ impl CompilationError for Error {
                 .with_message(format!("Expected type {}, got {}", expected, got))
                 .with_labels(vec![loc
                     .primary_label()
-                    .with_message(format!("Expected {}", expected))]),
+                    .with_message(format!("Expected {} here", expected))]),
             Error::IntLiteralIncompatible { .. } => {
                 todo! {}
             }
