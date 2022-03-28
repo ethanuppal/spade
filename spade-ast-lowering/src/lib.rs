@@ -825,7 +825,7 @@ pub fn visit_expression(
             let head = head.clone();
 
             if head.depth.inner != depth.inner as usize {
-                return Err(Error::PipelineDepthMissmatch {
+                return Err(Error::PipelineDepthMismatch {
                     expected: head.depth.inner,
                     got: depth.clone(),
                 });
@@ -1928,7 +1928,7 @@ mod expression_visiting {
     }
 
     #[test]
-    fn pipeline_instantiation_with_missmatched_depth_causes_error() {
+    fn pipeline_instantiation_with_mismatched_depth_causes_error() {
         let input = ast::Expression::PipelineInstance(
             2.nowhere(),
             ast_path("test"),
@@ -1961,7 +1961,7 @@ mod expression_visiting {
 
         assert_eq!(
             visit_expression(&input, &mut symtab, &mut idtracker),
-            Err(Error::PipelineDepthMissmatch {
+            Err(Error::PipelineDepthMismatch {
                 expected: 3,
                 got: 2.nowhere()
             })

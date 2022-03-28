@@ -218,7 +218,7 @@ impl TypeState {
 
             for (l, r) in members.iter().zip(members.iter().skip(1)) {
                 self.unify(l, r, symtab)
-                    .map_err(|(expected, got)| Error::ArrayElementMissmatch {
+                    .map_err(|(expected, got)| Error::ArrayElementMismatch {
                         got,
                         expected,
                         loc: r.loc(),
@@ -369,7 +369,7 @@ impl TypeState {
 
                 if i != 0 {
                     self.unify(&branches[0].1, result, symtab).map_err(
-                        |(expected, got)| Error::MatchBranchMissmatch {
+                        |(expected, got)| Error::MatchBranchMismatch {
                             expected,
                             got,
                             first_branch: branches[0].1.loc(),

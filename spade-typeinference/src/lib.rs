@@ -583,7 +583,7 @@ impl TypeState {
                 self.visit_pattern(pattern, symtab)?;
 
                 self.unify(&TypedExpression::Id(pattern.id), value, symtab)
-                    .map_err(|(expected, got)| Error::PatternTypeMissmatch {
+                    .map_err(|(expected, got)| Error::PatternTypeMismatch {
                         pattern: pattern.loc(),
                         expected,
                         got,
@@ -659,7 +659,7 @@ impl TypeState {
             .commit(self);
 
         self.unify(&TypedExpression::Id(reg.pattern.id), &reg.value, symtab)
-            .map_err(|(expected, got)| Error::PatternTypeMissmatch {
+            .map_err(|(expected, got)| Error::PatternTypeMismatch {
                 pattern: reg.pattern.loc(),
                 expected,
                 got,

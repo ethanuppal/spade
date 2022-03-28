@@ -82,7 +82,7 @@ impl CompilationError for Error {
                         .with_message(format!("But this one has type {}", got)),
                 ])
                 .with_notes(type_mismatch_notes(got, expected)),
-            Error::MatchBranchMissmatch {
+            Error::MatchBranchMismatch {
                 expected,
                 got,
                 first_branch,
@@ -149,14 +149,14 @@ impl CompilationError for Error {
                     format!("     Index: {}", index),
                     format!("Tuple size: {}", actual_size),
                 ]),
-            Error::ArrayElementMissmatch {
+            Error::ArrayElementMismatch {
                 expected,
                 got,
                 loc,
                 first_element,
             } => Diagnostic::error()
                 .with_message(format!(
-                    "Array element type missmatch. Expected {}",
+                    "Array element type mismatch. Expected {}",
                     expected
                 ))
                 .with_labels(vec![
@@ -264,12 +264,12 @@ impl CompilationError for Error {
                     format!("Expected: {}", expected),
                     format!("     Got: {}", got),
                 ]),
-            Error::PatternTypeMissmatch {
+            Error::PatternTypeMismatch {
                 pattern,
                 expected,
                 got,
             } => Diagnostic::error()
-                .with_message("Pattern type missmatch")
+                .with_message("Pattern type mismatch")
                 .with_labels(vec![pattern
                     .primary_label()
                     .with_message(format!("expected {}", expected))])

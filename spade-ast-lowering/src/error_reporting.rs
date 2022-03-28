@@ -227,7 +227,7 @@ impl CompilationError for Error {
                 .with_notes(vec![format!(
                     "Only the last stage of a pipeline can return values"
                 )]),
-            Error::PipelineDepthMissmatch { expected, got } => Diagnostic::error()
+            Error::PipelineDepthMismatch { expected, got } => Diagnostic::error()
                 .with_message(format!(
                     "Pipeline depth mismatch. Expected {} got {}",
                     expected, got

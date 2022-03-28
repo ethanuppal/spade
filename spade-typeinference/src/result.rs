@@ -105,8 +105,8 @@ pub enum Error {
         first_branch: Loc<()>,
         incorrect_branch: Loc<()>,
     },
-    #[error("Match branch missmatch")]
-    MatchBranchMissmatch {
+    #[error("Match branch mismatch")]
+    MatchBranchMismatch {
         expected: UnificationTrace,
         got: UnificationTrace,
         first_branch: Loc<()>,
@@ -172,8 +172,8 @@ pub enum Error {
     #[error("Field access on primitive type")]
     FieldAccessOnPrimitive { loc: Loc<()>, actual_type: NameID },
 
-    #[error("Array element missmatch")]
-    ArrayElementMissmatch {
+    #[error("Array element mismatch")]
+    ArrayElementMismatch {
         expected: UnificationTrace,
         got: UnificationTrace,
         loc: Loc<()>,
@@ -185,8 +185,8 @@ pub enum Error {
     #[error("Indexee must be an array")]
     IndexeeMustBeArray { got: UnificationTrace, loc: Loc<()> },
 
-    #[error("Pattern type missmatch")]
-    PatternTypeMissmatch {
+    #[error("Pattern type mismatch")]
+    PatternTypeMismatch {
         pattern: Loc<()>,
         expected: UnificationTrace,
         got: UnificationTrace,

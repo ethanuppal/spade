@@ -25,7 +25,7 @@ impl TypeState {
         self.visit_pattern(&binding.pat, symtab)?;
 
         self.unify(&TypedExpression::Id(binding.pat.id), &binding.value, symtab)
-            .map_err(|(expected, got)| Error::PatternTypeMissmatch {
+            .map_err(|(expected, got)| Error::PatternTypeMismatch {
                 pattern: binding.pat.loc(),
                 expected,
                 got,

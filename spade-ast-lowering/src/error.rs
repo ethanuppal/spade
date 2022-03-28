@@ -38,7 +38,7 @@ pub enum Error {
         got: usize,
         at: Loc<()>,
     },
-    #[error("Pattern list length missmatch, expected {expected} arguments, got {got}")]
+    #[error("Pattern list length mismatch, expected {expected} arguments, got {got}")]
     PatternListLengthMismatch {
         expected: usize,
         got: usize,
@@ -67,7 +67,7 @@ pub enum Error {
     #[error("Early pipeline return")]
     EarlyPipelineReturn { expression: Loc<hir::Expression> },
     #[error("Pipeline depth mismatch")]
-    PipelineDepthMissmatch { expected: usize, got: Loc<u128> },
+    PipelineDepthMismatch { expected: usize, got: Loc<u128> },
     #[error("Pipeline missing clock")]
     MissingPipelineClock { at_loc: Loc<()> },
 
