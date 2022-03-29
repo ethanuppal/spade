@@ -2,7 +2,7 @@
 
 #[cfg(test)]
 mod namespace_tests {
-    use crate::build_items;
+    use crate::{build_items, snapshot_error};
 
     #[test]
     fn namespacing_works() {
@@ -21,11 +21,9 @@ mod namespace_tests {
         build_items(code);
     }
 
-    // Once we get failing tests up and running, this should be tested
-    #[ignore]
-    #[test]
-    fn namespacing_adds_to_the_correct_namespace() {
-        let code = r#"
+    snapshot_error!(
+        namespacing_adds_to_the_correct_namespace,
+        r#"
             mod X {
                 entity x() -> int<2> {
                     1
@@ -35,10 +33,8 @@ mod namespace_tests {
             entity top() -> int<2> {
                 x()
             }
-        "#;
-
-        build_items(code);
-    }
+        "#
+    );
 
     #[test]
     fn use_statements_work() {

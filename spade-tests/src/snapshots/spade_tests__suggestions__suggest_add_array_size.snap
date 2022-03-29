@@ -1,0 +1,16 @@
+---
+source: spade-tests/src/suggestions.rs
+expression: "std::str::from_utf8(buffer.as_slice()).expect(\"error contains invalid utf-8\")"
+---
+error: Expected array size
+  ┌─ testinput:2:12
+  │
+2 │     let _: [bool] = [true, false];
+  │            ^^^^^^ This array type
+  │
+  = Array types need a specified size
+  │
+2 │     let _: [bool; N] = [true, false];
+  │                 +++ Insert a size here
+
+

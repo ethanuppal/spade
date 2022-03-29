@@ -9,12 +9,14 @@ use spade_testutil::{parse_typecheck_module_body, ParseTypececkResult};
 #[cfg(test)]
 use spade_typeinference::ProcessedItem;
 
-mod hir_lowering;
-mod integration;
-mod typeinference;
-
 #[cfg(test)]
-mod errors;
+mod hir_lowering;
+#[cfg(test)]
+mod integration;
+#[cfg(test)]
+mod suggestions;
+#[cfg(test)]
+mod typeinference;
 
 pub trait ResultExt<T> {
     fn report_failure(self, code: &str) -> T;
@@ -58,6 +60,30 @@ macro_rules! build_entity {
         .report_failure($code);
         result
     }};
+}
+
+#[macro_export]
+macro_rules! snapshot_error {
+    ($fn:ident, $src:literal) => {
+        #[test]
+        fn $fn() {
+            let source = unindent::unindent($src);
+            let mut buffer = codespan_reporting::term::termcolor::Buffer::no_color();
+            let opts = spade::Opt {
+                error_buffer: &mut buffer,
+                outfile: None,
+                mir_output: None,
+                print_type_traceback: false,
+                print_parse_traceback: false,
+            };
+
+            let _ = spade::compile(vec![("testinput".to_string(), source.to_string())], opts);
+
+            insta::assert_snapshot!(
+                std::str::from_utf8(buffer.as_slice()).expect("error contains invalid utf-8")
+            );
+        }
+    };
 }
 
 /// Builds mutliple entities and types from a source string. If any pipelines or other
