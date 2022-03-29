@@ -1,3 +1,6 @@
+use codespan_reporting::term::termcolor::Buffer;
+use std::io::Write;
+
 use spade_common::error_reporting::{CodeBundle, CompilationError};
 #[cfg(test)]
 use spade_hir_lowering::generate_entity;
@@ -10,6 +13,9 @@ mod hir_lowering;
 mod integration;
 mod typeinference;
 
+#[cfg(test)]
+mod errors;
+
 pub trait ResultExt<T> {
     fn report_failure(self, code: &str) -> T;
 }
@@ -19,7 +25,9 @@ impl<T> ResultExt<T> for spade_hir_lowering::Result<T> {
             Ok(t) => t,
             Err(e) => {
                 let code_bundle = CodeBundle::new(code.to_string());
-                e.report(&code_bundle, false);
+                let mut buffer = Buffer::no_color();
+                e.report(&mut buffer, &code_bundle);
+                std::io::stderr().write_all(buffer.as_slice()).unwrap();
                 panic!("Compilation error")
             }
         }

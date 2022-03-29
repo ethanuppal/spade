@@ -1,12 +1,10 @@
 use crate::Error;
 use codespan_reporting::diagnostic::Diagnostic;
-use codespan_reporting::term::{self, termcolor::StandardStream};
-use spade_common::error_reporting::{
-    codespan_config, color_choice, AsLabel, CodeBundle, CompilationError,
-};
+use codespan_reporting::term::{self, termcolor::Buffer};
+use spade_common::error_reporting::{codespan_config, AsLabel, CodeBundle, CompilationError};
 
 impl CompilationError for Error {
-    fn report(self, code: &CodeBundle, no_color: bool) {
+    fn report(self, buffer: &mut Buffer, code: &CodeBundle) {
         let diag = match self {
             Error::UsingGenericType { expr, t } => Diagnostic::error()
                 .with_message(format!("Type of expression is not fully known"))
@@ -43,8 +41,6 @@ impl CompilationError for Error {
                 ]),
         };
 
-        let writer = StandardStream::stderr(color_choice(no_color));
-
-        term::emit(&mut writer.lock(), &codespan_config(), &code.files, &diag).unwrap();
+        term::emit(buffer, &codespan_config(), &code.files, &diag).unwrap();
     }
 }

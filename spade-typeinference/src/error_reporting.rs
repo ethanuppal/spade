@@ -1,9 +1,7 @@
 use crate::{result::UnificationTrace, Error};
 use codespan_reporting::diagnostic::Diagnostic;
-use codespan_reporting::term::{self, termcolor::StandardStream};
-use spade_common::error_reporting::{
-    codespan_config, color_choice, AsLabel, CodeBundle, CompilationError,
-};
+use codespan_reporting::term::{self, termcolor::Buffer};
+use spade_common::error_reporting::{codespan_config, AsLabel, CodeBundle, CompilationError};
 
 pub fn type_mismatch_notes(got: UnificationTrace, expected: UnificationTrace) -> Vec<String> {
     let mut result = vec![];
@@ -20,7 +18,7 @@ pub fn type_mismatch_notes(got: UnificationTrace, expected: UnificationTrace) ->
 }
 
 impl CompilationError for Error {
-    fn report(self, code: &CodeBundle, no_color: bool) {
+    fn report(self, buffer: &mut Buffer, code: &CodeBundle) {
         let diag = match self {
             Error::GenericTypeInstanciation => todo![],
             Error::UnknownType(expr) => Diagnostic::error()
@@ -287,8 +285,6 @@ impl CompilationError for Error {
                     .with_message(format!("Expected {}", expected))]),
         };
 
-        let writer = StandardStream::stderr(color_choice(no_color));
-
-        term::emit(&mut writer.lock(), &codespan_config(), &code.files, &diag).unwrap();
+        term::emit(buffer, &codespan_config(), &code.files, &diag).unwrap();
     }
 }

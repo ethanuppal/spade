@@ -10,6 +10,7 @@ edition = "2018"
 doctest = false
 
 [dependencies]
+codespan-reporting = "0.11.0"
 logos = "0.11"
 
 spade-common = {path = "../spade-common"}

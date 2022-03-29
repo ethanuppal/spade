@@ -10,6 +10,7 @@ edition = "2018"
 doctest = false
 
 [dependencies]
+codespan-reporting = "0.11.0"
 logos = "0.11"
 colored = "2.0"
 prettydiff = "0.3.1"
@@ -24,3 +25,8 @@ spade-hir-lowering = {path = "../spade-hir-lowering"}
 spade-typeinference = {path = "../spade-typeinference"}
 spade-ast-lowering = {path = "../spade-ast-lowering"}
 parse_tree_macros = {path = "../parse_tree_macros"}
+spade = {path = "../spade-compiler"}
+
+[dev-dependencies]
+insta = "1.14.0"
+unindent = "0.1.8"

@@ -1,0 +1,21 @@
+---
+source: spade-tests/src/errors.rs
+expression: "std::str::from_utf8(buffer.as_slice()).expect(\"error contains invalid utf-8\")"
+---
+error: Type error
+  ┌─ testinput:1:25
+  │  
+1 │   entity main() -> int<1> {
+  │                    ------ int<1> type specified here
+  │ ╭─────────────────────────^
+2 │ │     let a: int<2> = 0;
+3 │ │     a
+4 │ │ }
+  │ ╰─^ Found type int<2>
+  │  
+  = Expected: 1
+  =       in: int<1>
+  =      Got: 2
+  =       in: int<2>
+
+

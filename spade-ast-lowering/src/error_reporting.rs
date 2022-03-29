@@ -1,13 +1,11 @@
 use crate::Error;
 use codespan_reporting::diagnostic::Diagnostic;
-use codespan_reporting::term::{self, termcolor::StandardStream};
-use spade_common::error_reporting::{
-    codespan_config, color_choice, AsLabel, CodeBundle, CompilationError,
-};
+use codespan_reporting::term::{self, termcolor::Buffer};
+use spade_common::error_reporting::{codespan_config, AsLabel, CodeBundle, CompilationError};
 use spade_hir::symbol_table::{DeclarationError, LookupError};
 
 impl CompilationError for Error {
-    fn report(self, code: &CodeBundle, no_color: bool) {
+    fn report(self, buffer: &mut Buffer, code: &CodeBundle) {
         let diag = match self {
             Error::DuplicateTypeVariable { found, previously } => Diagnostic::error()
                 .with_message(format!("Duplicate typename: `{}`", found.inner))
@@ -272,8 +270,6 @@ impl CompilationError for Error {
                 .with_notes(vec![format!("Declared variables can only be defined once")]),
         };
 
-        let writer = StandardStream::stderr(color_choice(no_color));
-
-        term::emit(&mut writer.lock(), &codespan_config(), &code.files, &diag).unwrap();
+        term::emit(buffer, &codespan_config(), &code.files, &diag).unwrap();
     }
 }

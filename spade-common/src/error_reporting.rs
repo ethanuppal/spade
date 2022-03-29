@@ -1,8 +1,8 @@
-use std::path::PathBuf;
-
 use codespan_reporting::diagnostic::Label;
 use codespan_reporting::files::SimpleFiles;
+use codespan_reporting::term::termcolor::Buffer;
 use codespan_reporting::term::termcolor::{Color, ColorChoice, ColorSpec};
+use std::io::Write;
 
 use crate::location_info::Loc;
 
@@ -43,14 +43,25 @@ impl CodeBundle {
         Self { files }
     }
 
-    pub fn add_file(&mut self, filename: PathBuf, content: String) -> usize {
-        self.files
-            .add(filename.to_string_lossy().to_string(), content)
+    pub fn add_file(&mut self, filename: String, content: String) -> usize {
+        self.files.add(filename, content)
     }
 }
 
 pub trait CompilationError {
-    fn report(self, code: &CodeBundle, no_color: bool);
+    fn report(self, buffer: &mut Buffer, code: &CodeBundle);
+}
+
+impl CompilationError for std::io::Error {
+    fn report(self, buffer: &mut Buffer, _code: &CodeBundle) {
+        if let Err(e) = buffer.write_all(self.to_string().as_bytes()) {
+            eprintln!(
+                "io error when writing io error to error buffer\noriginal error: {}\nnew error: {}",
+                self.to_string(),
+                e.to_string()
+            );
+        }
+    }
 }
 
 pub fn primary_label<T>(loc: Loc<T>) -> Label<usize> {

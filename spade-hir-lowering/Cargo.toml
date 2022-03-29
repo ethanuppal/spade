@@ -13,6 +13,7 @@ doctest = false
 indoc = "1.0"
 codespan = "0.11.1"
 codespan-reporting = "0.11.1"
+thiserror = "1.0.20"
 
 spade-common = {path = "../spade-common"}
 spade-types = {path = "../spade-types"}

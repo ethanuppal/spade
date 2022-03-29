@@ -1,10 +1,8 @@
 use crate::lexer::TokenKind;
 use crate::{Error, Token};
 use codespan_reporting::diagnostic::{Diagnostic, Label, Suggestion};
-use codespan_reporting::term::{self, termcolor::StandardStream};
-use spade_common::error_reporting::{
-    codespan_config, color_choice, AsLabel, CodeBundle, CompilationError,
-};
+use codespan_reporting::term::{self, termcolor::Buffer};
+use spade_common::error_reporting::{codespan_config, AsLabel, CodeBundle, CompilationError};
 
 fn unexpected_token_list<'a>(expected: impl IntoIterator<Item = &'a str>) -> String {
     let expected = expected
@@ -42,7 +40,7 @@ fn unexpected_token<'a>(
 }
 
 impl CompilationError for Error {
-    fn report(self, code: &CodeBundle, no_color: bool) {
+    fn report(self, buffer: &mut Buffer, code: &CodeBundle) {
         let diag = match self {
             Error::Eof => Diagnostic::error().with_message("Reached end of file when parsing"),
             Error::LexerError(file_id, location) => Diagnostic::error()
@@ -202,9 +200,7 @@ impl CompilationError for Error {
                 }]),
         };
 
-        let writer = StandardStream::stderr(color_choice(no_color));
-
-        term::emit(&mut writer.lock(), &codespan_config(), &code.files, &diag).unwrap();
+        term::emit(buffer, &codespan_config(), &code.files, &diag).unwrap();
     }
 }
 

@@ -1,4 +1,6 @@
+use codespan_reporting::term::termcolor::Buffer;
 use logos::Logos;
+use std::io::Write;
 
 use spade_ast_lowering::{global_symbols, visit_module_body};
 use spade_common::{
@@ -74,7 +76,9 @@ pub fn parse_typecheck_module_body(input: &str) -> ParseTypececkResult {
             match $to_try {
                 Ok(result) => result,
                 Err(e) => {
-                    e.report(&code_bundle, true);
+                    let mut buffer = Buffer::ansi();
+                    e.report(&mut buffer, &code_bundle);
+                    std::io::stderr().write_all(buffer.as_slice()).unwrap();
                     panic!("Aborting due to previous error")
                 }
             }

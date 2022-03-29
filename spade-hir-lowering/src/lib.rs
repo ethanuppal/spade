@@ -12,6 +12,7 @@ use spade_common::location_info::WithLocation;
 use spade_common::name::{Identifier, Path};
 use spade_typeinference::equation::FreeTypeVar;
 use substitution::Substitutions;
+use thiserror::Error;
 
 use parse_tree_macros::local_impl;
 use spade_common::{location_info::Loc, name::NameID};
@@ -23,15 +24,17 @@ use spade_mir as mir;
 use spade_typeinference::{equation::TypedExpression, TypeState};
 use spade_types::{ConcreteType, PrimitiveType};
 
+// TODO better error descriptions that uses fields
+#[derive(Error, Debug)]
 pub enum Error {
+    #[error("using generic type")]
     UsingGenericType {
         expr: Loc<Expression>,
         t: FreeTypeVar,
     },
-    CastToLarger {
-        from: Loc<u64>,
-        to: Loc<u64>,
-    },
+    #[error("cast to larger")]
+    CastToLarger { from: Loc<u64>, to: Loc<u64> },
+    #[error("concat size mismatch")]
     ConcatSizeMismatch {
         lhs: Loc<u64>,
         rhs: Loc<u64>,
