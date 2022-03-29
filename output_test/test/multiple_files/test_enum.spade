@@ -1,5 +1,5 @@
 enum TestEnum {
     Lonely,
-    Payload(a: int<8>)
+    Payload{a: int<8>}
 }
 

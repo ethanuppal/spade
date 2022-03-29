@@ -1,6 +1,6 @@
 enum ReceiveState {
     Waiting,
-    Bit(count: int<3>, data: int<8>),
+    Bit{count: int<3>, data: int<8>},
 }
 
 entity spi_receiver(clk: clk, rst: bool) -> int<8> {

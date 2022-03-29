@@ -19,7 +19,7 @@ mod tests {
     fn type_inference_works_for_generics() {
         let code = r#"
         enum Option<T> {
-            Some(value: T),
+            Some{value: T},
             None
         }
         entity name() -> Option<int<16>> {

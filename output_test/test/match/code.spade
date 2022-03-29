@@ -1,6 +1,6 @@
 enum TestEnum {
     Lonely,
-    Payload(a: int<8>)
+    Payload{a: int<8>}
 }
 
 entity counter(test_case: int<8>) -> int<8> {

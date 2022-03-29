@@ -1,4 +1,4 @@
 enum Option<T> {
-    Some(value: T),
+    Some{value: T},
     None
 }

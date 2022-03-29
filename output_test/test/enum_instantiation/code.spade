@@ -1,5 +1,5 @@
 enum Option<T> {
-    Some(inner: T),
+    Some{inner: T},
     None
 }
 

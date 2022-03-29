@@ -935,6 +935,13 @@ impl<'a> Parser<'a> {
         ))
     }
 
+    pub fn type_parameter_list(&mut self) -> Result<ParameterList> {
+        Ok(ParameterList(
+            self.comma_separated(Self::name_and_type, &TokenKind::CloseBrace)
+                .no_context()?,
+        ))
+    }
+
     // Entities
     #[trace_parser]
     pub fn entity(&mut self) -> Result<Option<Loc<Entity>>> {
@@ -1240,9 +1247,9 @@ impl<'a> Parser<'a> {
     pub fn enum_option(&mut self) -> Result<(Loc<Identifier>, Option<ParameterList>)> {
         let name = self.identifier()?;
 
-        let args = if self.peek_and_eat(&TokenKind::OpenParen)?.is_some() {
-            let result = Some(self.parameter_list()?);
-            self.eat(&TokenKind::CloseParen)?;
+        let args = if self.peek_and_eat(&TokenKind::OpenBrace)?.is_some() {
+            let result = Some(self.type_parameter_list()?);
+            self.eat(&TokenKind::CloseBrace)?;
             result
         } else {
             None
@@ -1291,9 +1298,9 @@ impl<'a> Parser<'a> {
         let generic_args = self.generics_list()?;
 
         let (members, members_loc) = self.surrounded(
-            &TokenKind::OpenParen,
-            Self::parameter_list,
-            &TokenKind::CloseParen,
+            &TokenKind::OpenBrace,
+            Self::type_parameter_list,
+            &TokenKind::CloseBrace,
         )?;
 
         let result = TypeDeclaration {
@@ -2945,8 +2952,8 @@ mod tests {
     fn enum_declarations_parse() {
         let code = "enum State {
             First,
-            Second(a: bool),
-            Third(a: bool, b: bool)
+            Second{a: bool},
+            Third{a: bool, b: bool}
         }";
 
         let expected = Item::Type(
@@ -2978,8 +2985,8 @@ mod tests {
     fn enum_declarations_with_type_args_parse() {
         let code = "enum State<T, #N> {
             First,
-            Second(a: T),
-            Third(a: N, b: bool)
+            Second{a: T},
+            Third{a: N, b: bool}
         }";
 
         let expected = Item::Type(
@@ -3012,7 +3019,7 @@ mod tests {
 
     #[test]
     fn struct_declarations_parse() {
-        let code = "struct State ( a: bool, b: bool )";
+        let code = "struct State { a: bool, b: bool }";
 
         let expected = Item::Type(
             TypeDeclaration {

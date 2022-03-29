@@ -842,7 +842,7 @@ mod tests {
     #[test]
     fn struct_instantiation_works() {
         let code = r#"
-            struct X (payload: bool)
+            struct X {payload: bool}
 
             entity test(payload: bool) -> X {
                 X$(payload)
@@ -864,7 +864,7 @@ mod tests {
     #[test]
     fn struct_field_access_and_creation_works() {
         let code = r#"
-        struct X (a: int<16>, b: int<8>)
+        struct X {a: int<16>, b: int<8>}
 
         entity name(a: int<16>, b: int<8>) -> int<8> {
             let compound = X$(a, b);
@@ -891,7 +891,7 @@ mod tests {
     fn enum_instantiation_works() {
         let code = r#"
             enum X {
-                A(payload: bool),
+                A{payload: bool},
                 B
             }
 
@@ -916,7 +916,7 @@ mod tests {
     fn enum_instantiation_with_subexpression_works() {
         let code = r#"
             enum X {
-                A(payload: int<16>),
+                A{payload: int<16>},
                 B
             }
 
@@ -943,7 +943,7 @@ mod tests {
     fn enum_instantiation_with_fixed_generics_works() {
         let code = r#"
             enum X {
-                A(payload: int<5>),
+                A{payload: int<5>},
                 B
             }
 
@@ -968,7 +968,7 @@ mod tests {
     fn enum_instantiation_with_full_generics_works() {
         let code = r#"
             enum Option<T> {
-                Some(payload: T),
+                Some{payload: T},
                 None
             }
 
@@ -993,7 +993,7 @@ mod tests {
     fn enum_match_works() {
         let code = r#"
             enum Option<T> {
-                Some(payload: T),
+                Some{ payload: T },
                 None
             }
 
@@ -1104,7 +1104,7 @@ mod tests {
     #[test]
     fn registers_with_struct_patterns_work() {
         let code = r#"
-        struct X(a: int<16>, b: int<8>)
+        struct X{a: int<16>, b: int<8>}
 
         entity name(clk: clk, a: X) -> int<16> {
             reg(clk) X(x, y) = a;
@@ -1130,7 +1130,7 @@ mod tests {
     #[test]
     fn registers_with_struct_patterns_with_named_bindings_work() {
         let code = r#"
-        struct X(a: int<16>, b: int<8>)
+        struct X{a: int<16>, b: int<8>}
 
         entity name(clk: clk, a: X) -> int<16> {
             reg(clk) X$(b: y, a: x) = a;

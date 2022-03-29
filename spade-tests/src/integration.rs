@@ -105,7 +105,7 @@ mod namespace_tests {
     fn using_names_in_namespaces_works() {
         let code = r#"
             mod X {
-                enum A {X(a: bool)}
+                enum A {X{a: bool}}
 
                 entity x() -> A {
                     A::X(true)
@@ -120,8 +120,8 @@ mod namespace_tests {
     fn using_names_of_types_in_namespaces_works() {
         let code = r#"
             mod X {
-                struct A ()
-                struct B(a: A)
+                struct A {}
+                struct B{a: A}
             }
             "#;
 
