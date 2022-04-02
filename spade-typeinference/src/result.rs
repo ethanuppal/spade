@@ -207,3 +207,28 @@ pub enum Error {
     GenericTypeInstanciation,
 }
 pub type Result<T> = std::result::Result<T, Error>;
+
+#[macro_export]
+macro_rules! forget_all {
+    () => {};
+    ($first:expr) => {
+        std::mem::forget($first);
+    };
+    ($first:expr, $($rest:expr),+) => {
+        std::mem::forget($first);
+        forget_all!($($rest),*);
+    }
+}
+
+#[macro_export]
+macro_rules! try_and_forget {
+    ($result:expr, [$($to_forget:expr),*]) => (
+        match $result {
+            Err(e) => {
+                forget_all!($($to_forget),*);
+                return Err(e)
+            }
+            Ok(val) => val
+        }
+    )
+}

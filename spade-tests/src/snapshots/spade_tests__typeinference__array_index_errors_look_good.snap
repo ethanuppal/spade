@@ -1,0 +1,13 @@
+---
+source: spade-tests/src/typeinference.rs
+expression: "std::str::from_utf8(buffer.as_slice()).expect(\"error contains invalid utf-8\")"
+---
+error: Expected type int<7>, got int<4>
+  ┌─ testinput:2:7
+  │
+2 │     x[idx]
+  │       ^^^ Expected int<7>, got int<4>
+  │
+  = because the value is used as an index to an array
+
+

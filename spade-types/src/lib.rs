@@ -109,7 +109,7 @@ impl std::fmt::Display for ConcreteType {
     }
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Hash, Eq)]
 pub enum KnownType {
     Type(NameID),
     Integer(u128),

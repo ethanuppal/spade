@@ -47,3 +47,12 @@ snapshot_error!(
     }
     "#
 );
+
+snapshot_error!(
+    type_error_when_overflow_is_possible,
+    "
+    entity main(a: int<16>, b: int<16>) -> int<16> {
+        a + b
+    }
+    "
+);

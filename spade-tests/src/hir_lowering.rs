@@ -1,6 +1,6 @@
 #[cfg(test)]
 mod tests {
-    use crate::{build_and_compare_entities, build_entity, build_items, ResultExt};
+    use crate::{build_and_compare_entities, build_entity, build_items, snapshot_error, ResultExt};
     use colored::Colorize;
     use spade_hir_lowering::*;
     use spade_mir::{
@@ -99,7 +99,7 @@ mod tests {
     #[test]
     fn an_adder_is_buildable() {
         let code = r#"
-        entity name(a: int<16>, b: int<16>) -> int<16> {
+        entity name(a: int<16>, b: int<16>) -> int<17> {
             a + b
         }
         "#;
@@ -107,8 +107,8 @@ mod tests {
         let expected = entity!("name"; (
                 "a", n(0, "a"), Type::Int(16),
                 "b", n(1, "b"), Type::Int(16)
-            ) -> Type::Int(16); {
-                (e(0); Type::Int(16); Add; n(0, "a"), n(1, "b"))
+            ) -> Type::Int(17); {
+                (e(0); Type::Int(17); Add; n(0, "a"), n(1, "b"))
             } => e(0)
         );
 
@@ -118,7 +118,7 @@ mod tests {
     #[test]
     fn an_subtractor_is_buildable() {
         let code = r#"
-        entity name(a: int<16>, b: int<16>) -> int<16> {
+        entity name(a: int<16>, b: int<16>) -> int<17> {
             a - b
         }
         "#;
@@ -126,8 +126,8 @@ mod tests {
         let expected = entity!("name"; (
                 "a", n(0, "a"), Type::Int(16),
                 "b", n(1, "b"), Type::Int(16)
-            ) -> Type::Int(16); {
-                (e(0); Type::Int(16); Sub; n(0, "a"), n(1, "b"))
+            ) -> Type::Int(17); {
+                (e(0); Type::Int(17); Sub; n(0, "a"), n(1, "b"))
             } => e(0)
         );
 
@@ -738,9 +738,9 @@ mod tests {
     #[test]
     fn pipelines_work() {
         let code = r#"
-            pipeline(3) pl(clk: clk, a: int<16>) -> int<16> {
+            pipeline(3) pl(clk: clk, a: int<16>) -> int<18> {
                 stage {
-                    let x = a + a;
+                    let x = a << a;
                 }
                 stage {
                     let y = x + a;
@@ -755,27 +755,27 @@ mod tests {
         let expected = entity!("pl"; (
                 "clk", n(3, "clk"), Type::Bool,
                 "a", n(0, "a"), Type::Int(16),
-            ) -> Type::Int(16); {
+            ) -> Type::Int(18); {
                 // Stage 0
-                (e(0); Type::Int(16); Add; n(0, "a"), n(0, "a"));
+                (e(0); Type::Int(16); LeftShift; n(0, "a"), n(0, "a"));
                 (n(10, "x"); Type::Int(16); Alias; e(0));
                 (reg n(2, "a_s0"); Type::Int(16); clock(n(3, "clk")); n(0, "a"));
                 (reg n(4, "x_s0"); Type::Int(16); clock(n(3, "clk")); n(10, "x"));
 
                 // Stage 1
-                (e(1); Type::Int(16); Add; n(4, "x_s0"), n(2, "a_s0"));
-                (n(11, "y"); Type::Int(16); Alias; e(1));
+                (e(1); Type::Int(17); Add; n(4, "x_s0"), n(2, "a_s0"));
+                (n(11, "y"); Type::Int(17); Alias; e(1));
                 (reg n(21, "a_s1"); Type::Int(16); clock(n(3, "clk")); n(2, "a_s0"));
                 (reg n(22, "x_s1"); Type::Int(16); clock(n(3, "clk")); n(4, "x_s0"));
-                (reg n(23, "y_s1"); Type::Int(16); clock(n(3, "clk")); n(11, "y"));
+                (reg n(23, "y_s1"); Type::Int(17); clock(n(3, "clk")); n(11, "y"));
 
                 // Stage 3
-                (e(2); Type::Int(16); Add; n(23, "y_s1"), n(23, "y_s1"));
-                (n(6, "res"); Type::Int(16); Alias; e(2));
+                (e(2); Type::Int(18); Add; n(23, "y_s1"), n(23, "y_s1"));
+                (n(6, "res"); Type::Int(18); Alias; e(2));
                 (reg n(31, "a_s2"); Type::Int(16); clock(n(3, "clk")); n(21, "a_s1"));
                 (reg n(32, "x_s2"); Type::Int(16); clock(n(3, "clk")); n(22, "x_s1"));
-                (reg n(33, "y_s2"); Type::Int(16); clock(n(3, "clk")); n(23, "y_s1"));
-                (reg n(34, "res_s2"); Type::Int(16); clock(n(3, "clk")); n(6, "res"));
+                (reg n(33, "y_s2"); Type::Int(17); clock(n(3, "clk")); n(23, "y_s1"));
+                (reg n(34, "res_s2"); Type::Int(18); clock(n(3, "clk")); n(6, "res"));
             } => n(34, "res_s2")
         );
 
@@ -796,7 +796,7 @@ mod tests {
     #[test]
     fn pipelines_returning_expressions_work() {
         let code = r#"
-            pipeline(3) pl(clk: clk, a: int<16>) -> int<16> {
+            pipeline(3) pl(clk: clk, a: int<16>) -> int<17> {
                 stage {
                 }
                 stage {
@@ -810,7 +810,7 @@ mod tests {
         let expected = entity!("pl"; (
                 "clk", n(3, "clk"), Type::Bool,
                 "a", n(0, "a"), Type::Int(16),
-            ) -> Type::Int(16); {
+            ) -> Type::Int(17); {
                 // Stage 0
                 (reg n(2, "a_s0"); Type::Int(16); clock(n(3, "clk")); n(0, "a"));
 
@@ -821,7 +821,7 @@ mod tests {
                 (reg n(31, "a_s2"); Type::Int(16); clock(n(3, "clk")); n(21, "a_s1"));
 
                 // Output
-                (e(3); Type::Int(16); Add; n(31, "a_s2"), n(31, "a_s2"));
+                (e(3); Type::Int(17); Add; n(31, "a_s2"), n(31, "a_s2"));
             } => e(3)
         );
 
@@ -920,7 +920,7 @@ mod tests {
                 B
             }
 
-            entity test(payload: int<16>) -> X {
+            entity test(payload: int<15>) -> X {
                 X::A(payload + 1)
             }
         "#;
@@ -928,9 +928,9 @@ mod tests {
         let mir_enum = Type::Enum(vec![vec![Type::Int(16)], vec![]]);
 
         let expected = vec![entity!("test"; (
-                "payload", n(0, "payload"), Type::Int(16),
+                "payload", n(0, "payload"), Type::Int(15),
             ) -> mir_enum.clone(); {
-                (const 3; Type::Int(16); ConstantValue::Int(1));
+                (const 3; Type::Int(15); ConstantValue::Int(1));
                 (e(2); Type::Int(16); Add; n(0, "payload"), e(3));
                 (e(1); mir_enum; ConstructEnum({variant: 0, variant_count: 2}); e(2));
             } => e(1)
@@ -1198,5 +1198,16 @@ mod tests {
         }];
 
         build_and_compare_entities!(code, expected);
+    }
+
+    snapshot_error! {
+        invalid_field_access,
+        "
+        struct X {}
+
+        entity main(x: X) -> int<8> {
+            x.not_a_field
+        }
+        "
     }
 }

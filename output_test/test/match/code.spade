@@ -1,3 +1,5 @@
+use std::conv::trunc;
+
 enum TestEnum {
     Lonely,
     Payload{a: int<8>}
@@ -8,7 +10,7 @@ entity counter(test_case: int<8>) -> int<8> {
         TestEnum::Lonely()
     }
     else {
-        TestEnum::Payload(test_case + 1)
+        TestEnum::Payload(trunc(test_case + 1))
     };
 
     match input {

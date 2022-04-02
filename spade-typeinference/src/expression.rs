@@ -1,13 +1,15 @@
 use parse_tree_macros::trace_typechecker;
-use spade_common::location_info::Loc;
+use spade_common::location_info::{Loc, WithLocation};
 use spade_hir::expression::{BinaryOperator, UnaryOperator};
 use spade_hir::symbol_table::{SymbolTable, TypeDeclKind, TypeSymbol};
 use spade_hir::{ExprKind, Expression};
 use spade_types::KnownType;
 
+use crate::constraints::ConstraintExpr;
 use crate::equation::{InnerTypeVar, TypeVarRef, TypedExpression};
 use crate::fixed_types::t_bool;
 use crate::result::Error;
+use crate::{forget_all, try_and_forget};
 use crate::{kvar, Result};
 use crate::{GenericListToken, TypeState};
 use crate::{HasType, TraceStackEntry};
@@ -35,7 +37,7 @@ impl TypeState {
                 &expression,
                 &TypedExpression::Name(ident.clone()),
                 symtab,
-            )?.commit(self);
+            )?.commit(self, symtab)?;
         });
         Ok(())
     }
@@ -52,7 +54,7 @@ impl TypeState {
                 .map_err(|(_, got)| Error::IntLiteralIncompatible {
                     got,
                     loc: expression.loc(),
-                })?.commit(self);
+                })?.commit(self, symtab)?;
         });
         Ok(())
     }
@@ -64,7 +66,7 @@ impl TypeState {
         symtab: &SymbolTable,
     ) -> Result<()> {
         assuming_kind!(ExprKind::BoolLiteral(_) = &expression => {
-            self.unify_expression_generic_error(&expression, &t_bool(symtab), symtab)?.commit(self);
+            self.unify_expression_generic_error(&expression, &t_bool(symtab), symtab)?.commit(self, symtab)?;
         });
         Ok(())
     }
@@ -93,7 +95,7 @@ impl TypeState {
                 &expression,
                 TypeVarRef::tuple(inner_types).as_ref(),
                 symtab,
-            )?.commit(self);
+            )?.commit(self, symtab)?;
         });
         Ok(())
     }
@@ -116,7 +118,7 @@ impl TypeState {
                             &expression,
                             &inner[index.inner as usize],
                             symtab,
-                        )?.commit(self)
+                        )?.commit(self, symtab)?
                     } else {
                         return Err(Error::TupleIndexOutOfBounds {
                             index: index.clone(),
@@ -192,7 +194,7 @@ impl TypeState {
                             let field_type = self.type_var_from_hir(&field_spec, generic_list);
 
                             self.unify_expression_generic_error(expression, field_type.as_ref(), symtab)?
-                                .commit(self);
+                                .commit(self, symtab)?;
                         },
                         KnownType::Integer(_) => {
                             return Err(Error::FieldAccessOnInteger{loc: expression.loc()})
@@ -230,7 +232,7 @@ impl TypeState {
                         expected,
                         loc: r.loc(),
                         first_element: members.first().unwrap().loc(),
-                    })?.commit(self);
+                    })?.commit(self, symtab)?;
             }
 
             let inner_type = if members.is_empty() {
@@ -246,7 +248,7 @@ impl TypeState {
                 TypeVarRef::from_owned(size_type, self),
             );
 
-            self.unify_expression_generic_error(expression, result_type.as_ref(), symtab)?.commit(self);
+            self.unify_expression_generic_error(expression, result_type.as_ref(), symtab)?.commit(self, symtab)?;
         });
         Ok(())
     }
@@ -271,14 +273,14 @@ impl TypeState {
                 &expression,
                 inner_type.as_ref(),
                 symtab
-            )?.commit(self);
+            )?.commit(self, symtab)?;
 
             let int_type = self.new_generic_int(&symtab);
             // self.add_equation(TypedExpression::Id(index.id), int_type.clone());
             self.unify(&index.inner, int_type.as_ref(), symtab)
                 .map_err(|(got, _)| {
                     Error::IndexMustBeInteger{got, loc: index.loc()}
-                })?.commit(self);
+                })?.commit(self, symtab)?;
 
             let array_type = TypeVarRef::array(
                 expression.get_type(self)?,
@@ -287,7 +289,7 @@ impl TypeState {
             self.unify(&target.inner, array_type.as_ref(), symtab)
                 .map_err(|(got, _)| {
                     Error::IndexeeMustBeArray{got, loc: target.loc()}
-                })?.commit(self);
+                })?.commit(self, symtab)?;
         });
         Ok(())
     }
@@ -311,7 +313,7 @@ impl TypeState {
                     expected,
                     got,
                     loc: block.result.loc(),
-                })?.commit(self);
+                })?.commit(self, symtab)?;
         });
         Ok(())
     }
@@ -332,20 +334,20 @@ impl TypeState {
                 .map_err(|(got, _)| Error::NonBooleanCondition {
                     got,
                     loc: cond.loc(),
-                })?.commit(self);
+                })?.commit(self, symtab)?;
             self.unify(&on_true.inner, &on_false.inner, symtab)
                 .map_err(|(expected, got)| Error::IfConditionMismatch {
                     expected,
                     got,
                     first_branch: on_true.loc(),
                     incorrect_branch: on_false.loc(),
-                })?.commit(self);
+                })?.commit(self, symtab)?;
             self.unify(expression, &on_false.inner, symtab)
                 .map_err(|(got, expected)| Error::UnspecifiedTypeError {
                     expected,
                     got,
                     loc: expression.loc(),
-                })?.commit(self);
+                })?.commit(self, symtab)?;
         });
         Ok(())
     }
@@ -372,7 +374,7 @@ impl TypeState {
                             got,
                             loc: pattern.loc(),
                         }
-                    })?.commit(self);
+                    })?.commit(self, symtab)?;
 
                 if i != 0 {
                     self.unify(&branches[0].1, result, symtab).map_err(
@@ -382,7 +384,7 @@ impl TypeState {
                             first_branch: branches[0].1.loc(),
                             incorrect_branch: result.loc(),
                         },
-                    )?.commit(self);
+                    )?.commit(self, symtab)?;
                 }
             }
 
@@ -391,7 +393,7 @@ impl TypeState {
                 "Empty match statements should be checked by ast lowering"
             );
 
-            self.unify_expression_generic_error(&branches[0].1, expression, symtab)?.commit(self);
+            self.unify_expression_generic_error(&branches[0].1, expression, symtab)?.commit(self, symtab)?;
         });
         Ok(())
     }
@@ -408,17 +410,54 @@ impl TypeState {
             self.visit_expression(&rhs, symtab, generic_list)?;
             match *op {
                 BinaryOperator::Add
-                | BinaryOperator::Sub
-                | BinaryOperator::Mul
-                | BinaryOperator::LeftShift
+                | BinaryOperator::Sub => {
+                    println!("--- Visiting a new binary operator");
+                    let (lhs_t, lhs_size) = self.new_split_generic_int(symtab);
+                    let (result_t, result_size) = self.new_split_generic_int(symtab);
+
+                    let result_constraint = self.add_constraint(result_size.clone(), ConstraintExpr::Sum(
+                            Box::new(ConstraintExpr::Var(lhs_size.clone())),
+                            Box::new(ConstraintExpr::Integer(1))
+                        ).at_loc(&expression)
+                    );
+                    let lhs_constraint = self.add_constraint(lhs_size, ConstraintExpr::Sum(
+                            Box::new(ConstraintExpr::Var(result_size)),
+                            Box::new(ConstraintExpr::Integer(-1))
+                        ).at_loc(&lhs)
+                    );
+
+                    // TODO: Make generic over types that can be added
+                    let lhs_task = self.unify_expression_generic_error(&lhs, lhs_t.as_ref(), symtab)?;
+                    let rhs_task = try_and_forget!(self.unify_expression_generic_error(&lhs, &rhs.inner, symtab), [lhs_task, result_constraint, lhs_constraint]);
+                    let result_task = try_and_forget!(self.unify_expression_generic_error(expression, result_t.as_ref(), symtab), [lhs_task, rhs_task, result_constraint, lhs_constraint]);
+
+
+                    lhs_constraint.commit(self);
+                    result_constraint.commit(self);
+
+
+
+                    // NOTE: lhs_task ans result_task refer to free type variables which
+                    // can be made obsolete by commits. Therefore, rhs_task must be run last,
+                    // as is done here
+                    try_and_forget!(lhs_task.commit(self, symtab), [result_task, rhs_task]);
+                    try_and_forget!(result_task.commit(self, symtab), [rhs_task]);
+                    rhs_task.commit(self, symtab)?;
+                }
+                BinaryOperator::Mul => {
+                    todo!()
+                }
+                // Shift operators have the same widht in as they do out
+                BinaryOperator::LeftShift
                 | BinaryOperator::BitwiseAnd
                 | BinaryOperator::BitwiseOr
                 | BinaryOperator::RightShift => {
                     let int_type = self.new_generic_int(symtab);
+
                     // TODO: Make generic over types that can be added
-                    self.unify_expression_generic_error(&lhs, int_type.as_ref(), symtab)?.commit(self);
-                    self.unify_expression_generic_error(&lhs, &rhs.inner, symtab)?.commit(self);
-                    self.unify_expression_generic_error(expression, &rhs.inner, symtab)?.commit(self)
+                    self.unify_expression_generic_error(&lhs, int_type.as_ref(), symtab)?.commit(self, symtab)?;
+                    self.unify_expression_generic_error(&lhs, &rhs.inner, symtab)?.commit(self, symtab)?;
+                    self.unify_expression_generic_error(expression, &rhs.inner, symtab)?.commit(self, symtab)?
                 }
                 BinaryOperator::Eq
                 | BinaryOperator::Gt
@@ -427,18 +466,18 @@ impl TypeState {
                 | BinaryOperator::Le => {
                     let int_type = self.new_generic_int(symtab);
                     // TODO: Make generic over types that can be added
-                    self.unify_expression_generic_error(&lhs, int_type.as_ref(), symtab)?.commit(self);
-                    self.unify_expression_generic_error(&lhs, &rhs.inner, symtab)?.commit(self);
-                    self.unify_expression_generic_error(expression, &t_bool(symtab), symtab)?.commit(self)
+                    self.unify_expression_generic_error(&lhs, int_type.as_ref(), symtab)?.commit(self, symtab)?;
+                    self.unify_expression_generic_error(&lhs, &rhs.inner, symtab)?.commit(self, symtab)?;
+                    self.unify_expression_generic_error(expression, &t_bool(symtab), symtab)?.commit(self, symtab)?
                 }
                 BinaryOperator::LogicalAnd
                 | BinaryOperator::LogicalOr
                 | BinaryOperator::Xor => {
                     // TODO: Make generic over types that can be ored
-                    self.unify_expression_generic_error(&lhs, &t_bool(symtab), symtab)?.commit(self);
-                    self.unify_expression_generic_error(&lhs, &rhs.inner, symtab)?.commit(self);
+                    self.unify_expression_generic_error(&lhs, &t_bool(symtab), symtab)?.commit(self, symtab)?;
+                    self.unify_expression_generic_error(&lhs, &rhs.inner, symtab)?.commit(self, symtab)?;
 
-                    self.unify_expression_generic_error(expression, &t_bool(symtab), symtab)?.commit(self)
+                    self.unify_expression_generic_error(expression, &t_bool(symtab), symtab)?.commit(self, symtab)?
                 }
             }
         });
@@ -457,10 +496,10 @@ impl TypeState {
             match op {
                 UnaryOperator::Sub | UnaryOperator::BitwiseNot => {
                     let int_type = self.new_generic_int(symtab);
-                    self.unify_expression_generic_error(operand, int_type.as_ref(), symtab)?.commit(self)
+                    self.unify_expression_generic_error(operand, int_type.as_ref(), symtab)?.commit(self, symtab)?
                 }
                 UnaryOperator::Not => {
-                    self.unify_expression_generic_error(operand, &t_bool(symtab), symtab)?.commit(self)
+                    self.unify_expression_generic_error(operand, &t_bool(symtab), symtab)?.commit(self, symtab)?
                 }
             }
         });

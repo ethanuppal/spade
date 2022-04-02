@@ -30,7 +30,7 @@ impl TypeState {
                 expected,
                 got,
             })?
-            .commit(self);
+            .commit(self, symtab)?;
 
         Ok(())
     }
@@ -75,7 +75,7 @@ impl TypeState {
             expected,
             spec: got.at_loc(&inputs[0].1.loc()),
         })?
-        .commit(self);
+        .commit(self, symtab)?;
 
         // Add equations for the inputs
         for (name, t) in inputs.iter().skip(1) {
@@ -99,7 +99,7 @@ impl TypeState {
                 type_spec: output_type.loc(),
                 output_expr: result.loc(),
             })?
-            .commit(self);
+            .commit(self, symtab)?;
 
         Ok(())
     }

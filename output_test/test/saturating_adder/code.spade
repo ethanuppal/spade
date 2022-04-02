@@ -1,4 +1,4 @@
-entity saturating_adder(a: int<8>, b: int<8>, max: int<8>) -> int<8> {
+entity saturating_adder(a: int<8>, b: int<8>, max: int<9>) -> int<9> {
     if a+b > max {
         max
     }

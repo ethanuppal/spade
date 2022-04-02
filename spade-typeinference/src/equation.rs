@@ -13,7 +13,7 @@ pub type TypeEquations = HashMap<TypedExpression, InnerTypeVar>;
 ///
 /// `clone` is derived to simplify the implementation through allowing derives, but
 /// should not be used outside the unification code
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Hash, Eq)]
 pub enum InnerTypeVar {
     /// The type is known. If the type is known through a type signature specified by
     /// the user, that signature is the second argument, otherwise None
