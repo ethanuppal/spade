@@ -8,6 +8,9 @@ pub enum ConstraintExpr {
     Var(TypeVar),
     Sum(Box<ConstraintExpr>, Box<ConstraintExpr>),
     Sub(Box<ConstraintExpr>),
+    /// The number of bits requried to represent the specified number. In practice
+    /// inner.log2().floor()+1
+    BitsToRepresent(Box<ConstraintExpr>),
 }
 
 impl WithLocation for ConstraintExpr {}
@@ -18,14 +21,20 @@ impl ConstraintExpr {
         match self {
             ConstraintExpr::Integer(_) => self.clone(),
             ConstraintExpr::Var(_) => self.clone(),
-            ConstraintExpr::Sum(lhs, rhs) => match (lhs.as_ref(), rhs.as_ref()) {
+            ConstraintExpr::Sum(lhs, rhs) => match (lhs.evaluate(), rhs.evaluate()) {
                 (ConstraintExpr::Integer(l), ConstraintExpr::Integer(r)) => {
                     ConstraintExpr::Integer(l + r)
                 }
                 _ => self.clone(),
             },
-            ConstraintExpr::Sub(inner) => match **inner {
+            ConstraintExpr::Sub(inner) => match inner.evaluate() {
                 ConstraintExpr::Integer(val) => ConstraintExpr::Integer(-val),
+                _ => self.clone(),
+            },
+            ConstraintExpr::BitsToRepresent(inner) => match inner.evaluate() {
+                ConstraintExpr::Integer(val) => {
+                    ConstraintExpr::Integer((val as f64).log2().floor() as i128 + 1)
+                }
                 _ => self.clone(),
             },
         }
@@ -56,6 +65,14 @@ impl std::ops::Add for ConstraintExpr {
     }
 }
 
+impl std::ops::Sub for ConstraintExpr {
+    type Output = ConstraintExpr;
+
+    fn sub(self, rhs: Self) -> Self::Output {
+        ConstraintExpr::Sum(Box::new(self.clone()), Box::new(-rhs.clone()))
+    }
+}
+
 impl std::ops::Neg for ConstraintExpr {
     type Output = ConstraintExpr;
 
@@ -71,8 +88,13 @@ impl std::fmt::Display for ConstraintExpr {
             ConstraintExpr::Var(var) => write!(f, "{var}"),
             ConstraintExpr::Sum(rhs, lhs) => write!(f, "({rhs} + {lhs})"),
             ConstraintExpr::Sub(val) => write!(f, "(-{val})"),
+            ConstraintExpr::BitsToRepresent(val) => write!(f, "BitsToRepresent({val})"),
         }
     }
+}
+
+pub fn bits_to_store(inner: ConstraintExpr) -> ConstraintExpr {
+    ConstraintExpr::BitsToRepresent(Box::new(inner))
 }
 
 // Shorthand constructors for constraint_expr
@@ -87,6 +109,7 @@ pub fn ce_int(v: i128) -> ConstraintExpr {
 pub enum ConstraintSource {
     AdditionOutput,
     MultOutput,
+    ArrayIndexing,
 }
 
 impl std::fmt::Display for ConstraintSource {
@@ -94,6 +117,7 @@ impl std::fmt::Display for ConstraintSource {
         match self {
             ConstraintSource::AdditionOutput => write!(f, "AdditionOutput"),
             ConstraintSource::MultOutput => write!(f, "MultiplicationOutput"),
+            ConstraintSource::ArrayIndexing => write!(f, "ArrayIndexing"),
         }
     }
 }
@@ -144,9 +168,10 @@ impl TypeConstraints {
                             .push(().at_loc(&rhs).map(|_| (expr.clone(), replacement.clone())));
                         None
                     }
-                    ConstraintExpr::Var(_) => Some((expr.clone(), rhs)),
-                    ConstraintExpr::Sum(_, _) => Some((expr.clone(), rhs)),
-                    ConstraintExpr::Sub(_) => Some((expr.clone(), rhs)),
+                    ConstraintExpr::Var(_)
+                    | ConstraintExpr::Sum(_, _)
+                    | ConstraintExpr::BitsToRepresent(_)
+                    | ConstraintExpr::Sub(_) => Some((expr.clone(), rhs)),
                 }
             })
             .collect();

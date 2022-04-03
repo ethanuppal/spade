@@ -721,6 +721,9 @@ impl TypeState {
             ConstraintExpr::Sub(inner) => {
                 ConstraintExpr::Sub(Box::new(self.check_expr_for_replacement(*inner)))
             }
+            ConstraintExpr::BitsToRepresent(inner) => {
+                ConstraintExpr::BitsToRepresent(Box::new(self.check_expr_for_replacement(*inner)))
+            }
         }
     }
 
@@ -1057,7 +1060,7 @@ impl TypeState {
                 Self::replace_type_var_in_constraint_expr(lhs, from, replacement);
                 Self::replace_type_var_in_constraint_expr(rhs, from, replacement);
             }
-            ConstraintExpr::Sub(i) => {
+            ConstraintExpr::Sub(i) | ConstraintExpr::BitsToRepresent(i) => {
                 Self::replace_type_var_in_constraint_expr(i, from, replacement);
             }
         }
@@ -1507,7 +1510,7 @@ mod tests {
             .unwrap();
 
         // The index should be an integer
-        ensure_same_type!(state, expr_b, unsized_int(4, &symtab));
+        ensure_same_type!(state, expr_b, unsized_int(5, &symtab));
         // The target should be an array
 
         ensure_same_type!(
@@ -1515,7 +1518,7 @@ mod tests {
             &expr_a,
             TVar::Array {
                 inner: Box::new(TVar::Unknown(0)),
-                size: Box::new(TVar::Unknown(5))
+                size: Box::new(TVar::Unknown(4))
             }
         );
 

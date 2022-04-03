@@ -38,6 +38,17 @@ fn type_inference_works_for_int_patterns() {
     build_items(code);
 }
 
+#[test]
+fn type_inference_works_for_array_indexing() {
+    let code = r#"
+    entity name(x: [int<16>; 10]) -> int<16> {
+        x[0]
+    }
+    "#;
+
+    build_items(code);
+}
+
 snapshot_error!(
     return_type_mismatch,
     r#"
@@ -98,6 +109,15 @@ snapshot_error! {
                 };
 
             (x, y)
+        }
+        "
+}
+
+snapshot_error! {
+    array_index_errors_look_good,
+    "
+        entity counter(x: [int<8>; 10], idx: int<7>) -> int<8> {
+            x[idx]
         }
         "
 }

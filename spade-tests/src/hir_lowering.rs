@@ -532,22 +532,22 @@ mod tests {
     #[test]
     fn array_indexing_works() {
         let code = r#"
-            entity x(a: [int<2>; 3]) -> int<2> {
-                let idx: int<8> = 2;
+            entity x(a: [int<2>; 5]) -> int<2> {
+                let idx: int<3> = 2;
                 a[idx]
             }
         "#;
 
         let array_type = Type::Array {
             inner: Box::new(Type::Int(2)),
-            length: 3,
+            length: 5,
         };
 
         let expected = entity!("x"; (
                 "a", n(0, "a"), array_type.clone(),
         ) -> Type::Int(2); {
-            (const 0; Type::Int(8); ConstantValue::Int(2));
-            (n(1, "idx"); Type::Int(8); Alias; e(0));
+            (const 0; Type::Int(3); ConstantValue::Int(2));
+            (n(1, "idx"); Type::Int(3); Alias; e(0));
             (e(4); Type::Int(2); IndexArray((2)); n(0, "a"), n(1, "idx"));
         } => e(4));
 

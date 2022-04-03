@@ -5,7 +5,7 @@ use spade_hir::symbol_table::{SymbolTable, TypeDeclKind, TypeSymbol};
 use spade_hir::{ExprKind, Expression};
 use spade_types::KnownType;
 
-use crate::constraints::{ce_int, ce_var, ConstraintSource};
+use crate::constraints::{bits_to_store, ce_int, ce_var, ConstraintSource};
 use crate::equation::{TypeVar, TypedExpression};
 use crate::fixed_types::t_bool;
 use crate::result::{Error, UnificationErrorExt};
@@ -274,7 +274,17 @@ impl TypeState {
                 symtab
             )?;
 
-            let int_type = self.new_generic_int(&symtab);
+            let array_size = self.new_generic();
+            let (int_type, int_size) = self.new_split_generic_int(&symtab);
+
+            self.add_constraint(
+                int_size,
+                bits_to_store(ce_var(&array_size) - ce_int(1)),
+                index.loc(),
+                &int_type,
+                ConstraintSource::ArrayIndexing
+            );
+
             // self.add_equation(TypedExpression::Id(index.id), int_type.clone());
             self.unify(&index.inner, &int_type, symtab)
                 .map_normal_err(|(got, _)| {
@@ -283,7 +293,7 @@ impl TypeState {
 
             let array_type = TypeVar::Array{
                 inner: Box::new(expression.get_type(self)?),
-                size: Box::new(self.new_generic())
+                size: Box::new(array_size)
             };
             self.unify(&target.inner, &array_type, symtab)
                 .map_normal_err(|(got, _)| {

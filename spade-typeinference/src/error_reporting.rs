@@ -64,13 +64,17 @@ impl CompilationError for Error {
                 .with_message(format!("Expected type {}, got {}", expected, got))
                 .with_labels(vec![loc
                     .primary_label()
-                    .with_message(format!("Expected {} here", expected))])
+                    .with_message(format!("Expected {}, got {}", expected, got))])
                 .with_notes(vec![match source {
                     ConstraintSource::AdditionOutput => format!(
                         "Addition creates one more output bit than the input to avoid overflow"
                     ),
                     ConstraintSource::MultOutput => {
                         format!("The size of a multiplication is the sum of the operand sizes")
+                    }
+                    ConstraintSource::ArrayIndexing => {
+                        // NOTE: This error message could probably be improved
+                        format!("because the value is used as an index to an array")
                     }
                 }]),
             Error::IntLiteralIncompatible { .. } => {
