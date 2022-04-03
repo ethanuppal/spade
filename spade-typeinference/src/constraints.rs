@@ -34,14 +34,16 @@ impl ConstraintExpr {
     pub fn with_context(
         self,
         replaces: &TypeVar,
-        from: &TypeVar,
+        inside: &TypeVar,
         source: ConstraintSource,
     ) -> ConstraintRhs {
         ConstraintRhs {
             constraint: self,
-            from: from.clone(),
-            replaces: replaces.clone(),
-            source,
+            context: ConstraintContext {
+                replaces: replaces.clone(),
+                inside: inside.clone(),
+                source,
+            },
         }
     }
 }
@@ -100,15 +102,7 @@ impl std::fmt::Display for ConstraintSource {
 pub struct ConstraintRhs {
     /// The actual constraint
     pub constraint: ConstraintExpr,
-    /// A type var in which this constraint applies. For example, if a constraint
-    /// this constraint constrains `t1` inside `int<t1>`, then `from` is `int<t1>`
-    // TODO: Rename -> inside
-    pub from: TypeVar,
-    /// The left hand side which this constrains. Used together with `from` to construct
-    /// type errors
-    pub replaces: TypeVar,
-    /// Context in which this constraint was added to give hints to the user
-    pub source: ConstraintSource,
+    pub context: ConstraintContext,
 }
 
 impl WithLocation for ConstraintRhs {}
@@ -144,9 +138,7 @@ impl TypeConstraints {
                         // the the unusual tuple used here
                         let replacement = ConstraintReplacement {
                             val,
-                            from: rhs.from.clone(),
-                            source: rhs.source.clone(),
-                            replaces: rhs.replaces.clone(),
+                            context: rhs.context.clone(),
                         };
                         new_known
                             .push(().at_loc(&rhs).map(|_| (expr.clone(), replacement.clone())));
@@ -167,13 +159,19 @@ impl TypeConstraints {
 pub struct ConstraintReplacement {
     /// The actual constraint
     pub val: i128,
-    // TODO: Make this context information a separate struct to avoid code duplication
+    pub context: ConstraintContext,
+}
+
+#[derive(Clone, Debug)]
+pub struct ConstraintContext {
     /// A type var in which this constraint applies. For example, if a constraint
     /// this constraint constrains `t1` inside `int<t1>`, then `from` is `int<t1>`
-    pub from: TypeVar,
+    pub inside: TypeVar,
+    /// The left hand side which this constrains. Used together with `from` to construct
+    /// type errors
+    pub replaces: TypeVar,
     /// Context in which this constraint was added to give hints to the user
     pub source: ConstraintSource,
-    pub replaces: TypeVar,
 }
 
 impl std::fmt::Display for TypeConstraints {

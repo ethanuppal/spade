@@ -6,12 +6,12 @@
 // and should be done by the visitor for that node. The visitor should then unify
 // types according to the rules of the node.
 
-use constraints::{ConstraintExpr, ConstraintRhs, TypeConstraints};
+use constraints::{ConstraintExpr, ConstraintRhs, ConstraintSource, TypeConstraints};
 use hir::symbol_table::{Patternable, PatternableKind, TypeSymbol};
 use hir::{Argument, FunctionLike, ParameterList, Pattern, PatternArgument, TypeParam};
 use hir::{ExecutableItem, ItemList};
 use parse_tree_macros::trace_typechecker;
-use spade_common::location_info::Loc;
+use spade_common::location_info::{Loc, WithLocation};
 use spade_common::name::NameID;
 use spade_hir as hir;
 use spade_hir::symbol_table::SymbolTable;
@@ -724,15 +724,6 @@ impl TypeState {
         }
     }
 
-    fn check_constraint_rhs_for_replacement(&self, val: ConstraintRhs) -> ConstraintRhs {
-        ConstraintRhs {
-            constraint: self.check_expr_for_replacement(val.constraint),
-            from: self.check_var_for_replacement(val.from),
-            source: val.source,
-            replaces: val.replaces,
-        }
-    }
-
     fn add_equation(&mut self, expression: TypedExpression, var: TypeVar) {
         let var = self.check_var_for_replacement(var);
 
@@ -748,9 +739,21 @@ impl TypeState {
         }
     }
 
-    fn add_constraint(&mut self, lhs: TypeVar, rhs: Loc<ConstraintRhs>) {
+    fn add_constraint(
+        &mut self,
+        lhs: TypeVar,
+        rhs: ConstraintExpr,
+        loc: Loc<()>,
+        inside: &TypeVar,
+        source: ConstraintSource,
+    ) {
+        let replaces = lhs.clone();
         let lhs = self.check_var_for_replacement(lhs);
-        let rhs = rhs.map(|rhs| self.check_constraint_rhs_for_replacement(rhs));
+        let rhs = self
+            .check_expr_for_replacement(rhs)
+            .with_context(&replaces, &inside.clone(), source)
+            .at_loc(&loc);
+
         self.constraints.add_constraint(lhs, rhs);
     }
 
@@ -979,16 +982,16 @@ impl TypeState {
                 match self.unify_inner(&var, expected_type, symtab) {
                     Ok(_) => {}
                     Err(UnificationError::Normal((mut lhs, mut rhs))) => {
-                        let mut source_lhs = replacement.from.clone();
+                        let mut source_lhs = replacement.context.inside.clone();
                         Self::replace_type_var(
                             &mut source_lhs,
-                            &replacement.replaces,
+                            &replacement.context.replaces,
                             &lhs.outer(),
                         );
-                        let mut source_rhs = replacement.from.clone();
+                        let mut source_rhs = replacement.context.inside.clone();
                         Self::replace_type_var(
                             &mut source_rhs,
-                            &replacement.replaces,
+                            &replacement.context.replaces,
                             &rhs.outer(),
                         );
                         lhs.inside.replace(source_lhs);
@@ -996,7 +999,7 @@ impl TypeState {
                         return Err(UnificationError::FromConstraints {
                             got: rhs,
                             expected: lhs,
-                            source: replacement.source,
+                            source: replacement.context.source,
                             loc,
                         });
                     }
