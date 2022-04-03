@@ -32,6 +32,22 @@ impl ConstraintExpr {
     }
 }
 
+impl std::ops::Add for ConstraintExpr {
+    type Output = ConstraintExpr;
+
+    fn add(self, rhs: Self) -> Self::Output {
+        ConstraintExpr::Sum(Box::new(self.clone()), Box::new(rhs.clone()))
+    }
+}
+
+impl std::ops::Neg for ConstraintExpr {
+    type Output = ConstraintExpr;
+
+    fn neg(self) -> Self::Output {
+        ConstraintExpr::Sub(Box::new(self.clone()))
+    }
+}
+
 impl std::fmt::Display for ConstraintExpr {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -41,6 +57,14 @@ impl std::fmt::Display for ConstraintExpr {
             ConstraintExpr::Sub(val) => write!(f, "(-{val})"),
         }
     }
+}
+
+// Shorthand constructors for constraint_expr
+pub fn ce_var(v: &TypeVar) -> ConstraintExpr {
+    ConstraintExpr::Var(v.clone())
+}
+pub fn ce_int(v: i128) -> ConstraintExpr {
+    ConstraintExpr::Integer(v)
 }
 
 pub struct TypeConstraints {

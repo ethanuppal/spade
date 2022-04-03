@@ -5,7 +5,7 @@ use spade_hir::symbol_table::{SymbolTable, TypeDeclKind, TypeSymbol};
 use spade_hir::{ExprKind, Expression};
 use spade_types::KnownType;
 
-use crate::constraints::ConstraintExpr;
+use crate::constraints::{ce_int, ce_var};
 use crate::equation::{TypeVar, TypedExpression};
 use crate::fixed_types::t_bool;
 use crate::result::{Error, UnificationErrorExt};
@@ -413,15 +413,13 @@ impl TypeState {
                     let (lhs_t, lhs_size) = self.new_split_generic_int(symtab);
                     let (result_t, result_size) = self.new_split_generic_int(symtab);
 
-                    self.add_constraint(result_size.clone(), ConstraintExpr::Sum(
-                            Box::new(ConstraintExpr::Var(lhs_size.clone())),
-                            Box::new(ConstraintExpr::Integer(1))
-                        ).at_loc(&expression)
+                    self.add_constraint(
+                        result_size.clone(),
+                        (ce_var(&lhs_size) + ce_int(1)).at_loc(&expression)
                     );
-                    self.add_constraint(lhs_size, ConstraintExpr::Sum(
-                            Box::new(ConstraintExpr::Var(result_size)),
-                            Box::new(ConstraintExpr::Integer(-1))
-                        ).at_loc(&lhs)
+                    self.add_constraint(
+                        lhs_size.clone(),
+                        (ce_var(&result_size) + -ce_int(1)).at_loc(&lhs)
                     );
 
                     // TODO: Make generic over types that can be added
@@ -436,23 +434,19 @@ impl TypeState {
 
                     // TODO: Make these convenient to write
                     // Result size is sum of input sizes
-                    self.add_constraint(result_size.clone(), ConstraintExpr::Sum(
-                            Box::new(ConstraintExpr::Var(lhs_size.clone())),
-                            Box::new(ConstraintExpr::Var(rhs_size.clone()))
+                    self.add_constraint(result_size.clone(), (
+                            ce_var(&lhs_size) + ce_var(&rhs_size)
                         ).at_loc(&expression)
                     );
-                    self.add_constraint(lhs_size.clone(), ConstraintExpr::Sum(
-                            Box::new(ConstraintExpr::Var(result_size.clone())),
-                            Box::new(ConstraintExpr::Sub(Box::new(ConstraintExpr::Var(rhs_size.clone()))))
+                    self.add_constraint(lhs_size.clone(), (
+                            ce_var(&result_size) + -ce_var(&rhs_size)
                         ).at_loc(&lhs)
                     );
-                    self.add_constraint(rhs_size, ConstraintExpr::Sum(
-                            Box::new(ConstraintExpr::Var(result_size)),
-                            Box::new(ConstraintExpr::Sub(Box::new(ConstraintExpr::Var(lhs_size))))
-                        ).at_loc(&lhs)
+                    self.add_constraint(rhs_size.clone(), (
+                            ce_var(&result_size) + -ce_var(&lhs_size)
+                        ).at_loc(&rhs)
                     );
 
-                    // TODO: Make generic over types that can be added
                     self.unify_expression_generic_error(&lhs, &lhs_t, symtab)?;
                     self.unify_expression_generic_error(&rhs, &rhs_t, symtab)?;
                     self.unify_expression_generic_error(expression, &result_t, symtab)?;
