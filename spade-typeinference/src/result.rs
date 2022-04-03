@@ -1,6 +1,6 @@
 use thiserror::Error;
 
-use super::equation::{InnerTypeVar, TypedExpression};
+use super::equation::{TypeVar, TypedExpression};
 use spade_common::{
     location_info::{Loc, WithLocation},
     name::{Identifier, NameID},
@@ -14,8 +14,8 @@ use spade_common::{
 /// while if unifying `int<7>` with `bool`, inside would be `None`
 #[derive(Debug, PartialEq, Clone)]
 pub struct UnificationTrace {
-    pub failing: InnerTypeVar,
-    pub inside: Option<InnerTypeVar>,
+    pub failing: TypeVar,
+    pub inside: Option<TypeVar>,
 }
 impl WithLocation for UnificationTrace {}
 impl std::fmt::Display for UnificationTrace {
@@ -24,34 +24,26 @@ impl std::fmt::Display for UnificationTrace {
     }
 }
 impl UnificationTrace {
-    pub fn new(failing: InnerTypeVar) -> Self {
+    pub fn new(failing: TypeVar) -> Self {
         Self {
             failing,
             inside: None,
         }
     }
 
-    pub fn outer(&self) -> &InnerTypeVar {
+    pub fn outer(&self) -> &TypeVar {
         self.inside.as_ref().unwrap_or(&self.failing)
     }
 }
 pub trait UnificationErrorExt<T> {
-    fn add_context(
-        self,
-        lhs: InnerTypeVar,
-        rhs: InnerTypeVar,
-    ) -> std::result::Result<T, UnificationError>;
+    fn add_context(self, lhs: TypeVar, rhs: TypeVar) -> std::result::Result<T, UnificationError>;
 
     fn map_normal_err<F>(self, f: F) -> std::result::Result<T, Error>
     where
         F: Fn((UnificationTrace, UnificationTrace)) -> Error;
 }
 impl<T> UnificationErrorExt<T> for std::result::Result<T, UnificationError> {
-    fn add_context(
-        self,
-        lhs: InnerTypeVar,
-        rhs: InnerTypeVar,
-    ) -> std::result::Result<T, UnificationError> {
+    fn add_context(self, lhs: TypeVar, rhs: TypeVar) -> std::result::Result<T, UnificationError> {
         match self {
             Ok(val) => Ok(val),
             Err(UnificationError::Normal((mut old_lhs, mut old_rhs))) => {
@@ -190,7 +182,7 @@ pub enum Error {
     #[error("Tuple index of generic argument")]
     TupleIndexOfGeneric { loc: Loc<()> },
     #[error("Tuple index of non-tuple")]
-    TupleIndexOfNonTuple { got: InnerTypeVar, loc: Loc<()> },
+    TupleIndexOfNonTuple { got: TypeVar, loc: Loc<()> },
     #[error("Tuple index out of bounds")]
     TupleIndexOutOfBounds { index: Loc<u128>, actual_size: u128 },
 
@@ -199,7 +191,7 @@ pub enum Error {
     #[error("Field access on generic")]
     FieldAccessOnGeneric { loc: Loc<()>, name: NameID },
     #[error("Field access on non-struct")]
-    FieldAccessOnNonStruct { loc: Loc<()>, got: InnerTypeVar },
+    FieldAccessOnNonStruct { loc: Loc<()>, got: TypeVar },
     #[error("Field access on integer")]
     FieldAccessOnInteger { loc: Loc<()> },
     #[error("Field access on enum")]

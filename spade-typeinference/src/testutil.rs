@@ -2,7 +2,7 @@ use spade_hir::symbol_table::SymbolTable;
 use spade_types::KnownType;
 
 use crate::fixed_types::t_int;
-use crate::InnerTypeVar as TVar;
+use crate::TypeVar as TVar;
 
 pub fn sized_int(size: u128, symtab: &SymbolTable) -> TVar {
     TVar::Known(
@@ -55,6 +55,6 @@ macro_rules! ensure_same_type {
 #[macro_export]
 macro_rules! kvar {
     ($base:expr $(; ( $( $params:expr ),* ) )? ) => {
-        InnerTypeVar::Known($base, vec![ $( $($params),* )? ])
+        TypeVar::Known($base, vec![ $( $($params),* )? ])
     }
 }

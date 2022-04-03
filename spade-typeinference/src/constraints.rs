@@ -1,11 +1,11 @@
 use spade_common::location_info::{Loc, WithLocation};
 
-use crate::equation::InnerTypeVar;
+use crate::equation::TypeVar;
 
 #[derive(Clone)]
 pub enum ConstraintExpr {
     Integer(i128),
-    Var(InnerTypeVar),
+    Var(TypeVar),
     Sum(Box<ConstraintExpr>, Box<ConstraintExpr>),
     Sub(Box<ConstraintExpr>),
 }
@@ -44,7 +44,7 @@ impl std::fmt::Display for ConstraintExpr {
 }
 
 pub struct TypeConstraints {
-    pub inner: Vec<(InnerTypeVar, Loc<ConstraintExpr>)>,
+    pub inner: Vec<(TypeVar, Loc<ConstraintExpr>)>,
 }
 
 impl TypeConstraints {
@@ -52,13 +52,13 @@ impl TypeConstraints {
         Self { inner: vec![] }
     }
 
-    pub fn add_constraint(&mut self, lhs: InnerTypeVar, rhs: Loc<ConstraintExpr>) {
+    pub fn add_constraint(&mut self, lhs: TypeVar, rhs: Loc<ConstraintExpr>) {
         self.inner.push((lhs, rhs));
     }
 
     /// Calls `evaluate` on all constraints. If any constraints are now `T = Integer(val)`,
     /// those updated values are returned. Such constraints are then removed
-    pub fn update_constraints(&mut self) -> Vec<Loc<(InnerTypeVar, i128)>> {
+    pub fn update_constraints(&mut self) -> Vec<Loc<(TypeVar, i128)>> {
         let mut new_known = vec![];
         self.inner = self
             .inner

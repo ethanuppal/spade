@@ -6,7 +6,7 @@ use spade_hir::{ExprKind, Expression};
 use spade_types::KnownType;
 
 use crate::constraints::ConstraintExpr;
-use crate::equation::{InnerTypeVar, TypedExpression};
+use crate::equation::{TypeVar, TypedExpression};
 use crate::fixed_types::t_bool;
 use crate::result::{Error, UnificationErrorExt};
 use crate::{kvar, Result};
@@ -92,7 +92,7 @@ impl TypeState {
 
             self.unify_expression_generic_error(
                 &expression,
-                &InnerTypeVar::Tuple(inner_types),
+                &TypeVar::Tuple(inner_types),
                 symtab,
             )?;
         });
@@ -111,7 +111,7 @@ impl TypeState {
             let t = self.type_of(&TypedExpression::Id(tup.id));
 
             match t {
-                Ok(InnerTypeVar::Tuple(inner)) => {
+                Ok(TypeVar::Tuple(inner)) => {
                     if (index.inner as usize) < inner.len() {
                         self.unify_expression_generic_error(
                             &expression,
@@ -125,13 +125,13 @@ impl TypeState {
                         });
                     }
                 }
-                Ok(t @ InnerTypeVar::Known(_, _) | t @ InnerTypeVar::Array { .. }) => {
+                Ok(t @ TypeVar::Known(_, _) | t @ TypeVar::Array { .. }) => {
                     return Err(Error::TupleIndexOfNonTuple {
                         got: t.clone(),
                         loc: tup.loc(),
                     })
                 }
-                Ok(InnerTypeVar::Unknown(_)) => {
+                Ok(TypeVar::Unknown(_)) => {
                     return Err(Error::TupleIndexOfGeneric { loc: tup.loc() })
                 }
                 Err(e) => return Err(e.clone()),
@@ -153,7 +153,7 @@ impl TypeState {
             let t = self.type_of(&TypedExpression::Id(target.id));
 
             match t {
-                Ok(InnerTypeVar::Known(inner, _)) => {
+                Ok(TypeVar::Known(inner, _)) => {
                     // Look up the type of the known var
                     match inner {
                         KnownType::Type(inner) => {
@@ -200,7 +200,7 @@ impl TypeState {
                         },
                     }
                 }
-                Ok(InnerTypeVar::Unknown(_)) => {
+                Ok(TypeVar::Unknown(_)) => {
                     return Err(Error::FieldAccessOnIncomplete{loc: expression.loc()})
                 }
                 Ok(other) => {
@@ -242,7 +242,7 @@ impl TypeState {
             };
 
             let size_type = kvar!(KnownType::Integer(members.len() as u128));
-            let result_type = InnerTypeVar::Array {
+            let result_type = TypeVar::Array {
                 inner: Box::new(inner_type),
                 size: Box::new(size_type),
             };
@@ -281,7 +281,7 @@ impl TypeState {
                     Error::IndexMustBeInteger{got, loc: index.loc()}
                 })?;
 
-            let array_type = InnerTypeVar::Array{
+            let array_type = TypeVar::Array{
                 inner: Box::new(expression.get_type(self)?),
                 size: Box::new(self.new_generic())
             };

@@ -10,7 +10,7 @@ pub use pipelines::generate_pipeline;
 use spade_common::id_tracker::ExprIdTracker;
 use spade_common::location_info::WithLocation;
 use spade_common::name::{Identifier, Path};
-use spade_typeinference::equation::InnerTypeVar;
+use spade_typeinference::equation::TypeVar;
 use substitution::Substitutions;
 use thiserror::Error;
 
@@ -28,10 +28,7 @@ use spade_types::{ConcreteType, PrimitiveType};
 #[derive(Error, Debug)]
 pub enum Error {
     #[error("using generic type")]
-    UsingGenericType {
-        expr: Loc<Expression>,
-        t: InnerTypeVar,
-    },
+    UsingGenericType { expr: Loc<Expression>, t: TypeVar },
     #[error("cast to larger")]
     CastToLarger { from: Loc<u64>, to: Loc<u64> },
     #[error("concat size mismatch")]

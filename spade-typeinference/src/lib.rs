@@ -35,7 +35,7 @@ use crate::fixed_types::t_clock;
 use crate::fixed_types::{t_bool, t_int};
 use crate::trace_stack::{format_trace_stack, TraceStackEntry};
 
-use equation::{InnerTypeVar, TypeEquations, TypedExpression};
+use equation::{TypeEquations, TypeVar, TypedExpression};
 use result::{Error, Result};
 
 use self::result::{UnificationError, UnificationErrorExt, UnificationTrace};
@@ -144,11 +144,11 @@ pub struct TypeState {
     next_typeid: u64,
     // List of the mapping between generic parameters and type vars. Managed here
     // because unification must update *all* TypeVars in existence.
-    generic_lists: Vec<HashMap<NameID, InnerTypeVar>>,
+    generic_lists: Vec<HashMap<NameID, TypeVar>>,
 
     constraints: TypeConstraints,
 
-    replacements: HashMap<InnerTypeVar, InnerTypeVar>,
+    replacements: HashMap<TypeVar, TypeVar>,
 
     pub trace_stack: TraceStack,
 }
@@ -169,7 +169,7 @@ impl TypeState {
     fn get_generic_list<'a>(
         &'a self,
         generic_list_token: &'a GenericListToken,
-    ) -> &'a HashMap<NameID, InnerTypeVar> {
+    ) -> &'a HashMap<NameID, TypeVar> {
         &self.generic_lists[generic_list_token.id]
     }
 
@@ -177,9 +177,9 @@ impl TypeState {
         &'a self,
         e: &hir::TypeExpression,
         generic_list_token: &GenericListToken,
-    ) -> InnerTypeVar {
+    ) -> TypeVar {
         match e {
-            hir::TypeExpression::Integer(i) => InnerTypeVar::Known(KnownType::Integer(*i), vec![]),
+            hir::TypeExpression::Integer(i) => TypeVar::Known(KnownType::Integer(*i), vec![]),
             hir::TypeExpression::TypeSpec(spec) => self.type_var_from_hir(spec, generic_list_token),
         }
     }
@@ -188,7 +188,7 @@ impl TypeState {
         &'a self,
         hir_type: &crate::hir::TypeSpec,
         generic_list_token: &GenericListToken,
-    ) -> InnerTypeVar {
+    ) -> TypeVar {
         let generic_list = self.get_generic_list(generic_list_token);
         match hir_type {
             hir::TypeSpec::Declared(base, params) => {
@@ -197,7 +197,7 @@ impl TypeState {
                     .map(|e| self.hir_type_expr_to_var(e, generic_list_token))
                     .collect();
 
-                InnerTypeVar::Known(KnownType::Type(base.inner.clone()), params)
+                TypeVar::Known(KnownType::Type(base.inner.clone()), params)
             }
             hir::TypeSpec::Generic(name) => match generic_list.get(name) {
                 Some(t) => t.clone(),
@@ -210,13 +210,13 @@ impl TypeState {
                     .iter()
                     .map(|t| self.type_var_from_hir(t, generic_list_token))
                     .collect();
-                InnerTypeVar::Tuple(inner)
+                TypeVar::Tuple(inner)
             }
             hir::TypeSpec::Array { inner, size } => {
                 let inner = self.type_var_from_hir(inner, generic_list_token);
                 let size = self.hir_type_expr_to_var(size, generic_list_token);
 
-                InnerTypeVar::Array {
+                TypeVar::Array {
                     inner: Box::new(inner),
                     size: Box::new(size),
                 }
@@ -228,7 +228,7 @@ impl TypeState {
     }
 
     /// Returns the type of the expression with the specified id. Error if unknown
-    pub fn type_of<'a>(&'a self, expr: &TypedExpression) -> Result<InnerTypeVar> {
+    pub fn type_of<'a>(&'a self, expr: &TypedExpression) -> Result<TypeVar> {
         for (e, t) in &self.equations {
             if e == expr {
                 return Ok(t.clone());
@@ -237,21 +237,21 @@ impl TypeState {
         Err(Error::UnknownType(expr.clone()).into())
     }
 
-    pub fn new_generic_int(&mut self, symtab: &SymbolTable) -> InnerTypeVar {
-        InnerTypeVar::Known(t_int(symtab), vec![self.new_generic()])
+    pub fn new_generic_int(&mut self, symtab: &SymbolTable) -> TypeVar {
+        TypeVar::Known(t_int(symtab), vec![self.new_generic()])
     }
 
     /// Return a new generic int. The first returned value is int<N>, and the second
     /// value is N
-    pub fn new_split_generic_int(&mut self, symtab: &SymbolTable) -> (InnerTypeVar, InnerTypeVar) {
+    pub fn new_split_generic_int(&mut self, symtab: &SymbolTable) -> (TypeVar, TypeVar) {
         let size = self.new_generic();
-        let full = InnerTypeVar::Known(t_int(symtab), vec![size.clone()]);
+        let full = TypeVar::Known(t_int(symtab), vec![size.clone()]);
         (full, size)
     }
 
-    fn new_generic(&mut self) -> InnerTypeVar {
+    fn new_generic(&mut self) -> TypeVar {
         let id = self.new_typeid();
-        InnerTypeVar::Unknown(id)
+        TypeVar::Unknown(id)
     }
 
     #[trace_typechecker]
@@ -484,7 +484,7 @@ impl TypeState {
                 for pattern in subpatterns {
                     self.visit_pattern(pattern, symtab)?;
                 }
-                let tuple_type = InnerTypeVar::Tuple(
+                let tuple_type = TypeVar::Tuple(
                     subpatterns
                         .iter()
                         .map(|pattern| {
@@ -684,29 +684,29 @@ impl TypeState {
         result
     }
 
-    fn check_var_for_replacement(&self, var: InnerTypeVar) -> InnerTypeVar {
+    fn check_var_for_replacement(&self, var: TypeVar) -> TypeVar {
         if let Some(new) = self.replacements.get(&var) {
             return new.clone();
         };
         match var {
-            InnerTypeVar::Known(base, params) => InnerTypeVar::Known(
+            TypeVar::Known(base, params) => TypeVar::Known(
                 base,
                 params
                     .into_iter()
                     .map(|p| self.check_var_for_replacement(p))
                     .collect(),
             ),
-            InnerTypeVar::Tuple(inner) => InnerTypeVar::Tuple(
+            TypeVar::Tuple(inner) => TypeVar::Tuple(
                 inner
                     .into_iter()
                     .map(|p| self.check_var_for_replacement(p))
                     .collect(),
             ),
-            InnerTypeVar::Array { inner, size } => InnerTypeVar::Array {
+            TypeVar::Array { inner, size } => TypeVar::Array {
                 inner: Box::new(self.check_var_for_replacement(*inner)),
                 size: Box::new(self.check_var_for_replacement(*size)),
             },
-            u @ InnerTypeVar::Unknown(_) => u,
+            u @ TypeVar::Unknown(_) => u,
         }
     }
 
@@ -724,7 +724,7 @@ impl TypeState {
         }
     }
 
-    fn add_equation(&mut self, expression: TypedExpression, var: InnerTypeVar) {
+    fn add_equation(&mut self, expression: TypedExpression, var: TypeVar) {
         let var = self.check_var_for_replacement(var);
 
         self.trace_stack.push(TraceStackEntry::AddingEquation(
@@ -739,14 +739,14 @@ impl TypeState {
         }
     }
 
-    fn add_constraint(&mut self, lhs: InnerTypeVar, rhs: Loc<ConstraintExpr>) {
+    fn add_constraint(&mut self, lhs: TypeVar, rhs: Loc<ConstraintExpr>) {
         let lhs = self.check_var_for_replacement(lhs);
         let rhs = rhs.map(|rhs| self.check_expr_for_replacement(rhs));
         self.constraints.add_constraint(lhs, rhs);
     }
 
     #[cfg(test)]
-    fn add_eq_from_tvar(&mut self, expression: TypedExpression, var: InnerTypeVar) {
+    fn add_eq_from_tvar(&mut self, expression: TypedExpression, var: TypeVar) {
         self.add_equation(expression, var)
     }
 
@@ -759,7 +759,7 @@ impl TypeState {
         e1: &impl HasType,
         e2: &impl HasType,
         symtab: &SymbolTable,
-    ) -> std::result::Result<InnerTypeVar, UnificationError> {
+    ) -> std::result::Result<TypeVar, UnificationError> {
         let v1 = e1
             .get_type(self)
             .expect("Tried to unify types but the lhs was not found");
@@ -811,7 +811,7 @@ impl TypeState {
         // Figure out the most general type, and take note if we need to
         // do any replacement of the types in the rest of the state
         let result = match (&v1, &v2) {
-            (InnerTypeVar::Known(t1, p1), InnerTypeVar::Known(t2, p2)) => match (t1, t2) {
+            (TypeVar::Known(t1, p1), TypeVar::Known(t2, p2)) => match (t1, t2) {
                 (KnownType::Integer(val1), KnownType::Integer(val2)) => {
                     unify_if!(val1 == val2, v1, None)
                 }
@@ -852,7 +852,7 @@ impl TypeState {
                 (KnownType::Integer(_), KnownType::Type(_)) => Err(err_producer!()),
                 (KnownType::Type(_), KnownType::Integer(_)) => Err(err_producer!()),
             },
-            (InnerTypeVar::Tuple(i1), InnerTypeVar::Tuple(i2)) => {
+            (TypeVar::Tuple(i1), TypeVar::Tuple(i2)) => {
                 if i1.len() != i2.len() {
                     return Err(err_producer!());
                 }
@@ -864,11 +864,11 @@ impl TypeState {
                 Ok((self.check_var_for_replacement(v1), None))
             }
             (
-                InnerTypeVar::Array {
+                TypeVar::Array {
                     inner: i1,
                     size: s1,
                 },
-                InnerTypeVar::Array {
+                TypeVar::Array {
                     inner: i2,
                     size: s2,
                 },
@@ -877,7 +877,7 @@ impl TypeState {
                 let size = try_with_context!(self.unify_inner(s1.as_ref(), s2.as_ref(), symtab));
 
                 Ok((
-                    InnerTypeVar::Array {
+                    TypeVar::Array {
                         inner: Box::new(inner),
                         size: Box::new(size),
                     },
@@ -885,14 +885,14 @@ impl TypeState {
                 ))
             }
             // Unknown with other
-            (InnerTypeVar::Unknown(_), InnerTypeVar::Unknown(_)) => Ok((v1, Some(v2))),
-            (_other, InnerTypeVar::Unknown(_)) => Ok((v1, Some(v2))),
-            (InnerTypeVar::Unknown(_), _other) => Ok((v2, Some(v1))),
+            (TypeVar::Unknown(_), TypeVar::Unknown(_)) => Ok((v1, Some(v2))),
+            (_other, TypeVar::Unknown(_)) => Ok((v1, Some(v2))),
+            (TypeVar::Unknown(_), _other) => Ok((v2, Some(v1))),
             // Incompatibilities
-            (InnerTypeVar::Known(_, _), _other) => Err(err_producer!()),
-            (_other, InnerTypeVar::Known(_, _)) => Err(err_producer!()),
-            (InnerTypeVar::Tuple(_), _other) => Err(err_producer!()),
-            (_other, InnerTypeVar::Tuple(_)) => Err(err_producer!()),
+            (TypeVar::Known(_, _), _other) => Err(err_producer!()),
+            (_other, TypeVar::Known(_, _)) => Err(err_producer!()),
+            (TypeVar::Tuple(_), _other) => Err(err_producer!()),
+            (_other, TypeVar::Tuple(_)) => Err(err_producer!()),
         };
 
         let (new_type, replaced_type) = result?;
@@ -934,7 +934,7 @@ impl TypeState {
         e1: &impl HasType,
         e2: &impl HasType,
         symtab: &SymbolTable,
-    ) -> std::result::Result<InnerTypeVar, UnificationError> {
+    ) -> std::result::Result<TypeVar, UnificationError> {
         let new_type = self.unify_inner(e1, e2, symtab)?;
 
         // With replacement done, some of our constraints may have been updated to provide
@@ -977,28 +977,24 @@ impl TypeState {
         Ok(new_type)
     }
 
-    fn replace_type_var(
-        in_var: &mut InnerTypeVar,
-        from: &InnerTypeVar,
-        replacement: &InnerTypeVar,
-    ) {
+    fn replace_type_var(in_var: &mut TypeVar, from: &TypeVar, replacement: &TypeVar) {
         // First, do recursive replacement
         match in_var {
-            InnerTypeVar::Known(_, params) => {
+            TypeVar::Known(_, params) => {
                 for param in params {
                     Self::replace_type_var(param, from, replacement)
                 }
             }
-            InnerTypeVar::Tuple(inner) => {
+            TypeVar::Tuple(inner) => {
                 for t in inner {
                     Self::replace_type_var(t, from, replacement)
                 }
             }
-            InnerTypeVar::Array { inner, size } => {
+            TypeVar::Array { inner, size } => {
                 Self::replace_type_var(inner, from, replacement);
                 Self::replace_type_var(size, from, replacement);
             }
-            InnerTypeVar::Unknown(_) => {}
+            TypeVar::Unknown(_) => {}
         }
 
         if in_var == from {
@@ -1008,8 +1004,8 @@ impl TypeState {
 
     fn replace_type_var_in_constraint(
         in_constraint: &mut ConstraintExpr,
-        from: &InnerTypeVar,
-        replacement: &InnerTypeVar,
+        from: &TypeVar,
+        replacement: &TypeVar,
     ) {
         match in_constraint {
             ConstraintExpr::Integer(_) => {}
@@ -1017,7 +1013,7 @@ impl TypeState {
                 Self::replace_type_var(v, from, replacement);
 
                 match v {
-                    InnerTypeVar::Known(KnownType::Integer(val), _) => {
+                    TypeVar::Known(KnownType::Integer(val), _) => {
                         *in_constraint = ConstraintExpr::Integer(*val as i128)
                     }
                     _ => {}
@@ -1038,7 +1034,7 @@ impl TypeState {
         expr: &Loc<Expression>,
         other: &impl HasType,
         symtab: &SymbolTable,
-    ) -> Result<InnerTypeVar> {
+    ) -> Result<TypeVar> {
         self.unify(&expr.inner, other, symtab)
             .map_normal_err(|(got, expected)| Error::UnspecifiedTypeError {
                 got,
@@ -1057,47 +1053,47 @@ impl TypeState {
 }
 
 pub trait HasType: std::fmt::Debug {
-    fn get_type(&self, state: &TypeState) -> Result<InnerTypeVar>;
+    fn get_type(&self, state: &TypeState) -> Result<TypeVar>;
 }
 
-impl HasType for InnerTypeVar {
-    fn get_type(&self, state: &TypeState) -> Result<InnerTypeVar> {
+impl HasType for TypeVar {
+    fn get_type(&self, state: &TypeState) -> Result<TypeVar> {
         Ok(state.check_var_for_replacement(self.clone()))
     }
 }
-impl HasType for Loc<InnerTypeVar> {
-    fn get_type(&self, state: &TypeState) -> Result<InnerTypeVar> {
+impl HasType for Loc<TypeVar> {
+    fn get_type(&self, state: &TypeState) -> Result<TypeVar> {
         self.inner.get_type(state)
     }
 }
 impl HasType for TypedExpression {
-    fn get_type(&self, state: &TypeState) -> Result<InnerTypeVar> {
+    fn get_type(&self, state: &TypeState) -> Result<TypeVar> {
         state.type_of(self)
     }
 }
 impl HasType for Expression {
-    fn get_type(&self, state: &TypeState) -> Result<InnerTypeVar> {
+    fn get_type(&self, state: &TypeState) -> Result<TypeVar> {
         state.type_of(&TypedExpression::Id(self.id))
     }
 }
 impl HasType for Loc<Expression> {
-    fn get_type(&self, state: &TypeState) -> Result<InnerTypeVar> {
+    fn get_type(&self, state: &TypeState) -> Result<TypeVar> {
         state.type_of(&TypedExpression::Id(self.inner.id))
     }
 }
 impl HasType for Pattern {
-    fn get_type(&self, state: &TypeState) -> Result<InnerTypeVar> {
+    fn get_type(&self, state: &TypeState) -> Result<TypeVar> {
         state.type_of(&TypedExpression::Id(self.id))
     }
 }
 impl HasType for Loc<Pattern> {
-    fn get_type(&self, state: &TypeState) -> Result<InnerTypeVar> {
+    fn get_type(&self, state: &TypeState) -> Result<TypeVar> {
         state.type_of(&TypedExpression::Id(self.inner.id))
     }
 }
 impl HasType for KnownType {
-    fn get_type(&self, _state: &TypeState) -> Result<InnerTypeVar> {
-        Ok(InnerTypeVar::Known(self.clone(), vec![]))
+    fn get_type(&self, _state: &TypeState) -> Result<TypeVar> {
+        Ok(TypeVar::Known(self.clone(), vec![]))
     }
 }
 
@@ -1105,7 +1101,7 @@ impl HasType for KnownType {
 mod tests {
     use super::*;
 
-    use super::InnerTypeVar as TVar;
+    use super::TypeVar as TVar;
     use super::TypedExpression as TExpr;
 
     use crate::testutil::{sized_int, unsized_int};
@@ -1676,9 +1672,9 @@ mod tests {
 
         let ttup = get_type!(state, &TExpr::Id(3));
         let reg = get_type!(state, &TExpr::Name(name_id(0, "test").inner));
-        let expected = InnerTypeVar::Tuple(vec![
+        let expected = TypeVar::Tuple(vec![
             sized_int(5, &symtab),
-            InnerTypeVar::Known(t_bool(&symtab), vec![]),
+            TypeVar::Known(t_bool(&symtab), vec![]),
         ]);
         ensure_same_type!(state, ttup, &expected);
         ensure_same_type!(state, reg, &expected);
@@ -1747,7 +1743,7 @@ mod tests {
             t1.clone(),
             TVar::Known(
                 t_int(&symtab),
-                vec![InnerTypeVar::Known(KnownType::Integer(10), vec![])],
+                vec![TypeVar::Known(KnownType::Integer(10), vec![])],
             )
         );
         ensure_same_type!(
@@ -1755,7 +1751,7 @@ mod tests {
             t2,
             TVar::Known(
                 t_int(&symtab),
-                vec![InnerTypeVar::Known(KnownType::Integer(5), vec![])],
+                vec![TypeVar::Known(KnownType::Integer(5), vec![])],
             )
         );
 
@@ -1823,7 +1819,7 @@ mod tests {
             TExpr::Id(1),
             TVar::Known(
                 t_int(&symtab),
-                vec![InnerTypeVar::Known(KnownType::Integer(10), vec![])],
+                vec![TypeVar::Known(KnownType::Integer(10), vec![])],
             )
         );
         ensure_same_type!(
@@ -1831,7 +1827,7 @@ mod tests {
             TExpr::Id(2),
             TVar::Known(
                 t_int(&symtab),
-                vec![InnerTypeVar::Known(KnownType::Integer(5), vec![])],
+                vec![TypeVar::Known(KnownType::Integer(5), vec![])],
             )
         );
 

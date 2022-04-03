@@ -7,7 +7,7 @@ use spade_hir as hir;
 use spade_hir::{TypeDeclaration, TypeList};
 use spade_types::{ConcreteType, KnownType};
 
-use crate::equation::{InnerTypeVar, TypedExpression};
+use crate::equation::{TypeVar, TypedExpression};
 use crate::TypeState;
 
 impl TypeState {
@@ -147,12 +147,12 @@ impl TypeState {
     /// Converts the specified type to a concrete type, returning None
     /// if it fails
     pub fn ungenerify_type(
-        var: &InnerTypeVar,
+        var: &TypeVar,
         symtab: &SymbolTable,
         type_list: &TypeList,
     ) -> Option<ConcreteType> {
         match var {
-            InnerTypeVar::Known(KnownType::Type(t), params) => {
+            TypeVar::Known(KnownType::Type(t), params) => {
                 let params = params
                     .iter()
                     .map(|v| Self::ungenerify_type(v, symtab, type_list))
@@ -163,12 +163,12 @@ impl TypeState {
                     None => None,
                 }
             }
-            InnerTypeVar::Known(KnownType::Integer(size), params) => {
+            TypeVar::Known(KnownType::Integer(size), params) => {
                 assert!(params.len() == 0, "integers can not have type parameters");
 
                 Some(ConcreteType::Integer(*size))
             }
-            InnerTypeVar::Array { inner, size } => {
+            TypeVar::Array { inner, size } => {
                 let inner = Self::ungenerify_type(inner, symtab, type_list);
                 let size = Self::ungenerify_type(size, symtab, type_list).map(|t| {
                     if let ConcreteType::Integer(size) = t {
@@ -186,14 +186,14 @@ impl TypeState {
                     _ => None,
                 }
             }
-            InnerTypeVar::Tuple(inner) => {
+            TypeVar::Tuple(inner) => {
                 let inner = inner
                     .iter()
                     .map(|v| Self::ungenerify_type(v, symtab, type_list))
                     .collect::<Option<Vec<_>>>()?;
                 Some(ConcreteType::Tuple(inner))
             }
-            InnerTypeVar::Unknown(_) => None,
+            TypeVar::Unknown(_) => None,
         }
     }
 

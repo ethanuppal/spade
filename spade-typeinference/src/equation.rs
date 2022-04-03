@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use spade_common::name::NameID;
 use spade_types::KnownType;
 
-pub type TypeEquations = HashMap<TypedExpression, InnerTypeVar>;
+pub type TypeEquations = HashMap<TypedExpression, TypeVar>;
 
 /// An owned type variable. Should only be owned by the TypeState struct in a context
 /// where the type state replaces TypeVars after unification. Any external owners of
@@ -12,23 +12,23 @@ pub type TypeEquations = HashMap<TypedExpression, InnerTypeVar>;
 /// `clone` is derived to simplify the implementation through allowing derives, but
 /// should not be used outside the unification code
 #[derive(Debug, Clone, PartialEq, Hash, Eq)]
-pub enum InnerTypeVar {
+pub enum TypeVar {
     /// The type is known. If the type is known through a type signature specified by
     /// the user, that signature is the second argument, otherwise None
-    Known(KnownType, Vec<InnerTypeVar>),
-    Tuple(Vec<InnerTypeVar>),
+    Known(KnownType, Vec<TypeVar>),
+    Tuple(Vec<TypeVar>),
     Array {
-        inner: Box<InnerTypeVar>,
-        size: Box<InnerTypeVar>,
+        inner: Box<TypeVar>,
+        size: Box<TypeVar>,
     },
     /// The type is completely unknown
     Unknown(u64),
 }
 
-impl std::fmt::Display for InnerTypeVar {
+impl std::fmt::Display for TypeVar {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            InnerTypeVar::Known(t, params) => {
+            TypeVar::Known(t, params) => {
                 let generics = if params.is_empty() {
                     format!("")
                 } else {
@@ -43,7 +43,7 @@ impl std::fmt::Display for InnerTypeVar {
                 };
                 write!(f, "{}{}", t, generics)
             }
-            InnerTypeVar::Tuple(inner) => {
+            TypeVar::Tuple(inner) => {
                 write!(
                     f,
                     "({})",
@@ -54,10 +54,10 @@ impl std::fmt::Display for InnerTypeVar {
                         .join(", ")
                 )
             }
-            InnerTypeVar::Array { inner, size } => {
+            TypeVar::Array { inner, size } => {
                 write!(f, "[{}; {}]", inner, size)
             }
-            InnerTypeVar::Unknown(id) => write!(f, "t{}", id),
+            TypeVar::Unknown(id) => write!(f, "t{}", id),
         }
     }
 }

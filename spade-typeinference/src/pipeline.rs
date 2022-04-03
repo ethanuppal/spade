@@ -105,8 +105,8 @@ impl TypeState {
 mod tests {
     use super::*;
 
-    use crate::InnerTypeVar as TVar;
-    use crate::InnerTypeVar;
+    use crate::TypeVar as TVar;
+    use crate::TypeVar;
     use crate::TypedExpression as TExpr;
 
     use crate::{ensure_same_type, HasType};

@@ -2,7 +2,7 @@ use std::sync::RwLock;
 
 use colored::*;
 
-use crate::equation::{InnerTypeVar, TypedExpression};
+use crate::equation::{TypeVar, TypedExpression};
 
 pub struct TraceStack {
     entries: RwLock<Vec<TraceStackEntry>>,
@@ -24,12 +24,12 @@ pub enum TraceStackEntry {
     Enter(String),
     /// Exited the most recent visitor and the node had the specified type
     Exit,
-    TryingUnify(InnerTypeVar, InnerTypeVar),
+    TryingUnify(TypeVar, TypeVar),
     /// Unified .0 with .1 producing .2
-    Unified(InnerTypeVar, InnerTypeVar, InnerTypeVar),
-    AddingEquation(TypedExpression, InnerTypeVar),
+    Unified(TypeVar, TypeVar, TypeVar),
+    AddingEquation(TypedExpression, TypeVar),
     /// Infering more from constraints
-    InferingFromConstraints(InnerTypeVar, i128),
+    InferingFromConstraints(TypeVar, i128),
     /// Arbitrary message
     Message(String),
 }
