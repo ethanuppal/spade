@@ -2,7 +2,7 @@ use std::sync::RwLock;
 
 use colored::*;
 
-use crate::equation::{FreeTypeVar, TypedExpression};
+use crate::equation::{InnerTypeVar, TypedExpression};
 
 pub struct TraceStack {
     entries: RwLock<Vec<TraceStackEntry>>,
@@ -24,10 +24,12 @@ pub enum TraceStackEntry {
     Enter(String),
     /// Exited the most recent visitor and the node had the specified type
     Exit,
-    TryingUnify(FreeTypeVar, FreeTypeVar),
+    TryingUnify(InnerTypeVar, InnerTypeVar),
     /// Unified .0 with .1 producing .2
-    Unified(FreeTypeVar, FreeTypeVar, FreeTypeVar),
-    AddingEquation(TypedExpression, FreeTypeVar),
+    Unified(InnerTypeVar, InnerTypeVar, InnerTypeVar),
+    AddingEquation(TypedExpression, InnerTypeVar),
+    /// Infering more from constraints
+    InferingFromConstraints(InnerTypeVar, i128),
     /// Arbitrary message
     Message(String),
 }
@@ -47,10 +49,15 @@ pub fn format_trace_stack(stack: &TraceStack) -> String {
                 format!("{} {} <- {}", "eq".yellow(), expr, t)
             }
             TraceStackEntry::Unified(lhs, rhs, result) => {
+                next_indent_amount -= 1;
                 format!("{} {}, {} -> {}", "unified".green(), lhs, rhs, result)
             }
             TraceStackEntry::TryingUnify(lhs, rhs) => {
+                next_indent_amount += 1;
                 format!("{} of {} with {}", "trying unification".cyan(), lhs, rhs)
+            }
+            TraceStackEntry::InferingFromConstraints(lhs, rhs) => {
+                format!("{} {lhs} as {rhs} from constraints", "infering".purple())
             }
             TraceStackEntry::Message(msg) => {
                 format!("{}: {}", "m".purple(), msg)

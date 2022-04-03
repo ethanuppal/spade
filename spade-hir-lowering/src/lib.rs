@@ -10,7 +10,7 @@ pub use pipelines::generate_pipeline;
 use spade_common::id_tracker::ExprIdTracker;
 use spade_common::location_info::WithLocation;
 use spade_common::name::{Identifier, Path};
-use spade_typeinference::equation::FreeTypeVar;
+use spade_typeinference::equation::InnerTypeVar;
 use substitution::Substitutions;
 use thiserror::Error;
 
@@ -30,7 +30,7 @@ pub enum Error {
     #[error("using generic type")]
     UsingGenericType {
         expr: Loc<Expression>,
-        t: FreeTypeVar,
+        t: InnerTypeVar,
     },
     #[error("cast to larger")]
     CastToLarger { from: Loc<u64>, to: Loc<u64> },
@@ -66,8 +66,7 @@ impl TypeStateLocal for TypeState {
     ) -> Result<ConcreteType> {
         let t = self
             .type_of(&TypedExpression::Id(expr.id))
-            .expect("Expression had no specified type")
-            .as_free();
+            .expect("Expression had no specified type");
 
         if let Some(t) = Self::ungenerify_type(&t, symtab, types) {
             Ok(t)

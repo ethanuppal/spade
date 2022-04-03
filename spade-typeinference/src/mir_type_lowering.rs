@@ -7,7 +7,7 @@ use spade_hir as hir;
 use spade_hir::{TypeDeclaration, TypeList};
 use spade_types::{ConcreteType, KnownType};
 
-use crate::equation::{FreeTypeVar, InnerTypeVar, TypedExpression};
+use crate::equation::{InnerTypeVar, TypedExpression};
 use crate::TypeState;
 
 impl TypeState {
@@ -147,18 +147,18 @@ impl TypeState {
     /// Converts the specified type to a concrete type, returning None
     /// if it fails
     pub fn ungenerify_type(
-        var: &FreeTypeVar,
+        var: &InnerTypeVar,
         symtab: &SymbolTable,
         type_list: &TypeList,
     ) -> Option<ConcreteType> {
-        match var.danger_inner() {
+        match var {
             InnerTypeVar::Known(KnownType::Type(t), params, _) => {
                 let params = params
                     .iter()
-                    .map(|v| Self::ungenerify_type(&FreeTypeVar::new(v.clone()), symtab, type_list))
+                    .map(|v| Self::ungenerify_type(v, symtab, type_list))
                     .collect::<Option<Vec<_>>>()?;
 
-                match type_list.get(t) {
+                match type_list.get(&t) {
                     Some(t) => Some(Self::type_decl_to_concrete(&t.inner, type_list, params)),
                     None => None,
                 }
@@ -169,18 +169,14 @@ impl TypeState {
                 Some(ConcreteType::Integer(*size))
             }
             InnerTypeVar::Array { inner, size } => {
-                let inner =
-                    Self::ungenerify_type(&FreeTypeVar::new(*inner.clone()), symtab, type_list);
-                let size =
-                    Self::ungenerify_type(&FreeTypeVar::new(*size.clone()), symtab, type_list).map(
-                        |t| {
-                            if let ConcreteType::Integer(size) = t {
-                                size
-                            } else {
-                                panic!("Array size must be an integer")
-                            }
-                        },
-                    );
+                let inner = Self::ungenerify_type(inner, symtab, type_list);
+                let size = Self::ungenerify_type(size, symtab, type_list).map(|t| {
+                    if let ConcreteType::Integer(size) = t {
+                        size
+                    } else {
+                        panic!("Array size must be an integer")
+                    }
+                });
 
                 match (inner, size) {
                     (Some(inner), Some(size)) => Some(ConcreteType::Array {
@@ -193,7 +189,7 @@ impl TypeState {
             InnerTypeVar::Tuple(inner) => {
                 let inner = inner
                     .iter()
-                    .map(|v| Self::ungenerify_type(&FreeTypeVar::new(v.clone()), symtab, type_list))
+                    .map(|v| Self::ungenerify_type(v, symtab, type_list))
                     .collect::<Option<Vec<_>>>()?;
                 Some(ConcreteType::Tuple(inner))
             }
@@ -212,8 +208,7 @@ impl TypeState {
         Self::ungenerify_type(
             &self
                 .type_of(&TypedExpression::Name(name.clone()))
-                .expect("Expression had no specified type")
-                .as_free(),
+                .expect("Expression had no specified type"),
             symtab,
             type_list,
         )
@@ -226,8 +221,7 @@ impl TypeState {
         Self::ungenerify_type(
             &self
                 .type_of(&TypedExpression::Id(id))
-                .expect("Expression had no specified type")
-                .as_free(),
+                .expect("Expression had no specified type"),
             symtab,
             type_list,
         )

@@ -1,22 +1,20 @@
-use std::collections::HashMap;
-
 use spade_common::location_info::{Loc, WithLocation};
 
 use crate::equation::InnerTypeVar;
 
 #[derive(Clone)]
-pub enum ConstraintExpr<I> {
+pub enum ConstraintExpr {
     Integer(i128),
-    Var(I),
-    Sum(Box<ConstraintExpr<I>>, Box<ConstraintExpr<I>>),
-    Sub(Box<ConstraintExpr<I>>),
+    Var(InnerTypeVar),
+    Sum(Box<ConstraintExpr>, Box<ConstraintExpr>),
+    Sub(Box<ConstraintExpr>),
 }
 
-impl<I> WithLocation for ConstraintExpr<I> {}
+impl WithLocation for ConstraintExpr {}
 
-impl ConstraintExpr<InnerTypeVar> {
+impl ConstraintExpr {
     /// Evaluates the ConstraintExpr returning a new simplified form
-    fn evaluate(&self) -> ConstraintExpr<InnerTypeVar> {
+    fn evaluate(&self) -> ConstraintExpr {
         match self {
             ConstraintExpr::Integer(_) => self.clone(),
             ConstraintExpr::Var(_) => self.clone(),
@@ -34,10 +32,7 @@ impl ConstraintExpr<InnerTypeVar> {
     }
 }
 
-impl<I> std::fmt::Display for ConstraintExpr<I>
-where
-    I: std::fmt::Display,
-{
+impl std::fmt::Display for ConstraintExpr {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             ConstraintExpr::Integer(val) => write!(f, "{val}"),
@@ -49,46 +44,52 @@ where
 }
 
 pub struct TypeConstraints {
-    pub inner: HashMap<InnerTypeVar, Vec<Loc<ConstraintExpr<InnerTypeVar>>>>,
+    pub inner: Vec<(InnerTypeVar, Loc<ConstraintExpr>)>,
 }
 
 impl TypeConstraints {
     pub fn new() -> Self {
-        Self {
-            inner: HashMap::new(),
-        }
+        Self { inner: vec![] }
     }
 
-    pub fn add_constraint(&mut self, lhs: InnerTypeVar, rhs: Loc<ConstraintExpr<InnerTypeVar>>) {
-        self.inner.entry(lhs).or_insert(vec![]).push(rhs)
+    pub fn add_constraint(&mut self, lhs: InnerTypeVar, rhs: Loc<ConstraintExpr>) {
+        self.inner.push((lhs, rhs));
     }
 
     /// Calls `evaluate` on all constraints. If any constraints are now `T = Integer(val)`,
     /// those updated values are returned. Such constraints are then removed
     pub fn update_constraints(&mut self) -> Vec<Loc<(InnerTypeVar, i128)>> {
         let mut new_known = vec![];
-        for (expr, constraints) in &mut self.inner {
-            *constraints = constraints
-                .into_iter()
-                .filter_map(|constraint| {
-                    let result = constraint.map_ref(ConstraintExpr::evaluate);
+        self.inner = self
+            .inner
+            .iter_mut()
+            .filter_map(|(expr, constraint)| {
+                let result = constraint.map_ref(ConstraintExpr::evaluate);
 
-                    match constraint.inner {
-                        ConstraintExpr::Integer(val) => {
-                            // ().at_loc(..).map is a somewhat ugly way to wrap an arbitrary type
-                            // in a known Loc. This is done to avoid having to impl WithLocation for
-                            // the the unusual tuple used here
-                            new_known.push(().at_loc(&constraint).map(|_| (expr.clone(), val)));
-                            None
-                        }
-                        ConstraintExpr::Var(_) => Some(result),
-                        ConstraintExpr::Sum(_, _) => Some(result),
-                        ConstraintExpr::Sub(_) => Some(result),
+                match result.inner {
+                    ConstraintExpr::Integer(val) => {
+                        // ().at_loc(..).map is a somewhat ugly way to wrap an arbitrary type
+                        // in a known Loc. This is done to avoid having to impl WithLocation for
+                        // the the unusual tuple used here
+                        new_known.push(().at_loc(&constraint).map(|_| (expr.clone(), val)));
+                        None
                     }
-                })
-                .collect()
-        }
+                    ConstraintExpr::Var(_) => Some((expr.clone(), result)),
+                    ConstraintExpr::Sum(_, _) => Some((expr.clone(), result)),
+                    ConstraintExpr::Sub(_) => Some((expr.clone(), result)),
+                }
+            })
+            .collect();
 
         new_known
+    }
+}
+
+impl std::fmt::Display for TypeConstraints {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        for (lhs, rhs) in &self.inner {
+            write!(f, "{lhs}: {rhs}",)?;
+        }
+        Ok(())
     }
 }

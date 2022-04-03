@@ -56,3 +56,48 @@ snapshot_error!(
     }
     "
 );
+
+snapshot_error! {
+    multiplication_errors_if_overflow,
+    "
+    entity main(a: int<14>, b: int<16>) -> int<32> {
+        a * b
+    }
+    "
+}
+
+snapshot_error! {
+    counter_without_trunc_causes_type_error,
+    "
+        entity counter(clk: clk, rst: bool) -> int<8> {
+            reg(clk) x reset (rst: 0) = x + 1;
+            x
+        }
+    "
+}
+
+snapshot_error! {
+    type_error_has_replacements_applied,
+    "
+        entity counter(clk: clk, rst: bool) -> (int<8>, int<8>) {
+            decl x, y;
+
+            let x_at_max = x == 8;
+            let y_at_max = y == 6;
+
+            reg(clk) x reset (rst: 0) =
+                if x_at_max {
+                    x
+                }
+                else {
+                    x + 1
+                };
+
+            reg(clk) y reset (rst: 0) = {
+                    y
+                };
+
+            (x, y)
+        }
+        "
+}

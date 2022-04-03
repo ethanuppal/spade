@@ -1,7 +1,5 @@
 use thiserror::Error;
 
-use crate::equation::{FreeTypeVar, TypeVarRef};
-
 use super::equation::{InnerTypeVar, TypedExpression};
 use spade_common::{
     location_info::{Loc, WithLocation},
@@ -16,8 +14,8 @@ use spade_common::{
 /// while if unifying `int<7>` with `bool`, inside would be `None`
 #[derive(Debug, PartialEq, Clone)]
 pub struct UnificationTrace {
-    pub failing: FreeTypeVar,
-    pub inside: Option<FreeTypeVar>,
+    pub failing: InnerTypeVar,
+    pub inside: Option<InnerTypeVar>,
 }
 impl WithLocation for UnificationTrace {}
 impl std::fmt::Display for UnificationTrace {
@@ -26,42 +24,72 @@ impl std::fmt::Display for UnificationTrace {
     }
 }
 impl UnificationTrace {
-    pub fn new(failing: FreeTypeVar) -> Self {
+    pub fn new(failing: InnerTypeVar) -> Self {
         Self {
             failing,
             inside: None,
         }
     }
 
-    pub fn outer(&self) -> &FreeTypeVar {
+    pub fn outer(&self) -> &InnerTypeVar {
         self.inside.as_ref().unwrap_or(&self.failing)
     }
 }
 pub trait UnificationErrorExt<T> {
-    fn add_context<'a, 'b>(
+    fn add_context(
         self,
-        lhs: TypeVarRef<'a>,
-        rhs: TypeVarRef<'b>,
+        lhs: InnerTypeVar,
+        rhs: InnerTypeVar,
     ) -> std::result::Result<T, UnificationError>;
+
+    fn map_normal_err<F>(self, f: F) -> std::result::Result<T, Error>
+    where
+        F: Fn((UnificationTrace, UnificationTrace)) -> Error;
 }
 impl<T> UnificationErrorExt<T> for std::result::Result<T, UnificationError> {
-    fn add_context<'a, 'b>(
+    fn add_context(
         self,
-        lhs: TypeVarRef<'a>,
-        rhs: TypeVarRef<'b>,
+        lhs: InnerTypeVar,
+        rhs: InnerTypeVar,
     ) -> std::result::Result<T, UnificationError> {
         match self {
             Ok(val) => Ok(val),
-            Err((mut old_lhs, mut old_rhs)) => {
-                old_lhs.inside.replace(lhs.as_free());
-                old_rhs.inside.replace(rhs.as_free());
-                Err((old_lhs, old_rhs))
+            Err(UnificationError::Normal((mut old_lhs, mut old_rhs))) => {
+                old_lhs.inside.replace(lhs);
+                old_rhs.inside.replace(rhs);
+                Err(UnificationError::Normal((old_lhs, old_rhs)))
+            }
+            Err(UnificationError::FromConstraints { .. }) => {
+                panic!("Called add_context on a constraint based unfication error")
+            }
+        }
+    }
+
+    fn map_normal_err<F>(self, f: F) -> std::result::Result<T, Error>
+    where
+        F: Fn((UnificationTrace, UnificationTrace)) -> Error,
+    {
+        match self {
+            Ok(val) => Ok(val),
+            Err(UnificationError::Normal(inner)) => Err(f(inner)),
+            Err(UnificationError::FromConstraints { expected, got, loc }) => {
+                Err(Error::ConstraintMissmatch { expected, got, loc })
             }
         }
     }
 }
 
-pub type UnificationError = (UnificationTrace, UnificationTrace);
+#[derive(Debug, Error, PartialEq, Clone)]
+pub enum UnificationError {
+    #[error("Unification error")]
+    Normal((UnificationTrace, UnificationTrace)),
+    #[error("Unification error from constraints")]
+    FromConstraints {
+        expected: UnificationTrace,
+        got: UnificationTrace,
+        loc: Loc<()>,
+    },
+}
 
 #[derive(Debug, Error, PartialEq, Clone)]
 pub enum Error {
@@ -94,6 +122,13 @@ pub enum Error {
         got: UnificationTrace,
         loc: Loc<()>,
     },
+    #[error("Type missmatch due to constraints")]
+    ConstraintMissmatch {
+        expected: UnificationTrace,
+        got: UnificationTrace,
+        loc: Loc<()>,
+    },
+
     #[error("Int literal not compatible")]
     IntLiteralIncompatible { got: UnificationTrace, loc: Loc<()> },
     #[error("If condition must be boolean")]
@@ -207,28 +242,3 @@ pub enum Error {
     GenericTypeInstanciation,
 }
 pub type Result<T> = std::result::Result<T, Error>;
-
-#[macro_export]
-macro_rules! forget_all {
-    () => {};
-    ($first:expr) => {
-        std::mem::forget($first);
-    };
-    ($first:expr, $($rest:expr),+) => {
-        std::mem::forget($first);
-        forget_all!($($rest),*);
-    }
-}
-
-#[macro_export]
-macro_rules! try_and_forget {
-    ($result:expr, [$($to_forget:expr),*]) => (
-        match $result {
-            Err(e) => {
-                forget_all!($($to_forget),*);
-                return Err(e)
-            }
-            Ok(val) => val
-        }
-    )
-}

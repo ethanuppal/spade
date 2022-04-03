@@ -49,7 +49,8 @@ impl CompilationError for Error {
                         .with_message(format!("{} type specified here", expected)),
                 ])
                 .with_notes(type_mismatch_notes(got, expected)),
-            Error::UnspecifiedTypeError { expected, got, loc } => Diagnostic::error()
+            Error::UnspecifiedTypeError { expected, got, loc }
+            | Error::ConstraintMissmatch { expected, got, loc } => Diagnostic::error()
                 .with_message(format!("Expected type {}, got {}", expected, got))
                 .with_labels(vec![loc
                     .primary_label()

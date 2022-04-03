@@ -1,3 +1,4 @@
+use std::conv::trunc;
 entity counter(clk: clk, rst: bool) -> (int<8>, int<8>) {
     decl x, y;
 
@@ -14,7 +15,7 @@ entity counter(clk: clk, rst: bool) -> (int<8>, int<8>) {
             }
         }
         else {
-            x + 1
+            trunc(x + 1)
         };
 
     reg(clk) y reset (rst: 0) =
@@ -23,7 +24,7 @@ entity counter(clk: clk, rst: bool) -> (int<8>, int<8>) {
                 0
             }
             else {
-                y + 1
+                trunc(y + 1)
             }
         }
         else {

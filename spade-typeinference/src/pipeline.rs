@@ -3,6 +3,7 @@ use spade_common::location_info::WithLocation;
 use spade_hir::symbol_table::SymbolTable;
 use spade_hir::{Pipeline, PipelineBinding, PipelineStage};
 
+use crate::result::UnificationErrorExt;
 use crate::GenericListToken;
 use crate::{equation::TypedExpression, fixed_types::t_clock, result::Error};
 
@@ -25,12 +26,11 @@ impl TypeState {
         self.visit_pattern(&binding.pat, symtab)?;
 
         self.unify(&TypedExpression::Id(binding.pat.id), &binding.value, symtab)
-            .map_err(|(expected, got)| Error::PatternTypeMismatch {
+            .map_normal_err(|(expected, got)| Error::PatternTypeMismatch {
                 pattern: binding.pat.loc(),
                 expected,
                 got,
-            })?
-            .commit(self, symtab)?;
+            })?;
 
         Ok(())
     }
@@ -64,24 +64,21 @@ impl TypeState {
 
         // Add an equation for the clock
         let input_tvar = self.type_var_from_hir(&inputs[0].1.inner, &generic_list);
-        self.add_equation(TypedExpression::Name(inputs[0].0.clone()), input_tvar)
-            .commit(self);
+        self.add_equation(TypedExpression::Name(inputs[0].0.clone()), input_tvar);
         self.unify(
             &TypedExpression::Name(inputs[0].0.clone()),
             &t_clock(symtab),
             symtab,
         )
-        .map_err(|(got, expected)| Error::FirstPipelineArgNotClock {
+        .map_normal_err(|(got, expected)| Error::FirstPipelineArgNotClock {
             expected,
             spec: got.at_loc(&inputs[0].1.loc()),
-        })?
-        .commit(self, symtab)?;
+        })?;
 
         // Add equations for the inputs
         for (name, t) in inputs.iter().skip(1) {
             let tvar = self.type_var_from_hir(t, &generic_list);
-            self.add_equation(TypedExpression::Name(name.clone()), tvar)
-                .commit(self);
+            self.add_equation(TypedExpression::Name(name.clone()), tvar);
         }
 
         // Go through the stages
@@ -92,14 +89,13 @@ impl TypeState {
         self.visit_expression(result, symtab, &generic_list)?;
 
         let tvar = self.type_var_from_hir(output_type, &generic_list);
-        self.unify(&TypedExpression::Id(result.inner.id), tvar.as_ref(), symtab)
-            .map_err(|(got, expected)| Error::EntityOutputTypeMismatch {
+        self.unify(&TypedExpression::Id(result.inner.id), &tvar, symtab)
+            .map_normal_err(|(got, expected)| Error::EntityOutputTypeMismatch {
                 expected,
                 got,
                 type_spec: output_type.loc(),
                 output_expr: result.loc(),
-            })?
-            .commit(self, symtab)?;
+            })?;
 
         Ok(())
     }
@@ -113,7 +109,6 @@ mod tests {
     use crate::InnerTypeVar;
     use crate::TypedExpression as TExpr;
 
-    use crate::equation::TypeVarRef;
     use crate::{ensure_same_type, HasType};
     use crate::{fixed_types::t_int, format_trace_stack, hir, kvar};
     use hir::ItemList;
@@ -137,12 +132,7 @@ mod tests {
         let symtab = SymbolTable::new();
 
         let expr_a = TExpr::Name(name_id(1, "b").inner);
-        state
-            .add_equation(
-                expr_a.clone(),
-                TypeVarRef::from_owned(TVar::Unknown(100), &state),
-            )
-            .commit(&mut state);
+        state.add_equation(expr_a.clone(), TVar::Unknown(100));
 
         let generic_list = state.create_generic_list(&vec![]);
         state

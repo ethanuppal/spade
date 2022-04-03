@@ -18,7 +18,6 @@ use spade_hir::symbol_table::SymbolTable;
 use spade_hir::{Block, Entity, ExprKind, Expression, Register, Statement};
 use spade_types::KnownType;
 use std::collections::HashMap;
-use std::sync::atomic::AtomicU64;
 use trace_stack::TraceStack;
 
 mod constraints;
@@ -36,7 +35,7 @@ use crate::fixed_types::t_clock;
 use crate::fixed_types::{t_bool, t_int};
 use crate::trace_stack::{format_trace_stack, TraceStackEntry};
 
-use equation::{FreeTypeVar, InnerTypeVar, TypeEquations, TypeVarRef, TypedExpression};
+use equation::{InnerTypeVar, TypeEquations, TypedExpression};
 use result::{Error, Result};
 
 use self::result::{UnificationError, UnificationErrorExt, UnificationTrace};
@@ -142,12 +141,14 @@ pub struct TypeState {
     ///
     /// This in turn is done since owning a &mut of the type state represents none of
     /// the live type variables changing
-    next_typeid: AtomicU64,
+    next_typeid: u64,
     // List of the mapping between generic parameters and type vars. Managed here
     // because unification must update *all* TypeVars in existence.
     generic_lists: Vec<HashMap<NameID, InnerTypeVar>>,
 
     constraints: TypeConstraints,
+
+    replacements: HashMap<InnerTypeVar, InnerTypeVar>,
 
     pub trace_stack: TraceStack,
 }
@@ -156,9 +157,10 @@ impl TypeState {
     pub fn new() -> Self {
         Self {
             equations: HashMap::new(),
-            next_typeid: AtomicU64::new(0),
+            next_typeid: 0,
             trace_stack: TraceStack::new(),
             constraints: TypeConstraints::new(),
+            replacements: HashMap::new(),
             generic_lists: vec![],
         }
     }
@@ -175,10 +177,10 @@ impl TypeState {
         &'a self,
         e: &hir::TypeExpression,
         generic_list_token: &GenericListToken,
-    ) -> TypeVarRef<'a> {
+    ) -> InnerTypeVar {
         match e {
             hir::TypeExpression::Integer(i) => {
-                TypeVarRef::known(KnownType::Integer(*i), vec![], None)
+                InnerTypeVar::Known(KnownType::Integer(*i), vec![], None)
             }
             hir::TypeExpression::TypeSpec(spec) => self.type_var_from_hir(spec, generic_list_token),
         }
@@ -188,7 +190,7 @@ impl TypeState {
         &'a self,
         hir_type: &crate::hir::TypeSpec,
         generic_list_token: &GenericListToken,
-    ) -> TypeVarRef<'a> {
+    ) -> InnerTypeVar {
         let generic_list = self.get_generic_list(generic_list_token);
         match hir_type {
             hir::TypeSpec::Declared(base, params) => {
@@ -197,10 +199,10 @@ impl TypeState {
                     .map(|e| self.hir_type_expr_to_var(e, generic_list_token))
                     .collect();
 
-                TypeVarRef::known(KnownType::Type(base.inner.clone()), params, None)
+                InnerTypeVar::Known(KnownType::Type(base.inner.clone()), params, None)
             }
             hir::TypeSpec::Generic(name) => match generic_list.get(name) {
-                Some(t) => TypeVarRef::from_owned(t.clone(), self),
+                Some(t) => t.clone(),
                 None => {
                     panic!("No entry for {} in generic_list", name)
                 }
@@ -210,13 +212,16 @@ impl TypeState {
                     .iter()
                     .map(|t| self.type_var_from_hir(t, generic_list_token))
                     .collect();
-                TypeVarRef::tuple(inner)
+                InnerTypeVar::Tuple(inner)
             }
             hir::TypeSpec::Array { inner, size } => {
                 let inner = self.type_var_from_hir(inner, generic_list_token);
                 let size = self.hir_type_expr_to_var(size, generic_list_token);
 
-                TypeVarRef::array(inner, size)
+                InnerTypeVar::Array {
+                    inner: Box::new(inner),
+                    size: Box::new(size),
+                }
             }
             hir::TypeSpec::Unit(_) => {
                 todo!("Support unit type in type inference")
@@ -225,33 +230,30 @@ impl TypeState {
     }
 
     /// Returns the type of the expression with the specified id. Error if unknown
-    pub fn type_of<'a>(&'a self, expr: &TypedExpression) -> Result<TypeVarRef<'a>> {
+    pub fn type_of<'a>(&'a self, expr: &TypedExpression) -> Result<InnerTypeVar> {
         for (e, t) in &self.equations {
             if e == expr {
-                return Ok(TypeVarRef::from_ref(&t, self));
+                return Ok(t.clone());
             }
         }
         Err(Error::UnknownType(expr.clone()).into())
     }
 
-    pub fn new_generic_int<'a>(&'a self, symtab: &SymbolTable) -> TypeVarRef<'a> {
-        TypeVarRef::known(t_int(symtab), vec![self.new_generic()], None)
+    pub fn new_generic_int(&mut self, symtab: &SymbolTable) -> InnerTypeVar {
+        InnerTypeVar::Known(t_int(symtab), vec![self.new_generic()], None)
     }
 
     /// Return a new generic int. The first returned value is int<N>, and the second
     /// value is N
-    pub fn new_split_generic_int<'a>(
-        &'a self,
-        symtab: &SymbolTable,
-    ) -> (TypeVarRef<'a>, TypeVarRef<'a>) {
+    pub fn new_split_generic_int(&mut self, symtab: &SymbolTable) -> (InnerTypeVar, InnerTypeVar) {
         let size = self.new_generic();
-        let full = TypeVarRef::known(t_int(symtab), vec![size.clone()], None);
+        let full = InnerTypeVar::Known(t_int(symtab), vec![size.clone()], None);
         (full, size)
     }
 
-    fn new_generic<'a>(&'a self) -> TypeVarRef<'a> {
+    fn new_generic(&mut self) -> InnerTypeVar {
         let id = self.new_typeid();
-        TypeVarRef::from_owned(InnerTypeVar::Unknown(id), self)
+        InnerTypeVar::Unknown(id)
     }
 
     #[trace_typechecker]
@@ -266,7 +268,6 @@ impl TypeState {
         for (name, t) in &entity.inputs {
             let tvar = self.type_var_from_hir(t, &generic_list);
             self.add_equation(TypedExpression::Name(name.clone()), tvar)
-                .commit(self);
         }
 
         self.visit_expression(&entity.body, symtab, &generic_list)?;
@@ -274,18 +275,13 @@ impl TypeState {
         // Ensure that the output type matches what the user specified, and unit otherwise
         if let Some(output_type) = &entity.head.output_type {
             let tvar = self.type_var_from_hir(&output_type, &generic_list);
-            self.unify(
-                &TypedExpression::Id(entity.body.inner.id),
-                tvar.as_ref(),
-                symtab,
-            )
-            .map_err(|(got, expected)| Error::EntityOutputTypeMismatch {
-                expected,
-                got,
-                type_spec: output_type.loc(),
-                output_expr: entity.body.loc(),
-            })?
-            .commit(self, symtab)?;
+            self.unify(&TypedExpression::Id(entity.body.inner.id), &tvar, symtab)
+                .map_normal_err(|(got, expected)| Error::EntityOutputTypeMismatch {
+                    expected,
+                    got,
+                    type_spec: output_type.loc(),
+                    output_expr: entity.body.loc(),
+                })?;
         } else {
             todo!("Support unit types")
             // self.unify_types(
@@ -321,8 +317,8 @@ impl TypeState {
             self.visit_expression(&value, symtab, generic_list)?;
             let target_type = self.type_var_from_hir(&params.arg_type(&target), generic_list);
 
-            self.unify(target_type.as_ref(), value, symtab)
-                .map_err(|(expected, got)| match kind {
+            self.unify(&target_type, value, symtab).map_normal_err(
+                |(expected, got)| match kind {
                     hir::ArgumentKind::Positional => Error::PositionalArgumentMismatch {
                         index: i,
                         expr: value.loc(),
@@ -340,8 +336,8 @@ impl TypeState {
                         expected,
                         got,
                     },
-                })?
-                .commit(self, symtab)?;
+                },
+            )?;
         }
 
         Ok(())
@@ -355,8 +351,7 @@ impl TypeState {
         generic_list: &GenericListToken,
     ) -> Result<()> {
         let new_type = self.new_generic();
-        self.add_equation(TypedExpression::Id(expression.inner.id), new_type)
-            .commit(self);
+        self.add_equation(TypedExpression::Id(expression.inner.id), new_type);
 
         // Recurse down the expression
         match &expression.inner.kind {
@@ -421,15 +416,13 @@ impl TypeState {
         self.visit_argument_list(args, &head.inputs(), symtab, &generic_list)?;
 
         let return_type = self.type_var_from_hir(
-            &head
-                .output_type()
+            head.output_type()
                 .as_ref()
                 .expect("Unit return type from entity is unsupported"),
             &generic_list,
         );
 
-        self.unify_expression_generic_error(expression, return_type.as_ref(), symtab)?
-            .commit(self, symtab)?;
+        self.unify_expression_generic_error(expression, &return_type, symtab)?;
 
         Ok(())
     }
@@ -447,7 +440,7 @@ impl TypeState {
                 let t = self.new_generic();
                 (name, t)
             })
-            .map(|(name, t)| (name, t.as_ref().clone()))
+            .map(|(name, t)| (name, t.clone()))
             .collect();
         self.generic_lists.push(new_list);
         GenericListToken { id }
@@ -461,42 +454,39 @@ impl TypeState {
         generic_list: &GenericListToken,
     ) -> Result<()> {
         for statement in &block.statements {
-            self.visit_statement(statement, symtab, generic_list)?
+            self.visit_statement(statement, symtab, generic_list)?;
         }
-        self.visit_expression(&block.result, symtab, generic_list)
+        self.visit_expression(&block.result, symtab, generic_list)?;
+        Ok(())
     }
 
     #[trace_typechecker]
     pub fn visit_pattern(&mut self, pattern: &Loc<Pattern>, symtab: &SymbolTable) -> Result<()> {
         let new_type = self.new_generic();
-        self.add_equation(TypedExpression::Id(pattern.inner.id), new_type)
-            .commit(self);
+        self.add_equation(TypedExpression::Id(pattern.inner.id), new_type);
         match &pattern.inner.kind {
             hir::PatternKind::Integer(_) => {
                 let int_t = &self.new_generic_int(&symtab);
-                self.unify(pattern, int_t.as_ref(), symtab)
-                    .expect("Failed to unify new_generic with int")
-                    .commit(self, symtab)?;
+                self.unify(pattern, int_t, symtab)
+                    .expect("Failed to unify new_generic with int");
             }
             hir::PatternKind::Bool(_) => {
                 self.unify(pattern, &t_bool(symtab), symtab)
-                    .expect("Expected new_generic with boolean")
-                    .commit(self, symtab)?;
+                    .expect("Expected new_generic with boolean");
             }
             hir::PatternKind::Name { name, pre_declared } => {
                 if !pre_declared {
                     self.add_equation(
                         TypedExpression::Name(name.clone().inner),
                         pattern.get_type(self)?,
-                    )
-                    .commit(self);
+                    );
                 }
             }
             hir::PatternKind::Tuple(subpatterns) => {
                 for pattern in subpatterns {
                     self.visit_pattern(pattern, symtab)?;
                 }
-                let tuple_type = TypeVarRef::tuple(
+                let tuple_type = InnerTypeVar::Tuple(
                     subpatterns
                         .iter()
                         .map(|pattern| {
@@ -506,9 +496,8 @@ impl TypeState {
                         .collect::<Result<_>>()?,
                 );
 
-                self.unify(pattern, tuple_type.as_ref(), symtab)
-                    .expect("Unification of new_generic with tuple type can not fail")
-                    .commit(self, symtab)?;
+                self.unify(pattern, &tuple_type, symtab)
+                    .expect("Unification of new_generic with tuple type can not fail");
             }
             hir::PatternKind::Type(name, args) => {
                 let (condition_type, params, generic_list) =
@@ -539,9 +528,8 @@ impl TypeState {
                         }
                     };
 
-                self.unify(pattern, condition_type.as_ref(), symtab)
-                    .expect("Unification of new_generic with enum can not fail")
-                    .commit(self, symtab)?;
+                self.unify(pattern, &condition_type, symtab)
+                    .expect("Unification of new_generic with enum can not fail");
 
                 for (
                     i,
@@ -558,8 +546,8 @@ impl TypeState {
                     self.visit_pattern(pattern, symtab)?;
                     let target_type = self.type_var_from_hir(&target_type, &generic_list);
 
-                    self.unify(target_type.as_ref(), pattern, symtab)
-                        .map_err(|(expected, got)| match kind {
+                    self.unify(&target_type, pattern, symtab).map_normal_err(
+                        |(expected, got)| match kind {
                             hir::ArgumentKind::Positional => Error::PositionalArgumentMismatch {
                                 index: i,
                                 expr: pattern.loc(),
@@ -577,8 +565,8 @@ impl TypeState {
                                 expected,
                                 got,
                             },
-                        })?
-                        .commit(self, symtab)?;
+                        },
+                    )?;
                 }
             }
         }
@@ -599,23 +587,21 @@ impl TypeState {
                 self.visit_pattern(pattern, symtab)?;
 
                 self.unify(&TypedExpression::Id(pattern.id), value, symtab)
-                    .map_err(|(expected, got)| Error::PatternTypeMismatch {
+                    .map_normal_err(|(expected, got)| Error::PatternTypeMismatch {
                         pattern: pattern.loc(),
                         expected,
                         got,
-                    })?
-                    .commit(self, symtab)?;
+                    })?;
 
                 if let Some(t) = t {
                     let generic_list = self.create_generic_list(&[]);
                     let tvar = self.type_var_from_hir(&t, &generic_list);
-                    self.unify(&TypedExpression::Id(pattern.id), tvar.as_ref(), symtab)
-                        .map_err(|(got, expected)| Error::UnspecifiedTypeError {
+                    self.unify(&TypedExpression::Id(pattern.id), &tvar, symtab)
+                        .map_normal_err(|(got, expected)| Error::UnspecifiedTypeError {
                             expected,
                             got,
                             loc: value.loc(),
-                        })?
-                        .commit(self, symtab)?;
+                        })?;
                 }
 
                 Ok(())
@@ -624,8 +610,7 @@ impl TypeState {
             Statement::Declaration(names) => {
                 for name in names {
                     let new_type = self.new_generic();
-                    self.add_equation(TypedExpression::Name(name.clone().inner), new_type)
-                        .commit(self);
+                    self.add_equation(TypedExpression::Name(name.clone().inner), new_type);
                 }
                 Ok(())
             }
@@ -649,249 +634,135 @@ impl TypeState {
             self.visit_expression(&rst_value, symtab, generic_list)?;
             // Ensure cond is a boolean
             self.unify(&rst_cond.inner, &t_bool(symtab), symtab)
-                .map_err(|(got, expected)| Error::NonBoolReset {
+                .map_normal_err(|(got, expected)| Error::NonBoolReset {
                     expected,
                     got,
                     loc: rst_cond.loc(),
-                })?
-                .commit(self, symtab)?;
+                })?;
 
             // Ensure the reset value has the same type as the register itself
             self.unify(&rst_value.inner, &reg.value.inner, symtab)
-                .map_err(|(got, expected)| Error::RegisterResetMismatch {
+                .map_normal_err(|(got, expected)| Error::RegisterResetMismatch {
                     expected,
                     got,
                     loc: rst_cond.loc(),
-                })?
-                .commit(self, symtab)?;
+                })?;
         }
 
         self.unify(&reg.clock, &t_clock(symtab), symtab)
-            .map_err(|(got, expected)| Error::NonClockClock {
+            .map_normal_err(|(got, expected)| Error::NonClockClock {
                 expected,
                 got,
                 loc: reg.clock.loc(),
-            })?
-            .commit(self, symtab)?;
+            })?;
 
         self.unify(&TypedExpression::Id(reg.pattern.id), &reg.value, symtab)
-            .map_err(|(expected, got)| Error::PatternTypeMismatch {
+            .map_normal_err(|(expected, got)| Error::PatternTypeMismatch {
                 pattern: reg.pattern.loc(),
                 expected,
                 got,
-            })?
-            .commit(self, symtab)?;
+            })?;
 
         if let Some(t) = &reg.value_type {
             let token = self.create_generic_list(&[]);
             let tvar = self.type_var_from_hir(&t, &token);
-            self.unify(&TypedExpression::Id(reg.pattern.id), tvar.as_ref(), symtab)
-                .map_err(|(got, expected)| Error::UnspecifiedTypeError {
+            self.unify(&TypedExpression::Id(reg.pattern.id), &tvar, symtab)
+                .map_normal_err(|(got, expected)| Error::UnspecifiedTypeError {
                     expected,
                     got,
                     loc: reg.pattern.loc(),
-                })?
-                .commit(self, symtab)?;
+                })?;
         }
 
         Ok(())
-    }
-}
-
-/// The result of a unification, i.e. a new type and potentially a type to replace.
-/// Must be used by calling `commit`. This type should never be bound to a variable
-/// as it contains unmanaged `InnerTypeVar` which could go stale.
-///
-/// This is required in order for the lifetime based variable system to work as it allows
-/// the unfication, which uses lifetime limited type variables to work without mutable
-/// references to the TypeState, which can be committed after the fact.
-///
-/// Has a drop bomb to ensure it is used
-#[must_use]
-struct UnificationTask {
-    // List of (new, replacement) pairs
-    pub tasks: Vec<(InnerTypeVar, Option<InnerTypeVar>)>,
-}
-
-impl UnificationTask {
-    /// Returns the last type that was unified but has not been committed yet. This is
-    /// effectively the resulting type of the unification process.
-    ///
-    /// Should not be called outside unify
-    fn last_result_type(&self) -> InnerTypeVar {
-        self.tasks
-            .last()
-            .expect("attempting to get last_result_type on unification task")
-            .0
-            .clone()
-    }
-
-    fn join(mut self, other: &mut UnificationTask) {
-        other.tasks.append(&mut self.tasks);
-        std::mem::forget(self);
-    }
-
-    fn commit(self, state: &mut TypeState, symtab: &SymbolTable) -> Result<()> {
-        for (new_type, replaced_type) in &self.tasks {
-            if let Some(replaced_type) = replaced_type {
-                let replaced_type = replaced_type;
-                for (_, rhs) in &mut state.equations {
-                    TypeState::replace_type_var(rhs, &replaced_type, new_type)
-                }
-                for generic_list in &mut state.generic_lists {
-                    for (_, lhs) in generic_list.iter_mut() {
-                        TypeState::replace_type_var(lhs, &replaced_type, new_type)
-                    }
-                }
-                state.constraints.inner = state
-                    .constraints
-                    .inner
-                    .clone()
-                    .into_iter()
-                    .map(|(mut lhs, mut constraints)| {
-                        TypeState::replace_type_var(&mut lhs, &replaced_type, new_type);
-                        for constraint in &mut constraints {
-                            TypeState::replace_type_var_in_constraint(
-                                constraint,
-                                &replaced_type,
-                                new_type,
-                            )
-                        }
-
-                        (lhs, constraints)
-                    })
-                    .collect()
-            }
-        }
-
-        std::mem::forget(self);
-
-        // With replacement done, some of our constraints may have been updated to provide
-        // more type inference information. Try to do unification of those new constraints too
-        let new_info = state.constraints.update_constraints();
-        for constraint in new_info {
-            let ((var, value), loc) = constraint.split_loc();
-            if value < 0 {
-                // TODO before merge: Report this properly, or support integers
-                panic!("Infered a negative integer from constraints");
-            }
-
-            state
-                .unify(&var, &KnownType::Integer(value as u128), symtab)
-                .map_err(|(got, expected)| Error::UnspecifiedTypeError { got, expected, loc })?
-                .commit(state, symtab)?;
-        }
-
-        Ok(())
-    }
-}
-
-impl Drop for UnificationTask {
-    fn drop(&mut self) {
-        if !std::thread::panicking() {
-            panic!("Dropped a UnificationTask which was not committed")
-        }
-    }
-}
-
-// Similar to `UnificationTask` but for the addition of equations and constraints
-#[must_use]
-enum AdditionTask {
-    Equation {
-        expression: TypedExpression,
-        var: InnerTypeVar,
-    },
-    Constraint {
-        lhs: InnerTypeVar,
-        rhs: Loc<ConstraintExpr<InnerTypeVar>>,
-    },
-}
-
-impl AdditionTask {
-    fn commit(self, state: &mut TypeState) {
-        match &self {
-            Self::Equation { expression, var } => {
-                state.trace_stack.push(TraceStackEntry::AddingEquation(
-                    expression.clone(),
-                    FreeTypeVar::new(var.clone()),
-                ));
-                if let Some(prev) = state.equations.insert(expression.clone(), var.clone()) {
-                    let var = var.clone();
-                    let expr = expression.clone();
-                    std::mem::forget(self);
-                    println!("{}", format_trace_stack(&state.trace_stack));
-                    panic!("Adding equation for {} == {} but a previous eq exists.\n\tIt was previously bound to {}", expr, var, prev)
-                }
-            }
-            Self::Constraint { lhs, rhs } => {
-                state.constraints.add_constraint(lhs.clone(), rhs.clone())
-            }
-        }
-        std::mem::forget(self);
-    }
-}
-impl Drop for AdditionTask {
-    fn drop(&mut self) {
-        if !std::thread::panicking() {
-            panic!("Dropped an EquationTask which was not committed")
-        }
     }
 }
 
 // Private helper functions
 impl TypeState {
-    fn new_typeid(&self) -> u64 {
-        self.next_typeid
-            .fetch_add(1, std::sync::atomic::Ordering::SeqCst)
+    fn new_typeid(&mut self) -> u64 {
+        let result = self.next_typeid;
+        self.next_typeid += 1;
+        result
     }
 
-    fn add_equation<'a>(&self, expression: TypedExpression, var: TypeVarRef<'a>) -> AdditionTask {
-        AdditionTask::Equation {
-            expression,
-            var: var.as_ref().clone(),
+    fn check_var_for_replacement(&self, var: InnerTypeVar) -> InnerTypeVar {
+        if let Some(new) = self.replacements.get(&var) {
+            return new.clone();
+        };
+        match var {
+            InnerTypeVar::Known(base, params, loc) => InnerTypeVar::Known(
+                base,
+                params
+                    .into_iter()
+                    .map(|p| self.check_var_for_replacement(p))
+                    .collect(),
+                loc,
+            ),
+            InnerTypeVar::Tuple(inner) => InnerTypeVar::Tuple(
+                inner
+                    .into_iter()
+                    .map(|p| self.check_var_for_replacement(p))
+                    .collect(),
+            ),
+            InnerTypeVar::Array { inner, size } => InnerTypeVar::Array {
+                inner: Box::new(self.check_var_for_replacement(*inner)),
+                size: Box::new(self.check_var_for_replacement(*size)),
+            },
+            u @ InnerTypeVar::Unknown(_) => u,
         }
     }
 
-    fn add_constraint<'a>(
-        &self,
-        lhs: TypeVarRef<'a>,
-        rhs: Loc<ConstraintExpr<TypeVarRef<'a>>>,
-    ) -> AdditionTask {
-        AdditionTask::Constraint {
-            lhs: lhs.as_ref().clone(),
-            rhs: rhs.map(|rhs| self.constraint_expr_to_inner_type_var(rhs)),
-        }
-    }
-
-    fn constraint_expr_to_inner_type_var<'a>(
-        &self,
-        expr: ConstraintExpr<TypeVarRef<'a>>,
-    ) -> ConstraintExpr<InnerTypeVar> {
-        match expr {
-            ConstraintExpr::Integer(val) => ConstraintExpr::Integer(val),
-            ConstraintExpr::Var(v) => ConstraintExpr::Var(v.as_ref().clone()),
+    fn check_expr_for_replacement(&self, val: ConstraintExpr) -> ConstraintExpr {
+        match val {
+            v @ ConstraintExpr::Integer(_) => v,
+            ConstraintExpr::Var(var) => ConstraintExpr::Var(self.check_var_for_replacement(var)),
             ConstraintExpr::Sum(lhs, rhs) => ConstraintExpr::Sum(
-                Box::new(self.constraint_expr_to_inner_type_var(*lhs)),
-                Box::new(self.constraint_expr_to_inner_type_var(*rhs)),
+                Box::new(self.check_expr_for_replacement(*lhs)),
+                Box::new(self.check_expr_for_replacement(*rhs)),
             ),
             ConstraintExpr::Sub(inner) => {
-                ConstraintExpr::Sub(Box::new(self.constraint_expr_to_inner_type_var(*inner)))
+                ConstraintExpr::Sub(Box::new(self.check_expr_for_replacement(*inner)))
             }
         }
     }
 
-    #[cfg(test)]
-    fn add_eq_from_tvar(&mut self, expression: TypedExpression, var: InnerTypeVar) {
-        self.add_equation(expression, TypeVarRef::from_owned(var, self))
-            .commit(self)
+    fn add_equation(&mut self, expression: TypedExpression, var: InnerTypeVar) {
+        let var = self.check_var_for_replacement(var);
+
+        self.trace_stack.push(TraceStackEntry::AddingEquation(
+            expression.clone(),
+            var.clone(),
+        ));
+        if let Some(prev) = self.equations.insert(expression.clone(), var.clone()) {
+            let var = var.clone();
+            let expr = expression.clone();
+            println!("{}", format_trace_stack(&self.trace_stack));
+            panic!("Adding equation for {} == {} but a previous eq exists.\n\tIt was previously bound to {}", expr, var, prev)
+        }
     }
 
-    fn unify(
-        &self,
+    fn add_constraint(&mut self, lhs: InnerTypeVar, rhs: Loc<ConstraintExpr>) {
+        let lhs = self.check_var_for_replacement(lhs);
+        let rhs = rhs.map(|rhs| self.check_expr_for_replacement(rhs));
+        self.constraints.add_constraint(lhs, rhs);
+    }
+
+    #[cfg(test)]
+    fn add_eq_from_tvar(&mut self, expression: TypedExpression, var: InnerTypeVar) {
+        self.add_equation(expression, var)
+    }
+
+    /// Performs unification but does not update constraints. This is done to avoid
+    /// updating constraints more often than nessecary. Technically, constraints can
+    /// be updated even less often, but `unify` is a pretty natural point to do so.
+
+    fn unify_inner(
+        &mut self,
         e1: &impl HasType,
         e2: &impl HasType,
         symtab: &SymbolTable,
-    ) -> std::result::Result<UnificationTask, UnificationError> {
+    ) -> std::result::Result<InnerTypeVar, UnificationError> {
         let v1 = e1
             .get_type(self)
             .expect("Tried to unify types but the lhs was not found");
@@ -899,38 +770,41 @@ impl TypeState {
             .get_type(self)
             .expect("Tried to unify types but the rhs was not found");
 
+        let v1 = self.check_var_for_replacement(v1);
+        let v2 = self.check_var_for_replacement(v2);
+
         self.trace_stack
-            .push(TraceStackEntry::TryingUnify(v1.as_free(), v2.as_free()));
+            .push(TraceStackEntry::TryingUnify(v1.clone(), v2.clone()));
 
         // Copy the original types so we can properly trace the progress of the
         // unification
         let v1cpy = v1.clone();
         let v2cpy = v2.clone();
 
-        let err_producer = || {
-            (
-                UnificationTrace::new(v1.as_free()),
-                UnificationTrace::new(v2.as_free()),
-            )
-        };
+        macro_rules! err_producer {
+            () => {
+                UnificationError::Normal((
+                    UnificationTrace::new(self.check_var_for_replacement(v1)),
+                    UnificationTrace::new(self.check_var_for_replacement(v2)),
+                ))
+            };
+        }
+
         macro_rules! unify_if {
             ($condition:expr, $new_type:expr, $replaced_type:expr) => {
                 if $condition {
                     Ok(($new_type, $replaced_type))
                 } else {
-                    Err(err_producer())
+                    Err(err_producer!())
                 }
             };
         }
-
-        let mut task = UnificationTask { tasks: vec![] };
 
         macro_rules! try_with_context {
             ($value: expr) => {
                 match $value {
                     Ok(result) => result,
                     e => {
-                        std::mem::forget(task);
                         return e.add_context(v1.clone(), v2.clone());
                     }
                 }
@@ -939,32 +813,30 @@ impl TypeState {
 
         // Figure out the most general type, and take note if we need to
         // do any replacement of the types in the rest of the state
-        let result = match (&v1.as_ref(), &v2.as_ref()) {
+        let result = match (&v1, &v2) {
             (InnerTypeVar::Known(t1, p1, _), InnerTypeVar::Known(t2, p2, _)) => match (t1, t2) {
                 (KnownType::Integer(val1), KnownType::Integer(val2)) => {
                     unify_if!(val1 == val2, v1, None)
                 }
                 (KnownType::Type(n1), KnownType::Type(n2)) => {
                     match (
-                        &symtab.type_symbol_by_id(n1).inner,
-                        &symtab.type_symbol_by_id(n2).inner,
+                        &symtab.type_symbol_by_id(&n1).inner,
+                        &symtab.type_symbol_by_id(&n2).inner,
                     ) {
                         (TypeSymbol::Declared(_, _), TypeSymbol::Declared(_, _)) => {
                             if n1 != n2 {
-                                std::mem::forget(task);
-                                return Err(err_producer());
+                                return Err(err_producer!());
                             }
                             if p1.len() != p2.len() {
-                                std::mem::forget(task);
-                                return Err(err_producer());
+                                return Err(err_producer!());
                             }
 
                             for (t1, t2) in p1.iter().zip(p2.iter()) {
-                                try_with_context!(self.unify(t1, t2, symtab)).join(&mut task);
+                                try_with_context!(self.unify_inner(t1, t2, symtab));
                             }
 
-                            let new_ts1 = symtab.type_symbol_by_id(n1).inner;
-                            let new_ts2 = symtab.type_symbol_by_id(n2).inner;
+                            let new_ts1 = symtab.type_symbol_by_id(&n1).inner;
+                            let new_ts2 = symtab.type_symbol_by_id(&n2).inner;
                             let new_v1 = e1
                                 .get_type(self)
                                 .expect("Tried to unify types but the lhs was not found");
@@ -980,20 +852,19 @@ impl TypeState {
                         (TypeSymbol::GenericInt, TypeSymbol::GenericInt) => todo!(),
                     }
                 }
-                (KnownType::Integer(_), KnownType::Type(_)) => Err(err_producer()),
-                (KnownType::Type(_), KnownType::Integer(_)) => Err(err_producer()),
+                (KnownType::Integer(_), KnownType::Type(_)) => Err(err_producer!()),
+                (KnownType::Type(_), KnownType::Integer(_)) => Err(err_producer!()),
             },
             (InnerTypeVar::Tuple(i1), InnerTypeVar::Tuple(i2)) => {
                 if i1.len() != i2.len() {
-                    std::mem::forget(task);
-                    return Err(err_producer());
+                    return Err(err_producer!());
                 }
 
                 for (t1, t2) in i1.iter().zip(i2.iter()) {
-                    try_with_context!(self.unify(t1, t2, symtab)).join(&mut task);
+                    try_with_context!(self.unify_inner(t1, t2, symtab));
                 }
 
-                Ok((v1, None))
+                Ok((self.check_var_for_replacement(v1), None))
             }
             (
                 InnerTypeVar::Array {
@@ -1005,18 +876,14 @@ impl TypeState {
                     size: s2,
                 },
             ) => {
-                let inner_task = try_with_context!(self.unify(i1.as_ref(), i2.as_ref(), symtab));
-                let inner = inner_task.last_result_type();
-                inner_task.join(&mut task);
-                let size_task = try_with_context!(self.unify(s1.as_ref(), s2.as_ref(), symtab));
-                let size = size_task.last_result_type();
-                size_task.join(&mut task);
+                let inner = try_with_context!(self.unify_inner(i1.as_ref(), i2.as_ref(), symtab));
+                let size = try_with_context!(self.unify_inner(s1.as_ref(), s2.as_ref(), symtab));
 
                 Ok((
-                    TypeVarRef::array(
-                        TypeVarRef::from_owned(inner.clone(), self),
-                        TypeVarRef::from_owned(size.clone(), self),
-                    ),
+                    InnerTypeVar::Array {
+                        inner: Box::new(inner),
+                        size: Box::new(size),
+                    },
                     None,
                 ))
             }
@@ -1025,32 +892,92 @@ impl TypeState {
             (_other, InnerTypeVar::Unknown(_)) => Ok((v1, Some(v2))),
             (InnerTypeVar::Unknown(_), _other) => Ok((v2, Some(v1))),
             // Incompatibilities
-            (InnerTypeVar::Known(_, _, _), _other) => Err(err_producer()),
-            (_other, InnerTypeVar::Known(_, _, _)) => Err(err_producer()),
-            (InnerTypeVar::Tuple(_), _other) => Err(err_producer()),
-            (_other, InnerTypeVar::Tuple(_)) => Err(err_producer()),
+            (InnerTypeVar::Known(_, _, _), _other) => Err(err_producer!()),
+            (_other, InnerTypeVar::Known(_, _, _)) => Err(err_producer!()),
+            (InnerTypeVar::Tuple(_), _other) => Err(err_producer!()),
+            (_other, InnerTypeVar::Tuple(_)) => Err(err_producer!()),
         };
 
-        let (new_type, replaced_type) = match result {
-            Ok(result) => result,
-            Err(e) => {
-                std::mem::forget(task);
-                return Err(e);
+        let (new_type, replaced_type) = result?;
+
+        self.trace_stack
+            .push(TraceStackEntry::Unified(v1cpy, v2cpy, new_type.clone()));
+
+        if let Some(replaced_type) = replaced_type {
+            self.replacements
+                .insert(replaced_type.clone(), new_type.clone());
+
+            for (_, rhs) in &mut self.equations {
+                TypeState::replace_type_var(rhs, &replaced_type, &new_type)
             }
-        };
+            for generic_list in &mut self.generic_lists {
+                for (_, lhs) in generic_list.iter_mut() {
+                    TypeState::replace_type_var(lhs, &replaced_type, &new_type)
+                }
+            }
+            self.constraints.inner = self
+                .constraints
+                .inner
+                .clone()
+                .into_iter()
+                .map(|(mut lhs, mut rhs)| {
+                    TypeState::replace_type_var(&mut lhs, &replaced_type, &new_type);
+                    TypeState::replace_type_var_in_constraint(&mut rhs, &replaced_type, &new_type);
 
-        task.tasks.push((
-            new_type.as_ref().clone(),
-            replaced_type.map(|i| i.as_ref().clone()),
-        ));
+                    (lhs, rhs)
+                })
+                .collect()
+        }
 
-        self.trace_stack.push(TraceStackEntry::Unified(
-            v1cpy.as_free(),
-            v2cpy.as_free(),
-            new_type.as_free(),
-        ));
+        Ok(new_type)
+    }
 
-        Ok(task)
+    fn unify(
+        &mut self,
+        e1: &impl HasType,
+        e2: &impl HasType,
+        symtab: &SymbolTable,
+    ) -> std::result::Result<InnerTypeVar, UnificationError> {
+        let new_type = self.unify_inner(e1, e2, symtab)?;
+
+        // With replacement done, some of our constraints may have been updated to provide
+        // more type inference information. Try to do unification of those new constraints too
+        loop {
+            let new_info = self.constraints.update_constraints();
+
+            if new_info.is_empty() {
+                break;
+            }
+
+            for constraint in new_info {
+                let ((var, value), loc) = constraint.split_loc();
+
+                self.trace_stack
+                    .push(TraceStackEntry::InferingFromConstraints(var.clone(), value));
+
+                let var = self.check_var_for_replacement(var);
+
+                if value < 0 {
+                    // TODO before merge: Report this properly, or support integers
+                    panic!("Infered a negative integer from constraints");
+                }
+
+                let expected_type = &KnownType::Integer(value as u128);
+                match self.unify_inner(&var, expected_type, symtab) {
+                    Ok(_) => {}
+                    Err(UnificationError::Normal((lhs, rhs))) => {
+                        return Err(UnificationError::FromConstraints {
+                            got: lhs,
+                            expected: rhs,
+                            loc,
+                        })
+                    }
+                    Err(e @ UnificationError::FromConstraints { .. }) => return Err(e),
+                };
+            }
+        }
+
+        Ok(new_type)
     }
 
     fn replace_type_var(
@@ -1083,7 +1010,7 @@ impl TypeState {
     }
 
     fn replace_type_var_in_constraint(
-        in_constraint: &mut ConstraintExpr<InnerTypeVar>,
+        in_constraint: &mut ConstraintExpr,
         from: &InnerTypeVar,
         replacement: &InnerTypeVar,
     ) {
@@ -1110,13 +1037,13 @@ impl TypeState {
     }
 
     fn unify_expression_generic_error<'a>(
-        &self,
+        &mut self,
         expr: &Loc<Expression>,
         other: &impl HasType,
         symtab: &SymbolTable,
-    ) -> Result<UnificationTask> {
+    ) -> Result<InnerTypeVar> {
         self.unify(&expr.inner, other, symtab)
-            .map_err(|(got, expected)| Error::UnspecifiedTypeError {
+            .map_normal_err(|(got, expected)| Error::UnspecifiedTypeError {
                 got,
                 expected,
                 loc: expr.loc(),
@@ -1133,50 +1060,47 @@ impl TypeState {
 }
 
 pub trait HasType: std::fmt::Debug {
-    fn get_type<'a, 'b: 'a>(&'b self, state: &'a TypeState) -> Result<TypeVarRef<'a>>;
+    fn get_type(&self, state: &TypeState) -> Result<InnerTypeVar>;
 }
 
 impl HasType for InnerTypeVar {
-    fn get_type<'a, 'b: 'a>(&'b self, state: &'a TypeState) -> Result<TypeVarRef<'a>> {
-        Ok(TypeVarRef::from_ref(self, state))
+    fn get_type(&self, state: &TypeState) -> Result<InnerTypeVar> {
+        Ok(state.check_var_for_replacement(self.clone()))
     }
 }
 impl HasType for Loc<InnerTypeVar> {
-    fn get_type<'a, 'b: 'a>(&'b self, state: &'a TypeState) -> Result<TypeVarRef<'a>> {
+    fn get_type(&self, state: &TypeState) -> Result<InnerTypeVar> {
         self.inner.get_type(state)
     }
 }
 impl HasType for TypedExpression {
-    fn get_type<'a, 'b: 'a>(&'b self, state: &'a TypeState) -> Result<TypeVarRef<'a>> {
+    fn get_type(&self, state: &TypeState) -> Result<InnerTypeVar> {
         state.type_of(self)
     }
 }
 impl HasType for Expression {
-    fn get_type<'a, 'b: 'a>(&'b self, state: &'a TypeState) -> Result<TypeVarRef<'a>> {
+    fn get_type(&self, state: &TypeState) -> Result<InnerTypeVar> {
         state.type_of(&TypedExpression::Id(self.id))
     }
 }
 impl HasType for Loc<Expression> {
-    fn get_type<'a, 'b: 'a>(&'b self, state: &'a TypeState) -> Result<TypeVarRef<'a>> {
+    fn get_type(&self, state: &TypeState) -> Result<InnerTypeVar> {
         state.type_of(&TypedExpression::Id(self.inner.id))
     }
 }
 impl HasType for Pattern {
-    fn get_type<'a, 'b: 'a>(&'b self, state: &'a TypeState) -> Result<TypeVarRef<'a>> {
+    fn get_type(&self, state: &TypeState) -> Result<InnerTypeVar> {
         state.type_of(&TypedExpression::Id(self.id))
     }
 }
 impl HasType for Loc<Pattern> {
-    fn get_type<'a, 'b: 'a>(&'b self, state: &'a TypeState) -> Result<TypeVarRef<'a>> {
+    fn get_type(&self, state: &TypeState) -> Result<InnerTypeVar> {
         state.type_of(&TypedExpression::Id(self.inner.id))
     }
 }
 impl HasType for KnownType {
-    fn get_type<'a, 'b: 'a>(&'b self, state: &'a TypeState) -> Result<TypeVarRef<'a>> {
-        Ok(TypeVarRef::from_owned(
-            InnerTypeVar::Known(self.clone(), vec![], None),
-            state,
-        ))
+    fn get_type(&self, _state: &TypeState) -> Result<InnerTypeVar> {
+        Ok(InnerTypeVar::Known(self.clone(), vec![], None))
     }
 }
 
@@ -1676,11 +1600,11 @@ mod tests {
         let tclk = get_type!(state, &TExpr::Name(name_id(1, "clk").inner));
         let trst_cond = get_type!(state, &TExpr::Name(rst_cond.clone()));
         let trst_val = get_type!(state, &TExpr::Name(rst_value.clone()));
-        ensure_same_type!(state, t0.as_ref(), unsized_int(3, &symtab));
-        ensure_same_type!(state, ta.as_ref(), unsized_int(3, &symtab));
-        ensure_same_type!(state, tclk.as_ref(), t_clock(&symtab));
-        ensure_same_type!(state, trst_cond.as_ref(), t_bool(&symtab));
-        ensure_same_type!(state, trst_val.as_ref(), unsized_int(3, &symtab));
+        ensure_same_type!(state, t0, unsized_int(3, &symtab));
+        ensure_same_type!(state, ta, unsized_int(3, &symtab));
+        ensure_same_type!(state, tclk, t_clock(&symtab));
+        ensure_same_type!(state, trst_cond, t_bool(&symtab));
+        ensure_same_type!(state, trst_val, unsized_int(3, &symtab));
     }
 
     #[test]
@@ -1703,7 +1627,7 @@ mod tests {
             .unwrap();
 
         let ta = get_type!(state, &TExpr::Name(name_id(0, "a").inner));
-        ensure_same_type!(state, ta.as_ref(), unsized_int(1, &symtab));
+        ensure_same_type!(state, ta, unsized_int(1, &symtab));
     }
 
     #[test]
@@ -1726,7 +1650,7 @@ mod tests {
             .unwrap();
 
         let ta = get_type!(state, &TExpr::Name(name_id(0, "a").inner));
-        ensure_same_type!(state, ta.as_ref(), sized_int(5, &symtab));
+        ensure_same_type!(state, ta, sized_int(5, &symtab));
     }
 
     #[test]
@@ -1771,8 +1695,8 @@ mod tests {
             sized_int(5, &symtab),
             InnerTypeVar::Known(t_bool(&symtab), vec![], None),
         ]);
-        ensure_same_type!(state, ttup.as_ref(), &expected);
-        ensure_same_type!(state, reg.as_ref(), &expected);
+        ensure_same_type!(state, ttup, &expected);
+        ensure_same_type!(state, reg, &expected);
     }
 
     #[test]
@@ -1834,12 +1758,12 @@ mod tests {
         // Check the generic type variables
         ensure_same_type!(
             state,
-            t0.as_ref(),
+            t0.clone(),
             TVar::Known(t_bool(&symtab), vec![], None)
         );
         ensure_same_type!(
             state,
-            t1.as_ref(),
+            t1.clone(),
             TVar::Known(
                 t_int(&symtab),
                 vec![InnerTypeVar::Known(KnownType::Integer(10), vec![], None)],
@@ -1848,7 +1772,7 @@ mod tests {
         );
         ensure_same_type!(
             state,
-            t2.as_ref(),
+            t2,
             TVar::Known(
                 t_int(&symtab),
                 vec![InnerTypeVar::Known(KnownType::Integer(5), vec![], None)],
@@ -1857,8 +1781,8 @@ mod tests {
         );
 
         // Check the constraints added to the literals
-        ensure_same_type!(state, t0.as_ref(), ta.as_ref());
-        ensure_same_type!(state, t1.as_ref(), tb.as_ref());
+        ensure_same_type!(state, t0.clone(), ta);
+        ensure_same_type!(state, t1.clone(), tb);
     }
 
     #[test]
