@@ -125,7 +125,7 @@ impl TypeState {
                         });
                     }
                 }
-                Ok(t @ InnerTypeVar::Known(_, _, _) | t @ InnerTypeVar::Array { .. }) => {
+                Ok(t @ InnerTypeVar::Known(_, _) | t @ InnerTypeVar::Array { .. }) => {
                     return Err(Error::TupleIndexOfNonTuple {
                         got: t.clone(),
                         loc: tup.loc(),
@@ -153,7 +153,7 @@ impl TypeState {
             let t = self.type_of(&TypedExpression::Id(target.id));
 
             match t {
-                Ok(InnerTypeVar::Known(inner, _, _)) => {
+                Ok(InnerTypeVar::Known(inner, _)) => {
                     // Look up the type of the known var
                     match inner {
                         KnownType::Type(inner) => {

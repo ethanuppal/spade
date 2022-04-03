@@ -179,9 +179,7 @@ impl TypeState {
         generic_list_token: &GenericListToken,
     ) -> InnerTypeVar {
         match e {
-            hir::TypeExpression::Integer(i) => {
-                InnerTypeVar::Known(KnownType::Integer(*i), vec![], None)
-            }
+            hir::TypeExpression::Integer(i) => InnerTypeVar::Known(KnownType::Integer(*i), vec![]),
             hir::TypeExpression::TypeSpec(spec) => self.type_var_from_hir(spec, generic_list_token),
         }
     }
@@ -199,7 +197,7 @@ impl TypeState {
                     .map(|e| self.hir_type_expr_to_var(e, generic_list_token))
                     .collect();
 
-                InnerTypeVar::Known(KnownType::Type(base.inner.clone()), params, None)
+                InnerTypeVar::Known(KnownType::Type(base.inner.clone()), params)
             }
             hir::TypeSpec::Generic(name) => match generic_list.get(name) {
                 Some(t) => t.clone(),
@@ -240,14 +238,14 @@ impl TypeState {
     }
 
     pub fn new_generic_int(&mut self, symtab: &SymbolTable) -> InnerTypeVar {
-        InnerTypeVar::Known(t_int(symtab), vec![self.new_generic()], None)
+        InnerTypeVar::Known(t_int(symtab), vec![self.new_generic()])
     }
 
     /// Return a new generic int. The first returned value is int<N>, and the second
     /// value is N
     pub fn new_split_generic_int(&mut self, symtab: &SymbolTable) -> (InnerTypeVar, InnerTypeVar) {
         let size = self.new_generic();
-        let full = InnerTypeVar::Known(t_int(symtab), vec![size.clone()], None);
+        let full = InnerTypeVar::Known(t_int(symtab), vec![size.clone()]);
         (full, size)
     }
 
@@ -691,13 +689,12 @@ impl TypeState {
             return new.clone();
         };
         match var {
-            InnerTypeVar::Known(base, params, loc) => InnerTypeVar::Known(
+            InnerTypeVar::Known(base, params) => InnerTypeVar::Known(
                 base,
                 params
                     .into_iter()
                     .map(|p| self.check_var_for_replacement(p))
                     .collect(),
-                loc,
             ),
             InnerTypeVar::Tuple(inner) => InnerTypeVar::Tuple(
                 inner
@@ -814,7 +811,7 @@ impl TypeState {
         // Figure out the most general type, and take note if we need to
         // do any replacement of the types in the rest of the state
         let result = match (&v1, &v2) {
-            (InnerTypeVar::Known(t1, p1, _), InnerTypeVar::Known(t2, p2, _)) => match (t1, t2) {
+            (InnerTypeVar::Known(t1, p1), InnerTypeVar::Known(t2, p2)) => match (t1, t2) {
                 (KnownType::Integer(val1), KnownType::Integer(val2)) => {
                     unify_if!(val1 == val2, v1, None)
                 }
@@ -892,8 +889,8 @@ impl TypeState {
             (_other, InnerTypeVar::Unknown(_)) => Ok((v1, Some(v2))),
             (InnerTypeVar::Unknown(_), _other) => Ok((v2, Some(v1))),
             // Incompatibilities
-            (InnerTypeVar::Known(_, _, _), _other) => Err(err_producer!()),
-            (_other, InnerTypeVar::Known(_, _, _)) => Err(err_producer!()),
+            (InnerTypeVar::Known(_, _), _other) => Err(err_producer!()),
+            (_other, InnerTypeVar::Known(_, _)) => Err(err_producer!()),
             (InnerTypeVar::Tuple(_), _other) => Err(err_producer!()),
             (_other, InnerTypeVar::Tuple(_)) => Err(err_producer!()),
         };
@@ -987,7 +984,7 @@ impl TypeState {
     ) {
         // First, do recursive replacement
         match in_var {
-            InnerTypeVar::Known(_, params, _) => {
+            InnerTypeVar::Known(_, params) => {
                 for param in params {
                     Self::replace_type_var(param, from, replacement)
                 }
@@ -1020,7 +1017,7 @@ impl TypeState {
                 Self::replace_type_var(v, from, replacement);
 
                 match v {
-                    InnerTypeVar::Known(KnownType::Integer(val), _, _) => {
+                    InnerTypeVar::Known(KnownType::Integer(val), _) => {
                         *in_constraint = ConstraintExpr::Integer(*val as i128)
                     }
                     _ => {}
@@ -1100,7 +1097,7 @@ impl HasType for Loc<Pattern> {
 }
 impl HasType for KnownType {
     fn get_type(&self, _state: &TypeState) -> Result<InnerTypeVar> {
-        Ok(InnerTypeVar::Known(self.clone(), vec![], None))
+        Ok(InnerTypeVar::Known(self.clone(), vec![]))
     }
 }
 
@@ -1169,11 +1166,7 @@ mod tests {
             .unwrap();
 
         // Check the generic type variables
-        ensure_same_type!(
-            state,
-            TExpr::Id(0),
-            TVar::Known(t_bool(&symtab), vec![], None)
-        );
+        ensure_same_type!(state, TExpr::Id(0), TVar::Known(t_bool(&symtab), vec![]));
         ensure_same_type!(state, TExpr::Id(1), TExpr::Id(2));
         ensure_same_type!(state, TExpr::Id(1), TExpr::Id(3));
 
@@ -1211,11 +1204,7 @@ mod tests {
             .unwrap();
 
         // Check the generic type variables
-        ensure_same_type!(
-            state,
-            TExpr::Id(0),
-            TVar::Known(t_bool(&symtab), vec![], None)
-        );
+        ensure_same_type!(state, TExpr::Id(0), TVar::Known(t_bool(&symtab), vec![]));
         ensure_same_type!(state, TExpr::Id(1), unsized_int(101, &symtab));
         ensure_same_type!(state, TExpr::Id(2), unsized_int(101, &symtab));
         ensure_same_type!(state, TExpr::Id(3), unsized_int(101, &symtab));
@@ -1246,7 +1235,7 @@ mod tests {
         let expr_c = TExpr::Name(name_id(2, "c").inner);
         state.add_eq_from_tvar(expr_a.clone(), TVar::Unknown(100));
         state.add_eq_from_tvar(expr_b.clone(), unsized_int(101, &symtab));
-        state.add_eq_from_tvar(expr_c.clone(), TVar::Known(t_clock(&symtab), vec![], None));
+        state.add_eq_from_tvar(expr_c.clone(), TVar::Known(t_clock(&symtab), vec![]));
 
         let generic_list = state.create_generic_list(&vec![]);
         assert_ne!(
@@ -1432,11 +1421,7 @@ mod tests {
             .unwrap();
 
         // Check the generic type variables
-        ensure_same_type!(
-            state,
-            TExpr::Id(0),
-            TVar::Known(t_bool(&symtab), vec![], None)
-        );
+        ensure_same_type!(state, TExpr::Id(0), TVar::Known(t_bool(&symtab), vec![]));
         ensure_same_type!(state, TExpr::Id(1), sized_int(5, &symtab));
         ensure_same_type!(state, TExpr::Id(2), sized_int(5, &symtab));
         ensure_same_type!(state, TExpr::Id(3), sized_int(5, &symtab));
@@ -1693,7 +1678,7 @@ mod tests {
         let reg = get_type!(state, &TExpr::Name(name_id(0, "test").inner));
         let expected = InnerTypeVar::Tuple(vec![
             sized_int(5, &symtab),
-            InnerTypeVar::Known(t_bool(&symtab), vec![], None),
+            InnerTypeVar::Known(t_bool(&symtab), vec![]),
         ]);
         ensure_same_type!(state, ttup, &expected);
         ensure_same_type!(state, reg, &expected);
@@ -1756,18 +1741,13 @@ mod tests {
         let tb = get_type!(state, &expr_b);
 
         // Check the generic type variables
-        ensure_same_type!(
-            state,
-            t0.clone(),
-            TVar::Known(t_bool(&symtab), vec![], None)
-        );
+        ensure_same_type!(state, t0.clone(), TVar::Known(t_bool(&symtab), vec![]));
         ensure_same_type!(
             state,
             t1.clone(),
             TVar::Known(
                 t_int(&symtab),
-                vec![InnerTypeVar::Known(KnownType::Integer(10), vec![], None)],
-                None,
+                vec![InnerTypeVar::Known(KnownType::Integer(10), vec![])],
             )
         );
         ensure_same_type!(
@@ -1775,8 +1755,7 @@ mod tests {
             t2,
             TVar::Known(
                 t_int(&symtab),
-                vec![InnerTypeVar::Known(KnownType::Integer(5), vec![], None)],
-                None,
+                vec![InnerTypeVar::Known(KnownType::Integer(5), vec![])],
             )
         );
 
@@ -1838,18 +1817,13 @@ mod tests {
             .unwrap();
 
         // Check the generic type variables
-        ensure_same_type!(
-            state,
-            TExpr::Id(0),
-            TVar::Known(t_bool(&symtab), vec![], None)
-        );
+        ensure_same_type!(state, TExpr::Id(0), TVar::Known(t_bool(&symtab), vec![]));
         ensure_same_type!(
             state,
             TExpr::Id(1),
             TVar::Known(
                 t_int(&symtab),
-                vec![InnerTypeVar::Known(KnownType::Integer(10), vec![], None)],
-                None,
+                vec![InnerTypeVar::Known(KnownType::Integer(10), vec![])],
             )
         );
         ensure_same_type!(
@@ -1857,8 +1831,7 @@ mod tests {
             TExpr::Id(2),
             TVar::Known(
                 t_int(&symtab),
-                vec![InnerTypeVar::Known(KnownType::Integer(5), vec![], None)],
-                None,
+                vec![InnerTypeVar::Known(KnownType::Integer(5), vec![])],
             )
         );
 

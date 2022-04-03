@@ -7,13 +7,12 @@ use crate::InnerTypeVar as TVar;
 pub fn sized_int(size: u128, symtab: &SymbolTable) -> TVar {
     TVar::Known(
         t_int(symtab),
-        vec![TVar::Known(KnownType::Integer(size), vec![], None)],
-        None,
+        vec![TVar::Known(KnownType::Integer(size), vec![])],
     )
 }
 
 pub fn unsized_int(id: u64, symtab: &SymbolTable) -> TVar {
-    TVar::Known(t_int(symtab), vec![TVar::Unknown(id)], None)
+    TVar::Known(t_int(symtab), vec![TVar::Unknown(id)])
 }
 
 #[macro_export]
@@ -56,6 +55,6 @@ macro_rules! ensure_same_type {
 #[macro_export]
 macro_rules! kvar {
     ($base:expr $(; ( $( $params:expr ),* ) )? ) => {
-        InnerTypeVar::Known($base, vec![ $( $($params),* )? ], None)
+        InnerTypeVar::Known($base, vec![ $( $($params),* )? ])
     }
 }

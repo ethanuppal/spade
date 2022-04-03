@@ -1,11 +1,9 @@
 use std::collections::HashMap;
 
-use spade_common::{location_info::Loc, name::NameID};
+use spade_common::name::NameID;
 use spade_types::KnownType;
 
 pub type TypeEquations = HashMap<TypedExpression, InnerTypeVar>;
-
-// TODO Before merge: Is Hash derive safe here? PartialEq has a manual impl
 
 /// An owned type variable. Should only be owned by the TypeState struct in a context
 /// where the type state replaces TypeVars after unification. Any external owners of
@@ -13,11 +11,11 @@ pub type TypeEquations = HashMap<TypedExpression, InnerTypeVar>;
 ///
 /// `clone` is derived to simplify the implementation through allowing derives, but
 /// should not be used outside the unification code
-#[derive(Debug, Clone, Hash, Eq)]
+#[derive(Debug, Clone, PartialEq, Hash, Eq)]
 pub enum InnerTypeVar {
     /// The type is known. If the type is known through a type signature specified by
     /// the user, that signature is the second argument, otherwise None
-    Known(KnownType, Vec<InnerTypeVar>, Option<Loc<()>>),
+    Known(KnownType, Vec<InnerTypeVar>),
     Tuple(Vec<InnerTypeVar>),
     Array {
         inner: Box<InnerTypeVar>,
@@ -30,7 +28,7 @@ pub enum InnerTypeVar {
 impl std::fmt::Display for InnerTypeVar {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            InnerTypeVar::Known(t, params, _) => {
+            InnerTypeVar::Known(t, params) => {
                 let generics = if params.is_empty() {
                     format!("")
                 } else {
@@ -60,34 +58,6 @@ impl std::fmt::Display for InnerTypeVar {
                 write!(f, "[{}; {}]", inner, size)
             }
             InnerTypeVar::Unknown(id) => write!(f, "t{}", id),
-        }
-    }
-}
-
-impl PartialEq for InnerTypeVar {
-    fn eq(&self, other: &Self) -> bool {
-        match (self, other) {
-            (InnerTypeVar::Known(t1, p1, _), InnerTypeVar::Known(t2, p2, _)) => {
-                t1 == t2 && p1 == p2
-            }
-            (InnerTypeVar::Known(_, _, _), InnerTypeVar::Unknown(_)) => false,
-            (InnerTypeVar::Unknown(_), InnerTypeVar::Known(_, _, _)) => false,
-            (InnerTypeVar::Tuple(i1), InnerTypeVar::Tuple(i2)) => i1 == i2,
-            (
-                InnerTypeVar::Array {
-                    inner: i1,
-                    size: s1,
-                },
-                InnerTypeVar::Array {
-                    inner: i2,
-                    size: s2,
-                },
-            ) => i1 == i2 && s1 == s2,
-            (InnerTypeVar::Tuple(_), _) => false,
-            (_, InnerTypeVar::Tuple(_)) => false,
-            (InnerTypeVar::Array { .. }, _) => false,
-            (_, InnerTypeVar::Array { .. }) => false,
-            (InnerTypeVar::Unknown(t1), InnerTypeVar::Unknown(t2)) => t1 == t2,
         }
     }
 }

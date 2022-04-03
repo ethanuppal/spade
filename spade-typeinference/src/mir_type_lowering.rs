@@ -152,7 +152,7 @@ impl TypeState {
         type_list: &TypeList,
     ) -> Option<ConcreteType> {
         match var {
-            InnerTypeVar::Known(KnownType::Type(t), params, _) => {
+            InnerTypeVar::Known(KnownType::Type(t), params) => {
                 let params = params
                     .iter()
                     .map(|v| Self::ungenerify_type(v, symtab, type_list))
@@ -163,7 +163,7 @@ impl TypeState {
                     None => None,
                 }
             }
-            InnerTypeVar::Known(KnownType::Integer(size), params, _) => {
+            InnerTypeVar::Known(KnownType::Integer(size), params) => {
                 assert!(params.len() == 0, "integers can not have type parameters");
 
                 Some(ConcreteType::Integer(*size))
