@@ -1,3 +1,4 @@
+use crate::constraints::ConstraintSource;
 use crate::{result::UnificationTrace, Error};
 use codespan_reporting::diagnostic::Diagnostic;
 use codespan_reporting::term::{self, termcolor::Buffer};
@@ -49,12 +50,29 @@ impl CompilationError for Error {
                         .with_message(format!("{} type specified here", expected)),
                 ])
                 .with_notes(type_mismatch_notes(got, expected)),
-            Error::UnspecifiedTypeError { expected, got, loc }
-            | Error::ConstraintMissmatch { expected, got, loc } => Diagnostic::error()
+            Error::UnspecifiedTypeError { expected, got, loc } => Diagnostic::error()
                 .with_message(format!("Expected type {}, got {}", expected, got))
                 .with_labels(vec![loc
                     .primary_label()
                     .with_message(format!("Expected {} here", expected))]),
+            Error::ConstraintMissmatch {
+                expected,
+                got,
+                source,
+                loc,
+            } => Diagnostic::error()
+                .with_message(format!("Expected type {}, got {}", expected, got))
+                .with_labels(vec![loc
+                    .primary_label()
+                    .with_message(format!("Expected {} here", expected))])
+                .with_notes(vec![match source {
+                    ConstraintSource::AdditionOutput => format!(
+                        "Addition creates one more output bit than the input to avoid overflow"
+                    ),
+                    ConstraintSource::MultOutput => {
+                        format!("The size of a multiplication is the sum of the operand sizes")
+                    }
+                }]),
             Error::IntLiteralIncompatible { .. } => {
                 todo! {}
             }

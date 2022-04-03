@@ -6,7 +6,7 @@
 // and should be done by the visitor for that node. The visitor should then unify
 // types according to the rules of the node.
 
-use constraints::{ConstraintExpr, TypeConstraints};
+use constraints::{ConstraintExpr, ConstraintRhs, TypeConstraints};
 use hir::symbol_table::{Patternable, PatternableKind, TypeSymbol};
 use hir::{Argument, FunctionLike, ParameterList, Pattern, PatternArgument, TypeParam};
 use hir::{ExecutableItem, ItemList};
@@ -724,6 +724,15 @@ impl TypeState {
         }
     }
 
+    fn check_constraint_rhs_for_replacement(&self, val: ConstraintRhs) -> ConstraintRhs {
+        ConstraintRhs {
+            constraint: self.check_expr_for_replacement(val.constraint),
+            from: self.check_var_for_replacement(val.from),
+            source: val.source,
+            replaces: val.replaces,
+        }
+    }
+
     fn add_equation(&mut self, expression: TypedExpression, var: TypeVar) {
         let var = self.check_var_for_replacement(var);
 
@@ -739,9 +748,9 @@ impl TypeState {
         }
     }
 
-    fn add_constraint(&mut self, lhs: TypeVar, rhs: Loc<ConstraintExpr>) {
+    fn add_constraint(&mut self, lhs: TypeVar, rhs: Loc<ConstraintRhs>) {
         let lhs = self.check_var_for_replacement(lhs);
-        let rhs = rhs.map(|rhs| self.check_expr_for_replacement(rhs));
+        let rhs = rhs.map(|rhs| self.check_constraint_rhs_for_replacement(rhs));
         self.constraints.add_constraint(lhs, rhs);
     }
 
@@ -919,7 +928,11 @@ impl TypeState {
                 .into_iter()
                 .map(|(mut lhs, mut rhs)| {
                     TypeState::replace_type_var(&mut lhs, &replaced_type, &new_type);
-                    TypeState::replace_type_var_in_constraint(&mut rhs, &replaced_type, &new_type);
+                    TypeState::replace_type_var_in_constraint_rhs(
+                        &mut rhs,
+                        &replaced_type,
+                        &new_type,
+                    );
 
                     (lhs, rhs)
                 })
@@ -947,27 +960,45 @@ impl TypeState {
             }
 
             for constraint in new_info {
-                let ((var, value), loc) = constraint.split_loc();
+                let ((var, replacement), loc) = constraint.split_loc();
 
                 self.trace_stack
-                    .push(TraceStackEntry::InferingFromConstraints(var.clone(), value));
+                    .push(TraceStackEntry::InferingFromConstraints(
+                        var.clone(),
+                        replacement.val,
+                    ));
 
                 let var = self.check_var_for_replacement(var);
 
-                if value < 0 {
+                if replacement.val < 0 {
                     // TODO before merge: Report this properly, or support integers
                     panic!("Infered a negative integer from constraints");
                 }
 
-                let expected_type = &KnownType::Integer(value as u128);
+                let expected_type = &KnownType::Integer(replacement.val as u128);
                 match self.unify_inner(&var, expected_type, symtab) {
                     Ok(_) => {}
-                    Err(UnificationError::Normal((lhs, rhs))) => {
+                    Err(UnificationError::Normal((mut lhs, mut rhs))) => {
+                        let mut source_lhs = replacement.from.clone();
+                        Self::replace_type_var(
+                            &mut source_lhs,
+                            &replacement.replaces,
+                            &lhs.outer(),
+                        );
+                        let mut source_rhs = replacement.from.clone();
+                        Self::replace_type_var(
+                            &mut source_rhs,
+                            &replacement.replaces,
+                            &rhs.outer(),
+                        );
+                        lhs.inside.replace(source_lhs);
+                        rhs.inside.replace(source_rhs);
                         return Err(UnificationError::FromConstraints {
-                            got: lhs,
-                            expected: rhs,
+                            got: rhs,
+                            expected: lhs,
+                            source: replacement.source,
                             loc,
-                        })
+                        });
                     }
                     Err(e @ UnificationError::FromConstraints { .. }) => return Err(e),
                 };
@@ -1002,7 +1033,7 @@ impl TypeState {
         }
     }
 
-    fn replace_type_var_in_constraint(
+    fn replace_type_var_in_constraint_expr(
         in_constraint: &mut ConstraintExpr,
         from: &TypeVar,
         replacement: &TypeVar,
@@ -1020,13 +1051,25 @@ impl TypeState {
                 }
             }
             ConstraintExpr::Sum(lhs, rhs) => {
-                Self::replace_type_var_in_constraint(lhs, from, replacement);
-                Self::replace_type_var_in_constraint(rhs, from, replacement);
+                Self::replace_type_var_in_constraint_expr(lhs, from, replacement);
+                Self::replace_type_var_in_constraint_expr(rhs, from, replacement);
             }
             ConstraintExpr::Sub(i) => {
-                Self::replace_type_var_in_constraint(i, from, replacement);
+                Self::replace_type_var_in_constraint_expr(i, from, replacement);
             }
         }
+    }
+
+    fn replace_type_var_in_constraint_rhs(
+        in_constraint: &mut ConstraintRhs,
+        from: &TypeVar,
+        replacement: &TypeVar,
+    ) {
+        Self::replace_type_var_in_constraint_expr(&mut in_constraint.constraint, from, replacement);
+        // NOTE: We do not want to replace type variables here as that that removes
+        // information about where the constraint relates. Instead, this replacement
+        // is preformed when reporting ther error
+        // Self::replace_type_var(&mut in_constraint.from, from, replacement);
     }
 
     fn unify_expression_generic_error<'a>(

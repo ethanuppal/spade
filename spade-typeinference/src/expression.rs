@@ -5,7 +5,7 @@ use spade_hir::symbol_table::{SymbolTable, TypeDeclKind, TypeSymbol};
 use spade_hir::{ExprKind, Expression};
 use spade_types::KnownType;
 
-use crate::constraints::{ce_int, ce_var};
+use crate::constraints::{ce_int, ce_var, ConstraintSource};
 use crate::equation::{TypeVar, TypedExpression};
 use crate::fixed_types::t_bool;
 use crate::result::{Error, UnificationErrorExt};
@@ -415,11 +415,15 @@ impl TypeState {
 
                     self.add_constraint(
                         result_size.clone(),
-                        (ce_var(&lhs_size) + ce_int(1)).at_loc(&expression)
+                        (ce_var(&lhs_size) + ce_int(1))
+                            .with_context(&result_size, &result_t, ConstraintSource::AdditionOutput)
+                            .at_loc(&expression)
                     );
                     self.add_constraint(
                         lhs_size.clone(),
-                        (ce_var(&result_size) + -ce_int(1)).at_loc(&lhs)
+                        (ce_var(&result_size) + -ce_int(1))
+                            .with_context(&lhs_size, &lhs_t, ConstraintSource::AdditionOutput)
+                            .at_loc(&lhs)
                     );
 
                     // TODO: Make generic over types that can be added
@@ -436,15 +440,21 @@ impl TypeState {
                     // Result size is sum of input sizes
                     self.add_constraint(result_size.clone(), (
                             ce_var(&lhs_size) + ce_var(&rhs_size)
-                        ).at_loc(&expression)
+                        )
+                        .with_context(&result_size, &result_t, ConstraintSource::MultOutput)
+                        .at_loc(&expression)
                     );
                     self.add_constraint(lhs_size.clone(), (
                             ce_var(&result_size) + -ce_var(&rhs_size)
-                        ).at_loc(&lhs)
+                        )
+                        .with_context(&lhs_size, &lhs_t, ConstraintSource::MultOutput)
+                        .at_loc(&lhs)
                     );
                     self.add_constraint(rhs_size.clone(), (
                             ce_var(&result_size) + -ce_var(&lhs_size)
-                        ).at_loc(&rhs)
+                        )
+                        .with_context(&rhs_size, &rhs_t, ConstraintSource::MultOutput)
+                        .at_loc(&rhs)
                     );
 
                     self.unify_expression_generic_error(&lhs, &lhs_t, symtab)?;

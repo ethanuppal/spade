@@ -2,7 +2,7 @@ use spade_common::location_info::{Loc, WithLocation};
 
 use crate::equation::TypeVar;
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub enum ConstraintExpr {
     Integer(i128),
     Var(TypeVar),
@@ -28,6 +28,20 @@ impl ConstraintExpr {
                 ConstraintExpr::Integer(val) => ConstraintExpr::Integer(-val),
                 _ => self.clone(),
             },
+        }
+    }
+
+    pub fn with_context(
+        self,
+        replaces: &TypeVar,
+        from: &TypeVar,
+        source: ConstraintSource,
+    ) -> ConstraintRhs {
+        ConstraintRhs {
+            constraint: self,
+            from: from.clone(),
+            replaces: replaces.clone(),
+            source,
         }
     }
 }
@@ -67,8 +81,40 @@ pub fn ce_int(v: i128) -> ConstraintExpr {
     ConstraintExpr::Integer(v)
 }
 
+#[derive(Debug, Clone, PartialEq, thiserror::Error)]
+pub enum ConstraintSource {
+    AdditionOutput,
+    MultOutput,
+}
+
+impl std::fmt::Display for ConstraintSource {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ConstraintSource::AdditionOutput => write!(f, "AdditionOutput"),
+            ConstraintSource::MultOutput => write!(f, "MultiplicationOutput"),
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct ConstraintRhs {
+    /// The actual constraint
+    pub constraint: ConstraintExpr,
+    /// A type var in which this constraint applies. For example, if a constraint
+    /// this constraint constrains `t1` inside `int<t1>`, then `from` is `int<t1>`
+    // TODO: Rename -> inside
+    pub from: TypeVar,
+    /// The left hand side which this constrains. Used together with `from` to construct
+    /// type errors
+    pub replaces: TypeVar,
+    /// Context in which this constraint was added to give hints to the user
+    pub source: ConstraintSource,
+}
+
+impl WithLocation for ConstraintRhs {}
+
 pub struct TypeConstraints {
-    pub inner: Vec<(TypeVar, Loc<ConstraintExpr>)>,
+    pub inner: Vec<(TypeVar, Loc<ConstraintRhs>)>,
 }
 
 impl TypeConstraints {
@@ -76,31 +122,39 @@ impl TypeConstraints {
         Self { inner: vec![] }
     }
 
-    pub fn add_constraint(&mut self, lhs: TypeVar, rhs: Loc<ConstraintExpr>) {
+    pub fn add_constraint(&mut self, lhs: TypeVar, rhs: Loc<ConstraintRhs>) {
         self.inner.push((lhs, rhs));
     }
 
     /// Calls `evaluate` on all constraints. If any constraints are now `T = Integer(val)`,
     /// those updated values are returned. Such constraints are then removed
-    pub fn update_constraints(&mut self) -> Vec<Loc<(TypeVar, i128)>> {
+    pub fn update_constraints(&mut self) -> Vec<Loc<(TypeVar, ConstraintReplacement)>> {
         let mut new_known = vec![];
         self.inner = self
             .inner
             .iter_mut()
-            .filter_map(|(expr, constraint)| {
-                let result = constraint.map_ref(ConstraintExpr::evaluate);
+            .filter_map(|(expr, rhs)| {
+                let mut rhs = rhs.clone();
+                rhs.constraint = rhs.constraint.evaluate();
 
-                match result.inner {
+                match rhs.constraint {
                     ConstraintExpr::Integer(val) => {
                         // ().at_loc(..).map is a somewhat ugly way to wrap an arbitrary type
                         // in a known Loc. This is done to avoid having to impl WithLocation for
                         // the the unusual tuple used here
-                        new_known.push(().at_loc(&constraint).map(|_| (expr.clone(), val)));
+                        let replacement = ConstraintReplacement {
+                            val,
+                            from: rhs.from.clone(),
+                            source: rhs.source.clone(),
+                            replaces: rhs.replaces.clone(),
+                        };
+                        new_known
+                            .push(().at_loc(&rhs).map(|_| (expr.clone(), replacement.clone())));
                         None
                     }
-                    ConstraintExpr::Var(_) => Some((expr.clone(), result)),
-                    ConstraintExpr::Sum(_, _) => Some((expr.clone(), result)),
-                    ConstraintExpr::Sub(_) => Some((expr.clone(), result)),
+                    ConstraintExpr::Var(_) => Some((expr.clone(), rhs)),
+                    ConstraintExpr::Sum(_, _) => Some((expr.clone(), rhs)),
+                    ConstraintExpr::Sub(_) => Some((expr.clone(), rhs)),
                 }
             })
             .collect();
@@ -109,10 +163,23 @@ impl TypeConstraints {
     }
 }
 
+#[derive(Clone)]
+pub struct ConstraintReplacement {
+    /// The actual constraint
+    pub val: i128,
+    // TODO: Make this context information a separate struct to avoid code duplication
+    /// A type var in which this constraint applies. For example, if a constraint
+    /// this constraint constrains `t1` inside `int<t1>`, then `from` is `int<t1>`
+    pub from: TypeVar,
+    /// Context in which this constraint was added to give hints to the user
+    pub source: ConstraintSource,
+    pub replaces: TypeVar,
+}
+
 impl std::fmt::Display for TypeConstraints {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         for (lhs, rhs) in &self.inner {
-            write!(f, "{lhs}: {rhs}",)?;
+            writeln!(f, "{lhs}: {rhs}", rhs = rhs.constraint)?;
         }
         Ok(())
     }

@@ -1,5 +1,7 @@
 use thiserror::Error;
 
+use crate::constraints::ConstraintSource;
+
 use super::equation::{TypeVar, TypedExpression};
 use spade_common::{
     location_info::{Loc, WithLocation},
@@ -64,9 +66,17 @@ impl<T> UnificationErrorExt<T> for std::result::Result<T, UnificationError> {
         match self {
             Ok(val) => Ok(val),
             Err(UnificationError::Normal(inner)) => Err(f(inner)),
-            Err(UnificationError::FromConstraints { expected, got, loc }) => {
-                Err(Error::ConstraintMissmatch { expected, got, loc })
-            }
+            Err(UnificationError::FromConstraints {
+                expected,
+                got,
+                loc,
+                source,
+            }) => Err(Error::ConstraintMissmatch {
+                expected,
+                got,
+                loc,
+                source,
+            }),
         }
     }
 }
@@ -79,6 +89,7 @@ pub enum UnificationError {
     FromConstraints {
         expected: UnificationTrace,
         got: UnificationTrace,
+        source: ConstraintSource,
         loc: Loc<()>,
     },
 }
@@ -118,6 +129,7 @@ pub enum Error {
     ConstraintMissmatch {
         expected: UnificationTrace,
         got: UnificationTrace,
+        source: ConstraintSource,
         loc: Loc<()>,
     },
 
