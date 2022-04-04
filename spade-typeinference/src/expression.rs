@@ -182,7 +182,14 @@ impl TypeState {
                             // Get the struct, find the type of the field and unify
                             let s = symtab.struct_by_id(inner);
 
-                            let field_type = self.type_var_from_hir(&s.params.arg_type(field), generic_list);
+                            let field_spec = if let Some(spec) = s.params.try_get_arg_type(field) {
+                                spec
+                            }
+                            else {
+                                return Err(Error::NoSuchField{field: field.clone(), _struct: inner.clone()})
+                            };
+
+                            let field_type = self.type_var_from_hir(&field_spec, generic_list);
 
                             self.unify_expression_generic_error(expression, field_type.as_ref(), symtab)?
                                 .commit(self);

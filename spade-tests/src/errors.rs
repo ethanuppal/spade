@@ -34,3 +34,14 @@ snapshot_error!(
     }
     "
 );
+
+snapshot_error! {
+    invalid_field_access,
+    "
+    struct X {}
+
+    entity main(x: X) -> int<8> {
+        x.not_a_field
+    }
+    "
+}

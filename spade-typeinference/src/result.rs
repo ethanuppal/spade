@@ -171,6 +171,11 @@ pub enum Error {
     FieldAccessOnEnum { loc: Loc<()>, actual_type: NameID },
     #[error("Field access on primitive type")]
     FieldAccessOnPrimitive { loc: Loc<()>, actual_type: NameID },
+    #[error("No such field")]
+    NoSuchField {
+        field: Loc<Identifier>,
+        _struct: NameID,
+    },
 
     #[error("Array element mismatch")]
     ArrayElementMismatch {

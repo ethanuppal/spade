@@ -218,15 +218,24 @@ impl ParameterList {
 
     /// Look up the type of an argument. Panics if no such argument exists
     pub fn arg_type(&self, name: &Identifier) -> TypeSpec {
+        if let Some(result) = self.try_get_arg_type(name) {
+            result
+        } else {
+            panic!(
+                "Tried to get type of an argument which is not part of the parameter list. {}",
+                name
+            )
+        }
+    }
+
+    /// Look up the type of an argument, returning None if no such argument exists
+    pub fn try_get_arg_type(&self, name: &Identifier) -> Option<TypeSpec> {
         for (arg, ty) in &self.0 {
             if &arg.inner == name {
-                return ty.inner.clone();
+                return Some(ty.inner.clone());
             }
         }
-        panic!(
-            "Tried to get type of an argument which is not part of the entity. {}",
-            name
-        )
+        None
     }
 
     pub fn arg_index(&self, target: &Identifier) -> Option<usize> {

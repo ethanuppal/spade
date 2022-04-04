@@ -221,6 +221,11 @@ impl CompilationError for Error {
                 .with_labels(vec![loc
                     .primary_label()
                     .with_message(format!("Expected strcut, found {}", got))]),
+            Error::NoSuchField { field, _struct } => Diagnostic::error()
+                .with_message(format!("{_struct} has no field named {field}"))
+                .with_labels(vec![field
+                    .primary_label()
+                    .with_message(format!("Not a field of {_struct}"))]),
             Error::NamedArgumentMismatch {
                 expr,
                 expected,
