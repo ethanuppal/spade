@@ -5,16 +5,14 @@ use spade_types::KnownType;
 
 pub type TypeEquations = HashMap<TypedExpression, TypeVar>;
 
-/// An owned type variable. Should only be owned by the TypeState struct in a context
-/// where the type state replaces TypeVars after unification. Any external owners of
-/// TypeVars must use TypeVarRef
+/// A type variable represents the type of something in the program. It is mapped
+/// to expressions by type equations in the TypeState.
 ///
-/// `clone` is derived to simplify the implementation through allowing derives, but
-/// should not be used outside the unification code
+/// When TypeVars are passed externally into TypeState, they must be checked for replacement,
+/// as the type inference process might have refined them.
 #[derive(Debug, Clone, PartialEq, Hash, Eq)]
 pub enum TypeVar {
-    /// The type is known. If the type is known through a type signature specified by
-    /// the user, that signature is the second argument, otherwise None
+    /// The base type is known and has a list of parameters
     Known(KnownType, Vec<TypeVar>),
     Tuple(Vec<TypeVar>),
     Array {

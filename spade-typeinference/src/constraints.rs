@@ -61,7 +61,7 @@ impl std::ops::Add for ConstraintExpr {
     type Output = ConstraintExpr;
 
     fn add(self, rhs: Self) -> Self::Output {
-        ConstraintExpr::Sum(Box::new(self.clone()), Box::new(rhs.clone()))
+        ConstraintExpr::Sum(Box::new(self), Box::new(rhs))
     }
 }
 
@@ -69,7 +69,7 @@ impl std::ops::Sub for ConstraintExpr {
     type Output = ConstraintExpr;
 
     fn sub(self, rhs: Self) -> Self::Output {
-        ConstraintExpr::Sum(Box::new(self.clone()), Box::new(-rhs.clone()))
+        ConstraintExpr::Sum(Box::new(self), Box::new(-rhs))
     }
 }
 
@@ -77,7 +77,7 @@ impl std::ops::Neg for ConstraintExpr {
     type Output = ConstraintExpr;
 
     fn neg(self) -> Self::Output {
-        ConstraintExpr::Sub(Box::new(self.clone()))
+        ConstraintExpr::Sub(Box::new(self))
     }
 }
 

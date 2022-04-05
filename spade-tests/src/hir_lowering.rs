@@ -116,7 +116,7 @@ mod tests {
     }
 
     #[test]
-    fn an_subtractor_is_buildable() {
+    fn a_subtractor_is_buildable() {
         let code = r#"
         entity name(a: int<16>, b: int<16>) -> int<17> {
             a - b

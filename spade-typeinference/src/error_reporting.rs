@@ -55,7 +55,7 @@ impl CompilationError for Error {
                 .with_labels(vec![loc
                     .primary_label()
                     .with_message(format!("Expected {} here", expected))]),
-            Error::ConstraintMissmatch {
+            Error::ConstraintMismatch {
                 expected,
                 got,
                 source,

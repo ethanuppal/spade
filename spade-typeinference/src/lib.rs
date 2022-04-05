@@ -135,12 +135,6 @@ pub struct GenericListToken {
 /// State of the type inference algorithm
 pub struct TypeState {
     equations: TypeEquations,
-    /// The next type id. Can be incremented without mutable references thanks to
-    /// the atomic. This is done to ensure that one can call `new_type` without having
-    /// a mutable reference.
-    ///
-    /// This in turn is done since owning a &mut of the type state represents none of
-    /// the live type variables changing
     next_typeid: u64,
     // List of the mapping between generic parameters and type vars. Managed here
     // because unification must update *all* TypeVars in existence.

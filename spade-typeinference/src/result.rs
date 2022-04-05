@@ -71,7 +71,7 @@ impl<T> UnificationErrorExt<T> for std::result::Result<T, UnificationError> {
                 got,
                 loc,
                 source,
-            }) => Err(Error::ConstraintMissmatch {
+            }) => Err(Error::ConstraintMismatch {
                 expected,
                 got,
                 loc,
@@ -125,8 +125,8 @@ pub enum Error {
         got: UnificationTrace,
         loc: Loc<()>,
     },
-    #[error("Type missmatch due to constraints")]
-    ConstraintMissmatch {
+    #[error("Type mismatch due to constraints")]
+    ConstraintMismatch {
         expected: UnificationTrace,
         got: UnificationTrace,
         source: ConstraintSource,
