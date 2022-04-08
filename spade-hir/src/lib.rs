@@ -103,6 +103,8 @@ pub enum Statement {
     Binding(Loc<Pattern>, Option<Loc<TypeSpec>>, Loc<Expression>),
     Register(Loc<Register>),
     Declaration(Vec<Loc<NameID>>),
+    PipelineRegMarker,
+    Label(Loc<NameID>),
 }
 impl WithLocation for Statement {}
 
@@ -329,14 +331,11 @@ impl WithLocation for PipelineStage {}
 
 #[derive(PartialEq, Debug, Clone)]
 pub struct Pipeline {
+    pub head: PipelineHead,
     pub name: Loc<NameID>,
-    // The inputs to the pipeline as visible locally, rather than the inputs
-    // as visible externally in the PipelineHead
+    // This is needed here because the head does not have NameIDs
     pub inputs: Vec<(NameID, Loc<TypeSpec>)>,
-    pub body: Vec<Loc<PipelineStage>>,
-    pub result: Loc<Expression>,
-    pub depth: Loc<u128>,
-    pub output_type: Loc<TypeSpec>,
+    pub body: Loc<Expression>,
 }
 impl WithLocation for Pipeline {}
 

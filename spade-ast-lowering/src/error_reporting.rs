@@ -198,11 +198,6 @@ impl CompilationError for Error {
                             .with_message(format!("Missing {}", arg_list)),
                     ])
             }
-            Error::NoPipelineStages { pipeline } => Diagnostic::error()
-                .with_message("Missing pipeline stages")
-                .with_labels(vec![pipeline
-                    .primary_label()
-                    .with_message(format!("Pipelien must have at least one stage"))]),
             Error::IncorrectStageCount {
                 got,
                 expected,

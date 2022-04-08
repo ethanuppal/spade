@@ -7,9 +7,9 @@ use error::{CommaSeparatedResult, Error, Result};
 
 use spade_ast::{
     ArgumentList, ArgumentPattern, BinaryOperator, Block, Entity, Enum, Expression, FunctionDecl,
-    Item, Module, ModuleBody, NamedArgument, ParameterList, Pattern, Pipeline, PipelineBinding,
-    PipelineStage, Register, Statement, Struct, TraitDef, TypeDeclKind, TypeDeclaration,
-    TypeExpression, TypeParam, TypeSpec, UnaryOperator, UseStatement,
+    Item, Module, ModuleBody, NamedArgument, ParameterList, Pattern, Pipeline, Register, Statement,
+    Struct, TraitDef, TypeDeclKind, TypeDeclaration, TypeExpression, TypeParam, TypeSpec,
+    UnaryOperator, UseStatement,
 };
 use spade_common::{
     error_reporting::AsLabel,
@@ -284,7 +284,7 @@ impl<'a> Parser<'a> {
             Ok(val.map(Expression::BoolLiteral))
         } else if let Some(val) = self.int_literal()? {
             Ok(val.map(Expression::IntLiteral))
-        } else if let Some(block) = self.block()? {
+        } else if let Some(block) = self.block(false)? {
             Ok(block.map(Box::new).map(Expression::Block))
         } else if let Some(if_expr) = self.if_expression()? {
             Ok(if_expr)
@@ -524,10 +524,10 @@ impl<'a> Parser<'a> {
     }
 
     #[trace_parser]
-    pub fn block(&mut self) -> Result<Option<Loc<Block>>> {
+    pub fn block(&mut self, is_pipeline: bool) -> Result<Option<Loc<Block>>> {
         let start = peek_for!(self, &TokenKind::OpenBrace);
 
-        let statements = self.statements()?;
+        let statements = self.statements(is_pipeline)?;
         let output_value = self.expression()?;
         let end = self.eat(&TokenKind::CloseBrace)?;
 
@@ -810,6 +810,13 @@ impl<'a> Parser<'a> {
     pub fn register(&mut self) -> Result<Option<Loc<Statement>>> {
         let start_token = peek_for!(self, &TokenKind::Reg);
 
+        // If this is a reg marker for a pipeline
+        if self.peek_kind(&TokenKind::Semi)? {
+            return Ok(Some(
+                Statement::PipelineRegMarker.at(self.file_id, &start_token),
+            ));
+        }
+
         self.item_context
             .allows_reg(().at(self.file_id, &start_token.span()))?;
 
@@ -893,22 +900,48 @@ impl<'a> Parser<'a> {
         )))
     }
 
+    #[trace_parser]
+    pub fn label(&mut self) -> Result<Option<Loc<Statement>>> {
+        let tok = peek_for!(self, &TokenKind::SingleQuote);
+
+        let name = self.identifier()?;
+        Ok(Some(Statement::Label(name.clone()).between(
+            self.file_id,
+            &tok.span,
+            &name,
+        )))
+    }
+
     /// If the next token is the start of a statement, return that statement,
     /// otherwise None
     #[trace_parser]
-    pub fn statement(&mut self) -> Result<Option<Loc<Statement>>> {
-        let result =
-            self.first_successful(vec![&Self::binding, &Self::register, &Self::declaration])?;
-        if result.is_some() {
-            self.eat(&TokenKind::Semi)?;
+    pub fn statement(&mut self, allow_stages: bool) -> Result<Option<Loc<Statement>>> {
+        let result = self.first_successful(vec![
+            &Self::binding,
+            &Self::register,
+            &Self::declaration,
+            &Self::label,
+        ])?;
+
+        if let Some(statement) = &result {
+            if let Statement::Label(_) = statement.inner {
+            } else {
+                self.eat(&TokenKind::Semi)?;
+            }
+
+            if let Statement::PipelineRegMarker = statement.inner {
+                if !allow_stages {
+                    return Err(Error::StageOutsidePipeline(statement.loc()));
+                }
+            }
         }
         Ok(result)
     }
 
     #[trace_parser]
-    pub fn statements(&mut self) -> Result<Vec<Loc<Statement>>> {
+    pub fn statements(&mut self, allow_stages: bool) -> Result<Vec<Loc<Statement>>> {
         let mut result = vec![];
-        while let Some(statement) = self.statement()? {
+        while let Some(statement) = self.statement(allow_stages)? {
             result.push(statement)
         }
         Ok(result)
@@ -972,7 +1005,7 @@ impl<'a> Parser<'a> {
         };
 
         // Body (TODO: might want to make this a separate structure like a block)
-        let (block, block_span) = if let Some(block) = self.block()? {
+        let (block, block_span) = if let Some(block) = self.block(false)? {
             let (block, block_span) = block.separate();
             (Some(block), block_span)
         } else if self.peek_kind(&TokenKind::Builtin)? {
@@ -1012,64 +1045,12 @@ impl<'a> Parser<'a> {
     }
 
     #[trace_parser]
-    pub fn pipeline_binding(&mut self) -> Result<Option<Loc<PipelineBinding>>> {
-        let start = peek_for!(self, &TokenKind::Let);
-
-        let pat = self.pattern()?;
-
-        let type_spec = if self.peek_and_eat(&TokenKind::Colon)?.is_some() {
-            Some(self.type_spec()?)
-        } else {
-            None
-        };
-
-        self.eat(&TokenKind::Assignment)?;
-
-        let value = self.expression()?;
-
-        let end = self.eat(&TokenKind::Semi)?;
-
-        Ok(Some(
-            PipelineBinding {
-                pat,
-                type_spec,
-                value,
-            }
-            .between(self.file_id, &start.span, &end.span),
-        ))
-    }
-
-    #[trace_parser]
-    pub fn pipeline_stage(&mut self) -> Result<Option<Loc<PipelineStage>>> {
-        let start = peek_for!(self, &TokenKind::Stage);
-
-        self.eat(&TokenKind::OpenBrace)?;
-
-        let mut bindings = vec![];
-        while let Some(statement) = self.pipeline_binding()? {
-            bindings.push(statement)
-        }
-
-        let end = self.eat(&TokenKind::CloseBrace).map_err(|e| match e {
-            Error::UnexpectedToken { got, mut expected } => {
-                expected.push("Pipeline binding");
-                Error::UnexpectedToken { got, expected }
-            }
-            other => other,
-        })?;
-
-        Ok(Some(PipelineStage { bindings }.between(
-            self.file_id,
-            &start.span,
-            &end.span,
-        )))
-    }
-
-    #[trace_parser]
     pub fn pipeline(&mut self) -> Result<Option<Loc<Pipeline>>> {
-        let start = peek_for!(self, &TokenKind::Pipeline);
+        let start_token = peek_for!(self, &TokenKind::Pipeline);
 
-        self.set_item_context(ItemType::Pipeline.at(self.file_id, &start.span()))?;
+        self.set_item_context(ItemType::Pipeline.at(self.file_id, &start_token.span()))?;
+
+        let type_params = self.generics_list()?;
 
         // Depth
         self.eat(&TokenKind::OpenParen)?;
@@ -1088,7 +1069,7 @@ impl<'a> Parser<'a> {
         self.eat(&TokenKind::OpenParen)?;
         // TODO: Can we use surrounded here?
         let inputs = self.parameter_list()?;
-        self.eat(&TokenKind::CloseParen)?;
+        let close_paren = self.eat(&TokenKind::CloseParen)?;
 
         // Return type
         let output_type = if self.peek_and_eat(&TokenKind::SlimArrow)?.is_some() {
@@ -1097,38 +1078,43 @@ impl<'a> Parser<'a> {
             None
         };
 
-        let (stages, result, end) = if self.peek_kind(&TokenKind::Builtin)? {
-            let end = self.eat_unconditional()?;
-            (vec![], None, end)
+        // Body (TODO: might want to make this a separate structure like a block)
+        let (block, block_span) = if let Some(block) = self.block(true)? {
+            let (block, block_span) = block.separate();
+            (Some(block), block_span)
+        } else if self.peek_kind(&TokenKind::Builtin)? {
+            let tok = self.eat_unconditional()?;
+
+            (None, ().at(self.file_id, &tok.span).span)
         } else {
-            self.eat(&TokenKind::OpenBrace)?;
-            let mut stages = vec![];
-            while let Some(stage) = self.pipeline_stage()? {
-                stages.push(stage)
-            }
+            // The end of the entity definition depends on wether or not
+            // a type is present.
+            let end_loc = output_type
+                .map(|t| t.loc().span)
+                .unwrap_or_else(|| lspan(close_paren.span));
 
-            let result = self.expression().map_err(|e| match e {
-                Error::ExpectedExpression { got } => Error::ExpectedExpressionOrStage { got },
-                other => other,
-            })?;
-
-            let end = self.eat(&TokenKind::CloseBrace)?;
-
-            (stages, Some(result), end)
+            return match self.peek()? {
+                Some(got) => Err(Error::ExpectedBlock {
+                    for_what: "entity".to_string(),
+                    got,
+                    loc: Loc::new((), lspan(start_token.span).merge(end_loc), self.file_id),
+                }),
+                None => Err(Error::Eof),
+            };
         };
 
         self.clear_item_context();
 
         Ok(Some(
             Pipeline {
-                depth,
                 name,
+                depth,
                 inputs,
                 output_type,
-                stages,
-                result,
+                body: block.map(|inner| inner.map(|inner| Expression::Block(Box::new(inner)))),
+                type_params,
             }
-            .between(self.file_id, &start.span, &end.span),
+            .between(self.file_id, &start_token.span, &block_span),
         ))
     }
 
@@ -1768,12 +1754,12 @@ mod tests {
     use spade_common::location_info::{Loc, WithLocation};
 
     macro_rules! check_parse {
-        ($string:expr , $method:ident, $expected:expr$(, $run_on_parser:expr)?) => {
+        ($string:expr , $method:ident$(($($arg:expr),*))?, $expected:expr$(, $run_on_parser:expr)?) => {
             let mut parser = Parser::new(TokenKind::lexer($string), 0);
 
             $($run_on_parser(&mut parser);)?
 
-            let result = parser.$method();
+            let result = parser.$method($($($arg),*)?);
             // This is needed because type inference fails for some unexpected reason
             let expected: Result<_> = $expected;
 
@@ -2087,7 +2073,7 @@ mod tests {
         }
         .nowhere();
 
-        check_parse!(code, block, Ok(Some(expected)));
+        check_parse!(code, block(false), Ok(Some(expected)));
     }
 
     #[test]
@@ -2148,7 +2134,11 @@ mod tests {
             Expression::IntLiteral(123).nowhere(),
         )
         .nowhere();
-        check_parse!("let test: bool = 123;", statement, Ok(Some(expected)));
+        check_parse!(
+            "let test: bool = 123;",
+            statement(false),
+            Ok(Some(expected))
+        );
     }
 
     #[test]
@@ -2251,7 +2241,7 @@ mod tests {
 
         check_parse!(
             code,
-            statement,
+            statement(false),
             Ok(Some(expected)),
             Parser::set_parsing_entity
         );
@@ -2278,7 +2268,7 @@ mod tests {
 
         check_parse!(
             code,
-            statement,
+            statement(false),
             Ok(Some(expected)),
             Parser::set_parsing_entity
         );
@@ -2305,7 +2295,7 @@ mod tests {
 
         check_parse!(
             code,
-            statement,
+            statement(false),
             Ok(Some(expected)),
             Parser::set_parsing_entity
         );
@@ -2686,8 +2676,8 @@ mod tests {
                 inputs: ParameterList(vec![]),
                 output_type: None,
                 depth: 1.nowhere(),
-                stages: vec![],
-                result: None,
+                body: None,
+                type_params: vec![],
             }
             .nowhere(),
         );
@@ -2822,53 +2812,16 @@ mod tests {
     }
 
     #[test]
-    fn pipeline_stage_parsing_works() {
-        let code = r#"
-            stage {
-                let y = 0;
-                let x = 0;
-                let x: bool = 0;
-            }
-            "#;
-
-        let expected = PipelineStage {
-            bindings: vec![
-                PipelineBinding {
-                    pat: Pattern::name("y"),
-                    type_spec: None,
-                    value: Expression::IntLiteral(0).nowhere(),
-                }
-                .nowhere(),
-                PipelineBinding {
-                    pat: Pattern::name("x"),
-                    type_spec: None,
-                    value: Expression::IntLiteral(0).nowhere(),
-                }
-                .nowhere(),
-                PipelineBinding {
-                    pat: Pattern::name("x"),
-                    type_spec: Some(TypeSpec::Named(ast_path("bool"), vec![]).nowhere()),
-                    value: Expression::IntLiteral(0).nowhere(),
-                }
-                .nowhere(),
-            ],
-        }
-        .nowhere();
-
-        check_parse!(code, pipeline_stage, Ok(Some(expected)));
-    }
-
-    #[test]
     fn pipeline_parsing_works() {
         let code = r#"
             pipeline(2) test(a: bool) -> bool {
-                stage {
+                    's0
+                reg;
                     let b = 0;
-                }
-                stage {
+                reg;
+                    's2
                     let c = 0;
-                }
-                0
+                    0
             }
         "#;
 
@@ -2877,27 +2830,31 @@ mod tests {
             name: ast_ident("test"),
             inputs: aparams![("a", tspec!("bool"))],
             output_type: Some(TypeSpec::Named(ast_path("bool"), vec![]).nowhere()),
-            stages: vec![
-                PipelineStage {
-                    bindings: vec![PipelineBinding {
-                        pat: Pattern::name("b"),
-                        type_spec: None,
-                        value: Expression::IntLiteral(0).nowhere(),
-                    }
-                    .nowhere()],
-                }
+            body: Some(
+                Expression::Block(Box::new(Block {
+                    statements: vec![
+                        Statement::Label(ast_ident("s0")).nowhere(),
+                        Statement::PipelineRegMarker.nowhere(),
+                        Statement::Binding(
+                            Pattern::name("b"),
+                            None,
+                            Expression::IntLiteral(0).nowhere(),
+                        )
+                        .nowhere(),
+                        Statement::PipelineRegMarker.nowhere(),
+                        Statement::Label(ast_ident("s2")).nowhere(),
+                        Statement::Binding(
+                            Pattern::name("c"),
+                            None,
+                            Expression::IntLiteral(0).nowhere(),
+                        )
+                        .nowhere(),
+                    ],
+                    result: Expression::IntLiteral(0).nowhere(),
+                }))
                 .nowhere(),
-                PipelineStage {
-                    bindings: vec![PipelineBinding {
-                        pat: Pattern::name("c"),
-                        type_spec: None,
-                        value: Expression::IntLiteral(0).nowhere(),
-                    }
-                    .nowhere()],
-                }
-                .nowhere(),
-            ],
-            result: Some(Expression::IntLiteral(0).nowhere()),
+            ),
+            type_params: vec![],
         }
         .nowhere();
 
@@ -2919,8 +2876,14 @@ mod tests {
                     name: ast_ident("test"),
                     inputs: aparams![("a", tspec!("bool"))],
                     output_type: Some(TypeSpec::Named(ast_path("bool"), vec![]).nowhere()),
-                    stages: vec![],
-                    result: Some(Expression::IntLiteral(0).nowhere()),
+                    body: Some(
+                        Expression::Block(Box::new(Block {
+                            statements: vec![],
+                            result: Expression::IntLiteral(0).nowhere(),
+                        }))
+                        .nowhere(),
+                    ),
+                    type_params: vec![],
                 }
                 .nowhere(),
             )],
@@ -3152,7 +3115,7 @@ mod tests {
     fn missing_semicolon_error_points_to_correct_token() {
         check_parse!(
             "let a = 1 let b = 2;",
-            statements,
+            statements(false),
             Err(Error::UnexpectedToken {
                 expected: vec![";"],
                 got: Token {

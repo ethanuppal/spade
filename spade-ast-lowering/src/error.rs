@@ -56,8 +56,6 @@ pub enum Error {
         missing: Vec<Identifier>,
         at: Loc<()>,
     },
-    #[error("Pipelines must have at least one stage")]
-    NoPipelineStages { pipeline: Loc<ast::Pipeline> },
     #[error("Incorrect stage count")]
     IncorrectStageCount {
         got: usize,

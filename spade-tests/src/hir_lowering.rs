@@ -666,8 +666,8 @@ mod tests {
     fn pipeline_instanciation_works() {
         let code = r#"
             pipeline(2) sub(clk: clk, a: int<16>) -> int<16> {
-                stage {}
-                stage {}
+                reg;
+                reg;
                 a
             }
 
@@ -739,16 +739,13 @@ mod tests {
     fn pipelines_work() {
         let code = r#"
             pipeline(3) pl(clk: clk, a: int<16>) -> int<18> {
-                stage {
                     let x = a << a;
-                }
-                stage {
+                reg;
                     let y = x + a;
-                }
-                stage {
+                reg;
                     let res = y + y;
-                }
-                res
+                reg;
+                    res
             }
         "#;
 
@@ -797,12 +794,9 @@ mod tests {
     fn pipelines_returning_expressions_work() {
         let code = r#"
             pipeline(3) pl(clk: clk, a: int<16>) -> int<17> {
-                stage {
-                }
-                stage {
-                }
-                stage {
-                }
+                reg;
+                reg;
+                reg;
                 a+a
             }
         "#;

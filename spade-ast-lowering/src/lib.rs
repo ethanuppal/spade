@@ -579,6 +579,16 @@ pub fn visit_statement(
             let (result, span) = visit_register(&inner, symtab, idtracker)?.separate_loc();
             Ok(hir::Statement::Register(result).at_loc(&span))
         }
+        ast::Statement::PipelineRegMarker => {
+            // NOTE: For now we don't do anything about pipeline reg markers and labels at the
+            // ast lowering level. When we add referencing other stages, we need to change that
+            Ok(hir::Statement::PipelineRegMarker.at_loc(s))
+        }
+        ast::Statement::Label(_) => {
+            // NOTE: For now we don't do anything about pipeline reg markers and labels at the
+            // ast lowering level. When we add referencing other stages, we need to change that
+            todo!()
+        }
     }
 }
 

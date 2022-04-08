@@ -117,6 +117,16 @@ pub enum Expression {
 }
 impl WithLocation for Expression {}
 
+impl Expression {
+    pub fn assume_block(&self) -> &Block {
+        if let Expression::Block(inner) = self {
+            inner
+        } else {
+            panic!("Expected block")
+        }
+    }
+}
+
 #[derive(PartialEq, Debug, Clone)]
 pub struct Block {
     pub statements: Vec<Loc<Statement>>,
@@ -126,8 +136,10 @@ impl WithLocation for Block {}
 
 #[derive(PartialEq, Debug, Clone)]
 pub enum Statement {
+    Label(Loc<Identifier>),
     Declaration(Vec<Loc<Identifier>>),
     Binding(Loc<Pattern>, Option<Loc<TypeSpec>>, Loc<Expression>),
+    PipelineRegMarker,
     Register(Loc<Register>),
 }
 impl WithLocation for Statement {}
@@ -166,41 +178,16 @@ pub struct Entity {
 }
 impl WithLocation for Entity {}
 
-/// Modifiers on pipeline bindings which change the visibility of the binding
-#[derive(PartialEq, Debug, Clone)]
-pub enum PipelineBindModifier {
-    Reg,
-}
-impl WithLocation for PipelineBindModifier {}
-/// A variable binding inside a pipeline. These behave a bit differently
-/// to standard bindings
-#[derive(PartialEq, Debug, Clone)]
-pub struct PipelineBinding {
-    pub pat: Loc<Pattern>,
-    pub type_spec: Option<Loc<TypeSpec>>,
-    pub value: Loc<Expression>,
-}
-impl WithLocation for PipelineBinding {}
-
-/// A single stage in a pipeline.
-#[derive(PartialEq, Debug, Clone)]
-pub struct PipelineStage {
-    pub bindings: Vec<Loc<PipelineBinding>>,
-}
-impl WithLocation for PipelineStage {}
-
 #[derive(PartialEq, Debug, Clone)]
 pub struct Pipeline {
     pub depth: Loc<u128>,
     pub name: Loc<Identifier>,
     pub inputs: ParameterList,
     pub output_type: Option<Loc<TypeSpec>>,
-    /// The body is a list of expression for ID assignment purposes, but semantic analysis
-    /// ensures that it is always a block.
-    pub stages: Vec<Loc<PipelineStage>>,
-    /// The resulting value. If the pipeline is __builtin__, this is None and stages must
-    /// be empty
-    pub result: Option<Loc<Expression>>,
+    /// The body is an expression for ID assignment purposes, but semantic analysis
+    /// ensures that it is always a block. If body is `None`, the entity is __builtin__
+    pub body: Option<Loc<Expression>>,
+    pub type_params: Vec<Loc<TypeParam>>,
 }
 impl WithLocation for Pipeline {}
 

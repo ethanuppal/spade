@@ -112,6 +112,8 @@ pub enum TokenKind {
     Xor,
     #[token("`")]
     InfixOperatorSeparator,
+    #[token("'")]
+    SingleQuote,
 
     // Other operators
     #[token("=")]
@@ -229,6 +231,7 @@ impl TokenKind {
             TokenKind::Comma => ",",
             TokenKind::Dot => ".",
             TokenKind::PathSeparator => "::",
+            TokenKind::SingleQuote => "'",
 
             TokenKind::Hash => "#",
             TokenKind::Dollar => "$",

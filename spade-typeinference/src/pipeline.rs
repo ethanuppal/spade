@@ -1,66 +1,27 @@
 use parse_tree_macros::trace_typechecker;
 use spade_common::location_info::WithLocation;
 use spade_hir::symbol_table::SymbolTable;
-use spade_hir::{Pipeline, PipelineBinding, PipelineStage};
+use spade_hir::Pipeline;
 
 use crate::result::UnificationErrorExt;
-use crate::GenericListToken;
 use crate::{equation::TypedExpression, fixed_types::t_clock, result::Error};
 
 use super::{Result, TraceStackEntry, TypeState};
 
 impl TypeState {
     #[trace_typechecker]
-    pub fn visit_pipeline_binding(
-        &mut self,
-        binding: &PipelineBinding,
-        symtab: &SymbolTable,
-        generic_list: &GenericListToken,
-    ) -> Result<()> {
-        self.visit_expression(&binding.value, symtab, generic_list)?;
-
-        if binding.type_spec.is_some() {
-            todo!("Let bindings with fixed types are unsupported")
-        }
-
-        self.visit_pattern(&binding.pat, symtab)?;
-
-        self.unify(&TypedExpression::Id(binding.pat.id), &binding.value, symtab)
-            .map_normal_err(|(expected, got)| Error::PatternTypeMismatch {
-                pattern: binding.pat.loc(),
-                expected,
-                got,
-            })?;
-
-        Ok(())
-    }
-
-    #[trace_typechecker]
-    pub fn visit_pipeline_stage(
-        &mut self,
-        stage: &PipelineStage,
-        symtab: &SymbolTable,
-        generic_list: &GenericListToken,
-    ) -> Result<()> {
-        for binding in &stage.bindings {
-            // Add a type eq for the name
-            self.visit_pipeline_binding(binding, symtab, generic_list)?;
-        }
-        Ok(())
-    }
-
-    #[trace_typechecker]
     pub fn visit_pipeline(&mut self, pipeline: &Pipeline, symtab: &SymbolTable) -> Result<()> {
         let Pipeline {
+            head,
             name: _,
             inputs,
             body,
-            result,
-            depth: _,
-            output_type,
         } = pipeline;
-
-        let generic_list = self.create_generic_list(&[]);
+        let generic_list = if pipeline.head.type_params.is_empty() {
+            self.create_generic_list(&[])
+        } else {
+            todo!("Support entity definitions with generics")
+        };
 
         // Add an equation for the clock
         let input_tvar = self.type_var_from_hir(&inputs[0].1.inner, &generic_list);
@@ -81,22 +42,30 @@ impl TypeState {
             self.add_equation(TypedExpression::Name(name.clone()), tvar);
         }
 
-        // Go through the stages
-        for stage in body {
-            self.visit_pipeline_stage(stage, symtab, &generic_list)?
+        self.visit_expression(&body, symtab, &generic_list)?;
+
+        // Ensure that the output type matches what the user specified, and unit otherwise
+        if let Some(output_type) = &head.output_type {
+            let tvar = self.type_var_from_hir(&output_type, &generic_list);
+            self.unify(&TypedExpression::Id(body.inner.id), &tvar, symtab)
+                .map_normal_err(|(got, expected)| Error::EntityOutputTypeMismatch {
+                    expected,
+                    got,
+                    type_spec: output_type.loc(),
+                    output_expr: body.loc(),
+                })?;
+        } else {
+            todo!("Support unit types")
+            // self.unify_types(
+            //     &TypedExpression::Id(entity.body.inner.id),
+            //     &TypeVar::Known(KnownType::Type(BaseType::Unit), vec![], None),
+            // )
+            // .map_err(|(got, expected)| Error::UnspecedEntityOutputTypeMismatch {
+            //     expected,
+            //     got,
+            //     output_expr: entity.body.loc(),
+            // })?;
         }
-
-        self.visit_expression(result, symtab, &generic_list)?;
-
-        let tvar = self.type_var_from_hir(output_type, &generic_list);
-        self.unify(&TypedExpression::Id(result.inner.id), &tvar, symtab)
-            .map_normal_err(|(got, expected)| Error::EntityOutputTypeMismatch {
-                expected,
-                got,
-                type_spec: output_type.loc(),
-                output_expr: result.loc(),
-            })?;
-
         Ok(())
     }
 }
@@ -105,90 +74,15 @@ impl TypeState {
 mod tests {
     use super::*;
 
-    use crate::TypeVar as TVar;
-    use crate::TypeVar;
-    use crate::TypedExpression as TExpr;
-
-    use crate::{ensure_same_type, HasType};
-    use crate::{fixed_types::t_int, format_trace_stack, hir, kvar};
+    use crate::{format_trace_stack, hir};
+    use hir::Block;
     use hir::ItemList;
-    use hir::PatternKind;
-    use hir::{dtype, testutil::t_num, ExprKind, Expression, PipelineStage};
+    use hir::{dtype, testutil::t_num, ExprKind};
+    use spade_ast::testutil::ast_ident;
     use spade_ast::testutil::ast_path;
     use spade_common::location_info::WithLocation;
     use spade_common::name::testutil::name_id;
     use spade_hir::symbol_table::SymbolTable;
-    use spade_types::KnownType;
-
-    #[test]
-    fn pipeline_bindings_fixes_type_of_name() {
-        let input = PipelineBinding {
-            pat: hir::PatternKind::name(name_id(0, "a")).idless().nowhere(),
-            type_spec: None,
-            value: Expression::ident(1, 1, "b").nowhere(),
-        };
-
-        let mut state = TypeState::new();
-        let symtab = SymbolTable::new();
-
-        let expr_a = TExpr::Name(name_id(1, "b").inner);
-        state.add_equation(expr_a.clone(), TVar::Unknown(100));
-
-        let generic_list = state.create_generic_list(&vec![]);
-        state
-            .visit_pipeline_binding(&input, &symtab, &generic_list)
-            .unwrap();
-
-        ensure_same_type!(
-            state,
-            TExpr::Name(name_id(1, "a").inner),
-            TExpr::Name(name_id(1, "b").inner)
-        );
-    }
-
-    #[test]
-    fn pipelines_typecheck_correctly() {
-        let mut symtab = SymbolTable::new();
-
-        spade_ast_lowering::builtins::populate_symtab(&mut symtab, &mut ItemList::new());
-
-        let input = Pipeline {
-            name: name_id(0, "pipe"),
-            inputs: vec![
-                (name_id(10, "clk").inner, dtype!(symtab => "clk")),
-                (name_id(1, "a").inner, dtype!(symtab => "int"; (t_num(5)))),
-            ],
-            body: vec![
-                PipelineStage {
-                    bindings: vec![PipelineBinding {
-                        pat: hir::PatternKind::name(name_id(3, "b")).idless().nowhere(),
-                        type_spec: None,
-                        value: Expression::ident(2, 1, "a").nowhere(),
-                    }
-                    .nowhere()],
-                }
-                .nowhere(),
-                PipelineStage { bindings: vec![] }.nowhere(),
-            ],
-            result: ExprKind::IntLiteral(0).with_id(10).nowhere(),
-            depth: 3.nowhere(),
-            output_type: dtype!(symtab => "int"; (t_num(8))),
-        };
-
-        let mut state = TypeState::new();
-
-        state.visit_pipeline(&input, &mut symtab).unwrap();
-
-        let a_type = kvar!( t_int(&symtab); ( kvar!( KnownType::Integer(5) ) ) );
-        let ret_type = kvar!( t_int(&symtab); ( kvar!( KnownType::Integer(8) ) ) );
-        let clk_type = kvar!(t_clock(&symtab));
-
-        ensure_same_type!(state, TExpr::Name(name_id(1, "b").inner), a_type);
-        ensure_same_type!(state, TExpr::Id(10), ret_type);
-        ensure_same_type!(state, TExpr::Name(name_id(10, "clk").inner), clk_type);
-
-        // ensure_same_type!(state, t_a, t_b);
-    }
 
     #[test]
     fn pipeline_first_argument_is_clock() {
@@ -199,22 +93,19 @@ mod tests {
         // Add the entity to the symtab
         let pipeline = Pipeline {
             name: name_id(0, "pipe"),
-            inputs: vec![(name_id(1, "clk").inner, dtype!(symtab => "int"; (t_num(5))))],
-            body: vec![
-                PipelineStage {
-                    bindings: vec![PipelineBinding {
-                        pat: PatternKind::name(name_id(3, "b")).idless().nowhere(),
-                        type_spec: None,
-                        value: Expression::ident(2, 1, "a").nowhere(),
-                    }
-                    .nowhere()],
-                }
-                .nowhere(),
-                PipelineStage { bindings: vec![] }.nowhere(),
-            ],
-            result: ExprKind::IntLiteral(0).with_id(10).nowhere(),
-            depth: 3.nowhere(),
-            output_type: dtype!(symtab => "int"; (t_num(8))),
+            head: hir::PipelineHead {
+                depth: 3.nowhere(),
+                inputs: hir::ParameterList(vec![(ast_ident("clk"), dtype!(symtab => "bool"))]),
+                output_type: Some(dtype!(symtab => "int"; (t_num(5)))),
+                type_params: vec![],
+            },
+            body: ExprKind::Block(Box::new(Block {
+                statements: vec![],
+                result: ExprKind::IntLiteral(0).idless().nowhere(),
+            }))
+            .idless()
+            .nowhere(),
+            inputs: vec![(name_id(0, "clk").inner, dtype!(symtab => "bool"))],
         };
 
         let mut state = TypeState::new();

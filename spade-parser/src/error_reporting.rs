@@ -198,6 +198,11 @@ impl CompilationError for Error {
                     replacement: format!("; N"),
                     message: format!("Insert a size here")
                 }]),
+            // TODO Before merge: Add a test for the format of this
+            Error::StageOutsidePipeline(loc) => Diagnostic::error()
+                .with_message("Stage outside pipeline")
+                .with_labels(vec![loc.primary_label().with_message("stage is not allowed here")])
+                .with_notes(vec![format!("Stages are only allowed in the root block of a pipeline")])
         };
 
         term::emit(buffer, &codespan_config(), &code.files, &diag).unwrap();

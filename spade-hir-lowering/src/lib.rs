@@ -446,7 +446,7 @@ impl StatementLocal for Statement {
         item_list: &hir::ItemList,
     ) -> Result<Vec<mir::Statement>> {
         let mut result = vec![];
-        match &self {
+        match self {
             Statement::Binding(pattern, _t, value) => {
                 result.append(&mut value.lower(symtab, idtracker, types, subs, item_list)?);
 
@@ -506,6 +506,8 @@ impl StatementLocal for Statement {
                 )?);
             }
             Statement::Declaration(_) => {}
+            Statement::PipelineRegMarker => {}
+            Statement::Label(_) => {}
         }
         Ok(result)
     }

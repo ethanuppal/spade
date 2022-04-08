@@ -606,6 +606,8 @@ impl TypeState {
                 }
                 Ok(())
             }
+            // These statements have no effect on the types
+            Statement::PipelineRegMarker | Statement::Label(_) => Ok(()),
         }
     }
 

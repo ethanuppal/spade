@@ -1,0 +1,15 @@
+struct X {
+    x: int<4>,
+    y: int<4>,
+    z: int<4>,
+    w: int<4>,
+}
+
+pipeline(3) delay_3(clk: clk, input: X) -> int<4> {
+        let X$(x, y, z, w) = input;
+    reg;
+    reg;
+    reg;
+        x
+}
+
