@@ -26,6 +26,7 @@ pub struct Opt<'b> {
 
 #[derive(Error, Debug)]
 pub enum Error {
+    // TODO: Unify the modules that contain errors
     #[error("parse error")]
     ParseError(#[from] spade_parser::error::Error),
 
@@ -33,7 +34,7 @@ pub enum Error {
     AstLoweringError(#[from] spade_ast_lowering::Error),
 
     #[error("hir lowering error")]
-    HirLoweringError(#[from] spade_hir_lowering::Error),
+    HirLoweringError(#[from] spade_hir_lowering::error::Error),
 
     #[error("type inference error")]
     TypeInferenceError(#[from] spade_typeinference::result::Error),

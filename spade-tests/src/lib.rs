@@ -25,7 +25,7 @@ mod typeinference;
 pub trait ResultExt<T> {
     fn report_failure(self, code: &str) -> T;
 }
-impl<T> ResultExt<T> for spade_hir_lowering::Result<T> {
+impl<T> ResultExt<T> for spade_hir_lowering::error::Result<T> {
     fn report_failure(self, code: &str) -> T {
         match self {
             Ok(t) => t,

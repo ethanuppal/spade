@@ -327,20 +327,6 @@ macro_rules! impl_function_like {
 impl_function_like!(EntityHead, FunctionHead, PipelineHead);
 
 #[derive(PartialEq, Debug, Clone)]
-pub struct PipelineBinding {
-    pub pat: Loc<Pattern>,
-    pub type_spec: Option<Loc<TypeSpec>>,
-    pub value: Loc<Expression>,
-}
-impl WithLocation for PipelineBinding {}
-
-#[derive(PartialEq, Debug, Clone)]
-pub struct PipelineStage {
-    pub bindings: Vec<Loc<PipelineBinding>>,
-}
-impl WithLocation for PipelineStage {}
-
-#[derive(PartialEq, Debug, Clone)]
 pub struct Pipeline {
     pub head: PipelineHead,
     pub name: Loc<NameID>,

@@ -396,7 +396,7 @@ impl TypeState {
             }
             ExprKind::PipelineRef { .. } => {
                 // TODO: test type inference for stages
-                self.visit_identifier(expression, symtab)?
+                self.visit_pipeline_ref(expression, symtab)?;
             }
         }
         Ok(())
@@ -541,6 +541,16 @@ impl TypeState {
                         pattern.get_type(self)?,
                     );
                 }
+                self.unify(
+                    &TypedExpression::Id(pattern.id),
+                    &TypedExpression::Name(name.clone().inner),
+                    symtab,
+                )
+                .map_normal_err(|(lhs, rhs)| Error::UnspecifiedTypeError {
+                    expected: lhs,
+                    got: rhs,
+                    loc: name.loc(),
+                })?;
             }
             hir::PatternKind::Tuple(subpatterns) => {
                 for pattern in subpatterns {
@@ -669,6 +679,7 @@ impl TypeState {
             Statement::Register(reg) => self.visit_register(reg, symtab, generic_list),
             Statement::Declaration(names) => {
                 for name in names {
+                    println!("Type checking declaration of {name}");
                     let new_type = self.new_generic();
                     self.add_equation(TypedExpression::Name(name.clone().inner), new_type);
                 }
@@ -1207,6 +1218,11 @@ impl HasType for Loc<Pattern> {
 impl HasType for KnownType {
     fn get_type(&self, _state: &TypeState) -> Result<TypeVar> {
         Ok(TypeVar::Known(self.clone(), vec![]))
+    }
+}
+impl HasType for NameID {
+    fn get_type(&self, state: &TypeState) -> Result<TypeVar> {
+        state.type_of(&TypedExpression::Name(self.clone()))
     }
 }
 

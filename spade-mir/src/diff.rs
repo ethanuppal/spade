@@ -1,5 +1,7 @@
 use std::collections::HashMap;
 
+use thiserror::Error;
+
 use crate::{Entity, Statement, ValueName};
 
 macro_rules! check {
@@ -8,6 +10,14 @@ macro_rules! check {
             return false;
         }
     };
+}
+
+#[derive(Error, Debug, Clone)]
+enum Error {
+    #[error("Could not match {0:?} with {1:?}")]
+    StatementMismatch(Statement, Statement),
+    #[error("Could not match name {0} with {1}")]
+    NameMismatch(ValueName, ValueName),
 }
 
 /// Functions for diffing and comparing mir code while ignoring exact variable IDs
@@ -39,12 +49,12 @@ impl VarMap {
         self.name_map_rev.insert(rhs, lhs);
     }
 
-    pub fn try_update_name(&mut self, lhs: &ValueName, rhs: &ValueName) -> Result<(), ()> {
+    fn try_update_name(&mut self, lhs: &ValueName, rhs: &ValueName) -> Result<(), Error> {
         // Update the name if both are the same kind
         match (lhs, rhs) {
             (ValueName::Named(i1, n1), ValueName::Named(i2, n2)) => {
                 if n1 != n2 {
-                    Err(())
+                    Err(Error::NameMismatch(lhs.clone(), rhs.clone()))
                 } else {
                     self.map_name(*i1, *i2);
                     Ok(())
@@ -54,7 +64,7 @@ impl VarMap {
                 self.map_expr(*i1, *i2);
                 Ok(())
             }
-            _ => Err(()),
+            _ => Err(Error::NameMismatch(lhs.clone(), rhs.clone())),
         }
     }
 
@@ -115,10 +125,6 @@ fn compare_statements(s1: &Statement, s2: &Statement, var_map: &mut VarMap) -> b
                 check_name!(n1, n2)
             }
 
-            if var_map.try_update_name(&b1.name, &b2.name).is_err() {
-                return false;
-            }
-
             true
         }
         (Statement::Register(r1), Statement::Register(r2)) => {
@@ -138,30 +144,44 @@ fn compare_statements(s1: &Statement, s2: &Statement, var_map: &mut VarMap) -> b
                 _ => return false,
             }
 
-            if var_map.try_update_name(&r1.name, &r2.name).is_err() {
-                return false;
-            }
-
             return true;
         }
-        (Statement::Constant(e1, t1, v1), Statement::Constant(e2, t2, v2)) => {
+        (Statement::Constant(_, t1, v1), Statement::Constant(_, t2, v2)) => {
             if t1 != t2 {
                 return false;
             }
             if v1 != v2 {
                 return false;
             }
-
-            if var_map
-                .try_update_name(&ValueName::Expr(*e1), &ValueName::Expr(*e2))
-                .is_err()
-            {
-                return false;
-            }
             true
         }
         _ => false,
     }
+}
+
+fn populate_var_map(
+    stmts1: &[Statement],
+    stmts2: &[Statement],
+    var_map: &mut VarMap,
+) -> Result<(), Error> {
+    // Check if two names can be the same by comparing the string names of ValueName::Named.
+    // If they are the same, merge them and return true
+    stmts1
+        .iter()
+        .zip(stmts2.iter())
+        .map(|(s1, s2)| match (s1, s2) {
+            (Statement::Binding(b1), Statement::Binding(b2)) => {
+                var_map.try_update_name(&b1.name, &b2.name)
+            }
+            (Statement::Register(r1), Statement::Register(r2)) => {
+                var_map.try_update_name(&r1.name, &r2.name)
+            }
+            (Statement::Constant(e1, _, _), Statement::Constant(e2, _, _)) => {
+                var_map.try_update_name(&ValueName::Expr(*e1), &ValueName::Expr(*e2))
+            }
+            _ => return Err(Error::StatementMismatch(s1.clone(), s2.clone())),
+        })
+        .collect::<Result<_, Error>>()
 }
 
 pub fn compare_entity(e1: &Entity, e2: &Entity, var_map: &mut VarMap) -> bool {
@@ -172,6 +192,10 @@ pub fn compare_entity(e1: &Entity, e2: &Entity, var_map: &mut VarMap) -> bool {
         check!(n1 == n2);
         check!(var_map.try_update_name(vn1, vn2).is_ok());
         check!(t1 == t2);
+    }
+
+    if populate_var_map(&e1.statements, &e2.statements, var_map).is_err() {
+        return false;
     }
 
     for (s1, s2) in e1.statements.iter().zip(e2.statements.iter()) {
@@ -202,6 +226,7 @@ mod statement_comparison_tests {
         let lhs = statement!(e(0); Type::Int(5); Add; e(1), n(2, "test"));
         let rhs = statement!(e(3); Type::Int(5); Add; e(2), n(3, "test"));
 
+        populate_var_map(&vec![lhs.clone()], &vec![rhs.clone()], &mut map).unwrap();
         assert!(compare_statements(&lhs, &rhs, &mut map));
 
         assert!(map.compare_exprs(0, 3))
@@ -217,6 +242,7 @@ mod statement_comparison_tests {
         let lhs = statement!(n(0, "a"); Type::Int(5); Add; e(1), n(2, "test"));
         let rhs = statement!(n(3, "a"); Type::Int(5); Add; e(2), n(3, "test"));
 
+        populate_var_map(&vec![lhs.clone()], &vec![rhs.clone()], &mut map).unwrap();
         assert!(compare_statements(&lhs, &rhs, &mut map));
 
         assert!(map.compare_name((&0, "a"), (&3, "a")))
@@ -232,7 +258,7 @@ mod statement_comparison_tests {
         let lhs = statement!(n(0, "a"); Type::Int(5); Add; e(1), n(2, "test"));
         let rhs = statement!(n(3, "b"); Type::Int(5); Add; e(2), n(3, "test"));
 
-        assert!(!compare_statements(&lhs, &rhs, &mut map));
+        assert!(populate_var_map(&vec![lhs.clone()], &vec![rhs.clone()], &mut map).is_err());
     }
 
     #[test]
@@ -244,6 +270,8 @@ mod statement_comparison_tests {
 
         let lhs = statement!(e(0); Type::Int(5); Add; e(1), e(2));
         let rhs = statement!(e(3); Type::Int(4); Add; e(1), e(2));
+
+        populate_var_map(&vec![lhs.clone()], &vec![rhs.clone()], &mut map).unwrap();
 
         assert!(!compare_statements(&lhs, &rhs, &mut map));
     }
@@ -258,6 +286,8 @@ mod statement_comparison_tests {
         let lhs = statement!(e(0); Type::Int(5); Add; e(1), e(2));
         let rhs = statement!(e(3); Type::Int(5); Select; e(1), e(2));
 
+        populate_var_map(&vec![lhs.clone()], &vec![rhs.clone()], &mut map).unwrap();
+
         assert!(!compare_statements(&lhs, &rhs, &mut map));
     }
 
@@ -271,6 +301,8 @@ mod statement_comparison_tests {
         let lhs = statement!(e(0); Type::Int(5); Add; e(2), e(1));
         let rhs = statement!(e(3); Type::Int(5); Add; e(1), e(2));
 
+        populate_var_map(&vec![lhs.clone()], &vec![rhs.clone()], &mut map).unwrap();
+
         assert!(!compare_statements(&lhs, &rhs, &mut map));
     }
 
@@ -283,6 +315,8 @@ mod statement_comparison_tests {
 
         let lhs = statement!(e(0); Type::Int(5); Add; e(2), e(1));
         let rhs = statement!(e(3); Type::Int(5); Add; e(1), e(3));
+
+        populate_var_map(&vec![lhs.clone()], &vec![rhs.clone()], &mut map).unwrap();
 
         assert!(!compare_statements(&lhs, &rhs, &mut map));
     }
@@ -300,6 +334,8 @@ mod statement_comparison_tests {
         let lhs = statement!(reg e(0); Type::Int(5); clock(e(2)); reset(e(3), e(4)); e(1));
         let rhs = statement!(reg e(5); Type::Int(5); clock(e(2)); reset(e(3), e(4)); e(1));
 
+        populate_var_map(&vec![lhs.clone()], &vec![rhs.clone()], &mut map).unwrap();
+
         assert!(compare_statements(&lhs, &rhs, &mut map));
     }
 
@@ -314,6 +350,8 @@ mod statement_comparison_tests {
 
         let lhs = statement!(reg e(0); Type::Int(5); clock(e(2)); reset(e(3), e(4)); e(1));
         let rhs = statement!(reg e(5); Type::Int(5); clock(e(2)); reset(e(3), e(4)); e(1));
+
+        populate_var_map(&vec![lhs.clone()], &vec![rhs.clone()], &mut map).unwrap();
 
         assert!(compare_statements(&lhs, &rhs, &mut map));
 
@@ -332,6 +370,8 @@ mod statement_comparison_tests {
         let lhs = statement!(reg n(0, "test"); Type::Int(5); clock(e(2)); reset(e(3), e(4)); e(1));
         let rhs = statement!(reg n(5, "test"); Type::Int(5); clock(e(2)); reset(e(3), e(4)); e(1));
 
+        populate_var_map(&vec![lhs.clone()], &vec![rhs.clone()], &mut map).unwrap();
+
         assert!(compare_statements(&lhs, &rhs, &mut map));
 
         assert!(map.compare_name((&0, "test"), (&5, "test")));
@@ -349,6 +389,8 @@ mod statement_comparison_tests {
         let lhs = statement!(reg e(0); Type::Int(5); clock(e(3)); reset(e(3), e(4)); e(1));
         let rhs = statement!(reg e(0); Type::Int(5); clock(e(2)); reset(e(3), e(4)); e(1));
 
+        populate_var_map(&vec![lhs.clone()], &vec![rhs.clone()], &mut map).unwrap();
+
         assert!(!compare_statements(&lhs, &rhs, &mut map));
     }
 
@@ -363,6 +405,8 @@ mod statement_comparison_tests {
 
         let lhs = statement!(reg e(0); Type::Int(5); clock(e(3)); reset(e(3), e(4)); e(1));
         let rhs = statement!(reg e(0); Type::Int(5); clock(e(3)); reset(e(2), e(4)); e(1));
+
+        populate_var_map(&vec![lhs.clone()], &vec![rhs.clone()], &mut map).unwrap();
 
         assert!(!compare_statements(&lhs, &rhs, &mut map));
     }
@@ -379,6 +423,8 @@ mod statement_comparison_tests {
         let lhs = statement!(reg e(0); Type::Int(5); clock(e(2)); reset(e(3), e(4)); e(1));
         let rhs = statement!(reg e(0); Type::Int(5); clock(e(2)); reset(e(3), e(5)); e(1));
 
+        populate_var_map(&vec![lhs.clone()], &vec![rhs.clone()], &mut map).unwrap();
+
         assert!(!compare_statements(&lhs, &rhs, &mut map));
     }
 
@@ -394,11 +440,13 @@ mod statement_comparison_tests {
         let lhs = statement!(reg e(0); Type::Int(5); clock(e(2)); reset(e(3), e(4)); e(1));
         let rhs = statement!(reg e(0); Type::Int(5); clock(e(2)); reset(e(3), e(4)); e(2));
 
+        populate_var_map(&vec![lhs.clone()], &vec![rhs.clone()], &mut map).unwrap();
+
         assert!(!compare_statements(&lhs, &rhs, &mut map));
     }
 
     #[test]
-    fn missing_register_causes_adiff() {
+    fn missing_register_causes_a_diff() {
         let mut map = VarMap::new();
 
         map.map_expr(1, 1);
@@ -408,6 +456,8 @@ mod statement_comparison_tests {
 
         let lhs = statement!(reg e(0); Type::Int(5); clock(e(2)); reset(e(3), e(4)); e(1));
         let rhs = statement!(reg e(0); Type::Int(5); clock(e(2)); e(1));
+
+        populate_var_map(&vec![lhs.clone()], &vec![rhs.clone()], &mut map).unwrap();
 
         assert!(!compare_statements(&lhs, &rhs, &mut map));
     }
@@ -424,6 +474,8 @@ mod statement_comparison_tests {
         let lhs = statement!(reg e(0); Type::Int(6); clock(e(2)); reset(e(3), e(4)); e(1));
         let rhs = statement!(reg e(5); Type::Int(5); clock(e(2)); reset(e(3), e(4)); e(1));
 
+        populate_var_map(&vec![lhs.clone()], &vec![rhs.clone()], &mut map).unwrap();
+
         assert!(!compare_statements(&lhs, &rhs, &mut map));
     }
 
@@ -436,6 +488,8 @@ mod statement_comparison_tests {
         let lhs = statement!(const 0; Type::Int(5); ConstantValue::Int(10));
         let rhs = statement!(const 0; Type::Int(5); ConstantValue::Int(10));
 
+        populate_var_map(&vec![lhs.clone()], &vec![rhs.clone()], &mut map).unwrap();
+
         assert!(compare_statements(&lhs, &rhs, &mut map));
     }
 
@@ -445,6 +499,8 @@ mod statement_comparison_tests {
 
         let lhs = statement!(const 0; Type::Int(5); ConstantValue::Int(10));
         let rhs = statement!(const 1; Type::Int(5); ConstantValue::Int(10));
+
+        populate_var_map(&vec![lhs.clone()], &vec![rhs.clone()], &mut map).unwrap();
 
         assert!(compare_statements(&lhs, &rhs, &mut map));
 
@@ -458,6 +514,8 @@ mod statement_comparison_tests {
         let lhs = statement!(const 0; Type::Int(6); ConstantValue::Int(10));
         let rhs = statement!(const 0; Type::Int(5); ConstantValue::Int(10));
 
+        populate_var_map(&vec![lhs.clone()], &vec![rhs.clone()], &mut map).unwrap();
+
         assert!(!compare_statements(&lhs, &rhs, &mut map));
     }
 
@@ -468,6 +526,8 @@ mod statement_comparison_tests {
         let lhs = statement!(const 0; Type::Int(5); ConstantValue::Int(11));
         let rhs = statement!(const 0; Type::Int(5); ConstantValue::Int(10));
 
+        populate_var_map(&vec![lhs.clone()], &vec![rhs.clone()], &mut map).unwrap();
+
         assert!(!compare_statements(&lhs, &rhs, &mut map));
     }
 
@@ -477,6 +537,8 @@ mod statement_comparison_tests {
 
         let lhs = statement!(const 0; Type::Int(5); ConstantValue::Bool(false));
         let rhs = statement!(const 0; Type::Int(5); ConstantValue::Int(10));
+
+        populate_var_map(&vec![lhs.clone()], &vec![rhs.clone()], &mut map).unwrap();
 
         assert!(!compare_statements(&lhs, &rhs, &mut map));
     }

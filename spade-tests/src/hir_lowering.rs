@@ -681,9 +681,9 @@ mod tests {
                     "clk", n(100, "clk"), Type::Bool,
                     "a", n(0, "a"), Type::Int(16)
                 ) -> Type::Int(16); {
-                    (reg n(1, "a_s0"); Type::Int(16); clock (n(100, "clk")); n(0, "a"));
-                    (reg n(2, "a_s1"); Type::Int(16); clock (n(100, "clk")); n(1, "a_s0"));
-                } => n(2, "a_s1")
+                    (reg n(1, "a_s1"); Type::Int(16); clock (n(100, "clk")); n(0, "a"));
+                    (reg n(2, "a_s2"); Type::Int(16); clock (n(100, "clk")); n(1, "a_s1"));
+                } => n(2, "a_s2")
             ),
             entity!("top"; ("clk", n(100, "clk"), Type::Bool) -> Type::Int(16); {
                 (const 1; Type::Int(16); ConstantValue::Int(0));
@@ -753,27 +753,28 @@ mod tests {
                 "clk", n(3, "clk"), Type::Bool,
                 "a", n(0, "a"), Type::Int(16),
             ) -> Type::Int(18); {
+                // Pipeline registers
+                (reg n(2, "a_s1"); Type::Int(16); clock(n(3, "clk")); n(0, "a"));
+                (reg n(4, "x_s1"); Type::Int(16); clock(n(3, "clk")); n(10, "x"));
+                (reg n(21, "a_s2"); Type::Int(16); clock(n(3, "clk")); n(2, "a_s1"));
+                (reg n(22, "x_s2"); Type::Int(16); clock(n(3, "clk")); n(4, "x_s1"));
+                (reg n(23, "y_s2"); Type::Int(17); clock(n(3, "clk")); n(11, "y"));
+                (reg n(31, "a_s3"); Type::Int(16); clock(n(3, "clk")); n(21, "a_s2"));
+                (reg n(32, "x_s3"); Type::Int(16); clock(n(3, "clk")); n(22, "x_s2"));
+                (reg n(33, "y_s3"); Type::Int(17); clock(n(3, "clk")); n(23, "y_s2"));
+                (reg n(34, "res_s3"); Type::Int(18); clock(n(3, "clk")); n(6, "res"));
                 // Stage 0
                 (e(0); Type::Int(16); LeftShift; n(0, "a"), n(0, "a"));
                 (n(10, "x"); Type::Int(16); Alias; e(0));
-                (reg n(2, "a_s0"); Type::Int(16); clock(n(3, "clk")); n(0, "a"));
-                (reg n(4, "x_s0"); Type::Int(16); clock(n(3, "clk")); n(10, "x"));
 
                 // Stage 1
-                (e(1); Type::Int(17); Add; n(4, "x_s0"), n(2, "a_s0"));
+                (e(1); Type::Int(17); Add; n(4, "x_s1"), n(2, "a_s1"));
                 (n(11, "y"); Type::Int(17); Alias; e(1));
-                (reg n(21, "a_s1"); Type::Int(16); clock(n(3, "clk")); n(2, "a_s0"));
-                (reg n(22, "x_s1"); Type::Int(16); clock(n(3, "clk")); n(4, "x_s0"));
-                (reg n(23, "y_s1"); Type::Int(17); clock(n(3, "clk")); n(11, "y"));
 
                 // Stage 3
-                (e(2); Type::Int(18); Add; n(23, "y_s1"), n(23, "y_s1"));
+                (e(2); Type::Int(18); Add; n(23, "y_s2"), n(23, "y_s2"));
                 (n(6, "res"); Type::Int(18); Alias; e(2));
-                (reg n(31, "a_s2"); Type::Int(16); clock(n(3, "clk")); n(21, "a_s1"));
-                (reg n(32, "x_s2"); Type::Int(16); clock(n(3, "clk")); n(22, "x_s1"));
-                (reg n(33, "y_s2"); Type::Int(17); clock(n(3, "clk")); n(23, "y_s1"));
-                (reg n(34, "res_s2"); Type::Int(18); clock(n(3, "clk")); n(6, "res"));
-            } => n(34, "res_s2")
+            } => n(34, "res_s3")
         );
 
         let (processed, mut symbol_tracker, mut idtracker, type_list) =
@@ -806,17 +807,95 @@ mod tests {
                 "a", n(0, "a"), Type::Int(16),
             ) -> Type::Int(17); {
                 // Stage 0
-                (reg n(2, "a_s0"); Type::Int(16); clock(n(3, "clk")); n(0, "a"));
+                (reg n(2, "a_s1"); Type::Int(16); clock(n(3, "clk")); n(0, "a"));
 
                 // Stage 1
-                (reg n(21, "a_s1"); Type::Int(16); clock(n(3, "clk")); n(2, "a_s0"));
+                (reg n(21, "a_s2"); Type::Int(16); clock(n(3, "clk")); n(2, "a_s1"));
 
                 // Stage 3
-                (reg n(31, "a_s2"); Type::Int(16); clock(n(3, "clk")); n(21, "a_s1"));
+                (reg n(31, "a_s3"); Type::Int(16); clock(n(3, "clk")); n(21, "a_s2"));
 
                 // Output
-                (e(3); Type::Int(17); Add; n(31, "a_s2"), n(31, "a_s2"));
+                (e(3); Type::Int(17); Add; n(31, "a_s3"), n(31, "a_s3"));
             } => e(3)
+        );
+
+        let (processed, mut symbol_tracker, mut idtracker, type_list) =
+            parse_typecheck_pipeline(code);
+
+        let result = generate_pipeline(
+            &processed.pipeline,
+            &processed.type_state,
+            &mut symbol_tracker,
+            &mut idtracker,
+            &type_list,
+        )
+        .report_failure(code);
+        assert_same_mir!(&result, &expected);
+    }
+
+    #[test]
+    fn backward_pipeline_references_work() {
+        let code = r#"
+            pipeline(1) pl(clk: clk, a: int<16>) -> int<16> {
+                reg;
+                    stage(-1).a
+            }
+        "#;
+
+        let expected = entity!("pl"; (
+                "clk", n(3, "clk"), Type::Bool,
+                "a", n(0, "a"), Type::Int(16),
+            ) -> Type::Int(16); {
+                (reg n(31, "a_s1"); Type::Int(16); clock(n(3, "clk")); n(0, "a"));
+
+                // Output
+            } => n(0, "a")
+        );
+
+        let (processed, mut symbol_tracker, mut idtracker, type_list) =
+            parse_typecheck_pipeline(code);
+
+        let result = generate_pipeline(
+            &processed.pipeline,
+            &processed.type_state,
+            &mut symbol_tracker,
+            &mut idtracker,
+            &type_list,
+        )
+        .report_failure(code);
+        assert_same_mir!(&result, &expected);
+    }
+
+    // TODO: Test for absolute references
+    #[test]
+    fn forward_pipeline_references_work() {
+        let code = r#"
+            pipeline(2) pl(clk: clk, a: bool) -> int<16> {
+                reg;
+                    let b = stage(+1).x;
+                reg;
+                    let x = 0;
+                    b
+            }
+        "#;
+
+        let expected = entity!("pl"; (
+                "clk", n(3, "clk"), Type::Bool,
+                "a", n(4, "a"), Type::Bool,
+            ) -> Type::Int(16); {
+                (reg n(14, "a_s1"); Type::Bool; clock(n(3, "clk")); n(4, "a"));
+                (reg n(24, "a_s2"); Type::Bool; clock(n(3, "clk")); n(14, "a_s1"));
+                (reg n(20, "b_s2"); Type::Int(16); clock(n(3, "clk")); n(0, "b"));
+                // Stage 0
+                // Stage 1
+                (n(0, "b"); Type::Int(16); Alias; n(1, "x"));
+                // Stage 2
+                (const 1; Type::Int(16); ConstantValue::Int(0));
+                (n(1, "x"); Type::Int(16); Alias; e(1));
+
+                // Output
+            } => n(20, "b_s2")
         );
 
         let (processed, mut symbol_tracker, mut idtracker, type_list) =

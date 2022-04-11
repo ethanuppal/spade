@@ -39,6 +39,14 @@ impl CompilationError for Error {
                     rhs.secondary_label()
                         .with_message(format!("This has {rhs} bits")),
                 ]),
+            Error::UndefinedVariable { name } => Diagnostic::error()
+                .with_message("Use of undeclared name {name}")
+                .with_labels(vec![name.primary_label().with_message("Undeclared name")]),
+            Error::UseBeforeReady { name, available_in } => Diagnostic::error()
+                .with_message("Use of {name} before it is ready")
+                .with_labels(vec![name.primary_label().with_message(format!(
+                    "not ready for another {available_in} stages"
+                ))]),
         };
 
         term::emit(buffer, &codespan_config(), &code.files, &diag).unwrap();

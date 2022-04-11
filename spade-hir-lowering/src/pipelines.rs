@@ -1,98 +1,12 @@
-use parse_tree_macros::local_impl;
-use spade_common::{
-    id_tracker::ExprIdTracker,
-    location_info::WithLocation,
-    name::{Identifier, NameID},
-};
-use spade_hir::{
-    symbol_table::FrozenSymtab, ExprKind, ItemList, Pattern, Pipeline, PipelineBinding,
-    PipelineStage, Statement,
-};
+use spade_common::{id_tracker::ExprIdTracker, name::NameID};
+use spade_hir::{symbol_table::FrozenSymtab, ExprKind, ItemList, Pattern, Pipeline, Statement};
 use spade_mir as mir;
 use spade_typeinference::TypeState;
 
-use crate::{substitution::Substitutions, Result, StatementLocal};
-use crate::{ExprLocal, MirLowerable, NameIDLocal, PatternLocal, TypeStateLocal};
-
-#[local_impl]
-impl BindingLocal for PipelineBinding {
-    fn lower(
-        &self,
-        symtab: &mut FrozenSymtab,
-        idtracker: &mut ExprIdTracker,
-        types: &TypeState,
-        live_vars: &mut Vec<NameID>,
-        subs: &Substitutions,
-        item_list: &ItemList,
-    ) -> Result<Vec<mir::Statement>> {
-        // Code for the expression itself
-        let mut result = self
-            .value
-            .lower(symtab, idtracker, types, subs, item_list)?;
-
-        // Add a let binding for this var
-        result.push(mir::Statement::Binding(mir::Binding {
-            name: self.pat.value_name(),
-            operator: mir::Operator::Alias,
-            operands: vec![self.value.variable(subs)],
-            ty: types
-                .type_of_id(self.pat.id, symtab.symtab(), &item_list.types)
-                .to_mir_type(),
-        }));
-
-        // Add this variable to the live vars list
-        for name in self.pat.get_names() {
-            live_vars.push(name.clone());
-        }
-
-        Ok(result)
-    }
-}
-
-#[local_impl]
-impl StageLocal for PipelineStage {
-    fn lower(
-        &self,
-        stage_num: usize,
-        symtab: &mut FrozenSymtab,
-        idtracker: &mut ExprIdTracker,
-        types: &TypeState,
-        live_vars: &mut Vec<NameID>,
-        clock: &NameID,
-        subs: &mut Substitutions,
-        item_list: &ItemList,
-    ) -> Result<Vec<mir::Statement>> {
-        let mut result = vec![];
-
-        // Generate the local expressions
-        for binding in &self.bindings {
-            result
-                .append(&mut binding.lower(symtab, idtracker, types, live_vars, subs, item_list)?);
-        }
-
-        // Generate pipeline regs for previous live vars
-        for name in live_vars {
-            let new_name = symtab.new_name(
-                name.1
-                    .push_ident(Identifier(format!("s{}", stage_num)).nowhere()),
-            );
-
-            result.push(mir::Statement::Register(mir::Register {
-                name: new_name.value_name(),
-                ty: types
-                    .type_of_name(name, symtab.symtab(), &item_list.types)
-                    .to_mir_type(),
-                clock: clock.value_name(),
-                reset: None,
-                value: subs.lookup(name).value_name(),
-            }));
-
-            subs.replace(name.clone(), new_name.clone());
-        }
-
-        Ok(result)
-    }
-}
+use crate::{
+    substitution::Substitutions, ExprLocal, MirLowerable, NameIDLocal, Result, StatementLocal,
+    TypeStateLocal,
+};
 
 pub fn handle_pattern(pat: &Pattern, live_vars: &mut Vec<NameID>) {
     // Add this variable to the live vars list
@@ -117,9 +31,23 @@ pub fn generate_pipeline<'a>(
 
     let clock = &inputs[0].0;
 
-    // Skip because the clock should not be pipelined
-    let mut live_vars = inputs.iter().skip(1).map(|var| var.0.clone()).collect();
+    let mut subs = Substitutions::new();
 
+    // Skip because the clock should not be pipelined
+    for input in inputs.iter().skip(1).map(|var| var.0.clone()) {
+        subs.set_available(input)
+    }
+
+    let mut statements = vec![];
+
+    let (body_statements, result) = if let ExprKind::Block(block) = &body.kind {
+        (&block.statements, &block.result)
+    } else {
+        panic!("Pipeline body was not a block");
+    };
+
+    // Lower inputs to make sure they are available before adding the pipeline registers
+    // for them
     let lowered_inputs = inputs
         .iter()
         .map(|(name_id, _)| {
@@ -133,51 +61,46 @@ pub fn generate_pipeline<'a>(
         })
         .collect::<Vec<_>>();
 
-    let (body_statements, result) = if let ExprKind::Block(block) = &body.kind {
-        (&block.statements, &block.result)
-    } else {
-        panic!("Pipeline body was not a block");
-    };
-
-    let mut subs = Substitutions::new();
-
-    let mut stage_num = 0;
-    let mut statements = vec![];
     for statement in body_statements {
         match &statement.inner {
-            Statement::Binding(pat, _, _) => handle_pattern(&pat, &mut live_vars),
-            Statement::Register(reg) => handle_pattern(&reg.pattern, &mut live_vars),
+            Statement::Binding(pat, _, _) => {
+                for name in pat.get_names() {
+                    subs.set_available(name)
+                }
+            }
+            Statement::Register(reg) => {
+                for name in reg.pattern.get_names() {
+                    subs.set_available(name)
+                }
+            }
             Statement::Declaration(_) => todo!(),
             Statement::PipelineRegMarker => {
-                // Generate pipeline regs for previous live vars
-                for name in &live_vars {
-                    let new_name = symtab.new_name(
-                        name.1
-                            .push_ident(Identifier(format!("s{}", stage_num)).nowhere()),
-                    );
+                let live_vars = subs.next_stage(symtab);
 
+                // Generate pipeline regs for previous live vars
+                for reg in &live_vars {
                     statements.push(mir::Statement::Register(mir::Register {
-                        name: new_name.value_name(),
+                        name: reg.new.value_name(),
                         ty: types
-                            .type_of_name(&name, symtab.symtab(), &item_list.types)
+                            .type_of_name(&reg.original, symtab.symtab(), &item_list.types)
                             .to_mir_type(),
                         clock: clock.value_name(),
                         reset: None,
-                        value: subs.lookup(&name).value_name(),
+                        value: reg.previous.value_name(),
                     }));
-
-                    subs.replace(name.clone(), new_name.clone());
                 }
-                stage_num += 1;
             }
             Statement::Label(_) => {
-                todo!()
+                // Labels have no effect on codegen
             }
         }
-        statements.append(&mut statement.lower(symtab, idtracker, types, &subs, item_list)?);
     }
 
-    statements.append(&mut result.lower(symtab, idtracker, types, &subs, item_list)?);
+    for statement in body_statements {
+        statements.append(&mut statement.lower(symtab, idtracker, types, &mut subs, item_list)?);
+    }
+
+    statements.append(&mut result.lower(symtab, idtracker, types, &mut subs, item_list)?);
 
     let output = result.variable(&subs);
 
@@ -188,7 +111,7 @@ pub fn generate_pipeline<'a>(
     Ok(mir::Entity {
         name: name.1.to_string(),
         inputs: lowered_inputs,
-        output,
+        output: output?,
         output_type,
         statements,
     })

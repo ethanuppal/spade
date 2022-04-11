@@ -1,3 +1,4 @@
+pub mod error;
 pub mod error_reporting;
 pub mod pipelines;
 pub mod substitution;
@@ -10,10 +11,10 @@ pub use pipelines::generate_pipeline;
 use spade_common::id_tracker::ExprIdTracker;
 use spade_common::location_info::WithLocation;
 use spade_common::name::{Identifier, Path};
-use spade_typeinference::equation::TypeVar;
 use substitution::Substitutions;
 use thiserror::Error;
 
+use crate::error::{Error, Result};
 use parse_tree_macros::local_impl;
 use spade_common::{location_info::Loc, name::NameID};
 use spade_hir as hir;
@@ -23,22 +24,6 @@ use spade_hir::{
 use spade_mir as mir;
 use spade_typeinference::{equation::TypedExpression, TypeState};
 use spade_types::{ConcreteType, PrimitiveType};
-
-#[derive(Error, Debug)]
-pub enum Error {
-    #[error("using generic type")]
-    UsingGenericType { expr: Loc<Expression>, t: TypeVar },
-    #[error("cast to larger")]
-    CastToLarger { from: Loc<u64>, to: Loc<u64> },
-    #[error("concat size mismatch")]
-    ConcatSizeMismatch {
-        lhs: Loc<u64>,
-        rhs: Loc<u64>,
-        result: Loc<u64>,
-        expected: u64,
-    },
-}
-pub type Result<T> = std::result::Result<T, Error>;
 
 pub trait Manglable {
     fn mangled(&self) -> String;
@@ -444,7 +429,7 @@ impl StatementLocal for Statement {
         symtab: &FrozenSymtab,
         idtracker: &mut ExprIdTracker,
         types: &TypeState,
-        subs: &Substitutions,
+        subs: &mut Substitutions,
         item_list: &hir::ItemList,
     ) -> Result<Vec<mir::Statement>> {
         let mut result = vec![];
@@ -455,13 +440,13 @@ impl StatementLocal for Statement {
                 result.push(mir::Statement::Binding(mir::Binding {
                     name: pattern.value_name(),
                     operator: mir::Operator::Alias,
-                    operands: vec![value.variable(subs)],
+                    operands: vec![value.variable(subs)?],
                     ty: types
                         .type_of_id(pattern.id, symtab.symtab(), &item_list.types)
                         .to_mir_type(),
                 }));
                 result.append(&mut pattern.lower(
-                    value.variable(subs),
+                    value.variable(subs)?,
                     symtab.symtab(),
                     types,
                     subs,
@@ -491,12 +476,13 @@ impl StatementLocal for Statement {
                     ty: types
                         .type_of_id(register.pattern.id, symtab.symtab(), &item_list.types)
                         .to_mir_type(),
-                    clock: register.clock.variable(subs),
+                    clock: register.clock.variable(subs)?,
                     reset: register
                         .reset
                         .as_ref()
-                        .map(|(value, trig)| (value.variable(subs), trig.variable(subs))),
-                    value: register.value.variable(subs),
+                        .map(|(value, trig)| Ok((value.variable(subs)?, trig.variable(subs)?)))
+                        .transpose()?,
+                    value: register.value.variable(subs)?,
                 }));
 
                 result.append(&mut register.pattern.lower(
@@ -508,7 +494,9 @@ impl StatementLocal for Statement {
                 )?);
             }
             Statement::Declaration(_) => {}
-            Statement::PipelineRegMarker => {}
+            Statement::PipelineRegMarker => {
+                subs.current_stage += 1;
+            }
             Statement::Label(_) => {}
         }
         Ok(result)
@@ -520,36 +508,61 @@ impl ExprLocal for Loc<Expression> {
     /// If the verilog code for this expression is just an alias for another variable
     /// that is returned here. This allows us to skip generating wires that we don't
     /// really need
-    fn alias(&self, subs: &Substitutions) -> Option<mir::ValueName> {
+    fn alias(&self, subs: &Substitutions) -> Result<Option<mir::ValueName>> {
         match &self.kind {
-            ExprKind::Identifier(ident) => Some(subs.lookup(&ident).value_name()),
-            ExprKind::IntLiteral(_) => None,
-            ExprKind::BoolLiteral(_) => None,
-            ExprKind::FnCall(_, _) => None,
-            ExprKind::TupleLiteral(_) => None,
-            ExprKind::TupleIndex(_, _) => None,
-            ExprKind::FieldAccess(_, _) => None,
-            ExprKind::ArrayLiteral { .. } => None,
-            ExprKind::Index(_, _) => None,
-            ExprKind::Block(block) => Some(block.result.variable(subs)),
-            ExprKind::If(_, _, _) => None,
-            ExprKind::Match(_, _) => None,
-            ExprKind::BinaryOperator(_, _, _) => None,
-            ExprKind::UnaryOperator(_, _) => None,
-            ExprKind::EntityInstance(_, _) => None,
-            ExprKind::PipelineInstance { .. } => None,
-            ExprKind::PipelineRef { stage, name } => todo!(),
+            ExprKind::Identifier(ident) => match subs.lookup(ident) {
+                substitution::Substitution::Undefined => Err(Error::UndefinedVariable {
+                    name: ident.clone().at_loc(self),
+                }),
+                substitution::Substitution::Waiting(available_in, name) => {
+                    Err(Error::UseBeforeReady {
+                        name: name.clone().at_loc(self),
+                        available_in,
+                    })
+                }
+                substitution::Substitution::Available(current) => Ok(Some(current.value_name())),
+            },
+            ExprKind::IntLiteral(_) => Ok(None),
+            ExprKind::BoolLiteral(_) => Ok(None),
+            ExprKind::FnCall(_, _) => Ok(None),
+            ExprKind::TupleLiteral(_) => Ok(None),
+            ExprKind::TupleIndex(_, _) => Ok(None),
+            ExprKind::FieldAccess(_, _) => Ok(None),
+            ExprKind::ArrayLiteral { .. } => Ok(None),
+            ExprKind::Index(_, _) => Ok(None),
+            ExprKind::Block(block) => block.result.variable(subs).map(|v| Some(v)),
+            ExprKind::If(_, _, _) => Ok(None),
+            ExprKind::Match(_, _) => Ok(None),
+            ExprKind::BinaryOperator(_, _, _) => Ok(None),
+            ExprKind::UnaryOperator(_, _) => Ok(None),
+            ExprKind::EntityInstance(_, _) => Ok(None),
+            ExprKind::PipelineInstance { .. } => Ok(None),
+            ExprKind::PipelineRef { stage, name } => {
+                match subs.lookup_referenced(stage.inner, name) {
+                    substitution::Substitution::Undefined => {
+                        Err(Error::UndefinedVariable { name: name.clone() })
+                    }
+                    substitution::Substitution::Waiting(available_at, _) => {
+                        Err(Error::UseBeforeReady {
+                            name: name.clone(),
+                            available_in: available_at - subs.current_stage,
+                        })
+                    }
+                    substitution::Substitution::Available(name) => Ok(Some(name.value_name())),
+                }
+            }
         }
     }
 
     // NOTE: this impl and a few others could be moved to a impl block that does not have
     // the Loc requirement if desired
-    fn variable(&self, subs: &Substitutions) -> mir::ValueName {
+    fn variable(&self, subs: &Substitutions) -> Result<mir::ValueName> {
         // If this expressions should not use the standard __expr__{} variable,
         // that is specified here
 
-        self.alias(subs)
-            .unwrap_or_else(|| mir::ValueName::Expr(self.id))
+        Ok(self
+            .alias(subs)?
+            .unwrap_or_else(|| mir::ValueName::Expr(self.id)))
     }
 
     fn lower(
@@ -557,7 +570,7 @@ impl ExprLocal for Loc<Expression> {
         symtab: &FrozenSymtab,
         idtracker: &mut ExprIdTracker,
         types: &TypeState,
-        subs: &Substitutions,
+        subs: &mut Substitutions,
         item_list: &ItemList,
     ) -> Result<Vec<mir::Statement>> {
         let mut result = vec![];
@@ -592,9 +605,9 @@ impl ExprLocal for Loc<Expression> {
                     result.append(&mut rhs.lower(symtab, idtracker, types, subs, &item_list)?);
 
                     result.push(mir::Statement::Binding(mir::Binding {
-                        name: self.variable(subs),
+                        name: self.variable(subs)?,
                         operator: op,
-                        operands: vec![lhs.variable(subs), rhs.variable(subs)],
+                        operands: vec![lhs.variable(subs)?, rhs.variable(subs)?],
                         ty: self_type,
                     }));
                     Ok(())
@@ -623,9 +636,9 @@ impl ExprLocal for Loc<Expression> {
                     result.append(&mut operand.lower(symtab, idtracker, types, subs, &item_list)?);
 
                     result.push(mir::Statement::Binding(mir::Binding {
-                        name: self.variable(subs),
+                        name: self.variable(subs)?,
                         operator: op,
-                        operands: vec![operand.variable(subs)],
+                        operands: vec![operand.variable(subs)?],
                         ty: self_type,
                     }));
                     Ok(())
@@ -643,9 +656,12 @@ impl ExprLocal for Loc<Expression> {
                 }
 
                 result.push(mir::Statement::Binding(mir::Binding {
-                    name: self.variable(subs),
+                    name: self.variable(subs)?,
                     operator: mir::Operator::ConstructTuple,
-                    operands: elems.iter().map(|e| e.variable(subs)).collect(),
+                    operands: elems
+                        .iter()
+                        .map(|e| e.variable(subs))
+                        .collect::<Result<_>>()?,
                     ty: self_type,
                 }))
             }
@@ -662,9 +678,9 @@ impl ExprLocal for Loc<Expression> {
                 };
 
                 result.push(mir::Statement::Binding(mir::Binding {
-                    name: self.variable(subs),
+                    name: self.variable(subs)?,
                     operator: mir::Operator::IndexTuple(idx.inner as u64, types),
-                    operands: vec![tup.variable(subs)],
+                    operands: vec![tup.variable(subs)?],
                     ty: self_type,
                 }))
             }
@@ -707,9 +723,9 @@ impl ExprLocal for Loc<Expression> {
                 };
 
                 result.push(mir::Statement::Binding(mir::Binding {
-                    name: self.variable(subs),
+                    name: self.variable(subs)?,
                     operator: mir::Operator::IndexTuple(field_index as u64, member_types),
-                    operands: vec![target.variable(subs)],
+                    operands: vec![target.variable(subs)?],
                     ty: self_type,
                 }))
             }
@@ -718,9 +734,12 @@ impl ExprLocal for Loc<Expression> {
                     result.append(&mut elem.lower(symtab, idtracker, types, subs, &item_list)?)
                 }
                 result.push(mir::Statement::Binding(mir::Binding {
-                    name: self.variable(subs),
+                    name: self.variable(subs)?,
                     operator: mir::Operator::ConstructArray,
-                    operands: values.iter().map(|v| v.variable(subs)).collect(),
+                    operands: values
+                        .iter()
+                        .map(|v| v.variable(subs))
+                        .collect::<Result<_>>()?,
                     ty: self_type,
                 }))
             }
@@ -738,9 +757,9 @@ impl ExprLocal for Loc<Expression> {
                 };
 
                 result.push(mir::Statement::Binding(mir::Binding {
-                    name: self.variable(subs),
+                    name: self.variable(subs)?,
                     operator: mir::Operator::IndexArray(inner_size as usize),
-                    operands: vec![target.variable(subs), index.variable(subs)],
+                    operands: vec![target.variable(subs)?, index.variable(subs)?],
                     ty: self_type,
                 }))
             }
@@ -762,12 +781,12 @@ impl ExprLocal for Loc<Expression> {
                 result.append(&mut on_false.lower(symtab, idtracker, types, subs, item_list)?);
 
                 result.push(mir::Statement::Binding(mir::Binding {
-                    name: self.variable(subs),
+                    name: self.variable(subs)?,
                     operator: mir::Operator::Select,
                     operands: vec![
-                        cond.variable(subs),
-                        on_true.variable(subs),
-                        on_false.variable(subs),
+                        cond.variable(subs)?,
+                        on_true.variable(subs)?,
+                        on_false.variable(subs)?,
                     ],
                     ty: types
                         .expr_type(self, symtab.symtab(), &item_list.types)?
@@ -779,7 +798,7 @@ impl ExprLocal for Loc<Expression> {
                 let mut operands = vec![];
                 for (pat, result_expr) in branches {
                     result.append(&mut pat.lower(
-                        operand.variable(subs),
+                        operand.variable(subs)?,
                         symtab.symtab(),
                         types,
                         subs,
@@ -787,7 +806,7 @@ impl ExprLocal for Loc<Expression> {
                     )?);
 
                     let mut cond = pat.condition(
-                        &operand.variable(subs),
+                        &operand.variable(subs)?,
                         symtab,
                         idtracker,
                         types,
@@ -800,11 +819,11 @@ impl ExprLocal for Loc<Expression> {
                         .append(&mut result_expr.lower(symtab, idtracker, types, subs, item_list)?);
 
                     operands.push(cond.result_name);
-                    operands.push(result_expr.variable(subs));
+                    operands.push(result_expr.variable(subs)?);
                 }
 
                 result.push(mir::Statement::Binding(mir::Binding {
-                    name: self.variable(subs),
+                    name: self.variable(subs)?,
                     operator: mir::Operator::Match,
                     operands,
                     ty: types
@@ -825,8 +844,8 @@ impl ExprLocal for Loc<Expression> {
             } => result.append(
                 &mut self.handle_call(name, args, symtab, idtracker, types, subs, item_list)?,
             ),
-            ExprKind::PipelineRef { stage, name } => {
-                todo!()
+            ExprKind::PipelineRef { .. } => {
+                // Empty: Pipeline refs are lowered in the alias checking
             }
         }
         Ok(result)
@@ -839,7 +858,7 @@ impl ExprLocal for Loc<Expression> {
         symtab: &FrozenSymtab,
         idtracker: &mut ExprIdTracker,
         types: &TypeState,
-        subs: &Substitutions,
+        subs: &mut Substitutions,
         item_list: &ItemList,
     ) -> Result<Vec<mir::Statement>> {
         let mut result = vec![];
@@ -943,7 +962,7 @@ impl ExprLocal for Loc<Expression> {
                 };
 
                 result.push(mir::Statement::Binding(mir::Binding {
-                    name: self.variable(subs),
+                    name: self.variable(subs)?,
                     ty: types
                         .expr_type(self, symtab.symtab(), &item_list.types)?
                         .to_mir_type(),
@@ -954,12 +973,12 @@ impl ExprLocal for Loc<Expression> {
                     operands: args
                         .into_iter()
                         .map(|arg| arg.value.variable(subs))
-                        .collect(),
+                        .collect::<Result<_>>()?,
                 }))
             }
             Some(hir::ExecutableItem::StructInstance) => {
                 result.push(mir::Statement::Binding(mir::Binding {
-                    name: self.variable(subs),
+                    name: self.variable(subs)?,
                     ty: types
                         .expr_type(self, symtab.symtab(), &item_list.types)?
                         .to_mir_type(),
@@ -967,17 +986,17 @@ impl ExprLocal for Loc<Expression> {
                     operands: args
                         .into_iter()
                         .map(|arg| arg.value.variable(subs))
-                        .collect(),
+                        .collect::<Result<Vec<_>>>()?,
                 }))
             }
             Some(hir::ExecutableItem::Pipeline(_)) | Some(hir::ExecutableItem::Entity(_)) => {
                 result.push(mir::Statement::Binding(mir::Binding {
-                    name: self.variable(subs),
+                    name: self.variable(subs)?,
                     operator: mir::Operator::Instance(name.1.to_string()),
                     operands: args
                         .into_iter()
                         .map(|arg| arg.value.variable(subs))
-                        .collect(),
+                        .collect::<Result<_>>()?,
                     ty: types
                         .expr_type(self, symtab.symtab(), &item_list.types)?
                         .to_mir_type(),
@@ -988,12 +1007,12 @@ impl ExprLocal for Loc<Expression> {
                 // We'll just ignore that problem and assume it exists for now. Bug introduced
                 // in commit 20f58921
                 result.push(mir::Statement::Binding(mir::Binding {
-                    name: self.variable(subs),
+                    name: self.variable(subs)?,
                     operator: mir::Operator::Instance(name.1.to_string()),
                     operands: args
                         .into_iter()
                         .map(|arg| arg.value.variable(subs))
-                        .collect(),
+                        .collect::<Result<_>>()?,
                     ty: types
                         .expr_type(self, symtab.symtab(), &item_list.types)?
                         .to_mir_type(),
@@ -1043,7 +1062,7 @@ impl ExprLocal for Loc<Expression> {
                 let inner_w = tup_inner[2].to_mir_type().size();
 
                 result.push(mir::Statement::Binding(mir::Binding {
-                    name: self.variable(subs),
+                    name: self.variable(subs)?,
                     operator: mir::Operator::DeclClockedMemory {
                         addr_w,
                         inner_w,
@@ -1053,7 +1072,7 @@ impl ExprLocal for Loc<Expression> {
                     operands: args
                         .into_iter()
                         .map(|arg| arg.value.variable(subs))
-                        .collect(),
+                        .collect::<Result<Vec<_>>>()?,
                     ty: types
                         .expr_type(self, symtab.symtab(), &item_list.types)?
                         .to_mir_type(),
@@ -1089,9 +1108,9 @@ impl ExprLocal for Loc<Expression> {
             .to_mir_type();
 
         result.push(mir::Statement::Binding(mir::Binding {
-            name: self.variable(subs),
+            name: self.variable(subs)?,
             operator: mir::Operator::IndexMemory,
-            operands: vec![target.variable(subs), index.variable(subs)],
+            operands: vec![target.variable(subs)?, index.variable(subs)?],
             ty: self_type,
         }));
 
@@ -1125,9 +1144,9 @@ impl ExprLocal for Loc<Expression> {
         }
 
         result.push(mir::Statement::Binding(mir::Binding {
-            name: self.variable(subs),
+            name: self.variable(subs)?,
             operator: mir::Operator::Truncate,
-            operands: vec![args[0].value.variable(subs)],
+            operands: vec![args[0].value.variable(subs)?],
             ty: types
                 .expr_type(self, symtab.symtab(), &item_list.types)?
                 .to_mir_type(),
@@ -1162,12 +1181,12 @@ impl ExprLocal for Loc<Expression> {
         };
 
         result.push(mir::Statement::Binding(mir::Binding {
-            name: self.variable(subs),
+            name: self.variable(subs)?,
             operator: mir::Operator::SignExtend {
                 extra_bits,
                 operand_size: input_type.size(),
             },
-            operands: vec![args[0].value.variable(subs)],
+            operands: vec![args[0].value.variable(subs)?],
             ty: self_type,
         }));
 
@@ -1200,9 +1219,9 @@ impl ExprLocal for Loc<Expression> {
         };
 
         result.push(mir::Statement::Binding(mir::Binding {
-            name: self.variable(subs),
+            name: self.variable(subs)?,
             operator: mir::Operator::ZeroExtend { extra_bits },
-            operands: vec![args[0].value.variable(subs)],
+            operands: vec![args[0].value.variable(subs)?],
             ty: self_type,
         }));
 
@@ -1240,9 +1259,9 @@ impl ExprLocal for Loc<Expression> {
             })
         } else {
             result.push(mir::Statement::Binding(mir::Binding {
-                name: self.variable(subs),
+                name: self.variable(subs)?,
                 operator: mir::Operator::Concat,
-                operands: vec![args[0].value.variable(subs), args[1].value.variable(subs)],
+                operands: vec![args[0].value.variable(subs)?, args[1].value.variable(subs)?],
                 ty: self_type,
             }));
 
@@ -1272,10 +1291,13 @@ pub fn generate_entity<'a>(
         })
         .collect();
 
-    let statements =
-        entity
-            .body
-            .lower(symtab, idtracker, types, &Substitutions::new(), item_list)?;
+    let statements = entity.body.lower(
+        symtab,
+        idtracker,
+        types,
+        &mut Substitutions::new(),
+        item_list,
+    )?;
 
     let output_t = types
         .expr_type(&entity.body, symtab.symtab(), &item_list.types)?
@@ -1286,7 +1308,7 @@ pub fn generate_entity<'a>(
     Ok(mir::Entity {
         name: entity.name.1.to_string(),
         inputs: inputs,
-        output: entity.body.variable(&subs),
+        output: entity.body.variable(&subs)?,
         output_type: output_t,
         statements: statements,
     })
