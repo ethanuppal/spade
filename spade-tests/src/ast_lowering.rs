@@ -1,6 +1,39 @@
 use crate::snapshot_error;
 
 snapshot_error! {
+    duplicate_definition_of_decl_triggers_errors,
+    "
+    entity X() -> int<8> {
+        decl x;
+        let x = 0;
+        let x = 1;
+        x
+    }
+    "
+}
+
+snapshot_error! {
+    declaration_without_definition_triggers_error,
+    "
+    entity X() -> int<8> {
+        decl x;
+        x
+    }
+    "
+}
+
+snapshot_error! {
+    declaration_after_let_requires_new_definition,
+    "
+    entity X() -> int<8> {
+        let x: int<8> = 0;
+        decl x;
+        x
+    }
+    "
+}
+
+snapshot_error! {
     negative_stage_index,
     "
     pipeline(3) main(x: int<8>) -> int<8> {

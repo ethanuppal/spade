@@ -335,6 +335,16 @@ impl SymbolTable {
     }
 
     pub fn add_declaration(&mut self, ident: Loc<Identifier>) -> Result<NameID, DeclarationError> {
+        // Check if a variable with this name already exists
+        if let Some(id) = self.try_lookup_id(&Path(vec![ident.clone()]).at_loc(&ident)) {
+            if let Some(Thing::Variable(prev)) = self.things.get(&id) {
+                return Err(DeclarationError::DuplicateDeclaration {
+                    new: ident.clone(),
+                    old: prev.clone(),
+                });
+            }
+        }
+
         if let Some((old, _)) = self.declarations.last().unwrap().get_key_value(&ident) {
             Err(DeclarationError::DuplicateDeclaration {
                 new: ident.clone(),
@@ -365,6 +375,18 @@ impl SymbolTable {
             .unwrap()
             .get_mut(&ident)
             .unwrap() = DeclarationState::Defined(definition_point)
+    }
+
+    pub fn get_undefined_declarations(&self) -> Vec<Loc<Identifier>> {
+        self.declarations
+            .last()
+            .unwrap()
+            .iter()
+            .filter_map(|(ident, state)| match state {
+                DeclarationState::Undefined(_) => Some(ident.clone()),
+                DeclarationState::Defined(_) => None,
+            })
+            .collect()
     }
 }
 macro_rules! thing_accessors {

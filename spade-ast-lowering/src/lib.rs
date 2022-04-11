@@ -897,6 +897,10 @@ fn visit_block(b: &ast::Block, ctx: &mut Context) -> Result<hir::Block> {
 
     let result = b.result.try_visit(visit_expression, ctx)?;
 
+    for undefined in ctx.symtab.get_undefined_declarations() {
+        return Err(Error::UndefinedDeclaration(undefined));
+    }
+
     ctx.symtab.close_scope();
 
     Ok(hir::Block { statements, result })

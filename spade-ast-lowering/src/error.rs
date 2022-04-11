@@ -98,6 +98,9 @@ pub enum Error {
         declaration_location: Loc<()>,
     },
 
+    #[error("Variable declared but not defined")]
+    UndefinedDeclaration(Loc<Identifier>),
+
     #[error("Redefinition of declaration")]
     RedefinitionOfDeclaration {
         at: Loc<Identifier>,

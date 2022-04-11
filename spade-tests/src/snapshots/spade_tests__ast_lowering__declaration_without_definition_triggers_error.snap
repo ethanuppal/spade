@@ -1,0 +1,13 @@
+---
+source: spade-tests/src/ast_lowering.rs
+expression: "std::str::from_utf8(buffer.as_slice()).expect(\"error contains invalid utf-8\")"
+---
+error: x is declared but not defined
+  ┌─ testinput:2:10
+  │
+2 │     decl x;
+  │          ^ declaration without definition
+  │
+  = Consider defining x with a let or reg binding
+
+

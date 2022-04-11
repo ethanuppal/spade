@@ -305,6 +305,14 @@ impl CompilationError for Error {
                         .with_message(format!("previous definition")),
                 ])
                 .with_notes(vec![format!("Declared variables can only be defined once")]),
+            Error::UndefinedDeclaration(name) => Diagnostic::error()
+                .with_message(format!("{name} is declared but not defined"))
+                .with_labels(vec![name
+                    .primary_label()
+                    .with_message("declaration without definition")])
+                .with_notes(vec![format!(
+                    "Consider defining {name} with a let or reg binding"
+                )]),
         };
 
         term::emit(buffer, &codespan_config(), &code.files, &diag).unwrap();

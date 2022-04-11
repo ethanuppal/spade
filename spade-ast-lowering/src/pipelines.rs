@@ -31,7 +31,7 @@ impl PipelineContext {
     /// Returns the location of the previous definition of stage `name` if such
     /// a definition exists
     pub fn previous_def(&self, name: &Identifier) -> Option<Loc<Identifier>> {
-        for (i, stage_name) in self.stages.iter().enumerate() {
+        for stage_name in &self.stages {
             if stage_name.as_ref().map(|n| &n.inner) == Some(name) {
                 return stage_name.clone();
             }
@@ -46,6 +46,9 @@ pub fn pipeline_head(input: &ast::Pipeline, symtab: &mut SymbolTable) -> Result<
     // FIXME: Support type parameters in pipelines
     // lifeguard https://gitlab.com/spade-lang/spade/-/issues/124
     let type_params = vec![];
+    if !input.type_params.is_empty() {
+        panic!("Pipelines currently do not support type parameters")
+    }
 
     let inputs = crate::visit_parameter_list(&input.inputs, symtab)?;
 
