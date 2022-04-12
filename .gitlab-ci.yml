@@ -1,11 +1,22 @@
 # image: "scorpil/rust:nightly"
 image: rust:latest
 
-before_script:
-    - rustup component add rustfmt
-    - apt update
-    - apt install -y iverilog
+variables:
+    CARGO_HOME: $CI_PROJECT_DIR/cargo_cache
 
+clippy:
+    stage: test
+    before_script:
+        - rustup component add clippy
+        - cargo install gitlab_clippy
+    script:
+        - cargo clippy
+    after_script:
+        - cargo clippy --message-format=json | $CARGO_HOME/bin/gitlab-clippy > gl-code-quality-report.json
+    artifacts:
+        reports:
+            codequality: gl-code-quality-report.json
+        expire_in: 1 week
 
 build:
     script:
@@ -30,6 +41,9 @@ test:
 
 output_test:
     needs: [build]
+    before_script:
+        - apt update
+        - apt install -y iverilog
     script:
         - cd output_test && make
     cache:
@@ -39,6 +53,8 @@ output_test:
             - cargo/
 
 test cargo-fmt:
+    before_script:
+        - rustup component add rustfmt
     script:
         # pass --check to rustfmt to error if un-formatted
         - cargo fmt -- --check
