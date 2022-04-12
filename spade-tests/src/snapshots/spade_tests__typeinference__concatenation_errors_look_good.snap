@@ -1,0 +1,20 @@
+---
+source: spade-tests/src/typeinference.rs
+expression: "std::str::from_utf8(buffer.as_slice()).expect(\"error contains invalid utf-8\")"
+---
+error: Type error
+  ┌─ testinput:4:47
+  │  
+4 │   entity counter(x: int<4>, y:int<3>) -> int<8> {
+  │                                          ------ int<8> type specified here
+  │ ╭───────────────────────────────────────────────^
+5 │ │     x `std::conv::concat` y
+6 │ │ }
+  │ ╰─^ Found type int<7>
+  │  
+  = Expected: 8
+  =       in: int<8>
+  =      Got: 7
+  =       in: int<7>
+
+

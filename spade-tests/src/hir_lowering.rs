@@ -1172,6 +1172,33 @@ mod tests {
     }
 
     #[test]
+    fn concatenation_infers_size() {
+        // TODO: Figure out a nice way to include the stdlib in tests
+        let code = r#"
+            mod std{mod conv{ 
+                fn concat<#N, #M, #K>(x: int<N>, y: int<M>) -> int<K> __builtin__
+            }}
+            use std::conv::concat;
+            entity name(a: int<16>, b: int<8>) -> int<24> {
+                let x = a `concat` b;
+                0
+            }
+        "#;
+
+        let expected = vec![entity! {"name"; (
+                "a", n(0, "a"), Type::Int(16),
+                "b", n(1, "b"), Type::Int(8),
+            ) -> Type::Int(24); {
+                (e(0); Type::Int(24); Concat; n(0, "a"), n(1, "b"));
+                (n(2, "x"); Type::Int(24); Alias; e(0));
+                (const 1; Type::Int(24); ConstantValue::Int(0));
+            } => e(1)
+        }];
+
+        build_and_compare_entities!(code, expected);
+    }
+
+    #[test]
     fn zero_extend_works() {
         // TODO: Figure out a nice way to include the stdlib in tests
         let code = r#"

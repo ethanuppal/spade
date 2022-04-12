@@ -12,7 +12,7 @@ use hir::{Argument, FunctionLike, ParameterList, Pattern, PatternArgument, TypeP
 use hir::{ExecutableItem, ItemList};
 use parse_tree_macros::trace_typechecker;
 use spade_common::location_info::{Loc, WithLocation};
-use spade_common::name::NameID;
+use spade_common::name::{Identifier, NameID, Path};
 use spade_hir as hir;
 use spade_hir::symbol_table::SymbolTable;
 use spade_hir::{Block, Entity, ExprKind, Expression, Register, Statement};
@@ -31,6 +31,7 @@ pub mod result;
 pub mod testutil;
 pub mod trace_stack;
 
+use crate::constraints::ce_var;
 use crate::fixed_types::t_clock;
 use crate::fixed_types::{t_bool, t_int};
 use crate::trace_stack::{format_trace_stack, TraceStackEntry};
@@ -374,7 +375,7 @@ impl TypeState {
             }
             ExprKind::EntityInstance(name, args) => {
                 let head = symtab.entity_by_id(&name.inner);
-                self.handle_function_like(expression, &head.inner, args, symtab)?;
+                self.handle_function_like(expression, &name.inner, &head.inner, args, symtab)?;
             }
             ExprKind::PipelineInstance {
                 depth: _,
@@ -382,11 +383,11 @@ impl TypeState {
                 args,
             } => {
                 let head = symtab.pipeline_by_id(&name.inner);
-                self.handle_function_like(expression, &head.inner, args, symtab)?;
+                self.handle_function_like(expression, &name.inner, &head.inner, args, symtab)?;
             }
             ExprKind::FnCall(name, args) => {
                 let head = symtab.function_by_id(&name.inner);
-                self.handle_function_like(expression, &head.inner, args, symtab)?;
+                self.handle_function_like(expression, &name.inner, &head.inner, args, symtab)?;
             }
         }
         Ok(())
@@ -397,6 +398,7 @@ impl TypeState {
     fn handle_function_like(
         &mut self,
         expression: &Loc<Expression>,
+        name: &NameID,
         head: &impl FunctionLike,
         args: &[Argument],
         symtab: &SymbolTable,
@@ -404,8 +406,62 @@ impl TypeState {
         // Add new symbols for all the type parameters
         let generic_list = self.create_generic_list(head.type_params());
 
-        // Unify the types of the arguments
-        self.visit_argument_list(args, &head.inputs(), symtab, &generic_list)?;
+        let type_params = head.type_params();
+
+        // Special handling of built in functions
+        macro_rules! handle_special_functions {
+            ($([$($path:expr),*] => $handler:expr),*) => {
+                $(
+                    let path = Path(vec![$(Identifier($path.to_string()).nowhere()),*]).nowhere();
+                    if symtab
+                        .try_lookup_final_id(&path)
+                        .map(|n| &n == name)
+                        .unwrap_or(false)
+                    {
+                        $handler
+                    };
+                )*
+            }
+        }
+
+        // NOTE: These would be better as a closure, but unfortunately that does not satisfy
+        // the borrow checker
+        macro_rules! generic_arg {
+            ($idx:expr) => {
+                self.get_generic_list(&generic_list)[&type_params[$idx].name_id()].clone()
+            };
+        }
+
+        handle_special_functions! {
+            ["std", "conv", "concat"] => {
+
+                let lhs_size = generic_arg!(0);
+                let rhs_size = generic_arg!(1);
+                let result_size = generic_arg!(2);
+
+                // Result size is sum of input sizes
+                self.add_constraint(
+                    result_size.clone(),
+                    ce_var(&lhs_size) + ce_var(&rhs_size),
+                    expression.loc(),
+                    &result_size,
+                    ConstraintSource::Concatenation
+                );
+                self.add_constraint(
+                    lhs_size.clone(),
+                    ce_var(&result_size) + -ce_var(&rhs_size),
+                    args[0].value.loc(),
+                    &lhs_size,
+                    ConstraintSource::Concatenation
+                );
+                self.add_constraint(rhs_size.clone(),
+                    ce_var(&result_size) + -ce_var(&lhs_size),
+                    args[1].value.loc(),
+                    &rhs_size,
+                    ConstraintSource::Concatenation
+                );
+            }
+        };
 
         let return_type = self.type_var_from_hir(
             head.output_type()
@@ -413,6 +469,9 @@ impl TypeState {
                 .expect("Unit return type from entity is unsupported"),
             &generic_list,
         );
+
+        // Unify the types of the arguments
+        self.visit_argument_list(args, &head.inputs(), symtab, &generic_list)?;
 
         self.unify_expression_generic_error(expression, &return_type, symtab)?;
 

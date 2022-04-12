@@ -121,3 +121,16 @@ snapshot_error! {
         }
         "
 }
+
+snapshot_error! {
+    concatenation_errors_look_good,
+    // TODO: Figure out a nice way to include the stdlib in tests
+    "
+    mod std{mod conv{ 
+        fn concat<#N, #M, #K>(x: int<N>, y: int<M>) -> int<K> __builtin__
+    }}
+    entity counter(x: int<4>, y:int<3>) -> int<8> {
+        x `std::conv::concat` y
+    }
+    "
+}

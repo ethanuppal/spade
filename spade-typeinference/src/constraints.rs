@@ -110,6 +110,7 @@ pub enum ConstraintSource {
     AdditionOutput,
     MultOutput,
     ArrayIndexing,
+    Concatenation,
 }
 
 impl std::fmt::Display for ConstraintSource {
@@ -118,6 +119,7 @@ impl std::fmt::Display for ConstraintSource {
             ConstraintSource::AdditionOutput => write!(f, "AdditionOutput"),
             ConstraintSource::MultOutput => write!(f, "MultiplicationOutput"),
             ConstraintSource::ArrayIndexing => write!(f, "ArrayIndexing"),
+            ConstraintSource::Concatenation => write!(f, "Concatenation"),
         }
     }
 }
