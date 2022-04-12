@@ -1149,7 +1149,7 @@ mod tests {
 
     #[test]
     fn concatenation_works() {
-        // TODO: Figure out a nice way to include the stdlib in tests
+        // https://gitlab.com/spade-lang/spade/-/issues/125
         let code = r#"
             mod std{mod conv{ 
                 fn concat<#N, #M, #K>(x: int<N>, y: int<M>) -> int<K> __builtin__
@@ -1173,7 +1173,8 @@ mod tests {
 
     #[test]
     fn concatenation_infers_size() {
-        // TODO: Figure out a nice way to include the stdlib in tests
+        // FIXME: Figure out a way to include stdlib in tests
+        // lifeguard spade#125
         let code = r#"
             mod std{mod conv{ 
                 fn concat<#N, #M, #K>(x: int<N>, y: int<M>) -> int<K> __builtin__
@@ -1200,7 +1201,8 @@ mod tests {
 
     #[test]
     fn zero_extend_works() {
-        // TODO: Figure out a nice way to include the stdlib in tests
+        // FIXME: Figure out a way to include stdlib in tests
+        // lifeguard https://gitlab.com/spade-lang/spade/-/issues/125
         let code = r#"
             mod std{mod conv{ 
                 fn zext<#N, #M>(x: int<N>) -> int<M> __builtin__

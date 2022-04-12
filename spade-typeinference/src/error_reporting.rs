@@ -87,7 +87,7 @@ impl CompilationError for Error {
                 .with_message(format!("If condition must be a bool, got {}", got))
                 .with_labels(vec![loc.primary_label().with_message("Expected boolean")])
                 .with_notes(vec![
-                    format!("Expected: {}", "bool"), // TODO: Specify full path to the type
+                    format!("Expected: {}", "bool"),
                     format!("     Got: {}", got),
                 ]),
             Error::IfConditionMismatch {

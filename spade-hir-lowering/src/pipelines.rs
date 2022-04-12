@@ -153,8 +153,6 @@ pub fn generate_pipeline<'a>(
                 for name in &live_vars {
                     let new_name = symtab.new_name(
                         name.1
-                            // TODO: instead of s{num}, replace it by label if a label
-                            // is present
                             .push_ident(Identifier(format!("s{}", stage_num)).nowhere()),
                     );
 

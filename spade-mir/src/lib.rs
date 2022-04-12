@@ -32,7 +32,7 @@ pub enum ValueName {
     /// A named value in the code with with an index to make that name globally unique
     /// In the resulting verilog, this is translated as _n_$id_$name
     Named(u64, String),
-    // TODO: Consider renaming this since it's now used for both patterns and expressions
+    // FIXME: Consider renaming this since it's now used for both patterns and expressions
     /// An un-named expression. In the resulting verilog, this is called _e_$id
     Expr(u64),
 }

@@ -403,7 +403,7 @@ impl<'a> Parser<'a> {
 
         self.item_context
             .allows_inst(().at(self.file_id, &start.span()))?;
-        // TODO: Clean this up a bit
+        // FIXME: Clean this up a bit
         // Check if this is a pipeline or not
         let pipeline_depth = if self.peek_and_eat(&TokenKind::OpenParen)?.is_some() {
             if let Some(depth) = self.int_literal()? {
@@ -673,7 +673,6 @@ impl<'a> Parser<'a> {
     /// as struct defintions
     ///
     /// name: Type
-    // TODO: Use this for let bindings
     #[trace_parser]
     pub fn name_and_type(&mut self) -> Result<(Loc<Identifier>, Loc<TypeSpec>)> {
         let name = self.identifier()?;
@@ -1004,7 +1003,6 @@ impl<'a> Parser<'a> {
             None
         };
 
-        // Body (TODO: might want to make this a separate structure like a block)
         let (block, block_span) = if let Some(block) = self.block(false)? {
             let (block, block_span) = block.separate();
             (Some(block), block_span)
@@ -1067,7 +1065,7 @@ impl<'a> Parser<'a> {
 
         // Input types
         self.eat(&TokenKind::OpenParen)?;
-        // TODO: Can we use surrounded here?
+        // FIXME: Can we use surrounded here?
         let inputs = self.parameter_list()?;
         let close_paren = self.eat(&TokenKind::CloseParen)?;
 
@@ -1078,7 +1076,7 @@ impl<'a> Parser<'a> {
             None
         };
 
-        // Body (TODO: might want to make this a separate structure like a block)
+        // Body (FIXME: might want to make this a separate structure like a block)
         let (block, block_span) = if let Some(block) = self.block(true)? {
             let (block, block_span) = block.separate();
             (Some(block), block_span)
@@ -1132,7 +1130,6 @@ impl<'a> Parser<'a> {
 
     #[trace_parser]
     pub fn generics_list(&mut self) -> Result<Vec<Loc<TypeParam>>> {
-        // TODO: Use surrounded
         if self.peek_kind(&TokenKind::Lt)? {
             let (params, _) = self.surrounded(
                 &TokenKind::Lt,
@@ -1446,7 +1443,7 @@ impl<'a> Parser<'a> {
     ) -> Result<(T, Loc<()>)> {
         let opener = self.eat(start)?;
         let result = inner(self)?;
-        // TODO: Better error handling here. We are throwing away potential EOFs
+        // FIXME: Better error handling here. We are throwing away potential EOFs
         let end = if let Some(end) = self.peek_and_eat(end_kind)? {
             end
         } else {

@@ -13,7 +13,6 @@ macro_rules! dtype {
     }
 }
 
-// TODO: Rename to t_num
 /// A type level integer
 pub fn t_num(size: u128) -> Loc<crate::TypeExpression> {
     crate::TypeExpression::Integer(size).nowhere()

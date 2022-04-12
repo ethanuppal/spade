@@ -24,7 +24,6 @@ use spade_mir as mir;
 use spade_typeinference::{equation::TypedExpression, TypeState};
 use spade_types::{ConcreteType, PrimitiveType};
 
-// TODO better error descriptions that uses fields
 #[derive(Error, Debug)]
 pub enum Error {
     #[error("using generic type")]

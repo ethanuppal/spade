@@ -15,7 +15,8 @@ use spade_hir::symbol_table::SymbolTable;
 pub fn pipeline_head(input: &ast::Pipeline, symtab: &mut SymbolTable) -> Result<hir::PipelineHead> {
     let depth = input.depth.map(|u| u as usize);
 
-    // TODO: Support type params
+    // FIXME: Support type parameters in pipelines
+    // lifeguard https://gitlab.com/spade-lang/spade/-/issues/124
     let type_params = vec![];
 
     let inputs = crate::visit_parameter_list(&input.inputs, symtab)?;
@@ -50,7 +51,7 @@ pub fn visit_pipeline(
 
     symtab.new_scope();
 
-    // TODO: We should probably unify this code with the entity code at some point
+    // FIXME: Unify this code with the entity code
     let (id, head) = symtab
         .lookup_pipeline(&Path(vec![pipeline.name.clone()]).at_loc(&pipeline.name.loc()))
         .expect("Attempting to lower a pipeline that has not been added to the symtab previously");

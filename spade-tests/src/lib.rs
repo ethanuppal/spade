@@ -14,6 +14,8 @@ mod hir_lowering;
 #[cfg(test)]
 mod integration;
 #[cfg(test)]
+mod parser;
+#[cfg(test)]
 mod suggestions;
 #[cfg(test)]
 mod typeinference;
@@ -98,7 +100,7 @@ fn build_items(code: &str) -> Vec<spade_mir::Entity> {
         mut idtracker,
     } = parse_typecheck_module_body(code);
 
-    // TODO: This is copied from the above code, so it is fairly general. Perhaps
+    // FIXME: This is copied from the above code, so it is fairly general. Perhaps
     // we should macroify it
     let mut result = vec![];
     for processed in items_with_types.executables {

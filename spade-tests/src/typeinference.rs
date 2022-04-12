@@ -124,7 +124,8 @@ snapshot_error! {
 
 snapshot_error! {
     concatenation_errors_look_good,
-    // TODO: Figure out a nice way to include the stdlib in tests
+    // FIXME: Figure out a way to include stdlib in tests
+    // lifeguard spade#125
     "
     mod std{mod conv{ 
         fn concat<#N, #M, #K>(x: int<N>, y: int<M>) -> int<K> __builtin__

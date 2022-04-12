@@ -1037,7 +1037,7 @@ impl TypeState {
                 let var = self.check_var_for_replacement(var);
 
                 if replacement.val < 0 {
-                    // TODO before merge: Report this properly, or support integers
+                    // lifeguard spade#126
                     panic!("Infered a negative integer from constraints");
                 }
 

@@ -55,7 +55,7 @@ fn main() -> Result<()> {
     let mut buffer = if opts.no_color {
         Buffer::no_color()
     } else {
-        Buffer::ansi() // TODO Use `Buffer::console()` on windows?
+        Buffer::ansi() // FIXME: Use `Buffer::console()` on windows?
     };
 
     let spade_opts = spade::Opt {

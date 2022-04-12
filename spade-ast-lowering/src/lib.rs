@@ -351,8 +351,9 @@ pub fn visit_pattern(
         ast::Pattern::Integer(val) => hir::PatternKind::Integer(*val),
         ast::Pattern::Bool(val) => hir::PatternKind::Bool(*val),
         ast::Pattern::Path(path) => {
-            // TODO: Support paths with a single identifier refering to constants
+            // FIXME: Support paths with a single identifier refering to constants
             // and types
+            // lifeguard https://gitlab.com/spade-lang/spade/-/issues/123
             match path.inner.0.as_slice() {
                 [ident] => {
                     // Check if this is declaring a variable

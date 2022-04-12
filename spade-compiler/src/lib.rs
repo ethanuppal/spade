@@ -63,7 +63,6 @@ pub fn compile(sources: Vec<(String, String)>, opts: Opt) -> Result<(), ()> {
     }
 
     let mut module_asts = vec![];
-    // TODO: Namespace individual files
     // Read and parse input files
     for (name, content) in sources {
         let file_id = code.add_file(name, content.clone());
@@ -185,7 +184,6 @@ pub fn compile(sources: Vec<(String, String)>, opts: Opt) -> Result<(), ()> {
         }
     }
 
-    // TODO try or report
     if let Some(outfile) = opts.outfile {
         try_or_report!(std::fs::write(outfile, module_code.join("\n\n")));
     }

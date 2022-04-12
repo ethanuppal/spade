@@ -377,7 +377,7 @@ impl TypeState {
 
                 self.unify(&cond.inner, pattern, symtab)
                     .map_normal_err(|(expected, got)| {
-                        // TODO, Consider introducing a more specific error
+                        // FIXME: Consider introducing a more specific error
                         Error::UnspecifiedTypeError {
                             expected,
                             got,
@@ -438,7 +438,7 @@ impl TypeState {
                         ConstraintSource::AdditionOutput
                     );
 
-                    // TODO: Make generic over types that can be added
+                    // FIXME: Make generic over types that can be added
                     self.unify_expression_generic_error(&lhs, &lhs_t, symtab)?;
                     self.unify_expression_generic_error(&lhs, &rhs.inner, symtab)?;
                     self.unify_expression_generic_error(expression, &result_t, symtab)?;
@@ -448,7 +448,6 @@ impl TypeState {
                     let (rhs_t, rhs_size) = self.new_split_generic_int(symtab);
                     let (result_t, result_size) = self.new_split_generic_int(symtab);
 
-                    // TODO: Make these convenient to write
                     // Result size is sum of input sizes
                     self.add_constraint(
                         result_size.clone(),
@@ -482,7 +481,7 @@ impl TypeState {
                 | BinaryOperator::RightShift => {
                     let int_type = self.new_generic_int(symtab);
 
-                    // TODO: Make generic over types that can be added
+                    // FIXME: Make generic over types that can be added
                     self.unify_expression_generic_error(&lhs, &int_type, symtab)?;
                     self.unify_expression_generic_error(&lhs, &rhs.inner, symtab)?;
                     self.unify_expression_generic_error(expression, &rhs.inner, symtab)?;
@@ -493,7 +492,7 @@ impl TypeState {
                 | BinaryOperator::Ge
                 | BinaryOperator::Le => {
                     let int_type = self.new_generic_int(symtab);
-                    // TODO: Make generic over types that can be added
+                    // FIXME: Make generic over types that can be added
                     self.unify_expression_generic_error(&lhs, &int_type, symtab)?;
                     self.unify_expression_generic_error(&lhs, &rhs.inner, symtab)?;
                     self.unify_expression_generic_error(expression, &t_bool(symtab), symtab)?;
@@ -501,7 +500,7 @@ impl TypeState {
                 BinaryOperator::LogicalAnd
                 | BinaryOperator::LogicalOr
                 | BinaryOperator::Xor => {
-                    // TODO: Make generic over types that can be ored
+                    // FIXME: Make generic over types that can be ored
                     self.unify_expression_generic_error(&lhs, &t_bool(symtab), symtab)?;
                     self.unify_expression_generic_error(&lhs, &rhs.inner, symtab)?;
 

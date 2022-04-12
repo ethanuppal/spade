@@ -1,0 +1,13 @@
+---
+source: spade-tests/src/parser.rs
+expression: "std::str::from_utf8(buffer.as_slice()).expect(\"error contains invalid utf-8\")"
+---
+error: Stage outside pipeline
+  ┌─ testinput:2:5
+  │
+2 │     reg;
+  │     ^^^ stage is not allowed here
+  │
+  = Stages are only allowed in the root block of a pipeline
+
+

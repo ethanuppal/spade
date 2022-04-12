@@ -3,6 +3,12 @@ image: rust:latest
 
 variables:
     CARGO_HOME: $CI_PROJECT_DIR/cargo_cache
+    FF_ENABLE_BASH_EXIT_CODE_CHECK: "true"
+
+before_script:
+    - rustup component add rustfmt
+    - apt update
+    - apt install -y iverilog
 
 clippy:
     stage: test
@@ -19,51 +25,64 @@ clippy:
         expire_in: 1 week
 
 build:
+    stage: build
     script:
         - cargo build --color=always
-    cache:
-        # pull the old cache and push the new when done
-        policy: pull-push
-        paths:
-            - target/
-            - cargo/
+    # cache:
+    #     # pull the old cache and push the new when done
+    #     policy: pull-push
+    #     paths:
+    #         - target/
+    #         - cargo/
+
+build-tests:
+    stage: build
+    script:
+        - cargo build --tests --color=always
+    # cache:
+    #     # pull the old cache and push the new when done
+    #     policy: pull-push
+    #     paths:
+    #         - target/
+    #         - cargo/
 
 test:
+    stage: test
     needs: [build]
     script:
         - cargo test --color=always
-    cache:
-        # only pull the cache since the build pushes it
-        policy: pull
-        paths:
-            - target/
-            - cargo/
+    # cache:
+    #     # only pull the cache since the build pushes it
+    #     policy: pull
+    #     paths:
+    #         - target/
+    #         - cargo/
 
 output_test:
+    stage: test
     needs: [build]
     before_script:
         - apt update
         - apt install -y iverilog
     script:
         - cd output_test && make
-    cache:
-        # only pull the cache since the build pushes it
-        paths:
-            - target/
-            - cargo/
+    # cache:
+    #     # only pull the cache since the build pushes it
+    #     paths:
+    #         - target/
+    #         - cargo/
 
-test cargo-fmt:
-    before_script:
-        - rustup component add rustfmt
+cargo-fmt:
+    stage: test
     script:
         # pass --check to rustfmt to error if un-formatted
         - cargo fmt -- --check
-    cache:
-        # only pull the cache since the build pushes it
-        policy: pull
-        paths:
-            - target/
-            - cargo/
+
+grep-todo:
+    stage: test
+    script:
+        # invert exit code of grep while still printing all matches
+        - set -e; find . -name "*.rs" | xargs grep -E "// ?TODO" || exit 0 && exit 1
 
 variables:
     CARGO_HOME: $CI_PROJECT_DIR/cargo

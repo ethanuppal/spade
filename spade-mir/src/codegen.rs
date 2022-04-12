@@ -345,11 +345,11 @@ fn statement_code(statement: &Statement) -> Code {
                 Operator::ConstructTuple => {
                     // To make index calculations easier, we will store tuples in "inverse order".
                     // i.e. the left-most element is stored to the right in the bit vector.
-                    // TODO: is this comment even correct?
                     format!("{{{}}}", ops.join(", "))
                 }
                 Operator::Instance(_) => {
-                    format!("") // NOTE: dummy. Set in the next match statement
+                    // NOTE: dummy. Set in the next match statement
+                    format!("")
                 }
                 Operator::Alias => {
                     // NOTE Dummy. Set in the next match statement
