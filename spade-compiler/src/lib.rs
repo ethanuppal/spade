@@ -143,7 +143,7 @@ pub fn compile(sources: Vec<(String, String)>, opts: Opt) -> Result<(), ()> {
 
                 let mir = try_or_report!(
                     spade_hir_lowering::generate_pipeline(
-                        &p,
+                        p,
                         &type_state,
                         &mut frozen_symtab,
                         &mut idtracker,
