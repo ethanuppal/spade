@@ -27,7 +27,7 @@ there are a few larger examples of what the language looks like in the `sample_p
 
 
 ## Getting started
-1. Clone the repo `git clone git@gitlab.com:TheZoq2/spade.git`
+1. Clone the repo `git clone git@gitlab.com:spade-lang/spade.git`
 2. Initialize the submodules `git submodule update --init`
 3. Build the project `cargo build`
 4. Build your spade code using `cargo run -- <input.spade> -o output.v`
@@ -39,7 +39,7 @@ an overview of the inner workings of the compiler.
 ## Editor integration
 
 There is a vim plugin for syntax highlighting and auto indentation at
-https://gitlab.com/TheZoq2/spade-vim
+https://gitlab.com/spade-lang/spade-vim
 
 There is an Emacs plugin at
 https://github.com/Emiluren/.emacs.d/blob/master/lisp/spade-mode/spade-mode.el
