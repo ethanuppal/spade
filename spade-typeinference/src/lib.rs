@@ -535,6 +535,9 @@ impl TypeState {
                     .expect("Expected new_generic with boolean");
             }
             hir::PatternKind::Name { name, pre_declared } => {
+                if *pre_declared {
+                    println!("{name} was pre declared");
+                }
                 if !pre_declared {
                     self.add_equation(
                         TypedExpression::Name(name.clone().inner),

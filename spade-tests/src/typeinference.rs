@@ -49,6 +49,20 @@ fn type_inference_works_for_array_indexing() {
     build_items(code);
 }
 
+#[test]
+fn type_inference_works_for_declared_variables() {
+    let code = r#"
+    entity name() -> int<16> {
+        decl x;
+        let a = x;
+        let x = 0;
+        a
+    }
+    "#;
+
+    build_items(code);
+}
+
 snapshot_error!(
     return_type_mismatch,
     r#"
@@ -134,4 +148,16 @@ snapshot_error! {
         x `std::conv::concat` y
     }
     "
+}
+
+snapshot_error! {
+    variable_declarations_are_typechecked_correctly,
+    "
+        entity counter() -> int<8> {
+            decl x;
+            let a = x;
+            let x: int<9> = 0;
+            x
+        }
+        "
 }
