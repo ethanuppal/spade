@@ -19,6 +19,7 @@ thiserror = "1.0.20"
 
 parse_tree_macros = {path = "../parse_tree_macros"}
 indoc = "1.0"
+ron = "0.7.0"
 
 spade-common = {path = "../spade-common"}
 spade-hir = {path = "../spade-hir"}

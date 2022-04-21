@@ -8,7 +8,7 @@ use itertools::Itertools;
 use nesty::{code, Code};
 
 impl ValueName {
-    fn var_name(&self) -> String {
+    pub fn var_name(&self) -> String {
         match self {
             ValueName::Named(id, name) => {
                 format!("{}_n{}", name, id)
@@ -20,7 +20,7 @@ impl ValueName {
     }
 }
 
-fn escape_path(path: String) -> String {
+pub fn escape_path(path: String) -> String {
     path.replace("::", "_")
 }
 

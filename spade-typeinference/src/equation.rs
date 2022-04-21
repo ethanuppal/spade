@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 
+use serde::{Deserialize, Serialize};
 use spade_common::name::NameID;
 use spade_types::KnownType;
 
@@ -60,7 +61,7 @@ impl std::fmt::Display for TypeVar {
     }
 }
 
-#[derive(Eq, PartialEq, Hash, Debug, Clone)]
+#[derive(Eq, PartialEq, Hash, Debug, Clone, Serialize, Deserialize)]
 pub enum TypedExpression {
     Id(u64),
     Name(NameID),

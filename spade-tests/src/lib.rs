@@ -73,6 +73,7 @@ macro_rules! snapshot_error {
                 error_buffer: &mut buffer,
                 outfile: None,
                 mir_output: None,
+                type_dump_file: None,
                 print_type_traceback: false,
                 print_parse_traceback: false,
             };

@@ -21,6 +21,7 @@ use std::collections::HashMap;
 use trace_stack::TraceStack;
 
 mod constraints;
+pub mod dump;
 pub mod equation;
 pub mod error_reporting;
 pub mod expression;
@@ -158,6 +159,10 @@ impl TypeState {
             replacements: HashMap::new(),
             generic_lists: vec![],
         }
+    }
+
+    pub fn get_equations(&self) -> &TypeEquations {
+        &self.equations
     }
 
     // Get a generic list with a safe unwrap since a token is aquired

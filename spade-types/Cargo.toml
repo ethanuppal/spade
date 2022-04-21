@@ -10,4 +10,6 @@ edition = "2018"
 doctest = false
 
 [dependencies]
+serde = {version = "1.0.136", features = ["derive"]}
+
 spade-common = {path = "../spade-common"}

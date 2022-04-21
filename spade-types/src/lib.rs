@@ -1,6 +1,7 @@
+use serde::{Deserialize, Serialize};
 use spade_common::name::{Identifier, NameID};
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum PrimitiveType {
     Int,
     Uint,
@@ -21,7 +22,7 @@ impl std::fmt::Display for PrimitiveType {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum ConcreteType {
     Tuple(Vec<ConcreteType>),
     Struct {

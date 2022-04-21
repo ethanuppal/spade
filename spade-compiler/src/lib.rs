@@ -1,5 +1,7 @@
 use codespan_reporting::term::termcolor::Buffer;
 use logos::Logos;
+use spade_typeinference::dump::dump_types;
+use std::collections::HashMap;
 use std::path::PathBuf;
 use thiserror::Error;
 
@@ -17,6 +19,7 @@ pub struct Opt<'b> {
     pub error_buffer: &'b mut Buffer,
     pub outfile: Option<PathBuf>,
     pub mir_output: Option<PathBuf>,
+    pub type_dump_file: Option<PathBuf>,
     pub print_type_traceback: bool,
     pub print_parse_traceback: bool,
 }
@@ -100,6 +103,8 @@ pub fn compile(sources: Vec<(String, String)>, opts: Opt) -> Result<(), ()> {
     let mut module_code = vec![];
     let mut mir_code = vec![];
 
+    let mut all_types = HashMap::new();
+
     for item in item_list.executables.values() {
         match item {
             ExecutableItem::Entity(e) => {
@@ -131,6 +136,12 @@ pub fn compile(sources: Vec<(String, String)>, opts: Opt) -> Result<(), ()> {
                 let code = spade_mir::codegen::entity_code(mir);
 
                 module_code.push(code.to_string());
+
+                all_types.extend(dump_types(
+                    &type_state,
+                    &item_list.types,
+                    frozen_symtab.symtab(),
+                ))
             }
             ExecutableItem::Pipeline(p) => {
                 let mut type_state = typeinference::TypeState::new();
@@ -162,6 +173,12 @@ pub fn compile(sources: Vec<(String, String)>, opts: Opt) -> Result<(), ()> {
                 let code = spade_mir::codegen::entity_code(mir);
 
                 module_code.push(code.to_string());
+
+                all_types.extend(dump_types(
+                    &type_state,
+                    &item_list.types,
+                    frozen_symtab.symtab(),
+                ))
             }
             ExecutableItem::EnumInstance { .. } => {}
             ExecutableItem::StructInstance { .. } => {}
@@ -174,6 +191,16 @@ pub fn compile(sources: Vec<(String, String)>, opts: Opt) -> Result<(), ()> {
     }
     if let Some(mir_output) = opts.mir_output {
         try_or_report!(std::fs::write(mir_output, mir_code.join("\n\n")));
+    }
+    if let Some(type_dump_file) = opts.type_dump_file {
+        match ron::to_string(&all_types) {
+            Ok(encoded_type_info) => {
+                try_or_report!(std::fs::write(type_dump_file, encoded_type_info))
+            }
+            Err(e) => {
+                println!("Failed to encode type info as RON {:?}", e)
+            }
+        }
     }
     Ok(())
 }

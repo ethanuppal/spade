@@ -13,6 +13,7 @@ members = [
     "spade-mir",
     "spade-hir-lowering",
     "spade-ast",
+    "vcd-translate",
     "parse_tree_macros"
 ]
 

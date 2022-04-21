@@ -12,7 +12,7 @@ use spade_mir as mir;
 use spade_typeinference::TypeState;
 
 use crate::{substitution::Substitutions, Result, StatementLocal};
-use crate::{ConcreteTypeLocal, ExprLocal, NameIDLocal, PatternLocal, TypeStateLocal};
+use crate::{ExprLocal, MirLowerable, NameIDLocal, PatternLocal, TypeStateLocal};
 
 #[local_impl]
 impl BindingLocal for PipelineBinding {

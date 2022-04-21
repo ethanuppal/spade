@@ -1,6 +1,7 @@
 use std::ops::Range;
 
 use codespan::Span;
+use serde::{Deserialize, Serialize};
 
 use crate::error_reporting::AsLabel;
 
@@ -74,10 +75,12 @@ pub fn dummy() -> Span {
     Span::new(0, 0)
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Serialize, Deserialize)]
 pub struct Loc<T> {
     pub inner: T,
+    #[serde(skip)]
     pub span: Span,
+    #[serde(skip)]
     pub file_id: usize,
 }
 

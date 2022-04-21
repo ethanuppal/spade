@@ -1,6 +1,8 @@
+use serde::{Deserialize, Serialize};
+
 use crate::location_info::{Loc, WithLocation};
 
-#[derive(PartialEq, Debug, Clone, Eq, Hash)]
+#[derive(PartialEq, Debug, Clone, Eq, Hash, Serialize, Deserialize)]
 pub struct Identifier(pub String);
 
 impl std::fmt::Display for Identifier {
@@ -11,7 +13,7 @@ impl std::fmt::Display for Identifier {
 
 impl WithLocation for Identifier {}
 
-#[derive(PartialEq, Debug, Clone, Eq, Hash)]
+#[derive(PartialEq, Debug, Clone, Eq, Hash, Serialize, Deserialize)]
 pub struct Path(pub Vec<Loc<Identifier>>);
 impl WithLocation for Path {}
 
@@ -68,7 +70,7 @@ impl std::fmt::Display for Path {
 ///
 /// The associated string is only used for formating when printing. The hash and eq methods do not
 /// use it
-#[derive(Clone)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct NameID(pub u64, pub Path);
 impl WithLocation for NameID {}
 

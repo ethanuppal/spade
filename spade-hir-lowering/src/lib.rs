@@ -76,15 +76,18 @@ impl TypeStateLocal for TypeState {
     }
 }
 
-#[local_impl]
-impl ConcreteTypeLocal for ConcreteType {
+pub trait MirLowerable {
+    fn to_mir_type(&self) -> mir::types::Type;
+}
+
+impl MirLowerable for ConcreteType {
     fn to_mir_type(&self) -> mir::types::Type {
         use mir::types::Type;
         use ConcreteType as CType;
 
         match self {
             CType::Tuple(inner) => {
-                Type::Tuple(inner.iter().map(ConcreteTypeLocal::to_mir_type).collect())
+                Type::Tuple(inner.iter().map(MirLowerable::to_mir_type).collect())
             }
             CType::Array { inner, size } => Type::Array {
                 inner: Box::new(inner.to_mir_type()),

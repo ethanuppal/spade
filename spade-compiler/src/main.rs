@@ -22,6 +22,11 @@ pub struct Opt {
     #[structopt(long = "no-color")]
     pub no_color: bool,
 
+    /// Write a mapping between expression ids/names and the types of the values
+    /// formatted in ron https://github.com/ron-rs/ron
+    #[structopt(long)]
+    pub type_dump: Option<PathBuf>,
+
     /// Print a traceback of the type inference process if type inference or hir lowering fails
     #[structopt(long = "print-type-traceback")]
     pub print_type_traceback: bool,
@@ -57,6 +62,7 @@ fn main() -> Result<()> {
         error_buffer: &mut buffer,
         outfile: Some(opts.outfile),
         mir_output: opts.mir_output,
+        type_dump_file: opts.type_dump,
         print_type_traceback: opts.print_type_traceback,
         print_parse_traceback: opts.print_parse_traceback,
     };
