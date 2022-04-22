@@ -619,6 +619,42 @@ mod tests {
 
         assert_same_code!(&statement_code(&input).to_string(), expected)
     }
+
+    #[test]
+    fn pipeline_with_stage_references_codegens_correctly() {
+        let input = entity!("pl"; (
+                "clk", n(3, "clk"), Type::Bool,
+            ) -> Type::Int(16); {
+                (reg n(10, "x__s1"); Type::Int(16); clock(n(3, "clk")); n(0, "x_"));
+                // Stage 0
+                (e(0); Type::Int(16); Instance(("A".to_string())););
+                (n(0, "x_"); Type::Int(16); Alias; e(0));
+                // Stage 1
+                (n(1, "x"); Type::Int(16); Alias; n(0, "x_"));
+            } => n(1, "x")
+        );
+
+        // This test removes a lot of variables through alias resolution
+        let expected = indoc!(
+            r#"
+            module e_pl (
+                    input _i_clk,
+                    output[15:0] __output
+                );
+                logic clk_n3;
+                assign clk_n3 = _i_clk;
+                reg[15:0] x__s1_n10;
+                always @(posedge clk_n3) begin
+                    x__s1_n10 <= x_n1;
+                end
+                logic[15:0] x_n1;
+                e_A A_x_n1(x_n1);
+                assign __output = x_n1;
+            endmodule"#
+        );
+
+        assert_same_code!(&entity_code(input.clone()).to_string(), expected);
+    }
 }
 
 #[cfg(test)]

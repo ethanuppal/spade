@@ -40,7 +40,7 @@ pub fn flatten_aliases(entity: &mut Entity) {
     }
 
     // Filter out any aliases we shouldn't alias because they have too many aliases
-    let aliases = aliased_by
+    let mut aliases = aliased_by
         .into_iter()
         .filter_map(|(k, v)| {
             if v.len() == 1 && !unaliasable.contains(&k) {
@@ -63,6 +63,21 @@ pub fn flatten_aliases(entity: &mut Entity) {
             true
         }
     });
+
+    // Resolve chained aliases, i.e. a -> b -> c should alias bot a and b to c
+    let mut changed = true;
+    while changed {
+        changed = false;
+
+        let prev_aliases = aliases.clone();
+        for (from, to) in prev_aliases {
+            for alias_for in aliases.values_mut() {
+                if alias_for == &from {
+                    *alias_for = to.clone();
+                }
+            }
+        }
+    }
 
     for stmt in &mut entity.statements {
         match stmt {
@@ -201,6 +216,35 @@ mod tests {
 
         let expected = entity!("pong"; ("_i_op", n(0, "op"), Type::Int(6)) -> Type::Int(6); {
         } => n(0, "a"));
+
+        flatten_aliases(&mut input);
+
+        assert_eq!(input, expected);
+    }
+
+    #[test]
+    fn aliases_in_pipelines_work_correctly() {
+        let mut input = entity!("pl"; (
+                "clk", n(3, "clk"), Type::Bool,
+            ) -> Type::Int(16); {
+                (reg n(10, "x__s1"); Type::Int(16); clock(n(3, "clk")); n(0, "x_"));
+                // Stage 0
+                (e(0); Type::Int(16); Instance(("A".to_string())););
+                (n(0, "x_"); Type::Int(16); Alias; e(0));
+                // Stage 1
+                (n(1, "x"); Type::Int(16); Alias; n(0, "x_"));
+            } => n(1, "x")
+        );
+
+        let expected = entity!("pl"; (
+                "clk", n(3, "clk"), Type::Bool,
+            ) -> Type::Int(16); {
+                (reg n(10, "x__s1"); Type::Int(16); clock(n(3, "clk")); n(1, "x"));
+                // Stage 0
+                (n(1, "x"); Type::Int(16); Instance(("A".to_string())););
+                // Stage 1
+            } => n(1, "x")
+        );
 
         flatten_aliases(&mut input);
 

@@ -867,7 +867,6 @@ mod tests {
         assert_same_mir!(&result, &expected);
     }
 
-    // TODO: Test for absolute references
     #[test]
     fn forward_pipeline_references_work() {
         let code = r#"
@@ -896,6 +895,90 @@ mod tests {
 
                 // Output
             } => n(20, "b_s2")
+        );
+
+        let (processed, mut symbol_tracker, mut idtracker, type_list) =
+            parse_typecheck_pipeline(code);
+
+        let result = generate_pipeline(
+            &processed.pipeline,
+            &processed.type_state,
+            &mut symbol_tracker,
+            &mut idtracker,
+            &type_list,
+        )
+        .report_failure(code);
+        assert_same_mir!(&result, &expected);
+    }
+
+    #[test]
+    fn absolute_pipeline_references_work() {
+        let code = r#"
+            pipeline(2) pl(clk: clk, a: bool) -> int<16> {
+                reg;
+                    let b = stage(a).x;
+                reg;
+                    'a
+                    let x = 0;
+                    b
+            }
+        "#;
+
+        let expected = entity!("pl"; (
+                "clk", n(3, "clk"), Type::Bool,
+                "a", n(4, "a"), Type::Bool,
+            ) -> Type::Int(16); {
+                (reg n(14, "a_s1"); Type::Bool; clock(n(3, "clk")); n(4, "a"));
+                (reg n(24, "a_s2"); Type::Bool; clock(n(3, "clk")); n(14, "a_s1"));
+                (reg n(20, "b_s2"); Type::Int(16); clock(n(3, "clk")); n(0, "b"));
+                // Stage 0
+                // Stage 1
+                (n(0, "b"); Type::Int(16); Alias; n(1, "x"));
+                // Stage 2
+                (const 1; Type::Int(16); ConstantValue::Int(0));
+                (n(1, "x"); Type::Int(16); Alias; e(1));
+
+                // Output
+            } => n(20, "b_s2")
+        );
+
+        let (processed, mut symbol_tracker, mut idtracker, type_list) =
+            parse_typecheck_pipeline(code);
+
+        let result = generate_pipeline(
+            &processed.pipeline,
+            &processed.type_state,
+            &mut symbol_tracker,
+            &mut idtracker,
+            &type_list,
+        )
+        .report_failure(code);
+        assert_same_mir!(&result, &expected);
+    }
+
+    #[test]
+    fn correct_codegen_for_forward_references() {
+        let code = r#"
+            entity A() -> int<16> __builtin__
+
+            pipeline(1) pl(clk: clk) -> int<16> {
+                    let x_ = inst A();
+                reg;
+                    let x = stage(-1).x_;
+                    x
+            }
+            "#;
+
+        let expected = entity!("pl"; (
+                "clk", n(3, "clk"), Type::Bool,
+            ) -> Type::Int(16); {
+                (reg n(10, "x__s1"); Type::Int(16); clock(n(3, "clk")); n(0, "x_"));
+                // Stage 0
+                (e(0); Type::Int(16); Instance(("A".to_string())););
+                (n(0, "x_"); Type::Int(16); Alias; e(0));
+                // Stage 1
+                (n(1, "x"); Type::Int(16); Alias; n(0, "x_"));
+            } => n(1, "x")
         );
 
         let (processed, mut symbol_tracker, mut idtracker, type_list) =
