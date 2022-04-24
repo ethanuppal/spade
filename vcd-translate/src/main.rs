@@ -18,25 +18,25 @@ struct CliArgs {
     outfile: PathBuf,
 }
 
-struct MapepdVar {
+#[derive(Debug, Clone)]
+struct MappedVar {
     pub raw: IdCode,
     pub parsed: IdCode,
     pub name: String,
 }
 
-type NewVarMap = HashMap<IdCode, MapepdVar>;
+type NewVarMap = HashMap<IdCode, Vec<MappedVar>>;
 
 fn add_new_vars(
+    mut result: NewVarMap,
     items: &Vec<ScopeItem>,
     writer: &mut vcd::Writer<impl std::io::Write>,
 ) -> Result<NewVarMap> {
-    let mut result = HashMap::new();
     for item in items {
         match item {
             ScopeItem::Scope(scope) => {
                 writer.scope_def(scope.scope_type, &scope.identifier)?;
-                let new_vars = add_new_vars(&scope.children, writer)?;
-                result.extend(new_vars);
+                result = add_new_vars(result, &scope.children, writer)?;
                 writer.upscope()?;
             }
             ScopeItem::Var(var) => {
@@ -47,14 +47,17 @@ fn add_new_vars(
                     &format!("p_{}", var.reference),
                     None,
                 )?;
-                result.insert(
-                    var.code,
-                    MapepdVar {
-                        parsed,
-                        raw,
-                        name: var.reference.clone(),
-                    },
-                );
+
+                let new_map = MappedVar {
+                    parsed,
+                    raw,
+                    name: var.reference.clone(),
+                };
+
+                result
+                    .entry(var.code)
+                    .or_insert(vec![])
+                    .push(new_map.clone());
             }
         }
     }
@@ -80,7 +83,7 @@ fn main() -> Result<()> {
         Some((t, unit)) => writer.timescale(t, unit)?,
         None => {}
     }
-    let var_map = add_new_vars(&header.items, &mut writer)?;
+    let var_map = add_new_vars(HashMap::new(), &header.items, &mut writer)?;
     writer.enddefinitions()?;
 
     let type_file = std::fs::read_to_string(&args.type_file)
@@ -96,21 +99,31 @@ fn main() -> Result<()> {
         let command = command_result?;
         match command {
             ChangeScalar(id, value) => {
-                let mapped = &var_map[&id];
-                writer.change_scalar(mapped.raw, value)?;
-                if let Some(translated) = translate_value(&mapped.name, &[value], &types) {
-                    writer.change_string(mapped.parsed, &translated)?;
+                for mapped in &var_map[&id] {
+                    writer.change_scalar(mapped.raw, value)?;
+                    if let Some(translated) = translate_value(&mapped.name, &[value], &types) {
+                        writer.change_string(mapped.parsed, &translated)?;
+                    }
                 }
             }
             ChangeVector(id, value) => {
-                let mapped = &var_map[&id];
-                writer.change_vector(mapped.raw, &value)?;
-                if let Some(translated) = translate_value(&mapped.name, &value, &types) {
-                    writer.change_string(mapped.parsed, &translated)?;
+                for mapped in &var_map[&id] {
+                    writer.change_vector(mapped.raw, &value)?;
+                    if let Some(translated) = translate_value(&mapped.name, &value, &types) {
+                        writer.change_string(mapped.parsed, &translated)?;
+                    }
                 }
             }
-            ChangeReal(id, value) => writer.change_real(var_map[&id].raw, value)?,
-            ChangeString(id, value) => writer.change_string(var_map[&id].raw, &value)?,
+            ChangeReal(id, value) => {
+                for mapped in &var_map[&id] {
+                    writer.change_real(mapped.raw, value)?
+                }
+            }
+            ChangeString(id, value) => {
+                for mapped in &var_map[&id] {
+                    writer.change_string(mapped.raw, &value)?
+                }
+            }
             other => writer.command(&other)?,
         }
     }
