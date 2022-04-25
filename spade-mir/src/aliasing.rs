@@ -64,7 +64,7 @@ pub fn flatten_aliases(entity: &mut Entity) {
         }
     });
 
-    // Resolve chained aliases, i.e. a -> b -> c should alias bot a and b to c
+    // Resolve chained aliases, i.e. a -> b -> c should alias both a and b to c
     let mut changed = true;
     while changed {
         changed = false;

@@ -40,7 +40,7 @@ impl CompilationError for Error {
                         .with_message(format!("This has {rhs} bits")),
                 ]),
             Error::UndefinedVariable { name } => Diagnostic::error()
-                .with_message("Use of undeclared name {name}")
+                .with_message(format!("Use of undeclared name {name}"))
                 .with_labels(vec![name.primary_label().with_message("Undeclared name")]),
             Error::UseBeforeReady { name, available_in } => Diagnostic::error()
                 .with_message("Use of {name} before it is ready")
