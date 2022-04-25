@@ -62,6 +62,7 @@ pub trait WithLocation: Sized {
 impl WithLocation for () {}
 impl WithLocation for u128 {}
 impl WithLocation for u64 {}
+impl WithLocation for i64 {}
 impl WithLocation for usize {}
 impl WithLocation for bool {}
 impl<T> WithLocation for Vec<T> {}

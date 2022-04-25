@@ -123,6 +123,31 @@ impl CompilationError for Error {
                         format!("Pipeline depth can only be fixed integers"),
                     ])
             }
+            Error::ExpectedOffset{got} => {
+                Diagnostic::error()
+                    .with_message(format!("Expected an offset"))
+                    .with_labels(vec![got.primary_label()
+                        .with_message("Expected offset")
+                    ])
+            }
+            Error::PipelineRefInFunction{ at, fn_keyword } => {
+                Diagnostic::error()
+                    .with_message(format!("Pipeline stage reference in function"))
+                    .with_labels(vec![
+                        at.primary_label()
+                            .with_message("Stage reference is not allowed here"),
+                        fn_keyword.secondary_label().with_message("Because this is a function")
+                    ])
+            }
+            Error::PipelineRefInEntity{ at, entity_keyword } => {
+                Diagnostic::error()
+                    .with_message(format!("Pipeline stage reference in entity"))
+                    .with_labels(vec![
+                        at.primary_label()
+                            .with_message("Stage reference is not allowed here"),
+                        entity_keyword.secondary_label().with_message("Because this is an enity")
+                    ])
+            }
             Error::ExpectedType(found) => Diagnostic::error()
                 .with_message(format!(
                     "Unexpected token. Got `{}`, expected type",

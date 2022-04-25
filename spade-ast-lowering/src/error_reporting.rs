@@ -234,6 +234,48 @@ impl CompilationError for Error {
                     .primary_label()
                     .with_message(format!("Expected clock argument"))])
                 .with_notes(vec![format!("All pipelines take a clock as an argument")]),
+            Error::NegativePipelineReference {
+                at_loc,
+                absolute_stage,
+            } => Diagnostic::error()
+                .with_message("Reference to negative pipeline stage")
+                .with_labels(vec![at_loc
+                    .primary_label()
+                    .with_message(format!("Reference to stage {absolute_stage}"))])
+                .with_notes(vec![format!("Pipeline stages start at 0")]),
+            Error::PipelineStageOOB {
+                at_loc,
+                num_stages,
+                absolute_stage,
+            } => Diagnostic::error()
+                .with_message(format!("Pipeline does not have stage {absolute_stage}"))
+                .with_labels(vec![at_loc
+                    .primary_label()
+                    .with_message(format!("Reference to stage {absolute_stage}"))])
+                .with_notes(vec![format!("The pipeline only has {num_stages} stages")]),
+            Error::UndefinedPipelineStage { stage } => Diagnostic::error()
+                .with_message(format!("Undefined pipeline stage '{stage}'"))
+                .with_labels(vec![stage
+                    .primary_label()
+                    .with_message(format!("Not a stage in this pipeline"))]),
+            Error::DuplicatePipelineStage { stage, previous } => Diagnostic::error()
+                .with_message(format!("Stage {stage} was already defined"))
+                .with_labels(vec![
+                    stage
+                        .primary_label()
+                        .with_message(format!("duplicate pipeline stage")),
+                    previous
+                        .secondary_label()
+                        .with_message("Previous definition"),
+                ]),
+            Error::MultipleStageLabels { new, previous } => Diagnostic::error()
+                .with_message(format!("Stage already has label {previous}"))
+                .with_labels(vec![
+                    new.primary_label().with_message(format!("Duplicate label")),
+                    previous
+                        .secondary_label()
+                        .with_message(format!("Previously labeled here")),
+                ]),
             Error::GenericsGivenForGeneric { at_loc, for_type } => Diagnostic::error()
                 .with_message("Generic arguments given for a generic type")
                 .with_labels(vec![at_loc

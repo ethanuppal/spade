@@ -5,7 +5,7 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use thiserror::Error;
 
-use spade_ast_lowering::{global_symbols, visit_module_body};
+use spade_ast_lowering::{global_symbols, visit_module_body, Context as AstLoweringCtx};
 use spade_common::error_reporting::CodeBundle;
 use spade_common::error_reporting::CompilationError;
 use spade_common::id_tracker;
@@ -87,16 +87,22 @@ pub fn compile(sources: Vec<(String, String)>, opts: Opt) -> Result<(), ()> {
         ));
     }
 
-    let mut idtracker = id_tracker::ExprIdTracker::new();
+    let idtracker = id_tracker::ExprIdTracker::new();
+    let mut ctx = AstLoweringCtx {
+        symtab,
+        idtracker,
+        pipeline_ctx: None,
+    };
 
     for module_ast in &module_asts {
-        item_list = try_or_report!(visit_module_body(
-            item_list,
-            &module_ast,
-            &mut symtab,
-            &mut idtracker
-        ));
+        item_list = try_or_report!(visit_module_body(item_list, &module_ast, &mut ctx,));
     }
+
+    let AstLoweringCtx {
+        symtab,
+        mut idtracker,
+        pipeline_ctx: _,
+    } = ctx;
 
     let mut frozen_symtab = symtab.freeze();
     let mut module_code = vec![];

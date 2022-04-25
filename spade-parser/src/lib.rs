@@ -7,9 +7,9 @@ use error::{CommaSeparatedResult, Error, Result};
 
 use spade_ast::{
     ArgumentList, ArgumentPattern, BinaryOperator, Block, Entity, Enum, Expression, FunctionDecl,
-    Item, Module, ModuleBody, NamedArgument, ParameterList, Pattern, Pipeline, Register, Statement,
-    Struct, TraitDef, TypeDeclKind, TypeDeclaration, TypeExpression, TypeParam, TypeSpec,
-    UnaryOperator, UseStatement,
+    Item, Module, ModuleBody, NamedArgument, ParameterList, Pattern, Pipeline, PipelineReference,
+    Register, Statement, Struct, TraitDef, TypeDeclKind, TypeDeclaration, TypeExpression,
+    TypeParam, TypeSpec, UnaryOperator, UseStatement,
 };
 use spade_common::{
     error_reporting::AsLabel,
@@ -292,6 +292,8 @@ impl<'a> Parser<'a> {
             Ok(match_expr)
         } else if let Some(operator) = self.unary_operator()? {
             Ok(operator)
+        } else if let Some(stageref) = self.pipeline_reference()? {
+            Ok(stageref)
         } else {
             match self.path() {
                 Ok(path) => {
@@ -537,6 +539,62 @@ impl<'a> Parser<'a> {
                 result: output_value,
             }
             .between(self.file_id, &start.span, &end.span),
+        ))
+    }
+
+    #[trace_parser]
+    pub fn pipeline_reference(&mut self) -> Result<Option<Loc<Expression>>> {
+        let start = peek_for!(self, &TokenKind::Stage);
+
+        self.eat(&TokenKind::OpenParen)?;
+
+        let next = self.peek()?;
+        let reference = match next.as_ref().map(|tok| tok.kind.clone()) {
+            Some(TokenKind::Identifier(_)) => PipelineReference::Absolute(self.identifier()?),
+            Some(TokenKind::Plus) => {
+                self.eat(&TokenKind::Plus)?;
+                let num = if let Some(d) = self.int_literal()? {
+                    d
+                } else {
+                    return Err(Error::ExpectedOffset {
+                        got: self.eat_unconditional()?,
+                    });
+                };
+
+                PipelineReference::Relative(num.map(|inner| inner as i64))
+            }
+            Some(TokenKind::Minus) => {
+                self.eat(&TokenKind::Minus)?;
+                let num = if let Some(d) = self.int_literal()? {
+                    d
+                } else {
+                    return Err(Error::ExpectedOffset {
+                        got: self.eat_unconditional()?,
+                    });
+                };
+                PipelineReference::Relative(num.map(|inner| -(inner as i64)))
+            }
+            Some(_) => {
+                return Err(Error::UnexpectedToken {
+                    got: next.unwrap(),
+                    expected: vec!["+", "-", "identifier"],
+                })
+            }
+            _ => return Err(Error::Eof),
+        };
+
+        self.eat(&TokenKind::CloseParen)?;
+
+        self.eat(&TokenKind::Dot)?;
+
+        let ident = self.identifier()?;
+
+        Ok(Some(
+            Expression::PipelineReference(reference, ident.clone()).between(
+                self.file_id,
+                &start.span,
+                &ident,
+            ),
         ))
     }
 
@@ -3303,6 +3361,45 @@ mod tests {
                 .nowhere(),
             ),
             2.nowhere(),
+        )
+        .nowhere();
+
+        check_parse!(code, expression, Ok(expected));
+    }
+
+    #[test]
+    fn absolute_pipeline_references_parse() {
+        let code = r#"stage(s).var"#;
+
+        let expected = Expression::PipelineReference(
+            PipelineReference::Absolute(ast_ident("s")),
+            ast_ident("var"),
+        )
+        .nowhere();
+
+        check_parse!(code, expression, Ok(expected));
+    }
+
+    #[test]
+    fn relative_forward_pipeline_references_parse() {
+        let code = r#"stage(+5).var"#;
+
+        let expected = Expression::PipelineReference(
+            PipelineReference::Relative(5.nowhere()),
+            ast_ident("var"),
+        )
+        .nowhere();
+
+        check_parse!(code, expression, Ok(expected));
+    }
+
+    #[test]
+    fn relative_backward_pipeline_references_parse() {
+        let code = r#"stage(-5).var"#;
+
+        let expected = Expression::PipelineReference(
+            PipelineReference::Relative((-5).nowhere()),
+            ast_ident("var"),
         )
         .nowhere();
 

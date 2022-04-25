@@ -68,6 +68,29 @@ pub enum Error {
     PipelineDepthMismatch { expected: usize, got: Loc<u128> },
     #[error("Pipeline missing clock")]
     MissingPipelineClock { at_loc: Loc<()> },
+    #[error("Referencing negative pipeline stage")]
+    NegativePipelineReference {
+        at_loc: Loc<()>,
+        absolute_stage: i64,
+    },
+    #[error("Referencing out of bounds pipeline stage")]
+    PipelineStageOOB {
+        at_loc: Loc<()>,
+        absolute_stage: usize,
+        num_stages: usize,
+    },
+    #[error("Undefined pipeline stage")]
+    UndefinedPipelineStage { stage: Loc<Identifier> },
+    #[error("Undefined pipeline stage")]
+    DuplicatePipelineStage {
+        stage: Loc<Identifier>,
+        previous: Loc<Identifier>,
+    },
+    #[error("Multiple labels for same stage")]
+    MultipleStageLabels {
+        new: Loc<Identifier>,
+        previous: Loc<Identifier>,
+    },
 
     #[error("Declarations can only be defined by registers")]
     DeclarationOfNonReg {

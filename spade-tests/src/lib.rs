@@ -10,6 +10,8 @@ use spade_testutil::{parse_typecheck_module_body, ParseTypececkResult};
 use spade_typeinference::ProcessedItem;
 
 #[cfg(test)]
+mod ast_lowering;
+#[cfg(test)]
 mod hir_lowering;
 #[cfg(test)]
 mod integration;

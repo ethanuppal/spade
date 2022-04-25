@@ -57,6 +57,9 @@ pub enum Error {
     #[error("Expected pipeline depth")]
     ExpectedPipelineDepth { got: Token },
 
+    #[error("Expected offset")]
+    ExpectedOffset { got: Token },
+
     #[error("Expected expression or stage")]
     ExpectedExpressionOrStage { got: Token },
 
@@ -65,9 +68,15 @@ pub enum Error {
 
     #[error("Reg in function")]
     RegInFunction { at: Loc<()>, fn_keyword: Loc<()> },
-
     #[error("Inst in function")]
     InstInFunction { at: Loc<()>, fn_keyword: Loc<()> },
+    #[error("Stage references are not allowed in functions")]
+    PipelineRefInFunction { at: Loc<()>, fn_keyword: Loc<()> },
+    #[error("Stage references are not allowed in entities")]
+    PipelineRefInEntity {
+        at: Loc<()>,
+        entity_keyword: Loc<()>,
+    },
 
     #[error("(Internal) Expected an item context to be set")]
     InternalExpectedItemContext { at: Loc<()> },

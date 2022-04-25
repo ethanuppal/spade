@@ -121,6 +121,7 @@ pub enum Thing {
     Pipeline(Loc<PipelineHead>),
     Variable(Loc<Identifier>),
     Alias(Loc<Path>),
+    PipelineStage(Loc<Identifier>),
 }
 
 impl Thing {
@@ -133,6 +134,7 @@ impl Thing {
             Thing::Function(_) => "function",
             Thing::EnumVariant(_) => "enum variant",
             Thing::Alias(_) => "alias",
+            Thing::PipelineStage(_) => "pipeline stage",
         }
     }
 
@@ -145,6 +147,7 @@ impl Thing {
             Thing::Function(i) => i.loc(),
             Thing::EnumVariant(i) => i.loc(),
             Thing::Alias(i) => i.loc(),
+            Thing::PipelineStage(i) => i.loc(),
         }
     }
 }
@@ -496,6 +499,25 @@ impl SymbolTable {
         }
     }
 
+    /// Look up `name`. If it is defined and a variable, return that name. If it is defined
+    /// but not a variable, return an error. If it is undefined, return None
+    ///
+    /// Intended for use if undefined variables should be declared
+    pub fn try_lookup_variable(&self, name: &Loc<Path>) -> Result<Option<NameID>, LookupError> {
+        let id = self.try_lookup_id(name);
+        match id {
+            Some(id) => match self.things.get(&id) {
+                Some(Thing::Variable(_)) => Ok(Some(id)),
+                Some(other) => Err(LookupError::NotAVariable(name.clone(), other.clone())),
+                None => match self.types.get(&id) {
+                    Some(_) => Err(LookupError::IsAType(name.clone())),
+                    None => Ok(None),
+                },
+            },
+            None => Ok(None),
+        }
+    }
+
     pub fn lookup_id(&self, name: &Loc<Path>) -> Result<NameID, LookupError> {
         self.try_lookup_id(name)
             .ok_or_else(|| LookupError::NoSuchSymbol(name.clone()))
@@ -560,6 +582,7 @@ impl SymbolTable {
                 Thing::Pipeline(_) => println!("pipeline"),
                 Thing::Variable(_) => println!("variable"),
                 Thing::Alias(to) => println!("{}", format!("alias => {to}").green()),
+                Thing::PipelineStage(stage) => println!("'{stage}"),
             }
         }
 

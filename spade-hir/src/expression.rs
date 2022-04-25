@@ -86,6 +86,10 @@ pub enum ExprKind {
         Box<Loc<Expression>>,
         Box<Loc<Expression>>,
     ),
+    PipelineRef {
+        stage: Loc<usize>,
+        name: Loc<NameID>,
+    },
 }
 impl WithLocation for ExprKind {}
 
@@ -112,6 +116,15 @@ impl Expression {
     /// id and name
     pub fn ident(expr_id: u64, name_id: u64, name: &str) -> Expression {
         ExprKind::Identifier(NameID(name_id, Path::from_strs(&[name]))).with_id(expr_id)
+    }
+
+    /// Returns the block that is this expression. Panics if the expression is not a block
+    pub fn assume_block(&self) -> &Block {
+        if let ExprKind::Block(ref block) = self.kind {
+            block
+        } else {
+            panic!("Expression is not a block")
+        }
     }
 }
 

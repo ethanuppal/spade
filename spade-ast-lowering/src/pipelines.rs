@@ -1,16 +1,44 @@
 use spade_ast as ast;
 use spade_common::{
-    id_tracker::ExprIdTracker,
     location_info::{Loc, WithLocation},
-    name::Path,
+    name::{Identifier, Path},
 };
 use spade_hir as hir;
 
 use crate::{
     error::{Error, Result},
-    visit_expression, LocExt,
+    visit_expression, Context, LocExt,
 };
 use spade_hir::symbol_table::SymbolTable;
+
+pub struct PipelineContext {
+    /// All stages within the pipeline, possibly labelled
+    pub stages: Vec<Option<Loc<Identifier>>>,
+    /// The stage we are currently lowering
+    pub current_stage: usize,
+}
+
+impl PipelineContext {
+    pub fn get_stage(&self, name: &Identifier) -> Option<usize> {
+        for (i, stage_name) in self.stages.iter().enumerate() {
+            if stage_name.as_ref().map(|n| &n.inner) == Some(name) {
+                return Some(i);
+            }
+        }
+        None
+    }
+
+    /// Returns the location of the previous definition of stage `name` if such
+    /// a definition exists
+    pub fn previous_def(&self, name: &Identifier) -> Option<Loc<Identifier>> {
+        for (i, stage_name) in self.stages.iter().enumerate() {
+            if stage_name.as_ref().map(|n| &n.inner) == Some(name) {
+                return stage_name.clone();
+            }
+        }
+        None
+    }
+}
 
 pub fn pipeline_head(input: &ast::Pipeline, symtab: &mut SymbolTable) -> Result<hir::PipelineHead> {
     let depth = input.depth.map(|u| u as usize);
@@ -37,8 +65,7 @@ pub fn pipeline_head(input: &ast::Pipeline, symtab: &mut SymbolTable) -> Result<
 
 pub fn visit_pipeline(
     pipeline: &Loc<ast::Pipeline>,
-    symtab: &mut SymbolTable,
-    idtracker: &mut ExprIdTracker,
+    ctx: &mut Context,
 ) -> Result<Option<Loc<hir::Pipeline>>> {
     let ast::Pipeline {
         depth,
@@ -49,10 +76,11 @@ pub fn visit_pipeline(
         type_params: _,
     } = pipeline.inner.clone();
 
-    symtab.new_scope();
+    ctx.symtab.new_scope();
 
     // FIXME: Unify this code with the entity code
-    let (id, head) = symtab
+    let (id, head) = ctx
+        .symtab
         .lookup_pipeline(&Path(vec![pipeline.name.clone()]).at_loc(&pipeline.name.loc()))
         .expect("Attempting to lower a pipeline that has not been added to the symtab previously");
     let head = head.clone(); // An offering to the borrow checker. May ferris have mercy on us all
@@ -71,32 +99,59 @@ pub fn visit_pipeline(
         .inputs
         .0
         .iter()
-        .map(|(ident, ty)| (symtab.add_local_variable(ident.clone()), ty.clone()))
+        .map(|(ident, ty)| (ctx.symtab.add_local_variable(ident.clone()), ty.clone()))
         .collect();
 
-    let num_regs = body
-        .as_ref()
-        .unwrap()
-        .assume_block()
-        .statements
-        .iter()
-        .filter(|s| s.inner == ast::Statement::PipelineRegMarker)
-        .count();
+    let mut context = PipelineContext {
+        stages: vec![None],
+        current_stage: 0,
+    };
 
-    if num_regs as u128 != depth.inner {
+    let mut current_stage = 0;
+    for statement in &body.as_ref().unwrap().assume_block().statements {
+        match &statement.inner {
+            ast::Statement::Label(name) => {
+                if let Some(previous) = &context.stages[current_stage] {
+                    // TODO: We might actually want to support multiple labels
+                    // for the same stage... If so we need to rewrite
+                    // some other parts
+                    return Err(Error::MultipleStageLabels {
+                        new: name.clone(),
+                        previous: previous.clone(),
+                    });
+                }
+
+                if let Some(prev) = context.previous_def(name) {
+                    return Err(Error::DuplicatePipelineStage {
+                        stage: name.clone(),
+                        previous: prev,
+                    });
+                }
+                context.stages[current_stage] = Some(name.clone());
+            }
+            ast::Statement::Declaration(_) => {}
+            ast::Statement::Binding(_, _, _) => {}
+            ast::Statement::PipelineRegMarker => {
+                current_stage += 1;
+                context.stages.push(None)
+            }
+            ast::Statement::Register(_) => {}
+        }
+    }
+
+    if current_stage as u128 != depth.inner {
         return Err(Error::IncorrectStageCount {
-            got: num_regs,
+            got: current_stage,
             expected: depth,
             pipeline: pipeline.clone(),
         });
     }
 
-    let body = body
-        .as_ref()
-        .unwrap()
-        .try_visit(visit_expression, symtab, idtracker)?;
+    ctx.pipeline_ctx.replace(context);
+    let body = body.as_ref().unwrap().try_visit(visit_expression, ctx)?;
+    ctx.pipeline_ctx = None;
 
-    symtab.close_scope();
+    ctx.symtab.close_scope();
 
     Ok(Some(
         hir::Pipeline {
@@ -114,7 +169,9 @@ mod pipeline_visiting {
     use super::*;
 
     use spade_ast::testutil::ast_ident;
-    use spade_common::location_info::WithLocation;
+    use spade_common::{
+        id_tracker::ExprIdTracker, location_info::WithLocation, name::testutil::name_id,
+    };
 
     use pretty_assertions::assert_eq;
 
@@ -143,12 +200,19 @@ mod pipeline_visiting {
         .nowhere();
 
         let mut symtab = SymbolTable::new();
-        let mut id_tracker = ExprIdTracker::new();
+        let idtracker = ExprIdTracker::new();
 
         crate::global_symbols::visit_pipeline(&input, &mut symtab)
             .expect("Failed to add pipeline to symtab");
 
-        let result = visit_pipeline(&input, &mut symtab, &mut id_tracker);
+        let result = visit_pipeline(
+            &input,
+            &mut Context {
+                symtab,
+                idtracker,
+                pipeline_ctx: None,
+            },
+        );
 
         assert_eq!(
             result,
@@ -173,18 +237,183 @@ mod pipeline_visiting {
         .nowhere();
 
         let mut symtab = SymbolTable::new();
-        let mut id_tracker = ExprIdTracker::new();
+        let idtracker = ExprIdTracker::new();
 
         crate::global_symbols::visit_pipeline(&input, &mut symtab)
             .expect("Failed to add pipeline to symtab");
 
-        let result = visit_pipeline(&input, &mut symtab, &mut id_tracker);
+        let result = visit_pipeline(
+            &input,
+            &mut Context {
+                symtab,
+                idtracker,
+                pipeline_ctx: None,
+            },
+        );
 
         assert_eq!(
             result,
             Err(Error::MissingPipelineClock {
                 at_loc: ().nowhere()
             })
+        );
+    }
+
+    #[test]
+    fn relative_stage_references_work() {
+        let input = ast::Pipeline {
+            name: ast_ident("pipe"),
+            depth: 2.nowhere(),
+            inputs: ast::ParameterList(vec![(
+                ast_ident("clk"),
+                ast::TypeSpec::Unit(().nowhere()).nowhere(),
+            )]),
+            output_type: Some(ast::TypeSpec::Unit(().nowhere()).nowhere()),
+            body: Some(
+                ast::Expression::Block(Box::new(ast::Block {
+                    statements: vec![
+                        ast::Statement::PipelineRegMarker.nowhere(),
+                        ast::Statement::Binding(
+                            ast::Pattern::name("a"),
+                            None,
+                            ast::Expression::IntLiteral(0).nowhere(),
+                        )
+                        .nowhere(),
+                        ast::Statement::PipelineRegMarker.nowhere(),
+                        ast::Statement::Binding(
+                            ast::Pattern::name("b"),
+                            None,
+                            ast::Expression::PipelineReference(
+                                ast::PipelineReference::Relative((-1).nowhere()),
+                                ast_ident("a"),
+                            )
+                            .nowhere(),
+                        )
+                        .nowhere(),
+                    ],
+                    result: ast::Expression::IntLiteral(0).nowhere(),
+                }))
+                .nowhere(),
+            ),
+            type_params: vec![],
+        }
+        .nowhere();
+
+        let expected_statements = vec![
+            hir::Statement::PipelineRegMarker.nowhere(),
+            hir::Statement::named_let(2, name_id(2, "a"), hir::ExprKind::IntLiteral(0).with_id(3))
+                .nowhere(),
+            hir::Statement::PipelineRegMarker.nowhere(),
+            hir::Statement::named_let(
+                4,
+                name_id(3, "b"),
+                hir::ExprKind::PipelineRef {
+                    stage: 1usize.nowhere(),
+                    name: name_id(2, "a"),
+                }
+                .idless(),
+            )
+            .nowhere(),
+        ];
+
+        let mut symtab = SymbolTable::new();
+        let idtracker = ExprIdTracker::new();
+
+        crate::global_symbols::visit_pipeline(&input, &mut symtab)
+            .expect("Failed to add pipeline to symtab");
+
+        let result = visit_pipeline(
+            &input,
+            &mut Context {
+                symtab,
+                idtracker,
+                pipeline_ctx: None,
+            },
+        );
+
+        assert_eq!(
+            result.unwrap().unwrap().body.assume_block().statements,
+            expected_statements
+        );
+    }
+
+    #[test]
+    fn absolute_stage_references_work() {
+        let input = ast::Pipeline {
+            name: ast_ident("pipe"),
+            depth: 2.nowhere(),
+            inputs: ast::ParameterList(vec![(
+                ast_ident("clk"),
+                ast::TypeSpec::Unit(().nowhere()).nowhere(),
+            )]),
+            output_type: Some(ast::TypeSpec::Unit(().nowhere()).nowhere()),
+            body: Some(
+                ast::Expression::Block(Box::new(ast::Block {
+                    statements: vec![
+                        ast::Statement::PipelineRegMarker.nowhere(),
+                        ast::Statement::Label(ast_ident("s")).nowhere(),
+                        ast::Statement::Binding(
+                            ast::Pattern::name("a"),
+                            None,
+                            ast::Expression::IntLiteral(0).nowhere(),
+                        )
+                        .nowhere(),
+                        ast::Statement::PipelineRegMarker.nowhere(),
+                        ast::Statement::Binding(
+                            ast::Pattern::name("b"),
+                            None,
+                            ast::Expression::PipelineReference(
+                                ast::PipelineReference::Absolute(ast_ident("s")),
+                                ast_ident("a"),
+                            )
+                            .nowhere(),
+                        )
+                        .nowhere(),
+                    ],
+                    result: ast::Expression::IntLiteral(0).nowhere(),
+                }))
+                .nowhere(),
+            ),
+            type_params: vec![],
+        }
+        .nowhere();
+
+        let expected_statements = vec![
+            hir::Statement::PipelineRegMarker.nowhere(),
+            hir::Statement::Label(ast_ident("s")).nowhere(),
+            hir::Statement::named_let(2, name_id(2, "a"), hir::ExprKind::IntLiteral(0).with_id(3))
+                .nowhere(),
+            hir::Statement::PipelineRegMarker.nowhere(),
+            hir::Statement::named_let(
+                4,
+                name_id(3, "b"),
+                hir::ExprKind::PipelineRef {
+                    stage: 1usize.nowhere(),
+                    name: name_id(2, "a"),
+                }
+                .idless(),
+            )
+            .nowhere(),
+        ];
+
+        let mut symtab = SymbolTable::new();
+        let idtracker = ExprIdTracker::new();
+
+        crate::global_symbols::visit_pipeline(&input, &mut symtab)
+            .expect("Failed to add pipeline to symtab");
+
+        let result = visit_pipeline(
+            &input,
+            &mut Context {
+                symtab,
+                idtracker,
+                pipeline_ctx: None,
+            },
+        );
+
+        assert_eq!(
+            result.unwrap().unwrap().body.assume_block().statements,
+            expected_statements
         );
     }
 }

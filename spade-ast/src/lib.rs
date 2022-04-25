@@ -93,6 +93,12 @@ pub enum UnaryOperator {
 impl WithLocation for UnaryOperator {}
 
 #[derive(PartialEq, Debug, Clone)]
+pub enum PipelineReference {
+    Relative(Loc<i64>),
+    Absolute(Loc<Identifier>),
+}
+
+#[derive(PartialEq, Debug, Clone)]
 pub enum Expression {
     Identifier(Loc<Path>),
     IntLiteral(u128),
@@ -114,6 +120,7 @@ pub enum Expression {
     Block(Box<Block>),
     EntityInstance(Loc<Path>, Loc<ArgumentList>),
     PipelineInstance(Loc<u128>, Loc<Path>, Loc<ArgumentList>),
+    PipelineReference(PipelineReference, Loc<Identifier>),
 }
 impl WithLocation for Expression {}
 

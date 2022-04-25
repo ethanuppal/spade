@@ -36,4 +36,19 @@ impl ItemTypeLocal for Option<Loc<ItemType>> {
             None => Err(Error::InternalExpectedItemContext { at }),
         }
     }
+
+    fn allows_pipeline_ref(&self, at: Loc<()>) -> Result<()> {
+        match self.as_ref().map(|s| &s.inner) {
+            Some(ItemType::Function) => Err(Error::PipelineRefInFunction {
+                at,
+                fn_keyword: self.as_ref().unwrap().loc(),
+            }),
+            Some(ItemType::Entity) => Err(Error::PipelineRefInEntity {
+                at,
+                entity_keyword: self.as_ref().unwrap().loc(),
+            }),
+            Some(ItemType::Pipeline) => Ok(()),
+            None => Err(Error::InternalExpectedItemContext { at }),
+        }
+    }
 }

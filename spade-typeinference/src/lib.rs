@@ -394,6 +394,10 @@ impl TypeState {
                 let head = symtab.function_by_id(&name.inner);
                 self.handle_function_like(expression, &name.inner, &head.inner, args, symtab)?;
             }
+            ExprKind::PipelineRef { .. } => {
+                // TODO: test type inference for stages
+                self.visit_identifier(expression, symtab)?
+            }
         }
         Ok(())
     }

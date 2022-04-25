@@ -538,6 +538,7 @@ impl ExprLocal for Loc<Expression> {
             ExprKind::UnaryOperator(_, _) => None,
             ExprKind::EntityInstance(_, _) => None,
             ExprKind::PipelineInstance { .. } => None,
+            ExprKind::PipelineRef { stage, name } => todo!(),
         }
     }
 
@@ -824,6 +825,9 @@ impl ExprLocal for Loc<Expression> {
             } => result.append(
                 &mut self.handle_call(name, args, symtab, idtracker, types, subs, item_list)?,
             ),
+            ExprKind::PipelineRef { stage, name } => {
+                todo!()
+            }
         }
         Ok(result)
     }

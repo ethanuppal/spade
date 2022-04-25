@@ -2,7 +2,7 @@ use codespan_reporting::term::termcolor::Buffer;
 use logos::Logos;
 use std::io::Write;
 
-use spade_ast_lowering::{global_symbols, visit_module_body};
+use spade_ast_lowering::{global_symbols, visit_module_body, Context as AstLoweringCtx};
 use spade_common::{
     error_reporting::{CodeBundle, CompilationError},
     id_tracker::ExprIdTracker,
@@ -97,24 +97,27 @@ pub fn parse_typecheck_module_body(input: &str) -> ParseTypececkResult {
         &mut item_list
     ));
 
-    let mut idtracker = ExprIdTracker::new();
+    let idtracker = ExprIdTracker::new();
 
-    let item_list = try_or_report!(visit_module_body(
-        item_list,
-        &module_ast,
-        &mut symtab,
-        &mut idtracker
-    ));
+    let mut ctx = AstLoweringCtx {
+        symtab,
+        idtracker,
+        pipeline_ctx: None,
+    };
+
+    let item_list = try_or_report!(visit_module_body(item_list, &module_ast, &mut ctx));
 
     let items = try_or_report!(typeinference::ProcessedItemList::typecheck(
-        &item_list, &symtab, true
+        &item_list,
+        &ctx.symtab,
+        true
     ));
 
     ParseTypececkResult {
         items_with_types: items,
         item_list,
-        idtracker,
-        symtab: symtab.freeze(),
+        idtracker: ctx.idtracker,
+        symtab: ctx.symtab.freeze(),
     }
 }
 

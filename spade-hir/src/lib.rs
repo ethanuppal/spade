@@ -104,9 +104,20 @@ pub enum Statement {
     Register(Loc<Register>),
     Declaration(Vec<Loc<NameID>>),
     PipelineRegMarker,
-    Label(Loc<NameID>),
+    Label(Loc<Identifier>),
 }
 impl WithLocation for Statement {}
+
+impl Statement {
+    /// NOTE: For use in tests
+    pub fn named_let(pattern_id: u64, name_id: Loc<NameID>, val: Expression) -> Self {
+        Self::Binding(
+            PatternKind::name(name_id).with_id(pattern_id).nowhere(),
+            None,
+            val.nowhere(),
+        )
+    }
+}
 
 #[derive(PartialEq, Debug, Clone)]
 pub struct Register {
