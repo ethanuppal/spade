@@ -27,7 +27,7 @@ use spade_hir::symbol_table::SymbolTable;
 use spade_hir::symbol_table::{LookupError, Thing, TypeSymbol};
 use spade_hir::{expression::BinaryOperator, EntityHead};
 
-pub use error::{Error, Result};
+use error::{Error, Result};
 
 pub struct Context {
     pub symtab: SymbolTable,
@@ -560,12 +560,7 @@ fn visit_statement(s: &Loc<ast::Statement>, ctx: &mut Context) -> Result<Loc<hir
             Ok(hir::Statement::PipelineRegMarker.at_loc(s))
         }
         ast::Statement::Label(name) => {
-            let pipeline_ctx = ctx
-                .pipeline_ctx
-                .as_mut()
-                .expect("Expected to have a pipeline context");
-            pipeline_ctx.stages[pipeline_ctx.current_stage] = Some(name.clone());
-            // TODO: Check if the label is duplicated
+            // NOTE: pipeline labels are lowered in visit_pipeline
             Ok(hir::Statement::Label(name.clone()).at_loc(s))
         }
     }
@@ -868,7 +863,6 @@ fn visit_expression(e: &ast::Expression, ctx: &mut Context) -> Result<hir::Expre
                 ),
             };
 
-            // TODO: Handle shadowing
             let path = Path(vec![name.clone()]).at_loc(name);
             let name_id = match ctx.symtab.try_lookup_variable(&path)? {
                 Some(id) => id,

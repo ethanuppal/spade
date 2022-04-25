@@ -115,7 +115,7 @@ pub fn visit_pipeline(
         match &statement.inner {
             ast::Statement::Label(name) => {
                 if let Some(previous) = &context.stages[current_stage] {
-                    // TODO: We might actually want to support multiple labels
+                    // FIXME: We might actually want to support multiple labels
                     // for the same stage... If so we need to rewrite
                     // some other parts
                     return Err(Error::MultipleStageLabels {

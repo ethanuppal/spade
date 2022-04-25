@@ -3,7 +3,6 @@ use spade_hir::Expression;
 use spade_typeinference::equation::TypeVar;
 use thiserror::Error;
 
-// TODO better error descriptions that uses fields
 #[derive(Error, Debug)]
 pub enum Error {
     #[error("using generic type")]

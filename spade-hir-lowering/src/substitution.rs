@@ -65,8 +65,9 @@ impl Substitutions {
                 Substitution::Available(previous) => {
                     let new_path = original
                         .1
-                        // TODO: instead of s{num}, replace it by label if a label
+                        // FIXME: instead of s{num}, replace it by label if a label
                         // is present
+                        // spade#128
                         .push_ident(Identifier(format!("s{}", stage_num)).nowhere());
                     let new_name = symtab.new_name(new_path);
                     result.push(SubRegister {

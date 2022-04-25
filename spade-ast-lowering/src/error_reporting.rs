@@ -239,9 +239,9 @@ impl CompilationError for Error {
                 absolute_stage,
             } => Diagnostic::error()
                 .with_message("Reference to negative pipeline stage")
-                .with_labels(vec![at_loc
-                    .primary_label()
-                    .with_message(format!("Reference to stage {absolute_stage}"))])
+                .with_labels(vec![at_loc.primary_label().with_message(format!(
+                    "Reference to absolute stage {absolute_stage}"
+                ))])
                 .with_notes(vec![format!("Pipeline stages start at 0")]),
             Error::PipelineStageOOB {
                 at_loc,

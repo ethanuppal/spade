@@ -395,7 +395,6 @@ impl TypeState {
                 self.handle_function_like(expression, &name.inner, &head.inner, args, symtab)?;
             }
             ExprKind::PipelineRef { .. } => {
-                // TODO: test type inference for stages
                 self.visit_pipeline_ref(expression, symtab)?;
             }
         }

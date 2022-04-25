@@ -74,6 +74,7 @@ pub fn flatten_aliases(entity: &mut Entity) {
             for alias_for in aliases.values_mut() {
                 if alias_for == &from {
                     *alias_for = to.clone();
+                    changed = true;
                 }
             }
         }
@@ -115,6 +116,24 @@ mod tests {
 
         let expected = entity!("pong"; ("_i_op", n(0, "op"), Type::Int(6)) -> Type::Int(6); {
             (n(0, "a"); Type::Int(6); Add; n(0, "op"), e(1))
+        } => e(10));
+
+        flatten_aliases(&mut input);
+
+        assert_eq!(input, expected);
+    }
+
+    #[test]
+    fn three_level_aliasing_replaces_definitions() {
+        let mut input = entity!("pong"; ("_i_op", n(0, "op"), Type::Int(6)) -> Type::Int(6); {
+            (e(0); Type::Int(6); Add; n(0, "op"), e(1));
+            (n(0, "a"); Type::Int(6); Alias; e(0));
+            (n(2, "b"); Type::Int(6); Alias; n(0, "a"));
+            (n(1, "c"); Type::Int(6); Alias; n(2, "b"));
+        } => e(10));
+
+        let expected = entity!("pong"; ("_i_op", n(0, "op"), Type::Int(6)) -> Type::Int(6); {
+            (n(1, "c"); Type::Int(6); Add; n(0, "op"), e(1))
         } => e(10));
 
         flatten_aliases(&mut input);

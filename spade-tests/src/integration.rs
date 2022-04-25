@@ -123,4 +123,20 @@ mod namespace_tests {
 
         build_items(code);
     }
+
+    // NOTE: this is an awful error message at the moment, but it is strange code
+    // and fixing it would take quite a bit of effort, so we'll leave it be and
+    // create an issue for it
+    snapshot_error! {
+        pipeline_shadowing_does_not_fail_silently,
+        "
+        pipeline(2) main(clk: clk, x: int<8>) -> int<8> {
+                let x: int<8> = 0;
+            reg;
+                let x: int<8> = 1;
+            reg;
+                stage(-2).x
+        }
+        "
+    }
 }

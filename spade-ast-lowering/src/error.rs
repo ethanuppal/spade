@@ -81,7 +81,7 @@ pub enum Error {
     },
     #[error("Undefined pipeline stage")]
     UndefinedPipelineStage { stage: Loc<Identifier> },
-    #[error("Undefined pipeline stage")]
+    #[error("Duplicate pipeline stage")]
     DuplicatePipelineStage {
         stage: Loc<Identifier>,
         previous: Loc<Identifier>,
