@@ -61,11 +61,17 @@ fn statement_code(statement: &Statement) -> Code {
                         binding.operands.len() == 2,
                         "expected 2 operands to binary operator"
                     );
-                    if $verilog == ">" || $verilog == "<" {
-                        format!("$signed({}) {} $signed({})", ops[0], $verilog, ops[1])
-                    } else {
-                        format!("{} {} {}", ops[0], $verilog, ops[1])
-                    }
+                    format!("{} {} {}", ops[0], $verilog, ops[1])
+                }};
+            }
+
+            macro_rules! signed_binop {
+                ($verilog:expr) => {{
+                    assert!(
+                        binding.operands.len() == 2,
+                        "expected 2 operands to binary operator"
+                    );
+                    format!("$signed({}) {} $signed({})", ops[0], $verilog, ops[1])
                 }};
             }
 
@@ -82,12 +88,12 @@ fn statement_code(statement: &Statement) -> Code {
             let expression = match &binding.operator {
                 Operator::Add => binop!("+"),
                 Operator::Sub => binop!("-"),
-                Operator::Mul => binop!("*"),
+                Operator::Mul => signed_binop!("*"),
                 Operator::Eq => binop!("=="),
-                Operator::Gt => binop!(">"),
-                Operator::Lt => binop!("<"),
-                Operator::Ge => binop!(">="),
-                Operator::Le => binop!("<="),
+                Operator::Gt => signed_binop!(">"),
+                Operator::Lt => signed_binop!("<"),
+                Operator::Ge => signed_binop!(">="),
+                Operator::Le => signed_binop!("<="),
                 Operator::LeftShift => binop!("<<"),
                 Operator::RightShift => binop!(">>"),
                 Operator::LogicalAnd => binop!("&&"),
@@ -720,7 +726,7 @@ mod expression_tests {
 
     binop_test!(binop_add_works, Type::Int(2), "[1:0]", Add, "+");
     binop_test!(binop_sub_works, Type::Int(2), "[1:0]", Sub, "-");
-    binop_test!(binop_mul_works, Type::Int(2), "[1:0]", Mul, "*");
+    signed_binop_test!(binop_mul_works, Type::Int(2), "[1:0]", Mul, "*");
     binop_test!(
         binop_left_shift_works,
         Type::Int(2),
@@ -736,10 +742,10 @@ mod expression_tests {
         ">>"
     );
     binop_test!(binop_eq_works, Type::Bool, "", Eq, "==");
-    binop_test!(binop_ge_works, Type::Bool, "", Ge, ">=");
-    binop_test!(binop_le_works, Type::Bool, "", Le, "<=");
     signed_binop_test!(binop_gt_works, Type::Bool, "", Gt, ">");
     signed_binop_test!(binop_lt_works, Type::Bool, "", Lt, "<");
+    signed_binop_test!(binop_ge_works, Type::Bool, "", Ge, ">=");
+    signed_binop_test!(binop_le_works, Type::Bool, "", Le, "<=");
     binop_test!(binop_logical_and_works, Type::Bool, "", LogicalAnd, "&&");
     binop_test!(binop_logical_or_works, Type::Bool, "", LogicalOr, "||");
     binop_test!(xor_works, Type::Bool, "", Xor, "^");
