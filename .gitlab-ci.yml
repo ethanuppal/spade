@@ -1,5 +1,5 @@
 # image: "scorpil/rust:nightly"
-image: rust:latest
+image: rust:1.59
 
 variables:
     CARGO_HOME: $CI_PROJECT_DIR/cargo
