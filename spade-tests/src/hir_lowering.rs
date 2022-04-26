@@ -1,5 +1,7 @@
 #[cfg(test)]
 mod tests {
+    use std::collections::HashMap;
+
     use crate::{build_and_compare_entities, build_entity, build_items, snapshot_error, ResultExt};
     use colored::Colorize;
     use spade_hir_lowering::*;
@@ -681,9 +683,9 @@ mod tests {
                     "clk", n(100, "clk"), Type::Bool,
                     "a", n(0, "a"), Type::Int(16)
                 ) -> Type::Int(16); {
-                    (reg n(1, "a_s1"); Type::Int(16); clock (n(100, "clk")); n(0, "a"));
-                    (reg n(2, "a_s2"); Type::Int(16); clock (n(100, "clk")); n(1, "a_s1"));
-                } => n(2, "a_s2")
+                    (reg n(1, "s1_a"); Type::Int(16); clock (n(100, "clk")); n(0, "a"));
+                    (reg n(2, "s2_a"); Type::Int(16); clock (n(100, "clk")); n(1, "s1_a"));
+                } => n(2, "s2_a")
             ),
             entity!("top"; ("clk", n(100, "clk"), Type::Bool) -> Type::Int(16); {
                 (const 1; Type::Int(16); ConstantValue::Int(0));
@@ -718,6 +720,7 @@ mod tests {
                             &mut symtab,
                             &mut idtracker,
                             &module.item_list,
+                            &mut HashMap::new(),
                         )
                         .report_failure(code),
                     );
@@ -754,27 +757,27 @@ mod tests {
                 "a", n(0, "a"), Type::Int(16),
             ) -> Type::Int(18); {
                 // Pipeline registers
-                (reg n(2, "a_s1"); Type::Int(16); clock(n(3, "clk")); n(0, "a"));
-                (reg n(4, "x_s1"); Type::Int(16); clock(n(3, "clk")); n(10, "x"));
-                (reg n(21, "a_s2"); Type::Int(16); clock(n(3, "clk")); n(2, "a_s1"));
-                (reg n(22, "x_s2"); Type::Int(16); clock(n(3, "clk")); n(4, "x_s1"));
-                (reg n(23, "y_s2"); Type::Int(17); clock(n(3, "clk")); n(11, "y"));
-                (reg n(31, "a_s3"); Type::Int(16); clock(n(3, "clk")); n(21, "a_s2"));
-                (reg n(32, "x_s3"); Type::Int(16); clock(n(3, "clk")); n(22, "x_s2"));
-                (reg n(33, "y_s3"); Type::Int(17); clock(n(3, "clk")); n(23, "y_s2"));
-                (reg n(34, "res_s3"); Type::Int(18); clock(n(3, "clk")); n(6, "res"));
+                (reg n(2, "s1_a"); Type::Int(16); clock(n(3, "clk")); n(0, "a"));
+                (reg n(4, "s1_x"); Type::Int(16); clock(n(3, "clk")); n(10, "x"));
+                (reg n(21, "s2_a"); Type::Int(16); clock(n(3, "clk")); n(2, "s1_a"));
+                (reg n(22, "s2_x"); Type::Int(16); clock(n(3, "clk")); n(4, "s1_x"));
+                (reg n(23, "s2_y"); Type::Int(17); clock(n(3, "clk")); n(11, "y"));
+                (reg n(31, "s3_a"); Type::Int(16); clock(n(3, "clk")); n(21, "s2_a"));
+                (reg n(32, "s3_x"); Type::Int(16); clock(n(3, "clk")); n(22, "s2_x"));
+                (reg n(33, "s3_y"); Type::Int(17); clock(n(3, "clk")); n(23, "s2_y"));
+                (reg n(34, "s3_res"); Type::Int(18); clock(n(3, "clk")); n(6, "res"));
                 // Stage 0
                 (e(0); Type::Int(16); LeftShift; n(0, "a"), n(0, "a"));
                 (n(10, "x"); Type::Int(16); Alias; e(0));
 
                 // Stage 1
-                (e(1); Type::Int(17); Add; n(4, "x_s1"), n(2, "a_s1"));
+                (e(1); Type::Int(17); Add; n(4, "s1_x"), n(2, "s1_a"));
                 (n(11, "y"); Type::Int(17); Alias; e(1));
 
                 // Stage 3
-                (e(2); Type::Int(18); Add; n(23, "y_s2"), n(23, "y_s2"));
+                (e(2); Type::Int(18); Add; n(23, "s2_y"), n(23, "s2_y"));
                 (n(6, "res"); Type::Int(18); Alias; e(2));
-            } => n(34, "res_s3")
+            } => n(34, "s3_res")
         );
 
         let (processed, mut symbol_tracker, mut idtracker, type_list) =
@@ -786,6 +789,7 @@ mod tests {
             &mut symbol_tracker,
             &mut idtracker,
             &type_list,
+            &mut HashMap::new(),
         )
         .report_failure(code);
         assert_same_mir!(&result, &expected);
@@ -807,16 +811,16 @@ mod tests {
                 "a", n(0, "a"), Type::Int(16),
             ) -> Type::Int(17); {
                 // Stage 0
-                (reg n(2, "a_s1"); Type::Int(16); clock(n(3, "clk")); n(0, "a"));
+                (reg n(2, "s1_a"); Type::Int(16); clock(n(3, "clk")); n(0, "a"));
 
                 // Stage 1
-                (reg n(21, "a_s2"); Type::Int(16); clock(n(3, "clk")); n(2, "a_s1"));
+                (reg n(21, "s2_a"); Type::Int(16); clock(n(3, "clk")); n(2, "s1_a"));
 
                 // Stage 3
-                (reg n(31, "a_s3"); Type::Int(16); clock(n(3, "clk")); n(21, "a_s2"));
+                (reg n(31, "s3_a"); Type::Int(16); clock(n(3, "clk")); n(21, "s2_a"));
 
                 // Output
-                (e(3); Type::Int(17); Add; n(31, "a_s3"), n(31, "a_s3"));
+                (e(3); Type::Int(17); Add; n(31, "s3_a"), n(31, "s3_a"));
             } => e(3)
         );
 
@@ -829,6 +833,7 @@ mod tests {
             &mut symbol_tracker,
             &mut idtracker,
             &type_list,
+            &mut HashMap::new(),
         )
         .report_failure(code);
         assert_same_mir!(&result, &expected);
@@ -847,7 +852,7 @@ mod tests {
                 "clk", n(3, "clk"), Type::Bool,
                 "a", n(0, "a"), Type::Int(16),
             ) -> Type::Int(16); {
-                (reg n(31, "a_s1"); Type::Int(16); clock(n(3, "clk")); n(0, "a"));
+                (reg n(31, "s1_a"); Type::Int(16); clock(n(3, "clk")); n(0, "a"));
 
                 // Output
             } => n(0, "a")
@@ -862,6 +867,7 @@ mod tests {
             &mut symbol_tracker,
             &mut idtracker,
             &type_list,
+            &mut HashMap::new(),
         )
         .report_failure(code);
         assert_same_mir!(&result, &expected);
@@ -883,9 +889,9 @@ mod tests {
                 "clk", n(3, "clk"), Type::Bool,
                 "a", n(4, "a"), Type::Bool,
             ) -> Type::Int(16); {
-                (reg n(14, "a_s1"); Type::Bool; clock(n(3, "clk")); n(4, "a"));
-                (reg n(24, "a_s2"); Type::Bool; clock(n(3, "clk")); n(14, "a_s1"));
-                (reg n(20, "b_s2"); Type::Int(16); clock(n(3, "clk")); n(0, "b"));
+                (reg n(14, "s1_a"); Type::Bool; clock(n(3, "clk")); n(4, "a"));
+                (reg n(24, "s2_a"); Type::Bool; clock(n(3, "clk")); n(14, "s1_a"));
+                (reg n(20, "s2_b"); Type::Int(16); clock(n(3, "clk")); n(0, "b"));
                 // Stage 0
                 // Stage 1
                 (n(0, "b"); Type::Int(16); Alias; n(1, "x"));
@@ -894,7 +900,7 @@ mod tests {
                 (n(1, "x"); Type::Int(16); Alias; e(1));
 
                 // Output
-            } => n(20, "b_s2")
+            } => n(20, "s2_b")
         );
 
         let (processed, mut symbol_tracker, mut idtracker, type_list) =
@@ -906,6 +912,7 @@ mod tests {
             &mut symbol_tracker,
             &mut idtracker,
             &type_list,
+            &mut HashMap::new(),
         )
         .report_failure(code);
         assert_same_mir!(&result, &expected);
@@ -928,9 +935,9 @@ mod tests {
                 "clk", n(3, "clk"), Type::Bool,
                 "a", n(4, "a"), Type::Bool,
             ) -> Type::Int(16); {
-                (reg n(14, "a_s1"); Type::Bool; clock(n(3, "clk")); n(4, "a"));
-                (reg n(24, "a_s2"); Type::Bool; clock(n(3, "clk")); n(14, "a_s1"));
-                (reg n(20, "b_s2"); Type::Int(16); clock(n(3, "clk")); n(0, "b"));
+                (reg n(14, "s1_a"); Type::Bool; clock(n(3, "clk")); n(4, "a"));
+                (reg n(24, "s2_a"); Type::Bool; clock(n(3, "clk")); n(14, "s1_a"));
+                (reg n(20, "s2_b"); Type::Int(16); clock(n(3, "clk")); n(0, "b"));
                 // Stage 0
                 // Stage 1
                 (n(0, "b"); Type::Int(16); Alias; n(1, "x"));
@@ -939,7 +946,7 @@ mod tests {
                 (n(1, "x"); Type::Int(16); Alias; e(1));
 
                 // Output
-            } => n(20, "b_s2")
+            } => n(20, "s2_b")
         );
 
         let (processed, mut symbol_tracker, mut idtracker, type_list) =
@@ -951,6 +958,7 @@ mod tests {
             &mut symbol_tracker,
             &mut idtracker,
             &type_list,
+            &mut HashMap::new(),
         )
         .report_failure(code);
         assert_same_mir!(&result, &expected);
@@ -972,7 +980,7 @@ mod tests {
         let expected = entity!("pl"; (
                 "clk", n(3, "clk"), Type::Bool,
             ) -> Type::Int(16); {
-                (reg n(10, "x__s1"); Type::Int(16); clock(n(3, "clk")); n(0, "x_"));
+                (reg n(10, "s1_x_"); Type::Int(16); clock(n(3, "clk")); n(0, "x_"));
                 // Stage 0
                 (e(0); Type::Int(16); Instance(("A".to_string())););
                 (n(0, "x_"); Type::Int(16); Alias; e(0));
@@ -990,6 +998,7 @@ mod tests {
             &mut symbol_tracker,
             &mut idtracker,
             &type_list,
+            &mut HashMap::new(),
         )
         .report_failure(code);
         assert_same_mir!(&result, &expected);
