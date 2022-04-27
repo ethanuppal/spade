@@ -1212,31 +1212,6 @@ impl<'a> Parser<'a> {
     }
 }
 
-macro_rules! def_is_operators {
-    ($( $name:ident [ $($token_kind:ident),* ] ),*$(,)?) => {
-        $(fn $name(&mut self) -> Result<bool> {
-            Ok(match self.peek()?.map(|token| token.kind) {
-                $(Some(TokenKind::$token_kind) => true),*,
-                _ => false
-            })
-        })*
-    }
-}
-// Helper functions for checking the type of tokens
-impl<'a> Parser<'a> {
-    def_is_operators! {
-        is_next_addition_operator [Plus, Minus],
-        is_next_shift_operator [LeftShift, RightShift],
-        is_next_multiplication_operator [Asterisk],
-        is_next_comparison_operator [Equals, Gt, Lt, Ge, Le],
-        is_next_logical_and [LogicalAnd],
-        is_next_logical_or [LogicalOr],
-        is_next_bitwise_and [BitwiseAnd],
-        is_next_bitwise_or [BitwiseOr],
-        is_next_xor [Xor]
-    }
-}
-
 // Helper functions for combining parsers
 impl<'a> Parser<'a> {
     fn first_successful<T>(

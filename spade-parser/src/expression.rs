@@ -5,97 +5,71 @@ use spade_common::location_info::{lspan, Loc, WithLocation};
 use crate::error::{Error, Result};
 use crate::{lexer::TokenKind, ParseStackEntry, Parser};
 
-macro_rules! operator_expr {
-    ($this_operator:ident, $condition:ident, $next:ident $(,)?) => {
-        fn $this_operator(&mut self) -> Result<Loc<Expression>> {
-            self.binary_operator(Self::$next, Self::$condition, Self::$this_operator)
-        }
-    };
+#[derive(PartialEq, PartialOrd, Eq, Ord)]
+enum BinopBindingPower {
+    None,
+    LogicalOr,
+    LogicalAnd,
+    BitwiseOr,
+    BitwiseXor,
+    BitwiseAnd,
+    Equality,
+    RelationalCmp,
+    Shift,
+    AddLike,
+    MulLike,
+}
+
+fn binop_binding_power(op: &BinaryOperator) -> BinopBindingPower {
+    match op {
+        BinaryOperator::Add => BinopBindingPower::AddLike,
+        BinaryOperator::Sub => BinopBindingPower::AddLike,
+        BinaryOperator::Mul => BinopBindingPower::MulLike,
+        BinaryOperator::Equals => BinopBindingPower::Equality,
+        BinaryOperator::Lt => BinopBindingPower::RelationalCmp,
+        BinaryOperator::Gt => BinopBindingPower::RelationalCmp,
+        BinaryOperator::Le => BinopBindingPower::RelationalCmp,
+        BinaryOperator::Ge => BinopBindingPower::RelationalCmp,
+        BinaryOperator::LogicalAnd => BinopBindingPower::LogicalAnd,
+        BinaryOperator::LogicalOr => BinopBindingPower::LogicalOr,
+        BinaryOperator::LeftShift => BinopBindingPower::Shift,
+        BinaryOperator::RightShift => BinopBindingPower::Shift,
+        BinaryOperator::BitwiseAnd => BinopBindingPower::BitwiseAnd,
+        BinaryOperator::BitwiseOr => BinopBindingPower::BitwiseOr,
+        BinaryOperator::Xor => BinopBindingPower::BitwiseXor,
+    }
 }
 
 impl<'a> Parser<'a> {
-    pub fn operator_from_kind(kind: TokenKind) -> BinaryOperator {
+    fn operator_from_kind(kind: &TokenKind) -> Option<BinaryOperator> {
         match kind {
-            TokenKind::Plus => BinaryOperator::Add,
-            TokenKind::Minus => BinaryOperator::Sub,
-            TokenKind::Asterisk => BinaryOperator::Mul,
-            TokenKind::Equals => BinaryOperator::Equals,
+            TokenKind::Plus => Some(BinaryOperator::Add),
+            TokenKind::Minus => Some(BinaryOperator::Sub),
+            TokenKind::Asterisk => Some(BinaryOperator::Mul),
+            TokenKind::Equals => Some(BinaryOperator::Equals),
             // We have to handle left and right shifts separately because otherwise
             // their parsing interferes with generic arguments
-            TokenKind::Lt => BinaryOperator::Lt,
-            TokenKind::Gt => BinaryOperator::Gt,
-            TokenKind::Le => BinaryOperator::Le,
-            TokenKind::Ge => BinaryOperator::Ge,
-            TokenKind::RightShift => BinaryOperator::RightShift,
-            TokenKind::LeftShift => BinaryOperator::LeftShift,
-            TokenKind::LogicalOr => BinaryOperator::LogicalOr,
-            TokenKind::LogicalAnd => BinaryOperator::LogicalAnd,
-            TokenKind::BitwiseAnd => BinaryOperator::BitwiseAnd,
-            TokenKind::BitwiseOr => BinaryOperator::BitwiseOr,
-            TokenKind::Xor => BinaryOperator::Xor,
-            x => unreachable!("{:?} ({}) is not an operator", x, x.as_str()),
-        }
-    }
-
-    pub fn binary_operator(
-        &mut self,
-        lhs: impl Fn(&mut Self) -> Result<Loc<Expression>>,
-        condition: impl Fn(&mut Self) -> Result<bool>,
-        rhs: impl Fn(&mut Self) -> Result<Loc<Expression>>,
-    ) -> Result<Loc<Expression>> {
-        let start = lhs(self)?;
-
-        if condition(self)? {
-            let operator = self.eat_unconditional()?;
-            let rest = rhs(self)?;
-
-            let span = start.span.merge(rest.span);
-
-            let op = Self::operator_from_kind(operator.kind);
-            Ok(
-                Expression::BinaryOperator(Box::new(start), op, Box::new(rest))
-                    .at(self.file_id, &span),
-            )
-        } else {
-            Ok(start)
-        }
-    }
-
-    pub fn unary_operator(&mut self) -> Result<Option<Loc<Expression>>> {
-        let operator = self.peek()?.and_then(|t| match t.kind {
-            TokenKind::Minus => Some(UnaryOperator::Sub.at(self.file_id, &t.span)),
-            TokenKind::Not => Some(UnaryOperator::Not.at(self.file_id, &t.span)),
-            TokenKind::BitwiseNot => Some(UnaryOperator::BitwiseNot.at(self.file_id, &t.span)),
+            TokenKind::Lt => Some(BinaryOperator::Lt),
+            TokenKind::Gt => Some(BinaryOperator::Gt),
+            TokenKind::Le => Some(BinaryOperator::Le),
+            TokenKind::Ge => Some(BinaryOperator::Ge),
+            TokenKind::RightShift => Some(BinaryOperator::RightShift),
+            TokenKind::LeftShift => Some(BinaryOperator::LeftShift),
+            TokenKind::LogicalOr => Some(BinaryOperator::LogicalOr),
+            TokenKind::LogicalAnd => Some(BinaryOperator::LogicalAnd),
+            TokenKind::BitwiseAnd => Some(BinaryOperator::BitwiseAnd),
+            TokenKind::BitwiseOr => Some(BinaryOperator::BitwiseOr),
+            TokenKind::Xor => Some(BinaryOperator::Xor),
             _ => None,
-        });
-
-        Ok(match operator {
-            Some(op) => {
-                self.eat_unconditional()?;
-                let expr = self.expression()?;
-                Some(
-                    Expression::UnaryOperator(op.inner.clone(), Box::new(expr.clone())).between(
-                        self.file_id,
-                        &op,
-                        &expr,
-                    ),
-                )
-            }
-            None => None,
-        })
+        }
     }
 
-    // Expression parsing
-    #[trace_parser]
     pub fn expression(&mut self) -> Result<Loc<Expression>> {
-        self.custom_infix_operator(Self::logical_or_expression)
+        self.custom_infix_operator()
     }
 
-    pub fn custom_infix_operator(
-        &mut self,
-        lhs: impl Fn(&mut Self) -> Result<Loc<Expression>>,
-    ) -> Result<Loc<Expression>> {
-        let lhs_val = lhs(self)?;
+    fn custom_infix_operator(&mut self) -> Result<Loc<Expression>> {
+        let lhs_val = self.binary_operator(BinopBindingPower::None)?;
 
         if self.peek_kind(&TokenKind::InfixOperatorSeparator)? {
             let (name, _) = self.surrounded(
@@ -104,7 +78,7 @@ impl<'a> Parser<'a> {
                 &TokenKind::InfixOperatorSeparator,
             )?;
 
-            let rhs_val = self.custom_infix_operator(lhs)?;
+            let rhs_val = self.custom_infix_operator()?;
 
             Ok(Expression::FnCall(
                 name,
@@ -120,46 +94,37 @@ impl<'a> Parser<'a> {
         }
     }
 
-    operator_expr!(
-        logical_or_expression,
-        is_next_logical_or,
-        logical_and_expression,
-    );
-    operator_expr!(
-        logical_and_expression,
-        is_next_logical_and,
-        bitwise_or_expression,
-    );
-    operator_expr!(bitwise_or_expression, is_next_bitwise_or, xor_expression,);
-    operator_expr!(xor_expression, is_next_xor, bitwise_and_expression,);
-    operator_expr!(
-        bitwise_and_expression,
-        is_next_bitwise_and,
-        comparison_operator,
-    );
-    operator_expr!(
-        comparison_operator,
-        is_next_comparison_operator,
-        shift_expression,
-    );
-    operator_expr!(
-        shift_expression,
-        is_next_shift_operator,
-        additive_expression,
-    );
-    operator_expr!(
-        additive_expression,
-        is_next_addition_operator,
-        multiplicative_expression,
-    );
-    operator_expr!(
-        multiplicative_expression,
-        is_next_multiplication_operator,
-        base_expression
-    );
+    // Based on matklads blog post on pratt parsing:
+    // https://matklad.github.io/2020/04/13/simple-but-powerful-pratt-parsing.html
+    fn binary_operator(&mut self, min_power: BinopBindingPower) -> Result<Loc<Expression>> {
+        let mut lhs = self.base_expression()?;
+
+        while let Some(op) = self
+            .peek()?
+            .map(|tok| tok.kind)
+            .as_ref()
+            .and_then(Self::operator_from_kind)
+        {
+            let op_power = binop_binding_power(&op);
+
+            if op_power <= min_power {
+                break;
+            }
+
+            self.eat_unconditional()?;
+
+            let rhs = self.binary_operator(op_power)?;
+            lhs = Expression::BinaryOperator(Box::new(lhs.clone()), op, Box::new(rhs.clone()))
+                .between(self.file_id, &lhs, &rhs)
+        }
+
+        Ok(lhs)
+    }
+
+    // Expression parsing
 
     #[trace_parser]
-    pub fn base_expression(&mut self) -> Result<Loc<Expression>> {
+    fn base_expression(&mut self) -> Result<Loc<Expression>> {
         let expr = if let Some(tuple) = self.tuple_literal()? {
             Ok(tuple)
         } else if let Some(array) = self.array_literal()? {
@@ -200,6 +165,30 @@ impl<'a> Parser<'a> {
         }?;
 
         self.expression_suffix(expr)
+    }
+
+    fn unary_operator(&mut self) -> Result<Option<Loc<Expression>>> {
+        let operator = self.peek()?.and_then(|t| match t.kind {
+            TokenKind::Minus => Some(UnaryOperator::Sub.at(self.file_id, &t.span)),
+            TokenKind::Not => Some(UnaryOperator::Not.at(self.file_id, &t.span)),
+            TokenKind::BitwiseNot => Some(UnaryOperator::BitwiseNot.at(self.file_id, &t.span)),
+            _ => None,
+        });
+
+        Ok(match operator {
+            Some(op) => {
+                self.eat_unconditional()?;
+                let expr = self.expression()?;
+                Some(
+                    Expression::UnaryOperator(op.inner.clone(), Box::new(expr.clone())).between(
+                        self.file_id,
+                        &op,
+                        &expr,
+                    ),
+                )
+            }
+            None => None,
+        })
     }
 
     #[trace_parser]
@@ -269,26 +258,6 @@ mod test {
         .nowhere();
 
         check_parse!("a + b", expression, Ok(expected_value.clone()));
-    }
-
-    #[ignore]
-    #[test]
-    fn subtraction_occurs_in_correct_order() {
-        let expected_value = Expression::BinaryOperator(
-            Box::new(
-                Expression::BinaryOperator(
-                    Box::new(Expression::Identifier(ast_path("a")).nowhere()),
-                    BinaryOperator::Sub,
-                    Box::new(Expression::Identifier(ast_path("b")).nowhere()),
-                )
-                .nowhere(),
-            ),
-            BinaryOperator::Sub,
-            Box::new(Expression::Identifier(ast_path("c")).nowhere()),
-        )
-        .nowhere();
-
-        check_parse!("a - b - c", expression, Ok(expected_value.clone()));
     }
 
     #[test]
@@ -842,5 +811,73 @@ mod test {
         .nowhere();
 
         check_parse!(code, expression, Ok(expected));
+    }
+
+    // Precedence related tests
+    #[test]
+    fn subtraction_occurs_in_correct_order() {
+        let expected_value = Expression::BinaryOperator(
+            Box::new(
+                Expression::BinaryOperator(
+                    Box::new(Expression::Identifier(ast_path("a")).nowhere()),
+                    BinaryOperator::Sub,
+                    Box::new(Expression::Identifier(ast_path("b")).nowhere()),
+                )
+                .nowhere(),
+            ),
+            BinaryOperator::Sub,
+            Box::new(Expression::Identifier(ast_path("c")).nowhere()),
+        )
+        .nowhere();
+
+        check_parse!("a - b - c", expression, Ok(expected_value.clone()));
+    }
+
+    #[test]
+    fn not_function_call_does_not_invert_function() {
+        let expected_value = Expression::UnaryOperator(
+            UnaryOperator::Not,
+            Box::new(
+                Expression::FnCall(ast_path("a"), ArgumentList::Positional(vec![]).nowhere())
+                    .nowhere(),
+            ),
+        )
+        .nowhere();
+
+        check_parse!("!a()", expression, Ok(expected_value.clone()));
+    }
+
+    #[test]
+    fn chained_array_indexing_is_left_to_right() {
+        let expected_value = Expression::Index(
+            Box::new(
+                Expression::Index(
+                    Box::new(Expression::Identifier(ast_path("a")).nowhere()),
+                    Box::new(Expression::Identifier(ast_path("b")).nowhere()),
+                )
+                .nowhere(),
+            ),
+            Box::new(Expression::Identifier(ast_path("c")).nowhere()),
+        )
+        .nowhere();
+
+        check_parse!("a[b][c]", expression, Ok(expected_value.clone()));
+    }
+
+    #[test]
+    fn not_index_result_inverts_whole_result() {
+        let expected_value = Expression::UnaryOperator(
+            UnaryOperator::Not,
+            Box::new(
+                Expression::Index(
+                    Box::new(Expression::Identifier(ast_path("a")).nowhere()),
+                    Box::new(Expression::Identifier(ast_path("b")).nowhere()),
+                )
+                .nowhere(),
+            ),
+        )
+        .nowhere();
+
+        check_parse!("!a[b]", expression, Ok(expected_value.clone()));
     }
 }
