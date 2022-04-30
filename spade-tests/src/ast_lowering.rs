@@ -1,4 +1,4 @@
-use crate::snapshot_error;
+use crate::{build_items, snapshot_error};
 
 snapshot_error! {
     duplicate_definition_of_decl_triggers_errors,
@@ -118,4 +118,42 @@ snapshot_error! {
         }
     }
     "
+}
+
+snapshot_error! {
+    match_expressions_open_new_scopes,
+    "
+    fn test(x: int<32>) -> int<32> {
+        let _: int<32> = match x {
+            a => 0
+        };
+
+        a
+    }
+    "
+}
+
+#[test]
+fn type_inference_works_for_declared_variables() {
+    let code = r#"
+    enum Option<T> {
+        Some{val: T},
+        None
+    }
+    fn test() -> bool {
+        let x: Option<(int<8>, int<8>)> = Option::Some((0, 0));
+
+        let _ = match x {
+            Option::Some(x) => true,
+            _ => false
+        };
+
+        match x {
+            Option::Some((a, b)) => true,
+            _ => false
+        }
+    }
+    "#;
+
+    build_items(code);
 }
