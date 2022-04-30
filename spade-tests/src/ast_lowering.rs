@@ -96,3 +96,26 @@ snapshot_error! {
             0
     }"
 }
+
+snapshot_error! {
+    single_identifier_enum_lookups_pass_compiler,
+    "
+    enum X {
+        A{x: int<5>},
+        B
+    }
+
+    use X::A;
+    use X::B;
+
+    fn test(x: X) -> X {
+        match x {
+            A(_) => A(4),
+            // If this test works, B, being in scope should not be a variable but remain
+            // refering to X::B. In the incorrect behaviour, the single identifier path B
+            // binds to X and B() is calling a variable as a function
+            B => B(), 
+        }
+    }
+    "
+}

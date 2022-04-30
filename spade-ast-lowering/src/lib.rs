@@ -324,6 +324,23 @@ pub fn visit_module_body(
     Ok(item_list)
 }
 
+fn try_lookup_enum_variant(path: &Loc<Path>, ctx: &mut Context) -> Result<hir::PatternKind> {
+    match ctx.symtab.lookup_enum_variant(path) {
+        Ok((name_id, variant)) => {
+            if variant.inner.params.argument_num() != 0 {
+                return Err(Error::PatternListLengthMismatch {
+                    expected: variant.inner.params.argument_num(),
+                    got: 0,
+                    at: path.loc(),
+                });
+            } else {
+                Ok(hir::PatternKind::Type(name_id.at_loc(path), vec![]))
+            }
+        }
+        Err(e) => Err(e.into()),
+    }
+}
+
 pub fn visit_pattern(
     p: &ast::Pattern,
     ctx: &mut Context,
@@ -333,11 +350,9 @@ pub fn visit_pattern(
         ast::Pattern::Integer(val) => hir::PatternKind::Integer(*val),
         ast::Pattern::Bool(val) => hir::PatternKind::Bool(*val),
         ast::Pattern::Path(path) => {
-            // FIXME: Support paths with a single identifier refering to constants
-            // and types
-            // lifeguard https://gitlab.com/spade-lang/spade/-/issues/123
-            match path.inner.0.as_slice() {
-                [ident] => {
+            match (try_lookup_enum_variant(path, ctx), path.inner.0.as_slice()) {
+                (Ok(kind), _) => kind,
+                (_, [ident]) => {
                     // Check if this is declaring a variable
                     let (name_id, pre_declared) =
                         if let Some(state) = ctx.symtab.get_declaration(ident) {
@@ -376,21 +391,8 @@ pub fn visit_pattern(
                         pre_declared,
                     }
                 }
-                [] => unreachable!(),
-                _ => match ctx.symtab.lookup_enum_variant(path) {
-                    Ok((name_id, variant)) => {
-                        if variant.inner.params.argument_num() != 0 {
-                            return Err(Error::PatternListLengthMismatch {
-                                expected: variant.inner.params.argument_num(),
-                                got: 0,
-                                at: path.loc(),
-                            });
-                        } else {
-                            hir::PatternKind::Type(name_id.at_loc(path), vec![])
-                        }
-                    }
-                    Err(e) => return Err(e.into()),
-                },
+                (_, []) => unreachable!(),
+                (Err(e), _) => return Err(e),
             }
         }
         ast::Pattern::Tuple(pattern) => {
