@@ -951,6 +951,16 @@ impl ExprLocal for Loc<Expression> {
                     subs,
                     item_list,
                 )
+            },
+            ["std", "ops", "div_pow2"] => {
+                return self.handle_div_pow2(
+                    result,
+                    args,
+                    symtab,
+                    types,
+                    subs,
+                    item_list,
+                )
             }
         }
 
@@ -1271,6 +1281,31 @@ impl ExprLocal for Loc<Expression> {
 
             Ok(result)
         }
+    }
+
+    fn handle_div_pow2(
+        &self,
+        result: Vec<mir::Statement>,
+        args: &[Argument],
+        symtab: &FrozenSymtab,
+        types: &TypeState,
+        subs: &Substitutions,
+        item_list: &ItemList,
+    ) -> Result<Vec<mir::Statement>> {
+        let mut result = result;
+
+        let self_type = types
+            .expr_type(self, symtab.symtab(), &item_list.types)?
+            .to_mir_type();
+
+        result.push(mir::Statement::Binding(mir::Binding {
+            name: self.variable(subs)?,
+            operator: mir::Operator::DivPow2,
+            operands: vec![args[0].value.variable(subs)?, args[1].value.variable(subs)?],
+            ty: self_type,
+        }));
+
+        Ok(result)
     }
 }
 

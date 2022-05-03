@@ -1414,6 +1414,31 @@ mod tests {
         build_and_compare_entities!(code, expected);
     }
 
+    #[test]
+    fn div_pow2_works() {
+        // FIXME: Figure out a way to include stdlib in tests
+        // lifeguard https://gitlab.com/spade-lang/spade/-/issues/125
+        let code = r#"
+            mod std{mod ops{ 
+                fn div_pow2<#N>(x: int<N>, pow: int<N>) -> int<N> __builtin__
+            }}
+            use std::ops::div_pow2;
+            entity name(a: int<16>) -> int<16> {
+                a `div_pow2` 2
+            }
+        "#;
+
+        let expected = vec![entity! {"name"; (
+                "a", n(0, "a"), Type::Int(16),
+            ) -> Type::Int(16); {
+                (const 0; Type::Int(16); ConstantValue::Int(2));
+                (e(1); Type::Int(16); DivPow2; n(0, "a"), e(0))
+            } => e(1)
+        }];
+
+        build_and_compare_entities!(code, expected);
+    }
+
     snapshot_error! {
         invalid_field_access,
         "

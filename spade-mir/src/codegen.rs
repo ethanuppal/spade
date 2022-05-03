@@ -117,6 +117,7 @@ fn statement_code(statement: &Statement, source_code: &CodeBundle) -> Code {
                 Operator::Xor => binop!("^"),
                 Operator::USub => unop!("-"),
                 Operator::Not => unop!("!"),
+                Operator::DivPow2 => format!("$signed({}) / (1 << {})", ops[0], ops[1]),
                 Operator::Truncate => {
                     format!("{}[{}:0]", ops[0], binding.ty.size() - 1)
                 }
@@ -1294,6 +1295,22 @@ mod expression_tests {
             &statement_code(&stmt, &CodeBundle::new("".to_string())).to_string(),
             expected
         );
+    }
+
+    #[test]
+    fn div_pow2_wokrs() {
+        let stmt = statement!(e(0); Type::Int(3); DivPow2; e(1), e(2));
+
+        let expected = indoc! {
+            r#"
+            logic[2:0] _e_0;
+            assign _e_0 = $signed(_e_1) / (1 << _e_2);"#
+        };
+
+        assert_same_code!(
+            &statement_code(&stmt, &CodeBundle::new("".to_string())).to_string(),
+            expected
+        )
     }
 
     #[test]

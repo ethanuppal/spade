@@ -72,6 +72,8 @@ pub enum Operator {
     USub,
     Not,
     BitwiseNot,
+    // Divide op[0] by 2**op[1] rounding towards 0
+    DivPow2,
     /// Sign extend the first operand with the provided amount of extra bits
     SignExtend {
         extra_bits: u64,
@@ -163,6 +165,7 @@ impl std::fmt::Display for Operator {
             Operator::Select => write!(f, "Select"),
             Operator::Match => write!(f, "Match"),
             Operator::LeftShift => write!(f, "LeftShift"),
+            Operator::DivPow2 => write!(f, "DivPow2"),
             Operator::SignExtend {
                 extra_bits,
                 operand_size,
