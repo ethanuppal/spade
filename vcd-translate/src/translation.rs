@@ -1,6 +1,5 @@
 use std::collections::HashMap;
 
-use itertools::Itertools;
 use num::{
     bigint::{Sign, ToBigUint},
     BigInt, BigUint,
@@ -61,29 +60,64 @@ where
     }
 }
 
-fn translate_uint(value: &[Value], flip: bool) -> MaybeValue<BigUint> {
-    let mut result = BigUint::new(vec![0]);
-    for v in value {
-        if v == &Value::X {
-            return MaybeValue::Undef;
-        } else if v == &Value::Z {
-            return MaybeValue::HighImpedance;
-        }
-        if !flip {
-            if v == &Value::V1 {
-                result = (result << 1i32) + BigUint::new(vec![1]);
-            } else {
-                result <<= 1i32
-            }
-        } else {
-            if v == &Value::V0 {
-                result = (result << 1i32) + BigUint::new(vec![1]);
-            } else {
-                result <<= 1i32
-            }
+impl MaybeValue<BigInt> {
+    fn write_to(&self, s: &mut String) {
+        match self {
+            MaybeValue::Value(val) => *s += &val.to_str_radix(10),
+            MaybeValue::Undef => *s += "UNDEF",
+            MaybeValue::HighImpedance => *s += "HIGHIMP",
         }
     }
-    MaybeValue::Value(result)
+}
+
+fn translate_uint(value: &[Value], flip: bool) -> MaybeValue<BigUint> {
+    if value.len() <= 64 {
+        let mut intermediate = 0u64;
+        for v in value {
+            if v == &Value::X {
+                return MaybeValue::Undef;
+            } else if v == &Value::Z {
+                return MaybeValue::HighImpedance;
+            }
+            if !flip {
+                if v == &Value::V1 {
+                    intermediate = (intermediate << 1i32) + 1;
+                } else {
+                    intermediate <<= 1i32
+                }
+            } else {
+                if v == &Value::V0 {
+                    intermediate = (intermediate << 1i32) + 1;
+                } else {
+                    intermediate <<= 1i32
+                }
+            }
+        }
+        MaybeValue::Value(BigUint::from(intermediate))
+    } else {
+        let mut result = BigUint::new(vec![0]);
+        for v in value {
+            if v == &Value::X {
+                return MaybeValue::Undef;
+            } else if v == &Value::Z {
+                return MaybeValue::HighImpedance;
+            }
+            if !flip {
+                if v == &Value::V1 {
+                    result = (result << 1i32) + BigUint::new(vec![1]);
+                } else {
+                    result <<= 1i32
+                }
+            } else {
+                if v == &Value::V0 {
+                    result = (result << 1i32) + BigUint::new(vec![1]);
+                } else {
+                    result <<= 1i32
+                }
+            }
+        }
+        MaybeValue::Value(result)
+    }
 }
 
 /// Translate a signed integer into a BigInt if none of the elements are undefined
@@ -109,7 +143,7 @@ fn translate_signed_int(value: &[Value]) -> MaybeValue<BigInt> {
     }
 }
 
-fn inner_translate_value(in_value: &[Value], t: &ConcreteType) -> String {
+fn inner_translate_value(result: &mut String, in_value: &[Value], t: &ConcreteType) {
     let value_len = in_value.len();
     let type_size = t.to_mir_type().size();
     let missing_values = type_size as usize - value_len;
@@ -126,46 +160,46 @@ fn inner_translate_value(in_value: &[Value], t: &ConcreteType) -> String {
 
     match t {
         ConcreteType::Tuple(inner) => {
-            let mut offset = 0;
-            let values = inner
-                .iter()
-                .map(|t| {
-                    let end = offset + t.to_mir_type().size() as usize;
-                    let result = inner_translate_value(&value[offset..end], t);
-                    offset = end;
-                    result
-                })
-                .collect::<Vec<_>>()
-                .join(",");
+            result.push('(');
 
-            format!("({values})")
+            let mut offset = 0;
+            for (i, t) in inner.iter().enumerate() {
+                let end = offset + t.to_mir_type().size() as usize;
+                inner_translate_value(result, &value[offset..end], t);
+                offset = end;
+                if i != inner.len() - 1 {
+                    result.push(',');
+                }
+            }
+            result.push(')')
         }
         ConcreteType::Struct { members } => {
             let mut offset = 0;
-            let values = members
-                .iter()
-                .map(|(name, t)| {
-                    let end = offset + t.to_mir_type().size() as usize;
-                    let result =
-                        format!("{name}:{}", inner_translate_value(&value[offset..end], t));
-                    offset = end;
-                    result
-                })
-                .join(",");
 
-            format!("{{{values}}}")
+            result.push('{');
+            for (i, (name, t)) in members.iter().enumerate() {
+                let end = offset + t.to_mir_type().size() as usize;
+                *result += &format!("{name}:");
+                inner_translate_value(result, &value[offset..end], t);
+                offset = end;
+                if i != members.len() - 1 {
+                    result.push(',');
+                }
+            }
+            result.push('}');
         }
         ConcreteType::Array { inner, size } => {
             let mut offset = 0;
-            let values = (0..*size)
-                .map(|_| {
-                    let end = offset + inner.to_mir_type().size() as usize;
-                    let result = inner_translate_value(&value[offset..end], inner);
-                    offset = end;
-                    result
-                })
-                .join(",");
-            format!("[{values}]")
+            result.push('[');
+            for i in 0..*size {
+                let end = offset + inner.to_mir_type().size() as usize;
+                inner_translate_value(result, &value[offset..end], inner);
+                offset = end;
+                if i != *size - 1 {
+                    result.push(',')
+                }
+            }
+            result.push(']');
         }
         ConcreteType::Enum { options } => {
             let tag_size = (options.len() as f32).log2().ceil() as usize;
@@ -178,28 +212,34 @@ fn inner_translate_value(in_value: &[Value], t: &ConcreteType) -> String {
                     } else {
                         let tag = tag_digits.get(0).cloned().unwrap_or(0);
                         if tag >= options.len() as u64 {
-                            format!("?TAG?")
+                            *result += "?TAG?";
                         } else {
                             let variant_idx = tag as usize;
                             let (variant_name, inner_types) = &options[variant_idx];
+                            *result += &format!("{variant_name}");
 
+                            result.push('(');
                             let mut offset = tag_size;
-                            let inner = inner_types
-                                .iter()
-                                .map(|t| {
-                                    let end = offset + t.to_mir_type().size() as usize;
-                                    let result = inner_translate_value(&value[offset..end], t);
-                                    offset = end;
-                                    result
-                                })
-                                .join(",");
+                            for (i, t) in inner_types.iter().enumerate() {
+                                let end = offset + t.to_mir_type().size() as usize;
+                                inner_translate_value(result, &value[offset..end], t);
+                                offset = end;
 
-                            format!("{variant_name}({inner})")
+                                if i != inner_types.len() - 1 {
+                                    result.push(',')
+                                }
+                            }
+
+                            result.push(')');
                         }
                     }
                 }
-                MaybeValue::Undef => format!("UNDEF"),
-                MaybeValue::HighImpedance => format!("HIGHIMP"),
+                MaybeValue::Undef => {
+                    *result += "UNDEF";
+                }
+                MaybeValue::HighImpedance => {
+                    *result += "HIGHIMP";
+                }
             }
         }
         ConcreteType::Single {
@@ -209,24 +249,32 @@ fn inner_translate_value(in_value: &[Value], t: &ConcreteType) -> String {
         | ConcreteType::Single {
             base: PrimitiveType::Clock,
             params: _,
-        } => match value[0] {
-            Value::V0 => "0".to_string(),
-            Value::V1 => "1".to_string(),
-            Value::X => "UNDEF".to_string(),
-            Value::Z => "HIGHIMP".to_string(),
-        },
+        } => {
+            *result += match value[0] {
+                Value::V0 => "0",
+                Value::V1 => "1",
+                Value::X => "UNDEF",
+                Value::Z => "HIGHIMP",
+            }
+        }
         ConcreteType::Single {
             base: PrimitiveType::Int,
             params: _,
-        } => format!("{}", translate_signed_int(&value)),
+        } => {
+            // *result += &format!("{}", translate_signed_int(&value));
+            translate_signed_int(&value).write_to(result);
+        }
         ConcreteType::Single {
             base: PrimitiveType::Uint,
             params: _,
-        } => format!("{}", translate_uint(&value, false)),
+        } => {
+            // *result += &format!("{}", translate_uint(&value, false));
+            *result += "X";
+        }
         ConcreteType::Single {
             base: PrimitiveType::Memory,
             params: _,
-        } => format!("memory"),
+        } => *result += "memory",
         ConcreteType::Integer(_) => {
             panic!("Found a variable with type level integer in the vcd file")
         }
@@ -238,9 +286,11 @@ pub fn translate_value(
     value: &[Value],
     types: &HashMap<String, Option<ConcreteType>>,
 ) -> Option<String> {
+    let mut result = String::new();
     // Try to translate the name back into a name_id
     if let Some(Some(t)) = types.get(name) {
-        Some(inner_translate_value(value, t))
+        inner_translate_value(&mut result, value, t);
+        Some(result)
     } else {
         None
     }
@@ -317,7 +367,8 @@ mod tests {
         };
 
         let value = vec![/*a*/ V0, V1, V0, V0, V0, /*b*/ V1, V0, V0];
-        let translated = inner_translate_value(&value, &ty);
+        let mut translated = String::new();
+        inner_translate_value(&mut translated, &value, &ty);
 
         assert_eq!(translated, "{a:8,b:-4}");
     }
@@ -336,7 +387,8 @@ mod tests {
         ]);
 
         let value = vec![/*a*/ V0, V1, V0, V0, V1, /*b*/ V1, V0, V1];
-        let translated = inner_translate_value(&value, &ty);
+        let mut translated = String::new();
+        inner_translate_value(&mut translated, &value, &ty);
 
         assert_eq!(translated, "(9,-3)");
     }
@@ -355,7 +407,8 @@ mod tests {
         ]);
 
         let value = vec![/*a*/ X, X, X, X, /*b*/ X, X, X];
-        let translated = inner_translate_value(&value, &ty);
+        let mut translated = String::new();
+        inner_translate_value(&mut translated, &value, &ty);
 
         assert_eq!(translated, "(UNDEF,UNDEF)");
     }
@@ -392,7 +445,8 @@ mod tests {
         let value = vec![
             /*tag*/ V0, V0, /*a*/ V0, V1, V0, V0, V1, /*b*/ V1, V0, V1,
         ];
-        let translated = inner_translate_value(&value, &ty);
+        let mut translated = String::new();
+        inner_translate_value(&mut translated, &value, &ty);
 
         assert_eq!(translated, "A(9,-3)");
     }
@@ -404,7 +458,8 @@ mod tests {
         let value = vec![
             /*tag*/ V0, V1, /*payload*/ V0, V1, V0, /*padding*/ X, X, X, X, X,
         ];
-        let translated = inner_translate_value(&value, &ty);
+        let mut translated = String::new();
+        inner_translate_value(&mut translated, &value, &ty);
 
         assert_eq!(translated, "B(2)");
     }
@@ -414,7 +469,8 @@ mod tests {
         let ty = enum_ty();
 
         let value = vec![/*tag*/ V1, V0, /*payload*/ X, X, X, X, X, X, X, X];
-        let translated = inner_translate_value(&value, &ty);
+        let mut translated = String::new();
+        inner_translate_value(&mut translated, &value, &ty);
 
         assert_eq!(translated, "C()");
     }
@@ -424,7 +480,8 @@ mod tests {
         let ty = enum_ty();
 
         let value = vec![/*tag*/ X, X, /*payload*/ X, X, X, X, X, X, X, X];
-        let translated = inner_translate_value(&value, &ty);
+        let mut translated = String::new();
+        inner_translate_value(&mut translated, &value, &ty);
 
         assert_eq!(translated, "UNDEF");
     }
@@ -436,7 +493,8 @@ mod tests {
         let value = vec![
             /*tag*/ V1, V1, /*a*/ X, X, X, X, X, /*b*/ X, X, X,
         ];
-        let translated = inner_translate_value(&value, &ty);
+        let mut translated = String::new();
+        inner_translate_value(&mut translated, &value, &ty);
 
         assert_eq!(translated, "?TAG?");
     }
@@ -452,7 +510,8 @@ mod tests {
         };
 
         let value = vec![V0, V0, V1, V0, V1, V0];
-        let translated = inner_translate_value(&value, &ty);
+        let mut translated = String::new();
+        inner_translate_value(&mut translated, &value, &ty);
 
         assert_eq!(translated, "[1,2]");
     }
@@ -471,7 +530,8 @@ mod tests {
         ]);
 
         let value = vec![X];
-        let translated = inner_translate_value(&value, &ty);
+        let mut translated = String::new();
+        inner_translate_value(&mut translated, &value, &ty);
 
         assert_eq!(translated, "(UNDEF,UNDEF)");
     }
@@ -490,7 +550,8 @@ mod tests {
         ]);
 
         let value = vec![Z];
-        let translated = inner_translate_value(&value, &ty);
+        let mut translated = String::new();
+        inner_translate_value(&mut translated, &value, &ty);
 
         assert_eq!(translated, "(HIGHIMP,HIGHIMP)");
     }

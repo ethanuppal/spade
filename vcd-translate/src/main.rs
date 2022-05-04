@@ -71,7 +71,9 @@ fn main() -> Result<()> {
 
     let args = CliArgs::parse();
 
-    let reader = BufReader::new(File::open(&args.infile)?);
+    let reader = BufReader::new(
+        File::open(&args.infile).with_context(|| format!("Failed to open {:?}", args.infile))?,
+    );
     let mut parser = vcd::Parser::new(reader);
 
     let header = parser
