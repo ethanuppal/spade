@@ -145,7 +145,7 @@ pub fn compile(sources: Vec<(String, String)>, opts: Opt) -> Result<(), ()> {
                 );
                 mir_code.push(format!("{mir}"));
 
-                let code = spade_mir::codegen::entity_code(mir);
+                let code = spade_mir::codegen::entity_code(mir, &code);
 
                 module_code.push(code.to_string());
             }
@@ -178,7 +178,7 @@ pub fn compile(sources: Vec<(String, String)>, opts: Opt) -> Result<(), ()> {
 
                 mir_code.push(format!("{mir}"));
 
-                let code = spade_mir::codegen::entity_code(mir);
+                let code = spade_mir::codegen::entity_code(mir, &code);
 
                 module_code.push(code.to_string());
 

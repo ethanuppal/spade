@@ -72,6 +72,8 @@ pub enum TokenKind {
     Use,
     #[token("as")]
     As,
+    #[token("assert")]
+    Assert,
 
     // Math operators
     #[token("+")]
@@ -195,6 +197,7 @@ impl TokenKind {
             TokenKind::Mod => "mod",
             TokenKind::As => "as",
             TokenKind::Use => "use",
+            TokenKind::Assert => "assert",
 
             TokenKind::Assignment => "=",
             TokenKind::Plus => "+",

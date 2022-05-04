@@ -148,6 +148,7 @@ pub enum Statement {
     Binding(Loc<Pattern>, Option<Loc<TypeSpec>>, Loc<Expression>),
     PipelineRegMarker,
     Register(Loc<Register>),
+    Assert(Loc<Expression>),
 }
 impl WithLocation for Statement {}
 

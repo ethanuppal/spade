@@ -1,11 +1,14 @@
 use crate::{
     aliasing::flatten_aliases,
+    assertion_codegen::AssertedExpression,
     enum_util,
     verilog::{self, assign, logic, size_spec},
     ConstantValue, Entity, Operator, Statement, ValueName,
 };
+use codespan_reporting::term::termcolor;
 use itertools::Itertools;
 use nesty::{code, Code};
+use spade_common::error_reporting::{CodeBundle, CompilationError};
 
 impl ValueName {
     pub fn var_name(&self) -> String {
@@ -32,7 +35,7 @@ fn mangle_input(input: &str) -> String {
     format!("_i_{}", input)
 }
 
-fn statement_code(statement: &Statement) -> Code {
+fn statement_code(statement: &Statement, source_code: &CodeBundle) -> Code {
     match statement {
         Statement::Binding(binding) => {
             let name = binding.name.var_name();
@@ -446,10 +449,45 @@ fn statement_code(statement: &Statement) -> Code {
                 [0] &assignment
             }
         }
+        Statement::Assert(val) => {
+            let mut msg_buf = termcolor::Buffer::ansi();
+
+            AssertedExpression(val.clone()).report(&mut msg_buf, source_code);
+
+            let msg = String::from_utf8(msg_buf.as_slice().into())
+                .map_err(|e| {
+                    println!("Internal error {e}: Failed to generate assert message, invalid utf-8 returned by codespan");
+                })
+                .unwrap_or_else(|_| String::new())
+                .lines()
+                .map(|line| {
+                    format!(r#"$display("{line}");"#)
+                })
+                .join("\n");
+
+            let val_var = val.var_name();
+            code! {
+                [0] format!("always @({val_var}) begin");
+                    // This #0 is a bit unintiutive, but it seems to prevent assertions
+                    // triggering too early. For example, in the case of !(x == 1 && y == 2)
+                    // if x 1 and updated to 2 in the time step as y is updated to not be 2,
+                    // an assertion might still trigger without #0 if the update of x triggers
+                    // the always block before x is updated. See for more details
+                    // https://electronics.stackexchange.com/questions/99223/relation-between-delta-cycle-and-event-scheduling-in-verilog-simulation
+                    [1] "#0";
+                    [1] format!("assert ({val_var})");
+                    [1] "else begin";
+                        [2] msg;
+                        [2] r#"$error("Assertion failed");"#;
+                        [2] r#"$fatal(1);"#;
+                    [1] "end";
+                [0] "end";
+            }
+        }
     }
 }
 
-pub fn entity_code(mut entity: Entity) -> Code {
+pub fn entity_code(mut entity: Entity, source_code: &CodeBundle) -> Code {
     flatten_aliases(&mut entity);
 
     let entity_name = mangle_entity(&escape_path(entity.name));
@@ -483,7 +521,7 @@ pub fn entity_code(mut entity: Entity) -> Code {
     let mut body = Code::new();
 
     for stmt in &entity.statements {
-        body.join(&statement_code(&stmt))
+        body.join(&statement_code(stmt, source_code))
     }
 
     code! {
@@ -539,7 +577,10 @@ mod tests {
             assign _e_0 = _e_1 + _e_2;"#
         );
 
-        assert_same_code!(&statement_code(&binding).to_string(), expected);
+        assert_same_code!(
+            &statement_code(&binding, &CodeBundle::new("".to_string())).to_string(),
+            expected
+        );
     }
 
     #[test]
@@ -552,7 +593,10 @@ mod tests {
             assign _e_0 = _e_1 + _e_2;"#
         );
 
-        assert_same_code!(&statement_code(&binding).to_string(), expected);
+        assert_same_code!(
+            &statement_code(&binding, &CodeBundle::new("".to_string())).to_string(),
+            expected
+        );
     }
 
     #[test]
@@ -567,7 +611,10 @@ mod tests {
                 end"#
         );
 
-        assert_same_code!(&statement_code(&reg).to_string(), expected);
+        assert_same_code!(
+            &statement_code(&reg, &CodeBundle::new("".to_string())).to_string(),
+            expected
+        );
     }
 
     #[test]
@@ -587,7 +634,10 @@ mod tests {
                 end"#
         );
 
-        assert_same_code!(&statement_code(&reg).to_string(), expected);
+        assert_same_code!(
+            &statement_code(&reg, &CodeBundle::new("".to_string())).to_string(),
+            expected
+        );
     }
 
     #[test]
@@ -610,7 +660,10 @@ mod tests {
             endmodule"#
         );
 
-        assert_same_code!(&entity_code(input.clone()).to_string(), expected);
+        assert_same_code!(
+            &entity_code(input.clone(), &CodeBundle::new("".to_string())).to_string(),
+            expected
+        );
     }
 
     #[test]
@@ -623,7 +676,10 @@ mod tests {
             assign _e_0 = 6;"#
         );
 
-        assert_same_code!(&statement_code(&input).to_string(), expected)
+        assert_same_code!(
+            &statement_code(&input, &CodeBundle::new("".to_string())).to_string(),
+            expected
+        )
     }
 
     #[test]
@@ -659,16 +715,21 @@ mod tests {
             endmodule"#
         );
 
-        assert_same_code!(&entity_code(input.clone()).to_string(), expected);
+        assert_same_code!(
+            &entity_code(input.clone(), &CodeBundle::new("".to_string())).to_string(),
+            expected
+        );
     }
 }
 
 #[cfg(test)]
 mod expression_tests {
     use super::*;
+    use codespan::Span;
     use colored::Colorize;
+    use spade_common::location_info::WithLocation;
 
-    use crate as spade_mir;
+    use crate::{self as spade_mir, value_name};
     use crate::{statement, types::Type};
 
     use indoc::{formatdoc, indoc};
@@ -685,7 +746,7 @@ mod expression_tests {
                     assign _e_0 = _e_1 {} _e_2;"#, $verilog_ty, $verilog_op
                 );
 
-                assert_same_code!(&statement_code(&stmt).to_string(), &expected)
+                assert_same_code!(&statement_code(&stmt, &CodeBundle::new("".to_string())).to_string(), &expected)
             }
         }
     }
@@ -702,7 +763,7 @@ mod expression_tests {
                     assign _e_0 = $signed(_e_1) {} $signed(_e_2);"#, $verilog_ty, $verilog_op
                 );
 
-                assert_same_code!(&statement_code(&stmt).to_string(), &expected)
+                assert_same_code!(&statement_code(&stmt, &CodeBundle::new("".to_string())).to_string(), &expected)
             }
         }
     }
@@ -719,7 +780,7 @@ mod expression_tests {
                     assign _e_0 = {}_e_1;"#, $verilog_ty, $verilog_op
                 );
 
-                assert_same_code!(&statement_code(&stmt).to_string(), &expected)
+                assert_same_code!(&statement_code(&stmt, &CodeBundle::new("".to_string())).to_string(), &expected)
             }
         }
     }
@@ -762,7 +823,10 @@ mod expression_tests {
             assign _e_0 = _e_1 ? _e_2 : _e_3;"#
         );
 
-        assert_same_code!(&statement_code(&stmt).to_string(), expected);
+        assert_same_code!(
+            &statement_code(&stmt, &CodeBundle::new("".to_string())).to_string(),
+            expected
+        );
     }
 
     #[test]
@@ -775,7 +839,10 @@ mod expression_tests {
             assign _e_0 = !_e_1;"#
         );
 
-        assert_same_code!(&statement_code(&stmt).to_string(), expected);
+        assert_same_code!(
+            &statement_code(&stmt, &CodeBundle::new("".to_string())).to_string(),
+            expected
+        );
     }
 
     #[test]
@@ -793,7 +860,10 @@ mod expression_tests {
             end"#
         );
 
-        assert_same_code!(&statement_code(&stmt).to_string(), expected);
+        assert_same_code!(
+            &statement_code(&stmt, &CodeBundle::new("".to_string())).to_string(),
+            expected
+        );
     }
 
     #[test]
@@ -806,7 +876,10 @@ mod expression_tests {
             assign _e_0 = 1;"#
         );
 
-        assert_same_code!(&statement_code(&stmt).to_string(), expected);
+        assert_same_code!(
+            &statement_code(&stmt, &CodeBundle::new("".to_string())).to_string(),
+            expected
+        );
     }
 
     #[test]
@@ -820,7 +893,10 @@ mod expression_tests {
             assign _e_0 = {_e_1, _e_2};"#
         );
 
-        assert_same_code!(&statement_code(&stmt).to_string(), expected);
+        assert_same_code!(
+            &statement_code(&stmt, &CodeBundle::new("".to_string())).to_string(),
+            expected
+        );
     }
 
     #[test]
@@ -834,7 +910,10 @@ mod expression_tests {
             assign _e_0 = {2'd2, _e_1, _e_2};"#
         );
 
-        assert_same_code!(&statement_code(&stmt).to_string(), expected);
+        assert_same_code!(
+            &statement_code(&stmt, &CodeBundle::new("".to_string())).to_string(),
+            expected
+        );
     }
 
     #[test]
@@ -848,7 +927,10 @@ mod expression_tests {
             assign _e_0 = _e_1[16:15] == 2'd2;"#
         );
 
-        assert_same_code!(&statement_code(&stmt).to_string(), expected);
+        assert_same_code!(
+            &statement_code(&stmt, &CodeBundle::new("".to_string())).to_string(),
+            expected
+        );
     }
 
     #[test]
@@ -862,7 +944,10 @@ mod expression_tests {
             assign _e_0 = _e_1[15] == 1'd1;"#
         );
 
-        assert_same_code!(&statement_code(&stmt).to_string(), expected);
+        assert_same_code!(
+            &statement_code(&stmt, &CodeBundle::new("".to_string())).to_string(),
+            expected
+        );
     }
 
     #[test]
@@ -876,7 +961,10 @@ mod expression_tests {
             assign _e_0 = _e_1[4:0];"#
         );
 
-        assert_same_code!(&statement_code(&stmt).to_string(), expected);
+        assert_same_code!(
+            &statement_code(&stmt, &CodeBundle::new("".to_string())).to_string(),
+            expected
+        );
     }
 
     #[test]
@@ -894,7 +982,10 @@ mod expression_tests {
             assign _e_0 = {2'd1, _e_1, 10'bX};"#
         );
 
-        assert_same_code!(&statement_code(&stmt).to_string(), expected);
+        assert_same_code!(
+            &statement_code(&stmt, &CodeBundle::new("".to_string())).to_string(),
+            expected
+        );
     }
 
     #[test]
@@ -908,7 +999,10 @@ mod expression_tests {
             assign _e_0 = _e_1[8:3];"#
         );
 
-        assert_same_code!(&statement_code(&stmt).to_string(), expected);
+        assert_same_code!(
+            &statement_code(&stmt, &CodeBundle::new("".to_string())).to_string(),
+            expected
+        );
     }
     #[test]
     fn tuple_indexing_works() {
@@ -921,7 +1015,10 @@ mod expression_tests {
             assign _e_0 = _e_1[2:0];"#
         );
 
-        assert_same_code!(&statement_code(&stmt).to_string(), expected);
+        assert_same_code!(
+            &statement_code(&stmt, &CodeBundle::new("".to_string())).to_string(),
+            expected
+        );
     }
 
     #[test]
@@ -935,7 +1032,10 @@ mod expression_tests {
             assign _e_0 = _e_1[3];"#
         );
 
-        assert_same_code!(&statement_code(&stmt).to_string(), expected);
+        assert_same_code!(
+            &statement_code(&stmt, &CodeBundle::new("".to_string())).to_string(),
+            expected
+        );
     }
 
     #[test]
@@ -952,7 +1052,10 @@ mod expression_tests {
             assign _e_0 = {_e_3, _e_2, _e_1};"#
         );
 
-        assert_same_code!(&statement_code(&statement).to_string(), expected);
+        assert_same_code!(
+            &statement_code(&statement, &CodeBundle::new("".to_string())).to_string(),
+            expected
+        );
     }
 
     #[test]
@@ -965,7 +1068,10 @@ mod expression_tests {
             assign _e_0 = _e_1[_e_2 * 3+:3];"#
         );
 
-        assert_same_code!(&statement_code(&statement).to_string(), expected);
+        assert_same_code!(
+            &statement_code(&statement, &CodeBundle::new("".to_string())).to_string(),
+            expected
+        );
     }
 
     #[test]
@@ -978,7 +1084,10 @@ mod expression_tests {
             assign _e_0 = _e_1[_e_2];"#
         );
 
-        assert_same_code!(&statement_code(&statement).to_string(), expected);
+        assert_same_code!(
+            &statement_code(&statement, &CodeBundle::new("".to_string())).to_string(),
+            expected
+        );
     }
 
     #[test]
@@ -991,7 +1100,10 @@ mod expression_tests {
             e_test test__e_0(_e_1, _e_2, _e_0);"#
         );
 
-        assert_same_code!(&statement_code(&stmt).to_string(), expected);
+        assert_same_code!(
+            &statement_code(&stmt, &CodeBundle::new("".to_string())).to_string(),
+            expected
+        );
     }
 
     #[test]
@@ -1017,7 +1129,10 @@ mod expression_tests {
             end"#
         );
 
-        assert_same_code!(&statement_code(&stmt).to_string(), expected);
+        assert_same_code!(
+            &statement_code(&stmt, &CodeBundle::new("".to_string())).to_string(),
+            expected
+        );
     }
 
     #[test]
@@ -1038,7 +1153,10 @@ mod expression_tests {
             end"#
         );
 
-        assert_same_code!(&statement_code(&stmt).to_string(), expected);
+        assert_same_code!(
+            &statement_code(&stmt, &CodeBundle::new("".to_string())).to_string(),
+            expected
+        );
     }
 
     #[test]
@@ -1061,7 +1179,10 @@ mod expression_tests {
             end"#
         );
 
-        assert_same_code!(&statement_code(&stmt).to_string(), expected);
+        assert_same_code!(
+            &statement_code(&stmt, &CodeBundle::new("".to_string())).to_string(),
+            expected
+        );
     }
 
     #[test]
@@ -1074,7 +1195,10 @@ mod expression_tests {
             assign _e_0 = _e_1[4:0];"#
         };
 
-        assert_same_code!(&statement_code(&stmt).to_string(), expected);
+        assert_same_code!(
+            &statement_code(&stmt, &CodeBundle::new("".to_string())).to_string(),
+            expected
+        );
     }
 
     #[test]
@@ -1088,7 +1212,10 @@ mod expression_tests {
             assign _e_0 = {{ 2 { _e_1[2] }}, _e_1};"#
         };
 
-        assert_same_code!(&statement_code(&stmt).to_string(), expected);
+        assert_same_code!(
+            &statement_code(&stmt, &CodeBundle::new("".to_string())).to_string(),
+            expected
+        );
     }
     #[test]
     fn sext_works_for_one_bits() {
@@ -1101,7 +1228,10 @@ mod expression_tests {
             assign _e_0 = {_e_1[2], _e_1};"#
         };
 
-        assert_same_code!(&statement_code(&stmt).to_string(), expected);
+        assert_same_code!(
+            &statement_code(&stmt, &CodeBundle::new("".to_string())).to_string(),
+            expected
+        );
     }
     #[test]
     fn sext_works_for_zero_bits() {
@@ -1114,7 +1244,10 @@ mod expression_tests {
             assign _e_0 = _e_1;"#
         };
 
-        assert_same_code!(&statement_code(&stmt).to_string(), expected);
+        assert_same_code!(
+            &statement_code(&stmt, &CodeBundle::new("".to_string())).to_string(),
+            expected
+        );
     }
 
     #[test]
@@ -1127,7 +1260,10 @@ mod expression_tests {
             assign _e_0 = {2'b0, _e_1};"#
         };
 
-        assert_same_code!(&statement_code(&stmt).to_string(), expected);
+        assert_same_code!(
+            &statement_code(&stmt, &CodeBundle::new("".to_string())).to_string(),
+            expected
+        );
     }
     #[test]
     fn zext_works_for_one_bits() {
@@ -1139,7 +1275,10 @@ mod expression_tests {
             assign _e_0 = {1'b0, _e_1};"#
         };
 
-        assert_same_code!(&statement_code(&stmt).to_string(), expected);
+        assert_same_code!(
+            &statement_code(&stmt, &CodeBundle::new("".to_string())).to_string(),
+            expected
+        );
     }
     #[test]
     fn zext_works_for_zero_bits() {
@@ -1151,7 +1290,10 @@ mod expression_tests {
             assign _e_0 = _e_1;"#
         };
 
-        assert_same_code!(&statement_code(&stmt).to_string(), expected);
+        assert_same_code!(
+            &statement_code(&stmt, &CodeBundle::new("".to_string())).to_string(),
+            expected
+        );
     }
 
     #[test]
@@ -1164,6 +1306,40 @@ mod expression_tests {
             assign _e_0 = {_e_1, _e_2};"#
         };
 
-        assert_same_code!(&statement_code(&stmt).to_string(), expected);
+        assert_same_code!(
+            &statement_code(&stmt, &CodeBundle::new("".to_string())).to_string(),
+            expected
+        );
+    }
+
+    #[test]
+    fn assertion_codegen_works() {
+        let stmt = Statement::Assert(value_name!(e(0)).at(0, &Span::new(1, 2)));
+
+        // NOTE: The escape sequences here are a bit annoying when this test failes,
+        // but where to add an option to turn them off isn't obvious. To update this test
+        // verify that the output is correct, then run `cargo test | sed -e 's/\x1b/_x1b_/g'`
+        // and copy paste the output here. Escape the " characters and replace _x1b_ with \x1b
+        let expected = indoc! {
+            "
+            always @(_e_0) begin
+                #0
+                assert (_e_0)
+                else begin
+                    $display(\"\x1b[0m\x1b[1m\x1b[38;5;9merror\x1b[0m\x1b[1m: Assertion failed\x1b[0m\");
+                    $display(\"  \x1b[0m\x1b[34m┌─\x1b[0m <str>:1:2\");
+                    $display(\"  \x1b[0m\x1b[34m│\x1b[0m\");
+                    $display(\"\x1b[0m\x1b[34m1\x1b[0m \x1b[0m\x1b[34m│\x1b[0m a\x1b[0m\x1b[38;5;9mb\x1b[0mcd\");
+                    $display(\"  \x1b[0m\x1b[34m│\x1b[0m  \x1b[0m\x1b[38;5;9m^\x1b[0m \x1b[0m\x1b[38;5;9mThis expression is false\x1b[0m\");
+                    $display(\"\");
+                    $error(\"Assertion failed\");
+                    $fatal(1);
+                end
+            end"
+        };
+
+        let source_code = CodeBundle::new("abcd".to_string());
+
+        assert_same_code!(&statement_code(&stmt, &source_code).to_string(), expected);
     }
 }

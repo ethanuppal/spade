@@ -498,6 +498,10 @@ impl StatementLocal for Statement {
                 subs.current_stage += 1;
             }
             Statement::Label(_) => {}
+            Statement::Assert(expr) => {
+                result.append(&mut expr.lower(symtab, idtracker, types, subs, item_list)?);
+                result.push(mir::Statement::Assert(expr.variable(subs)?.at_loc(expr)))
+            }
         }
         Ok(result)
     }

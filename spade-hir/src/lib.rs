@@ -105,6 +105,7 @@ pub enum Statement {
     Declaration(Vec<Loc<NameID>>),
     PipelineRegMarker,
     Label(Loc<Identifier>),
+    Assert(Loc<Expression>),
 }
 impl WithLocation for Statement {}
 

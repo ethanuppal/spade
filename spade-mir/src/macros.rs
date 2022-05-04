@@ -69,6 +69,11 @@ macro_rules! statement {
             value: spade_mir::value_name!($val_kind $val_name)
         })
     };
+    (
+        assert; $name_kind:ident $name:tt
+    ) => {
+        spade_mir::Statement::Assert(spade_mir::value_name!($name_kind $name).nowhere())
+    }
 }
 
 /// Example

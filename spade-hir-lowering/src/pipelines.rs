@@ -105,6 +105,9 @@ pub fn generate_pipeline<'a>(
             Statement::Label(_) => {
                 // Labels have no effect on codegen
             }
+            Statement::Assert(_) => {
+                // Assertions have no effect on pipeline state
+            }
         }
     }
 

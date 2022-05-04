@@ -155,6 +155,10 @@ fn compare_statements(s1: &Statement, s2: &Statement, var_map: &mut VarMap) -> b
             }
             true
         }
+        (Statement::Assert(v1), Statement::Assert(v2)) => {
+            check_name!(v1, v2);
+            true
+        }
         _ => false,
     }
 }
@@ -179,7 +183,8 @@ fn populate_var_map(
             (Statement::Constant(e1, _, _), Statement::Constant(e2, _, _)) => {
                 var_map.try_update_name(&ValueName::Expr(*e1), &ValueName::Expr(*e2))
             }
-            _ => return Err(Error::StatementMismatch(s1.clone(), s2.clone())),
+            (Statement::Assert(_), Statement::Assert(_)) => Ok(()),
+            _ => Err(Error::StatementMismatch(s1.clone(), s2.clone())),
         })
         .collect::<Result<_, Error>>()
 }

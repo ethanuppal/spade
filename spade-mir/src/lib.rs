@@ -1,4 +1,5 @@
 mod aliasing;
+mod assertion_codegen;
 pub mod codegen;
 pub mod diff;
 pub mod diff_printing;
@@ -8,6 +9,7 @@ pub mod types;
 mod verilog;
 
 use itertools::Itertools;
+use spade_common::location_info::{Loc, WithLocation};
 use types::Type;
 
 #[derive(Clone, PartialEq, Debug)]
@@ -36,6 +38,8 @@ pub enum ValueName {
     /// An un-named expression. In the resulting verilog, this is called _e_$id
     Expr(u64),
 }
+
+impl WithLocation for ValueName {}
 
 impl std::fmt::Display for ValueName {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -257,6 +261,7 @@ pub enum Statement {
     Register(Register),
     /// A constant expression with the specified ID and value
     Constant(u64, Type, ConstantValue),
+    Assert(Loc<ValueName>),
 }
 
 impl std::fmt::Display for Statement {
@@ -265,6 +270,7 @@ impl std::fmt::Display for Statement {
             Statement::Binding(b) => write!(f, "{b}"),
             Statement::Register(r) => write!(f, "{r}"),
             Statement::Constant(id, ty, val) => write!(f, "const e{id}: {ty} = {val}"),
+            Statement::Assert(val) => write!(f, "assert {val}"),
         }
     }
 }

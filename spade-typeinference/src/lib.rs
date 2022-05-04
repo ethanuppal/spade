@@ -689,6 +689,11 @@ impl TypeState {
             }
             // These statements have no effect on the types
             Statement::PipelineRegMarker | Statement::Label(_) => Ok(()),
+            Statement::Assert(expr) => {
+                self.visit_expression(expr, symtab, generic_list)?;
+                self.unify_expression_generic_error(expr, &t_bool(symtab), symtab)?;
+                Ok(())
+            }
         }
     }
 

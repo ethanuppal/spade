@@ -736,6 +736,19 @@ impl<'a> Parser<'a> {
         )))
     }
 
+    #[trace_parser]
+    pub fn assert(&mut self) -> Result<Option<Loc<Statement>>> {
+        let tok = peek_for!(self, &TokenKind::Assert);
+
+        let expr = self.expression()?;
+
+        Ok(Some(Statement::Assert(expr.clone()).between(
+            self.file_id,
+            &tok.span,
+            &expr,
+        )))
+    }
+
     /// If the next token is the start of a statement, return that statement,
     /// otherwise None
     #[trace_parser]
@@ -745,6 +758,7 @@ impl<'a> Parser<'a> {
             &Self::register,
             &Self::declaration,
             &Self::label,
+            &Self::assert,
         ])?;
 
         if let Some(statement) = &result {
@@ -2577,5 +2591,14 @@ mod tests {
         );
 
         check_parse!(code, item, Ok(Some(expected)));
+    }
+
+    #[test]
+    fn assertions_parse() {
+        let code = r#"assert x;"#;
+
+        let expected = Statement::Assert(Expression::Identifier(ast_path("x")).nowhere()).nowhere();
+
+        check_parse!(code, statement(false), Ok(Some(expected)));
     }
 }

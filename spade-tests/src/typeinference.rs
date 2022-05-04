@@ -161,3 +161,12 @@ snapshot_error! {
         }
         "
 }
+
+snapshot_error! {
+    assertions_require_bools,
+    "
+        fn test(x: int<32>) -> bool {
+            assert x;
+            true
+        }"
+}

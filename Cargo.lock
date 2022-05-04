@@ -1010,6 +1010,7 @@ name = "spade-mir"
 version = "0.1.0"
 dependencies = [
  "codespan",
+ "codespan-reporting",
  "colored",
  "indoc",
  "itertools",

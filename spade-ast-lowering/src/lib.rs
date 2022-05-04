@@ -563,6 +563,11 @@ fn visit_statement(s: &Loc<ast::Statement>, ctx: &mut Context) -> Result<Loc<hir
             // NOTE: pipeline labels are lowered in visit_pipeline
             Ok(hir::Statement::Label(name.clone()).at_loc(s))
         }
+        ast::Statement::Assert(expr) => {
+            let expr = expr.try_visit(visit_expression, ctx)?;
+
+            Ok(hir::Statement::Assert(expr).at_loc(s))
+        }
     }
 }
 

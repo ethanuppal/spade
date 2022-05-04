@@ -36,6 +36,7 @@ pub fn flatten_aliases(entity: &mut Entity) {
             Statement::Constant(id, _, _) => {
                 unaliasable.insert(ValueName::Expr(*id).clone());
             }
+            Statement::Assert(_) => {}
         }
     }
 
@@ -93,6 +94,7 @@ pub fn flatten_aliases(entity: &mut Entity) {
                 try_rename(&mut reg.value, &aliases);
             }
             Statement::Constant(_, _, _) => {}
+            Statement::Assert(_) => {}
         }
     }
 

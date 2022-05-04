@@ -4,6 +4,7 @@ mod tests {
 
     use crate::{build_and_compare_entities, build_entity, build_items, snapshot_error, ResultExt};
     use colored::Colorize;
+    use spade_common::location_info::WithLocation;
     use spade_hir_lowering::*;
     use spade_mir::{
         self,
@@ -1394,6 +1395,25 @@ mod tests {
         build_and_compare_entities!(code, expected);
     }
 
+    #[test]
+    fn assert_statements_lower_correctly() {
+        let code = r#"entity name(x: int<16>, y: int<16>) -> int<16> {
+            assert x == y;
+            x
+        }"#;
+
+        let expected = vec![entity! {"name"; (
+            "x", n(0, "x"), Type::Int(16),
+            "y", n(1, "y"), Type::Int(16),
+        ) -> Type::Int(16); {
+                (e(0); Type::Bool; Eq; n(0, "x"), n(1, "y"));
+                (assert; e(0));
+            } => n(0, "x")
+        }];
+
+        build_and_compare_entities!(code, expected);
+    }
+
     snapshot_error! {
         invalid_field_access,
         "
@@ -1402,6 +1422,6 @@ mod tests {
         entity main(x: X) -> int<8> {
             x.not_a_field
         }
-        "
+       "
     }
 }

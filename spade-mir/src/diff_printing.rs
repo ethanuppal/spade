@@ -136,6 +136,10 @@ where
 
             format!("const {}: {} = {}", name, ty, value)
         }
+        Statement::Assert(value) => {
+            let value = translate_val_name(value, lhs_trans, rhs_trans);
+            format!("assert {value}")
+        }
     }
 }
 

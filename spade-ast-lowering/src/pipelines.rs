@@ -139,6 +139,7 @@ pub fn visit_pipeline(
                 context.stages.push(None)
             }
             ast::Statement::Register(_) => {}
+            ast::Statement::Assert(_) => {}
         }
     }
 
