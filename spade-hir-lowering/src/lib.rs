@@ -877,7 +877,7 @@ impl ExprLocal for Loc<Expression> {
         // Check if this is a standard library function which we are supposed to
         // handle
         macro_rules! handle_special_functions {
-            ($([$($path:expr),*] => $handler:expr),*) => {
+            ($([$($path:expr),*] => $handler:ident),*) => {
                 $(
                     let path = Path(vec![$(Identifier($path.to_string()).nowhere()),*]).nowhere();
                     if symtab.symtab()
@@ -885,83 +885,20 @@ impl ExprLocal for Loc<Expression> {
                         .map(|n| &n == name)
                         .unwrap_or(false)
                     {
-                        $handler
+                        return self.$handler(result, args, symtab, types, subs, item_list);
                     };
                 )*
             }
         }
 
         handle_special_functions! {
-            ["std", "mem", "clocked_memory"] => {
-                return self.handle_clocked_memory_decl(
-                    result,
-                    args,
-                    symtab,
-                    types,
-                    subs,
-                    item_list,
-                )
-            },
-            ["std", "mem", "read_mem"] => {
-                return self.handle_read_memory(
-                    result,
-                    args,
-                    symtab,
-                    types,
-                    subs,
-                    item_list,
-                )
-            },
-            ["std", "conv", "trunc"] => {
-                return self.handle_trunc(
-                    result,
-                    args,
-                    symtab,
-                    types,
-                    subs,
-                    item_list,
-                )
-            },
-            ["std", "conv", "sext"] => {
-                return self.handle_sext(
-                    result,
-                    args,
-                    symtab,
-                    types,
-                    subs,
-                    item_list,
-                )
-            },
-            ["std", "conv", "zext"] => {
-                return self.handle_zext(
-                    result,
-                    args,
-                    symtab,
-                    types,
-                    subs,
-                    item_list,
-                )
-            },
-            ["std", "conv", "concat"] => {
-                return self.handle_concat(
-                    result,
-                    args,
-                    symtab,
-                    types,
-                    subs,
-                    item_list,
-                )
-            },
-            ["std", "ops", "div_pow2"] => {
-                return self.handle_div_pow2(
-                    result,
-                    args,
-                    symtab,
-                    types,
-                    subs,
-                    item_list,
-                )
-            }
+            ["std", "mem", "clocked_memory"] => handle_clocked_memory_decl,
+            ["std", "mem", "read_mem"] => handle_read_memory,
+            ["std", "conv", "trunc"] => handle_trunc,
+            ["std", "conv", "sext"] => handle_sext,
+            ["std", "conv", "zext"] => handle_zext,
+            ["std", "conv", "concat"] => handle_concat,
+            ["std", "ops", "div_pow2"] => handle_div_pow2
         }
 
         // Look up the name in the executable list to see if this is a type instantiation
