@@ -7,7 +7,7 @@ use color_eyre::{eyre::Context, Result};
 use translation::translate_names;
 use vcd::{IdCode, ScopeItem};
 
-use std::io::BufReader;
+use std::io::{BufReader, BufWriter};
 
 use crate::translation::translate_value;
 
@@ -80,8 +80,11 @@ fn main() -> Result<()> {
         .parse_header()
         .context("Failed to parse vcd header")?;
 
-    let mut outbytes = vec![];
-    let mut writer = vcd::Writer::new(&mut outbytes);
+    let mut outfile = BufWriter::new(
+        File::create(&args.outfile)
+            .with_context(|| format!("Failed to open outfile {:?}", args.outfile))?,
+    );
+    let mut writer = vcd::Writer::new(&mut outfile);
 
     match header.timescale {
         Some((t, unit)) => writer.timescale(t, unit)?,
@@ -138,8 +141,6 @@ fn main() -> Result<()> {
             other => writer.command(&other)?,
         }
     }
-
-    std::fs::write(args.outfile, outbytes)?;
 
     Ok(())
 }
