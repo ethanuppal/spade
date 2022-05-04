@@ -1,11 +1,13 @@
 mod translation;
 
-use std::{collections::HashMap, path::PathBuf};
+use std::{collections::HashMap, fs::File, path::PathBuf};
 
 use clap::StructOpt;
 use color_eyre::{eyre::Context, Result};
 use translation::translate_names;
 use vcd::{IdCode, ScopeItem};
+
+use std::io::BufReader;
 
 use crate::translation::translate_value;
 
@@ -69,8 +71,8 @@ fn main() -> Result<()> {
 
     let args = CliArgs::parse();
 
-    let bytes = std::fs::read(&args.infile)?;
-    let mut parser = vcd::Parser::new(std::io::Cursor::new(bytes));
+    let reader = BufReader::new(File::open(&args.infile)?);
+    let mut parser = vcd::Parser::new(reader);
 
     let header = parser
         .parse_header()
