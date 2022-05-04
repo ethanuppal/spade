@@ -1,0 +1,11 @@
+comment_prefix = "//"
+
+[[repositories]]
+name = "rust"
+project = "rust-lang/rust"
+host = "github"
+
+[[repositories]]
+name = "spade"
+project = "spade-lang/spade"
+host = "gitlab"
