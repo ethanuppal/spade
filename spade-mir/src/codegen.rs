@@ -35,7 +35,7 @@ fn mangle_input(input: &str) -> String {
     format!("_i_{}", input)
 }
 
-fn statement_code(statement: &Statement, source_code: &CodeBundle) -> Code {
+fn statement_declaration(statement: &Statement) -> Code {
     match statement {
         Statement::Binding(binding) => {
             let name = binding.name.var_name();
@@ -51,6 +51,55 @@ fn statement_code(statement: &Statement, source_code: &CodeBundle) -> Code {
                 }
                 _ => logic(&name, binding.ty.size()),
             };
+
+            let ops = &binding
+                .operands
+                .iter()
+                .map(ValueName::var_name)
+                .collect::<Vec<_>>();
+
+            // Aliases of memories have to be treated differently because we can't
+            // assign them
+            let assignment = match &binding.operator {
+                Operator::Alias => match binding.ty {
+                    crate::types::Type::Memory { .. } => {
+                        vec![format!("`define {} {}", name, ops[0])]
+                    }
+                    _ => vec![],
+                },
+                _ => vec![],
+            };
+
+            code! {
+                [0] &declaration;
+                [0] &assignment;
+            }
+        }
+        Statement::Register(reg) => {
+            let name = reg.name.var_name();
+            let declaration = verilog::reg(&name, reg.ty.size());
+            code! {
+                [0] &declaration;
+            }
+        }
+        Statement::Constant(id, ty, _) => {
+            let name = ValueName::Expr(*id).var_name();
+            let declaration = logic(&name, ty.size());
+
+            code! {
+                [0] &declaration;
+            }
+        }
+        Statement::Assert(_) => {
+            code! {}
+        }
+    }
+}
+
+fn statement_code(statement: &Statement, source_code: &CodeBundle) -> Code {
+    match statement {
+        Statement::Binding(binding) => {
+            let name = binding.name.var_name();
 
             let ops = &binding
                 .operands
@@ -392,7 +441,8 @@ fn statement_code(statement: &Statement, source_code: &CodeBundle) -> Code {
                 }
                 Operator::Alias => match binding.ty {
                     crate::types::Type::Memory { .. } => {
-                        format!("`define {} {}", name, ops[0])
+                        // Aliasing of memories happens at definition
+                        "".to_string()
                     }
                     _ => format!("assign {} = {};", name, ops[0]),
                 },
@@ -402,17 +452,14 @@ fn statement_code(statement: &Statement, source_code: &CodeBundle) -> Code {
             };
 
             code! {
-                [0] &declaration;
                 [0] &assignment
             }
         }
         Statement::Register(reg) => {
             if let Some((rst_trig, rst_val)) = &reg.reset {
                 let name = reg.name.var_name();
-                let declaration = verilog::reg(&name, reg.ty.size());
 
                 code! {
-                    [0] &declaration;
                     [0] &format!("always @(posedge {}, posedge {}) begin", reg.clock.var_name(), rst_trig.var_name());
                     [1]     &format!("if ({}) begin", rst_trig.var_name());
                     [2]         &format!("{} <= {};", name, rst_val.var_name());
@@ -424,19 +471,16 @@ fn statement_code(statement: &Statement, source_code: &CodeBundle) -> Code {
                 }
             } else {
                 let name = reg.name.var_name();
-                let declaration = verilog::reg(&name, reg.ty.size());
 
                 code! {
-                    [0] &declaration;
                     [0] &format!("always @(posedge {}) begin", reg.clock.var_name());
                     [1]     &format!("{} <= {};", name, reg.value.var_name());
                     [0] &"end"
                 }
             }
         }
-        Statement::Constant(id, ty, value) => {
+        Statement::Constant(id, _, value) => {
             let name = ValueName::Expr(*id).var_name();
-            let declaration = logic(&name, ty.size());
 
             let expression = match value {
                 ConstantValue::Int(val) => format!("{}", val),
@@ -446,7 +490,6 @@ fn statement_code(statement: &Statement, source_code: &CodeBundle) -> Code {
             let assignment = format!("assign {} = {};", name, expression);
 
             code! {
-                [0] &declaration;
                 [0] &assignment
             }
         }
@@ -488,6 +531,14 @@ fn statement_code(statement: &Statement, source_code: &CodeBundle) -> Code {
     }
 }
 
+#[cfg(test)]
+fn statement_code_and_declaration(statement: &Statement, source_code: &CodeBundle) -> Code {
+    code! {
+        [0] statement_declaration(statement);
+        [0] statement_code(statement, source_code);
+    }
+}
+
 pub fn entity_code(mut entity: Entity, source_code: &CodeBundle) -> Code {
     flatten_aliases(&mut entity);
 
@@ -521,6 +572,9 @@ pub fn entity_code(mut entity: Entity, source_code: &CodeBundle) -> Code {
 
     let mut body = Code::new();
 
+    for stmt in &entity.statements {
+        body.join(&statement_declaration(stmt))
+    }
     for stmt in &entity.statements {
         body.join(&statement_code(stmt, source_code))
     }
@@ -579,7 +633,7 @@ mod tests {
         );
 
         assert_same_code!(
-            &statement_code(&binding, &CodeBundle::new("".to_string())).to_string(),
+            &statement_code_and_declaration(&binding, &CodeBundle::new("".to_string())).to_string(),
             expected
         );
     }
@@ -595,7 +649,7 @@ mod tests {
         );
 
         assert_same_code!(
-            &statement_code(&binding, &CodeBundle::new("".to_string())).to_string(),
+            &statement_code_and_declaration(&binding, &CodeBundle::new("".to_string())).to_string(),
             expected
         );
     }
@@ -613,7 +667,7 @@ mod tests {
         );
 
         assert_same_code!(
-            &statement_code(&reg, &CodeBundle::new("".to_string())).to_string(),
+            &statement_code_and_declaration(&reg, &CodeBundle::new("".to_string())).to_string(),
             expected
         );
     }
@@ -636,7 +690,7 @@ mod tests {
         );
 
         assert_same_code!(
-            &statement_code(&reg, &CodeBundle::new("".to_string())).to_string(),
+            &statement_code_and_declaration(&reg, &CodeBundle::new("".to_string())).to_string(),
             expected
         );
     }
@@ -678,7 +732,7 @@ mod tests {
         );
 
         assert_same_code!(
-            &statement_code(&input, &CodeBundle::new("".to_string())).to_string(),
+            &statement_code_and_declaration(&input, &CodeBundle::new("".to_string())).to_string(),
             expected
         )
     }
@@ -707,10 +761,10 @@ mod tests {
                 logic clk_n3;
                 assign clk_n3 = _i_clk;
                 reg[15:0] x__s1_n10;
+                logic[15:0] x_n1;
                 always @(posedge clk_n3) begin
                     x__s1_n10 <= x_n1;
                 end
-                logic[15:0] x_n1;
                 e_A A_x_n1(x_n1);
                 assign __output = x_n1;
             endmodule"#
@@ -747,7 +801,7 @@ mod expression_tests {
                     assign _e_0 = _e_1 {} _e_2;"#, $verilog_ty, $verilog_op
                 );
 
-                assert_same_code!(&statement_code(&stmt, &CodeBundle::new("".to_string())).to_string(), &expected)
+                assert_same_code!(&statement_code_and_declaration(&stmt, &CodeBundle::new("".to_string())).to_string(), &expected)
             }
         }
     }
@@ -764,7 +818,7 @@ mod expression_tests {
                     assign _e_0 = $signed(_e_1) {} $signed(_e_2);"#, $verilog_ty, $verilog_op
                 );
 
-                assert_same_code!(&statement_code(&stmt, &CodeBundle::new("".to_string())).to_string(), &expected)
+                assert_same_code!(&statement_code_and_declaration(&stmt, &CodeBundle::new("".to_string())).to_string(), &expected)
             }
         }
     }
@@ -781,7 +835,7 @@ mod expression_tests {
                     assign _e_0 = {}_e_1;"#, $verilog_ty, $verilog_op
                 );
 
-                assert_same_code!(&statement_code(&stmt, &CodeBundle::new("".to_string())).to_string(), &expected)
+                assert_same_code!(&statement_code_and_declaration(&stmt, &CodeBundle::new("".to_string())).to_string(), &expected)
             }
         }
     }
@@ -825,7 +879,7 @@ mod expression_tests {
         );
 
         assert_same_code!(
-            &statement_code(&stmt, &CodeBundle::new("".to_string())).to_string(),
+            &statement_code_and_declaration(&stmt, &CodeBundle::new("".to_string())).to_string(),
             expected
         );
     }
@@ -841,7 +895,7 @@ mod expression_tests {
         );
 
         assert_same_code!(
-            &statement_code(&stmt, &CodeBundle::new("".to_string())).to_string(),
+            &statement_code_and_declaration(&stmt, &CodeBundle::new("".to_string())).to_string(),
             expected
         );
     }
@@ -862,7 +916,7 @@ mod expression_tests {
         );
 
         assert_same_code!(
-            &statement_code(&stmt, &CodeBundle::new("".to_string())).to_string(),
+            &statement_code_and_declaration(&stmt, &CodeBundle::new("".to_string())).to_string(),
             expected
         );
     }
@@ -878,7 +932,7 @@ mod expression_tests {
         );
 
         assert_same_code!(
-            &statement_code(&stmt, &CodeBundle::new("".to_string())).to_string(),
+            &statement_code_and_declaration(&stmt, &CodeBundle::new("".to_string())).to_string(),
             expected
         );
     }
@@ -895,7 +949,7 @@ mod expression_tests {
         );
 
         assert_same_code!(
-            &statement_code(&stmt, &CodeBundle::new("".to_string())).to_string(),
+            &statement_code_and_declaration(&stmt, &CodeBundle::new("".to_string())).to_string(),
             expected
         );
     }
@@ -912,7 +966,7 @@ mod expression_tests {
         );
 
         assert_same_code!(
-            &statement_code(&stmt, &CodeBundle::new("".to_string())).to_string(),
+            &statement_code_and_declaration(&stmt, &CodeBundle::new("".to_string())).to_string(),
             expected
         );
     }
@@ -929,7 +983,7 @@ mod expression_tests {
         );
 
         assert_same_code!(
-            &statement_code(&stmt, &CodeBundle::new("".to_string())).to_string(),
+            &statement_code_and_declaration(&stmt, &CodeBundle::new("".to_string())).to_string(),
             expected
         );
     }
@@ -946,7 +1000,7 @@ mod expression_tests {
         );
 
         assert_same_code!(
-            &statement_code(&stmt, &CodeBundle::new("".to_string())).to_string(),
+            &statement_code_and_declaration(&stmt, &CodeBundle::new("".to_string())).to_string(),
             expected
         );
     }
@@ -963,7 +1017,7 @@ mod expression_tests {
         );
 
         assert_same_code!(
-            &statement_code(&stmt, &CodeBundle::new("".to_string())).to_string(),
+            &statement_code_and_declaration(&stmt, &CodeBundle::new("".to_string())).to_string(),
             expected
         );
     }
@@ -984,7 +1038,7 @@ mod expression_tests {
         );
 
         assert_same_code!(
-            &statement_code(&stmt, &CodeBundle::new("".to_string())).to_string(),
+            &statement_code_and_declaration(&stmt, &CodeBundle::new("".to_string())).to_string(),
             expected
         );
     }
@@ -1001,7 +1055,7 @@ mod expression_tests {
         );
 
         assert_same_code!(
-            &statement_code(&stmt, &CodeBundle::new("".to_string())).to_string(),
+            &statement_code_and_declaration(&stmt, &CodeBundle::new("".to_string())).to_string(),
             expected
         );
     }
@@ -1017,7 +1071,7 @@ mod expression_tests {
         );
 
         assert_same_code!(
-            &statement_code(&stmt, &CodeBundle::new("".to_string())).to_string(),
+            &statement_code_and_declaration(&stmt, &CodeBundle::new("".to_string())).to_string(),
             expected
         );
     }
@@ -1034,7 +1088,7 @@ mod expression_tests {
         );
 
         assert_same_code!(
-            &statement_code(&stmt, &CodeBundle::new("".to_string())).to_string(),
+            &statement_code_and_declaration(&stmt, &CodeBundle::new("".to_string())).to_string(),
             expected
         );
     }
@@ -1054,7 +1108,8 @@ mod expression_tests {
         );
 
         assert_same_code!(
-            &statement_code(&statement, &CodeBundle::new("".to_string())).to_string(),
+            &statement_code_and_declaration(&statement, &CodeBundle::new("".to_string()))
+                .to_string(),
             expected
         );
     }
@@ -1070,7 +1125,8 @@ mod expression_tests {
         );
 
         assert_same_code!(
-            &statement_code(&statement, &CodeBundle::new("".to_string())).to_string(),
+            &statement_code_and_declaration(&statement, &CodeBundle::new("".to_string()))
+                .to_string(),
             expected
         );
     }
@@ -1086,7 +1142,8 @@ mod expression_tests {
         );
 
         assert_same_code!(
-            &statement_code(&statement, &CodeBundle::new("".to_string())).to_string(),
+            &statement_code_and_declaration(&statement, &CodeBundle::new("".to_string()))
+                .to_string(),
             expected
         );
     }
@@ -1102,7 +1159,7 @@ mod expression_tests {
         );
 
         assert_same_code!(
-            &statement_code(&stmt, &CodeBundle::new("".to_string())).to_string(),
+            &statement_code_and_declaration(&stmt, &CodeBundle::new("".to_string())).to_string(),
             expected
         );
     }
@@ -1131,7 +1188,7 @@ mod expression_tests {
         );
 
         assert_same_code!(
-            &statement_code(&stmt, &CodeBundle::new("".to_string())).to_string(),
+            &statement_code_and_declaration(&stmt, &CodeBundle::new("".to_string())).to_string(),
             expected
         );
     }
@@ -1155,7 +1212,7 @@ mod expression_tests {
         );
 
         assert_same_code!(
-            &statement_code(&stmt, &CodeBundle::new("".to_string())).to_string(),
+            &statement_code_and_declaration(&stmt, &CodeBundle::new("".to_string())).to_string(),
             expected
         );
     }
@@ -1181,7 +1238,7 @@ mod expression_tests {
         );
 
         assert_same_code!(
-            &statement_code(&stmt, &CodeBundle::new("".to_string())).to_string(),
+            &statement_code_and_declaration(&stmt, &CodeBundle::new("".to_string())).to_string(),
             expected
         );
     }
@@ -1197,7 +1254,7 @@ mod expression_tests {
         };
 
         assert_same_code!(
-            &statement_code(&stmt, &CodeBundle::new("".to_string())).to_string(),
+            &statement_code_and_declaration(&stmt, &CodeBundle::new("".to_string())).to_string(),
             expected
         );
     }
@@ -1214,7 +1271,7 @@ mod expression_tests {
         };
 
         assert_same_code!(
-            &statement_code(&stmt, &CodeBundle::new("".to_string())).to_string(),
+            &statement_code_and_declaration(&stmt, &CodeBundle::new("".to_string())).to_string(),
             expected
         );
     }
@@ -1230,7 +1287,7 @@ mod expression_tests {
         };
 
         assert_same_code!(
-            &statement_code(&stmt, &CodeBundle::new("".to_string())).to_string(),
+            &statement_code_and_declaration(&stmt, &CodeBundle::new("".to_string())).to_string(),
             expected
         );
     }
@@ -1246,7 +1303,7 @@ mod expression_tests {
         };
 
         assert_same_code!(
-            &statement_code(&stmt, &CodeBundle::new("".to_string())).to_string(),
+            &statement_code_and_declaration(&stmt, &CodeBundle::new("".to_string())).to_string(),
             expected
         );
     }
@@ -1262,7 +1319,7 @@ mod expression_tests {
         };
 
         assert_same_code!(
-            &statement_code(&stmt, &CodeBundle::new("".to_string())).to_string(),
+            &statement_code_and_declaration(&stmt, &CodeBundle::new("".to_string())).to_string(),
             expected
         );
     }
@@ -1277,7 +1334,7 @@ mod expression_tests {
         };
 
         assert_same_code!(
-            &statement_code(&stmt, &CodeBundle::new("".to_string())).to_string(),
+            &statement_code_and_declaration(&stmt, &CodeBundle::new("".to_string())).to_string(),
             expected
         );
     }
@@ -1292,7 +1349,7 @@ mod expression_tests {
         };
 
         assert_same_code!(
-            &statement_code(&stmt, &CodeBundle::new("".to_string())).to_string(),
+            &statement_code_and_declaration(&stmt, &CodeBundle::new("".to_string())).to_string(),
             expected
         );
     }
@@ -1308,7 +1365,7 @@ mod expression_tests {
         };
 
         assert_same_code!(
-            &statement_code(&stmt, &CodeBundle::new("".to_string())).to_string(),
+            &statement_code_and_declaration(&stmt, &CodeBundle::new("".to_string())).to_string(),
             expected
         )
     }
@@ -1324,7 +1381,7 @@ mod expression_tests {
         };
 
         assert_same_code!(
-            &statement_code(&stmt, &CodeBundle::new("".to_string())).to_string(),
+            &statement_code_and_declaration(&stmt, &CodeBundle::new("".to_string())).to_string(),
             expected
         );
     }
@@ -1357,6 +1414,9 @@ mod expression_tests {
 
         let source_code = CodeBundle::new("abcd".to_string());
 
-        assert_same_code!(&statement_code(&stmt, &source_code).to_string(), expected);
+        assert_same_code!(
+            &statement_code_and_declaration(&stmt, &source_code).to_string(),
+            expected
+        );
     }
 }
