@@ -166,7 +166,30 @@ fn statement_code(statement: &Statement, source_code: &CodeBundle) -> Code {
                 Operator::Xor => binop!("^"),
                 Operator::USub => unop!("-"),
                 Operator::Not => unop!("!"),
-                Operator::DivPow2 => format!("$signed({}) / (1 << {})", ops[0], ops[1]),
+                Operator::DivPow2 => {
+                    // Split into 3 cases: if the division amount is 2^0, nothing should
+                    // be done. Must be handled as a special case of the rest of the computation
+                    //
+                    // If the dividend is negative, we want to round the result towards 0, rather
+                    // than towards -inf. To do so, we add a 1 in the most significant bit
+                    // which is shifted away
+
+                    let dividend = &ops[0];
+                    let divisor = &ops[1];
+                    code! {
+                        [0] "always_comb begin";
+                        [1]     format!("if ({dividend} == 0) begin");
+                        [2]         format!("{name} = {dividend};");
+                        [1]     "end";
+                        [1]     format!("else if ($signed({divisor}) < 0) begin");
+                        [2]         format!("{name} = $signed({dividend} + (1 << ({divisor} - 1))) >>> {divisor};");
+                        [1]     "end";
+                        [1]     "else begin";
+                        [2]         format!("{name} = {dividend} >> {divisor};");
+                        [1]     "end";
+                        [0] "end";
+                    }.to_string()
+                }
                 Operator::Truncate => {
                     format!("{}[{}:0]", ops[0], binding.ty.size() - 1)
                 }
@@ -447,6 +470,7 @@ fn statement_code(statement: &Statement, source_code: &CodeBundle) -> Code {
                     _ => format!("assign {} = {};", name, ops[0]),
                 },
                 Operator::Match => format!("{}", expression),
+                Operator::DivPow2 => format!("{}", expression),
                 Operator::DeclClockedMemory { .. } => format!("{}", expression),
                 _ => format!("assign {} = {};", name, expression),
             };
@@ -1355,13 +1379,23 @@ mod expression_tests {
     }
 
     #[test]
-    fn div_pow2_wokrs() {
+    fn div_pow2_works() {
         let stmt = statement!(e(0); Type::Int(3); DivPow2; e(1), e(2));
 
         let expected = indoc! {
             r#"
             logic[2:0] _e_0;
-            assign _e_0 = $signed(_e_1) / (1 << _e_2);"#
+            always_comb begin
+                if (_e_1 == 0) begin
+                    _e_0 = _e_1;
+                end
+                else if ($signed(_e_2) < 0) begin
+                    _e_0 = $signed(_e_1 + (1 << (_e_2 - 1))) >>> _e_2;
+                end
+                else begin
+                    _e_0 = _e_1 >> _e_2;
+                end
+            end"#
         };
 
         assert_same_code!(
