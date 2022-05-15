@@ -75,7 +75,7 @@ of Electrical Engineering at Linköping university.
 
 ## License
 
-The spade compiler is licensed under the [EUPL-1.2 license](LICENSE-EUPL1.2.txt).
+The spade compiler is licensed under the [EUPL-1.2 license](LICENSE-EUPL-1.2.txt).
 
 The spade standard library (all files located in the stdlib directory) is licensed under
 the terms of both the [MIT license](MIT License) and the [Apache
