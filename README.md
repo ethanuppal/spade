@@ -31,7 +31,7 @@ there are a few larger examples of what the language looks like in the
 
 The recommended way to use spade is with its build tool
 [swim](https://gitlab.com/spade-lang/swim/), but for just playing around with
-the language you can use the compiler directly
+the language you can use the compiler directly.
 
 1. Install rust via your package manager or https://rustup.rs/
 2. Clone the repo `git clone git@gitlab.com:spade-lang/spade.git`
@@ -40,7 +40,7 @@ the language you can use the compiler directly
 
 You can also install the compiler using `cargo install --path spade-compiler`.
 That will install a `spade` binary to your [cargo
-home](https://doc.rust-lang.org/book/ch14-04-installing-binaries.html)
+home](https://doc.rust-lang.org/book/ch14-04-installing-binaries.html).
 
 If you are interested in contributing to spade, the
 [ARCHITECTURE.md](ARCHITECTURE.md) document is a good place to start. It gives
@@ -68,7 +68,7 @@ https://github.com/Emiluren/.emacs.d/blob/master/lisp/spade-mode/spade-mode.el
 ## Development and Community
 
 If you are interested in using or contributing to Spade, feel free to join our
-[discord group](https://discord.gg/KmmSGxNa)
+[discord group](https://discord.gg/KmmSGxNa).
 
 Spade is currently being developed as an Open Source project at the Department
 of Electrical Engineering at Linköping university.
@@ -79,4 +79,4 @@ The spade compiler is licensed under the [EUPL-1.2 license](LICENSE-EUPL1.2.txt)
 
 The spade standard library (all files located in the stdlib directory) is licensed under
 the terms of both the [MIT license](MIT License) and the [Apache
-License](LICENSE-APACHE2.0.txt)
+License](LICENSE-APACHE2.0.txt).
