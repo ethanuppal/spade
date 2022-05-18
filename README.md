@@ -22,10 +22,11 @@ entity counter(clk: clk, rst: bool, max: int<8>) -> int<8> {
 }
 ```
 
-Spade is in its early stages, so everything is subject to change. For now,
-there are a few larger examples of what the language looks like in the
-`sample_projects` directory.
+Spade is in its early stages, so everything is subject to change. For a taste of
+what the language looks like, here are some projects using most of the features
 
+- Work in progress Risc-V CPU: https://gitlab.com/TheZoq2/spade-v
+- An executor for dynamic programming: https://gitlab.com/TheZoq2/dp-executor
 
 ## Getting started
 
