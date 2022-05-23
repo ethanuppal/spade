@@ -57,6 +57,9 @@ pub enum Error {
     #[error("Expected pipeline depth")]
     ExpectedPipelineDepth { got: Token },
 
+    #[error("Expected register count")]
+    ExpectedRegisterCount { got: Token },
+
     #[error("Expected offset")]
     ExpectedOffset { got: Token },
 

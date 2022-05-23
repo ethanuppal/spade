@@ -134,9 +134,11 @@ pub fn visit_pipeline(
             }
             ast::Statement::Declaration(_) => {}
             ast::Statement::Binding(_, _, _) => {}
-            ast::Statement::PipelineRegMarker => {
-                current_stage += 1;
-                context.stages.push(None)
+            ast::Statement::PipelineRegMarker(count) => {
+                for _ in 0..*count {
+                    current_stage += 1;
+                    context.stages.push(None)
+                }
             }
             ast::Statement::Register(_) => {}
             ast::Statement::Assert(_) => {}
@@ -192,8 +194,8 @@ mod pipeline_visiting {
             body: Some(
                 ast::Expression::Block(Box::new(ast::Block {
                     statements: vec![
-                        ast::Statement::PipelineRegMarker.nowhere(),
-                        ast::Statement::PipelineRegMarker.nowhere(),
+                        ast::Statement::PipelineRegMarker(1).nowhere(),
+                        ast::Statement::PipelineRegMarker(1).nowhere(),
                     ],
                     result: ast::Expression::IntLiteral(0).nowhere(),
                 }))
@@ -276,14 +278,14 @@ mod pipeline_visiting {
             body: Some(
                 ast::Expression::Block(Box::new(ast::Block {
                     statements: vec![
-                        ast::Statement::PipelineRegMarker.nowhere(),
+                        ast::Statement::PipelineRegMarker(1).nowhere(),
                         ast::Statement::Binding(
                             ast::Pattern::name("a"),
                             None,
                             ast::Expression::IntLiteral(0).nowhere(),
                         )
                         .nowhere(),
-                        ast::Statement::PipelineRegMarker.nowhere(),
+                        ast::Statement::PipelineRegMarker(1).nowhere(),
                         ast::Statement::Binding(
                             ast::Pattern::name("b"),
                             None,
@@ -354,7 +356,7 @@ mod pipeline_visiting {
             body: Some(
                 ast::Expression::Block(Box::new(ast::Block {
                     statements: vec![
-                        ast::Statement::PipelineRegMarker.nowhere(),
+                        ast::Statement::PipelineRegMarker(1).nowhere(),
                         ast::Statement::Label(ast_ident("s")).nowhere(),
                         ast::Statement::Binding(
                             ast::Pattern::name("a"),
@@ -362,7 +364,7 @@ mod pipeline_visiting {
                             ast::Expression::IntLiteral(0).nowhere(),
                         )
                         .nowhere(),
-                        ast::Statement::PipelineRegMarker.nowhere(),
+                        ast::Statement::PipelineRegMarker(1).nowhere(),
                         ast::Statement::Binding(
                             ast::Pattern::name("b"),
                             None,

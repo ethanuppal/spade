@@ -635,9 +635,21 @@ impl<'a> Parser<'a> {
         let start_token = peek_for!(self, &TokenKind::Reg);
 
         // If this is a reg marker for a pipeline
-        if self.peek_kind(&TokenKind::Semi)? {
+        if self.peek_kind(&TokenKind::Semi)? || self.peek_kind(&TokenKind::Asterisk)? {
+            let count = if let Some(_) = self.peek_and_eat(&TokenKind::Asterisk)? {
+                if let Some(val) = self.int_literal()? {
+                    (val.inner) as usize
+                } else {
+                    return Err(Error::ExpectedRegisterCount {
+                        got: self.eat_unconditional()?,
+                    });
+                }
+            } else {
+                1
+            };
+
             return Ok(Some(
-                Statement::PipelineRegMarker.at(self.file_id, &start_token),
+                Statement::PipelineRegMarker(count).at(self.file_id, &start_token),
             ));
         }
 
@@ -767,7 +779,7 @@ impl<'a> Parser<'a> {
                 self.eat(&TokenKind::Semi)?;
             }
 
-            if let Statement::PipelineRegMarker = statement.inner {
+            if let Statement::PipelineRegMarker(_) = statement.inner {
                 if !allow_stages {
                     return Err(Error::StageOutsidePipeline(statement.loc()));
                 }
@@ -2261,14 +2273,14 @@ mod tests {
                 Expression::Block(Box::new(Block {
                     statements: vec![
                         Statement::Label(ast_ident("s0")).nowhere(),
-                        Statement::PipelineRegMarker.nowhere(),
+                        Statement::PipelineRegMarker(1).nowhere(),
                         Statement::Binding(
                             Pattern::name("b"),
                             None,
                             Expression::IntLiteral(0).nowhere(),
                         )
                         .nowhere(),
-                        Statement::PipelineRegMarker.nowhere(),
+                        Statement::PipelineRegMarker(1).nowhere(),
                         Statement::Label(ast_ident("s2")).nowhere(),
                         Statement::Binding(
                             Pattern::name("c"),
@@ -2277,6 +2289,34 @@ mod tests {
                         )
                         .nowhere(),
                     ],
+                    result: Expression::IntLiteral(0).nowhere(),
+                }))
+                .nowhere(),
+            ),
+            type_params: vec![],
+        }
+        .nowhere();
+
+        check_parse!(code, pipeline, Ok(Some(expected)));
+    }
+
+    #[test]
+    fn pipeline_parsing_with_many_regs_works() {
+        let code = r#"
+            pipeline(2) test(a: bool) -> bool {
+                reg*3;
+                    0
+            }
+        "#;
+
+        let expected = Pipeline {
+            depth: Loc::new(2, lspan(0..0), 0),
+            name: ast_ident("test"),
+            inputs: aparams![("a", tspec!("bool"))],
+            output_type: Some(TypeSpec::Named(ast_path("bool"), vec![]).nowhere()),
+            body: Some(
+                Expression::Block(Box::new(Block {
+                    statements: vec![Statement::PipelineRegMarker(3).nowhere()],
                     result: Expression::IntLiteral(0).nowhere(),
                 }))
                 .nowhere(),

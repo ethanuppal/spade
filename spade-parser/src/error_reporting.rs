@@ -123,6 +123,19 @@ impl CompilationError for Error {
                         format!("Pipeline depth can only be fixed integers"),
                     ])
             }
+            Error::ExpectedRegisterCount { got } => {
+                let message = format!("Expected register count");
+
+                Diagnostic::error()
+                    .with_message(message)
+                    .with_labels(vec![got
+                        .primary_label()
+                        .with_message("Expected register count")])
+                    .with_notes(vec![
+                        format!("Found {}", got.kind.as_str()),
+                        format!("Register count can only be fixed integers"),
+                    ])
+            }
             Error::ExpectedOffset{got} => {
                 Diagnostic::error()
                     .with_message(format!("Expected an offset"))

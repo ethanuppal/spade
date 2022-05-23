@@ -520,7 +520,7 @@ pub fn visit_pattern_allow_declarations(
     visit_pattern(p, ctx, true)
 }
 
-fn visit_statement(s: &Loc<ast::Statement>, ctx: &mut Context) -> Result<Loc<hir::Statement>> {
+fn visit_statement(s: &Loc<ast::Statement>, ctx: &mut Context) -> Result<Vec<Loc<hir::Statement>>> {
     match &s.inner {
         ast::Statement::Declaration(names) => {
             let names = names
@@ -533,7 +533,7 @@ fn visit_statement(s: &Loc<ast::Statement>, ctx: &mut Context) -> Result<Loc<hir
                 })
                 .collect::<Result<Vec<_>>>()?;
 
-            Ok(hir::Statement::Declaration(names).at_loc(&s))
+            Ok(vec![hir::Statement::Declaration(names).at_loc(&s)])
         }
         ast::Statement::Binding(pattern, t, expr) => {
             let hir_type = if let Some(t) = t {
@@ -546,29 +546,33 @@ fn visit_statement(s: &Loc<ast::Statement>, ctx: &mut Context) -> Result<Loc<hir
 
             let pat = pattern.try_visit(visit_pattern_allow_declarations, ctx)?;
 
-            Ok(hir::Statement::Binding(pat, hir_type, expr).at_loc(s))
+            Ok(vec![hir::Statement::Binding(pat, hir_type, expr).at_loc(s)])
         }
         ast::Statement::Register(inner) => {
             let (result, span) = visit_register(&inner, ctx)?.separate_loc();
-            Ok(hir::Statement::Register(result).at_loc(&span))
+            Ok(vec![hir::Statement::Register(result).at_loc(&span)])
         }
-        ast::Statement::PipelineRegMarker => {
-            ctx.pipeline_ctx
-                .as_mut()
-                .expect("Expected to have a pipeline context")
-                .current_stage += 1;
-            // NOTE: For now we don't do anything about pipeline reg markers and labels at the
-            // ast lowering level. When we add referencing other stages, we need to change that
-            Ok(hir::Statement::PipelineRegMarker.at_loc(s))
+        ast::Statement::PipelineRegMarker(count) => {
+            let result = (0..*count)
+                .map(|_| {
+                    ctx.pipeline_ctx
+                        .as_mut()
+                        .expect("Expected to have a pipeline context")
+                        .current_stage += 1;
+                    hir::Statement::PipelineRegMarker.at_loc(s)
+                })
+                .collect();
+
+            Ok(result)
         }
         ast::Statement::Label(name) => {
             // NOTE: pipeline labels are lowered in visit_pipeline
-            Ok(hir::Statement::Label(name.clone()).at_loc(s))
+            Ok(vec![hir::Statement::Label(name.clone()).at_loc(s)])
         }
         ast::Statement::Assert(expr) => {
             let expr = expr.try_visit(visit_expression, ctx)?;
 
-            Ok(hir::Statement::Assert(expr).at_loc(s))
+            Ok(vec![hir::Statement::Assert(expr).at_loc(s)])
         }
     }
 }
@@ -896,6 +900,8 @@ fn visit_block(b: &ast::Block, ctx: &mut Context) -> Result<hir::Block> {
         .map(|statement| visit_statement(statement, ctx))
         .collect::<Result<Vec<_>>>()?
         .into_iter()
+        .flatten()
+        .into_iter()
         .collect::<Vec<_>>();
 
     let result = b.result.try_visit(visit_expression, ctx)?;
@@ -1121,7 +1127,7 @@ mod statement_visiting {
         )
         .nowhere();
 
-        assert_eq!(visit_statement(&input, &mut ctx), Ok(expected));
+        assert_eq!(visit_statement(&input, &mut ctx), Ok(vec![expected]));
         assert_eq!(ctx.symtab.has_symbol(ast_path("a").inner), true);
     }
 
@@ -1164,7 +1170,7 @@ mod statement_visiting {
         };
         let clk_id = ctx.symtab.add_local_variable(ast_ident("clk"));
         assert_eq!(clk_id.0, 0);
-        assert_eq!(visit_statement(&input, &mut ctx), Ok(expected));
+        assert_eq!(visit_statement(&input, &mut ctx), Ok(vec![expected]));
         assert_eq!(ctx.symtab.has_symbol(ast_path("regname").inner), true);
     }
 
@@ -1181,10 +1187,40 @@ mod statement_visiting {
         };
         assert_eq!(
             visit_statement(&input, &mut ctx),
-            Ok(hir::Statement::Declaration(vec![name_id(0, "x"), name_id(1, "y")]).nowhere())
+            Ok(vec![hir::Statement::Declaration(vec![
+                name_id(0, "x"),
+                name_id(1, "y")
+            ])
+            .nowhere()])
         );
         assert_eq!(ctx.symtab.has_symbol(ast_path("x").inner), true);
         assert_eq!(ctx.symtab.has_symbol(ast_path("y").inner), true);
+    }
+
+    #[test]
+    fn multi_reg_statements_lower_correctly() {
+        let input = ast::Statement::PipelineRegMarker(3).nowhere();
+
+        let symtab = SymbolTable::new();
+        let idtracker = ExprIdTracker::new();
+        let mut ctx = Context {
+            symtab,
+            idtracker,
+            pipeline_ctx: Some(PipelineContext {
+                stages: vec![],
+                current_stage: 0,
+            }),
+        };
+        assert_eq!(
+            visit_statement(&input, &mut ctx),
+            Ok(vec![
+                hir::Statement::PipelineRegMarker.nowhere(),
+                hir::Statement::PipelineRegMarker.nowhere(),
+                hir::Statement::PipelineRegMarker.nowhere(),
+            ])
+        );
+
+        assert_eq!(ctx.pipeline_ctx.as_ref().unwrap().current_stage, 3);
     }
 
     #[test]
@@ -1240,7 +1276,7 @@ mod statement_visiting {
             },
         )
         .unwrap();
-        match result.inner {
+        match &result.first().unwrap().inner {
             hir::Statement::Register(reg) => match reg.pattern.kind {
                 hir::PatternKind::Name {
                     name: ref reg_id,

@@ -1,0 +1,14 @@
+---
+source: spade-tests/src/parser.rs
+expression: "std::str::from_utf8(buffer.as_slice()).expect(\"error contains invalid utf-8\")"
+---
+error: Expected register count
+  ┌─ testinput:2:10
+  │
+2 │     reg *;
+  │          ^ Expected register count
+  │
+  = Found ;
+  = Register count can only be fixed integers
+
+

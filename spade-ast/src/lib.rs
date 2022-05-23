@@ -146,7 +146,7 @@ pub enum Statement {
     Label(Loc<Identifier>),
     Declaration(Vec<Loc<Identifier>>),
     Binding(Loc<Pattern>, Option<Loc<TypeSpec>>, Loc<Expression>),
-    PipelineRegMarker,
+    PipelineRegMarker(usize),
     Register(Loc<Register>),
     Assert(Loc<Expression>),
 }

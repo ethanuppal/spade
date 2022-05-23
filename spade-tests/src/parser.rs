@@ -8,3 +8,12 @@ snapshot_error! {
     }
     "
 }
+
+snapshot_error! {
+    register_count_is_required,
+    "
+    pipeline(3) main(x: X) -> int<8> {
+        reg *;
+    }
+    "
+}
