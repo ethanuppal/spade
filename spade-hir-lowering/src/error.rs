@@ -21,8 +21,12 @@ pub enum Error {
     #[error("Use of value before it is ready")]
     UseBeforeReady {
         name: Loc<NameID>,
-        // Amount of cycles left until the value is available
-        available_in: usize,
+        // The number of stages left until the value is available
+        unavailable_for: usize,
+        // The absolute stage at which the variable is requested
+        referenced_at_stage: usize,
     },
+    #[error("Availability mismatch")]
+    AvailabilityMismatch { prev: Loc<usize>, new: Loc<usize> },
 }
 pub type Result<T> = std::result::Result<T, Error>;

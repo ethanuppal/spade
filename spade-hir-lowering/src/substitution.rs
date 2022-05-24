@@ -56,9 +56,11 @@ impl Substitutions {
                 Substitution::Undefined => {
                     unreachable!("Undefined substitutions should not be in the substitution map")
                 }
-                // The name of the value in the first stage at which it is avilable will
-                // be the original name
-                Substitution::Waiting(0, name) => Substitution::Available(name.clone()),
+                // The name of the value in the first stage at which it is avilable will be the
+                // original name.
+                // 1 because we would now replace it with 0, indicating that the value is in fact
+                // available.
+                Substitution::Waiting(1, name) => Substitution::Available(name.clone()),
                 Substitution::Waiting(time_left, name) => {
                     Substitution::Waiting(time_left - 1, name.clone())
                 }
@@ -91,12 +93,19 @@ impl Substitutions {
 
     /// Mark the variable as available in the current pipeline stage under its
     /// own name
-    pub fn set_available(&mut self, from: NameID) {
+    pub fn set_available(&mut self, from: NameID, time: usize) {
         self.live_vars.push(from.clone());
-        self.inner
-            .last_mut()
-            .unwrap()
-            .insert(from.clone(), Substitution::Available(from.clone()));
+        if time == 0 {
+            self.inner
+                .last_mut()
+                .unwrap()
+                .insert(from.clone(), Substitution::Available(from.clone()));
+        } else {
+            self.inner
+                .last_mut()
+                .unwrap()
+                .insert(from.clone(), Substitution::Waiting(time, from.clone()));
+        }
     }
 
     /// Return substituted name for `original` in the current pipeline stage

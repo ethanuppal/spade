@@ -521,7 +521,8 @@ impl ExprLocal for Loc<Expression> {
                 substitution::Substitution::Waiting(available_in, name) => {
                     Err(Error::UseBeforeReady {
                         name: name.clone().at_loc(self),
-                        available_in,
+                        referenced_at_stage: subs.current_stage,
+                        unavailable_for: available_in,
                     })
                 }
                 substitution::Substitution::Available(current) => Ok(Some(current.value_name())),
@@ -547,9 +548,13 @@ impl ExprLocal for Loc<Expression> {
                         Err(Error::UndefinedVariable { name: name.clone() })
                     }
                     substitution::Substitution::Waiting(available_at, _) => {
+                        // Available at is the amount of cycles left at the stage
+                        // from which the variable is requested.
+                        let referenced_at_stage = subs.current_stage - available_at;
                         Err(Error::UseBeforeReady {
                             name: name.clone(),
-                            available_in: available_at - subs.current_stage,
+                            referenced_at_stage,
+                            unavailable_for: available_at,
                         })
                     }
                     substitution::Substitution::Available(name) => Ok(Some(name.value_name())),

@@ -42,11 +42,30 @@ impl CompilationError for Error {
             Error::UndefinedVariable { name } => Diagnostic::error()
                 .with_message(format!("Use of undeclared name {name}"))
                 .with_labels(vec![name.primary_label().with_message("Undeclared name")]),
-            Error::UseBeforeReady { name, available_in } => Diagnostic::error()
-                .with_message("Use of {name} before it is ready")
+            Error::UseBeforeReady {
+                name,
+                unavailable_for,
+                referenced_at_stage,
+            } => Diagnostic::error()
+                .with_message(format!("Use of {name} before it is ready"))
                 .with_labels(vec![name.primary_label().with_message(format!(
-                    "not ready for another {available_in} stages"
-                ))]),
+                    "Is unavailable for another {unavailable_for} stages"
+                ))])
+                .with_notes(vec![
+                    format!("Requesting {name} from stage {referenced_at_stage}"),
+                    format!(
+                        "But it will not be available until stage {}",
+                        referenced_at_stage + unavailable_for
+                    ),
+                ]),
+            Error::AvailabilityMismatch { prev, new } => Diagnostic::error()
+                .with_message("All subexpressions need the same pipeline delay")
+                .with_labels(vec![
+                    new.primary_label()
+                        .with_message(format!("This has delay {new}")),
+                    prev.secondary_label()
+                        .with_message(format!("But this has delay {prev}")),
+                ]),
         };
 
         term::emit(buffer, &codespan_config(), &code.files, &diag).unwrap();

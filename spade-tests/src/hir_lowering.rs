@@ -797,6 +797,42 @@ mod tests {
     }
 
     #[test]
+    fn subpipes_do_not_get_extra_delay() {
+        let code = r#"
+            pipeline(3) sub(clk: clk) -> int<18> __builtin__
+
+            pipeline(3) pl(clk: clk) -> int<18> {
+                    let res = inst(3) sub(clk);
+                reg*3;
+                    res
+            }
+        "#;
+
+        let expected = entity!("pl"; (
+                "clk", n(3, "clk"), Type::Bool,
+            ) -> Type::Int(18); {
+                // Stage 0
+                (e(0); Type::Int(18); Instance(("sub".to_string())); n(3, "clk"));
+                (n(1, "res"); Type::Int(18); Alias; e(0));
+            } => n(1, "res")
+        );
+
+        let (processed, mut symbol_tracker, mut idtracker, type_list) =
+            parse_typecheck_pipeline(code);
+
+        let result = generate_pipeline(
+            &processed.pipeline,
+            &processed.type_state,
+            &mut symbol_tracker,
+            &mut idtracker,
+            &type_list,
+            &mut HashMap::new(),
+        )
+        .report_failure(code);
+        assert_same_mir!(&result, &expected);
+    }
+
+    #[test]
     fn pipelines_returning_expressions_work() {
         let code = r#"
             pipeline(3) pl(clk: clk, a: int<16>) -> int<17> {
@@ -1446,6 +1482,89 @@ mod tests {
 
         entity main(x: X) -> int<8> {
             x.not_a_field
+        }
+       "
+    }
+
+    snapshot_error! {
+        mismatched_pipeline_depth_match,
+        "
+        pipeline(5) X(clk: clk) -> bool __builtin__
+        pipeline(4) Y(clk: clk) -> bool __builtin__
+
+        pipeline(5) main(clk: clk, x: bool) -> bool {
+                let _ = match x {
+                    true => inst(5) X(clk),
+                    false => inst(4) Y(clk)
+                };
+            reg*5;
+                x
+        }
+       "
+    }
+
+    snapshot_error! {
+        mismatched_pipeline_depth_if,
+        "
+        pipeline(5) X(clk: clk) -> bool __builtin__
+        pipeline(4) Y(clk: clk) -> bool __builtin__
+
+        pipeline(5) main(clk: clk, x: bool) -> bool {
+                let _ = if x {
+                    inst(5) X(clk)
+                }
+                else {
+                    inst(4) Y(clk)
+                };
+            reg*5;
+                x
+        }
+       "
+    }
+
+    snapshot_error! {
+        using_unavailable_variable_causes_error,
+        "
+        pipeline(5) X(clk: clk) -> bool {reg*5; false}
+
+        pipeline(5) main(clk: clk, x: bool) -> bool {
+                let x = inst(5) X(clk);
+            reg;
+                let res = x;
+            reg*4;
+                res
+        }
+       "
+    }
+
+    snapshot_error! {
+        refering_to_unavailable_variable_causes_error,
+        "
+        pipeline(5) X(clk: clk) -> bool {reg*5; false}
+
+        pipeline(6) main(clk: clk, x: bool) -> bool {
+                let x = inst(5) X(clk);
+            reg*5;
+                let res = stage(-1).x;
+            reg;
+                res
+        }
+       "
+    }
+
+    snapshot_error! {
+        absolute_refering_to_unavailable_variable_causes_error,
+        "
+        pipeline(5) X(clk: clk) -> bool {reg*5; false}
+
+        pipeline(6) main(clk: clk, x: bool) -> bool {
+                let x = inst(5) X(clk);
+            reg*4;
+                'here
+            reg;
+                let res = stage(here).x;
+            reg;
+                res
         }
        "
     }

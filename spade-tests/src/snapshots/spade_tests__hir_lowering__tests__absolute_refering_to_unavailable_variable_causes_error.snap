@@ -1,0 +1,14 @@
+---
+source: spade-tests/src/hir_lowering.rs
+expression: "std::str::from_utf8(buffer.as_slice()).expect(\"error contains invalid utf-8\")"
+---
+error: Use of x before it is ready
+  ┌─ testinput:8:31
+  │
+8 │         let res = stage(here).x;
+  │                               ^ Is unavailable for another 1 stages
+  │
+  = Requesting x from stage 4
+  = But it will not be available until stage 5
+
+

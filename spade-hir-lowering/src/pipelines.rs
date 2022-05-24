@@ -1,13 +1,16 @@
 use std::collections::HashMap;
 
-use spade_common::{id_tracker::ExprIdTracker, name::NameID};
-use spade_hir::{symbol_table::FrozenSymtab, ExprKind, ItemList, Pattern, Pipeline, Statement};
+use parse_tree_macros::local_impl;
+use spade_common::{id_tracker::ExprIdTracker, location_info::Loc, name::NameID};
+use spade_hir::{
+    symbol_table::FrozenSymtab, ExprKind, Expression, ItemList, Pattern, Pipeline, Statement,
+};
 use spade_mir as mir;
 use spade_typeinference::TypeState;
 
 use crate::{
-    substitution::Substitutions, ExprLocal, MirLowerable, NameIDLocal, Result, StatementLocal,
-    TypeStateLocal,
+    error::Error, substitution::Substitutions, ExprLocal, MirLowerable, NameIDLocal, Result,
+    StatementLocal, TypeStateLocal,
 };
 
 pub fn handle_pattern(pat: &Pattern, live_vars: &mut Vec<NameID>) {
@@ -39,7 +42,7 @@ pub fn generate_pipeline<'a>(
 
     // Skip because the clock should not be pipelined
     for input in inputs.iter().skip(1).map(|var| var.0.clone()) {
-        subs.set_available(input)
+        subs.set_available(input, 0)
     }
 
     let mut statements = vec![];
@@ -67,14 +70,16 @@ pub fn generate_pipeline<'a>(
 
     for statement in body_statements {
         match &statement.inner {
-            Statement::Binding(pat, _, _) => {
+            Statement::Binding(pat, _, expr) => {
+                let time = expr.inner.kind.available_in()?;
                 for name in pat.get_names() {
-                    subs.set_available(name)
+                    subs.set_available(name, time)
                 }
             }
             Statement::Register(reg) => {
+                let time = reg.inner.value.kind.available_in()?;
                 for name in reg.pattern.get_names() {
-                    subs.set_available(name)
+                    subs.set_available(name, time)
                 }
             }
             Statement::Declaration(_) => todo!(),
@@ -130,4 +135,75 @@ pub fn generate_pipeline<'a>(
         output_type,
         statements,
     })
+}
+
+/// Computes the time at which the specified expressions will be available. If there
+/// is a mismatch, an error is returned
+pub fn try_compute_availability(
+    exprs: &[impl std::borrow::Borrow<Loc<Expression>>],
+) -> Result<usize> {
+    let mut result = None;
+    for expr in exprs {
+        let a = expr.borrow().kind.available_in()?;
+
+        result = match result {
+            None => Some(a),
+            Some(prev) if a == prev => result,
+            // NOTE: Safe index. This branch can only be reached in iteration 2 of the loop
+            _ => {
+                return Err(Error::AvailabilityMismatch {
+                    prev: exprs[0].borrow().clone().map(|_| result.unwrap()),
+                    new: expr.borrow().clone().map(|_| a),
+                })
+            }
+        }
+    }
+    Ok(result.unwrap_or(0))
+}
+
+#[local_impl]
+impl PipelineAvailability for ExprKind {
+    fn available_in(&self) -> Result<usize> {
+        match self {
+            ExprKind::Identifier(_) => Ok(0),
+            ExprKind::IntLiteral(_) => Ok(0),
+            ExprKind::BoolLiteral(_) => Ok(0),
+            ExprKind::TupleLiteral(inner) => try_compute_availability(inner),
+            ExprKind::ArrayLiteral(elems) => try_compute_availability(elems),
+            ExprKind::Index(lhs, idx) => try_compute_availability(&[lhs.as_ref(), idx.as_ref()]),
+            ExprKind::TupleIndex(lhs, _) => lhs.inner.kind.available_in(),
+            ExprKind::FieldAccess(lhs, _) => lhs.inner.kind.available_in(),
+            ExprKind::EntityInstance(_, args) | ExprKind::FnCall(_, args) => {
+                try_compute_availability(&args.iter().map(|arg| &arg.value).collect::<Vec<_>>())
+            }
+            ExprKind::BinaryOperator(lhs, _, rhs) => {
+                try_compute_availability(&[lhs.as_ref(), rhs.as_ref()])
+            }
+            ExprKind::UnaryOperator(_, val) => val.inner.kind.available_in(),
+            ExprKind::Match(_, values) => {
+                try_compute_availability(&values.iter().map(|(_, expr)| expr).collect::<Vec<_>>())
+            }
+            ExprKind::Block(inner) => {
+                // NOTE: Do we want to allow delayed values inside blocks? That could lead to some
+                // strange issues like
+                // {
+                //      let x = inst(10) subpipe();
+                //      x // Will appear as having availability 1
+                // }
+                inner.result.kind.available_in()
+            }
+            ExprKind::PipelineInstance {
+                depth,
+                name: _,
+                args,
+            } => {
+                let arg_availability = try_compute_availability(
+                    &args.iter().map(|arg| &arg.value).collect::<Vec<_>>(),
+                )?;
+                Ok(arg_availability + depth.inner as usize)
+            }
+            ExprKind::If(_, t, f) => try_compute_availability(&[t.as_ref(), f.as_ref()]),
+            ExprKind::PipelineRef { .. } => Ok(0),
+        }
+    }
 }

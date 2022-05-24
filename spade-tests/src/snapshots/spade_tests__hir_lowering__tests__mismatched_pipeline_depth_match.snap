@@ -1,0 +1,13 @@
+---
+source: spade-tests/src/hir_lowering.rs
+expression: "std::str::from_utf8(buffer.as_slice()).expect(\"error contains invalid utf-8\")"
+---
+error: All subexpressions need the same pipeline delay
+  ┌─ testinput:7:22
+  │
+6 │             true => inst(5) X(clk),
+  │                     -------------- But this has delay 5
+7 │             false => inst(4) Y(clk)
+  │                      ^^^^^^^^^^^^^^ This has delay 4
+
+
