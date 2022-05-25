@@ -138,8 +138,8 @@ fn statement_code(statement: &Statement, source_code: &CodeBundle) -> Code {
             }
 
             let expression = match &binding.operator {
-                Operator::Add => binop!("+"),
-                Operator::Sub => binop!("-"),
+                Operator::Add => signed_binop!("+"),
+                Operator::Sub => signed_binop!("-"),
                 Operator::Mul => signed_binop!("*"),
                 Operator::Eq => binop!("=="),
                 Operator::Gt => signed_binop!(">"),
@@ -653,7 +653,7 @@ mod tests {
         let expected = indoc!(
             r#"
             logic _e_0;
-            assign _e_0 = _e_1 + _e_2;"#
+            assign _e_0 = $signed(_e_1) + $signed(_e_2);"#
         );
 
         assert_same_code!(
@@ -669,7 +669,7 @@ mod tests {
         let expected = indoc!(
             r#"
             logic[4:0] _e_0;
-            assign _e_0 = _e_1 + _e_2;"#
+            assign _e_0 = $signed(_e_1) + $signed(_e_2);"#
         );
 
         assert_same_code!(
@@ -734,7 +734,7 @@ mod tests {
                 logic[5:0] op_n0;
                 assign op_n0 = _i_op;
                 logic[5:0] _e_0;
-                assign _e_0 = op_n0 + _e_1;
+                assign _e_0 = $signed(op_n0) + $signed(_e_1);
                 assign __output = _e_0;
             endmodule"#
         );
@@ -864,8 +864,8 @@ mod expression_tests {
         }
     }
 
-    binop_test!(binop_add_works, Type::Int(2), "[1:0]", Add, "+");
-    binop_test!(binop_sub_works, Type::Int(2), "[1:0]", Sub, "-");
+    signed_binop_test!(binop_add_works, Type::Int(2), "[1:0]", Add, "+");
+    signed_binop_test!(binop_sub_works, Type::Int(2), "[1:0]", Sub, "-");
     signed_binop_test!(binop_mul_works, Type::Int(2), "[1:0]", Mul, "*");
     binop_test!(
         binop_left_shift_works,
