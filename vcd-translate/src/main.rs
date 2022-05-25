@@ -31,7 +31,7 @@ type NewVarMap = HashMap<IdCode, Vec<MappedVar>>;
 
 fn add_new_vars(
     mut result: NewVarMap,
-    items: &Vec<ScopeItem>,
+    items: &[ScopeItem],
     writer: &mut vcd::Writer<impl std::io::Write>,
 ) -> Result<NewVarMap> {
     for item in items {
@@ -86,9 +86,8 @@ fn main() -> Result<()> {
     );
     let mut writer = vcd::Writer::new(&mut outfile);
 
-    match header.timescale {
-        Some((t, unit)) => writer.timescale(t, unit)?,
-        None => {}
+    if let Some((t, unit)) = header.timescale {
+        writer.timescale(t, unit)?
     }
     let var_map = add_new_vars(HashMap::new(), &header.items, &mut writer)?;
     writer.enddefinitions()?;

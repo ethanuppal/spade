@@ -71,53 +71,36 @@ impl MaybeValue<BigInt> {
 }
 
 fn translate_uint(value: &[Value], flip: bool) -> MaybeValue<BigUint> {
-    if value.len() <= 64 {
-        let mut intermediate = 0u64;
-        for v in value {
-            if v == &Value::X {
-                return MaybeValue::Undef;
-            } else if v == &Value::Z {
-                return MaybeValue::HighImpedance;
-            }
-            if !flip {
-                if v == &Value::V1 {
-                    intermediate = (intermediate << 1i32) + 1;
-                } else {
-                    intermediate <<= 1i32
-                }
+    let mut result = BigUint::new(vec![]);
+    let mut accumulated_bits = 0;
+    let mut intermediate = 0u64;
+    for v in value {
+        if accumulated_bits == 64 {
+            result = (result << accumulated_bits) + BigUint::from(intermediate);
+            accumulated_bits = 0;
+            intermediate = 0;
+        }
+        if v == &Value::X {
+            return MaybeValue::Undef;
+        } else if v == &Value::Z {
+            return MaybeValue::HighImpedance;
+        }
+        if !flip {
+            if v == &Value::V1 {
+                intermediate = (intermediate << 1i32) + 1;
             } else {
-                if v == &Value::V0 {
-                    intermediate = (intermediate << 1i32) + 1;
-                } else {
-                    intermediate <<= 1i32
-                }
+                intermediate <<= 1i32
+            }
+        } else {
+            if v == &Value::V0 {
+                intermediate = (intermediate << 1i32) + 1;
+            } else {
+                intermediate <<= 1i32
             }
         }
-        MaybeValue::Value(BigUint::from(intermediate))
-    } else {
-        let mut result = BigUint::new(vec![0]);
-        for v in value {
-            if v == &Value::X {
-                return MaybeValue::Undef;
-            } else if v == &Value::Z {
-                return MaybeValue::HighImpedance;
-            }
-            if !flip {
-                if v == &Value::V1 {
-                    result = (result << 1i32) + BigUint::new(vec![1]);
-                } else {
-                    result <<= 1i32
-                }
-            } else {
-                if v == &Value::V0 {
-                    result = (result << 1i32) + BigUint::new(vec![1]);
-                } else {
-                    result <<= 1i32
-                }
-            }
-        }
-        MaybeValue::Value(result)
+        accumulated_bits += 1;
     }
+    MaybeValue::Value((result << accumulated_bits) + BigUint::from(intermediate))
 }
 
 /// Translate a signed integer into a BigInt if none of the elements are undefined
@@ -261,14 +244,12 @@ fn inner_translate_value(result: &mut String, in_value: &[Value], t: &ConcreteTy
             base: PrimitiveType::Int,
             params: _,
         } => {
-            // *result += &format!("{}", translate_signed_int(&value));
             translate_signed_int(&value).write_to(result);
         }
         ConcreteType::Single {
             base: PrimitiveType::Uint,
             params: _,
         } => {
-            // *result += &format!("{}", translate_uint(&value, false));
             *result += "X";
         }
         ConcreteType::Single {
@@ -316,6 +297,42 @@ mod tests {
         assert_eq!(
             translated,
             MaybeValue::Value(BigInt::new(Sign::Plus, vec![0b1011]))
+        );
+    }
+
+    #[test]
+    fn uint_65_works() {
+        let mut values = vec![V1];
+        values.append(&mut vec![V0; 64]);
+
+        let translated = translate_uint(&values, false);
+
+        assert_eq!(translated, MaybeValue::Value(BigUint::new(vec![0, 0, 1])));
+    }
+
+    #[test]
+    fn uint_130_works() {
+        let mut values = vec![V1, V0, V1];
+        values.append(&mut vec![V0; 128]);
+
+        let translated = translate_uint(&values, false);
+
+        assert_eq!(
+            translated,
+            MaybeValue::Value(BigUint::new(vec![0, 0, 0, 0, 0b101]))
+        );
+    }
+
+    #[test]
+    fn uint_80_works() {
+        let mut values = vec![V1; 16];
+        values.append(&mut vec![V0; 64]);
+
+        let translated = translate_uint(&values, false);
+
+        assert_eq!(
+            translated,
+            MaybeValue::Value(BigUint::new(vec![0, 0, 0xffff]))
         );
     }
 
