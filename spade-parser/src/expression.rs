@@ -6,7 +6,7 @@ use crate::error::{Error, Result};
 use crate::{lexer::TokenKind, ParseStackEntry, Parser};
 
 #[derive(PartialEq, PartialOrd, Eq, Ord)]
-enum BinopBindingPower {
+enum OpBindingPower {
     None,
     LogicalOr,
     LogicalAnd,
@@ -18,30 +18,41 @@ enum BinopBindingPower {
     Shift,
     AddLike,
     MulLike,
+    // Unary operator appearing before the expression it applies to such as
+    // - and !
+    PrefixUnary,
 }
 
-fn binop_binding_power(op: &BinaryOperator) -> BinopBindingPower {
+fn binop_binding_power(op: &BinaryOperator) -> OpBindingPower {
     match op {
-        BinaryOperator::Add => BinopBindingPower::AddLike,
-        BinaryOperator::Sub => BinopBindingPower::AddLike,
-        BinaryOperator::Mul => BinopBindingPower::MulLike,
-        BinaryOperator::Equals => BinopBindingPower::Equality,
-        BinaryOperator::Lt => BinopBindingPower::RelationalCmp,
-        BinaryOperator::Gt => BinopBindingPower::RelationalCmp,
-        BinaryOperator::Le => BinopBindingPower::RelationalCmp,
-        BinaryOperator::Ge => BinopBindingPower::RelationalCmp,
-        BinaryOperator::LogicalAnd => BinopBindingPower::LogicalAnd,
-        BinaryOperator::LogicalOr => BinopBindingPower::LogicalOr,
-        BinaryOperator::LeftShift => BinopBindingPower::Shift,
-        BinaryOperator::RightShift => BinopBindingPower::Shift,
-        BinaryOperator::BitwiseAnd => BinopBindingPower::BitwiseAnd,
-        BinaryOperator::BitwiseOr => BinopBindingPower::BitwiseOr,
-        BinaryOperator::Xor => BinopBindingPower::BitwiseXor,
+        BinaryOperator::Add => OpBindingPower::AddLike,
+        BinaryOperator::Sub => OpBindingPower::AddLike,
+        BinaryOperator::Mul => OpBindingPower::MulLike,
+        BinaryOperator::Equals => OpBindingPower::Equality,
+        BinaryOperator::Lt => OpBindingPower::RelationalCmp,
+        BinaryOperator::Gt => OpBindingPower::RelationalCmp,
+        BinaryOperator::Le => OpBindingPower::RelationalCmp,
+        BinaryOperator::Ge => OpBindingPower::RelationalCmp,
+        BinaryOperator::LogicalAnd => OpBindingPower::LogicalAnd,
+        BinaryOperator::LogicalOr => OpBindingPower::LogicalOr,
+        BinaryOperator::LeftShift => OpBindingPower::Shift,
+        BinaryOperator::RightShift => OpBindingPower::Shift,
+        BinaryOperator::BitwiseAnd => OpBindingPower::BitwiseAnd,
+        BinaryOperator::BitwiseOr => OpBindingPower::BitwiseOr,
+        BinaryOperator::Xor => OpBindingPower::BitwiseXor,
+    }
+}
+
+fn unop_binding_power(op: &UnaryOperator) -> OpBindingPower {
+    match op {
+        UnaryOperator::Sub => OpBindingPower::PrefixUnary,
+        UnaryOperator::Not => OpBindingPower::PrefixUnary,
+        UnaryOperator::BitwiseNot => OpBindingPower::PrefixUnary,
     }
 }
 
 impl<'a> Parser<'a> {
-    fn operator_from_kind(kind: &TokenKind) -> Option<BinaryOperator> {
+    fn binop_from_kind(kind: &TokenKind) -> Option<BinaryOperator> {
         match kind {
             TokenKind::Plus => Some(BinaryOperator::Add),
             TokenKind::Minus => Some(BinaryOperator::Sub),
@@ -64,12 +75,21 @@ impl<'a> Parser<'a> {
         }
     }
 
+    fn unop_from_kind(kind: &TokenKind) -> Option<UnaryOperator> {
+        match kind {
+            TokenKind::Minus => Some(UnaryOperator::Sub),
+            TokenKind::Not => Some(UnaryOperator::Not),
+            TokenKind::BitwiseNot => Some(UnaryOperator::BitwiseNot),
+            _ => None,
+        }
+    }
+
     pub fn expression(&mut self) -> Result<Loc<Expression>> {
         self.custom_infix_operator()
     }
 
     fn custom_infix_operator(&mut self) -> Result<Loc<Expression>> {
-        let lhs_val = self.binary_operator(BinopBindingPower::None)?;
+        let lhs_val = self.expr_bp(OpBindingPower::None)?;
 
         if self.peek_kind(&TokenKind::InfixOperatorSeparator)? {
             let (name, _) = self.surrounded(
@@ -96,14 +116,26 @@ impl<'a> Parser<'a> {
 
     // Based on matklads blog post on pratt parsing:
     // https://matklad.github.io/2020/04/13/simple-but-powerful-pratt-parsing.html
-    fn binary_operator(&mut self, min_power: BinopBindingPower) -> Result<Loc<Expression>> {
-        let mut lhs = self.base_expression()?;
+    fn expr_bp(&mut self, min_power: OpBindingPower) -> Result<Loc<Expression>> {
+        let mut lhs = if let Some((tok, op)) = self
+            .peek()?
+            .and_then(|tok| Self::unop_from_kind(&tok.kind).map(|op| (tok, op)))
+        {
+            self.eat_unconditional()?;
+            let op_power = unop_binding_power(&op);
+
+            let rhs = self.expr_bp(op_power)?;
+
+            Expression::UnaryOperator(op, Box::new(rhs.clone())).between(self.file_id, &tok, &rhs)
+        } else {
+            self.base_expression()?
+        };
 
         while let Some(op) = self
             .peek()?
             .map(|tok| tok.kind)
             .as_ref()
-            .and_then(Self::operator_from_kind)
+            .and_then(Self::binop_from_kind)
         {
             let op_power = binop_binding_power(&op);
 
@@ -113,7 +145,7 @@ impl<'a> Parser<'a> {
 
             self.eat_unconditional()?;
 
-            let rhs = self.binary_operator(op_power)?;
+            let rhs = self.expr_bp(op_power)?;
             lhs = Expression::BinaryOperator(Box::new(lhs.clone()), op, Box::new(rhs.clone()))
                 .between(self.file_id, &lhs, &rhs)
         }
@@ -202,7 +234,7 @@ impl<'a> Parser<'a> {
                     hash_loc: Loc::new((), lspan(hash.span), self.file_id),
                 })
             }
-        } else if let Some(_) = self.peek_and_eat(&TokenKind::Dot)? {
+        } else if self.peek_and_eat(&TokenKind::Dot)?.is_some() {
             let field = self.identifier()?;
 
             Ok(
@@ -879,5 +911,23 @@ mod test {
         .nowhere();
 
         check_parse!("!a[b]", expression, Ok(expected_value.clone()));
+    }
+
+    #[test]
+    fn unary_sub_binds_correctly() {
+        let expexte_value = Expression::BinaryOperator(
+            Box::new(
+                Expression::UnaryOperator(
+                    UnaryOperator::Sub,
+                    Box::new(Expression::Identifier(ast_path("a")).nowhere()),
+                )
+                .nowhere(),
+            ),
+            BinaryOperator::Add,
+            Box::new(Expression::Identifier(ast_path("b")).nowhere()),
+        )
+        .nowhere();
+
+        check_parse!("-a + b", expression, Ok(expexte_value));
     }
 }
