@@ -11,6 +11,6 @@ error: Pattern type mismatch
   │              expected bool
   │
   = Expected: bool
-  =      Got: (t2, t3)
+  =      Got: (_, _)
 
 

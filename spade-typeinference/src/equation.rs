@@ -56,7 +56,7 @@ impl std::fmt::Display for TypeVar {
             TypeVar::Array { inner, size } => {
                 write!(f, "[{}; {}]", inner, size)
             }
-            TypeVar::Unknown(id) => write!(f, "t{}", id),
+            TypeVar::Unknown(_) => write!(f, "_"),
         }
     }
 }

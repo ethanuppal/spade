@@ -13,6 +13,6 @@ error: Pattern type mismatch
   │ ╰─────' because this has type bool
   │  
   = Expected: bool
-  =      Got: (t2, t3)
+  =      Got: (_, _)
 
 
