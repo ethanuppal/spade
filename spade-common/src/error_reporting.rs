@@ -49,11 +49,11 @@ impl CodeBundle {
 }
 
 pub trait CompilationError {
-    fn report(self, buffer: &mut Buffer, code: &CodeBundle);
+    fn report(&self, buffer: &mut Buffer, code: &CodeBundle);
 }
 
 impl CompilationError for std::io::Error {
-    fn report(self, buffer: &mut Buffer, _code: &CodeBundle) {
+    fn report(&self, buffer: &mut Buffer, _code: &CodeBundle) {
         if let Err(e) = buffer.write_all(self.to_string().as_bytes()) {
             eprintln!(
                 "io error when writing io error to error buffer\noriginal error: {}\nnew error: {}",

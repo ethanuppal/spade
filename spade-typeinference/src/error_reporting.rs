@@ -4,7 +4,7 @@ use codespan_reporting::diagnostic::Diagnostic;
 use codespan_reporting::term::{self, termcolor::Buffer};
 use spade_common::error_reporting::{codespan_config, AsLabel, CodeBundle, CompilationError};
 
-pub fn type_mismatch_notes(got: UnificationTrace, expected: UnificationTrace) -> Vec<String> {
+pub fn type_mismatch_notes(got: &UnificationTrace, expected: &UnificationTrace) -> Vec<String> {
     let mut result = vec![];
 
     result.push(format!("Expected: {}", expected.failing));
@@ -19,7 +19,7 @@ pub fn type_mismatch_notes(got: UnificationTrace, expected: UnificationTrace) ->
 }
 
 impl CompilationError for Error {
-    fn report(self, buffer: &mut Buffer, code: &CodeBundle) {
+    fn report(&self, buffer: &mut Buffer, code: &CodeBundle) {
         let diag = match self {
             Error::GenericTypeInstanciation => todo![],
             Error::UnknownType(expr) => Diagnostic::error()

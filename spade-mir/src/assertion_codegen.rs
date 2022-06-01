@@ -12,7 +12,7 @@ use crate::ValueName;
 pub struct AssertedExpression(pub Loc<ValueName>);
 
 impl CompilationError for AssertedExpression {
-    fn report(self, buffer: &mut Buffer, code: &CodeBundle) {
+    fn report(&self, buffer: &mut Buffer, code: &CodeBundle) {
         let diag = Diagnostic::error()
             .with_message("Assertion failed")
             .with_labels(vec![self

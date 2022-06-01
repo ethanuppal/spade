@@ -264,8 +264,9 @@ pub fn visit_item(
         }
         ast::Item::Module(m) => {
             ctx.symtab.push_namespace(m.name.clone());
-            let new_item_list = hir::ItemList::new();
-            let result = Ok((None, Some(visit_module_body(new_item_list, &m.body, ctx)?)));
+            let mut new_item_list = hir::ItemList::new();
+            visit_module_body(&mut new_item_list, &m.body, ctx)?;
+            let result = Ok((None, Some(new_item_list)));
             ctx.symtab.pop_namespace();
             result
         }
@@ -274,10 +275,10 @@ pub fn visit_item(
 }
 
 pub fn visit_module_body(
-    mut item_list: hir::ItemList,
+    item_list: &mut hir::ItemList,
     module: &ast::ModuleBody,
     ctx: &mut Context,
-) -> Result<hir::ItemList> {
+) -> Result<()> {
     let all_items = module
         .members
         .iter()
@@ -321,7 +322,7 @@ pub fn visit_module_body(
         }
     }
 
-    Ok(item_list)
+    Ok(())
 }
 
 fn try_lookup_enum_variant(path: &Loc<Path>, ctx: &mut Context) -> Result<hir::PatternKind> {
@@ -2693,9 +2694,10 @@ mod module_visiting {
         let idtracker = ExprIdTracker::new();
         global_symbols::gather_symbols(&input, &mut symtab, &mut ItemList::new())
             .expect("failed to collect global symbols");
+        let mut item_list = ItemList::new();
         assert_eq!(
             visit_module_body(
-                ItemList::new(),
+                &mut item_list,
                 &input,
                 &mut Context {
                     symtab,
@@ -2703,7 +2705,9 @@ mod module_visiting {
                     pipeline_ctx: None
                 }
             ),
-            Ok(expected)
+            Ok(())
         );
+
+        assert_eq!(item_list, expected);
     }
 }

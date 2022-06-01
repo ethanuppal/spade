@@ -40,17 +40,17 @@ fn unexpected_token<'a>(
 }
 
 impl CompilationError for Error {
-    fn report(self, buffer: &mut Buffer, code: &CodeBundle) {
+    fn report(&self, buffer: &mut Buffer, code: &CodeBundle) {
         let diag = match self {
             Error::Eof => Diagnostic::error().with_message("Reached end of file when parsing"),
             Error::LexerError(file_id, location) => Diagnostic::error()
                 .with_message("Lexer error, unexpected symbol")
-                .with_labels(vec![Label::primary(file_id, location)]),
+                .with_labels(vec![Label::primary(file_id.clone(), location.clone())]),
             Error::UnexpectedToken { got, expected } => {
-                unexpected_token(got.file_id, got, expected)
+                unexpected_token(got.file_id, got.clone(), expected.clone())
             }
             Error::UnexpectedEndOfArgList { got, expected } => {
-                unexpected_token(got.file_id, got, expected.iter().map(|tok| tok.as_str()))
+                unexpected_token(got.file_id, got.clone(), expected.iter().map(|tok| tok.as_str()))
             }
             Error::UnmatchedPair {
                 friend,
@@ -63,7 +63,7 @@ impl CompilationError for Error {
                     got.kind.as_str()
                 ))
                 .with_labels(vec![
-                    Label::primary(got.file_id, got.span)
+                    Label::primary(got.file_id, got.span.clone())
                         .with_message(format!("Expected `{}`", expected.as_str())),
                     friend
                         .secondary_label()
@@ -74,7 +74,7 @@ impl CompilationError for Error {
 
                 Diagnostic::error()
                     .with_message(message)
-                    .with_labels(vec![Label::primary(got.file_id, got.span)
+                    .with_labels(vec![Label::primary(got.file_id, got.span.clone())
                         .with_message(format!("expected expression here"))])
             }
             Error::ExpectedBlock { for_what, got, loc } => {
@@ -90,7 +90,7 @@ impl CompilationError for Error {
             Error::ExpectedItem { got } => Diagnostic::error()
                 .with_message(format!("Expected item, found {}", got.kind.as_str()))
                 .with_labels(vec![
-                    Label::primary(got.file_id, got.span).with_message("Expected item")
+                    Label::primary(got.file_id, got.span.clone()).with_message("Expected item")
                 ]),
             Error::MissingTupleIndex { hash_loc } => {
                 let message = format!("Expected an index after #");

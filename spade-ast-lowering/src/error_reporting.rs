@@ -5,7 +5,7 @@ use spade_common::error_reporting::{codespan_config, AsLabel, CodeBundle, Compil
 use spade_hir::symbol_table::{DeclarationError, LookupError};
 
 impl CompilationError for Error {
-    fn report(self, buffer: &mut Buffer, code: &CodeBundle) {
+    fn report(&self, buffer: &mut Buffer, code: &CodeBundle) {
         let diag = match self {
             Error::DuplicateTypeVariable { found, previously } => Diagnostic::error()
                 .with_message(format!("Duplicate typename: `{}`", found.inner))

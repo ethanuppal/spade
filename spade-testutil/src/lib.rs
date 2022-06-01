@@ -105,7 +105,7 @@ pub fn parse_typecheck_module_body(input: &str) -> ParseTypececkResult {
         pipeline_ctx: None,
     };
 
-    let item_list = try_or_report!(visit_module_body(item_list, &module_ast, &mut ctx));
+    try_or_report!(visit_module_body(&mut item_list, &module_ast, &mut ctx));
 
     let items = try_or_report!(typeinference::ProcessedItemList::typecheck(
         &item_list,

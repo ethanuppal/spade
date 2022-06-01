@@ -4,7 +4,7 @@ use codespan_reporting::term::{self, termcolor::Buffer};
 use spade_common::error_reporting::{codespan_config, AsLabel, CodeBundle, CompilationError};
 
 impl CompilationError for Error {
-    fn report(self, buffer: &mut Buffer, code: &CodeBundle) {
+    fn report(&self, buffer: &mut Buffer, code: &CodeBundle) {
         let diag = match self {
             Error::UsingGenericType { expr, t } => Diagnostic::error()
                 .with_message(format!("Type of expression is not fully known"))
