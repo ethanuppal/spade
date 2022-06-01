@@ -63,6 +63,29 @@ fn type_inference_works_for_declared_variables() {
     build_items(code);
 }
 
+#[test]
+fn type_inference_works_for_usub_on_literals() {
+    let code = r#"
+    entity name() -> int<16> {
+        -1
+    }
+    "#;
+
+    build_items(code);
+}
+
+#[test]
+fn type_inference_works_for_bools_with_not_operator() {
+    let code = r#"
+    entity name() -> int<16> {
+        let test = !false;
+        0
+    }
+    "#;
+
+    build_items(code);
+}
+
 snapshot_error!(
     return_type_mismatch,
     r#"

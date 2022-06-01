@@ -551,10 +551,12 @@ impl TypeState {
             match op {
                 UnaryOperator::Sub | UnaryOperator::BitwiseNot => {
                     let int_type = self.new_generic_int(symtab);
-                    self.unify_expression_generic_error(operand, &int_type, symtab)?
+                    self.unify_expression_generic_error(operand, &int_type, symtab)?;
+                    self.unify_expression_generic_error(expression, &int_type, symtab)?
                 }
                 UnaryOperator::Not => {
-                    self.unify_expression_generic_error(operand, &t_bool(symtab), symtab)?
+                    self.unify_expression_generic_error(operand, &t_bool(symtab), symtab)?;
+                    self.unify_expression_generic_error(expression, &t_bool(symtab), symtab)?
                 }
             }
         });
