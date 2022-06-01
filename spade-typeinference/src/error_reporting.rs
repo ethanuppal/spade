@@ -296,12 +296,18 @@ impl CompilationError for Error {
             Error::PatternTypeMismatch {
                 pattern,
                 expected,
+                reason,
                 got,
             } => Diagnostic::error()
                 .with_message("Pattern type mismatch")
-                .with_labels(vec![pattern
-                    .primary_label()
-                    .with_message(format!("expected {}", expected))])
+                .with_labels(vec![
+                    pattern
+                        .primary_label()
+                        .with_message(format!("expected {}", expected)),
+                    reason
+                        .secondary_label()
+                        .with_message(format!("because this has type {}", expected)),
+                ])
                 .with_notes(vec![
                     format!("Expected: {}", expected),
                     format!("     Got: {}", got),

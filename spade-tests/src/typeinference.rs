@@ -193,3 +193,64 @@ snapshot_error! {
             true
         }"
 }
+
+snapshot_error! {
+    good_error_message_for_reg_with_explicit_type,
+    "
+        entity test(clk: clk) -> bool {
+            reg(clk) (sample_i, audio_val): (int<9>, int<16>) = {
+                true
+            };
+
+            true
+        }
+        "
+}
+
+snapshot_error! {
+    good_error_message_for_reg_pattern_type_mismatch,
+    "
+        entity test(clk: clk) -> bool {
+            reg(clk) (sample_i, audio_val): bool = {
+                true
+            };
+
+            true
+        }
+        "
+}
+
+snapshot_error! {
+    good_error_message_for_reg_pattern_type_mismatch_with_implicit_type,
+    "
+        entity test(clk: clk) -> bool {
+            reg(clk) (sample_i, audio_val) = {
+                true
+            };
+
+            true
+        }
+        "
+}
+
+snapshot_error! {
+    good_error_message_for_let_pattern_type_mismatch_with_implicit_type,
+    "
+        entity test(clk: clk) -> bool {
+            let (x, y) = true;
+
+            true
+        }
+        "
+}
+
+snapshot_error! {
+    good_error_message_for_let_pattern_type_mismatch_with_explicit_type,
+    "
+        entity test(clk: clk) -> bool {
+            let (x, y): bool = true;
+
+            true
+        }
+        "
+}

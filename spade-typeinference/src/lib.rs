@@ -656,9 +656,10 @@ impl TypeState {
                 self.visit_pattern(pattern, symtab)?;
 
                 self.unify(&TypedExpression::Id(pattern.id), value, symtab)
-                    .map_normal_err(|(expected, got)| Error::PatternTypeMismatch {
+                    .map_normal_err(|(got, expected)| Error::PatternTypeMismatch {
                         pattern: pattern.loc(),
                         expected,
+                        reason: t.as_ref().map(|t| t.loc()).unwrap_or_else(|| value.loc()),
                         got,
                     })?;
 
@@ -733,23 +734,28 @@ impl TypeState {
                 loc: reg.clock.loc(),
             })?;
 
-        self.unify(&TypedExpression::Id(reg.pattern.id), &reg.value, symtab)
-            .map_normal_err(|(expected, got)| Error::PatternTypeMismatch {
-                pattern: reg.pattern.loc(),
-                expected,
-                got,
-            })?;
-
         if let Some(t) = &reg.value_type {
             let token = self.create_generic_list(&[]);
             let tvar = self.type_var_from_hir(&t, &token);
-            self.unify(&TypedExpression::Id(reg.pattern.id), &tvar, symtab)
+            self.unify(&reg.value, &tvar, symtab)
                 .map_normal_err(|(got, expected)| Error::UnspecifiedTypeError {
                     expected,
                     got,
-                    loc: reg.pattern.loc(),
+                    loc: reg.value.loc(),
                 })?;
         }
+
+        self.unify(&TypedExpression::Id(reg.pattern.id), &reg.value, symtab)
+            .map_normal_err(|(got, expected)| Error::PatternTypeMismatch {
+                pattern: reg.pattern.loc(),
+                reason: reg
+                    .value_type
+                    .as_ref()
+                    .map(|t| t.loc())
+                    .unwrap_or_else(|| reg.value.loc()),
+                expected,
+                got,
+            })?;
 
         Ok(())
     }

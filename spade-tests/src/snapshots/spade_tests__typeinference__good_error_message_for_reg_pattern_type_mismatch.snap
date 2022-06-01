@@ -1,0 +1,16 @@
+---
+source: spade-tests/src/typeinference.rs
+expression: "std::str::from_utf8(buffer.as_slice()).expect(\"error contains invalid utf-8\")"
+---
+error: Pattern type mismatch
+  ┌─ testinput:2:14
+  │
+2 │     reg(clk) (sample_i, audio_val): bool = {
+  │              ^^^^^^^^^^^^^^^^^^^^^  ---- because this has type bool
+  │              │                       
+  │              expected bool
+  │
+  = Expected: bool
+  =      Got: (t2, t3)
+
+

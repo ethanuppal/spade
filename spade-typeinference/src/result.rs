@@ -232,6 +232,7 @@ pub enum Error {
     #[error("Pattern type mismatch")]
     PatternTypeMismatch {
         pattern: Loc<()>,
+        reason: Loc<()>,
         expected: UnificationTrace,
         got: UnificationTrace,
     },

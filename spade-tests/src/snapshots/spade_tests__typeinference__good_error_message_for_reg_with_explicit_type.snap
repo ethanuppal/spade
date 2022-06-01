@@ -1,0 +1,14 @@
+---
+source: spade-tests/src/typeinference.rs
+expression: "std::str::from_utf8(buffer.as_slice()).expect(\"error contains invalid utf-8\")"
+---
+error: Expected type (int<9>, int<16>), got bool
+  ┌─ testinput:2:57
+  │  
+2 │       reg(clk) (sample_i, audio_val): (int<9>, int<16>) = {
+  │ ╭─────────────────────────────────────────────────────────^
+3 │ │         true
+4 │ │     };
+  │ ╰─────^ Expected (int<9>, int<16>) here
+
+
