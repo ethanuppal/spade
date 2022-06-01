@@ -1,11 +1,8 @@
 #[cfg(test)]
 mod tests {
-    use std::collections::HashMap;
-
-    use crate::{build_and_compare_entities, build_entity, build_items, snapshot_error, ResultExt};
+    use crate::{build_and_compare_entities, build_entity, build_items, snapshot_error};
     use colored::Colorize;
     use spade_common::location_info::WithLocation;
-    use spade_hir_lowering::*;
     use spade_mir::{
         self,
         diff::{compare_entity, VarMap},
@@ -14,11 +11,6 @@ mod tests {
         types::Type,
         ConstantValue,
     };
-    use spade_testutil::{
-        parse_typecheck_entity, parse_typecheck_module_body, parse_typecheck_pipeline,
-        ParseTypececkResult,
-    };
-    use spade_typeinference::ProcessedItem;
 
     macro_rules! assert_same_mir {
         ($got:expr, $expected:expr) => {
@@ -631,31 +623,7 @@ mod tests {
             } => e(0)),
         ];
 
-        let ParseTypececkResult {
-            items_with_types,
-            item_list,
-            mut idtracker,
-            mut symtab,
-        } = parse_typecheck_module_body(code);
-
-        let mut result = vec![];
-        for processed in items_with_types.executables {
-            match processed {
-                ProcessedItem::Entity(processed) => {
-                    result.push(
-                        generate_entity(
-                            &processed.entity,
-                            &mut symtab,
-                            &mut idtracker,
-                            &processed.type_state,
-                            &item_list,
-                        )
-                        .report_failure(code),
-                    );
-                }
-                _ => panic!("expected an entity"),
-            }
-        }
+        let mut result = build_items(code);
 
         expected.sort_by_key(|e| e.name.clone());
         result.sort_by_key(|e| e.name.clone());
@@ -694,42 +662,7 @@ mod tests {
             } => e(0)),
         ];
 
-        let module = parse_typecheck_module_body(code);
-        let mut symtab = module.symtab;
-        let mut idtracker = module.idtracker;
-
-        let mut result = vec![];
-        for processed in module.items_with_types.executables {
-            match processed {
-                ProcessedItem::Entity(processed) => {
-                    result.push(
-                        generate_entity(
-                            &processed.entity,
-                            &mut symtab,
-                            &mut idtracker,
-                            &processed.type_state,
-                            &module.item_list,
-                        )
-                        .report_failure(code),
-                    );
-                }
-                ProcessedItem::Pipeline(processed) => {
-                    result.push(
-                        generate_pipeline(
-                            &processed.pipeline,
-                            &processed.type_state,
-                            &mut symtab,
-                            &mut idtracker,
-                            &module.item_list,
-                            &mut HashMap::new(),
-                        )
-                        .report_failure(code),
-                    );
-                }
-                ProcessedItem::EnumInstance => {}
-                ProcessedItem::StructInstance => {}
-            }
-        }
+        let mut result = build_items(code);
 
         expected.sort_by_key(|e| e.name.clone());
         result.sort_by_key(|e| e.name.clone());
@@ -781,18 +714,8 @@ mod tests {
             } => n(34, "s3_res")
         );
 
-        let (processed, mut symbol_tracker, mut idtracker, type_list) =
-            parse_typecheck_pipeline(code);
+        let result = build_entity!(code);
 
-        let result = generate_pipeline(
-            &processed.pipeline,
-            &processed.type_state,
-            &mut symbol_tracker,
-            &mut idtracker,
-            &type_list,
-            &mut HashMap::new(),
-        )
-        .report_failure(code);
         assert_same_mir!(&result, &expected);
     }
 
@@ -817,18 +740,8 @@ mod tests {
             } => n(1, "res")
         );
 
-        let (processed, mut symbol_tracker, mut idtracker, type_list) =
-            parse_typecheck_pipeline(code);
+        let result = build_entity!(code);
 
-        let result = generate_pipeline(
-            &processed.pipeline,
-            &processed.type_state,
-            &mut symbol_tracker,
-            &mut idtracker,
-            &type_list,
-            &mut HashMap::new(),
-        )
-        .report_failure(code);
         assert_same_mir!(&result, &expected);
     }
 
@@ -861,18 +774,8 @@ mod tests {
             } => e(3)
         );
 
-        let (processed, mut symbol_tracker, mut idtracker, type_list) =
-            parse_typecheck_pipeline(code);
+        let result = build_entity!(code);
 
-        let result = generate_pipeline(
-            &processed.pipeline,
-            &processed.type_state,
-            &mut symbol_tracker,
-            &mut idtracker,
-            &type_list,
-            &mut HashMap::new(),
-        )
-        .report_failure(code);
         assert_same_mir!(&result, &expected);
     }
 
@@ -895,18 +798,8 @@ mod tests {
             } => n(0, "a")
         );
 
-        let (processed, mut symbol_tracker, mut idtracker, type_list) =
-            parse_typecheck_pipeline(code);
+        let result = build_entity!(code);
 
-        let result = generate_pipeline(
-            &processed.pipeline,
-            &processed.type_state,
-            &mut symbol_tracker,
-            &mut idtracker,
-            &type_list,
-            &mut HashMap::new(),
-        )
-        .report_failure(code);
         assert_same_mir!(&result, &expected);
     }
 
@@ -940,18 +833,8 @@ mod tests {
             } => n(20, "s2_b")
         );
 
-        let (processed, mut symbol_tracker, mut idtracker, type_list) =
-            parse_typecheck_pipeline(code);
+        let result = build_entity!(code);
 
-        let result = generate_pipeline(
-            &processed.pipeline,
-            &processed.type_state,
-            &mut symbol_tracker,
-            &mut idtracker,
-            &type_list,
-            &mut HashMap::new(),
-        )
-        .report_failure(code);
         assert_same_mir!(&result, &expected);
     }
 
@@ -986,18 +869,8 @@ mod tests {
             } => n(20, "s2_b")
         );
 
-        let (processed, mut symbol_tracker, mut idtracker, type_list) =
-            parse_typecheck_pipeline(code);
+        let result = build_entity!(code);
 
-        let result = generate_pipeline(
-            &processed.pipeline,
-            &processed.type_state,
-            &mut symbol_tracker,
-            &mut idtracker,
-            &type_list,
-            &mut HashMap::new(),
-        )
-        .report_failure(code);
         assert_same_mir!(&result, &expected);
     }
 
@@ -1026,18 +899,8 @@ mod tests {
             } => n(1, "x")
         );
 
-        let (processed, mut symbol_tracker, mut idtracker, type_list) =
-            parse_typecheck_pipeline(code);
+        let result = build_entity!(code);
 
-        let result = generate_pipeline(
-            &processed.pipeline,
-            &processed.type_state,
-            &mut symbol_tracker,
-            &mut idtracker,
-            &type_list,
-            &mut HashMap::new(),
-        )
-        .report_failure(code);
         assert_same_mir!(&result, &expected);
     }
 

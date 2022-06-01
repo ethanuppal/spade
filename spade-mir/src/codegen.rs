@@ -564,16 +564,16 @@ fn statement_code_and_declaration(statement: &Statement, source_code: &CodeBundl
     }
 }
 
-pub fn entity_code(mut entity: Entity, source_code: &CodeBundle) -> Code {
-    flatten_aliases(&mut entity);
+pub fn entity_code(entity: &mut Entity, source_code: &CodeBundle) -> Code {
+    flatten_aliases(entity);
 
-    let entity_name = mangle_entity(&escape_path(entity.name));
+    let entity_name = mangle_entity(&escape_path(entity.name.clone()));
 
     let inputs: Vec<_> = entity
         .inputs
-        .into_iter()
+        .iter()
         .map(|(name, value_name, ty)| {
-            let name = mangle_input(&escape_path(name));
+            let name = mangle_input(&escape_path(name.clone()));
             (name, value_name, ty)
         })
         .collect();
@@ -741,7 +741,7 @@ mod tests {
         );
 
         assert_same_code!(
-            &entity_code(input.clone(), &CodeBundle::new("".to_string())).to_string(),
+            &entity_code(&mut input.clone(), &CodeBundle::new("".to_string())).to_string(),
             expected
         );
     }
@@ -796,7 +796,7 @@ mod tests {
         );
 
         assert_same_code!(
-            &entity_code(input.clone(), &CodeBundle::new("".to_string())).to_string(),
+            &entity_code(&mut input.clone(), &CodeBundle::new("".to_string())).to_string(),
             expected
         );
     }

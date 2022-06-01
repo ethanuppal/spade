@@ -68,7 +68,7 @@ fn main() -> Result<()> {
     };
 
     match spade::compile(sources?, spade_opts) {
-        Ok(()) => Ok(()),
+        Ok(_) => Ok(()),
         Err(_) => {
             std::io::stderr().write_all(buffer.as_slice())?;
             Err(anyhow!("aborting due to previous error"))

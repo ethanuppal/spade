@@ -2,12 +2,6 @@ use codespan_reporting::term::termcolor::Buffer;
 use std::io::Write;
 
 use spade_common::error_reporting::{CodeBundle, CompilationError};
-#[cfg(test)]
-use spade_hir_lowering::generate_entity;
-#[cfg(test)]
-use spade_testutil::{parse_typecheck_module_body, ParseTypececkResult};
-#[cfg(test)]
-use spade_typeinference::ProcessedItem;
 
 #[cfg(test)]
 mod ast_lowering;
@@ -41,28 +35,14 @@ impl<T> ResultExt<T> for spade_hir_lowering::error::Result<T> {
 }
 
 #[macro_export]
+#[cfg(test)]
 macro_rules! build_entity {
     ($code:expr) => {{
-        let (processed, mut symtab, mut idtracker, item_list) = parse_typecheck_entity($code);
-        let result = generate_entity(
-            &processed.entity,
-            &mut symtab,
-            &mut idtracker,
-            &processed.type_state,
-            &item_list,
-        )
-        .map_err(|e| {
-            processed.type_state.print_equations();
-            print!(
-                "{}",
-                spade_typeinference::trace_stack::format_trace_stack(
-                    &processed.type_state.trace_stack
-                )
-            );
-            e
-        })
-        .report_failure($code);
-        result
+        match build_items($code).as_slice() {
+            [] => panic!("Found no entities"),
+            [e] => e.clone(),
+            _ => panic!("Found more than one entity"),
+        }
     }};
 }
 
@@ -91,51 +71,26 @@ macro_rules! snapshot_error {
     };
 }
 
-/// Builds mutliple entities and types from a source string. If any pipelines or other
-/// non-entities or types are included in $code, this panics
+/// Builds mutliple items and types from a source string.
+/// Panics if the compilation fails
+/// Returns all MIR entities in unflattened format
 #[cfg(test)]
 fn build_items(code: &str) -> Vec<spade_mir::Entity> {
-    let ParseTypececkResult {
-        items_with_types,
-        item_list,
-        mut symtab,
-        mut idtracker,
-    } = parse_typecheck_module_body(code);
+    let source = unindent::unindent(code);
+    let mut buffer = codespan_reporting::term::termcolor::Buffer::no_color();
+    let opts = spade::Opt {
+        error_buffer: &mut buffer,
+        outfile: None,
+        mir_output: None,
+        type_dump_file: None,
+        print_type_traceback: false,
+        print_parse_traceback: false,
+    };
 
-    // FIXME: This is copied from the above code, so it is fairly general. Perhaps
-    // we should macroify it
-    let mut result = vec![];
-    for processed in items_with_types.executables {
-        match processed {
-            ProcessedItem::Entity(processed) => {
-                result.push(
-                    generate_entity(
-                        &processed.entity,
-                        &mut symtab,
-                        &mut idtracker,
-                        &processed.type_state,
-                        &item_list,
-                    )
-                    .map_err(|e| {
-                        processed.type_state.print_equations();
-                        println!(
-                            "{}",
-                            spade_typeinference::trace_stack::format_trace_stack(
-                                &processed.type_state.trace_stack
-                            )
-                        );
-                        e
-                    })
-                    .report_failure(code),
-                );
-            }
-            ProcessedItem::EnumInstance => {}
-            ProcessedItem::StructInstance => {}
-            _ => panic!("expected an entity"),
-        }
+    match spade::compile(vec![("testinput".to_string(), source.to_string())], opts) {
+        Ok(artefacts) => artefacts.bumpy_mir_entities,
+        Err(()) => panic!("Compilation error"),
     }
-
-    result
 }
 
 /// Builds mutliple entities and types from a source string, then compares the resulting

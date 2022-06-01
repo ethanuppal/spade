@@ -84,9 +84,23 @@ impl<'a> ErrorHandler<'a> {
     }
 }
 
-pub fn compile(sources: Vec<(String, String)>, opts: Opt) -> Result<(), ()> {
+pub struct Artefacts {
+    // MIR entities before aliases have been flattened
+    pub bumpy_mir_entities: Vec<spade_mir::Entity>,
+    // MIR entities after flattening
+    pub flat_mir_entities: Vec<spade_mir::Entity>,
+}
+
+pub fn compile(sources: Vec<(String, String)>, opts: Opt) -> Result<Artefacts, ()> {
     let mut symtab = symbol_table::SymbolTable::new();
     let mut item_list = ItemList::new();
+
+    // Declared early in order to be able to return early in case this is only
+    // partial compilation
+
+    let mut bumpy_mir_entities = vec![];
+    let mut flat_mir_entities = vec![];
+
     spade_ast_lowering::builtins::populate_symtab(&mut symtab, &mut item_list);
 
     let code = Rc::new(RwLock::new(CodeBundle::new("".to_string())));
@@ -208,10 +222,14 @@ pub fn compile(sources: Vec<(String, String)>, opts: Opt) -> Result<(), ()> {
                 )
                 .report(&mut errors)
                 {
-                    Ok(mir) => {
+                    Ok(mut mir) => {
+                        bumpy_mir_entities.push(mir.clone());
+
+                        let code = spade_mir::codegen::entity_code(&mut mir, &code.read().unwrap());
+
                         mir_code.push(format!("{mir}"));
 
-                        let code = spade_mir::codegen::entity_code(mir, &code.read().unwrap());
+                        flat_mir_entities.push(mir);
 
                         module_code.push(code.to_string());
                     }
@@ -235,10 +253,14 @@ pub fn compile(sources: Vec<(String, String)>, opts: Opt) -> Result<(), ()> {
                 )
                 .report(&mut errors)
                 {
-                    Ok(mir) => {
+                    Ok(mut mir) => {
+                        bumpy_mir_entities.push(mir.clone());
+
+                        let code = spade_mir::codegen::entity_code(&mut mir, &code.read().unwrap());
+
                         mir_code.push(format!("{mir}"));
 
-                        let code = spade_mir::codegen::entity_code(mir, &code.read().unwrap());
+                        flat_mir_entities.push(mir);
 
                         module_code.push(code.to_string());
 
@@ -292,6 +314,9 @@ pub fn compile(sources: Vec<(String, String)>, opts: Opt) -> Result<(), ()> {
     if errors.failed {
         Err(())
     } else {
-        Ok(())
+        Ok(Artefacts {
+            bumpy_mir_entities,
+            flat_mir_entities,
+        })
     }
 }
