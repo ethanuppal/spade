@@ -8,7 +8,6 @@ members = [
     "spade-parser",
     "spade-typeinference",
     "spade-ast-lowering",
-    "spade-testutil",
     "spade-tests",
     "spade-mir",
     "spade-hir-lowering",

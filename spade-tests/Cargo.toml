@@ -15,7 +15,6 @@ logos = "0.11"
 indoc = "1.0"
 
 spade-ast-lowering = {path = "../spade-ast-lowering"}
-spade-testutil = {path = "../spade-testutil"}
 spade-parser = {path = "../spade-parser"}
 spade-common = {path = "../spade-common"}
 spade-hir = {path = "../spade-hir"}
