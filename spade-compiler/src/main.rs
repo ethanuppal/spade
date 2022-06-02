@@ -3,17 +3,17 @@ use std::io::prelude::*;
 use std::path::PathBuf;
 
 use anyhow::{anyhow, Context, Result};
+use clap::Parser;
 use codespan_reporting::term::termcolor::Buffer;
-use structopt::StructOpt;
 
-#[derive(StructOpt)]
+#[derive(Parser)]
 #[structopt(name = "spade", about = "Compiler for the spade language")]
 pub struct Opt {
     #[structopt(name = "INPUT_FILE")]
     pub infile: PathBuf,
     #[structopt(name = "EXTRA_FILES")]
     pub extra_files: Vec<PathBuf>,
-    #[structopt(short = "o")]
+    #[structopt(short = 'o')]
     pub outfile: PathBuf,
     /// File to output the MIR for the generated modules. Primarily for debug purposes
     #[structopt(long)]
@@ -36,7 +36,7 @@ pub struct Opt {
 }
 
 fn main() -> Result<()> {
-    let mut opts = Opt::from_args();
+    let mut opts = Opt::parse();
 
     let mut infiles = vec![opts.infile.clone()];
     infiles.append(&mut opts.extra_files);

@@ -11,8 +11,7 @@ colored = "2.0"
 logos = "0.11.4"
 codespan = "0.11.1"
 codespan-reporting = "0.11.1"
-derivative = "2.1"
-structopt = "0.3"
+clap = { version = "3.1.18", features = ["derive"] }
 
 anyhow = "1.0.32"
 thiserror = "1.0.20"
@@ -33,5 +32,5 @@ spade-ast-lowering = {path = "../spade-ast-lowering"}
 
 
 [dev-dependencies]
-prettydiff = "0.3.1"
+prettydiff = { version = "0.6.1", default-features = false }
 pretty_assertions = "0.6"
