@@ -1,5 +1,6 @@
 pub mod error;
 pub mod error_reporting;
+pub mod monomorphisation;
 pub mod pipelines;
 pub mod substitution;
 

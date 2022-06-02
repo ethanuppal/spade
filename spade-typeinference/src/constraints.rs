@@ -133,6 +133,7 @@ pub struct ConstraintRhs {
 
 impl WithLocation for ConstraintRhs {}
 
+#[derive(Clone)]
 pub struct TypeConstraints {
     pub inner: Vec<(TypeVar, Loc<ConstraintRhs>)>,
 }

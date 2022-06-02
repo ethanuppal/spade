@@ -18,6 +18,7 @@ use spade_hir::symbol_table::SymbolTable;
 use spade_hir::{Block, Entity, ExprKind, Expression, Register, Statement};
 use spade_types::KnownType;
 use std::collections::HashMap;
+use std::rc::Rc;
 use trace_stack::TraceStack;
 
 mod constraints;
@@ -135,6 +136,7 @@ pub struct GenericListToken {
 }
 
 /// State of the type inference algorithm
+#[derive(Clone)]
 pub struct TypeState {
     equations: TypeEquations,
     next_typeid: u64,
@@ -146,7 +148,7 @@ pub struct TypeState {
 
     replacements: HashMap<TypeVar, TypeVar>,
 
-    pub trace_stack: TraceStack,
+    pub trace_stack: Rc<TraceStack>,
 }
 
 impl TypeState {
@@ -154,7 +156,7 @@ impl TypeState {
         Self {
             equations: HashMap::new(),
             next_typeid: 0,
-            trace_stack: TraceStack::new(),
+            trace_stack: Rc::new(TraceStack::new()),
             constraints: TypeConstraints::new(),
             replacements: HashMap::new(),
             generic_lists: vec![],
@@ -259,7 +261,7 @@ impl TypeState {
         let generic_list = if entity.head.type_params.is_empty() {
             self.create_generic_list(&[])
         } else {
-            todo!("Support entity definitions with generics")
+            self.create_generic_list(&entity.head.type_params)
         };
 
         // Add equations for the inputs

@@ -1338,6 +1338,17 @@ mod tests {
         build_and_compare_entities!(code, expected);
     }
 
+    #[test]
+    fn free_standing_generic_compiles() {
+        let code = r#"
+            fn identity<T>(x: T) -> T {
+                x
+            }
+        "#;
+
+        build_items(code);
+    }
+
     snapshot_error! {
         invalid_field_access,
         "
