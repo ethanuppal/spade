@@ -17,6 +17,8 @@ members = [
     "parse_tree_macros"
 ]
 
+default-members = ["spade-compiler"]
+
 [patch.crates-io]
 codespan = { git = "https://gitlab.com/spade-lang/codespan.git" }
 codespan-reporting = { git = "https://gitlab.com/spade-lang/codespan.git" }
