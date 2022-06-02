@@ -16,16 +16,16 @@ struct MonoItem {
     pub params: Vec<TypeVar>,
 }
 
-struct State {
+pub struct MonoState {
     /// List of mono items left to compile
     to_compile: VecDeque<MonoItem>,
     /// Mapping between items with types specified and names
     translation: HashMap<(NameID, Vec<TypeVar>), NameID>,
 }
 
-impl State {
-    fn new() -> State {
-        State {
+impl MonoState {
+    fn new() -> MonoState {
+        MonoState {
             to_compile: VecDeque::new(),
             translation: HashMap::new(),
         }
@@ -54,7 +54,7 @@ impl State {
         }
     }
 
-    pub fn next_target(&mut self) -> Option<MonoItem> {
+    fn next_target(&mut self) -> Option<MonoItem> {
         self.to_compile.pop_front()
     }
 }
@@ -76,7 +76,7 @@ pub fn compile_items(
     // Build a map of items to use for compilation later. Also push all non
     // generic items to the compilation queue
 
-    let mut state = State::new();
+    let mut state = MonoState::new();
 
     for (_, (item, _)) in items {
         match item {
@@ -105,13 +105,12 @@ pub fn compile_items(
                 if !e.head.type_params.is_empty() {
                     todo!()
                 }
-                let out = generate_entity(e, symtab, idtracker, type_state, item_list).map(|mir| {
-                    MirOutput {
+                let out = generate_entity(e, symtab, idtracker, type_state, item_list, &mut state)
+                    .map(|mir| MirOutput {
                         mir,
                         type_state: type_state.clone(),
                         reg_name_map,
-                    }
-                });
+                    });
                 result.push(out);
             }
             Some((ExecutableItem::Pipeline(p), type_state)) => {
@@ -125,6 +124,7 @@ pub fn compile_items(
                     idtracker,
                     item_list,
                     &mut reg_name_map,
+                    &mut state,
                 )
                 .map(|mir| MirOutput {
                     mir,
