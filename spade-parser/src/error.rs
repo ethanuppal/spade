@@ -94,6 +94,12 @@ pub enum Error {
     },
     #[error("Stages are only allowed in the root of pipelines")]
     StageOutsidePipeline(Loc<()>),
+
+    #[error("Attributes are not allowed here")]
+    DisallowedAttributes {
+        attributes: Loc<()>,
+        item_start: Loc<TokenKind>,
+    },
 }
 
 impl Error {

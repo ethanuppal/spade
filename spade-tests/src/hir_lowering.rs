@@ -1362,7 +1362,6 @@ mod tests {
         "#;
 
         let expected = vec![
-            // Monomorphised identity function
             entity! {"x"; (
                 "x", n(0, "x"), Type::Bool,
             ) -> Type::Bool; {

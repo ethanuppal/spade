@@ -169,10 +169,19 @@ impl TypeParam {
 }
 
 #[derive(PartialEq, Debug, Clone)]
+pub struct AttributeList(pub Vec<Loc<Identifier>>);
+impl AttributeList {
+    pub fn empty() -> Self {
+        Self(vec![])
+    }
+}
+
+#[derive(PartialEq, Debug, Clone)]
 pub struct ParameterList(pub Vec<(Loc<Identifier>, Loc<TypeSpec>)>);
 
 #[derive(PartialEq, Debug, Clone)]
 pub struct Entity {
+    pub attributes: AttributeList,
     /// Since functions and entities are so similar, we'll make them share everything
     /// and just have a bool here to indicate the type.
     pub is_function: bool,
@@ -188,6 +197,7 @@ impl WithLocation for Entity {}
 
 #[derive(PartialEq, Debug, Clone)]
 pub struct Pipeline {
+    pub attributes: AttributeList,
     pub depth: Loc<u128>,
     pub name: Loc<Identifier>,
     pub inputs: ParameterList,

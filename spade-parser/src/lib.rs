@@ -7,10 +7,10 @@ pub mod lexer;
 use error::{CommaSeparatedResult, Error, Result};
 
 use spade_ast::{
-    ArgumentList, ArgumentPattern, Block, Entity, Enum, Expression, FunctionDecl, Item, Module,
-    ModuleBody, NamedArgument, ParameterList, Pattern, Pipeline, PipelineReference, Register,
-    Statement, Struct, TraitDef, TypeDeclKind, TypeDeclaration, TypeExpression, TypeParam,
-    TypeSpec, UseStatement,
+    ArgumentList, ArgumentPattern, AttributeList, Block, Entity, Enum, Expression, FunctionDecl,
+    Item, Module, ModuleBody, NamedArgument, ParameterList, Pattern, Pipeline, PipelineReference,
+    Register, Statement, Struct, TraitDef, TypeDeclKind, TypeDeclaration, TypeExpression,
+    TypeParam, TypeSpec, UseStatement,
 };
 use spade_common::{
     error_reporting::AsLabel,
@@ -825,9 +825,57 @@ impl<'a> Parser<'a> {
         ))
     }
 
+    #[trace_parser]
+    pub fn type_param(&mut self) -> Result<Loc<TypeParam>> {
+        // If this is a type level integer
+        if let Some(hash) = self.peek_and_eat(&TokenKind::Hash)? {
+            let (id, loc) = self.identifier()?.separate();
+            Ok(TypeParam::Integer(id).between(self.file_id, &hash.span, &loc))
+        } else {
+            let (id, loc) = self.identifier()?.separate();
+            Ok(TypeParam::TypeName(id).at(self.file_id, &loc))
+        }
+    }
+
+    #[trace_parser]
+    pub fn generics_list(&mut self) -> Result<Vec<Loc<TypeParam>>> {
+        if self.peek_kind(&TokenKind::Lt)? {
+            let (params, _) = self.surrounded(
+                &TokenKind::Lt,
+                |s| {
+                    s.comma_separated(Self::type_param, &TokenKind::Gt)
+                        .extra_expected(vec!["type parameter"])
+                },
+                &TokenKind::Gt,
+            )?;
+            Ok(params)
+        } else {
+            Ok(vec![])
+        }
+    }
+
+    fn disallow_attributes(&self, attributes: &AttributeList, item_start: &Token) -> Result<()> {
+        if attributes.0.is_empty() {
+            Ok(())
+        } else {
+            Err(Error::DisallowedAttributes {
+                attributes: ().between(
+                    self.file_id,
+                    attributes.0.first().unwrap(),
+                    attributes.0.last().unwrap(),
+                ),
+                item_start: Loc::new(
+                    item_start.clone().kind,
+                    lspan(item_start.span.clone()),
+                    self.file_id,
+                ),
+            })
+        }
+    }
+
     // Entities
     #[trace_parser]
-    pub fn entity(&mut self) -> Result<Option<Loc<Entity>>> {
+    pub fn entity(&mut self, attributes: &AttributeList) -> Result<Option<Loc<Entity>>> {
         let (is_function, start_token) = if let Some(s) = self.peek_and_eat(&TokenKind::Entity)? {
             self.set_item_context(ItemType::Entity.at(self.file_id, &s.span()))?;
             (false, s)
@@ -882,6 +930,7 @@ impl<'a> Parser<'a> {
 
         Ok(Some(
             Entity {
+                attributes: attributes.clone(),
                 is_function,
                 name,
                 inputs,
@@ -894,7 +943,7 @@ impl<'a> Parser<'a> {
     }
 
     #[trace_parser]
-    pub fn pipeline(&mut self) -> Result<Option<Loc<Pipeline>>> {
+    pub fn pipeline(&mut self, attributes: &AttributeList) -> Result<Option<Loc<Pipeline>>> {
         let start_token = peek_for!(self, &TokenKind::Pipeline);
 
         self.set_item_context(ItemType::Pipeline.at(self.file_id, &start_token.span()))?;
@@ -956,6 +1005,7 @@ impl<'a> Parser<'a> {
 
         Ok(Some(
             Pipeline {
+                attributes: attributes.clone(),
                 name,
                 depth,
                 inputs,
@@ -967,39 +1017,15 @@ impl<'a> Parser<'a> {
         ))
     }
 
-    #[trace_parser]
-    pub fn type_param(&mut self) -> Result<Loc<TypeParam>> {
-        // If this is a type level integer
-        if let Some(hash) = self.peek_and_eat(&TokenKind::Hash)? {
-            let (id, loc) = self.identifier()?.separate();
-            Ok(TypeParam::Integer(id).between(self.file_id, &hash.span, &loc))
-        } else {
-            let (id, loc) = self.identifier()?.separate();
-            Ok(TypeParam::TypeName(id).at(self.file_id, &loc))
-        }
-    }
-
-    #[trace_parser]
-    pub fn generics_list(&mut self) -> Result<Vec<Loc<TypeParam>>> {
-        if self.peek_kind(&TokenKind::Lt)? {
-            let (params, _) = self.surrounded(
-                &TokenKind::Lt,
-                |s| {
-                    s.comma_separated(Self::type_param, &TokenKind::Gt)
-                        .extra_expected(vec!["type parameter"])
-                },
-                &TokenKind::Gt,
-            )?;
-            Ok(params)
-        } else {
-            Ok(vec![])
-        }
-    }
-
     // Traits
     #[trace_parser]
-    pub fn function_decl(&mut self) -> Result<Option<Loc<FunctionDecl>>> {
+    pub fn function_decl(
+        &mut self,
+        attributes: &AttributeList,
+    ) -> Result<Option<Loc<FunctionDecl>>> {
         let start_token = peek_for!(self, &TokenKind::Function);
+
+        self.disallow_attributes(attributes, &start_token)?;
 
         let name = self.identifier()?;
 
@@ -1053,28 +1079,30 @@ impl<'a> Parser<'a> {
     }
 
     #[trace_parser]
-    pub fn trait_def(&mut self) -> Result<Option<Loc<TraitDef>>> {
+    pub fn trait_def(&mut self, attributes: &AttributeList) -> Result<Option<Loc<TraitDef>>> {
         let start_token = peek_for!(self, &TokenKind::Trait);
+        self.disallow_attributes(&attributes, &start_token)?;
+        todo!("Trait definitions are unimplemented");
 
-        let name = self.identifier()?;
+        // let name = self.identifier()?;
 
-        let mut result = TraitDef {
-            name,
-            functions: vec![],
-        };
+        // let mut result = TraitDef {
+        //     name,
+        //     functions: vec![],
+        // };
 
-        self.eat(&TokenKind::OpenBrace)?;
+        // self.eat(&TokenKind::OpenBrace)?;
 
-        while let Some(decl) = self.function_decl()? {
-            result.functions.push(decl);
-        }
-        let end_token = self.eat(&TokenKind::CloseBrace)?;
+        // while let Some(decl) = self.function_decl()? {
+        //     result.functions.push(decl);
+        // }
+        // let end_token = self.eat(&TokenKind::CloseBrace)?;
 
-        Ok(Some(result.between(
-            self.file_id,
-            &start_token.span,
-            &end_token.span,
-        )))
+        // Ok(Some(result.between(
+        //     self.file_id,
+        //     &start_token.span,
+        //     &end_token.span,
+        // )))
     }
 
     #[trace_parser]
@@ -1093,8 +1121,12 @@ impl<'a> Parser<'a> {
     }
 
     #[trace_parser]
-    pub fn enum_declaration(&mut self) -> Result<Option<Loc<TypeDeclaration>>> {
+    pub fn enum_declaration(
+        &mut self,
+        attributes: &AttributeList,
+    ) -> Result<Option<Loc<TypeDeclaration>>> {
         let start_token = peek_for!(self, &TokenKind::Enum);
+        self.disallow_attributes(&attributes, &start_token)?;
 
         let name = self.identifier()?;
 
@@ -1124,8 +1156,12 @@ impl<'a> Parser<'a> {
     }
 
     #[trace_parser]
-    pub fn struct_declaration(&mut self) -> Result<Option<Loc<TypeDeclaration>>> {
+    pub fn struct_declaration(
+        &mut self,
+        attributes: &AttributeList,
+    ) -> Result<Option<Loc<TypeDeclaration>>> {
         let start_token = peek_for!(self, &TokenKind::Struct);
+        self.disallow_attributes(&attributes, &start_token)?;
 
         let name = self.identifier()?;
 
@@ -1152,17 +1188,22 @@ impl<'a> Parser<'a> {
     }
 
     #[trace_parser]
-    pub fn type_declaration(&mut self) -> Result<Option<Loc<TypeDeclaration>>> {
+    pub fn type_declaration(
+        &mut self,
+        attributes: &AttributeList,
+    ) -> Result<Option<Loc<TypeDeclaration>>> {
         // The head of all type declarations will be `(enum|struct|type...) Name<T, S, ...>`
         // since we want access to the name and type params, we'll parse all those three, then
         // defer to parsing the rest.
-
-        self.first_successful(vec![&Self::enum_declaration, &Self::struct_declaration])
+        self.first_successful(vec![&|s| Self::enum_declaration(s, attributes), &|s| {
+            Self::struct_declaration(s, attributes)
+        }])
     }
 
     #[trace_parser]
-    pub fn module(&mut self) -> Result<Option<Loc<Module>>> {
+    pub fn module(&mut self, attributes: &AttributeList) -> Result<Option<Loc<Module>>> {
         let start = peek_for!(self, &TokenKind::Mod);
+        self.disallow_attributes(&attributes, &start)?;
 
         let name = self.identifier()?;
 
@@ -1183,8 +1224,9 @@ impl<'a> Parser<'a> {
     }
 
     #[trace_parser]
-    pub fn r#use(&mut self) -> Result<Option<Loc<UseStatement>>> {
+    pub fn r#use(&mut self, attributes: &AttributeList) -> Result<Option<Loc<UseStatement>>> {
         let start = peek_for!(self, &TokenKind::Use);
+        self.disallow_attributes(&attributes, &start)?;
 
         let path = self.path()?;
 
@@ -1204,14 +1246,33 @@ impl<'a> Parser<'a> {
     }
 
     #[trace_parser]
+    pub fn attributes(&mut self) -> Result<AttributeList> {
+        // peek_for!(self, &TokenKind::Hash)
+        let mut result = AttributeList(vec![]);
+        while let Some(start) = self.peek_and_eat(&TokenKind::Hash)? {
+            let (ident, loc) = self.surrounded(
+                &TokenKind::OpenBracket,
+                Self::identifier,
+                &TokenKind::CloseBracket,
+            )?;
+
+            result
+                .0
+                .push(ident.inner.between(self.file_id, &start, &loc));
+        }
+        Ok(result)
+    }
+
+    #[trace_parser]
     pub fn item(&mut self) -> Result<Option<Item>> {
+        let attrs = self.attributes()?;
         self.first_successful(vec![
-            &|s: &mut Self| s.entity().map(|e| e.map(Item::Entity)),
-            &|s: &mut Self| s.trait_def().map(|e| e.map(Item::TraitDef)),
-            &|s: &mut Self| s.pipeline().map(|e| e.map(Item::Pipeline)),
-            &|s: &mut Self| s.type_declaration().map(|e| e.map(Item::Type)),
-            &|s: &mut Self| s.module().map(|e| e.map(Item::Module)),
-            &|s: &mut Self| s.r#use().map(|e| e.map(Item::Use)),
+            &|s: &mut Self| s.entity(&attrs).map(|e| e.map(Item::Entity)),
+            &|s: &mut Self| s.pipeline(&attrs).map(|e| e.map(Item::Pipeline)),
+            &|s: &mut Self| s.trait_def(&attrs).map(|e| e.map(Item::TraitDef)),
+            &|s: &mut Self| s.type_declaration(&attrs).map(|e| e.map(Item::Type)),
+            &|s: &mut Self| s.module(&attrs).map(|e| e.map(Item::Module)),
+            &|s: &mut Self| s.r#use(&attrs).map(|e| e.map(Item::Use)),
         ])
     }
 
@@ -1662,6 +1723,7 @@ mod tests {
     fn entity_without_inputs() {
         let code = include_str!("../parser_test_code/entity_without_inputs.sp");
         let expected = Entity {
+            attributes: AttributeList::empty(),
             is_function: false,
             name: Identifier("no_inputs".to_string()).nowhere(),
             inputs: aparams![],
@@ -1690,13 +1752,14 @@ mod tests {
         }
         .nowhere();
 
-        check_parse!(code, entity, Ok(Some(expected)));
+        check_parse!(code, entity(&AttributeList::empty()), Ok(Some(expected)));
     }
 
     #[test]
     fn entity_with_inputs() {
         let code = include_str!("../parser_test_code/entity_with_inputs.sp");
         let expected = Entity {
+            attributes: AttributeList::empty(),
             is_function: false,
             name: ast_ident("with_inputs"),
             inputs: aparams![("clk", tspec!("bool")), ("rst", tspec!("bool"))],
@@ -1712,13 +1775,14 @@ mod tests {
         }
         .nowhere();
 
-        check_parse!(code, entity, Ok(Some(expected)));
+        check_parse!(code, entity(&AttributeList::empty()), Ok(Some(expected)));
     }
 
     #[test]
     fn entity_with_generics() {
         let code = include_str!("../parser_test_code/entity_with_generics.sp");
         let expected = Entity {
+            attributes: AttributeList::empty(),
             is_function: false,
             name: ast_ident("with_generics"),
             inputs: aparams![],
@@ -1737,7 +1801,7 @@ mod tests {
         }
         .nowhere();
 
-        check_parse!(code, entity, Ok(Some(expected)));
+        check_parse!(code, entity(&AttributeList::empty()), Ok(Some(expected)));
     }
 
     #[test]
@@ -1850,6 +1914,7 @@ mod tests {
         let code = include_str!("../parser_test_code/multiple_entities.sp");
 
         let e1 = Entity {
+            attributes: AttributeList::empty(),
             is_function: false,
             name: Identifier("e1".to_string()).nowhere(),
             inputs: aparams![],
@@ -1866,6 +1931,7 @@ mod tests {
         .nowhere();
 
         let e2 = Entity {
+            attributes: AttributeList::empty(),
             is_function: false,
             name: Identifier("e2".to_string()).nowhere(),
             inputs: aparams![],
@@ -1925,7 +1991,11 @@ mod tests {
         }
         .nowhere();
 
-        check_parse!(code, function_decl, Ok(Some(expected)));
+        check_parse!(
+            code,
+            function_decl(&AttributeList::empty()),
+            Ok(Some(expected))
+        );
     }
 
     #[test]
@@ -1941,7 +2011,11 @@ mod tests {
         }
         .nowhere();
 
-        check_parse!(code, function_decl, Ok(Some(expected)));
+        check_parse!(
+            code,
+            function_decl(&AttributeList::empty()),
+            Ok(Some(expected))
+        );
     }
 
     #[test]
@@ -1957,7 +2031,11 @@ mod tests {
         }
         .nowhere();
 
-        check_parse!(code, function_decl, Ok(Some(expected)));
+        check_parse!(
+            code,
+            function_decl(&AttributeList::empty()),
+            Ok(Some(expected))
+        );
     }
 
     #[test]
@@ -1973,9 +2051,14 @@ mod tests {
         }
         .nowhere();
 
-        check_parse!(code, function_decl, Ok(Some(expected)));
+        check_parse!(
+            code,
+            function_decl(&AttributeList::empty()),
+            Ok(Some(expected))
+        );
     }
 
+    #[ignore]
     #[test]
     fn trait_definitions_work() {
         let code = r#"
@@ -2008,7 +2091,7 @@ mod tests {
         }
         .nowhere();
 
-        check_parse!(code, trait_def, Ok(Some(expected)));
+        check_parse!(code, trait_def(&AttributeList::empty()), Ok(Some(expected)));
     }
 
     #[test]
@@ -2017,7 +2100,7 @@ mod tests {
 
         let expected = TypeParam::TypeName(ast_ident("X")).nowhere();
 
-        check_parse!(code, type_param, Ok(expected));
+        check_parse!(code, type_param(), Ok(expected));
     }
 
     #[test]
@@ -2026,7 +2109,7 @@ mod tests {
 
         let expected = TypeParam::Integer(ast_ident("X")).nowhere();
 
-        check_parse!(code, type_param, Ok(expected));
+        check_parse!(code, type_param(), Ok(expected));
     }
 
     #[test]
@@ -2092,6 +2175,7 @@ mod tests {
 
         let expected = Some(
             Entity {
+                attributes: AttributeList::empty(),
                 is_function: false,
                 name: ast_ident("X"),
                 inputs: ParameterList(vec![]),
@@ -2102,7 +2186,7 @@ mod tests {
             .nowhere(),
         );
 
-        check_parse!(code, entity, Ok(expected));
+        check_parse!(code, entity(&AttributeList::empty()), Ok(expected));
     }
 
     #[test]
@@ -2111,6 +2195,7 @@ mod tests {
 
         let expected = Some(
             Pipeline {
+                attributes: AttributeList::empty(),
                 name: ast_ident("X"),
                 inputs: ParameterList(vec![]),
                 output_type: None,
@@ -2121,7 +2206,7 @@ mod tests {
             .nowhere(),
         );
 
-        check_parse!(code, pipeline, Ok(expected));
+        check_parse!(code, pipeline(&AttributeList::empty()), Ok(expected));
     }
 
     #[test]
@@ -2130,6 +2215,7 @@ mod tests {
 
         let expected = Some(
             Entity {
+                attributes: AttributeList::empty(),
                 is_function: true,
                 name: ast_ident("X"),
                 inputs: ParameterList(vec![]),
@@ -2140,7 +2226,74 @@ mod tests {
             .nowhere(),
         );
 
-        check_parse!(code, entity, Ok(expected));
+        check_parse!(code, entity(&AttributeList::empty()), Ok(expected));
+    }
+
+    #[test]
+    fn functions_can_have_attributes() {
+        let code = r#"
+            #[attr]
+            fn X() __builtin__"#;
+
+        let expected = Some(Item::Entity(
+            Entity {
+                attributes: AttributeList(vec![ast_ident("attr")]),
+                is_function: true,
+                name: ast_ident("X"),
+                inputs: ParameterList(vec![]),
+                output_type: None,
+                body: None,
+                type_params: vec![],
+            }
+            .nowhere(),
+        ));
+
+        check_parse!(code, item, Ok(expected));
+    }
+
+    #[test]
+    fn entities_can_have_attributes() {
+        let code = r#"
+            #[attr]
+            entity X() __builtin__"#;
+
+        let expected = Some(Item::Entity(
+            Entity {
+                attributes: AttributeList(vec![ast_ident("attr")]),
+                is_function: false,
+                name: ast_ident("X"),
+                inputs: ParameterList(vec![]),
+                output_type: None,
+                body: None,
+                type_params: vec![],
+            }
+            .nowhere(),
+        ));
+
+        check_parse!(code, item, Ok(expected));
+    }
+
+    #[test]
+    fn pipelines_can_have_attributes() {
+        let code = r#"
+            #[attr]
+            pipeline(2) test(a: bool) __builtin__
+        "#;
+
+        let expected = Item::Pipeline(
+            Pipeline {
+                attributes: AttributeList(vec![ast_ident("attr")]),
+                depth: Loc::new(2, lspan(0..0), 0),
+                name: ast_ident("test"),
+                inputs: aparams![("a", tspec!("bool"))],
+                output_type: None,
+                body: None,
+                type_params: vec![],
+            }
+            .nowhere(),
+        );
+
+        check_parse!(code, item, Ok(Some(expected)));
     }
 
     #[test]
@@ -2152,7 +2305,7 @@ mod tests {
 
         check_parse!(
             code,
-            entity,
+            entity(&AttributeList::empty()),
             Err(Error::RegInFunction {
                 at: ().nowhere(),
                 fn_keyword: ().nowhere()
@@ -2168,7 +2321,7 @@ mod tests {
 
         check_parse!(
             code,
-            entity,
+            entity(&AttributeList::empty()),
             Err(Error::InstInFunction {
                 at: ().nowhere(),
                 fn_keyword: ().nowhere()
@@ -2265,6 +2418,7 @@ mod tests {
         "#;
 
         let expected = Pipeline {
+            attributes: AttributeList::empty(),
             depth: Loc::new(2, lspan(0..0), 0),
             name: ast_ident("test"),
             inputs: aparams![("a", tspec!("bool"))],
@@ -2297,7 +2451,7 @@ mod tests {
         }
         .nowhere();
 
-        check_parse!(code, pipeline, Ok(Some(expected)));
+        check_parse!(code, pipeline(&AttributeList::empty()), Ok(Some(expected)));
     }
 
     #[test]
@@ -2310,6 +2464,7 @@ mod tests {
         "#;
 
         let expected = Pipeline {
+            attributes: AttributeList::empty(),
             depth: Loc::new(2, lspan(0..0), 0),
             name: ast_ident("test"),
             inputs: aparams![("a", tspec!("bool"))],
@@ -2325,7 +2480,7 @@ mod tests {
         }
         .nowhere();
 
-        check_parse!(code, pipeline, Ok(Some(expected)));
+        check_parse!(code, pipeline(&AttributeList::empty()), Ok(Some(expected)));
     }
 
     #[test]
@@ -2339,6 +2494,7 @@ mod tests {
         let expected = ModuleBody {
             members: vec![Item::Pipeline(
                 Pipeline {
+                    attributes: AttributeList::empty(),
                     depth: Loc::new(2, lspan(0..0), 0),
                     name: ast_ident("test"),
                     inputs: aparams![("a", tspec!("bool"))],

@@ -77,6 +77,7 @@ pub fn visit_pipeline(
         output_type: _,
         body,
         type_params: _,
+        attributes,
     } = pipeline.inner.clone();
 
     ctx.symtab.new_scope();
@@ -202,6 +203,7 @@ mod pipeline_visiting {
                 .nowhere(),
             ),
             type_params: vec![],
+            attributes: ast::AttributeList(vec![]),
         }
         .nowhere();
 
@@ -239,6 +241,7 @@ mod pipeline_visiting {
             output_type: Some(ast::TypeSpec::Unit(().nowhere()).nowhere()),
             body: None,
             type_params: vec![],
+            attributes: ast::AttributeList(vec![]),
         }
         .nowhere();
 
@@ -302,6 +305,7 @@ mod pipeline_visiting {
                 .nowhere(),
             ),
             type_params: vec![],
+            attributes: ast::AttributeList(vec![]),
         }
         .nowhere();
 
@@ -381,6 +385,7 @@ mod pipeline_visiting {
                 .nowhere(),
             ),
             type_params: vec![],
+            attributes: ast::AttributeList(vec![]),
         }
         .nowhere();
 

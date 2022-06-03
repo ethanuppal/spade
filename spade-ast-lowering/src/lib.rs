@@ -985,6 +985,7 @@ mod entity_visiting {
                 .nowhere(),
             ),
             type_params: vec![],
+            attributes: ast::AttributeList(vec![]),
         }
         .nowhere();
 
@@ -2590,6 +2591,7 @@ mod item_visiting {
                     .nowhere(),
                 ),
                 type_params: vec![],
+                attributes: ast::AttributeList(vec![]),
             }
             .nowhere(),
         );
@@ -2658,6 +2660,7 @@ mod module_visiting {
                         .nowhere(),
                     ),
                     type_params: vec![],
+                    attributes: ast::AttributeList(vec![]),
                 }
                 .nowhere(),
             )],

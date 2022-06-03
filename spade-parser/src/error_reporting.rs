@@ -236,10 +236,21 @@ impl CompilationError for Error {
                     replacement: format!("; N"),
                     message: format!("Insert a size here")
                 }]),
+            Error::DisallowedAttributes { attributes, item_start } => {
+                Diagnostic::error()
+                    .with_message("Attributes are not allowed here")
+                    .with_labels(vec![
+                        attributes.primary_label().with_message("Not allowed here"),
+                        item_start.secondary_label().with_message(format!("Because this is a {}", item_start.as_str()))
+                    ])
+                    .with_notes(vec![
+                        "Attributes are only allowed on enums, functions and pipelines".to_string()
+                    ])
+            },
             Error::StageOutsidePipeline(loc) => Diagnostic::error()
                 .with_message("Stage outside pipeline")
                 .with_labels(vec![loc.primary_label().with_message("stage is not allowed here")])
-                .with_notes(vec![format!("Stages are only allowed in the root block of a pipeline")])
+                .with_notes(vec![format!("Stages are only allowed in the root block of a pipeline")]),
         };
 
         term::emit(buffer, &codespan_config(), &code.files, &diag).unwrap();
