@@ -1349,6 +1349,35 @@ mod tests {
         build_items(code);
     }
 
+    #[test]
+    fn generic_instantiation_works() {
+        let code = r#"
+            fn identity<T>(x: T) -> T {
+                x
+            }
+
+            fn x(x: bool) -> bool {
+                identity(x)
+            }
+        "#;
+
+        let expected = vec![
+            // Monomorphised identity function
+            entity! {"x"; (
+                "x", n(0, "x"), Type::Bool,
+            ) -> Type::Bool; {
+                (e(0); Type::Bool; Instance(("identity".to_string())); n(0, "x"))
+            } => e(0)},
+            // Monomorphised identity function
+            entity! {"identity"; (
+                "x", n(0, "x"), Type::Bool,
+            ) -> Type::Bool; {
+            } => n(0, "x")},
+        ];
+
+        build_and_compare_entities!(code, expected);
+    }
+
     snapshot_error! {
         invalid_field_access,
         "

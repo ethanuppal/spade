@@ -4,7 +4,7 @@ use crate::{error::Result, generate_entity, generate_pipeline};
 use spade_common::{id_tracker::ExprIdTracker, name::NameID};
 use spade_hir::{symbol_table::FrozenSymtab, ExecutableItem, ItemList};
 use spade_mir as mir;
-use spade_typeinference::{equation::TypeVar, TypeState};
+use spade_typeinference::{equation::TypeVar, GenericListToken, TypeState};
 
 /// An item to be monomorphised
 struct MonoItem {
@@ -101,11 +101,26 @@ pub fn compile_items(
 
         let mut reg_name_map = HashMap::new();
         match original_item {
-            Some((ExecutableItem::Entity(e), type_state)) => {
+            Some((ExecutableItem::Entity(e), old_type_state)) => {
+                let mut type_state = old_type_state.clone();
                 if !e.head.type_params.is_empty() {
-                    todo!()
+                    let generic_list = type_state
+                        .get_generic_list(&GenericListToken::Definition(e.name.inner.clone()))
+                        .clone();
+
+                    for (source_param, new) in e.head.type_params.iter().zip(item.params.iter()) {
+                        let source_var = &generic_list[&source_param.name_id()];
+
+                        match type_state.unify(source_var, new, symtab.symtab()) {
+                            Ok(_) => {}
+                            Err(e) => {
+                                // TODO: Handle this gracefully
+                                panic!("unification error during lowering {e}")
+                            }
+                        }
+                    }
                 }
-                let out = generate_entity(e, symtab, idtracker, type_state, item_list, &mut state)
+                let out = generate_entity(e, symtab, idtracker, &type_state, item_list, &mut state)
                     .map(|mir| MirOutput {
                         mir,
                         type_state: type_state.clone(),
@@ -115,6 +130,7 @@ pub fn compile_items(
             }
             Some((ExecutableItem::Pipeline(p), type_state)) => {
                 if !p.head.type_params.is_empty() {
+                    // TODO: Implement
                     todo!()
                 }
                 let out = generate_pipeline(

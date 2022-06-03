@@ -13,6 +13,7 @@ pub use pipelines::generate_pipeline;
 use spade_common::id_tracker::ExprIdTracker;
 use spade_common::location_info::WithLocation;
 use spade_common::name::{Identifier, Path};
+use spade_typeinference::GenericListToken;
 use substitution::Substitutions;
 use thiserror::Error;
 
@@ -895,7 +896,20 @@ impl ExprLocal for Loc<Expression> {
                 };
 
                 if !type_params.is_empty() {
-                    todo!("Codegen type params")
+                    let tok = GenericListToken::Expression(self.id);
+                    let instance_list = ctx.types.get_generic_list(&tok);
+
+                    let t = type_params
+                        .iter()
+                        .map(|param| {
+                            let name = param.name_id();
+
+                            instance_list[&name].clone()
+                        })
+                        .collect();
+
+                    ctx.mono_state
+                        .request_compilation(name.clone(), t, ctx.symtab);
                 }
 
                 result.push(mir::Statement::Binding(mir::Binding {

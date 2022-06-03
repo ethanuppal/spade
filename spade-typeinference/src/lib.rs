@@ -140,18 +140,10 @@ enum GenericListSource<'a> {
 
 /// Stored version of GenericListSource
 #[derive(Clone, Hash, Eq, PartialEq, Debug)]
-enum GenericListReference {
+pub enum GenericListToken {
     Anonymous(usize),
     Definition(NameID),
     Expression(u64),
-}
-
-// A token indicating the existence of a generic list in type TypeState. Used to
-// ensure that the generic list is dropped at an appropriate time and not aquired
-// later
-#[must_use]
-pub struct GenericListToken {
-    reference: GenericListReference,
 }
 
 /// State of the type inference algorithm
@@ -164,7 +156,7 @@ pub struct TypeState {
     // is a generic list for a call whose expression id is x to f<A, B>, then generic_lists[x] will
     // be {A: <type var>, b: <type var>}
     // Managed here because unification must update *all* TypeVars in existence.
-    generic_lists: HashMap<GenericListReference, HashMap<NameID, TypeVar>>,
+    generic_lists: HashMap<GenericListToken, HashMap<NameID, TypeVar>>,
 
     constraints: TypeConstraints,
 
@@ -190,11 +182,11 @@ impl TypeState {
     }
 
     // Get a generic list with a safe unwrap since a token is aquired
-    fn get_generic_list<'a>(
+    pub fn get_generic_list<'a>(
         &'a self,
         generic_list_token: &'a GenericListToken,
     ) -> &'a HashMap<NameID, TypeVar> {
-        &self.generic_lists[&generic_list_token.reference]
+        &self.generic_lists[&generic_list_token]
     }
 
     fn hir_type_expr_to_var<'a>(
@@ -518,11 +510,9 @@ impl TypeState {
         params: &[Loc<TypeParam>],
     ) -> GenericListToken {
         let reference = match source {
-            GenericListSource::Anonymous => {
-                GenericListReference::Anonymous(self.generic_lists.len())
-            }
-            GenericListSource::Definition(name) => GenericListReference::Definition(name.clone()),
-            GenericListSource::Expression(id) => GenericListReference::Expression(id),
+            GenericListSource::Anonymous => GenericListToken::Anonymous(self.generic_lists.len()),
+            GenericListSource::Definition(name) => GenericListToken::Definition(name.clone()),
+            GenericListSource::Expression(id) => GenericListToken::Expression(id),
         };
         let new_list = params
             .iter()
@@ -541,7 +531,7 @@ impl TypeState {
         if let Some(_) = self.generic_lists.insert(reference.clone(), new_list) {
             panic!("A generic list already existed for {reference:?}");
         }
-        GenericListToken { reference }
+        reference
     }
 
     #[trace_typechecker]
@@ -1079,7 +1069,7 @@ impl TypeState {
         Ok(new_type)
     }
 
-    fn unify(
+    pub fn unify(
         &mut self,
         e1: &impl HasType,
         e2: &impl HasType,
