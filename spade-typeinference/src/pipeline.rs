@@ -19,7 +19,7 @@ impl TypeState {
             body,
         } = pipeline;
         let generic_list = self.create_generic_list(
-            GenericListSource::Definition(&pipeline.name.inner),
+            GenericListSource::Definition(&pipeline.name.name_id().inner),
             &pipeline.head.type_params,
         );
 
@@ -92,7 +92,7 @@ mod tests {
 
         // Add the entity to the symtab
         let pipeline = Pipeline {
-            name: name_id(0, "pipe"),
+            name: hir::UnitName::WithID(name_id(0, "pipe")),
             head: hir::PipelineHead {
                 depth: 3.nowhere(),
                 inputs: hir::ParameterList(vec![(ast_ident("clk"), dtype!(symtab => "bool"))]),

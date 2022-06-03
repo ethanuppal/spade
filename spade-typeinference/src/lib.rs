@@ -273,7 +273,7 @@ impl TypeState {
     #[trace_typechecker]
     pub fn visit_entity(&mut self, entity: &Entity, symtab: &SymbolTable) -> Result<()> {
         let generic_list = self.create_generic_list(
-            GenericListSource::Definition(&entity.name.inner),
+            GenericListSource::Definition(&entity.name.name_id().inner),
             &entity.head.type_params,
         );
 

@@ -313,6 +313,11 @@ impl CompilationError for Error {
                 .with_notes(vec![format!(
                     "Consider defining {name} with a let or reg binding"
                 )]),
+            Error::UnrecognisedAttribute { attribute } => Diagnostic::error()
+                .with_message("Unrecognised attribute")
+                .with_labels(vec![attribute
+                    .primary_label()
+                    .with_message("Unrecognised attribute")]),
         };
 
         term::emit(buffer, &codespan_config(), &code.files, &diag).unwrap();

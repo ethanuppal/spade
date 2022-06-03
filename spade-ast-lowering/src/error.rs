@@ -107,6 +107,9 @@ pub enum Error {
         previous: Loc<()>,
     },
 
+    #[error("Unrecognised attribute")]
+    UnrecognisedAttribute { attribute: Loc<Identifier> },
+
     // Type related errors
     #[error("Generic parameters for generic name")]
     GenericsGivenForGeneric {

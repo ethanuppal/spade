@@ -82,12 +82,12 @@ pub fn compile_items(
         match item {
             ExecutableItem::Entity(e) => {
                 if e.head.type_params.is_empty() {
-                    state.request_compilation(e.name.inner.clone(), vec![], symtab);
+                    state.request_compilation(e.name.name_id().inner.clone(), vec![], symtab);
                 }
             }
             ExecutableItem::Pipeline(p) => {
                 if p.head.type_params.is_empty() {
-                    state.request_compilation(p.name.inner.clone(), vec![], symtab);
+                    state.request_compilation(p.name.name_id().inner.clone(), vec![], symtab);
                 }
             }
             ExecutableItem::StructInstance => {}
@@ -105,7 +105,9 @@ pub fn compile_items(
                 let mut type_state = old_type_state.clone();
                 if !e.head.type_params.is_empty() {
                     let generic_list = type_state
-                        .get_generic_list(&GenericListToken::Definition(e.name.inner.clone()))
+                        .get_generic_list(&GenericListToken::Definition(
+                            e.name.name_id().inner.clone(),
+                        ))
                         .clone();
 
                     for (source_param, new) in e.head.type_params.iter().zip(item.params.iter()) {

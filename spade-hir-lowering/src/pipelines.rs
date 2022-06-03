@@ -10,7 +10,7 @@ use spade_typeinference::TypeState;
 
 use crate::{
     error::Error, monomorphisation::MonoState, substitution::Substitutions, Context, ExprLocal,
-    MirLowerable, NameIDLocal, Result, StatementLocal, TypeStateLocal,
+    Manglable, MirLowerable, NameIDLocal, Result, StatementLocal, TypeStateLocal,
 };
 
 pub fn handle_pattern(pat: &Pattern, live_vars: &mut Vec<NameID>) {
@@ -139,7 +139,7 @@ pub fn generate_pipeline<'a>(
         .to_mir_type();
 
     Ok(mir::Entity {
-        name: name.1.to_string(),
+        name: name.mangled(),
         inputs: lowered_inputs,
         output: output?,
         output_type,

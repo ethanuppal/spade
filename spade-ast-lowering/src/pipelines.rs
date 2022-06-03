@@ -72,7 +72,7 @@ pub fn visit_pipeline(
 ) -> Result<Option<Loc<hir::Pipeline>>> {
     let ast::Pipeline {
         depth,
-        name: _,
+        name,
         inputs: _,
         output_type: _,
         body,
@@ -160,10 +160,31 @@ pub fn visit_pipeline(
 
     ctx.symtab.close_scope();
 
+    let mut mangle_name = true;
+    for attr in attributes.0 {
+        if attr.inner.0 == "no_mangle" {
+            mangle_name = false;
+        } else {
+            return Err(Error::UnrecognisedAttribute {
+                attribute: attr.clone(),
+            });
+        }
+    }
+
+    let name = if mangle_name {
+        if head.type_params.is_empty() {
+            hir::UnitName::FullPath(id.at_loc(&name))
+        } else {
+            hir::UnitName::WithID(id.at_loc(&name))
+        }
+    } else {
+        hir::UnitName::Unmangled(name.0.clone(), id.at_loc(&name))
+    };
+
     Ok(Some(
         hir::Pipeline {
             head: head.inner,
-            name: id.at_loc(&pipeline.name),
+            name,
             inputs,
             body,
         }

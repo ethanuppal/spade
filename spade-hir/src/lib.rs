@@ -212,8 +212,31 @@ pub struct TypeDeclaration {
 impl WithLocation for TypeDeclaration {}
 
 #[derive(PartialEq, Debug, Clone)]
+pub enum UnitName {
+    /// The name will be mangled down to contain the NameID in order to ensure
+    /// uniqueness. Emitted by generic functions
+    WithID(Loc<NameID>),
+    /// The name will contain the full path to the name but the ID section of the
+    /// nameID will not be included. Used by non-generic functions
+    FullPath(Loc<NameID>),
+    /// The name will not be mangled. In the output code it will appear as String
+    /// but the compiler will still refer to it by the NameID
+    Unmangled(String, Loc<NameID>),
+}
+
+impl UnitName {
+    pub fn name_id(&self) -> &Loc<NameID> {
+        match self {
+            UnitName::WithID(name) => name,
+            UnitName::FullPath(name) => name,
+            UnitName::Unmangled(_, name) => name,
+        }
+    }
+}
+
+#[derive(PartialEq, Debug, Clone)]
 pub struct Entity {
-    pub name: Loc<NameID>,
+    pub name: UnitName,
     pub head: EntityHead,
     // This is needed here because the head does not have NameIDs
     pub inputs: Vec<(NameID, Loc<TypeSpec>)>,
@@ -330,7 +353,7 @@ impl_function_like!(EntityHead, FunctionHead, PipelineHead);
 #[derive(PartialEq, Debug, Clone)]
 pub struct Pipeline {
     pub head: PipelineHead,
-    pub name: Loc<NameID>,
+    pub name: UnitName,
     // This is needed here because the head does not have NameIDs
     pub inputs: Vec<(NameID, Loc<TypeSpec>)>,
     pub body: Loc<Expression>,

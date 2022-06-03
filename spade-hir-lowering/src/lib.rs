@@ -5,7 +5,7 @@ pub mod pipelines;
 pub mod substitution;
 
 use hir::symbol_table::{FrozenSymtab, PatternableKind};
-use hir::{Argument, ItemList, Pattern, PatternArgument, TypeList};
+use hir::{Argument, ItemList, Pattern, PatternArgument, TypeList, UnitName};
 use mir::types::Type as MirType;
 use mir::{ConstantValue, ValueName};
 use monomorphisation::MonoState;
@@ -34,7 +34,16 @@ pub trait Manglable {
 impl Manglable for NameID {
     fn mangled(&self) -> String {
         let str_name = self.1.as_strs().join("_");
-        format!("_m{}_{}", self.0, str_name)
+        format!("{}_n{}", str_name, self.0)
+    }
+}
+impl Manglable for UnitName {
+    fn mangled(&self) -> String {
+        match self {
+            UnitName::WithID(name) => name.mangled(),
+            UnitName::FullPath(name) => name.1.as_strs().join("_"),
+            UnitName::Unmangled(raw, _) => raw.clone(),
+        }
     }
 }
 
@@ -889,9 +898,9 @@ impl ExprLocal for Loc<Expression> {
             }
             Some(i @ hir::ExecutableItem::Pipeline(_))
             | Some(i @ hir::ExecutableItem::Entity(_)) => {
-                let type_params = match i {
-                    hir::ExecutableItem::Pipeline(p) => &p.head.type_params,
-                    hir::ExecutableItem::Entity(e) => &e.head.type_params,
+                let (type_params, name_string) = match i {
+                    hir::ExecutableItem::Pipeline(p) => (&p.head.type_params, p.name.mangled()),
+                    hir::ExecutableItem::Entity(e) => (&e.head.type_params, e.name.mangled()),
                     _ => unreachable!(),
                 };
 
@@ -914,7 +923,7 @@ impl ExprLocal for Loc<Expression> {
 
                 result.push(mir::Statement::Binding(mir::Binding {
                     name: self.variable(ctx.subs)?,
-                    operator: mir::Operator::Instance(name.1.to_string()),
+                    operator: mir::Operator::Instance(name_string),
                     operands: args
                         .into_iter()
                         .map(|arg| arg.value.variable(ctx.subs))
@@ -1269,7 +1278,7 @@ pub fn generate_entity<'a>(
     let subs = Substitutions::new();
 
     Ok(mir::Entity {
-        name: entity.name.1.to_string(),
+        name: entity.name.mangled(),
         inputs: inputs,
         output: entity.body.variable(&subs)?,
         output_type: output_t,

@@ -199,14 +199,23 @@ pub fn visit_entity(
     item: &Loc<ast::Entity>,
     ctx: &mut Context,
 ) -> Result<Option<Loc<hir::Entity>>> {
+    let ast::Entity {
+        body,
+        name,
+        attributes,
+        is_function: _,
+        inputs: _,
+        output_type: _,
+        type_params: _,
+    } = &item.inner;
     // If this is a builtin entity
-    if item.body.is_none() {
+    if body.is_none() {
         return Ok(None);
     }
 
     ctx.symtab.new_scope();
 
-    let path = Path(vec![item.name.clone()]).at_loc(&item.name.loc());
+    let path = Path(vec![name.clone()]).at_loc(&name.loc());
     let (id, head) = ctx
         .symtab
         .lookup_entity(&path)
@@ -226,17 +235,34 @@ pub fn visit_entity(
         .map(|(ident, ty)| (ctx.symtab.add_local_variable(ident.clone()), ty.clone()))
         .collect();
 
-    let body = item
-        .body
-        .as_ref()
-        .unwrap()
-        .try_visit(visit_expression, ctx)?;
+    let body = body.as_ref().unwrap().try_visit(visit_expression, ctx)?;
 
     ctx.symtab.close_scope();
 
+    let mut mangle_name = true;
+    for attr in &attributes.0 {
+        if attr.inner.0 == "no_mangle" {
+            mangle_name = false;
+        } else {
+            return Err(Error::UnrecognisedAttribute {
+                attribute: attr.clone(),
+            });
+        }
+    }
+
+    let name = if mangle_name {
+        if head.type_params.is_empty() {
+            hir::UnitName::FullPath(id.at_loc(&name))
+        } else {
+            hir::UnitName::FullPath(id.at_loc(&name))
+        }
+    } else {
+        hir::UnitName::Unmangled(name.0.clone(), id.at_loc(&name))
+    };
+
     Ok(Some(
         hir::Entity {
-            name: id.at_loc(&item.name),
+            name,
             head: head.clone().inner,
             inputs,
             body,
@@ -301,12 +327,12 @@ pub fn visit_module_body(
         match item {
             Some(Entity(e)) => add_item!(
                 item_list.executables,
-                e.name.inner.clone(),
+                e.name.name_id().inner.clone(),
                 ExecutableItem::Entity(e.clone())
             ),
             Some(Pipeline(p)) => add_item!(
                 item_list.executables,
-                p.name.inner.clone(),
+                p.name.name_id().inner.clone(),
                 ExecutableItem::Pipeline(p.clone())
             ),
             None => {}
@@ -956,6 +982,7 @@ fn visit_register(reg: &Loc<ast::Register>, ctx: &mut Context) -> Result<Loc<hir
 mod entity_visiting {
     use super::*;
 
+    use hir::UnitName;
     use spade_ast::testutil::{ast_ident, ast_path};
     use spade_common::name::testutil::name_id;
     use spade_common::{location_info::WithLocation, name::Identifier};
@@ -990,7 +1017,7 @@ mod entity_visiting {
         .nowhere();
 
         let expected = hir::Entity {
-            name: name_id(0, "test"),
+            name: UnitName::FullPath(name_id(0, "test")),
             head: hir::EntityHead {
                 inputs: hir::ParameterList(vec![(ast_ident("a"), hir::TypeSpec::unit().nowhere())]),
                 output_type: None,
@@ -2598,7 +2625,7 @@ mod item_visiting {
 
         let expected = hir::Item::Entity(
             hir::Entity {
-                name: name_id(0, "test"),
+                name: hir::UnitName::FullPath(name_id(0, "test")),
                 head: EntityHead {
                     output_type: None,
                     inputs: hir::ParameterList(vec![]),
@@ -2671,7 +2698,7 @@ mod module_visiting {
                 name_id(0, "test").inner,
                 hir::ExecutableItem::Entity(
                     hir::Entity {
-                        name: name_id(0, "test"),
+                        name: hir::UnitName::FullPath(name_id(0, "test")),
                         head: EntityHead {
                             output_type: None,
                             inputs: hir::ParameterList(vec![]),
