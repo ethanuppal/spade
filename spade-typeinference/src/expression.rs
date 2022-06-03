@@ -400,7 +400,7 @@ impl TypeState {
             self.visit_expression(&cond, symtab, generic_list)?;
 
             for (i, (pattern, result)) in branches.iter().enumerate() {
-                self.visit_pattern(pattern, symtab)?;
+                self.visit_pattern(pattern, symtab, generic_list)?;
                 self.visit_expression(result, symtab, generic_list)?;
 
                 self.unify(&cond.inner, pattern, symtab)

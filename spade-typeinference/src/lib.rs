@@ -127,12 +127,31 @@ impl ProcessedItemList {
     }
 }
 
+enum GenericListSource<'a> {
+    /// For when you just need a new generic list but have no need to refer back
+    /// to it in the future
+    Anonymous,
+    /// For managing the generics of callable with the specified name when type checking
+    /// their body
+    Definition(&'a NameID),
+    /// For expressions which instanciate generic items
+    Expression(u64),
+}
+
+/// Stored version of GenericListSource
+#[derive(Clone, Hash, Eq, PartialEq, Debug)]
+enum GenericListReference {
+    Anonymous(usize),
+    Definition(NameID),
+    Expression(u64),
+}
+
 // A token indicating the existence of a generic list in type TypeState. Used to
 // ensure that the generic list is dropped at an appropriate time and not aquired
 // later
 #[must_use]
 pub struct GenericListToken {
-    id: usize,
+    reference: GenericListReference,
 }
 
 /// State of the type inference algorithm
@@ -140,9 +159,12 @@ pub struct GenericListToken {
 pub struct TypeState {
     equations: TypeEquations,
     next_typeid: u64,
-    // List of the mapping between generic parameters and type vars. Managed here
-    // because unification must update *all* TypeVars in existence.
-    generic_lists: Vec<HashMap<NameID, TypeVar>>,
+    // List of the mapping between generic parameters and type vars.
+    // The key is the index of the expression for which this generic list is associated. (if this
+    // is a generic list for a call whose expression id is x to f<A, B>, then generic_lists[x] will
+    // be {A: <type var>, b: <type var>}
+    // Managed here because unification must update *all* TypeVars in existence.
+    generic_lists: HashMap<GenericListReference, HashMap<NameID, TypeVar>>,
 
     constraints: TypeConstraints,
 
@@ -159,7 +181,7 @@ impl TypeState {
             trace_stack: Rc::new(TraceStack::new()),
             constraints: TypeConstraints::new(),
             replacements: HashMap::new(),
-            generic_lists: vec![],
+            generic_lists: HashMap::new(),
         }
     }
 
@@ -172,7 +194,7 @@ impl TypeState {
         &'a self,
         generic_list_token: &'a GenericListToken,
     ) -> &'a HashMap<NameID, TypeVar> {
-        &self.generic_lists[generic_list_token.id]
+        &self.generic_lists[&generic_list_token.reference]
     }
 
     fn hir_type_expr_to_var<'a>(
@@ -258,11 +280,10 @@ impl TypeState {
 
     #[trace_typechecker]
     pub fn visit_entity(&mut self, entity: &Entity, symtab: &SymbolTable) -> Result<()> {
-        let generic_list = if entity.head.type_params.is_empty() {
-            self.create_generic_list(&[])
-        } else {
-            self.create_generic_list(&entity.head.type_params)
-        };
+        let generic_list = self.create_generic_list(
+            GenericListSource::Definition(&entity.name.inner),
+            &entity.head.type_params,
+        );
 
         // Add equations for the inputs
         for (name, t) in &entity.inputs {
@@ -414,7 +435,10 @@ impl TypeState {
         symtab: &SymbolTable,
     ) -> Result<()> {
         // Add new symbols for all the type parameters
-        let generic_list = self.create_generic_list(head.type_params());
+        let generic_list = self.create_generic_list(
+            GenericListSource::Expression(expression.id),
+            head.type_params(),
+        );
 
         let type_params = head.type_params();
 
@@ -488,8 +512,18 @@ impl TypeState {
         Ok(())
     }
 
-    fn create_generic_list(&mut self, params: &[Loc<TypeParam>]) -> GenericListToken {
-        let id = self.generic_lists.len();
+    fn create_generic_list(
+        &mut self,
+        source: GenericListSource,
+        params: &[Loc<TypeParam>],
+    ) -> GenericListToken {
+        let reference = match source {
+            GenericListSource::Anonymous => {
+                GenericListReference::Anonymous(self.generic_lists.len())
+            }
+            GenericListSource::Definition(name) => GenericListReference::Definition(name.clone()),
+            GenericListSource::Expression(id) => GenericListReference::Expression(id),
+        };
         let new_list = params
             .iter()
             .map(|param| {
@@ -503,8 +537,11 @@ impl TypeState {
             })
             .map(|(name, t)| (name, t.clone()))
             .collect();
-        self.generic_lists.push(new_list);
-        GenericListToken { id }
+
+        if let Some(_) = self.generic_lists.insert(reference.clone(), new_list) {
+            panic!("A generic list already existed for {reference:?}");
+        }
+        GenericListToken { reference }
     }
 
     #[trace_typechecker]
@@ -522,7 +559,12 @@ impl TypeState {
     }
 
     #[trace_typechecker]
-    pub fn visit_pattern(&mut self, pattern: &Loc<Pattern>, symtab: &SymbolTable) -> Result<()> {
+    pub fn visit_pattern(
+        &mut self,
+        pattern: &Loc<Pattern>,
+        symtab: &SymbolTable,
+        generic_list: &GenericListToken,
+    ) -> Result<()> {
         let new_type = self.new_generic();
         self.add_equation(TypedExpression::Id(pattern.inner.id), new_type);
         match &pattern.inner.kind {
@@ -555,7 +597,7 @@ impl TypeState {
             }
             hir::PatternKind::Tuple(subpatterns) => {
                 for pattern in subpatterns {
-                    self.visit_pattern(pattern, symtab)?;
+                    self.visit_pattern(pattern, symtab, generic_list)?;
                 }
                 let tuple_type = TypeVar::Tuple(
                     subpatterns
@@ -578,7 +620,10 @@ impl TypeState {
                             params: _,
                         } => {
                             let enum_variant = symtab.enum_variant_by_id(name).inner;
-                            let generic_list = self.create_generic_list(&enum_variant.type_params);
+                            let generic_list = self.create_generic_list(
+                                GenericListSource::Anonymous,
+                                &enum_variant.type_params,
+                            );
 
                             let condition_type =
                                 self.type_var_from_hir(&enum_variant.output_type, &generic_list);
@@ -590,7 +635,8 @@ impl TypeState {
                             params: _,
                         } => {
                             let s = symtab.struct_by_id(name).inner;
-                            let generic_list = self.create_generic_list(&s.type_params);
+                            let generic_list = self
+                                .create_generic_list(GenericListSource::Anonymous, &s.type_params);
 
                             let condition_type =
                                 self.type_var_from_hir(&s.self_type, &generic_list);
@@ -614,7 +660,7 @@ impl TypeState {
                     ),
                 ) in args.iter().zip(params.0.iter()).enumerate()
                 {
-                    self.visit_pattern(pattern, symtab)?;
+                    self.visit_pattern(pattern, symtab, &generic_list)?;
                     let target_type = self.type_var_from_hir(&target_type, &generic_list);
 
                     self.unify(&target_type, pattern, symtab).map_normal_err(
@@ -655,7 +701,7 @@ impl TypeState {
             Statement::Binding(pattern, t, value) => {
                 self.visit_expression(value, symtab, generic_list)?;
 
-                self.visit_pattern(pattern, symtab)?;
+                self.visit_pattern(pattern, symtab, generic_list)?;
 
                 self.unify(&TypedExpression::Id(pattern.id), value, symtab)
                     .map_normal_err(|(got, expected)| Error::PatternTypeMismatch {
@@ -666,7 +712,6 @@ impl TypeState {
                     })?;
 
                 if let Some(t) = t {
-                    let generic_list = self.create_generic_list(&[]);
                     let tvar = self.type_var_from_hir(&t, &generic_list);
                     self.unify(&TypedExpression::Id(pattern.id), &tvar, symtab)
                         .map_normal_err(|(got, expected)| Error::UnspecifiedTypeError {
@@ -704,7 +749,7 @@ impl TypeState {
         symtab: &SymbolTable,
         generic_list: &GenericListToken,
     ) -> Result<()> {
-        self.visit_pattern(&reg.pattern, symtab)?;
+        self.visit_pattern(&reg.pattern, symtab, generic_list)?;
 
         self.visit_expression(&reg.clock, symtab, generic_list)?;
         self.visit_expression(&reg.value, symtab, generic_list)?;
@@ -737,8 +782,7 @@ impl TypeState {
             })?;
 
         if let Some(t) = &reg.value_type {
-            let token = self.create_generic_list(&[]);
-            let tvar = self.type_var_from_hir(&t, &token);
+            let tvar = self.type_var_from_hir(&t, &generic_list);
             self.unify(&reg.value, &tvar, symtab)
                 .map_normal_err(|(got, expected)| Error::UnspecifiedTypeError {
                     expected,
@@ -1009,7 +1053,7 @@ impl TypeState {
             for (_, rhs) in &mut self.equations {
                 TypeState::replace_type_var(rhs, &replaced_type, &new_type)
             }
-            for generic_list in &mut self.generic_lists {
+            for generic_list in &mut self.generic_lists.values_mut() {
                 for (_, lhs) in generic_list.iter_mut() {
                     TypeState::replace_type_var(lhs, &replaced_type, &new_type)
                 }
@@ -1263,7 +1307,7 @@ mod tests {
     fn int_literals_have_type_known_int() {
         let mut state = TypeState::new();
         let mut symtab = SymbolTable::new();
-        let generic_list = state.create_generic_list(&vec![]);
+        let generic_list = state.create_generic_list(GenericListSource::Anonymous, &vec![]);
         spade_ast_lowering::builtins::populate_symtab(&mut symtab, &mut ItemList::new());
 
         let input = ExprKind::IntLiteral(0).with_id(0).nowhere();
@@ -1297,7 +1341,7 @@ mod tests {
         state.add_eq_from_tvar(expr_b.clone(), TVar::Unknown(101));
         state.add_eq_from_tvar(expr_c.clone(), TVar::Unknown(102));
 
-        let generic_list = state.create_generic_list(&vec![]);
+        let generic_list = state.create_generic_list(GenericListSource::Anonymous, &vec![]);
         state
             .visit_expression(&input, &symtab, &generic_list)
             .unwrap();
@@ -1335,7 +1379,7 @@ mod tests {
         state.add_eq_from_tvar(expr_b.clone(), unsized_int(101, &symtab));
         state.add_eq_from_tvar(expr_c.clone(), TVar::Unknown(102));
 
-        let generic_list = state.create_generic_list(&vec![]);
+        let generic_list = state.create_generic_list(GenericListSource::Anonymous, &vec![]);
         state
             .visit_expression(&input, &symtab, &generic_list)
             .unwrap();
@@ -1374,7 +1418,7 @@ mod tests {
         state.add_eq_from_tvar(expr_b.clone(), unsized_int(101, &symtab));
         state.add_eq_from_tvar(expr_c.clone(), TVar::Known(t_clock(&symtab), vec![]));
 
-        let generic_list = state.create_generic_list(&vec![]);
+        let generic_list = state.create_generic_list(GenericListSource::Anonymous, &vec![]);
         assert_ne!(
             state.visit_expression(&input, &symtab, &generic_list),
             Ok(())
@@ -1415,7 +1459,7 @@ mod tests {
         state.add_eq_from_tvar(expr_b.clone(), unsized_int(101, &symtab));
         state.add_eq_from_tvar(expr_c.clone(), TVar::Unknown(102));
 
-        let generic_list = state.create_generic_list(&vec![]);
+        let generic_list = state.create_generic_list(GenericListSource::Anonymous, &vec![]);
         state
             .visit_expression(&input, &symtab, &generic_list)
             .unwrap();
@@ -1464,7 +1508,7 @@ mod tests {
         state.add_eq_from_tvar(expr_b.clone(), TVar::Unknown(101));
         state.add_eq_from_tvar(expr_c.clone(), TVar::Unknown(102));
 
-        let generic_list = state.create_generic_list(&vec![]);
+        let generic_list = state.create_generic_list(GenericListSource::Anonymous, &vec![]);
         state
             .visit_expression(&input, &symtab, &generic_list)
             .unwrap();
@@ -1501,7 +1545,7 @@ mod tests {
         )
         .nowhere();
 
-        let generic_list = state.create_generic_list(&vec![]);
+        let generic_list = state.create_generic_list(GenericListSource::Anonymous, &vec![]);
         assert!(state
             .visit_statement(&input, &symtab, &generic_list)
             .is_err());
@@ -1521,7 +1565,7 @@ mod tests {
 
         let mut state = TypeState::new();
 
-        let generic_list = state.create_generic_list(&vec![]);
+        let generic_list = state.create_generic_list(GenericListSource::Anonymous, &vec![]);
         state
             .visit_expression(&input, &symtab, &generic_list)
             .unwrap();
@@ -1552,7 +1596,7 @@ mod tests {
         state.add_eq_from_tvar(expr_b.clone(), unsized_int(101, &symtab));
         state.add_eq_from_tvar(expr_c.clone(), sized_int(5, &symtab));
 
-        let generic_list = state.create_generic_list(&vec![]);
+        let generic_list = state.create_generic_list(GenericListSource::Anonymous, &vec![]);
         state
             .visit_expression(&input, &symtab, &generic_list)
             .unwrap();
@@ -1596,7 +1640,7 @@ mod tests {
         state.add_eq_from_tvar(expr_a.clone(), TVar::Unknown(100));
         state.add_eq_from_tvar(expr_b.clone(), TVar::Unknown(101));
 
-        let generic_list = state.create_generic_list(&vec![]);
+        let generic_list = state.create_generic_list(GenericListSource::Anonymous, &vec![]);
         state
             .visit_expression(&input, &symtab, &generic_list)
             .unwrap();
@@ -1638,7 +1682,7 @@ mod tests {
         let expr_clk = TExpr::Name(name_id(1, "clk").inner);
         state.add_eq_from_tvar(expr_clk.clone(), TVar::Unknown(100));
 
-        let generic_list = state.create_generic_list(&vec![]);
+        let generic_list = state.create_generic_list(GenericListSource::Anonymous, &vec![]);
         state
             .visit_register(&input, &symtab, &generic_list)
             .unwrap();
@@ -1674,7 +1718,7 @@ mod tests {
         let expr_clk = TExpr::Name(name_id(1, "clk").inner);
         state.add_eq_from_tvar(expr_clk.clone(), TVar::Unknown(100));
 
-        let generic_list = state.create_generic_list(&vec![]);
+        let generic_list = state.create_generic_list(GenericListSource::Anonymous, &vec![]);
         state
             .visit_register(&input, &symtab, &generic_list)
             .unwrap();
@@ -1712,7 +1756,7 @@ mod tests {
         state.add_eq_from_tvar(expr_rst_cond.clone(), TVar::Unknown(101));
         state.add_eq_from_tvar(expr_rst_value.clone(), TVar::Unknown(102));
 
-        let generic_list = state.create_generic_list(&vec![]);
+        let generic_list = state.create_generic_list(GenericListSource::Anonymous, &vec![]);
         state
             .visit_register(&input, &symtab, &generic_list)
             .unwrap();
@@ -1743,7 +1787,7 @@ mod tests {
 
         let mut state = TypeState::new();
 
-        let generic_list = state.create_generic_list(&vec![]);
+        let generic_list = state.create_generic_list(GenericListSource::Anonymous, &vec![]);
         state
             .visit_statement(&input, &symtab, &generic_list)
             .unwrap();
@@ -1766,7 +1810,7 @@ mod tests {
 
         let mut state = TypeState::new();
 
-        let generic_list = state.create_generic_list(&vec![]);
+        let generic_list = state.create_generic_list(GenericListSource::Anonymous, &vec![]);
         state
             .visit_statement(&input, &symtab, &generic_list)
             .unwrap();
@@ -1806,7 +1850,7 @@ mod tests {
         let expr_clk = TExpr::Name(name_id(1, "clk").inner);
         state.add_eq_from_tvar(expr_clk.clone(), TVar::Unknown(100));
 
-        let generic_list = state.create_generic_list(&vec![]);
+        let generic_list = state.create_generic_list(GenericListSource::Anonymous, &vec![]);
         state
             .visit_register(&input, &symtab, &generic_list)
             .unwrap();
@@ -1865,7 +1909,7 @@ mod tests {
         state.add_eq_from_tvar(expr_a.clone(), TVar::Unknown(100));
         state.add_eq_from_tvar(expr_b.clone(), TVar::Unknown(101));
 
-        let generic_list = state.create_generic_list(&vec![]);
+        let generic_list = state.create_generic_list(GenericListSource::Anonymous, &vec![]);
         state
             .visit_expression(&input, &symtab, &generic_list)
             .unwrap();
@@ -1948,7 +1992,7 @@ mod tests {
         state.add_eq_from_tvar(expr_a.clone(), TVar::Unknown(100));
         state.add_eq_from_tvar(expr_b.clone(), TVar::Unknown(101));
 
-        let generic_list = state.create_generic_list(&vec![]);
+        let generic_list = state.create_generic_list(GenericListSource::Anonymous, &vec![]);
         state
             .visit_expression(&input, &symtab, &generic_list)
             .unwrap();

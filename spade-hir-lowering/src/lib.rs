@@ -886,7 +886,18 @@ impl ExprLocal for Loc<Expression> {
                         .collect::<Result<Vec<_>>>()?,
                 }))
             }
-            Some(hir::ExecutableItem::Pipeline(_)) | Some(hir::ExecutableItem::Entity(_)) => {
+            Some(i @ hir::ExecutableItem::Pipeline(_))
+            | Some(i @ hir::ExecutableItem::Entity(_)) => {
+                let type_params = match i {
+                    hir::ExecutableItem::Pipeline(p) => &p.head.type_params,
+                    hir::ExecutableItem::Entity(e) => &e.head.type_params,
+                    _ => unreachable!(),
+                };
+
+                if !type_params.is_empty() {
+                    todo!("Codegen type params")
+                }
+
                 result.push(mir::Statement::Binding(mir::Binding {
                     name: self.variable(ctx.subs)?,
                     operator: mir::Operator::Instance(name.1.to_string()),
@@ -901,9 +912,8 @@ impl ExprLocal for Loc<Expression> {
                 }));
             }
             None => {
-                // NOTE: Something causes entities to not be in the executable list at this point.
-                // We'll just ignore that problem and assume it exists for now. Bug introduced
-                // in commit 20f58921
+                // NOTE: Builtin entities are not part of the item list, but we
+                // should still emit the code for instanciating them
                 result.push(mir::Statement::Binding(mir::Binding {
                     name: self.variable(ctx.subs)?,
                     operator: mir::Operator::Instance(name.1.to_string()),

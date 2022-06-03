@@ -4,6 +4,7 @@ use spade_hir::symbol_table::SymbolTable;
 use spade_hir::Pipeline;
 
 use crate::result::UnificationErrorExt;
+use crate::GenericListSource;
 use crate::{equation::TypedExpression, fixed_types::t_clock, result::Error};
 
 use super::{Result, TraceStackEntry, TypeState};
@@ -17,11 +18,10 @@ impl TypeState {
             inputs,
             body,
         } = pipeline;
-        let generic_list = if pipeline.head.type_params.is_empty() {
-            self.create_generic_list(&[])
-        } else {
-            todo!("Support entity definitions with generics")
-        };
+        let generic_list = self.create_generic_list(
+            GenericListSource::Definition(&pipeline.name.inner),
+            &pipeline.head.type_params,
+        );
 
         // Add an equation for the clock
         let input_tvar = self.type_var_from_hir(&inputs[0].1.inner, &generic_list);
