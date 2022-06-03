@@ -19,3 +19,8 @@ nesty = "0.1"
 itertools = "0.10.3"
 
 spade-common = {path = "../spade-common"}
+parse_tree_macros = {path = "../parse_tree_macros"}
+
+[dev-dependencies]
+colored = "2.0"
+prettydiff = { version = "0.6.1", default-features = false }

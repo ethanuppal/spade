@@ -12,16 +12,21 @@ doctest = false
 [dependencies]
 codespan-reporting = "0.11.0"
 logos = "0.11"
-colored = "2.0"
 indoc = "1.0"
 
+spade-ast-lowering = {path = "../spade-ast-lowering"}
+spade-testutil = {path = "../spade-testutil"}
+spade-parser = {path = "../spade-parser"}
 spade-common = {path = "../spade-common"}
 spade-hir = {path = "../spade-hir"}
 spade-mir = {path = "../spade-mir"}
 spade-hir-lowering = {path = "../spade-hir-lowering"}
 spade-typeinference = {path = "../spade-typeinference"}
-parse_tree_macros = {path = "../parse_tree_macros"}
+spade = {path = "../spade-compiler"}
 
 [dev-dependencies]
 insta = "1.14.0"
 unindent = "0.1.8"
+colored = "2.0"
+prettydiff = { version = "0.6.1", default-features = false }
+
