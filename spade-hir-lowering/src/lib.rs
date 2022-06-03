@@ -898,13 +898,13 @@ impl ExprLocal for Loc<Expression> {
             }
             Some(i @ hir::ExecutableItem::Pipeline(_))
             | Some(i @ hir::ExecutableItem::Entity(_)) => {
-                let (type_params, name_string) = match i {
-                    hir::ExecutableItem::Pipeline(p) => (&p.head.type_params, p.name.mangled()),
-                    hir::ExecutableItem::Entity(e) => (&e.head.type_params, e.name.mangled()),
+                let (type_params, unit_name) = match i {
+                    hir::ExecutableItem::Pipeline(p) => (&p.head.type_params, p.name.clone()),
+                    hir::ExecutableItem::Entity(e) => (&e.head.type_params, e.name.clone()),
                     _ => unreachable!(),
                 };
 
-                if !type_params.is_empty() {
+                let instance_name = if !type_params.is_empty() {
                     let tok = GenericListToken::Expression(self.id);
                     let instance_list = ctx.types.get_generic_list(&tok);
 
@@ -917,9 +917,16 @@ impl ExprLocal for Loc<Expression> {
                         })
                         .collect();
 
-                    ctx.mono_state
-                        .request_compilation(name.clone(), t, ctx.symtab);
-                }
+                    UnitName::WithID(
+                        ctx.mono_state
+                            .request_compilation(name.clone(), t, ctx.symtab)
+                            .nowhere(),
+                    )
+                } else {
+                    unit_name
+                };
+
+                let name_string = instance_name.mangled();
 
                 result.push(mir::Statement::Binding(mir::Binding {
                     name: self.variable(ctx.subs)?,
@@ -935,6 +942,8 @@ impl ExprLocal for Loc<Expression> {
                 }));
             }
             None => {
+                // TODO: Handle builtins with mangled names here
+
                 // NOTE: Builtin entities are not part of the item list, but we
                 // should still emit the code for instanciating them
                 result.push(mir::Statement::Binding(mir::Binding {

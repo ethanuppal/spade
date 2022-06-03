@@ -1365,7 +1365,7 @@ mod tests {
             entity! {"x"; (
                 "x", n(0, "x"), Type::Bool,
             ) -> Type::Bool; {
-                (e(0); Type::Bool; Instance(("identity".to_string())); n(0, "x"))
+                (e(0); Type::Bool; Instance(("identity_n6".to_string())); n(0, "x"))
             } => e(0)},
             // Monomorphised identity function
             entity! {"identity"; (
