@@ -1,10 +1,15 @@
 use std::collections::{HashMap, VecDeque};
 
-use crate::{error::Result, generate_entity, generate_pipeline};
+use crate::{
+    error::{Error, Result},
+    generate_entity, generate_pipeline,
+};
 use spade_common::{id_tracker::ExprIdTracker, location_info::WithLocation, name::NameID};
 use spade_hir::{symbol_table::FrozenSymtab, ExecutableItem, ItemList, UnitName};
 use spade_mir as mir;
-use spade_typeinference::{equation::TypeVar, GenericListToken, TypeState};
+use spade_typeinference::{
+    equation::TypeVar, result::UnificationErrorExt, GenericListToken, TypeState,
+};
 
 /// An item to be monomorphised
 struct MonoItem {
@@ -128,11 +133,18 @@ pub fn compile_items(
                     for (source_param, new) in e.head.type_params.iter().zip(item.params.iter()) {
                         let source_var = &generic_list[&source_param.name_id()];
 
-                        match type_state.unify(source_var, new, symtab.symtab()) {
+                        match type_state
+                            .unify(source_var, new, symtab.symtab())
+                            .map_normal_err(|(expected, got)| {
+                                spade_typeinference::result::Error::UnspecifiedTypeError {
+                                    expected,
+                                    got,
+                                    loc: e.loc(),
+                                }
+                            }) {
                             Ok(_) => {}
                             Err(e) => {
-                                // TODO: Handle this gracefully
-                                panic!("unification error during lowering {e}")
+                                result.push(Err(Error::UnificationError(e.into())));
                             }
                         }
                     }

@@ -5,6 +5,15 @@ use spade_common::error_reporting::{codespan_config, AsLabel, CodeBundle, Compil
 
 impl CompilationError for Error {
     fn report(&self, buffer: &mut Buffer, code: &CodeBundle) {
+        // Errors which require special handling
+        match self {
+            Error::UnificationError(underlying) => {
+                underlying.report(buffer, code);
+                return;
+            }
+            _ => {}
+        }
+
         let diag = match self {
             Error::UsingGenericType { expr, t } => Diagnostic::error()
                 .with_message(format!("Type of expression is not fully known"))
@@ -73,6 +82,7 @@ impl CompilationError for Error {
                     head.secondary_label()
                         .with_message("Because this is a generic __builtin__"),
                 ]),
+            Error::UnificationError(_) => unreachable!(),
         };
 
         term::emit(buffer, &codespan_config(), &code.files, &diag).unwrap();

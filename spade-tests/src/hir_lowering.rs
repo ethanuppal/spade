@@ -1493,4 +1493,19 @@ mod tests {
     //         }
     //     "
     // }
+
+    snapshot_error! {
+        late_type_inference_failures_are_reported_well,
+        "
+            fn a<N>(x: int<N>, y: int<32>) -> int<33> {
+                x + y
+            }
+
+            fn main() -> int<33> {
+                let x: int<16> = 0;
+                let y: int<32> = 0;
+                a(x, y)
+            }
+            "
+    }
 }

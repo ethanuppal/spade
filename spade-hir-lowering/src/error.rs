@@ -30,5 +30,7 @@ pub enum Error {
     AvailabilityMismatch { prev: Loc<usize>, new: Loc<usize> },
     #[error("Generic builtin")]
     InstanciatingGenericBuiltin { loc: Loc<()>, head: Loc<()> },
+    #[error("Unification error")]
+    UnificationError(#[source] spade_typeinference::result::Error),
 }
 pub type Result<T> = std::result::Result<T, Error>;

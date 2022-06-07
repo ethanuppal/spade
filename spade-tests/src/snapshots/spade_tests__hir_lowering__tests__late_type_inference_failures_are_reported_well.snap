@@ -1,0 +1,13 @@
+---
+source: spade-tests/src/hir_lowering.rs
+expression: "std::str::from_utf8(buffer.as_slice()).expect(\"error contains invalid utf-8\")"
+---
+error: Expected type 32, got 16
+  ┌─ testinput:1:1
+  │  
+1 │ ╭ fn a<N>(x: int<N>, y: int<32>) -> int<33> {
+2 │ │     x + y
+3 │ │ }
+  │ ╰─^ Expected 32 here
+
+
