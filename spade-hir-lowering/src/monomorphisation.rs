@@ -167,7 +167,6 @@ pub fn compile_items(
             }
             Some((ExecutableItem::Pipeline(p), type_state)) => {
                 if !p.head.type_params.is_empty() {
-                    // TODO: Implement
                     todo!()
                 }
                 let out = generate_pipeline(

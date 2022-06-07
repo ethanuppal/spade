@@ -50,7 +50,7 @@ pub fn unit_name(
 }
 
 pub fn report_unused_attributes(attributes: &ast::AttributeList) -> Result<()> {
-    for attr in &attributes.0 {
+    if let Some(attr) = attributes.0.first() {
         return Err(Error::UnrecognisedAttribute {
             attribute: attr.clone(),
         });

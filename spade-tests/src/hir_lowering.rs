@@ -1482,7 +1482,7 @@ mod tests {
         "
     }
 
-    // TODO: Implement generic pipelines
+    // FIXME: Handle generic pipelines
     // snapshot_error! {
     //     instantiating_builtin_generic_pipeline_which_is_non_intrinsic_is_error,
     //     "
