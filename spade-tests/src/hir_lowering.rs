@@ -1368,7 +1368,7 @@ mod tests {
                 (e(0); Type::Bool; Instance(("identity_n6".to_string())); n(0, "x"))
             } => e(0)},
             // Monomorphised identity function
-            entity! {"identity"; (
+            entity! {"identity_n6"; (
                 "x", n(0, "x"), Type::Bool,
             ) -> Type::Bool; {
             } => n(0, "x")},
@@ -1470,4 +1470,27 @@ mod tests {
         }
        "
     }
+
+    snapshot_error! {
+        instantiating_builtin_generic_which_is_non_intrinsic_is_error,
+        "
+            fn a<T>() -> T __builtin__
+
+            fn main() -> int<32> {
+                a()
+            }
+        "
+    }
+
+    // TODO: Implement generic pipelines
+    // snapshot_error! {
+    //     instantiating_builtin_generic_pipeline_which_is_non_intrinsic_is_error,
+    //     "
+    //         pipeline(1) a<T>() -> T __builtin__
+
+    //         fn main() -> int<32> {
+    //             inst(1) a()
+    //         }
+    //     "
+    // }
 }

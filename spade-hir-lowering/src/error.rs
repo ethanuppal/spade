@@ -28,5 +28,7 @@ pub enum Error {
     },
     #[error("Availability mismatch")]
     AvailabilityMismatch { prev: Loc<usize>, new: Loc<usize> },
+    #[error("Generic builtin")]
+    InstanciatingGenericBuiltin { loc: Loc<()>, head: Loc<()> },
 }
 pub type Result<T> = std::result::Result<T, Error>;

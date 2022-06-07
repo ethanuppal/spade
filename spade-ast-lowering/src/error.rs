@@ -110,6 +110,12 @@ pub enum Error {
     #[error("Unrecognised attribute")]
     UnrecognisedAttribute { attribute: Loc<Identifier> },
 
+    #[error("Nomangle on generic")]
+    NoMangleGeneric {
+        attribute: Loc<Identifier>,
+        generic_list: Loc<()>,
+    },
+
     // Type related errors
     #[error("Generic parameters for generic name")]
     GenericsGivenForGeneric {

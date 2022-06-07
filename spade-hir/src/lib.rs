@@ -364,6 +364,18 @@ impl WithLocation for Pipeline {}
 pub enum Item {
     Entity(Loc<Entity>),
     Pipeline(Loc<Pipeline>),
+    BuiltinEntity(UnitName, Loc<EntityHead>),
+    BuiltinPipeline(UnitName, Loc<PipelineHead>),
+}
+
+impl Item {
+    pub fn assume_pipeline(&self) -> &Pipeline {
+        if let Item::Pipeline(p) = self {
+            p
+        } else {
+            panic!("Assumed item to be a pipeline but it was {self:?}")
+        }
+    }
 }
 
 /// Items which have associated code that can be executed. This is different from
@@ -374,6 +386,8 @@ pub enum ExecutableItem {
     StructInstance,
     Entity(Loc<Entity>),
     Pipeline(Loc<Pipeline>),
+    BuiltinEntity(UnitName, Loc<EntityHead>),
+    BuiltinPipeline(UnitName, Loc<PipelineHead>),
 }
 impl WithLocation for ExecutableItem {}
 

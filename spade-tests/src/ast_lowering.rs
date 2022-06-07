@@ -133,6 +133,38 @@ snapshot_error! {
     "
 }
 
+snapshot_error! {
+    unused_attribute_errors_on_builtin_entity,
+    "
+        #[uwu]
+        entity a() -> bool __builtin__
+    "
+}
+
+snapshot_error! {
+    unused_attribute_errors_on_builtin_pipeline,
+    "
+        #[uwu]
+        pipeline(1) a(clk: clk) -> bool __builtin__
+    "
+}
+
+snapshot_error! {
+    unused_attribute_errors_on_entity,
+    "
+        #[uwu]
+        entity a() -> bool {true}
+    "
+}
+
+snapshot_error! {
+    unused_attribute_errors_on_pipeline,
+    "
+        #[uwu]
+        pipeline(1) a(clk: clk) -> bool {reg; true}
+    "
+}
+
 #[test]
 fn type_inference_works_for_declared_variables() {
     let code = r#"

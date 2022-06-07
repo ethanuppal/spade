@@ -208,6 +208,8 @@ pub fn compile(sources: Vec<(String, String)>, opts: Opt) -> Result<Artefacts, (
             }
             ExecutableItem::EnumInstance { .. } => None,
             ExecutableItem::StructInstance { .. } => None,
+            ExecutableItem::BuiltinEntity(_, _) => None,
+            ExecutableItem::BuiltinPipeline(_, _) => None,
         })
         .collect::<HashMap<_, _>>();
 

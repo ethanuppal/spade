@@ -919,7 +919,7 @@ impl ExprLocal for Loc<Expression> {
 
                     UnitName::WithID(
                         ctx.mono_state
-                            .request_compilation(name.clone(), t, ctx.symtab)
+                            .request_compilation(unit_name, t, ctx.symtab)
                             .nowhere(),
                     )
                 } else {
@@ -941,14 +941,35 @@ impl ExprLocal for Loc<Expression> {
                         .to_mir_type(),
                 }));
             }
-            None => {
-                // TODO: Handle builtins with mangled names here
+            Some(
+                i @ hir::ExecutableItem::BuiltinPipeline(_, _)
+                | i @ hir::ExecutableItem::BuiltinEntity(_, _),
+            ) => {
+                let (unit_name, type_params, head_loc) = match i {
+                    hir::ExecutableItem::BuiltinPipeline(name, head) => {
+                        (name, &head.type_params, head.loc())
+                    }
+                    hir::ExecutableItem::BuiltinEntity(name, head) => {
+                        (name, &head.type_params, head.loc())
+                    }
+                    _ => unreachable!(),
+                };
+
+                // NOTE: Ideally this check would be done earlier, when defining the generic
+                // builtin. However, at the moment, the compiler does not know if the generic
+                // is an intrinsic until here when it has gone through the list of intrinsics
+                if !type_params.is_empty() {
+                    return Err(Error::InstanciatingGenericBuiltin {
+                        loc: self.loc(),
+                        head: head_loc,
+                    });
+                }
 
                 // NOTE: Builtin entities are not part of the item list, but we
                 // should still emit the code for instanciating them
                 result.push(mir::Statement::Binding(mir::Binding {
                     name: self.variable(ctx.subs)?,
-                    operator: mir::Operator::Instance(name.1.to_string()),
+                    operator: mir::Operator::Instance(unit_name.mangled()),
                     operands: args
                         .into_iter()
                         .map(|arg| arg.value.variable(ctx.subs))
@@ -958,6 +979,9 @@ impl ExprLocal for Loc<Expression> {
                         .expr_type(self, ctx.symtab.symtab(), &ctx.item_list.types)?
                         .to_mir_type(),
                 }));
+            }
+            None => {
+                unreachable!("Instantiating an item which is not known")
             }
         }
         Ok(result)
@@ -1249,6 +1273,7 @@ struct Context<'a> {
 
 pub fn generate_entity<'a>(
     entity: &Entity,
+    name: UnitName,
     symtab: &mut FrozenSymtab,
     idtracker: &mut ExprIdTracker,
     types: &TypeState,
@@ -1287,7 +1312,7 @@ pub fn generate_entity<'a>(
     let subs = Substitutions::new();
 
     Ok(mir::Entity {
-        name: entity.name.mangled(),
+        name: name.mangled(),
         inputs: inputs,
         output: entity.body.variable(&subs)?,
         output_type: output_t,

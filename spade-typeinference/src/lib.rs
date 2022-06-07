@@ -66,6 +66,8 @@ pub enum ProcessedItem {
     StructInstance,
     Entity(ProcessedEntity),
     Pipeline(ProcessedPipeline),
+    BuiltinEntity(Loc<hir::EntityHead>),
+    BuiltinPipeline(Loc<hir::PipelineHead>),
 }
 
 pub struct ProcessedItemList {
@@ -119,6 +121,12 @@ impl ProcessedItemList {
                                 pipeline: pipeline.inner,
                                 type_state,
                             }))
+                        }
+                        ExecutableItem::BuiltinEntity(_, head) => {
+                            Ok(ProcessedItem::BuiltinEntity(head))
+                        }
+                        ExecutableItem::BuiltinPipeline(_, head) => {
+                            Ok(ProcessedItem::BuiltinPipeline(head))
                         }
                     }
                 })

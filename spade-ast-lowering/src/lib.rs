@@ -1,3 +1,4 @@
+mod attributes;
 pub mod builtins;
 pub mod error;
 pub mod error_reporting;
@@ -6,6 +7,7 @@ pub mod pipelines;
 pub mod types;
 
 use ast::ParameterList;
+use attributes::{report_unused_attributes, unit_name};
 use hir::symbol_table::DeclarationState;
 use hir::ExecutableItem;
 use pipelines::PipelineContext;
@@ -195,10 +197,7 @@ pub fn entity_head(item: &ast::Entity, symtab: &mut SymbolTable) -> Result<Entit
     })
 }
 
-pub fn visit_entity(
-    item: &Loc<ast::Entity>,
-    ctx: &mut Context,
-) -> Result<Option<Loc<hir::Entity>>> {
+pub fn visit_entity(item: &Loc<ast::Entity>, ctx: &mut Context) -> Result<hir::Item> {
     let ast::Entity {
         body,
         name,
@@ -206,13 +205,8 @@ pub fn visit_entity(
         is_function: _,
         inputs: _,
         output_type: _,
-        type_params: _,
+        type_params,
     } = &item.inner;
-    // If this is a builtin entity
-    if body.is_none() {
-        return Ok(None);
-    }
-
     ctx.symtab.new_scope();
 
     let path = Path(vec![name.clone()]).at_loc(&name.loc());
@@ -227,6 +221,15 @@ pub fn visit_entity(
         .expect("Attempting to lower an entity that has not been added to the symtab previously");
     let head = head.clone(); // An offering to the borrow checker. May ferris have mercy on us all
 
+    let mut attributes = attributes.clone();
+    let unit_name = unit_name(&mut attributes, &id.at_loc(name), name, type_params)?;
+
+    // If this is a builtin entity
+    if body.is_none() {
+        report_unused_attributes(&attributes)?;
+        return Ok(hir::Item::BuiltinEntity(unit_name, head));
+    }
+
     // Add the inputs to the symtab
     let inputs = head
         .inputs
@@ -239,30 +242,12 @@ pub fn visit_entity(
 
     ctx.symtab.close_scope();
 
-    let mut mangle_name = true;
-    for attr in &attributes.0 {
-        if attr.inner.0 == "no_mangle" {
-            mangle_name = false;
-        } else {
-            return Err(Error::UnrecognisedAttribute {
-                attribute: attr.clone(),
-            });
-        }
-    }
+    // Any remaining attributes are unused and will have an error reported
+    report_unused_attributes(&attributes)?;
 
-    let name = if mangle_name {
-        if head.type_params.is_empty() {
-            hir::UnitName::FullPath(id.at_loc(&name))
-        } else {
-            hir::UnitName::FullPath(id.at_loc(&name))
-        }
-    } else {
-        hir::UnitName::Unmangled(name.0.clone(), id.at_loc(&name))
-    };
-
-    Ok(Some(
+    Ok(hir::Item::Entity(
         hir::Entity {
-            name,
+            name: unit_name,
             head: head.clone().inner,
             inputs,
             body,
@@ -276,11 +261,8 @@ pub fn visit_item(
     ctx: &mut Context,
 ) -> Result<(Option<hir::Item>, Option<hir::ItemList>)> {
     match item {
-        ast::Item::Entity(e) => Ok((visit_entity(e, ctx)?.map(hir::Item::Entity), None)),
-        ast::Item::Pipeline(p) => Ok((
-            pipelines::visit_pipeline(p, ctx)?.map(hir::Item::Pipeline),
-            None,
-        )),
+        ast::Item::Entity(e) => Ok((Some(visit_entity(e, ctx)?), None)),
+        ast::Item::Pipeline(p) => Ok((Some(pipelines::visit_pipeline(p, ctx)?), None)),
         ast::Item::TraitDef(_) => {
             todo!("Visit trait definitions")
         }
@@ -334,6 +316,18 @@ pub fn visit_module_body(
                 item_list.executables,
                 p.name.name_id().inner.clone(),
                 ExecutableItem::Pipeline(p.clone())
+            ),
+            Some(BuiltinEntity(name, head)) => {
+                add_item!(
+                    item_list.executables,
+                    name.name_id().clone().inner,
+                    ExecutableItem::BuiltinEntity(name.clone(), head)
+                )
+            }
+            Some(BuiltinPipeline(name, head)) => add_item!(
+                item_list.executables,
+                name.name_id().clone().inner,
+                ExecutableItem::BuiltinPipeline(name.clone(), head)
             ),
             None => {}
         }
@@ -1050,7 +1044,7 @@ mod entity_visiting {
 
         let result = visit_entity(&input, &mut ctx);
 
-        assert_eq!(result, Ok(Some(expected)));
+        assert_eq!(result, Ok(hir::Item::Entity(expected)));
 
         // But the local variables should not
         assert!(!ctx.symtab.has_symbol(ast_path("a").inner));

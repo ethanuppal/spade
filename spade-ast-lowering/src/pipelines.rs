@@ -6,8 +6,9 @@ use spade_common::{
 use spade_hir as hir;
 
 use crate::{
+    attributes::report_unused_attributes,
     error::{Error, Result},
-    visit_expression, Context, LocExt,
+    unit_name, visit_expression, Context, LocExt,
 };
 use spade_hir::symbol_table::SymbolTable;
 
@@ -66,18 +67,15 @@ pub fn pipeline_head(input: &ast::Pipeline, symtab: &mut SymbolTable) -> Result<
     })
 }
 
-pub fn visit_pipeline(
-    pipeline: &Loc<ast::Pipeline>,
-    ctx: &mut Context,
-) -> Result<Option<Loc<hir::Pipeline>>> {
+pub fn visit_pipeline(pipeline: &Loc<ast::Pipeline>, ctx: &mut Context) -> Result<hir::Item> {
     let ast::Pipeline {
         depth,
         name,
         inputs: _,
         output_type: _,
         body,
-        type_params: _,
-        attributes,
+        type_params,
+        mut attributes,
     } = pipeline.inner.clone();
 
     ctx.symtab.new_scope();
@@ -93,9 +91,12 @@ pub fn visit_pipeline(
         return Err(Error::MissingPipelineClock { at_loc: head.loc() });
     }
 
+    let unit_name = unit_name(&mut attributes, &id.at_loc(&name), &name, &type_params)?;
+
     // If this is a builtin pipeline
     if pipeline.body.is_none() {
-        return Ok(None);
+        report_unused_attributes(&attributes)?;
+        return Ok(hir::Item::BuiltinPipeline(unit_name, head));
     }
 
     // Add the inputs to the symtab
@@ -160,31 +161,13 @@ pub fn visit_pipeline(
 
     ctx.symtab.close_scope();
 
-    let mut mangle_name = true;
-    for attr in attributes.0 {
-        if attr.inner.0 == "no_mangle" {
-            mangle_name = false;
-        } else {
-            return Err(Error::UnrecognisedAttribute {
-                attribute: attr.clone(),
-            });
-        }
-    }
+    // Any remaining attributes are unused and will have an error reported
+    report_unused_attributes(&attributes)?;
 
-    let name = if mangle_name {
-        if head.type_params.is_empty() {
-            hir::UnitName::FullPath(id.at_loc(&name))
-        } else {
-            hir::UnitName::WithID(id.at_loc(&name))
-        }
-    } else {
-        hir::UnitName::Unmangled(name.0.clone(), id.at_loc(&name))
-    };
-
-    Ok(Some(
+    Ok(hir::Item::Pipeline(
         hir::Pipeline {
             head: head.inner,
-            name,
+            name: unit_name,
             inputs,
             body,
         }
@@ -363,7 +346,12 @@ mod pipeline_visiting {
         );
 
         assert_eq!(
-            result.unwrap().unwrap().body.assume_block().statements,
+            result
+                .unwrap()
+                .assume_pipeline()
+                .body
+                .assume_block()
+                .statements,
             expected_statements
         );
     }
@@ -444,7 +432,12 @@ mod pipeline_visiting {
         );
 
         assert_eq!(
-            result.unwrap().unwrap().body.assume_block().statements,
+            result
+                .unwrap()
+                .assume_pipeline()
+                .body
+                .assume_block()
+                .statements,
             expected_statements
         );
     }

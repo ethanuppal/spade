@@ -1,8 +1,8 @@
 use std::collections::{HashMap, VecDeque};
 
 use crate::{error::Result, generate_entity, generate_pipeline};
-use spade_common::{id_tracker::ExprIdTracker, name::NameID};
-use spade_hir::{symbol_table::FrozenSymtab, ExecutableItem, ItemList};
+use spade_common::{id_tracker::ExprIdTracker, location_info::WithLocation, name::NameID};
+use spade_hir::{symbol_table::FrozenSymtab, ExecutableItem, ItemList, UnitName};
 use spade_mir as mir;
 use spade_typeinference::{equation::TypeVar, GenericListToken, TypeState};
 
@@ -11,7 +11,7 @@ struct MonoItem {
     /// The name of the original item which this is a monomorphised version of
     pub source_name: NameID,
     /// The new name of the new item
-    pub new_name: NameID,
+    pub new_name: UnitName,
     /// The types to replace the generic types in the item. Positional replacement
     pub params: Vec<TypeVar>,
 }
@@ -36,17 +36,31 @@ impl MonoState {
     /// function to ensure that the type params are valid for this item.
     pub fn request_compilation(
         &mut self,
-        source_name: NameID,
+        source_name: UnitName,
         params: Vec<TypeVar>,
         symtab: &mut FrozenSymtab,
     ) -> NameID {
-        match self.translation.get(&(source_name.clone(), params.clone())) {
+        match self
+            .translation
+            .get(&(source_name.name_id().inner.clone(), params.clone()))
+        {
             Some(prev) => prev.clone(),
             None => {
-                let new_name = symtab.new_name(source_name.1.clone());
+                let new_name = symtab.new_name(source_name.name_id().1.clone());
+
+                // Wrap the new name in a UnitName to match the source. Previous steps
+                // ensure that the unit name is general enough to not cause name collisions
+                let new_unit_name = match &source_name {
+                    UnitName::WithID(_) => UnitName::WithID(new_name.clone().nowhere()),
+                    UnitName::FullPath(_) => UnitName::FullPath(new_name.clone().nowhere()),
+                    UnitName::Unmangled(source, _) => {
+                        UnitName::Unmangled(source.clone(), new_name.clone().nowhere())
+                    }
+                };
+
                 self.to_compile.push_back(MonoItem {
-                    source_name,
-                    new_name: new_name.clone(),
+                    source_name: source_name.name_id().inner.clone(),
+                    new_name: new_unit_name.clone(),
                     params,
                 });
                 new_name
@@ -82,16 +96,17 @@ pub fn compile_items(
         match item {
             ExecutableItem::Entity(e) => {
                 if e.head.type_params.is_empty() {
-                    state.request_compilation(e.name.name_id().inner.clone(), vec![], symtab);
+                    state.request_compilation(e.name.clone(), vec![], symtab);
                 }
             }
             ExecutableItem::Pipeline(p) => {
                 if p.head.type_params.is_empty() {
-                    state.request_compilation(p.name.name_id().inner.clone(), vec![], symtab);
+                    state.request_compilation(p.name.clone(), vec![], symtab);
                 }
             }
             ExecutableItem::StructInstance => {}
             ExecutableItem::EnumInstance { .. } => {}
+            ExecutableItem::BuiltinEntity(_, _) | ExecutableItem::BuiltinPipeline(_, _) => {}
         }
     }
 
@@ -122,12 +137,20 @@ pub fn compile_items(
                         }
                     }
                 }
-                let out = generate_entity(e, symtab, idtracker, &type_state, item_list, &mut state)
-                    .map(|mir| MirOutput {
-                        mir,
-                        type_state: type_state.clone(),
-                        reg_name_map,
-                    });
+                let out = generate_entity(
+                    e,
+                    item.new_name,
+                    symtab,
+                    idtracker,
+                    &type_state,
+                    item_list,
+                    &mut state,
+                )
+                .map(|mir| MirOutput {
+                    mir,
+                    type_state: type_state.clone(),
+                    reg_name_map,
+                });
                 result.push(out);
             }
             Some((ExecutableItem::Pipeline(p), type_state)) => {
@@ -156,6 +179,12 @@ pub fn compile_items(
             }
             Some((ExecutableItem::EnumInstance { .. }, _)) => {
                 panic!("Requesting compilation of enum instance as module")
+            }
+            Some(
+                (ExecutableItem::BuiltinEntity(_, _), _)
+                | (ExecutableItem::BuiltinPipeline(_, _), _),
+            ) => {
+                panic!("Requesting compilation of builtin unit")
             }
             None => {
                 panic!(

@@ -318,6 +318,17 @@ impl CompilationError for Error {
                 .with_labels(vec![attribute
                     .primary_label()
                     .with_message("Unrecognised attribute")]),
+            Error::NoMangleGeneric {
+                attribute,
+                generic_list,
+            } => Diagnostic::error()
+                .with_message("no_mangle is not allowed on generic units")
+                .with_labels(vec![
+                    attribute.primary_label().with_message("Not allowed here"),
+                    generic_list
+                        .secondary_label()
+                        .with_message("Because this unit is generic"),
+                ]),
         };
 
         term::emit(buffer, &codespan_config(), &code.files, &diag).unwrap();
