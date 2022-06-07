@@ -1,5 +1,9 @@
+pub mod namespaced_file;
+
 use codespan_reporting::term::termcolor::Buffer;
 use logos::Logos;
+use spade_common::name;
+use spade_hir::symbol_table::SymbolTable;
 use spade_hir_lowering::monomorphisation::MirOutput;
 use spade_typeinference::dump::dump_types;
 use std::collections::HashMap;
@@ -12,8 +16,8 @@ use typeinference::equation::TypedExpression;
 use spade_ast_lowering::{global_symbols, visit_module_body, Context as AstLoweringCtx};
 use spade_common::error_reporting::CodeBundle;
 use spade_common::error_reporting::CompilationError;
-use spade_common::id_tracker;
-use spade_hir::{symbol_table, ExecutableItem, ItemList};
+use spade_common::{id_tracker, name::Path as SpadePath};
+use spade_hir::{ExecutableItem, ItemList};
 pub use spade_parser::lexer;
 use spade_parser::Parser;
 use spade_typeinference as typeinference;
@@ -92,8 +96,8 @@ pub struct Artefacts {
     pub flat_mir_entities: Vec<spade_mir::Entity>,
 }
 
-pub fn compile(sources: Vec<(String, String)>, opts: Opt) -> Result<Artefacts, ()> {
-    let mut symtab = symbol_table::SymbolTable::new();
+pub fn compile(sources: Vec<(SpadePath, String, String)>, opts: Opt) -> Result<Artefacts, ()> {
+    let mut symtab = SymbolTable::new();
     let mut item_list = ItemList::new();
 
     // Declared early in order to be able to return early in case this is only
@@ -114,7 +118,7 @@ pub fn compile(sources: Vec<(String, String)>, opts: Opt) -> Result<Artefacts, (
 
     let mut module_asts = vec![];
     // Read and parse input files
-    for (name, content) in sources {
+    for (namespace, name, content) in sources {
         let file_id = code.write().unwrap().add_file(name, content.clone());
         let mut parser = Parser::new(lexer::TokenKind::lexer(&content), file_id);
 
@@ -129,17 +133,37 @@ pub fn compile(sources: Vec<(String, String)>, opts: Opt) -> Result<Artefacts, (
             .or_report(&mut errors);
 
         if let Some(ast) = result {
-            module_asts.push(ast)
+            module_asts.push((namespace, ast))
         }
     }
 
-    for module_ast in &module_asts {
-        global_symbols::gather_types(&module_ast, &mut symtab).or_report(&mut errors);
+    let do_in_namespace =
+        |namespace: &name::Path,
+         symtab: &mut SymbolTable,
+         to_do: &mut dyn FnMut(&mut SymbolTable) -> ()| {
+            for ident in &namespace.0 {
+                // NOTE: These identifiers do not have the correct file_id. However,
+                // as far as I know, they will never be part of an error, so we *should*
+                // be safe.
+                symtab.push_namespace(ident.clone());
+            }
+            to_do(symtab);
+            for _ in &namespace.0 {
+                symtab.pop_namespace();
+            }
+        };
+
+    for (namespace, module_ast) in &module_asts {
+        do_in_namespace(namespace, &mut symtab, &mut |symtab| {
+            global_symbols::gather_types(&module_ast, symtab).or_report(&mut errors);
+        })
     }
 
-    for module_ast in &module_asts {
-        global_symbols::gather_symbols(&module_ast, &mut symtab, &mut item_list)
-            .or_report(&mut errors);
+    for (namespace, module_ast) in &module_asts {
+        do_in_namespace(namespace, &mut symtab, &mut |symtab| {
+            global_symbols::gather_symbols(&module_ast, symtab, &mut item_list)
+                .or_report(&mut errors);
+        })
     }
 
     let idtracker = id_tracker::ExprIdTracker::new();
@@ -149,8 +173,19 @@ pub fn compile(sources: Vec<(String, String)>, opts: Opt) -> Result<Artefacts, (
         pipeline_ctx: None,
     };
 
-    for module_ast in &module_asts {
+    for (namespace, module_ast) in &module_asts {
+        // Can not be done by do_in_namespace because the symtab has been moved
+        // into `ctx`
+        for ident in &namespace.0 {
+            // NOTE: These identifiers do not have the correct file_id. However,
+            // as far as I know, they will never be part of an error, so we *should*
+            // be safe.
+            ctx.symtab.push_namespace(ident.clone());
+        }
         visit_module_body(&mut item_list, &module_ast, &mut ctx).or_report(&mut errors);
+        for _ in &namespace.0 {
+            ctx.symtab.pop_namespace();
+        }
     }
 
     let AstLoweringCtx {

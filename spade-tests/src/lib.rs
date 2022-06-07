@@ -63,7 +63,14 @@ macro_rules! snapshot_error {
                 print_parse_traceback: false,
             };
 
-            let _ = spade::compile(vec![("testinput".to_string(), source.to_string())], opts);
+            let _ = spade::compile(
+                vec![(
+                    spade_common::name::Path(vec![]),
+                    "testinput".to_string(),
+                    source.to_string(),
+                )],
+                opts,
+            );
 
             insta::assert_snapshot!(
                 std::str::from_utf8(buffer.as_slice()).expect("error contains invalid utf-8")
@@ -88,7 +95,14 @@ fn build_items(code: &str) -> Vec<spade_mir::Entity> {
         print_parse_traceback: false,
     };
 
-    match spade::compile(vec![("testinput".to_string(), source.to_string())], opts) {
+    match spade::compile(
+        vec![(
+            spade_common::name::Path(vec![]),
+            "testinput".to_string(),
+            source.to_string(),
+        )],
+        opts,
+    ) {
         Ok(artefacts) => artefacts.bumpy_mir_entities,
         Err(()) => {
             if !buffer.is_empty() {

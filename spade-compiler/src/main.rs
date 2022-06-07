@@ -6,13 +6,16 @@ use anyhow::{anyhow, Context, Result};
 use clap::Parser;
 use codespan_reporting::term::termcolor::Buffer;
 
+use spade::namespaced_file::{namespaced_file, NamespacedFile};
+use spade_common::name::Path as SpadePath;
+
 #[derive(Parser)]
 #[structopt(name = "spade", about = "Compiler for the spade language")]
 pub struct Opt {
-    #[structopt(name = "INPUT_FILE")]
-    pub infile: PathBuf,
-    #[structopt(name = "EXTRA_FILES")]
-    pub extra_files: Vec<PathBuf>,
+    #[structopt(name = "INPUT_FILE", parse(try_from_str = namespaced_file))]
+    pub infile: NamespacedFile,
+    #[structopt(name = "EXTRA_FILES", parse(try_from_str = namespaced_file))]
+    pub extra_files: Vec<NamespacedFile>,
     #[structopt(short = 'o')]
     pub outfile: PathBuf,
     /// File to output the MIR for the generated modules. Primarily for debug purposes
@@ -41,15 +44,24 @@ fn main() -> Result<()> {
     let mut infiles = vec![opts.infile.clone()];
     infiles.append(&mut opts.extra_files);
 
-    let sources: Result<Vec<(String, String)>> = infiles
+    let sources: Result<Vec<(SpadePath, String, String)>> = infiles
         .into_iter()
-        .map(|infile| {
-            let mut file = File::open(&infile)
-                .with_context(|| format!("Failed to open {}", &infile.to_string_lossy()))?;
-            let mut file_content = String::new();
-            file.read_to_string(&mut file_content)?;
-            Ok((infile.to_string_lossy().to_string(), file_content))
-        })
+        .map(
+            |NamespacedFile {
+                 file: infile,
+                 namespace,
+             }| {
+                let mut file = File::open(&infile)
+                    .with_context(|| format!("Failed to open {}", &infile.to_string_lossy()))?;
+                let mut file_content = String::new();
+                file.read_to_string(&mut file_content)?;
+                Ok((
+                    namespace,
+                    infile.to_string_lossy().to_string(),
+                    file_content,
+                ))
+            },
+        )
         .collect();
 
     let mut buffer = if opts.no_color {
