@@ -166,6 +166,25 @@ snapshot_error! {
 }
 
 #[test]
+fn nested_use_compiles_correctly() {
+    let code = r#"
+        mod A {
+            struct X {x: bool}
+        }
+
+        mod B {
+            use lib::A::X;
+
+            fn a() -> X {
+                X(true)
+            }
+        }
+    "#;
+
+    build_items(code);
+}
+
+#[test]
 fn type_inference_works_for_declared_variables() {
     let code = r#"
     enum Option<T> {

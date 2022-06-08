@@ -76,12 +76,7 @@ pub fn visit_item(
                 None => u.path.0.last().unwrap().clone(),
             };
 
-            let target_path = symtab
-                .current_namespace()
-                .join(u.path.clone().inner)
-                .at_loc(&u.path);
-
-            symtab.add_thing(Path::ident(new_name), Thing::Alias(target_path));
+            symtab.add_alias(Path::ident(new_name), u.path.clone());
         }
     }
     Ok(())

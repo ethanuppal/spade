@@ -288,6 +288,19 @@ pub enum Item {
 }
 impl WithLocation for Item {}
 
+impl Item {
+    pub fn name(&self) -> Option<&Identifier> {
+        match self {
+            Item::Entity(e) => Some(&e.name.inner),
+            Item::Pipeline(p) => Some(&p.name.inner),
+            Item::TraitDef(t) => Some(&t.name.inner),
+            Item::Type(t) => Some(&t.name.inner),
+            Item::Module(m) => Some(&m.name.inner),
+            Item::Use(u) => u.alias.as_ref().map(|name| &name.inner),
+        }
+    }
+}
+
 #[derive(PartialEq, Debug, Clone)]
 pub struct Module {
     pub name: Loc<Identifier>,

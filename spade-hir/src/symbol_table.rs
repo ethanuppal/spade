@@ -215,6 +215,8 @@ pub struct SymbolTable {
     /// is added to the start of the path, thus ensuring all paths are absolute. If a path is not
     /// found that path is also looked up in the global namespace
     namespace: Path,
+    /// The namespace which `lib` refers to currently.
+    base_namespace: Path,
 }
 
 impl SymbolTable {
@@ -226,6 +228,7 @@ impl SymbolTable {
             types: HashMap::new(),
             things: HashMap::new(),
             namespace: Path(vec![]),
+            base_namespace: Path(vec![]),
         }
     }
     pub fn new_scope(&mut self) {
@@ -249,6 +252,10 @@ impl SymbolTable {
 
     pub fn current_namespace(&self) -> &Path {
         &self.namespace
+    }
+
+    pub fn set_base_namespace(&mut self, base_namespace: Path) {
+        self.base_namespace = base_namespace
     }
 
     /// Adds a thing to the scope at `current_scope - offset`. Panics if there is no such scope
@@ -309,6 +316,15 @@ impl SymbolTable {
     pub fn add_type(&mut self, name: Path, t: Loc<TypeSymbol>) -> NameID {
         let id = self.id_tracker.next();
         self.add_type_with_id(id, name, t)
+    }
+
+    pub fn add_alias(&mut self, name: Path, target: Loc<Path>) -> NameID {
+        let absolute_path = if let Some(lib_relative) = target.inner.lib_relative() {
+            self.base_namespace.join(lib_relative)
+        } else {
+            self.current_namespace().join(target.inner.clone())
+        };
+        self.add_thing(name, Thing::Alias(absolute_path.at_loc(&target)))
     }
 
     /// Adds a thing to the scope at `current_scope - offset`. Panics if there is no such scope
@@ -422,7 +438,7 @@ macro_rules! thing_accessors {
                     None => {
                         match self.types.get(&id) {
                             Some(_) => Err(LookupError::IsAType(name.clone())),
-                            None => panic!("{:?} is in symtab but not a thign or type", id)
+                            None => panic!("{:?} is in symtab but not a thing or type", id)
                         }
                     }
                 }
@@ -560,17 +576,27 @@ impl SymbolTable {
     }
 
     pub fn try_lookup_id(&self, name: &Loc<Path>) -> Option<NameID> {
-        // Look up things in the current namespace first
-        let local_path = self.namespace.join(name.inner.clone());
-        for tab in self.symbols.iter().rev() {
-            if let Some(id) = tab.get(&local_path) {
-                return Some(id.clone());
+        // The behaviour depends on whether or not the path is a library relative path (starting
+        // with `lib`) or not. If it is, an absolute lookup of the path obtained by
+        // substituting `lib` for the current `base_path` should be performed.
+        // If not, two absolute lookups should be performed, one prefixing the current
+        // namespace to the path, and one with no prefixing
+        let absolute_path = if let Some(lib_relative) = name.lib_relative() {
+            self.base_namespace.join(lib_relative).at_loc(&name)
+        } else {
+            let local_path = self.namespace.join(name.inner.clone());
+            for tab in self.symbols.iter().rev() {
+                if let Some(id) = tab.get(&local_path) {
+                    return Some(id.clone());
+                }
             }
-        }
+
+            name.clone()
+        };
 
         // Then look up things in the absolute namespace. This is only needed at the
         // top scope as that's where all top level will be defined
-        if let Some(id) = self.symbols.first().unwrap().get(name) {
+        if let Some(id) = self.symbols.first().unwrap().get(&absolute_path) {
             return Some(id.clone());
         }
         None

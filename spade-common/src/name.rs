@@ -57,6 +57,15 @@ impl Path {
         }
         return result;
     }
+
+    /// If the path is lib::<rest> return Some(<rest>), else None
+    pub fn lib_relative(&self) -> Option<Path> {
+        if self.0.first() == Some(&Identifier(format!("lib")).nowhere()) {
+            Some(Path(Vec::from(&self.0[1..])))
+        } else {
+            None
+        }
+    }
 }
 
 impl std::fmt::Display for Path {

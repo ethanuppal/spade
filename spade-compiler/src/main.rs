@@ -6,8 +6,10 @@ use anyhow::{anyhow, Context, Result};
 use clap::Parser;
 use codespan_reporting::term::termcolor::Buffer;
 
-use spade::namespaced_file::{namespaced_file, NamespacedFile};
-use spade_common::name::Path as SpadePath;
+use spade::{
+    namespaced_file::{namespaced_file, NamespacedFile},
+    ModuleNamespace,
+};
 
 #[derive(Parser)]
 #[structopt(name = "spade", about = "Compiler for the spade language")]
@@ -44,19 +46,23 @@ fn main() -> Result<()> {
     let mut infiles = vec![opts.infile.clone()];
     infiles.append(&mut opts.extra_files);
 
-    let sources: Result<Vec<(SpadePath, String, String)>> = infiles
+    let sources: Result<Vec<(ModuleNamespace, String, String)>> = infiles
         .into_iter()
         .map(
             |NamespacedFile {
                  file: infile,
                  namespace,
+                 base_namespace,
              }| {
                 let mut file = File::open(&infile)
                     .with_context(|| format!("Failed to open {}", &infile.to_string_lossy()))?;
                 let mut file_content = String::new();
                 file.read_to_string(&mut file_content)?;
                 Ok((
-                    namespace,
+                    ModuleNamespace {
+                        namespace,
+                        base_namespace,
+                    },
                     infile.to_string_lossy().to_string(),
                     file_content,
                 ))

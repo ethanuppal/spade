@@ -65,7 +65,10 @@ macro_rules! snapshot_error {
 
             let _ = spade::compile(
                 vec![(
-                    spade_common::name::Path(vec![]),
+                    spade::ModuleNamespace {
+                        namespace: spade_common::name::Path(vec![]),
+                        base_namespace: spade_common::name::Path(vec![]),
+                    },
                     "testinput".to_string(),
                     source.to_string(),
                 )],
@@ -85,7 +88,10 @@ macro_rules! snapshot_error {
 #[cfg(test)]
 fn build_items(code: &str) -> Vec<spade_mir::Entity> {
     let source = unindent::unindent(code);
-    let mut buffer = codespan_reporting::term::termcolor::Buffer::no_color();
+    let mut buffer = codespan_reporting::term::termcolor::BufferWriter::stdout(
+        codespan_reporting::term::termcolor::ColorChoice::Never,
+    )
+    .buffer();
     let opts = spade::Opt {
         error_buffer: &mut buffer,
         outfile: None,
@@ -97,7 +103,10 @@ fn build_items(code: &str) -> Vec<spade_mir::Entity> {
 
     match spade::compile(
         vec![(
-            spade_common::name::Path(vec![]),
+            spade::ModuleNamespace {
+                namespace: spade_common::name::Path(vec![]),
+                base_namespace: spade_common::name::Path(vec![]),
+            },
             "testinput".to_string(),
             source.to_string(),
         )],
@@ -105,9 +114,12 @@ fn build_items(code: &str) -> Vec<spade_mir::Entity> {
     ) {
         Ok(artefacts) => artefacts.bumpy_mir_entities,
         Err(()) => {
+            // I'm not 100% sure why this is needed. The bufferwriter should output
+            // to stdout and buffer.flush() should be enough. Unfortunatley, that does
+            // not seem to be the case
             if !buffer.is_empty() {
-                println!("{}", String::from_utf8_lossy(buffer.as_slice()))
-            };
+                println!("{}", String::from_utf8_lossy(&buffer.into_inner()));
+            }
             panic!("Compilation error")
         }
     }

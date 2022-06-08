@@ -2,7 +2,6 @@ pub mod namespaced_file;
 
 use codespan_reporting::term::termcolor::Buffer;
 use logos::Logos;
-use spade_common::name;
 use spade_hir::symbol_table::SymbolTable;
 use spade_hir_lowering::monomorphisation::MirOutput;
 use spade_typeinference::dump::dump_types;
@@ -89,6 +88,11 @@ impl<'a> ErrorHandler<'a> {
     }
 }
 
+pub struct ModuleNamespace {
+    pub namespace: SpadePath,
+    pub base_namespace: SpadePath,
+}
+
 pub struct Artefacts {
     // MIR entities before aliases have been flattened
     pub bumpy_mir_entities: Vec<spade_mir::Entity>,
@@ -96,7 +100,10 @@ pub struct Artefacts {
     pub flat_mir_entities: Vec<spade_mir::Entity>,
 }
 
-pub fn compile(sources: Vec<(SpadePath, String, String)>, opts: Opt) -> Result<Artefacts, ()> {
+pub fn compile(
+    sources: Vec<(ModuleNamespace, String, String)>,
+    opts: Opt,
+) -> Result<Artefacts, ()> {
     let mut symtab = SymbolTable::new();
     let mut item_list = ItemList::new();
 
@@ -138,17 +145,19 @@ pub fn compile(sources: Vec<(SpadePath, String, String)>, opts: Opt) -> Result<A
     }
 
     let do_in_namespace =
-        |namespace: &name::Path,
+        |namespace: &ModuleNamespace,
          symtab: &mut SymbolTable,
          to_do: &mut dyn FnMut(&mut SymbolTable) -> ()| {
-            for ident in &namespace.0 {
+            for ident in &namespace.namespace.0 {
                 // NOTE: These identifiers do not have the correct file_id. However,
                 // as far as I know, they will never be part of an error, so we *should*
                 // be safe.
                 symtab.push_namespace(ident.clone());
             }
+            symtab.set_base_namespace(namespace.base_namespace.clone());
             to_do(symtab);
-            for _ in &namespace.0 {
+            symtab.set_base_namespace(SpadePath(vec![]));
+            for _ in &namespace.namespace.0 {
                 symtab.pop_namespace();
             }
         };
@@ -176,14 +185,17 @@ pub fn compile(sources: Vec<(SpadePath, String, String)>, opts: Opt) -> Result<A
     for (namespace, module_ast) in &module_asts {
         // Can not be done by do_in_namespace because the symtab has been moved
         // into `ctx`
-        for ident in &namespace.0 {
+        for ident in &namespace.namespace.0 {
             // NOTE: These identifiers do not have the correct file_id. However,
             // as far as I know, they will never be part of an error, so we *should*
             // be safe.
             ctx.symtab.push_namespace(ident.clone());
         }
+        ctx.symtab
+            .set_base_namespace(namespace.base_namespace.clone());
         visit_module_body(&mut item_list, &module_ast, &mut ctx).or_report(&mut errors);
-        for _ in &namespace.0 {
+        ctx.symtab.set_base_namespace(SpadePath(vec![]));
+        for _ in &namespace.namespace.0 {
             ctx.symtab.pop_namespace();
         }
     }
@@ -193,6 +205,14 @@ pub fn compile(sources: Vec<(SpadePath, String, String)>, opts: Opt) -> Result<A
         mut idtracker,
         pipeline_ctx: _,
     } = ctx;
+
+    // If we have errors during AST lowering, we need to early return becausue the
+    // items have already been added to the symtab when they are detected. Further compilation
+    // relies on all names in the symtab being in the item list, which will not be the
+    // case if we failed to compile some
+    if errors.failed {
+        return Err(());
+    }
 
     let mut frozen_symtab = symtab.freeze();
     let mut module_code = vec![];
