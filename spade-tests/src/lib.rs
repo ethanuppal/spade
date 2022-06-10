@@ -15,6 +15,7 @@ mod parser;
 mod suggestions;
 #[cfg(test)]
 mod typeinference;
+mod usefulness;
 
 pub trait ResultExt<T> {
     fn report_failure(self, code: &str) -> T;
@@ -89,7 +90,12 @@ fn build_items(code: &str) -> Vec<spade_mir::Entity> {
 
     match spade::compile(vec![("testinput".to_string(), source.to_string())], opts) {
         Ok(artefacts) => artefacts.bumpy_mir_entities,
-        Err(()) => panic!("Compilation error"),
+        Err(()) => {
+            if !buffer.is_empty() {
+                println!("{}", String::from_utf8_lossy(buffer.as_slice()))
+            };
+            panic!("Compilation error")
+        }
     }
 }
 

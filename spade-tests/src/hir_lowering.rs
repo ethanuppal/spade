@@ -1116,6 +1116,7 @@ mod tests {
             entity uwu(e: int<16>) -> bool {
                 match e {
                     0 => true,
+                    _ => false
                 }
             }
         "#;
@@ -1126,7 +1127,9 @@ mod tests {
                 (const 1; Type::Int(16); ConstantValue::Int(0));
                 (e(2); Type::Bool; Eq; n(0, "e"), e(1));
                 (const 4; Type::Bool; ConstantValue::Bool(true));
-                (e(6); Type::Bool; Match; e(2), e(4));
+                (const 5; Type::Bool; ConstantValue::Bool(true));
+                (const 6; Type::Bool; ConstantValue::Bool(false));
+                (e(6); Type::Bool; Match; e(2), e(4), e(5), e(6));
             } => e(6)},
         ];
 
@@ -1140,6 +1143,7 @@ mod tests {
                 match a {
                     (true, true) => 0,
                     (false, true) => 1,
+                    _ => 2,
                 }
             }
         "#;
@@ -1158,8 +1162,10 @@ mod tests {
                 (e(4); Type::Bool; LogicalNot; e(20));
                 (e(5); Type::Bool; LogicalAnd; e(4), e(21));
                 (const 11; Type::Int(16); ConstantValue::Int(1));
+                (const 12; Type::Bool; ConstantValue::Bool(true));
+                (const 13; Type::Int(16); ConstantValue::Int(2));
                 // Condition for branch 1
-                (e(6); Type::Int(16); Match; e(3), e(10), e(5), e(11))
+                (e(6); Type::Int(16); Match; e(3), e(10), e(5), e(11), e(12), e(13))
             } => e(6)
         };
 

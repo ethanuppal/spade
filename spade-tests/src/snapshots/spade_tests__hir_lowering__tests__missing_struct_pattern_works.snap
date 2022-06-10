@@ -1,0 +1,13 @@
+---
+source: spade-tests/src/hir_lowering.rs
+expression: "std::str::from_utf8(buffer.as_slice()).expect(\"error contains invalid utf-8\")"
+---
+error: Non-exhaustive match: patterns <struct>(false, false), <struct>(false, true), <struct>(true, false) not covered
+  ┌─ testinput:4:5
+  │  
+4 │ ╭     match a {
+5 │ │         A(true, true) => true,
+6 │ │     }
+  │ ╰─────^ patterns <struct>(false, false), <struct>(false, true), <struct>(true, false) not covered
+
+

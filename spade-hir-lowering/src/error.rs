@@ -3,6 +3,8 @@ use spade_hir::Expression;
 use spade_typeinference::equation::TypeVar;
 use thiserror::Error;
 
+use crate::usefulness::Witness;
+
 #[derive(Error, Debug)]
 pub enum Error {
     #[error("using generic type")]
@@ -30,6 +32,11 @@ pub enum Error {
     AvailabilityMismatch { prev: Loc<usize>, new: Loc<usize> },
     #[error("Generic builtin")]
     InstanciatingGenericBuiltin { loc: Loc<()>, head: Loc<()> },
+    #[error("Missing patterns")]
+    MissingPatterns {
+        match_expr: Loc<()>,
+        useful_branches: Vec<Witness>,
+    },
     #[error("Unification error")]
     UnificationError(#[source] spade_typeinference::result::Error),
 }

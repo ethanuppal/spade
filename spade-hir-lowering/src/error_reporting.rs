@@ -1,7 +1,30 @@
+use crate::usefulness::Witness;
 use crate::Error;
 use codespan_reporting::diagnostic::Diagnostic;
 use codespan_reporting::term::{self, termcolor::Buffer};
+use itertools::Itertools;
 use spade_common::error_reporting::{codespan_config, AsLabel, CodeBundle, CompilationError};
+
+fn format_witnesses(witnesses: &[Witness]) -> String {
+    let threshold_len = 4;
+    if witnesses.len() == 1 {
+        format!("pattern {}", witnesses[0])
+    } else if witnesses.len() < threshold_len {
+        format!(
+            "patterns {}",
+            witnesses.iter().map(|w| format!("{w}")).join(", ")
+        )
+    } else {
+        let partial = witnesses[0..threshold_len - 1]
+            .iter()
+            .map(|w| format!("{w}"))
+            .join(", ");
+        format!(
+            "patterns {partial} and {} more",
+            witnesses.len() - threshold_len
+        )
+    }
+}
 
 impl CompilationError for Error {
     fn report(&self, buffer: &mut Buffer, code: &CodeBundle) {
@@ -82,6 +105,17 @@ impl CompilationError for Error {
                     head.secondary_label()
                         .with_message("Because this is a generic __builtin__"),
                 ]),
+            Error::MissingPatterns {
+                match_expr,
+                useful_branches,
+            } => {
+                let witnesses = format_witnesses(useful_branches);
+                Diagnostic::error()
+                    .with_message(format!("Non-exhaustive match: {witnesses} not covered",))
+                    .with_labels(vec![match_expr
+                        .primary_label()
+                        .with_message(format!("{witnesses} not covered"))])
+            }
             Error::UnificationError(_) => unreachable!(),
         };
 

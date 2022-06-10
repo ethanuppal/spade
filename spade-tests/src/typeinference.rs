@@ -30,7 +30,8 @@ fn type_inference_works_for_int_patterns() {
     let code = r#"
     entity name(x: int<16>) -> int<16> {
         match x {
-            0 => 0
+            0 => 0,
+            _ => 1
         }
     }
     "#;

@@ -761,6 +761,7 @@ dependencies = [
  "codespan-reporting",
  "colored",
  "indoc",
+ "itertools",
  "parse_tree_macros",
  "pretty_assertions",
  "prettydiff",

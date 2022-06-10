@@ -1,14 +1,17 @@
 pub mod error;
 pub mod error_reporting;
 pub mod monomorphisation;
+mod pattern;
 pub mod pipelines;
 pub mod substitution;
+mod usefulness;
 
 use hir::symbol_table::{FrozenSymtab, PatternableKind};
 use hir::{Argument, ItemList, Pattern, PatternArgument, TypeList, UnitName};
 use mir::types::Type as MirType;
 use mir::{ConstantValue, ValueName};
 use monomorphisation::MonoState;
+use pattern::DeconstructedPattern;
 pub use pipelines::generate_pipeline;
 use spade_common::id_tracker::ExprIdTracker;
 use spade_common::location_info::WithLocation;
@@ -16,6 +19,7 @@ use spade_common::name::{Identifier, Path};
 use spade_typeinference::GenericListToken;
 use substitution::Substitutions;
 use thiserror::Error;
+use usefulness::{is_useful, PatStack};
 
 use crate::error::{Error, Result};
 use parse_tree_macros::local_impl;
@@ -777,6 +781,30 @@ impl ExprLocal for Loc<Expression> {
                 }));
             }
             ExprKind::Match(operand, branches) => {
+                let operand_ty =
+                    ctx.types
+                        .expr_type(operand, ctx.symtab.symtab(), &ctx.item_list.types)?;
+
+                // Check for missing branches
+                let pat_stacks = branches
+                    .iter()
+                    .map(|(pat, _)| PatStack::new(vec![DeconstructedPattern::from_hir(&pat, &ctx)]))
+                    .collect::<Vec<_>>();
+
+                // The patterns which make a wildcard useful are the ones that are missing
+                // from the match statement
+                let wildcard_useful = is_useful(
+                    &PatStack::new(vec![DeconstructedPattern::wildcard(&operand_ty)]),
+                    &usefulness::Matrix::new(&pat_stacks),
+                );
+
+                if wildcard_useful.is_useful() {
+                    return Err(Error::MissingPatterns {
+                        match_expr: self.loc(),
+                        useful_branches: wildcard_useful.witnesses.clone(),
+                    });
+                }
+
                 result.append(&mut operand.lower(ctx)?);
                 let mut operands = vec![];
                 for (pat, result_expr) in branches {

@@ -1,0 +1,13 @@
+---
+source: spade-tests/src/hir_lowering.rs
+expression: "std::str::from_utf8(buffer.as_slice()).expect(\"error contains invalid utf-8\")"
+---
+error: Non-exhaustive match: patterns X::B, X::C, X::D not covered
+   ┌─ testinput:9:5
+   │  
+ 9 │ ╭     match x {
+10 │ │         X::A => true,
+11 │ │     }
+   │ ╰─────^ patterns X::B, X::C, X::D not covered
+
+
