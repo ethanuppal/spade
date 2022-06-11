@@ -144,10 +144,6 @@ pub fn compile(
         }
     }
 
-    // If we have errors during AST lowering, we need to early return becausue the
-    // items have already been added to the symtab when they are detected. Further compilation
-    // relies on all names in the symtab being in the item list, which will not be the
-    // case if we failed to compile some
     if errors.failed {
         return Err(());
     }
@@ -176,11 +172,19 @@ pub fn compile(
         })
     }
 
+    if errors.failed {
+        return Err(());
+    }
+
     for (namespace, module_ast) in &module_asts {
         do_in_namespace(namespace, &mut symtab, &mut |symtab| {
             global_symbols::gather_symbols(&module_ast, symtab, &mut item_list)
                 .or_report(&mut errors);
         })
+    }
+
+    if errors.failed {
+        return Err(());
     }
 
     let idtracker = id_tracker::ExprIdTracker::new();

@@ -24,7 +24,7 @@ pub fn gather_types(module: &ast::ModuleBody, symtab: &mut SymbolTable) -> Resul
                 symtab.push_namespace(m.name.clone());
                 if let Err(e) = gather_types(&m.body, symtab) {
                     symtab.pop_namespace();
-                    return Err(e)
+                    return Err(e);
                 };
                 symtab.pop_namespace();
             }
