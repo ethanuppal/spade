@@ -22,7 +22,10 @@ pub fn gather_types(module: &ast::ModuleBody, symtab: &mut SymbolTable) -> Resul
             }
             ast::Item::Module(m) => {
                 symtab.push_namespace(m.name.clone());
-                gather_types(&m.body, symtab)?;
+                if let Err(e) = gather_types(&m.body, symtab) {
+                    symtab.pop_namespace();
+                    return Err(e)
+                };
                 symtab.pop_namespace();
             }
             ast::Item::Entity(_) => {}
@@ -67,7 +70,10 @@ pub fn visit_item(
         }
         ast::Item::Module(m) => {
             symtab.push_namespace(m.name.clone());
-            gather_symbols(&m.body, symtab, item_list)?;
+            if let Err(e) = gather_symbols(&m.body, symtab, item_list) {
+                symtab.pop_namespace();
+                return Err(e);
+            }
             symtab.pop_namespace();
         }
         ast::Item::Use(u) => {

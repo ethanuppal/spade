@@ -218,6 +218,10 @@ pub fn visit_entity(item: &Loc<ast::Entity>, ctx: &mut Context) -> Result<hir::I
                 .lookup_function(&path)
                 .map(|(name, head)| (name, head.map(|i| i.as_entity_head())))
         })
+        .map_err(|_| {
+            ctx.symtab.print_symbols();
+            println!("Failed to find {path:?} in symtab")
+        })
         .expect("Attempting to lower an entity that has not been added to the symtab previously");
     let head = head.clone(); // An offering to the borrow checker. May ferris have mercy on us all
 
@@ -273,8 +277,10 @@ pub fn visit_item(
         ast::Item::Module(m) => {
             ctx.symtab.push_namespace(m.name.clone());
             let mut new_item_list = hir::ItemList::new();
-            visit_module_body(&mut new_item_list, &m.body, ctx)?;
-            let result = Ok((None, Some(new_item_list)));
+            let result = match visit_module_body(&mut new_item_list, &m.body, ctx) {
+                Ok(()) => Ok((None, Some(new_item_list))),
+                Err(e) => Err(e)
+            };
             ctx.symtab.pop_namespace();
             result
         }

@@ -144,6 +144,15 @@ pub fn compile(
         }
     }
 
+
+    // If we have errors during AST lowering, we need to early return becausue the
+    // items have already been added to the symtab when they are detected. Further compilation
+    // relies on all names in the symtab being in the item list, which will not be the
+    // case if we failed to compile some
+    if errors.failed {
+        return Err(());
+    }
+
     let do_in_namespace =
         |namespace: &ModuleNamespace,
          symtab: &mut SymbolTable,

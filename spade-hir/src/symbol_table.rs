@@ -190,7 +190,7 @@ pub enum TypeSymbol {
 }
 impl WithLocation for TypeSymbol {}
 
-#[derive(Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum DeclarationState {
     Undefined(NameID),
     Defined(Loc<()>),
@@ -204,6 +204,7 @@ impl WithLocation for DeclarationState {}
 /// symtab are absolute paths, that is `X` in `mod A{mod B {fn X}}` will only be
 /// stored as `A::B::X`. All variables inside X will also have the full path
 /// appended to them. This should however be invisilbe to the user.
+#[derive(Debug)]
 pub struct SymbolTable {
     /// Each outer vec is a scope, inner vecs are symbols in that scope
     pub symbols: Vec<HashMap<Path, NameID>>,
@@ -606,6 +607,8 @@ impl SymbolTable {
         println!("=============================================================");
         println!("                      Symtab dump");
         println!("=============================================================");
+        println!("Current namespace is `{}`", self.namespace);
+        println!("Current base_namespace is `{}`", self.base_namespace);
         for (level, scope) in self.symbols.iter().enumerate() {
             let indent = (1..level + 1).map(|_| "\t").collect::<Vec<_>>().join("");
             println!(">>> new_scope",);

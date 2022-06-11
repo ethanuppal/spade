@@ -1,5 +1,6 @@
 macro_rules! def_id_tracker {
     ($name:ident) => {
+        #[derive(Debug)]
         pub struct $name {
             id: u64,
         }
