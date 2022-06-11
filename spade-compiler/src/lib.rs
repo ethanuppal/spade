@@ -144,7 +144,6 @@ pub fn compile(
         }
     }
 
-
     // If we have errors during AST lowering, we need to early return becausue the
     // items have already been added to the symtab when they are detected. Further compilation
     // relies on all names in the symtab being in the item list, which will not be the

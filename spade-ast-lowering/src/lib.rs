@@ -279,7 +279,7 @@ pub fn visit_item(
             let mut new_item_list = hir::ItemList::new();
             let result = match visit_module_body(&mut new_item_list, &m.body, ctx) {
                 Ok(()) => Ok((None, Some(new_item_list))),
-                Err(e) => Err(e)
+                Err(e) => Err(e),
             };
             ctx.symtab.pop_namespace();
             result

@@ -120,7 +120,10 @@ pub enum Thing {
     Entity(Loc<EntityHead>),
     Pipeline(Loc<PipelineHead>),
     Variable(Loc<Identifier>),
-    Alias(Loc<Path>),
+    Alias {
+        path: Loc<Path>,
+        in_namespace: Path,
+    },
     PipelineStage(Loc<Identifier>),
 }
 
@@ -133,7 +136,7 @@ impl Thing {
             Thing::Pipeline(_) => "pipeline",
             Thing::Function(_) => "function",
             Thing::EnumVariant(_) => "enum variant",
-            Thing::Alias(_) => "alias",
+            Thing::Alias { .. } => "alias",
             Thing::PipelineStage(_) => "pipeline stage",
         }
     }
@@ -146,7 +149,10 @@ impl Thing {
             Thing::Variable(i) => i.loc(),
             Thing::Function(i) => i.loc(),
             Thing::EnumVariant(i) => i.loc(),
-            Thing::Alias(i) => i.loc(),
+            Thing::Alias {
+                path,
+                in_namespace: _,
+            } => path.loc(),
             Thing::PipelineStage(i) => i.loc(),
         }
     }
@@ -323,9 +329,15 @@ impl SymbolTable {
         let absolute_path = if let Some(lib_relative) = target.inner.lib_relative() {
             self.base_namespace.join(lib_relative)
         } else {
-            self.current_namespace().join(target.inner.clone())
+            target.inner.clone()
         };
-        self.add_thing(name, Thing::Alias(absolute_path.at_loc(&target)))
+        self.add_thing(
+            name,
+            Thing::Alias {
+                path: absolute_path.at_loc(&target),
+                in_namespace: self.current_namespace().clone(),
+            },
+        )
     }
 
     /// Adds a thing to the scope at `current_scope - offset`. Panics if there is no such scope
@@ -434,7 +446,10 @@ macro_rules! thing_accessors {
 
                 match self.things.get(&id) {
                     $(Some($thing) => {Ok((id, $conversion))})*,
-                    Some(Thing::Alias(alias)) => self.$lookup_name(alias),
+                    Some(Thing::Alias{path, in_namespace}) => self.$lookup_name(path)
+                        .or_else(|_| {
+                            self.$lookup_name(&in_namespace.join(path.inner.clone()).at_loc(path))
+                        }),
                     Some(other) => Err(LookupError::$err(name.clone(), other.clone())),
                     None => {
                         match self.types.get(&id) {
@@ -501,7 +516,12 @@ impl SymbolTable {
         match self.types.get(&id) {
             Some(tsym) => Ok((id, tsym.clone())),
             None => match self.things.get(&id) {
-                Some(Thing::Alias(alias)) => self.lookup_type_symbol(alias),
+                Some(Thing::Alias {
+                    path: alias,
+                    in_namespace,
+                }) => self.lookup_type_symbol(alias).or_else(|_| {
+                    self.lookup_type_symbol(&in_namespace.join(alias.inner.clone()).at_loc(alias))
+                }),
                 Some(thing) => Err(LookupError::NotATypeSymbol(name.clone(), thing.clone())),
                 None => panic!("{:?} was in symtab but is neither a type nor a thing", id),
             },
@@ -568,7 +588,12 @@ impl SymbolTable {
         let id = self.try_lookup_id(name);
         if let Some(id) = id {
             match self.things.get(&id) {
-                Some(Thing::Alias(alias)) => self.try_lookup_final_id(alias),
+                Some(Thing::Alias {
+                    path: alias,
+                    in_namespace,
+                }) => self.try_lookup_final_id(alias).or_else(|| {
+                    self.try_lookup_final_id(&in_namespace.join(alias.inner.clone()).at_loc(alias))
+                }),
                 _ => Some(id),
             }
         } else {
@@ -632,7 +657,9 @@ impl SymbolTable {
                 Thing::Entity(_) => println!("entity"),
                 Thing::Pipeline(_) => println!("pipeline"),
                 Thing::Variable(_) => println!("variable"),
-                Thing::Alias(to) => println!("{}", format!("alias => {to}").green()),
+                Thing::Alias { path, in_namespace } => {
+                    println!("{}", format!("alias => {path} in {in_namespace}").green())
+                }
                 Thing::PipelineStage(stage) => println!("'{stage}"),
             }
         }
