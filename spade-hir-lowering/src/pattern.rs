@@ -109,7 +109,6 @@ pub enum Constructor {
         min: i128,
         max: i128,
     },
-    Missing,
     Wildcard,
 }
 
@@ -169,7 +168,7 @@ impl Constructor {
                     unreachable!("enum should have Variant constructor")
                 }
                 ConcreteType::Single { .. } => vec![],
-                ConcreteType::Integer(_) => todo!(),
+                ConcreteType::Integer(_) => unreachable!("Pattern matching on type level integer"),
             },
             Constructor::Variant(idx) => match ty {
                 ConcreteType::Enum { options } => {
@@ -179,7 +178,6 @@ impl Constructor {
             },
             Constructor::Bool(_) => vec![],
             Constructor::IntRange { .. } => vec![],
-            Constructor::Missing => vec![],
             Constructor::Wildcard => todo!(),
         }
     }
@@ -343,7 +341,6 @@ impl std::fmt::Display for DeconstructedPattern {
             },
             Constructor::Bool(val) => write!(f, "{val}"),
             Constructor::IntRange { min, max } => write!(f, "{min}..{max}"),
-            Constructor::Missing => write!(f, "*missing*"),
             Constructor::Wildcard => write!(f, "_"),
         }
     }
