@@ -6,16 +6,16 @@ use itertools::Itertools;
 use spade_common::error_reporting::{codespan_config, AsLabel, CodeBundle, CompilationError};
 
 fn format_witnesses(witnesses: &[Witness]) -> String {
-    let threshold_len = 4;
+    let threshold_len = 3;
     if witnesses.len() == 1 {
         format!("pattern {}", witnesses[0])
-    } else if witnesses.len() < threshold_len {
+    } else if witnesses.len() <= threshold_len {
         format!(
             "patterns {}",
             witnesses.iter().map(|w| format!("{w}")).join(", ")
         )
     } else {
-        let partial = witnesses[0..threshold_len - 1]
+        let partial = witnesses[0..threshold_len]
             .iter()
             .map(|w| format!("{w}"))
             .join(", ");

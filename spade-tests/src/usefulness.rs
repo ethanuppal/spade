@@ -209,3 +209,17 @@ snapshot_error! {
             }
             "
 }
+
+snapshot_error! {
+    zero_more_not_covered_should_not_be_present,
+    "
+    fn test(in: (bool, bool, bool)) -> bool {
+        match in {
+            (true, true, true) => true,
+            (false, true, true) => true,
+            (false, false, true) => true,
+            (false, false, false) => true,
+        }
+    }
+    "
+}
