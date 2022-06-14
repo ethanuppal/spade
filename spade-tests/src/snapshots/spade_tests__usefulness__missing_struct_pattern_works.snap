@@ -2,12 +2,12 @@
 source: spade-tests/src/usefulness.rs
 expression: "std::str::from_utf8(buffer.as_slice()).expect(\"error contains invalid utf-8\")"
 ---
-error: Non-exhaustive match: patterns A(false, false), A(false, true), A(true, false) not covered
+error: Non-exhaustive match: patterns A(x: false, y: false), A(x: false, y: true) and 1 more not covered
   ┌─ testinput:4:5
   │  
 4 │ ╭     match a {
 5 │ │         A(true, true) => true,
 6 │ │     }
-  │ ╰─────^ patterns A(false, false), A(false, true), A(true, false) not covered
+  │ ╰─────^ patterns A(x: false, y: false), A(x: false, y: true) and 1 more not covered
 
 

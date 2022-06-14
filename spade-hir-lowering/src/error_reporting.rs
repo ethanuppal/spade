@@ -6,7 +6,8 @@ use itertools::Itertools;
 use spade_common::error_reporting::{codespan_config, AsLabel, CodeBundle, CompilationError};
 
 fn format_witnesses(witnesses: &[Witness]) -> String {
-    let threshold_len = 3;
+    // Print 1 or 2 missing patterns in full, if more print and X more not covered
+    let threshold_len = 2;
     if witnesses.len() == 1 {
         format!("pattern {}", witnesses[0])
     } else if witnesses.len() <= threshold_len {

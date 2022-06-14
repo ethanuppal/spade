@@ -204,8 +204,8 @@ fn inner_translate_value(result: &mut String, in_value: &[Value], t: &ConcreteTy
                             result.push('(');
                             let mut offset = tag_size;
                             for (i, t) in inner_types.iter().enumerate() {
-                                let end = offset + t.to_mir_type().size() as usize;
-                                inner_translate_value(result, &value[offset..end], t);
+                                let end = offset + t.1.to_mir_type().size() as usize;
+                                inner_translate_value(result, &value[offset..end], &t.1);
                                 offset = end;
 
                                 if i != inner_types.len() - 1 {
@@ -433,19 +433,28 @@ mod tests {
 
     fn enum_ty() -> ConcreteType {
         let ty0 = vec![
-            ConcreteType::Single {
-                base: PrimitiveType::Int,
-                params: vec![ConcreteType::Integer(5)],
-            },
+            (
+                ast_ident("a").inner,
+                ConcreteType::Single {
+                    base: PrimitiveType::Int,
+                    params: vec![ConcreteType::Integer(5)],
+                },
+            ),
+            (
+                ast_ident("b").inner,
+                ConcreteType::Single {
+                    base: PrimitiveType::Int,
+                    params: vec![ConcreteType::Integer(3)],
+                },
+            ),
+        ];
+        let ty1 = vec![(
+            ast_ident("a").inner,
             ConcreteType::Single {
                 base: PrimitiveType::Int,
                 params: vec![ConcreteType::Integer(3)],
             },
-        ];
-        let ty1 = vec![ConcreteType::Single {
-            base: PrimitiveType::Int,
-            params: vec![ConcreteType::Integer(3)],
-        }];
+        )];
 
         ConcreteType::Enum {
             options: vec![

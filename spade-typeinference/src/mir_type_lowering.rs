@@ -41,7 +41,14 @@ impl TypeState {
                             .0
                             .iter()
                             .map(|arg| {
-                                Self::type_spec_to_concrete(&arg.1.inner, type_list, &generic_subs)
+                                (
+                                    arg.0.inner.clone(),
+                                    Self::type_spec_to_concrete(
+                                        &arg.1.inner,
+                                        type_list,
+                                        &generic_subs,
+                                    ),
+                                )
                             })
                             .collect();
                         (name.inner.clone(), args)

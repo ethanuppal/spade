@@ -131,7 +131,7 @@ impl MirLowerable for ConcreteType {
             CType::Enum { options } => {
                 let inner = options
                     .iter()
-                    .map(|o| o.1.iter().map(|t| t.to_mir_type()).collect())
+                    .map(|o| o.1.iter().map(|t| t.1.to_mir_type()).collect())
                     .collect();
                 Type::Enum(inner)
             }

@@ -34,7 +34,7 @@ pub enum ConcreteType {
         size: u128,
     },
     Enum {
-        options: Vec<(NameID, Vec<ConcreteType>)>,
+        options: Vec<(NameID, Vec<(Identifier, ConcreteType)>)>,
     },
     Single {
         base: PrimitiveType,
@@ -78,7 +78,7 @@ impl std::fmt::Display for ConcreteType {
                     .map(|o| {
                         let param_list =
                             o.1.iter()
-                                .map(|t| format!("{}", t))
+                                .map(|t| format!("{}", t.1))
                                 .collect::<Vec<_>>()
                                 .join(",");
                         format!("{} ( {} )", o.0 .0, param_list)

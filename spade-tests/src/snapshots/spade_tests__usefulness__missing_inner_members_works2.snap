@@ -2,13 +2,13 @@
 source: spade-tests/src/usefulness.rs
 expression: "std::str::from_utf8(buffer.as_slice()).expect(\"error contains invalid utf-8\")"
 ---
-error: Non-exhaustive match: patterns Y::A(X::B, X::A), Y::A(X::B, X::B) not covered
+error: Non-exhaustive match: patterns Y::A(x1: X::B, x2: X::A), Y::A(x1: X::B, x2: X::B) not covered
    ┌─ testinput:11:5
    │  
 11 │ ╭     match y {
 12 │ │         Y::A(X::A, X::A) => true,
 13 │ │         Y::A(X::A, _) => true,
 14 │ │     }
-   │ ╰─────^ patterns Y::A(X::B, X::A), Y::A(X::B, X::B) not covered
+   │ ╰─────^ patterns Y::A(x1: X::B, x2: X::A), Y::A(x1: X::B, x2: X::B) not covered
 
 

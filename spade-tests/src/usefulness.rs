@@ -238,3 +238,35 @@ snapshot_error! {
     }
     "
 }
+
+snapshot_error! {
+    struct_missing_pattern_message_with_named_args_is_good,
+    "
+        struct A {
+            x: bool,
+            y: bool,
+        }
+    fn test(in: A) -> bool {
+        match in {
+            A$(y:true, x: true) => true,
+            A$(y:true, x: false) => true,
+            A$(y:false, x: false) => true,
+        }
+    }
+    "
+}
+
+snapshot_error! {
+    enum_missing_pattern_message_with_named_args_is_good,
+    "
+        enum A {
+            X{a: bool},
+            Y
+        }
+    fn test(in: A) -> bool {
+        match in {
+            A::Y => true
+        }
+    }
+    "
+}

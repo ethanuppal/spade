@@ -1,0 +1,13 @@
+---
+source: spade-tests/src/usefulness.rs
+expression: "std::str::from_utf8(buffer.as_slice()).expect(\"error contains invalid utf-8\")"
+---
+error: Non-exhaustive match: patterns A::X(a: false), A::X(a: true) not covered
+  ┌─ testinput:6:5
+  │  
+6 │ ╭     match in {
+7 │ │         A::Y => true
+8 │ │     }
+  │ ╰─────^ patterns A::X(a: false), A::X(a: true) not covered
+
+

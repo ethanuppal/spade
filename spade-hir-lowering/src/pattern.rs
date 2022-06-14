@@ -172,7 +172,9 @@ impl Constructor {
                 ConcreteType::Integer(_) => todo!(),
             },
             Constructor::Variant(idx) => match ty {
-                ConcreteType::Enum { options } => options[*idx].1.clone(),
+                ConcreteType::Enum { options } => {
+                    options[*idx].1.iter().map(|o| o.1.clone()).collect()
+                }
                 _ => unreachable!(),
             },
             Constructor::Bool(_) => vec![],
@@ -296,11 +298,15 @@ impl std::fmt::Display for DeconstructedPattern {
                     "({})",
                     self.fields.iter().map(|f| format!("{f}")).join(", ")
                 ),
-                ConcreteType::Struct { name, .. } => {
+                ConcreteType::Struct { name, members } => {
                     write!(
                         f,
                         "{name}({})",
-                        self.fields.iter().map(|f| format!("{f}")).join(", ")
+                        self.fields
+                            .iter()
+                            .zip(members.iter())
+                            .map(|(f, m)| format!("{}: {f}", m.0))
+                            .join(", ")
                     )
                 }
                 ConcreteType::Array { .. } => {
@@ -316,16 +322,22 @@ impl std::fmt::Display for DeconstructedPattern {
             },
             Constructor::Variant(idx) => match &self.ty {
                 ConcreteType::Enum { options } => {
+                    let option = &options[idx];
+
                     let fields_str = if self.fields.len() != 0 {
                         format!(
                             "({})",
-                            self.fields.iter().map(|f| format!("{f}")).join(", ")
+                            self.fields
+                                .iter()
+                                .zip(option.1.iter())
+                                .map(|(f, m)| format!("{}: {f}", m.0))
+                                .join(", ")
                         )
                     } else {
                         format!("")
                     };
 
-                    write!(f, "{}{fields_str}", options[idx].0,)
+                    write!(f, "{}{fields_str}", option.0,)
                 }
                 _ => unreachable!(),
             },
