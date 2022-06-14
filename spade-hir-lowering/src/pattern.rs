@@ -60,6 +60,7 @@ pub(crate) fn split_wildcard(
     match ty {
         ConcreteType::Tuple(_) => vec![Constructor::Single],
         ConcreteType::Struct { .. } => vec![Constructor::Single],
+        // Matching on arrays is unimeplemented, leaving as todo
         ConcreteType::Array { .. } => todo!(),
         ConcreteType::Enum { options } => options
             .iter()
@@ -84,12 +85,14 @@ pub(crate) fn split_wildcard(
                         .flatten(),
                 )
             }
+            // Unsigned integers are currently unsupported so we'll leave this as todo
             spade_types::PrimitiveType::Uint => todo!(),
-            spade_types::PrimitiveType::Clock => todo!(),
             spade_types::PrimitiveType::Bool => {
                 vec![Constructor::Bool(false), Constructor::Bool(true)]
             }
-            spade_types::PrimitiveType::Memory => todo!(),
+            // Special types for which there are no constructors which makes matching
+            // on them impossible
+            spade_types::PrimitiveType::Clock | spade_types::PrimitiveType::Memory => vec![],
         },
         ConcreteType::Integer(_) => unreachable!("Pattern matching on type level integer"),
     }
@@ -178,7 +181,8 @@ impl Constructor {
             },
             Constructor::Bool(_) => vec![],
             Constructor::IntRange { .. } => vec![],
-            Constructor::Wildcard => todo!(),
+            // Accessing the fields of a wildcard is (probably) impossible
+            Constructor::Wildcard => unreachable!(),
         }
     }
 
@@ -316,7 +320,7 @@ impl std::fmt::Display for DeconstructedPattern {
                 }
                 ConcreteType::Enum { .. } => unreachable!(),
                 ConcreteType::Single { .. } => write!(f, "_"),
-                ConcreteType::Integer(_) => todo!(),
+                ConcreteType::Integer(_) => unreachable!("Pattern on type level integer"),
             },
             Constructor::Variant(idx) => match &self.ty {
                 ConcreteType::Enum { options } => {

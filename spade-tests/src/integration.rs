@@ -1,5 +1,3 @@
-//! For tests that ensure that type inference does not fail when it shouldnt
-
 #[cfg(test)]
 mod namespace_tests {
     use crate::{build_items, snapshot_error};
