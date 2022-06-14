@@ -60,8 +60,9 @@ pub(crate) fn split_wildcard(
     match ty {
         ConcreteType::Tuple(_) => vec![Constructor::Single],
         ConcreteType::Struct { .. } => vec![Constructor::Single],
-        // Matching on arrays is unimeplemented, leaving as todo
-        ConcreteType::Array { .. } => todo!(),
+        // We don't currently support array patterns. We'll return Constructor::Single
+        // here since we still want to be able to match on arrays with variables
+        ConcreteType::Array { .. } => vec![Constructor::Single],
         ConcreteType::Enum { options } => options
             .iter()
             .enumerate()

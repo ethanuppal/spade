@@ -19,7 +19,7 @@ use spade_common::name::{Identifier, Path};
 use spade_typeinference::GenericListToken;
 use substitution::Substitutions;
 use thiserror::Error;
-use usefulness::{is_useful, PatStack};
+use usefulness::{is_useful, PatStack, Usefulness};
 
 use crate::error::{Error, Result};
 use parse_tree_macros::local_impl;
@@ -420,6 +420,25 @@ impl PatternLocal for Pattern {
             hir::PatternKind::Type(_, _) => false,
         }
     }
+
+    /// Returns an error if the pattern is refutable, i.e. it does not match all possible
+    /// values it binds to
+    fn is_refutable(&self, ctx: &Context) -> Usefulness {
+        let operand_ty = ctx
+            .types
+            .type_of_id(self.id, ctx.symtab.symtab(), &ctx.item_list.types);
+
+        let pat_stacks = vec![PatStack::new(vec![DeconstructedPattern::from_hir(
+            self, &ctx,
+        )])];
+
+        // The patterns which make a wildcard useful are the ones that are missing
+        // from the match statement
+        is_useful(
+            &PatStack::new(vec![DeconstructedPattern::wildcard(&operand_ty)]),
+            &usefulness::Matrix::new(&pat_stacks),
+        )
+    }
 }
 
 #[local_impl]
@@ -428,6 +447,15 @@ impl StatementLocal for Statement {
         let mut result = vec![];
         match self {
             Statement::Binding(pattern, _t, value) => {
+                let refutability = pattern.is_refutable(ctx);
+                if refutability.is_useful() {
+                    return Err(Error::RefutablePattern {
+                        pattern: pattern.loc(),
+                        witnesses: refutability.witnesses,
+                        binding_kind: "let",
+                    });
+                }
+
                 result.append(&mut value.lower(ctx)?);
 
                 result.push(mir::Statement::Binding(mir::Binding {
@@ -442,6 +470,14 @@ impl StatementLocal for Statement {
                 result.append(&mut pattern.lower(value.variable(ctx.subs)?, ctx)?);
             }
             Statement::Register(register) => {
+                let refutability = register.pattern.is_refutable(ctx);
+                if refutability.is_useful() {
+                    return Err(Error::RefutablePattern {
+                        pattern: register.pattern.loc(),
+                        witnesses: refutability.witnesses,
+                        binding_kind: "reg",
+                    });
+                }
                 result.append(&mut register.clock.lower(ctx)?);
 
                 if let Some((trig, value)) = &register.reset {

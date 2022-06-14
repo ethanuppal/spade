@@ -1,0 +1,14 @@
+---
+source: spade-tests/src/usefulness.rs
+expression: "std::str::from_utf8(buffer.as_slice()).expect(\"error contains invalid utf-8\")"
+---
+error: Refutable pattern in local binding: pattern false not covered
+  ┌─ testinput:2:9
+  │
+2 │     let true = false;
+  │         ^^^^ pattern pattern false not covered
+  │
+  = let requires a pattern which matches all possible options, such as a variable, struct or enum with only 1 option.
+  = hint: you might want to use match statement to handle different cases
+
+

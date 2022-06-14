@@ -285,4 +285,24 @@ mod tests {
 
         build_items(code);
     }
+
+    snapshot_error! {
+        refutable_pattern_let_binding_errors,
+        "
+            fn A() -> bool {
+                let true = false;
+                false
+            }
+        "
+    }
+
+    snapshot_error! {
+        refutable_pattern_reg_errors,
+        "
+            entity A(clk: clk) -> bool {
+                reg(clk) true = false;
+                false
+            }
+        "
+    }
 }

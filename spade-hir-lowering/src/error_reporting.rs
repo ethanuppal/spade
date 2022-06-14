@@ -117,6 +117,23 @@ impl CompilationError for Error {
                         .primary_label()
                         .with_message(format!("{witnesses} not covered"))])
             }
+            Error::RefutablePattern {
+                binding_kind,
+                pattern,
+                witnesses,
+            } => {
+                let witnesses = format_witnesses(witnesses);
+
+                Diagnostic::error()
+                    .with_message(format!("Refutable pattern in local binding: {witnesses} not covered"))
+                    .with_labels(vec![
+                        pattern.primary_label().with_message(format!("pattern {witnesses} not covered"))
+                    ])
+                    .with_notes(vec![
+                        format!("{binding_kind} requires a pattern which matches all possible options, such as a variable, struct or enum with only 1 option."),
+                        format!("hint: you might want to use match statement to handle different cases")
+                    ])
+            }
             Error::UnificationError(_) => unreachable!(),
         };
 

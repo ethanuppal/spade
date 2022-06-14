@@ -37,6 +37,13 @@ pub enum Error {
         match_expr: Loc<()>,
         useful_branches: Vec<Witness>,
     },
+    #[error("Refutable pattern")]
+    RefutablePattern {
+        pattern: Loc<()>,
+        witnesses: Vec<Witness>,
+        // The statement in which this binding occurs. (let, reg etc.)
+        binding_kind: &'static str,
+    },
     #[error("Unification error")]
     UnificationError(#[source] spade_typeinference::result::Error),
 }
