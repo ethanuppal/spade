@@ -39,7 +39,7 @@ fn split_int_range(
     let mut result = vec![];
     let mut current_low = min;
 
-    for edge in edges.into_iter().filter(|e| *e >= min && *e <= max) {
+    for edge in edges.into_iter().filter(|e| *e > min && *e < max) {
         result.push(Constructor::IntRange {
             min: current_low,
             max: edge - 1,

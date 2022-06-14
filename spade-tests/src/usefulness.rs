@@ -305,4 +305,15 @@ mod tests {
             }
         "
     }
+
+    snapshot_error! {
+        non_exhaustive_pattern_with_sub_integer_range_causes_good_error_mesage,
+        "
+        fn test(in: (int<8>, bool)) -> bool {
+            match in {
+                (val, true) => true,
+            }
+        }
+        "
+    }
 }
