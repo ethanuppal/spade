@@ -13,6 +13,8 @@ pub(crate) struct PatStack {
     pats: Vec<DeconstructedPattern>,
 }
 
+/// A stack of subptaterns representing a part of a pattern which
+/// is currently being evaluated.
 impl PatStack {
     pub(crate) fn new(inner: Vec<DeconstructedPattern>) -> Self {
         Self { pats: inner }
@@ -22,6 +24,9 @@ impl PatStack {
         &self.pats[0]
     }
 
+    /// Remove the left-most pattern, re-adding the fields of the pattern to the stack.
+    /// For example, a stack containing `[Some((_, _)), None]` popped once would
+    /// result in `[(_, _), None]`, and `[_, _, None]` after a second pop
     fn pop_head(&self, ctor: &Constructor) -> PatStack {
         let mut new_fields = self.head().specialize(ctor);
         new_fields.extend_from_slice(&self.pats[1..]);
@@ -43,6 +48,9 @@ impl std::fmt::Display for PatStack {
     }
 }
 
+/// A vector of patterns which generally make up a set of patterns for which to check
+/// usefulness against.
+/// All patterns in the matrix must be of equal length
 pub(crate) struct Matrix {
     pub patterns: Vec<PatStack>,
 }
@@ -66,6 +74,18 @@ impl Matrix {
         self.patterns.push(new)
     }
 
+    /// Specializing a matrix with respect to a constructor `ctor` filters out branches
+    /// which are not covered by `ctor` and pops the inner patterns into a new matrix.
+    ///
+    /// For example, the stack
+    /// [ [Some(true), _]
+    /// , [Some(_), _]
+    /// , [None, _]
+    /// ]
+    /// specialized against `Some(_)` results in
+    /// [ [true, _]
+    /// , [_, _]
+    /// ]
     fn specialize(&self, ctor: Constructor) -> Matrix {
         let mut result = Matrix::empty();
 
@@ -89,6 +109,15 @@ impl std::fmt::Debug for Matrix {
     }
 }
 
+/// A witness of the usefulness of a pattern. During construction, patterns
+/// are pushed from left to right, with constructors containing fields "consuming"
+/// fields already on the stack for its parameters
+///
+/// For example, pushing `_, _, _, (,)` results in the following witness stacks
+/// [_, _]
+/// [_, _, _]
+/// [(_, _), _] // (,) (the 2 tuple constructor) takes 2 fields, and therefore consumes the 2 already
+/// on the stack
 #[derive(Debug, Clone)]
 pub struct Witness(pub Vec<DeconstructedPattern>);
 
@@ -123,6 +152,9 @@ impl std::fmt::Display for Witness {
     }
 }
 
+/// Struct representing if a pattern is useful nor not. `witnesses` are a list of
+/// patterns which are not matched. Not guaranteed to list all patterns, but is guaranteed
+/// to list at least one witness if the pattern is useful
 pub(crate) struct Usefulness {
     pub witnesses: Vec<Witness>,
 }
