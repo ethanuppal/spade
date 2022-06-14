@@ -223,3 +223,18 @@ snapshot_error! {
     }
     "
 }
+
+snapshot_error! {
+    struct_missing_pattern_message_is_good,
+    "
+        struct A {
+            x: bool,
+            y: bool,
+        }
+    fn test(in: A) -> bool {
+        match in {
+            A(true, true) => true
+        }
+    }
+    "
+}

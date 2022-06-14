@@ -26,6 +26,7 @@ impl std::fmt::Display for PrimitiveType {
 pub enum ConcreteType {
     Tuple(Vec<ConcreteType>),
     Struct {
+        name: NameID,
         members: Vec<(Identifier, ConcreteType)>,
     },
     Array {
@@ -56,10 +57,10 @@ impl std::fmt::Display for ConcreteType {
                         .join(", ")
                 )
             }
-            ConcreteType::Struct { members } => {
+            ConcreteType::Struct { name, members } => {
                 write!(
                     f,
-                    "struct {{{}}}",
+                    "struct {name} {{{}}}",
                     members
                         .iter()
                         .map(|(name, t)| format!("{}: {}", name, t))

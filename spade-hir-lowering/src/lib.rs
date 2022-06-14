@@ -135,7 +135,7 @@ impl MirLowerable for ConcreteType {
                     .collect();
                 Type::Enum(inner)
             }
-            CType::Struct { members } => {
+            CType::Struct { name: _, members } => {
                 let members = members.iter().map(|(_, t)| t.to_mir_type()).collect();
                 Type::Tuple(members)
             }
@@ -684,7 +684,7 @@ impl ExprLocal for Loc<Expression> {
                     unreachable!("Field access on non-struct {:?}", self_type)
                 };
 
-                let field_index = if let ConcreteType::Struct { members } = ctype {
+                let field_index = if let ConcreteType::Struct { name: _, members } = ctype {
                     let field_indices = members
                         .iter()
                         .enumerate()

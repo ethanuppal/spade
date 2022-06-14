@@ -159,7 +159,9 @@ impl Constructor {
         match &self {
             Constructor::Single => match ty {
                 ConcreteType::Tuple(i) => i.clone(),
-                ConcreteType::Struct { members } => members.iter().map(|m| m.1.clone()).collect(),
+                ConcreteType::Struct { name: _, members } => {
+                    members.iter().map(|m| m.1.clone()).collect()
+                }
                 ConcreteType::Array { inner, size } => {
                     (0..*size as usize).map(|_| *inner.clone()).collect()
                 }
@@ -294,11 +296,10 @@ impl std::fmt::Display for DeconstructedPattern {
                     "({})",
                     self.fields.iter().map(|f| format!("{f}")).join(", ")
                 ),
-                ConcreteType::Struct { .. } => {
-                    // TODO: Enable us to display the type name here
+                ConcreteType::Struct { name, .. } => {
                     write!(
                         f,
-                        "<struct>({})",
+                        "{name}({})",
                         self.fields.iter().map(|f| format!("{f}")).join(", ")
                     )
                 }

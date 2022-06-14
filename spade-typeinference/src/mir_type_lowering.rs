@@ -62,7 +62,10 @@ impl TypeState {
                     })
                     .collect();
 
-                ConcreteType::Struct { members }
+                ConcreteType::Struct {
+                    name: decl.name.inner.clone(),
+                    members,
+                }
             }
             hir::TypeDeclKind::Primitive(primitive) => ConcreteType::Single {
                 base: primitive.clone(),
