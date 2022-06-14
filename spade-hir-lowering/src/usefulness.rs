@@ -1,7 +1,7 @@
 // Heavily inspired by the rust usefulness implementation documented here
 // https://doc.rust-lang.org/nightly/nightly-rustc/rustc_mir_build/thir/pattern/usefulness/index.html
-// https://github.com/rust-lang/rust/blob/master/compiler/rustc_mir_build/src/thir/pattern/usefulness.rs
-// See https://github.com/rust-lang/rust/blob/master/COPYRIGHT for the rustc copyright
+// https://github.com/rust-lang/rust/blob/da895e7938e8d6f8d221fce2876d225bf58df865/compiler/rustc_mir_build/src/thir/pattern/usefulness.rs
+// See https://github.com/rust-lang/rust/blob/da895e7938e8d6f8d221fce2876d225bf58df865/COPYRIGHT for the rustc copyright
 
 use itertools::Itertools;
 use spade_types::ConcreteType;

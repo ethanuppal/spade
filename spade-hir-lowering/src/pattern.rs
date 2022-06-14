@@ -1,6 +1,6 @@
 // Heavily inspired by the rust compiler
-// https://github.com/rust-lang/rust/blob/master/compiler/rustc_mir_build/src/thir/pattern/deconstruct_pat.rs
-// See https://github.com/rust-lang/rust/blob/master/COPYRIGHT for the rustc copyright
+// https://github.com/rust-lang/rust/blob/da895e7938e8d6f8d221fce2876d225bf58df865/compiler/rustc_mir_build/src/thir/pattern/deconstruct_pat.rs
+// See https://github.com/rust-lang/rust/blob/da895e7938e8d6f8d221fce2876d225bf58df865/COPYRIGHT for the rustc copyright
 
 use itertools::Itertools;
 use spade_hir::Pattern;
