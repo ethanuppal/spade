@@ -605,8 +605,19 @@ impl SymbolTable {
         // The behaviour depends on whether or not the path is a library relative path (starting
         // with `lib`) or not. If it is, an absolute lookup of the path obtained by
         // substituting `lib` for the current `base_path` should be performed.
-        // If not, two absolute lookups should be performed, one prefixing the current
-        // namespace to the path, and one with no prefixing
+        //
+        // If not, three lookups should be performed
+        //  - The path in the root namespace
+        //  - The path in the current namespace
+        //  - The path in other use statements. For example, with
+        //      ```
+        //      use a::b;
+        //
+        //      b::c();
+        //      ```
+        //      A lookup for `b` is performed which returns an alias (a::b). From that, another
+        //      lookup for a::b::c is prefrormed
+
         let absolute_path = if let Some(lib_relative) = name.lib_relative() {
             self.base_namespace.join(lib_relative).at_loc(&name)
         } else {
@@ -614,6 +625,28 @@ impl SymbolTable {
             for tab in self.symbols.iter().rev() {
                 if let Some(id) = tab.get(&local_path) {
                     return Some(id.clone());
+                }
+            }
+
+            if name.inner.0.len() > 1 {
+                let base_name = name.inner.0.first().unwrap();
+
+                if let Some(alias_id) =
+                    self.try_lookup_id(&Path(vec![base_name.clone()]).at_loc(base_name))
+                {
+                    match self.things.get(&alias_id) {
+                        Some(Thing::Alias {
+                            path: alias_path,
+                            in_namespace,
+                        }) => {
+                            // NOTE: This lookup should be to .join(name.pop_front())
+                            let rest_path = Path(name.inner.0[1..].into());
+                            let full_path =
+                                in_namespace.join(alias_path.inner.clone()).join(rest_path);
+                            return self.try_lookup_id(&full_path.at_loc(name));
+                        }
+                        _ => {}
+                    }
                 }
             }
 

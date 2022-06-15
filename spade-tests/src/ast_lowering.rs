@@ -208,3 +208,22 @@ fn type_inference_works_for_declared_variables() {
 
     build_items(code);
 }
+
+#[test]
+fn use_of_namespace_works() {
+    let code = r#"
+        mod a {
+            mod b {
+                struct X {x: bool}
+            }
+        }
+
+        use a::b;
+
+        fn x() -> b::X {
+            b::X(true)
+        }
+    "#;
+
+    build_items(code);
+}

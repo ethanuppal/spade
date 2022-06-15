@@ -898,8 +898,8 @@ impl ExprLocal for Loc<Expression> {
             ($([$($path:expr),*] => $handler:ident),*) => {
                 $(
                     let path = Path(vec![$(Identifier($path.to_string()).nowhere()),*]).nowhere();
-                    if ctx.symtab.symtab()
-                        .try_lookup_final_id(&path)
+                    let final_id = ctx.symtab.symtab().try_lookup_final_id(&path);
+                    if final_id
                         .map(|n| &n == name)
                         .unwrap_or(false)
                     {

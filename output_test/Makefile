@@ -9,13 +9,18 @@ SPADEC=../target/debug/spade
 TEST_DIRS=$(wildcard test/*)
 TEST_TARGETS=$(patsubst test/%, test/%/build/code.v.vcd, $(TEST_DIRS))
 
+# Get the standard library files and add them to the correct namespace
+STDLIB_FILES=$(wildcard ../stdlib/*.spade)
+# Patsubst is really stupid and can't replace % more than once, so we'll shell out to sed
+STDLIB_ARGS=$(shell echo $(STDLIB_FILES) | sed -e 's|../stdlib/\(\w*\)\.spade|std,std::\1,\0|g')
+
 # Main rule
 all: ${TEST_TARGETS} namespace_test/done .PHONY
 
 test/%/build/code.v: test/%/code.spade $(SPADEC) .PHONY
 	@mkdir -p ${@D}
 	@echo -e "[\033[0;34m${SPADEC}\033[0m] building $@"
-	@${SPADEC} $(wildcard ${<D}/*.spade) $(wildcard ../stdlib/*.spade) -o $@ 
+	${SPADEC} $(wildcard ${<D}/*.spade) ${STDLIB_ARGS} -o $@ 
 
 # Build a test binary
 test/%/build/code.v.out: test/%/build/code.v

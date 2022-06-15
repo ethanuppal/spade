@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use logos::Logos;
-use spade_common::{name::Path as SpadePath, location_info::WithLocation};
+use spade_common::name::Path as SpadePath;
 use spade_parser::{lexer, Parser};
 
 #[derive(Clone, Debug)]
@@ -29,8 +29,7 @@ pub fn namespaced_file(arg: &str) -> Result<NamespacedFile, String> {
         3 => {
             let root_namespace = if parts[0].is_empty() {
                 SpadePath(vec![])
-            }
-            else {
+            } else {
                 let mut root_parser = Parser::new(lexer::TokenKind::lexer(&parts[0]), 0);
                 root_parser.path().map_err(|e| format!("{e}"))?.inner
             };

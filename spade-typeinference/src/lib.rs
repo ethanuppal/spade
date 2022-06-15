@@ -724,7 +724,6 @@ impl TypeState {
             Statement::Register(reg) => self.visit_register(reg, symtab, generic_list),
             Statement::Declaration(names) => {
                 for name in names {
-                    println!("Type checking declaration of {name}");
                     let new_type = self.new_generic();
                     self.add_equation(TypedExpression::Name(name.clone().inner), new_type);
                 }
