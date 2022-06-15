@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use logos::Logos;
-use spade_common::name::Path as SpadePath;
+use spade_common::{name::Path as SpadePath, location_info::WithLocation};
 use spade_parser::{lexer, Parser};
 
 #[derive(Clone, Debug)]
@@ -27,16 +27,25 @@ pub fn namespaced_file(arg: &str) -> Result<NamespacedFile, String> {
             base_namespace: SpadePath(vec![]),
         }),
         3 => {
-            let mut root_parser = Parser::new(lexer::TokenKind::lexer(&parts[0]), 0);
-            let root_namespace = root_parser.path().map_err(|e| format!("{e}"))?;
+            let root_namespace = if parts[0].is_empty() {
+                SpadePath(vec![])
+            }
+            else {
+                let mut root_parser = Parser::new(lexer::TokenKind::lexer(&parts[0]), 0);
+                root_parser.path().map_err(|e| format!("{e}"))?.inner
+            };
 
-            let mut namespace_parser = Parser::new(lexer::TokenKind::lexer(&parts[1]), 0);
-            let namespace = namespace_parser.path().map_err(|e| format!("{e}"))?;
+            let namespace = if parts[1].is_empty() {
+                SpadePath(vec![])
+            } else {
+                let mut namespace_parser = Parser::new(lexer::TokenKind::lexer(&parts[1]), 0);
+                namespace_parser.path().map_err(|e| format!("{e}"))?.inner
+            };
 
             Ok(NamespacedFile {
-                base_namespace: root_namespace.inner,
+                base_namespace: root_namespace,
                 file: parts[2].try_into().map_err(|e| format!("{e}"))?,
-                namespace: namespace.inner,
+                namespace: namespace,
             })
         }
         other => Err(format!(
