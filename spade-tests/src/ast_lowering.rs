@@ -227,3 +227,26 @@ fn use_of_namespace_works() {
 
     build_items(code);
 }
+
+#[test]
+fn global_use_statements_work_across_modules() {
+    let code = r#"
+        mod std {
+            enum Option<T> {
+                Some{val: T},
+                None
+            }
+        }
+
+
+        mod submod {
+            use std::Option;
+
+            fn x() -> Option<bool> {
+                Option::None()
+            }
+        }
+        "#;
+
+    build_items(code);
+}

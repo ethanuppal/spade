@@ -639,11 +639,20 @@ impl SymbolTable {
                             path: alias_path,
                             in_namespace,
                         }) => {
-                            // NOTE: This lookup should be to .join(name.pop_front())
+                            // Pop the aliased bit of the path
                             let rest_path = Path(name.inner.0[1..].into());
-                            let full_path =
-                                in_namespace.join(alias_path.inner.clone()).join(rest_path);
-                            return self.try_lookup_id(&full_path.at_loc(name));
+
+                            // Compute the path of the use in the global namespace
+                            // i.e. `mod a {use x;}` looks up `x`
+                            let full_path = alias_path.join(rest_path);
+
+                            // Compute the path of the use in the local namespace of the use
+                            // i.e. `mod a {use x;}` looks up `a::x`
+                            let path_in_namespace = in_namespace.join(full_path.clone());
+
+                            return self
+                                .try_lookup_id(&path_in_namespace.at_loc(name))
+                                .or_else(|| self.try_lookup_id(&full_path.at_loc(name)));
                         }
                         _ => {}
                     }
