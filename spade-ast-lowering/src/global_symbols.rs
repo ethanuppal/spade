@@ -31,7 +31,14 @@ pub fn gather_types(module: &ast::ModuleBody, symtab: &mut SymbolTable) -> Resul
             ast::Item::Entity(_) => {}
             ast::Item::Pipeline(_) => {}
             ast::Item::TraitDef(_) => {}
-            ast::Item::Use(_) => {}
+            ast::Item::Use(u) => {
+                let new_name = match &u.alias {
+                    Some(name) => name.clone(),
+                    None => u.path.0.last().unwrap().clone(),
+                };
+
+                symtab.add_alias(Path::ident(new_name), u.path.clone());
+            }
         }
     }
     Ok(())
@@ -76,14 +83,7 @@ pub fn visit_item(
             }
             symtab.pop_namespace();
         }
-        ast::Item::Use(u) => {
-            let new_name = match &u.alias {
-                Some(name) => name.clone(),
-                None => u.path.0.last().unwrap().clone(),
-            };
-
-            symtab.add_alias(Path::ident(new_name), u.path.clone());
-        }
+        ast::Item::Use(_) => {}
     }
     Ok(())
 }

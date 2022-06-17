@@ -250,3 +250,29 @@ fn global_use_statements_work_across_modules() {
 
     build_items(code);
 }
+
+#[test]
+fn use_statements_are_visible_before_appearing_in_source_code() {
+    let code = r#"
+        mod std {
+            mod option {
+                enum Option<T> {
+                    Some{val: T},
+                    None
+                }
+            }
+        }
+
+        mod mcp3002 {
+            mod adc {
+                struct SpiOut {
+                    received_data: Option<int<16>>
+                }
+            }
+        }
+
+        use std::option::Option;
+        "#;
+
+    build_items(code);
+}
