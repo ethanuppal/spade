@@ -280,6 +280,9 @@ pub fn compile(
         })
         .collect::<HashMap<_, _>>();
 
+    if errors.failed {
+        return Err(());
+    }
     let mir_entities = spade_hir_lowering::monomorphisation::compile_items(
         &executables_and_types,
         &mut frozen_symtab,

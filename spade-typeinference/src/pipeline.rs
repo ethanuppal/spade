@@ -66,6 +66,9 @@ impl TypeState {
             //     output_expr: entity.body.loc(),
             // })?;
         }
+
+        self.check_requirements(symtab, &generic_list)?;
+
         Ok(())
     }
 }

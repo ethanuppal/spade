@@ -1,0 +1,16 @@
+---
+source: spade-tests/src/typeinference.rs
+expression: "std::str::from_utf8(buffer.as_slice()).expect(\"error contains invalid utf-8\")"
+---
+error: Field access on a primitive type
+  ┌─ testinput:3:13
+  │
+3 │     let a = x.a;
+  │             ^
+  │             │
+  │             Expected a struct
+  │             Expression has type int
+  │
+  = Field access is only allowed on structs
+
+

@@ -447,6 +447,8 @@ impl StatementLocal for Statement {
         let mut result = vec![];
         match self {
             Statement::Binding(pattern, _t, value) => {
+                result.append(&mut value.lower(ctx)?);
+
                 let refutability = pattern.is_refutable(ctx);
                 if refutability.is_useful() {
                     return Err(Error::RefutablePattern {
@@ -455,8 +457,6 @@ impl StatementLocal for Statement {
                         binding_kind: "let",
                     });
                 }
-
-                result.append(&mut value.lower(ctx)?);
 
                 result.push(mir::Statement::Binding(mir::Binding {
                     name: pattern.value_name(),
@@ -470,6 +470,8 @@ impl StatementLocal for Statement {
                 result.append(&mut pattern.lower(value.variable(ctx.subs)?, ctx)?);
             }
             Statement::Register(register) => {
+                result.append(&mut register.clock.lower(ctx)?);
+
                 let refutability = register.pattern.is_refutable(ctx);
                 if refutability.is_useful() {
                     return Err(Error::RefutablePattern {
@@ -478,7 +480,6 @@ impl StatementLocal for Statement {
                         binding_kind: "reg",
                     });
                 }
-                result.append(&mut register.clock.lower(ctx)?);
 
                 if let Some((trig, value)) = &register.reset {
                     result.append(&mut trig.lower(ctx)?);

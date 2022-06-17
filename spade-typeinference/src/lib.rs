@@ -11,6 +11,7 @@ use hir::symbol_table::{Patternable, PatternableKind, TypeSymbol};
 use hir::{Argument, FunctionLike, ParameterList, Pattern, PatternArgument, TypeParam};
 use hir::{ExecutableItem, ItemList};
 use parse_tree_macros::trace_typechecker;
+use requirements::{Replacement, Requirement};
 use spade_common::location_info::{Loc, WithLocation};
 use spade_common::name::{Identifier, NameID, Path};
 use spade_hir as hir;
@@ -29,6 +30,7 @@ pub mod expression;
 pub mod fixed_types;
 pub mod mir_type_lowering;
 pub mod pipeline;
+mod requirements;
 pub mod result;
 pub mod testutil;
 pub mod trace_stack;
@@ -168,6 +170,11 @@ pub struct TypeState {
 
     constraints: TypeConstraints,
 
+    /// Requirements which must be fullfilled but which do not guide further type inference.
+    /// For example, if seeing `let y = x.a` before knowing the type of `x`, a requirement is
+    /// added to say "x has field a, and y should be the type of that field"
+    requirements: Vec<Requirement>,
+
     replacements: HashMap<TypeVar, TypeVar>,
 
     pub trace_stack: Rc<TraceStack>,
@@ -180,6 +187,7 @@ impl TypeState {
             next_typeid: 0,
             trace_stack: Rc::new(TraceStack::new()),
             constraints: TypeConstraints::new(),
+            requirements: vec![],
             replacements: HashMap::new(),
             generic_lists: HashMap::new(),
         }
@@ -251,7 +259,8 @@ impl TypeState {
         }
     }
 
-    /// Returns the type of the expression with the specified id. Error if unknown
+    /// Returns the type of the expression with the specified id. Error if no equation
+    /// for the specified epxression exists
     pub fn type_of<'a>(&'a self, expr: &TypedExpression) -> Result<TypeVar> {
         for (e, t) in &self.equations {
             if e == expr {
@@ -315,6 +324,9 @@ impl TypeState {
             //     output_expr: entity.body.loc(),
             // })?;
         }
+
+        self.check_requirements(symtab, &generic_list)?;
+
         Ok(())
     }
 
@@ -888,6 +900,26 @@ impl TypeState {
         self.constraints.add_constraint(lhs, rhs);
     }
 
+    fn add_requirement(&mut self, requirement: Requirement) {
+        let replaced = match requirement {
+            Requirement::HasField {
+                target_type,
+                field,
+                expr,
+            } => Requirement::HasField {
+                field,
+                target_type: self
+                    .check_var_for_replacement(target_type.inner.clone())
+                    .at_loc(&target_type),
+                expr: self
+                    .check_var_for_replacement(expr.inner.clone())
+                    .at_loc(&expr),
+            },
+        };
+
+        self.requirements.push(replaced)
+    }
+
     #[cfg(test)]
     fn add_eq_from_tvar(&mut self, expression: TypedExpression, var: TypeVar) {
         self.add_equation(expression, var)
@@ -1055,6 +1087,10 @@ impl TypeState {
                     TypeState::replace_type_var(lhs, &replaced_type, &new_type)
                 }
             }
+            for requirement in &mut self.requirements {
+                requirement.replace_type_var(&replaced_type, &new_type)
+            }
+
             self.constraints.inner = self
                 .constraints
                 .inner
@@ -1218,6 +1254,54 @@ impl TypeState {
                 expected,
                 loc: expr.loc(),
             })
+    }
+
+    fn check_requirements(
+        &mut self,
+        symtab: &SymbolTable,
+        generic_list: &GenericListToken,
+    ) -> Result<()> {
+        // Once we are done type checking the rest of the entity, check all requirements
+        loop {
+            // Walk through all the requirements, checking each one. If the requirement
+            // is still undetermined, take note to retain that id, otherwise store the
+            // replacement to be performed
+            let (retain, replacements): (Vec<_>, Vec<_>) = self
+                .requirements
+                .iter()
+                .map(|req| match req.check(self, symtab, &generic_list)? {
+                    requirements::RequirementResult::NoChange => Ok((true, None)),
+                    requirements::RequirementResult::Satisfied(replacement) => {
+                        Ok((false, Some(replacement)))
+                    }
+                })
+                .collect::<Result<Vec<_>>>()?
+                .into_iter()
+                .unzip();
+
+            if replacements.is_empty() {
+                break;
+            }
+
+            for Replacement { from, to } in replacements.into_iter().filter_map(|x| x).flatten() {
+                self.unify(&from, &to, symtab)
+                    .map_normal_err(|(got, expected)| Error::UnspecifiedTypeError {
+                        got,
+                        expected,
+                        loc: from.loc(),
+                    })?;
+            }
+
+            // Drop all replacements that have now been applied
+            self.requirements = self
+                .requirements
+                .drain(0..)
+                .zip(retain.into_iter())
+                .filter_map(|(req, keep)| if keep { Some(req) } else { None })
+                .collect();
+        }
+
+        Ok(())
     }
 }
 

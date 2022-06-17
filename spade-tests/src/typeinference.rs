@@ -255,3 +255,87 @@ snapshot_error! {
         }
         "
 }
+
+snapshot_error! {
+    fields_on_declared_vars_can_be_used,
+    "
+        struct X {a: bool}
+
+        entity a() -> bool {
+            decl x;
+            let _: int<32> = x.a;
+            let x = X(false);
+            true
+        }
+    "
+}
+
+#[test]
+fn fields_on_declared_variables_can_be_accessed_in_pipelines() {
+    let code = "
+        struct A {
+            x: bool
+        }
+        pipeline(1) a(clk: clk) -> int<32> {
+                let _ = stage(+1).x.x;
+            reg;
+                let x = A(false);
+                0
+        }
+        ";
+
+    build_items(code);
+}
+
+snapshot_error! {
+    field_based_type_inference_works,
+    "
+        struct A {
+            x: bool
+        }
+        fn a() -> int<32> {
+            let a: int<32> = A(true).x;
+            a
+        }
+    "
+}
+
+snapshot_error! {
+    non_existing_fields_on_declared_variables_in_pipelines,
+    "
+        struct X {a: bool}
+
+        pipeline(1) a(clk: clk) -> bool {
+                let y = stage(+1).x.b;
+            reg;
+                let x = X(false);
+                y
+        }
+        "
+}
+
+snapshot_error! {
+    non_existing_fields_on_normal_variables_in_pipelines,
+    "
+        struct X {a: bool}
+
+        pipeline(1) a(clk: clk) -> bool {
+            reg;
+                let x = X(false);
+                let y = x.b;
+                y
+        }
+        "
+}
+
+snapshot_error! {
+    field_access_on_declared_non_struct_is_error,
+    "
+        fn a() -> int<32> {
+            decl x;
+            let a = x.a;
+            let x = 0;
+            a
+        }
+    "
+}

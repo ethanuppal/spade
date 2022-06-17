@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
-use spade_common::name::NameID;
+use spade_common::{location_info::WithLocation, name::NameID};
 use spade_types::KnownType;
 
 pub type TypeEquations = HashMap<TypedExpression, TypeVar>;
@@ -23,6 +23,8 @@ pub enum TypeVar {
     /// The type is completely unknown
     Unknown(u64),
 }
+
+impl WithLocation for TypeVar {}
 
 impl std::fmt::Display for TypeVar {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {

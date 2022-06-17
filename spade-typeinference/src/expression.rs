@@ -1,13 +1,14 @@
 use parse_tree_macros::trace_typechecker;
-use spade_common::location_info::Loc;
+use spade_common::location_info::{Loc, WithLocation};
 use spade_hir::expression::{BinaryOperator, UnaryOperator};
-use spade_hir::symbol_table::{SymbolTable, TypeDeclKind, TypeSymbol};
+use spade_hir::symbol_table::SymbolTable;
 use spade_hir::{ExprKind, Expression};
 use spade_types::KnownType;
 
 use crate::constraints::{bits_to_store, ce_int, ce_var, ConstraintSource};
 use crate::equation::{TypeVar, TypedExpression};
 use crate::fixed_types::t_bool;
+use crate::requirements::Requirement;
 use crate::result::{Error, UnificationErrorExt};
 use crate::{kvar, Result};
 use crate::{GenericListToken, TypeState};
@@ -178,64 +179,16 @@ impl TypeState {
         assuming_kind!(ExprKind::FieldAccess(target, field) = &expression => {
             self.visit_expression(&target, symtab, generic_list)?;
 
-            let t = self.type_of(&TypedExpression::Id(target.id));
+            let target_type = self.type_of(&TypedExpression::Id(target.id))?;
+            let self_type = self.type_of(&TypedExpression::Id(expression.id))?;
 
-            match t {
-                Ok(TypeVar::Known(inner, _)) => {
-                    // Look up the type of the known var
-                    match inner {
-                        KnownType::Type(inner) => {
-                            // Check if we're dealing with a struct
-                            match symtab.type_symbol_by_id(&inner).inner {
-                                TypeSymbol::Declared(_, TypeDeclKind::Struct) => {}
-                                TypeSymbol::Declared(_, TypeDeclKind::Enum) => {
-                                    return Err(Error::FieldAccessOnEnum{
-                                        loc: target.loc(),
-                                        actual_type: inner.clone()
-                                    })
-                                }
-                                TypeSymbol::Declared(_, TypeDeclKind::Primitive) => {
-                                    return Err(Error::FieldAccessOnPrimitive {
-                                        loc: target.loc(),
-                                        actual_type: inner.clone()
-                                    })
-                                }
-                                TypeSymbol::GenericArg | TypeSymbol::GenericInt => {
-                                    return Err(Error::FieldAccessOnGeneric{
-                                        loc: target.loc(),
-                                        name: inner.clone()
-                                    })
-                                }
-                            }
+            let requirement = Requirement::HasField{
+                target_type: target_type.at_loc(target),
+                field: field.clone(),
+                expr: self_type.at_loc(expression)
+            };
 
-                            // Get the struct, find the type of the field and unify
-                            let s = symtab.struct_by_id(&inner);
-
-                            let field_spec = if let Some(spec) = s.params.try_get_arg_type(field) {
-                                spec
-                            }
-                            else {
-                                return Err(Error::NoSuchField{field: field.clone(), _struct: inner.clone()})
-                            };
-
-                            let field_type = self.type_var_from_hir(&field_spec, generic_list);
-
-                            self.unify_expression_generic_error(expression, &field_type, symtab)?
-                                ;
-                        },
-                        KnownType::Integer(_) => {
-                            return Err(Error::FieldAccessOnInteger{loc: expression.loc()})
-                        },
-                    }
-                }
-                Ok(TypeVar::Unknown(_)) => {
-                    return Err(Error::FieldAccessOnIncomplete{loc: expression.loc()})
-                }
-                Ok(other) => {
-                    return Err(Error::FieldAccessOnNonStruct{ loc: expression.loc(), got: other.clone() })
-                }
-                Err(e) => return Err(e.clone())
-            }
+            requirement.check_or_add(self, symtab, generic_list)?;
         });
         Ok(())
     }
