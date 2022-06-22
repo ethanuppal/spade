@@ -46,5 +46,7 @@ pub enum Error {
     },
     #[error("Unification error")]
     UnificationError(#[source] spade_typeinference::result::Error),
+    #[error("(Internal) Expression without type")]
+    InternalExpressionWithoutType(Loc<()>),
 }
 pub type Result<T> = std::result::Result<T, Error>;

@@ -2,7 +2,7 @@ use crate::Error;
 use codespan_reporting::diagnostic::Diagnostic;
 use codespan_reporting::term::{self, termcolor::Buffer};
 use spade_common::error_reporting::{codespan_config, AsLabel, CodeBundle, CompilationError};
-use spade_hir::symbol_table::{DeclarationError, LookupError};
+use spade_hir::symbol_table::{DeclarationError, LookupError, UniqueNameError};
 
 impl CompilationError for Error {
     fn report(&self, buffer: &mut Buffer, code: &CodeBundle) {
@@ -135,6 +135,16 @@ impl CompilationError for Error {
                             .with_message(format!("{} was declared more than once", new)),
                         old.primary_label()
                             .with_message(format!("Previously declared here")),
+                    ])
+            }
+            Error::UniquenessError(UniqueNameError::MultipleDefinitions { new, prev }) => {
+                Diagnostic::error()
+                    .with_message(format!("Multiple definitions of {new}"))
+                    .with_labels(vec![
+                        new.primary_label()
+                            .with_message(format!("Multiple items named {new}")),
+                        prev.secondary_label()
+                            .with_message(format!("Previous definition here")),
                     ])
             }
             Error::DuplicateArgument { new, prev } => Diagnostic::error()

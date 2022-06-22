@@ -276,3 +276,58 @@ fn use_statements_are_visible_before_appearing_in_source_code() {
 
     build_items(code);
 }
+
+snapshot_error! {
+    duplicate_item_names,
+    "
+        fn a() -> bool {
+            true
+        }
+        fn a() -> bool {
+            false
+        }
+    "
+}
+
+snapshot_error! {
+    duplicate_item_names2,
+    "
+        fn a() -> bool {
+            true
+        }
+        pipeline(0) a(clk: clk) -> bool {
+            false
+        }
+    "
+}
+
+snapshot_error! {
+    duplicate_item_names3,
+    "
+        fn a() -> bool {
+            true
+        }
+        struct a{}
+    "
+}
+
+snapshot_error! {
+    duplicate_item_names4,
+    "
+        fn a() -> bool {
+            true
+        }
+        enum a{}
+    "
+}
+
+snapshot_error! {
+    duplicate_item_names6,
+    "
+        fn a() -> bool {
+            true
+        }
+        mod x {fn b() -> bool {true}}
+        use x::b as a;
+    "
+}

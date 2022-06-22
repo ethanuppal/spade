@@ -37,7 +37,10 @@ pub fn gather_types(module: &ast::ModuleBody, symtab: &mut SymbolTable) -> Resul
                     None => u.path.0.last().unwrap().clone(),
                 };
 
-                symtab.add_alias(Path::ident(new_name), u.path.clone());
+                symtab.add_alias(
+                    Path::ident(new_name.clone()).at_loc(&new_name.loc()),
+                    u.path.clone(),
+                )?;
             }
         }
     }
@@ -91,10 +94,12 @@ pub fn visit_item(
 pub fn visit_entity(e: &Loc<ast::Entity>, symtab: &mut SymbolTable) -> Result<()> {
     let head = crate::entity_head(&e, symtab)?;
 
+    let new_path = Path::ident(e.name.clone()).at_loc(&e.name);
+
     if e.is_function {
-        symtab.add_thing(Path::ident(e.name.clone()), Thing::Function(head.at_loc(e)));
+        symtab.add_unique_thing(new_path, Thing::Function(head.at_loc(e)))?;
     } else {
-        symtab.add_thing(Path::ident(e.name.clone()), Thing::Entity(head.at_loc(e)));
+        symtab.add_unique_thing(new_path, Thing::Entity(head.at_loc(e)))?;
     }
 
     Ok(())
@@ -103,7 +108,9 @@ pub fn visit_entity(e: &Loc<ast::Entity>, symtab: &mut SymbolTable) -> Result<()
 pub fn visit_pipeline(p: &Loc<ast::Pipeline>, symtab: &mut SymbolTable) -> Result<()> {
     let head = crate::pipelines::pipeline_head(&p, symtab)?;
 
-    symtab.add_thing(Path::ident(p.name.clone()), Thing::Pipeline(head.at_loc(p)));
+    let new_path = Path::ident(p.name.clone()).at_loc(&p.name);
+
+    symtab.add_unique_thing(new_path, Thing::Pipeline(head.at_loc(p)))?;
 
     Ok(())
 }
@@ -129,10 +136,10 @@ pub fn visit_type_declaration(
         ast::TypeDeclKind::Struct(_) => hir::symbol_table::TypeDeclKind::Struct,
     };
 
-    symtab.add_type(
-        Path::ident(t.name.clone()),
+    symtab.add_unique_type(
+        Path::ident(t.name.clone()).at_loc(&t.name.loc()),
         TypeSymbol::Declared(args, kind).at_loc(&t),
-    );
+    )?;
 
     Ok(())
 }

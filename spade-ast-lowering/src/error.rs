@@ -17,6 +17,8 @@ pub enum Error {
     LookupError(#[from] spade_hir::symbol_table::LookupError),
     #[error("Declaration error")]
     DeclarationError(#[from] spade_hir::symbol_table::DeclarationError),
+    #[error("Uniqueness error")]
+    UniquenessError(#[from] spade_hir::symbol_table::UniqueNameError),
     #[error("Duplicate type variable")]
     DuplicateTypeVariable {
         found: Loc<Identifier>,

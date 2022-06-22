@@ -43,6 +43,12 @@ pub enum DeclarationError {
     },
 }
 
+#[derive(Error, Debug, Clone, PartialEq)]
+pub enum UniqueNameError {
+    #[error("Multiple definitions of {new}")]
+    MultipleDefinitions { new: Loc<Path>, prev: Loc<()> },
+}
+
 #[derive(PartialEq, Debug, Clone)]
 pub struct EnumVariant {
     pub output_type: Loc<TypeSpec>,
@@ -301,6 +307,15 @@ impl SymbolTable {
         self.add_thing_with_id_at_offset(0, id, name, item)
     }
 
+    pub fn add_unique_thing(
+        &mut self,
+        name: Loc<Path>,
+        item: Thing,
+    ) -> Result<NameID, UniqueNameError> {
+        self.ensure_is_unique(&name)?;
+        Ok(self.add_thing(name.inner, item))
+    }
+
     pub fn add_thing(&mut self, name: Path, item: Thing) -> NameID {
         let id = self.id_tracker.next();
         self.add_thing_with_id(id, name, item)
@@ -325,19 +340,34 @@ impl SymbolTable {
         self.add_type_with_id(id, name, t)
     }
 
-    pub fn add_alias(&mut self, name: Path, target: Loc<Path>) -> NameID {
+    pub fn add_unique_type(
+        &mut self,
+        name: Loc<Path>,
+        t: Loc<TypeSymbol>,
+    ) -> Result<NameID, UniqueNameError> {
+        self.ensure_is_unique(&name)?;
+
+        Ok(self.add_type(name.inner, t))
+    }
+
+    pub fn add_alias(
+        &mut self,
+        name: Loc<Path>,
+        target: Loc<Path>,
+    ) -> Result<NameID, UniqueNameError> {
+        self.ensure_is_unique(&name)?;
         let absolute_path = if let Some(lib_relative) = target.inner.lib_relative() {
             self.base_namespace.join(lib_relative)
         } else {
             target.inner.clone()
         };
-        self.add_thing(
-            name,
+        Ok(self.add_thing(
+            name.inner,
             Thing::Alias {
                 path: absolute_path.at_loc(&target),
                 in_namespace: self.current_namespace().clone(),
             },
-        )
+        ))
     }
 
     /// Adds a thing to the scope at `current_scope - offset`. Panics if there is no such scope
@@ -542,6 +572,36 @@ impl SymbolTable {
             Err(LookupError::NotAStruct(_, _)) => unreachable!(),
             Err(LookupError::NotAValue(_, _)) => unreachable!(),
             Err(LookupError::IsAType(_)) => unreachable!(),
+        }
+    }
+
+    /// Look up the previous definition of `name` returning None if no
+    /// such definition exists. Only an absolute path in the root name space is checked
+    /// as this is intended to be used for item definitions
+    pub fn ensure_is_unique(&self, name: &Loc<Path>) -> Result<(), UniqueNameError> {
+        // Ensure we only run this without scopes
+        assert_eq!(self.symbols.len(), 1);
+
+        let full_path = self.current_namespace().join(name.inner.clone());
+
+        let prev = self
+            .symbols
+            .first()
+            .unwrap()
+            .get(&full_path)
+            .and_then(|id| {
+                self.things
+                    .get(&id)
+                    .map(Thing::loc)
+                    .or_else(|| self.types.get(&id).map(|t| t.loc()))
+            });
+
+        match prev {
+            Some(prev) => Err(UniqueNameError::MultipleDefinitions {
+                new: name.clone(),
+                prev,
+            }),
+            None => Ok(()),
         }
     }
 

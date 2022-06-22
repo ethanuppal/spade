@@ -63,7 +63,7 @@ impl TypeStateLocal for TypeState {
     ) -> Result<ConcreteType> {
         let t = self
             .type_of(&TypedExpression::Id(expr.id))
-            .expect("Expression had no specified type");
+            .map_err(|_| Error::InternalExpressionWithoutType(expr.loc()))?;
 
         if let Some(t) = Self::ungenerify_type(&t, symtab, types) {
             Ok(t)

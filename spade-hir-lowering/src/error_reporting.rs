@@ -135,6 +135,11 @@ impl CompilationError for Error {
                     ])
             }
             Error::UnificationError(_) => unreachable!(),
+            Error::InternalExpressionWithoutType(loc) => Diagnostic::error()
+                .with_message("(Internal error) expression did not have a type")
+                .with_labels(vec![loc
+                    .primary_label()
+                    .with_message("Expression had no type")]),
         };
 
         term::emit(buffer, &codespan_config(), &code.files, &diag).unwrap();
