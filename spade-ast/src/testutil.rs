@@ -31,7 +31,13 @@ macro_rules! tspec {
 #[macro_export]
 macro_rules! aparams {
     ( $( ( $name:expr, $type:expr ) ),* $(,)? ) => {
-        ast::ParameterList(
+        ast::ParameterList::without_self(
+            vec![ $(( ast_ident($name), $type )),* ]
+        )
+    };
+    ( $(self $(,)?)? $( ( $name:expr, $type:expr ) ),* $(,)? ) => {
+        ast::ParameterList::with_self(
+            ().nowhere(),
             vec![ $(( ast_ident($name), $type )),* ]
         )
     };

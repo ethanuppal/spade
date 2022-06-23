@@ -62,6 +62,10 @@ pub enum TokenKind {
     Entity,
     #[token("trait")]
     Trait,
+    #[token("impl")]
+    Impl,
+    #[token("for")]
+    For,
     #[token("fn")]
     Function,
     #[token("enum")]
@@ -205,7 +209,9 @@ impl TokenKind {
             TokenKind::If => "if",
             TokenKind::Else => "else",
             TokenKind::Match => "match",
+            TokenKind::Impl => "impl",
             TokenKind::Trait => "trait",
+            TokenKind::For => "for",
             TokenKind::Function => "fn",
             TokenKind::Enum => "enum",
             TokenKind::Struct => "struct",

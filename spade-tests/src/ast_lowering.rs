@@ -633,3 +633,8 @@ snapshot_error! {
     }
     "
 }
+
+snapshot_error! {
+    self_in_free_standing_function,
+    "fn a(self) -> bool {true}"
+}

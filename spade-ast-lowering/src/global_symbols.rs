@@ -12,7 +12,7 @@ use spade_common::{
 use spade_diagnostics::Diagnostic;
 use spade_hir as hir;
 
-use crate::{types::IsPort, visit_parameter_list, Result};
+use crate::{types::IsPort, visit_parameter_list, Result, SelfContext};
 use spade_hir::symbol_table::{GenericArg, SymbolTable, Thing, TypeSymbol};
 
 #[tracing::instrument(skip_all)]
@@ -223,11 +223,20 @@ pub fn re_visit_type_declaration(
                 let parameter_list = option
                     .1
                     .clone()
-                    .map(|l| visit_parameter_list(&l, symtab))
+                    .map(|l| visit_parameter_list(&l, symtab, SelfContext::FreeStanding))
                     .unwrap_or_else(|| Ok(hir::ParameterList(vec![])))?;
 
+                let args = option.1.clone().map(|l| {
+                    if let Some(self_) = l.self_ {
+                        Err(Diagnostic::bug(self_, "enum meber contains self"))
+                    }
+                    else {
+                        Ok(l.args)
+                    }
+                }).unwrap_or(Ok(vec![]))?;
+
                 // Ensure that we don't have any port types in the enum variants
-                for (_, ty) in option.1.clone().map(|l| l.0).unwrap_or_default() {
+                for (_, ty) in args {
                     if ty.is_port(symtab)? {
                         return Err(Diagnostic::error(ty, "Port in enum")
                             .primary_label("This is a port")
@@ -277,10 +286,17 @@ pub fn re_visit_type_declaration(
             )
         }
         ast::TypeDeclKind::Struct(s) => {
+            if let Some(self_) = s.members.self_ {
+                return Err(Diagnostic::bug(
+                    self_,
+                    "struct contains self member which was let through parser",
+                )
+                .into());
+            }
             // Disallow normal arguments if the struct is a port, and port types
             // if it is not
             if s.is_port() {
-                for (f, ty) in &s.members.0 {
+                for (f, ty) in &s.members.args {
                     if !ty.is_port(symtab)? {
                         return Err(Diagnostic::error(ty, "Non-port in port struct")
                             .primary_label("This is not a port type")
@@ -298,7 +314,7 @@ pub fn re_visit_type_declaration(
                     }
                 }
             } else {
-                for (_, ty) in &s.members.0 {
+                for (_, ty) in &s.members.args {
                     if ty.is_port(symtab)? {
                         return Err(Diagnostic::error(ty, "Port in non-port struct")
                             .primary_label("This is a port")
@@ -313,7 +329,7 @@ pub fn re_visit_type_declaration(
                 }
             }
 
-            let members = visit_parameter_list(&s.members, symtab)?;
+            let members = visit_parameter_list(&s.members, symtab, SelfContext::FreeStanding)?;
 
             let self_type =
                 hir::TypeSpec::Declared(declaration_id.clone(), output_type_exprs.clone())
@@ -387,7 +403,7 @@ mod tests {
                         // Builtin type with no args
                         (
                             ast_ident("B"),
-                            Some(ast::ParameterList(vec![(
+                            Some(ast::ParameterList::without_self(vec![(
                                 ast_ident("x"),
                                 ast::TypeSpec::Named(ast_path("bool"), None).nowhere(),
                             )])),
@@ -395,7 +411,7 @@ mod tests {
                         // Builtin type with no args
                         (
                             ast_ident("C"),
-                            Some(ast::ParameterList(vec![(
+                            Some(ast::ParameterList::without_self(vec![(
                                 ast_ident("x"),
                                 ast::TypeSpec::Named(
                                     ast_path("int"),

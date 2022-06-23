@@ -236,8 +236,24 @@ impl AttributeList {
 }
 
 #[derive(PartialEq, Debug, Clone)]
-pub struct ParameterList(pub Vec<(Loc<Identifier>, Loc<TypeSpec>)>);
+pub struct ParameterList {
+    pub self_: Option<Loc<()>>,
+    pub args: Vec<(Loc<Identifier>, Loc<TypeSpec>)>,
+}
 impl WithLocation for ParameterList {}
+
+impl ParameterList {
+    pub fn without_self(args: Vec<(Loc<Identifier>, Loc<TypeSpec>)>) -> Self {
+        Self { self_: None, args }
+    }
+
+    pub fn with_self(self_: Loc<()>, args: Vec<(Loc<Identifier>, Loc<TypeSpec>)>) -> Self {
+        Self {
+            self_: Some(self_),
+            args,
+        }
+    }
+}
 
 #[derive(PartialEq, Debug, Clone)]
 pub struct Entity {
@@ -273,7 +289,6 @@ impl WithLocation for Pipeline {}
 #[derive(PartialEq, Debug, Clone)]
 pub struct FunctionDecl {
     pub name: Loc<Identifier>,
-    pub self_arg: Option<Loc<()>>,
     pub inputs: ParameterList,
     pub return_type: Option<Loc<TypeSpec>>,
     pub type_params: Vec<Loc<TypeParam>>,
@@ -297,6 +312,14 @@ pub struct TraitDef {
     pub functions: Vec<Loc<FunctionDecl>>,
 }
 impl WithLocation for TraitDef {}
+
+#[derive(PartialEq, Debug, Clone)]
+pub struct ImplBlock {
+    pub r#trait: Option<Loc<Path>>,
+    pub target: Loc<Path>,
+    pub entities: Vec<Loc<Entity>>,
+}
+impl WithLocation for ImplBlock {}
 
 /// Declaration of an enum
 #[derive(PartialEq, Debug, Clone)]

@@ -4,7 +4,7 @@ use spade_ast as ast;
 use spade_common::{location_info::WithLocation, name::Path};
 use spade_hir as hir;
 
-use crate::{visit_type_param, Result};
+use crate::{visit_type_param, Result, SelfContext};
 
 pub fn lower_type_declaration(
     decl: &ast::TypeDeclaration,
@@ -56,8 +56,11 @@ pub fn lower_type_declaration(
                     .iter()
                     .map(|(name, params)| {
                         let params = crate::visit_parameter_list(
-                            params.as_ref().unwrap_or(&ast::ParameterList(vec![])),
+                            params
+                                .as_ref()
+                                .unwrap_or(&ast::ParameterList::without_self(vec![])),
                             symtab,
+                            SelfContext::FreeStanding,
                         )?;
 
                         let option_path = this_path.clone().push_ident(name.clone());
@@ -80,7 +83,11 @@ pub fn lower_type_declaration(
                     members,
                     port_keyword: _,
                 } = s;
-                let members = crate::visit_parameter_list(members, symtab)?;
+                let members = crate::visit_parameter_list(
+                    members,
+                    symtab,
+                    SelfContext::FreeStanding
+                )?;
                 Ok(hir::Struct {
                     members,
                     is_port: s.is_port(),

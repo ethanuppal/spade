@@ -8,7 +8,7 @@ use spade_hir as hir;
 
 use crate::{
     attributes::report_unused_attributes, comptime::ComptimeCondExt, error::Result, unit_name,
-    visit_expression, Context, LocExt,
+    visit_expression, Context, LocExt, SelfContext,
 };
 use spade_hir::symbol_table::SymbolTable;
 
@@ -51,7 +51,7 @@ pub fn pipeline_head(input: &ast::Pipeline, symtab: &mut SymbolTable) -> Result<
         panic!("Pipelines currently do not support type parameters")
     }
 
-    let inputs = crate::visit_parameter_list(&input.inputs, symtab)?;
+    let inputs = crate::visit_parameter_list(&input.inputs, symtab, SelfContext::FreeStanding)?;
 
     let output_type = if let Some(output_type) = &input.output_type {
         Some(super::visit_type_spec(output_type, symtab)?)
@@ -222,7 +222,7 @@ mod pipeline_visiting {
         let input = ast::Pipeline {
             name: ast_ident("pipe"),
             depth: 2.nowhere(),
-            inputs: ast::ParameterList(vec![(
+            inputs: ast::ParameterList::without_self(vec![(
                 ast_ident("clk"),
                 ast::TypeSpec::Unit(().nowhere()).nowhere(),
             )])
@@ -309,7 +309,7 @@ mod pipeline_visiting {
         let input = ast::Pipeline {
             name: ast_ident("pipe"),
             depth: 2.nowhere(),
-            inputs: ast::ParameterList(vec![(
+            inputs: ast::ParameterList::without_self(vec![(
                 ast_ident("clk"),
                 ast::TypeSpec::Unit(().nowhere()).nowhere(),
             )])

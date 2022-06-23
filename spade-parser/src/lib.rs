@@ -14,7 +14,7 @@ use spade_ast::{
     ArgumentList, ArgumentPattern, AttributeList, Block, ComptimeConfig, Entity, Enum, Expression,
     FunctionDecl, Item, Module, ModuleBody, NamedArgument, ParameterList, Pattern, Pipeline,
     PipelineStageReference, Register, Statement, Struct, TraitDef, TypeDeclKind, TypeDeclaration,
-    TypeExpression, TypeParam, TypeSpec, UseStatement,
+    TypeExpression, TypeParam, TypeSpec, UseStatement, ImplBlock,
 };
 use spade_common::location_info::{lspan, AsLabel, FullSpan, HasCodespan, Loc, WithLocation};
 use spade_common::name::{Identifier, Path};
@@ -885,15 +885,28 @@ impl<'a> Parser<'a> {
 
     #[trace_parser]
     pub fn parameter_list(&mut self) -> Result<ParameterList> {
-        Ok(ParameterList(
-            self.comma_separated(Self::name_and_type, &TokenKind::CloseParen)
+        let self_ = if self.peek_cond(
+            |tok| tok == &TokenKind::Identifier(String::from("self")),
+            "Expected argument",
+        )? {
+            let self_tok = self.eat_unconditional()?;
+            self.peek_and_eat(&TokenKind::Comma)?;
+            Some(().at(self.file_id, &self_tok))
+        } else {
+            None
+        };
+
+        Ok(ParameterList {
+            self_,
+            args: self
+                .comma_separated(Self::name_and_type, &TokenKind::CloseParen)
                 .no_context()?,
-        ))
+        })
     }
 
     #[tracing::instrument(skip(self))]
     pub fn type_parameter_list(&mut self) -> Result<ParameterList> {
-        Ok(ParameterList(
+        Ok(ParameterList::without_self(
             self.comma_separated(Self::name_and_type, &TokenKind::CloseBrace)
                 .no_context()?,
         ))
@@ -1108,31 +1121,11 @@ impl<'a> Parser<'a> {
 
         let type_params = self.generics_list()?;
 
-        // Input types
-        self.eat(&TokenKind::OpenParen)?;
-        let (self_arg, more_args) = if let Some(arg) = self.self_arg()? {
-            if self.peek_and_eat(&TokenKind::Comma)?.is_some() {
-                (Some(arg), true)
-            } else if self.peek_and_eat(&TokenKind::CloseParen)?.is_some() {
-                (Some(arg), false)
-            } else {
-                let next = self.eat_unconditional()?;
-                return Err(Error::UnexpectedToken {
-                    got: next,
-                    expected: vec![TokenKind::Comma.as_str(), TokenKind::CloseParen.as_str()],
-                });
-            }
-        } else {
-            (None, true)
-        };
-
-        let inputs = if more_args {
-            let inputs = self.parameter_list()?;
-            self.eat(&TokenKind::CloseParen)?;
-            inputs
-        } else {
-            ParameterList(vec![])
-        };
+        let (inputs, _) = self.surrounded(
+            &TokenKind::OpenParen,
+            Self::parameter_list,
+            &TokenKind::CloseParen,
+        )?;
 
         // Return type
         let return_type = if self.peek_and_eat(&TokenKind::SlimArrow)?.is_some() {
@@ -1146,7 +1139,6 @@ impl<'a> Parser<'a> {
         Ok(Some(
             FunctionDecl {
                 name,
-                self_arg,
                 inputs,
                 return_type,
                 type_params,
@@ -1182,8 +1174,48 @@ impl<'a> Parser<'a> {
         )))
     }
 
-    #[trace_parser]
     #[tracing::instrument(level = "debug", skip(self))]
+    #[trace_parser]
+    pub fn impl_block(&mut self, attributes: &AttributeList) -> Result<Option<Loc<ImplBlock>>> {
+        let start_token = peek_for!(self, &TokenKind::Impl);
+        self.disallow_attributes(&attributes, &start_token)?;
+
+        let trait_or_target = self.path()?;
+
+        let (r#trait, target) = if self.peek_and_eat(&TokenKind::For)?.is_some() {
+            let target = self.path()?;
+            (Some(trait_or_target), target)
+        } else {
+            (None, trait_or_target)
+        };
+
+        let (body, body_span) = self.surrounded(
+            &TokenKind::OpenBrace,
+            Self::impl_body,
+            &TokenKind::CloseBrace,
+        )?;
+
+        Ok(Some(
+            ImplBlock {
+                r#trait,
+                target,
+                entities: body,
+            }
+            .between(self.file_id, &start_token.span, &body_span.span),
+        ))
+    }
+
+    #[trace_parser]
+    pub fn impl_body(&mut self) -> Result<Vec<Loc<Entity>>> {
+        let mut result = vec![];
+        while let Some(e) = self.entity(&AttributeList::empty())? {
+            result.push(e);
+        }
+        Ok(result)
+    }
+
+    #[tracing::instrument(level = "debug", skip(self))]
+    #[trace_parser]
     pub fn enum_option(&mut self) -> Result<(Loc<Identifier>, Option<ParameterList>)> {
         let name = self.identifier()?;
 
@@ -2180,8 +2212,7 @@ mod tests {
 
         let expected = FunctionDecl {
             name: ast_ident("some_fn"),
-            self_arg: Some(().nowhere()),
-            inputs: aparams![("a", tspec!("bit"))],
+            inputs: aparams![self, ("a", tspec!("bit"))],
             return_type: Some(TypeSpec::Named(ast_path("bit"), None).nowhere()),
             type_params: vec![],
         }
@@ -2200,8 +2231,7 @@ mod tests {
 
         let expected = FunctionDecl {
             name: ast_ident("some_fn"),
-            self_arg: Some(().nowhere()),
-            inputs: aparams![],
+            inputs: aparams![self],
             return_type: Some(TypeSpec::Named(ast_path("bit"), None).nowhere()),
             type_params: vec![],
         }
@@ -2220,8 +2250,7 @@ mod tests {
 
         let expected = FunctionDecl {
             name: ast_ident("some_fn"),
-            self_arg: Some(().nowhere()),
-            inputs: aparams![],
+            inputs: aparams![self],
             return_type: None,
             type_params: vec![],
         }
@@ -2240,8 +2269,7 @@ mod tests {
 
         let expected = FunctionDecl {
             name: ast_ident("some_fn"),
-            self_arg: Some(().nowhere()),
-            inputs: aparams![],
+            inputs: aparams![self],
             return_type: None,
             type_params: vec![TypeParam::TypeName(ast_ident("X")).nowhere()],
         }
@@ -2265,16 +2293,14 @@ mod tests {
 
         let fn1 = FunctionDecl {
             name: ast_ident("some_fn"),
-            self_arg: Some(().nowhere()),
-            inputs: aparams![("a", tspec!("bit"))],
+            inputs: aparams![self, ("a", tspec!("bit"))],
             return_type: Some(TypeSpec::Named(ast_path("bit"), None).nowhere()),
             type_params: vec![],
         }
         .nowhere();
         let fn2 = FunctionDecl {
             name: ast_ident("another_fn"),
-            self_arg: Some(().nowhere()),
-            inputs: aparams![],
+            inputs: aparams![self],
             return_type: Some(TypeSpec::Named(ast_path("bit"), None).nowhere()),
             type_params: vec![],
         }
@@ -2287,6 +2313,68 @@ mod tests {
         .nowhere();
 
         check_parse!(code, trait_def(&AttributeList::empty()), Ok(Some(expected)));
+    }
+
+    #[test]
+    fn anonymous_impl_blocks_work() {
+        let code = r#"
+        impl SomeType {
+            fn some_fn() __builtin__
+        }
+        "#;
+
+        let expected = ImplBlock {
+            r#trait: None,
+            target: ast_path("SomeType"),
+            entities: vec![Entity {
+                attributes: AttributeList::empty(),
+                is_function: true,
+                name: ast_ident("some_fn"),
+                inputs: ParameterList::without_self(vec![]),
+                output_type: None,
+                body: None,
+                type_params: vec![],
+            }
+            .nowhere()],
+        }
+        .nowhere();
+
+        check_parse!(
+            code,
+            impl_block(&AttributeList::empty()),
+            Ok(Some(expected))
+        );
+    }
+
+    #[test]
+    fn non_anonymous_impl_blocks_work() {
+        let code = r#"
+        impl SomeTrait for SomeType {
+            entity some_fn() __builtin__
+        }
+        "#;
+
+        let expected = ImplBlock {
+            r#trait: Some(ast_path("SomeTrait")),
+            target: ast_path("SomeType"),
+            entities: vec![Entity {
+                attributes: AttributeList::empty(),
+                is_function: false,
+                name: ast_ident("some_fn"),
+                inputs: ParameterList::without_self(vec![]),
+                output_type: None,
+                body: None,
+                type_params: vec![],
+            }
+            .nowhere()],
+        }
+        .nowhere();
+
+        check_parse!(
+            code,
+            impl_block(&AttributeList::empty()),
+            Ok(Some(expected))
+        );
     }
 
     #[test]
@@ -2376,7 +2464,7 @@ mod tests {
                 attributes: AttributeList::empty(),
                 is_function: false,
                 name: ast_ident("X"),
-                inputs: ParameterList(vec![]),
+                inputs: ParameterList::without_self(vec![]),
                 output_type: None,
                 body: None,
                 type_params: vec![],
@@ -2395,7 +2483,7 @@ mod tests {
             Pipeline {
                 attributes: AttributeList::empty(),
                 name: ast_ident("X"),
-                inputs: ParameterList(vec![]).nowhere(),
+                inputs: ParameterList::without_self(vec![]).nowhere(),
                 output_type: None,
                 depth: 1.nowhere(),
                 body: None,
@@ -2416,7 +2504,7 @@ mod tests {
                 attributes: AttributeList::empty(),
                 is_function: true,
                 name: ast_ident("X"),
-                inputs: ParameterList(vec![]),
+                inputs: ParameterList::without_self(vec![]),
                 output_type: None,
                 body: None,
                 type_params: vec![],
@@ -2438,7 +2526,7 @@ mod tests {
                 attributes: AttributeList(vec![ast_ident("attr")]),
                 is_function: true,
                 name: ast_ident("X"),
-                inputs: ParameterList(vec![]),
+                inputs: ParameterList::without_self(vec![]),
                 output_type: None,
                 body: None,
                 type_params: vec![],
@@ -2460,7 +2548,7 @@ mod tests {
                 attributes: AttributeList(vec![ast_ident("attr")]),
                 is_function: false,
                 name: ast_ident("X"),
-                inputs: ParameterList(vec![]),
+                inputs: ParameterList::without_self(vec![]),
                 output_type: None,
                 body: None,
                 type_params: vec![],

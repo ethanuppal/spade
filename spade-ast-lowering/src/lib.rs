@@ -218,10 +218,38 @@ pub fn visit_type_spec(
     Ok(result?.at_loc(&t))
 }
 
-fn visit_parameter_list(l: &ParameterList, symtab: &mut SymbolTable) -> Result<hir::ParameterList> {
+enum SelfContext {
+    /// `self` currently does not refer to anything
+    FreeStanding,
+    /// `self` refers to `TypeSpec` in an impl block for that type
+    ImplBlock(Loc<hir::TypeSpec>),
+}
+
+fn visit_parameter_list(
+    l: &ParameterList,
+    symtab: &mut SymbolTable,
+    self_context: SelfContext,
+) -> Result<hir::ParameterList> {
     let mut arg_names: HashSet<Loc<Identifier>> = HashSet::new();
     let mut result = vec![];
-    for (name, input_type) in &l.0 {
+
+    if let Some(self_loc) = l.self_ {
+        match self_context {
+            SelfContext::FreeStanding => {
+                return Err(Diagnostic::error(
+                    self_loc,
+                    "'self' can not be used in free standing units",
+                )
+                .primary_label("not allowed here")
+                .into())
+            }
+            SelfContext::ImplBlock(spec) => {
+                result.push((Identifier(String::from("self")).at_loc(&self_loc), spec))
+            }
+        }
+    }
+
+    for (name, input_type) in &l.args {
         if let Some(prev) = arg_names.get(name) {
             return Err(
                 Diagnostic::error(name, "Multiple arguments with the same name")
@@ -254,14 +282,15 @@ pub fn entity_head(item: &ast::Entity, symtab: &mut SymbolTable) -> Result<Entit
     } else {
         None
     };
-    let inputs = visit_parameter_list(&item.inputs, symtab)?;
+    let inputs = visit_parameter_list(&item.inputs, symtab, SelfContext::FreeStanding)?;
 
     // Check for ports in functions
     // We need to have the scope open to check this, but we also need to close
     // the scope if we fail here, so we'll store port_error in a variable
     let mut port_error = Ok(());
     if item.is_function {
-        for (_, ty) in &item.inputs.0 {
+        // TODO: How to handle self ports here?
+        for (_, ty) in &item.inputs.args {
             if ty.is_port(symtab)? {
                 port_error = Err(Diagnostic::error(ty, "Port argument in function")
                     .primary_label("This is a port")
@@ -1046,7 +1075,7 @@ mod entity_visiting {
         let input = ast::Entity {
             is_function: true,
             name: Identifier("test".to_string()).nowhere(),
-            inputs: ParameterList(vec![(
+            inputs: ParameterList::without_self(vec![(
                 ast_ident("a"),
                 ast::TypeSpec::Unit(().nowhere()).nowhere(),
             )]),
@@ -2168,6 +2197,7 @@ mod register_visiting {
 mod item_visiting {
     use super::*;
 
+    use ast::aparams;
     use hir::ItemList;
     use spade_ast::testutil::ast_ident;
     use spade_common::location_info::WithLocation;
@@ -2182,7 +2212,7 @@ mod item_visiting {
                 is_function: true,
                 name: ast_ident("test"),
                 output_type: None,
-                inputs: ParameterList(vec![]),
+                inputs: aparams![],
                 body: Some(
                     ast::Expression::Block(Box::new(ast::Block {
                         statements: vec![],
@@ -2252,7 +2282,7 @@ mod module_visiting {
                     is_function: true,
                     name: ast_ident("test"),
                     output_type: None,
-                    inputs: ParameterList(vec![]),
+                    inputs: ParameterList::without_self(vec![]),
                     body: Some(
                         ast::Expression::Block(Box::new(ast::Block {
                             statements: vec![],
