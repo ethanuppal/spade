@@ -17,6 +17,7 @@ use spade_common::name::Identifier;
 use std::collections::{HashMap, HashSet};
 
 use thiserror::Error;
+use tracing::{event, Level};
 
 use spade_ast as ast;
 use spade_common::id_tracker::ExprIdTracker;
@@ -197,6 +198,7 @@ pub fn entity_head(item: &ast::Entity, symtab: &mut SymbolTable) -> Result<Entit
     })
 }
 
+#[tracing::instrument(skip(item, ctx))]
 pub fn visit_entity(item: &Loc<ast::Entity>, ctx: &mut Context) -> Result<hir::Item> {
     let ast::Entity {
         body,
@@ -260,6 +262,7 @@ pub fn visit_entity(item: &Loc<ast::Entity>, ctx: &mut Context) -> Result<hir::I
     ))
 }
 
+#[tracing::instrument(skip(item, ctx))]
 pub fn visit_item(
     item: &ast::Item,
     ctx: &mut Context,
@@ -272,6 +275,7 @@ pub fn visit_item(
         }
         ast::Item::Type(_) => {
             // Global symbol lowering already visits type declarations
+            event!(Level::INFO, "Type definition");
             Ok((None, None))
         }
         ast::Item::Module(m) => {
@@ -288,6 +292,7 @@ pub fn visit_item(
     }
 }
 
+#[tracing::instrument(skip(item_list, module, ctx))]
 pub fn visit_module_body(
     item_list: &mut hir::ItemList,
     module: &ast::ModuleBody,

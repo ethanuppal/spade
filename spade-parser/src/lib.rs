@@ -20,6 +20,7 @@ use spade_common::{
 
 use colored::*;
 use logos::Lexer;
+use tracing::{event, Level};
 
 use parse_tree_macros::trace_parser;
 
@@ -98,6 +99,7 @@ macro_rules! peek_for {
 // Actual parsing functions
 impl<'a> Parser<'a> {
     #[trace_parser]
+    #[tracing::instrument(level = "trace", skip(self))]
     pub fn identifier(&mut self) -> Result<Loc<Identifier>> {
         let token = self.eat_cond(TokenKind::is_identifier, "Identifier")?;
 
@@ -764,6 +766,7 @@ impl<'a> Parser<'a> {
     /// If the next token is the start of a statement, return that statement,
     /// otherwise None
     #[trace_parser]
+    #[tracing::instrument(skip(self))]
     pub fn statement(&mut self, allow_stages: bool) -> Result<Option<Loc<Statement>>> {
         let result = self.first_successful(vec![
             &Self::binding,
@@ -875,6 +878,7 @@ impl<'a> Parser<'a> {
 
     // Entities
     #[trace_parser]
+    #[tracing::instrument(skip(self))]
     pub fn entity(&mut self, attributes: &AttributeList) -> Result<Option<Loc<Entity>>> {
         let (is_function, start_token) = if let Some(s) = self.peek_and_eat(&TokenKind::Entity)? {
             self.set_item_context(ItemType::Entity.at(self.file_id, &s.span()))?;
@@ -943,6 +947,7 @@ impl<'a> Parser<'a> {
     }
 
     #[trace_parser]
+    #[tracing::instrument(skip(self))]
     pub fn pipeline(&mut self, attributes: &AttributeList) -> Result<Option<Loc<Pipeline>>> {
         let start_token = peek_for!(self, &TokenKind::Pipeline);
 
@@ -1079,6 +1084,7 @@ impl<'a> Parser<'a> {
     }
 
     #[trace_parser]
+    #[tracing::instrument(skip(self))]
     pub fn trait_def(&mut self, attributes: &AttributeList) -> Result<Option<Loc<TraitDef>>> {
         let start_token = peek_for!(self, &TokenKind::Trait);
         self.disallow_attributes(&attributes, &start_token)?;
@@ -1121,6 +1127,7 @@ impl<'a> Parser<'a> {
     }
 
     #[trace_parser]
+    #[tracing::instrument(skip(self))]
     pub fn enum_declaration(
         &mut self,
         attributes: &AttributeList,
@@ -1156,6 +1163,7 @@ impl<'a> Parser<'a> {
     }
 
     #[trace_parser]
+    #[tracing::instrument(skip(self))]
     pub fn struct_declaration(
         &mut self,
         attributes: &AttributeList,
@@ -1188,6 +1196,7 @@ impl<'a> Parser<'a> {
     }
 
     #[trace_parser]
+    #[tracing::instrument(skip(self))]
     pub fn type_declaration(
         &mut self,
         attributes: &AttributeList,
@@ -1224,6 +1233,7 @@ impl<'a> Parser<'a> {
     }
 
     #[trace_parser]
+    #[tracing::instrument(skip(self))]
     pub fn r#use(&mut self, attributes: &AttributeList) -> Result<Option<Loc<UseStatement>>> {
         let start = peek_for!(self, &TokenKind::Use);
         self.disallow_attributes(&attributes, &start)?;
@@ -1264,6 +1274,7 @@ impl<'a> Parser<'a> {
     }
 
     #[trace_parser]
+    #[tracing::instrument(skip(self))]
     pub fn item(&mut self) -> Result<Option<Item>> {
         let attrs = self.attributes()?;
         self.first_successful(vec![
@@ -1277,6 +1288,7 @@ impl<'a> Parser<'a> {
     }
 
     #[trace_parser]
+    #[tracing::instrument(skip(self))]
     pub fn module_body(&mut self) -> Result<ModuleBody> {
         let mut members = vec![];
         while let Some(item) = self.item()? {
@@ -1288,6 +1300,7 @@ impl<'a> Parser<'a> {
     /// A module body which is not part of a `mod`. Errors if there is anything
     /// but an item found after the last item
     #[trace_parser]
+    #[tracing::instrument(skip(self))]
     pub fn top_level_module_body(&mut self) -> Result<ModuleBody> {
         let result = self.module_body()?;
 
@@ -1301,6 +1314,7 @@ impl<'a> Parser<'a> {
 
 // Helper functions for combining parsers
 impl<'a> Parser<'a> {
+    #[tracing::instrument(skip(self, parsers))]
     fn first_successful<T>(
         &mut self,
         parsers: Vec<&dyn Fn(&mut Self) -> Result<Option<T>>>,
@@ -1312,6 +1326,7 @@ impl<'a> Parser<'a> {
                 Err(e) => return Err(e),
             }
         }
+        event!(Level::INFO, "No parser matched");
         Ok(None)
     }
 

@@ -67,6 +67,7 @@ pub fn pipeline_head(input: &ast::Pipeline, symtab: &mut SymbolTable) -> Result<
     })
 }
 
+#[tracing::instrument(skip(pipeline, ctx))]
 pub fn visit_pipeline(pipeline: &Loc<ast::Pipeline>, ctx: &mut Context) -> Result<hir::Item> {
     let ast::Pipeline {
         depth,

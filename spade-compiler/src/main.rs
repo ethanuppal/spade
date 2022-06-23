@@ -5,6 +5,9 @@ use std::path::PathBuf;
 use anyhow::{anyhow, Context, Result};
 use clap::Parser;
 use codespan_reporting::term::termcolor::Buffer;
+use tracing_subscriber::filter::{EnvFilter, LevelFilter};
+use tracing_subscriber::prelude::*;
+use tracing_tree::HierarchicalLayer;
 
 use spade::{
     namespaced_file::{namespaced_file, NamespacedFile},
@@ -41,6 +44,16 @@ pub struct Opt {
 }
 
 fn main() -> Result<()> {
+    let env_filter = EnvFilter::builder()
+        .with_default_directive(LevelFilter::OFF.into())
+        .with_env_var("SPADE_LOG")
+        .from_env_lossy();
+    let layer = HierarchicalLayer::new(2)
+        .with_targets(true)
+        .with_filter(env_filter);
+
+    tracing_subscriber::registry().with(layer).init();
+
     let mut opts = Opt::parse();
 
     let mut infiles = vec![opts.infile.clone()];

@@ -62,10 +62,10 @@ where
     E: CompilationError,
 {
     fn report(self, errors: &mut ErrorHandler) -> Self {
-        self.map_err(|e| {
-            errors.report(&e);
-            e
-        })
+        if let Err(e) = &self {
+            errors.report(e);
+        }
+        self
     }
 
     fn or_report(self, errors: &mut ErrorHandler) -> Option<T> {

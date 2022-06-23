@@ -13,6 +13,7 @@ doctest = false
 thiserror = "1.0"
 codespan = "0.11.1"
 codespan-reporting = "0.11.1"
+tracing = "0.1.34"
 
 spade-common = {path = "../spade-common"}
 spade-ast = {path = "../spade-ast"}
