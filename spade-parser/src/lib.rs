@@ -1160,27 +1160,26 @@ impl<'a> Parser<'a> {
     pub fn trait_def(&mut self, attributes: &AttributeList) -> Result<Option<Loc<TraitDef>>> {
         let start_token = peek_for!(self, &TokenKind::Trait);
         self.disallow_attributes(attributes, &start_token)?;
-        todo!("Trait definitions are unimplemented");
 
-        // let name = self.identifier()?;
+        let name = self.identifier()?;
 
-        // let mut result = TraitDef {
-        //     name,
-        //     functions: vec![],
-        // };
+        let mut result = TraitDef {
+            name,
+            functions: vec![],
+        };
 
-        // self.eat(&TokenKind::OpenBrace)?;
+        self.eat(&TokenKind::OpenBrace)?;
 
-        // while let Some(decl) = self.function_decl()? {
-        //     result.functions.push(decl);
-        // }
-        // let end_token = self.eat(&TokenKind::CloseBrace)?;
+        while let Some(decl) = self.function_decl(&AttributeList::empty())? {
+            result.functions.push(decl);
+        }
+        let end_token = self.eat(&TokenKind::CloseBrace)?;
 
-        // Ok(Some(result.between(
-        //     self.file_id,
-        //     &start_token.span,
-        //     &end_token.span,
-        // )))
+        Ok(Some(result.between(
+            self.file_id,
+            &start_token.span,
+            &end_token.span,
+        )))
     }
 
     #[trace_parser]
@@ -2255,7 +2254,6 @@ mod tests {
         );
     }
 
-    #[ignore]
     #[test]
     fn trait_definitions_work() {
         let code = r#"
