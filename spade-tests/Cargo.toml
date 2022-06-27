@@ -10,7 +10,7 @@ edition = "2021"
 doctest = false
 
 [dependencies]
-codespan-reporting = "0.11.0"
+codespan-reporting = "0.12.0"
 logos = "0.11"
 indoc = "1.0"
 

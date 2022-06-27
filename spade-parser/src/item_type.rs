@@ -3,7 +3,7 @@ use spade_common::location_info::{Loc, WithLocation};
 
 use crate::error::{Error, Result};
 
-#[derive(Debug)]
+#[derive(Clone, Copy, Debug)]
 pub enum ItemType {
     Function,
     Entity,

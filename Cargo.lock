@@ -150,16 +150,16 @@ dependencies = [
 
 [[package]]
 name = "codespan"
-version = "0.11.1"
-source = "git+https://gitlab.com/spade-lang/codespan.git#74029ed90c6d66a5b60901ad9309b7421d6a7501"
+version = "0.12.0"
+source = "git+https://gitlab.com/spade-lang/codespan.git#1882f24e19acfe0f4bb91c3aa9191b2b73a4ac6a"
 dependencies = [
  "codespan-reporting",
 ]
 
 [[package]]
 name = "codespan-reporting"
-version = "0.11.1"
-source = "git+https://gitlab.com/spade-lang/codespan.git#74029ed90c6d66a5b60901ad9309b7421d6a7501"
+version = "0.12.0"
+source = "git+https://gitlab.com/spade-lang/codespan.git#1882f24e19acfe0f4bb91c3aa9191b2b73a4ac6a"
 dependencies = [
  "termcolor",
  "unicode-width",

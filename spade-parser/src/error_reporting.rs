@@ -1,6 +1,6 @@
 use crate::lexer::TokenKind;
 use crate::{Error, Token, UnexpectedTokenContext};
-use codespan_reporting::diagnostic::{Diagnostic, Label, Suggestion};
+use codespan_reporting::diagnostic::{Diagnostic, Label, Suggestion, SuggestionPart};
 use codespan_reporting::term::{self, termcolor::Buffer};
 use spade_common::error_reporting::{codespan_config, AsLabel, CodeBundle, CompilationError};
 
@@ -35,11 +35,22 @@ fn unexpected_token<'a>(
     let expected_list = unexpected_token_list(expected);
     let message = unexpected_token_message(&got.kind, &expected_list);
     let suggestions = match context {
-        Some(UnexpectedTokenContext::SuggestEnumVariantItems) => vec![Suggestion {
+        Some(UnexpectedTokenContext::SuggestEnumVariantItems {
+            open_paren,
+            close_paren,
+        }) => vec![Suggestion {
             file_id,
-            range: got.span(),
-            replacement: format!("{{"),
             message: format!("Use `{{` if you want to add items to this enum variant"),
+            parts: vec![
+                SuggestionPart {
+                    range: open_paren.span(),
+                    replacement: format!("{{"),
+                },
+                SuggestionPart {
+                    range: close_paren.span(),
+                    replacement: format!("}}"),
+                },
+            ],
         }],
         None => vec![],
     };
@@ -210,9 +221,13 @@ impl CompilationError for Error {
                 ])
                 .with_suggestions(vec![Suggestion {
                     file_id: fn_keyword.file_id,
-                    range: fn_keyword.span.into(),
-                    replacement: format!("entity"),
                     message: format!("Consider making the function an entity"),
+                    parts: vec![
+                        SuggestionPart {
+                            range: fn_keyword.span.into(),
+                            replacement: format!("entity"),
+                        },
+                    ],
                 }]),
             Error::RegInFunction{at, fn_keyword} => Diagnostic::error()
                 .with_message("Functions can not contain registers")
@@ -245,9 +260,13 @@ impl CompilationError for Error {
                 .with_notes(vec![format!("Array types need a specified size")])
                 .with_suggestions(vec![Suggestion {
                     file_id: array.file_id,
-                    range: inner.span.end().to_usize()..inner.span.end().to_usize(),
-                    replacement: format!("; N"),
-                    message: format!("Insert a size here")
+                    message: format!("Insert a size here"),
+                    parts: vec![
+                        SuggestionPart {
+                            range: inner.span.end().to_usize()..inner.span.end().to_usize(),
+                            replacement: format!("; N"),
+                        },
+                    ],
                 }]),
             Error::DisallowedAttributes { attributes, item_start } => {
                 Diagnostic::error()

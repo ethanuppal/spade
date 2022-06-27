@@ -9,8 +9,9 @@ error: Expected array size
   │            ^^^^^^ This array type
   │
   = Array types need a specified size
+  = Insert a size here
   │
 2 │     let _: [bool; N] = [true, false];
-  │                 +++ Insert a size here
+  │                 +++
 
 

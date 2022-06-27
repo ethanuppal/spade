@@ -11,8 +11,9 @@ error: Entities or pipelines can not be instanciated in functions
   │     ^^^^ inst not allowed here
   │
   = Functions can only contain combinatorial logic
+  = Consider making the function an entity
   │
-5 │ fnentity bar() -> int<1> {
-  │ --++++++ Consider making the function an entity
+5 │ entity bar() -> int<1> {
+  │ ~~~~~~
 
 

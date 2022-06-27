@@ -8,7 +8,9 @@ error: Unexpected `(`, expected `{`, `,`, or `}`
 2 │     A(int: int<4>),
   │      ^ expected `{`, `,`, or `}`
   │
-2 │     A({int: int<4>),
-  │      -+ Use `{` if you want to add items to this enum variant
+  = Use `{` if you want to add items to this enum variant
+  │
+2 │     A{int: int<4>},
+  │      ~           ~
 
 

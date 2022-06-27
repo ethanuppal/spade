@@ -10,8 +10,8 @@ edition = "2021"
 doctest = false
 
 [dependencies]
-codespan = "0.11.1"
-codespan-reporting = "0.11.1"
+codespan = "0.12.0"
+codespan-reporting = "0.12.0"
 colored = "2.0"
 logos = "0.11"
 thiserror = "1.0.20"

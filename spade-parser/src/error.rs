@@ -6,7 +6,10 @@ use crate::{lexer::TokenKind, Token, TypeSpec};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum UnexpectedTokenContext {
-    SuggestEnumVariantItems,
+    SuggestEnumVariantItems {
+        open_paren: Token,
+        close_paren: Token,
+    },
 }
 
 #[derive(Error, Debug, Clone, PartialEq)]

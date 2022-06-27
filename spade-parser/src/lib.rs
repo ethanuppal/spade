@@ -64,6 +64,9 @@ impl AsLabel for Token {
     }
 }
 
+// Clone for when you want to call a parse function but maybe discard the new parser state
+// depending on some later condition.
+#[derive(Clone)]
 pub struct Parser<'a> {
     lex: Lexer<'a, TokenKind>,
     peeked: Option<Token>,
@@ -823,6 +826,7 @@ impl<'a> Parser<'a> {
         ))
     }
 
+    #[tracing::instrument(skip(self))]
     pub fn type_parameter_list(&mut self) -> Result<ParameterList> {
         Ok(ParameterList(
             self.comma_separated(Self::name_and_type, &TokenKind::CloseBrace)
@@ -1126,13 +1130,30 @@ impl<'a> Parser<'a> {
         } else if self.peek_kind(&TokenKind::Comma)? || self.peek_kind(&TokenKind::CloseBrace)? {
             None
         } else {
-            let got = self.eat_unconditional()?;
-            let context = got
-                .kind
-                .eq(&TokenKind::OpenParen)
-                .then(|| UnexpectedTokenContext::SuggestEnumVariantItems);
+            let maybe_paren = self.peek_and_eat(&TokenKind::OpenParen)?;
+            let (token, context) = if let Some(open_paren) = maybe_paren {
+                event!(Level::INFO, "Found OpenParen after enum option identifier. Checking if we should suggest OpenBrace and CloseBrace.");
+
+                let mut try_parameter_list = self.clone();
+                let has_parameter_list = try_parameter_list.parameter_list().is_ok();
+                let close_paren = try_parameter_list.peek();
+
+                let context = match (has_parameter_list, close_paren) {
+                    (true, Ok(Some(close_paren))) => {
+                        Some(UnexpectedTokenContext::SuggestEnumVariantItems {
+                            open_paren: open_paren.clone(),
+                            close_paren,
+                        })
+                    }
+                    _ => None,
+                };
+                (open_paren, context)
+            } else {
+                (self.eat_unconditional()?, None)
+            };
+
             return Err(Error::UnexpectedToken {
-                got,
+                got: token,
                 expected: vec![
                     TokenKind::OpenBrace.as_str(),
                     TokenKind::Comma.as_str(),
@@ -1409,13 +1430,13 @@ impl<'a> Parser<'a> {
                 // search, or an end marker, in which case we abort
                 if self.peek_kind(end_marker)? {
                     break;
-                } else if !self.peek_kind(&TokenKind::Comma)? {
+                } else if self.peek_kind(&TokenKind::Comma)? {
+                    self.eat_unconditional()?;
+                } else {
                     return Err(CommaSeparatedError::UnexpectedToken {
                         got: self.eat_unconditional()?,
                         end_token: end_marker.clone(),
                     });
-                } else {
-                    self.eat_unconditional()?;
                 }
             }
             Ok(result)
@@ -1507,8 +1528,8 @@ impl<'a> Parser<'a> {
     }
 
     fn peek(&mut self) -> Result<Option<Token>> {
-        if let Some(prev) = self.peeked.clone() {
-            Ok(Some(prev))
+        if let Some(peeked) = self.peeked.clone() {
+            Ok(Some(peeked))
         } else {
             let result = match self.next_token() {
                 Ok(token) => Some(token),
@@ -1554,6 +1575,7 @@ impl<'a> Parser<'a> {
 
     fn next_token(&mut self) -> Result<Token> {
         let kind = self.lex.next().ok_or(Error::Eof)?;
+        event!(Level::TRACE, "Next token: {kind:?}");
 
         if let TokenKind::Error = kind {
             Err(Error::LexerError(self.file_id, lspan(self.lex.span())))?
@@ -1586,6 +1608,7 @@ impl<'a> Parser<'a> {
     }
 }
 
+#[derive(Clone)]
 pub enum ParseStackEntry {
     Enter(String),
     Ate(Token),
