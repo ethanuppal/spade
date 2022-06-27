@@ -4,16 +4,22 @@ use thiserror::Error;
 
 use crate::{lexer::TokenKind, Token, TypeSpec};
 
+#[derive(Debug, Clone, PartialEq)]
+pub enum UnexpectedTokenContext {
+    SuggestEnumVariantItems,
+}
+
 #[derive(Error, Debug, Clone, PartialEq)]
 pub enum Error {
     #[error("End of file")]
     Eof,
     #[error("Lexer error at {} in file {}", 1.0, 0)]
     LexerError(usize, codespan::Span),
-    #[error("Unexpected token. got {}, expected {expected:?}", got.kind.as_str())]
+    #[error("Unexpected token. Got {}, expected {expected:?}", got.kind.as_str())]
     UnexpectedToken {
         got: Token,
         expected: Vec<&'static str>,
+        context: Option<UnexpectedTokenContext>,
     },
     #[error("Expected to find a {} to match {friend:?}, got {got:?}", expected.as_str())]
     UnmatchedPair {
@@ -103,8 +109,8 @@ pub enum Error {
 }
 
 impl Error {
-    /// If the error is UnexpectedToken, replace it with the type returned by the
-    /// provided closure. Otherwise, return the error unaffected
+    /// If the error is UnexpectedToken, replace it with the error returned by the
+    /// provided function. Otherwise, return the error unaffected.
     pub fn specify_unexpected_token(self, f: impl Fn(Token) -> Self) -> Self {
         match self {
             Error::UnexpectedToken { got, .. } => f(got),
@@ -137,6 +143,7 @@ impl CommaSeparatedError {
                 Error::UnexpectedToken {
                     got,
                     expected: extra,
+                    context: None,
                 }
             }
         }

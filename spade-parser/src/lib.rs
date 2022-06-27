@@ -25,7 +25,7 @@ use tracing::{event, Level};
 use parse_tree_macros::trace_parser;
 
 use crate::{
-    error::{CSErrorTransformations, CommaSeparatedError},
+    error::{CSErrorTransformations, CommaSeparatedError, UnexpectedTokenContext},
     item_type::{ItemType, ItemTypeLocal},
     lexer::TokenKind,
 };
@@ -347,6 +347,7 @@ impl<'a> Parser<'a> {
                 return Err(Error::UnexpectedToken {
                     got: next.unwrap(),
                     expected: vec!["+", "-", "identifier"],
+                    context: None,
                 })
             }
             _ => return Err(Error::Eof),
@@ -595,6 +596,7 @@ impl<'a> Parser<'a> {
             Err(Error::UnexpectedToken {
                 got: self.eat_unconditional()?,
                 expected: vec!["Pattern"],
+                context: None,
             })
         }
     }
@@ -1048,6 +1050,7 @@ impl<'a> Parser<'a> {
                 return Err(Error::UnexpectedToken {
                     got: next,
                     expected: vec![TokenKind::Comma.as_str(), TokenKind::CloseParen.as_str()],
+                    context: None,
                 });
             }
         } else {
@@ -1112,6 +1115,7 @@ impl<'a> Parser<'a> {
     }
 
     #[trace_parser]
+    #[tracing::instrument(level = "debug", skip(self))]
     pub fn enum_option(&mut self) -> Result<(Loc<Identifier>, Option<ParameterList>)> {
         let name = self.identifier()?;
 
@@ -1119,8 +1123,23 @@ impl<'a> Parser<'a> {
             let result = Some(self.type_parameter_list()?);
             self.eat(&TokenKind::CloseBrace)?;
             result
-        } else {
+        } else if self.peek_kind(&TokenKind::Comma)? || self.peek_kind(&TokenKind::CloseBrace)? {
             None
+        } else {
+            let got = self.eat_unconditional()?;
+            let context = got
+                .kind
+                .eq(&TokenKind::OpenParen)
+                .then(|| UnexpectedTokenContext::SuggestEnumVariantItems);
+            return Err(Error::UnexpectedToken {
+                got,
+                expected: vec![
+                    TokenKind::OpenBrace.as_str(),
+                    TokenKind::Comma.as_str(),
+                    TokenKind::CloseBrace.as_str(),
+                ],
+                context,
+            });
         };
 
         Ok((name, args))
@@ -1337,6 +1356,7 @@ impl<'a> Parser<'a> {
     /// If the `start` token is found, but the inner parser returns `None`, `None` is returned.
     ///
     /// If the end token is not found, return a mismatch error
+    #[tracing::instrument(level = "debug", skip(self, inner))]
     fn surrounded<T>(
         &mut self,
         start: &TokenKind,
@@ -1365,6 +1385,7 @@ impl<'a> Parser<'a> {
     // NOTE: This can not currently use #[trace_parser] as it returns an error which is not
     // convertible into `Error`. If we end up with more functions like this, that
     // macro should probably be made smarter
+    #[tracing::instrument(level = "debug", skip(self, inner))]
     pub fn comma_separated<T>(
         &mut self,
         inner: impl Fn(&mut Self) -> Result<T>,
@@ -1434,6 +1455,7 @@ impl<'a> Parser<'a> {
             Err(Error::UnexpectedToken {
                 got: next,
                 expected: vec![expected.as_str()],
+                context: None,
             })
         }
     }
@@ -1451,6 +1473,7 @@ impl<'a> Parser<'a> {
             Err(Error::UnexpectedToken {
                 got: next,
                 expected: vec![expected_description],
+                context: None,
             })
         } else {
             Ok(next)
@@ -2402,7 +2425,8 @@ mod tests {
                     kind: TokenKind::Assignment,
                     span: (4..5),
                     file_id: 0,
-                }
+                },
+                context: None,
             })
         );
     }
@@ -2725,6 +2749,7 @@ mod tests {
                     span: 10..13,
                     file_id: 0,
                 },
+                context: None,
             })
         );
     }

@@ -17,3 +17,21 @@ snapshot_error! {
     }
     "
 }
+
+snapshot_error! {
+    wrong_enum_variant_items_opener,
+    "
+    enum foo {
+        A(int: int<4>),
+    }
+    "
+}
+
+snapshot_error! {
+    wrong_enum_variant_items_opener_but_very_wrong,
+    "
+    enum foo {
+        B|bool|,
+    }
+    "
+}

@@ -1,5 +1,5 @@
 use crate::lexer::TokenKind;
-use crate::{Error, Token};
+use crate::{Error, Token, UnexpectedTokenContext};
 use codespan_reporting::diagnostic::{Diagnostic, Label, Suggestion};
 use codespan_reporting::term::{self, termcolor::Buffer};
 use spade_common::error_reporting::{codespan_config, AsLabel, CodeBundle, CompilationError};
@@ -30,13 +30,26 @@ fn unexpected_token<'a>(
     file_id: usize,
     got: Token,
     expected: impl IntoIterator<Item = &'a str>,
+    context: Option<UnexpectedTokenContext>,
 ) -> Diagnostic<usize> {
     let expected_list = unexpected_token_list(expected);
     let message = unexpected_token_message(&got.kind, &expected_list);
+    let suggestions = match context {
+        Some(UnexpectedTokenContext::SuggestEnumVariantItems) => vec![Suggestion {
+            file_id,
+            range: got.span(),
+            replacement: format!("{{"),
+            message: format!("Use `{{` if you want to add items to this enum variant"),
+        }],
+        None => vec![],
+    };
 
-    Diagnostic::error().with_message(message).with_labels(vec![
-        Label::primary(file_id, got.span).with_message(format!("expected {}", expected_list))
-    ])
+    Diagnostic::error()
+        .with_message(message)
+        .with_labels(vec![
+            Label::primary(file_id, got.span).with_message(format!("expected {}", expected_list))
+        ])
+        .with_suggestions(suggestions)
 }
 
 impl CompilationError for Error {
@@ -46,11 +59,11 @@ impl CompilationError for Error {
             Error::LexerError(file_id, location) => Diagnostic::error()
                 .with_message("Lexer error, unexpected symbol")
                 .with_labels(vec![Label::primary(*file_id, *location)]),
-            Error::UnexpectedToken { got, expected } => {
-                unexpected_token(got.file_id, got.clone(), expected.clone())
+            Error::UnexpectedToken { got, expected, context } => {
+                unexpected_token(got.file_id, got.clone(), expected.clone(), context.clone())
             }
             Error::UnexpectedEndOfArgList { got, expected } => {
-                unexpected_token(got.file_id, got.clone(), expected.iter().map(|tok| tok.as_str()))
+                unexpected_token(got.file_id, got.clone(), expected.iter().map(|tok| tok.as_str()), None)
             }
             Error::UnmatchedPair {
                 friend,
