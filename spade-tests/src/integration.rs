@@ -135,3 +135,51 @@ snapshot_error! {
     }
     "
 }
+
+#[cfg(test)]
+mod trait_tests {
+    use crate::{build_items, snapshot_error};
+
+    snapshot_error! {
+        ast_lowering_errors_are_caught_in_impl_blocks,
+        "
+        struct X {}
+
+        impl X {
+            fn x(self) {
+                a
+            }
+        }
+        "
+    }
+
+    snapshot_error! {
+        type_errors_are_caught_in_impl_blocks,
+        "
+        struct X {}
+
+        impl X {
+            fn x(self) -> bool {
+                1
+            }
+        }
+        "
+    }
+
+    #[test]
+    fn accessing_fields_on_self_works() {
+        let code = "
+            struct X {
+                a: int<8>
+            }
+
+            impl X {
+                fn x(self) -> int<8> {
+                    self.a
+                }
+            }
+        ";
+
+        build_items(code);
+    }
+}

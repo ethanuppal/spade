@@ -17,6 +17,7 @@ codespan.workspace = true
 codespan-reporting.workspace = true
 tracing.workspace = true
 local-impl.workspace = true
+pretty_assertions.workspace = true
 
 spade-ast = {path = "../spade-ast"}
 spade-common = {path = "../spade-common"}

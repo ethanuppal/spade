@@ -1174,8 +1174,8 @@ impl<'a> Parser<'a> {
         )))
     }
 
-    #[tracing::instrument(level = "debug", skip(self))]
     #[trace_parser]
+    #[tracing::instrument(level = "debug", skip(self))]
     pub fn impl_block(&mut self, attributes: &AttributeList) -> Result<Option<Loc<ImplBlock>>> {
         let start_token = peek_for!(self, &TokenKind::Impl);
         self.disallow_attributes(&attributes, &start_token)?;
@@ -1214,8 +1214,8 @@ impl<'a> Parser<'a> {
         Ok(result)
     }
 
-    #[tracing::instrument(level = "debug", skip(self))]
     #[trace_parser]
+    #[tracing::instrument(level = "debug", skip(self))]
     pub fn enum_option(&mut self) -> Result<(Loc<Identifier>, Option<ParameterList>)> {
         let name = self.identifier()?;
 
@@ -1450,6 +1450,7 @@ impl<'a> Parser<'a> {
             &|s: &mut Self| s.entity(&attrs).map(|e| e.map(Item::Entity)),
             &|s: &mut Self| s.pipeline(&attrs).map(|e| e.map(Item::Pipeline)),
             &|s: &mut Self| s.trait_def(&attrs).map(|e| e.map(Item::TraitDef)),
+            &|s: &mut Self| s.impl_block(&attrs).map(|e| e.map(Item::ImplBlock)),
             &|s: &mut Self| s.type_declaration(&attrs).map(|e| e.map(Item::Type)),
             &|s: &mut Self| s.module(&attrs).map(|e| e.map(Item::Module)),
             &|s: &mut Self| s.r#use(&attrs).map(|e| e.map(Item::Use)),

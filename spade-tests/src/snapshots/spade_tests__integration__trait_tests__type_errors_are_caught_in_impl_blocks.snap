@@ -1,0 +1,18 @@
+---
+source: spade-tests/src/integration.rs
+expression: "std::str::from_utf8(buffer.as_slice()).expect(\"error contains invalid utf-8\")"
+---
+error: Type error
+  ┌─ testinput:4:24
+  │  
+4 │       fn x(self) -> bool {
+  │                     ---- bool type specified here
+  │ ╭────────────────────────^
+5 │ │         1
+6 │ │     }
+  │ ╰─────^ Found type int<_>
+  │  
+  = Expected: bool
+  =      Got: int<_>
+
+

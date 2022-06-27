@@ -8,36 +8,37 @@ pub mod pipelines;
 pub mod types;
 
 use attributes::{report_unused_attributes, unit_name};
-use comptime::ComptimeCondExt;
-use hir::param_util::ArgumentError;
 use pipelines::PipelineContext;
 use spade_diagnostics::Diagnostic;
-use tracing::info;
+use tracing::{info, event, Level};
 
-use std::collections::HashSet;
+use std::collections::{HashSet, HashMap};
 
 use thiserror::Error;
 
 use spade_ast as ast;
+use comptime::ComptimeCondExt;
+use hir::symbol_table::DeclarationState;
+use hir::{ExecutableItem, TraitName};
+use hir::param_util::ArgumentError;
+use spade_common::id_tracker::{ExprIdTracker, ImplIdTracker};
+use spade_common::location_info::{Loc, WithLocation};
+use spade_common::name::{Path, Identifier};
 use spade_hir as hir;
 
 use crate::types::IsPort;
 use ast::ParameterList;
 use hir::expression::BinaryOperator;
-use hir::symbol_table::{DeclarationState, LookupError, SymbolTable, Thing, TypeSymbol};
-use hir::{EntityHead, ExecutableItem};
+use hir::symbol_table::{LookupError, SymbolTable, Thing, TypeSymbol};
+use hir::EntityHead;
 pub use spade_common::id_tracker;
-use spade_common::{
-    id_tracker::ExprIdTracker,
-    location_info::{Loc, WithLocation},
-    name::{Identifier, Path},
-};
 
 use error::{Error, Result};
 
 pub struct Context {
     pub symtab: SymbolTable,
     pub idtracker: ExprIdTracker,
+    pub impl_idtracker: ImplIdTracker,
     pub pipeline_ctx: Option<PipelineContext>,
 }
 
@@ -218,7 +219,7 @@ pub fn visit_type_spec(
     Ok(result?.at_loc(&t))
 }
 
-enum SelfContext {
+pub enum SelfContext {
     /// `self` currently does not refer to anything
     FreeStanding,
     /// `self` refers to `TypeSpec` in an impl block for that type
@@ -228,7 +229,7 @@ enum SelfContext {
 fn visit_parameter_list(
     l: &ParameterList,
     symtab: &mut SymbolTable,
-    self_context: SelfContext,
+    self_context: &SelfContext,
 ) -> Result<hir::ParameterList> {
     let mut arg_names: HashSet<Loc<Identifier>> = HashSet::new();
     let mut result = vec![];
@@ -243,9 +244,10 @@ fn visit_parameter_list(
                 .primary_label("not allowed here")
                 .into())
             }
-            SelfContext::ImplBlock(spec) => {
-                result.push((Identifier(String::from("self")).at_loc(&self_loc), spec))
-            }
+            SelfContext::ImplBlock(spec) => result.push((
+                Identifier(String::from("self")).at_loc(&self_loc),
+                spec.clone(),
+            )),
         }
     }
 
@@ -268,7 +270,11 @@ fn visit_parameter_list(
 
 /// Visit the head of an entity to generate an entity head
 #[tracing::instrument(skip_all, fields(name=%item.name))]
-pub fn entity_head(item: &ast::Entity, symtab: &mut SymbolTable) -> Result<EntityHead> {
+pub fn entity_head(
+    item: &ast::Entity,
+    symtab: &mut SymbolTable,
+    self_context: &SelfContext,
+) -> Result<EntityHead> {
     symtab.new_scope();
 
     let type_params = item
@@ -282,7 +288,7 @@ pub fn entity_head(item: &ast::Entity, symtab: &mut SymbolTable) -> Result<Entit
     } else {
         None
     };
-    let inputs = visit_parameter_list(&item.inputs, symtab, SelfContext::FreeStanding)?;
+    let inputs = visit_parameter_list(&item.inputs, symtab, self_context)?;
 
     // Check for ports in functions
     // We need to have the scope open to check this, but we also need to close
@@ -382,33 +388,111 @@ pub fn visit_entity(item: &Loc<ast::Entity>, ctx: &mut Context) -> Result<hir::I
     ))
 }
 
-#[tracing::instrument(skip_all, fields(kind = item.variant_str()))]
+#[tracing::instrument(skip(items, ctx))]
+pub fn visit_impl(
+    block: &Loc<ast::ImplBlock>,
+    items: &mut hir::ItemList,
+    ctx: &mut Context,
+) -> Result<Vec<hir::Item>> {
+    let mut result = vec![];
+
+    let impl_block_id = ctx.impl_idtracker.next();
+    let (is_anonymous, trait_name) = if block.r#trait.is_some() {
+        todo!("Support impl of non-anonymous traits");
+    } else {
+        // Create an anonymous trait which we will impl
+        let trait_name = TraitName::Anonymous(impl_block_id);
+        (true, trait_name)
+    };
+
+    // FIXME: Support impls for generic items
+    let target_name = ctx.symtab.lookup_type_symbol(&block.target)?;
+    let ast_type_spec = ast::TypeSpec::Named(block.target.clone(), None).at_loc(&block.target);
+    let target_type_spec = visit_type_spec(&ast_type_spec, &mut ctx.symtab)?;
+
+    // We need the names defined in this impl block to be unique, so we'll generate
+    // a new namespace that will not be visible elsewhere
+    ctx.symtab
+        .push_namespace(Identifier(format!("impl_{}", impl_block_id)).nowhere());
+
+    // This closure is there to allow cleanup of the symtab even if there are errors
+    // inside the visitors
+    let inner_result = (|| -> Result<()> {
+        let mut trait_members = vec![];
+        let mut trait_impl = HashMap::new();
+        let self_context = SelfContext::ImplBlock(target_type_spec);
+        for entity in &block.entities {
+            global_symbols::visit_entity(entity, &mut ctx.symtab, &self_context)?;
+            let item = visit_entity(entity, ctx)?;
+
+            // TODO: Test and handle duplicate names
+
+            match &item {
+                hir::Item::Entity(e) => {
+                    trait_members
+                        .push((entity.name.inner.clone(), e.head.clone().as_function_head()));
+
+                    trait_impl.insert(entity.name.inner.clone(), e.name.name_id().inner.clone());
+                }
+                // TODO: Gracefully handle pipelines and builtins
+                hir::Item::Pipeline(_) => todo!(),
+                hir::Item::BuiltinEntity(_, _) => todo!(),
+                hir::Item::BuiltinPipeline(_, _) => todo!(),
+            }
+
+            result.push(item);
+        }
+
+        if is_anonymous {
+            // Add the trait to the trait list
+            items.traits.insert(trait_name.clone(), trait_members);
+            items
+                .impls
+                .entry(target_name.0)
+                .or_insert(HashMap::new())
+                .insert(trait_name, hir::ImplBlock { fns: trait_impl });
+        }
+
+        Ok(())
+    })();
+
+    ctx.symtab.pop_namespace();
+
+    inner_result?;
+
+    Ok(result)
+}
+
+#[tracing::instrument(skip(item, ctx))]
 pub fn visit_item(
     item: &ast::Item,
     ctx: &mut Context,
-) -> Result<(Option<hir::Item>, Option<hir::ItemList>)> {
+    item_list: &mut hir::ItemList,
+) -> Result<(Vec<hir::Item>, Option<hir::ItemList>)> {
     match item {
-        ast::Item::Entity(e) => Ok((Some(visit_entity(e, ctx)?), None)),
-        ast::Item::Pipeline(p) => Ok((Some(pipelines::visit_pipeline(p, ctx)?), None)),
+        ast::Item::Entity(e) => Ok((vec![visit_entity(e, ctx)?], None)),
+        ast::Item::Pipeline(p) => Ok((vec![pipelines::visit_pipeline(p, ctx)?], None)),
         ast::Item::TraitDef(_) => {
             todo!("Visit trait definitions")
         }
         ast::Item::Type(_) => {
             // Global symbol lowering already visits type declarations
-            Ok((None, None))
+            event!(Level::INFO, "Type definition");
+            Ok((vec![], None))
         }
+        ast::Item::ImplBlock(block) => Ok((visit_impl(block, item_list, ctx)?, None)),
         ast::Item::Module(m) => {
             ctx.symtab.push_namespace(m.name.clone());
             let mut new_item_list = hir::ItemList::new();
             let result = match visit_module(&mut new_item_list, m, ctx) {
-                Ok(()) => Ok((None, Some(new_item_list))),
+                Ok(()) => Ok((vec![], Some(new_item_list))),
                 Err(e) => Err(e),
             };
             ctx.symtab.pop_namespace();
             result
         }
-        ast::Item::Use(_) => Ok((None, None)),
-        ast::Item::Config(_) => Ok((None, None)),
+        ast::Item::Use(_) => Ok((vec![], None)),
+        ast::Item::Config(_) => Ok((vec![], None)),
     }
 }
 
@@ -430,11 +514,11 @@ pub fn visit_module_body(
     let all_items = body
         .members
         .iter()
-        .map(|i| visit_item(i, ctx))
+        .map(|i| visit_item(i, ctx, item_list))
         .collect::<Result<Vec<_>>>()?
         .into_iter();
 
-    for (item, new_item_list) in all_items {
+    for (items, new_item_list) in all_items {
         // Insertion in hash maps return a value if duplicates are present (or not if try_insert is
         // used) We need to get rid of that for the type of the match block here to work, and a macro
         // hides those details
@@ -445,31 +529,31 @@ pub fn visit_module_body(
                 }
             }};
         }
+
         use hir::Item::*;
-        match item {
-            Some(Entity(e)) => add_item!(
-                item_list.executables,
-                e.name.name_id().inner.clone(),
-                ExecutableItem::Entity(e.clone())
-            ),
-            Some(Pipeline(p)) => add_item!(
-                item_list.executables,
-                p.name.name_id().inner.clone(),
-                ExecutableItem::Pipeline(p.clone())
-            ),
-            Some(BuiltinEntity(name, head)) => {
-                add_item!(
+        for item in items {
+            match item {
+                Entity(e) => add_item!(
+                    item_list.executables,
+                    e.name.name_id().inner.clone(),
+                    ExecutableItem::Entity(e.clone())
+                ),
+                Pipeline(p) => add_item!(
+                    item_list.executables,
+                    p.name.name_id().inner.clone(),
+                    ExecutableItem::Pipeline(p.clone())
+                ),
+                BuiltinEntity(name, head) => add_item!(
                     item_list.executables,
                     name.name_id().clone().inner,
                     ExecutableItem::BuiltinEntity(name.clone(), head)
-                )
+                ),
+                BuiltinPipeline(name, head) => add_item!(
+                    item_list.executables,
+                    name.name_id().clone().inner,
+                    ExecutableItem::BuiltinPipeline(name.clone(), head)
+                ),
             }
-            Some(BuiltinPipeline(name, head)) => add_item!(
-                item_list.executables,
-                name.name_id().clone().inner,
-                ExecutableItem::BuiltinPipeline(name.clone(), head)
-            ),
-            None => {}
         }
 
         match new_item_list {
@@ -1125,9 +1209,10 @@ mod entity_visiting {
         let mut ctx = Context {
             symtab,
             idtracker,
+            impl_idtracker: ImplIdTracker::new(),
             pipeline_ctx: None,
         };
-        global_symbols::visit_entity(&input, &mut ctx.symtab)
+        global_symbols::visit_entity(&input, &mut ctx.symtab, &SelfContext::FreeStanding)
             .expect("Failed to collect global symbols");
 
         let result = visit_entity(&input, &mut ctx);
@@ -1219,6 +1304,7 @@ mod statement_visiting {
         let mut ctx = &mut Context {
             symtab,
             idtracker,
+            impl_idtracker: ImplIdTracker::new(),
             pipeline_ctx: None,
         };
 
@@ -1275,6 +1361,7 @@ mod statement_visiting {
         let mut ctx = Context {
             symtab,
             idtracker,
+            impl_idtracker: ImplIdTracker::new(),
             pipeline_ctx: None,
         };
         let clk_id = ctx.symtab.add_local_variable(ast_ident("clk"));
@@ -1292,6 +1379,7 @@ mod statement_visiting {
         let mut ctx = Context {
             symtab,
             idtracker,
+            impl_idtracker: ImplIdTracker::new(),
             pipeline_ctx: None,
         };
         assert_eq!(
@@ -1315,6 +1403,7 @@ mod statement_visiting {
         let mut ctx = Context {
             symtab,
             idtracker,
+            impl_idtracker: ImplIdTracker::new(),
             pipeline_ctx: Some(PipelineContext {
                 stages: vec![],
                 current_stage: 0,
@@ -1330,47 +1419,6 @@ mod statement_visiting {
         );
 
         assert_eq!(ctx.pipeline_ctx.as_ref().unwrap().current_stage, 3);
-    }
-
-    #[test]
-    fn register_with_declaration_defines_declaration() {
-        let input = ast::Statement::Register(
-            ast::Register {
-                pattern: ast::Pattern::name("regname"),
-                clock: ast::Expression::Identifier(ast_path("clk")).nowhere(),
-                reset: None,
-                value: ast::Expression::IntLiteral(0).nowhere(),
-                value_type: None,
-            }
-            .nowhere(),
-        )
-        .nowhere();
-
-        let mut symtab = SymbolTable::new();
-        let idtracker = ExprIdTracker::new();
-
-        symtab.add_local_variable(ast_ident("clk"));
-        let id = symtab.add_declaration(ast_ident("regname")).unwrap();
-
-        let result = visit_statement(
-            &input,
-            &mut Context {
-                symtab,
-                idtracker,
-                pipeline_ctx: None,
-            },
-        )
-        .unwrap();
-        match &result.first().unwrap().inner {
-            hir::Statement::Register(reg) => match reg.pattern.kind {
-                hir::PatternKind::Name {
-                    name: ref reg_id,
-                    pre_declared: _,
-                } => assert_eq!(id, reg_id.inner),
-                _ => panic!("Expected single name in register"),
-            },
-            other => panic!("Expected register, found {:?}", other),
-        }
     }
 }
 
@@ -1397,6 +1445,7 @@ mod expression_visiting {
                 &mut Context {
                     symtab,
                     idtracker,
+                    impl_idtracker: ImplIdTracker::new(),
                     pipeline_ctx: None
                 }
             ),
@@ -1428,6 +1477,7 @@ mod expression_visiting {
                         &mut Context {
                             symtab,
                             idtracker,
+                            impl_idtracker: ImplIdTracker::new(),
                             pipeline_ctx: None
                         }
                     ),
@@ -1459,6 +1509,7 @@ mod expression_visiting {
                         &mut Context {
                             symtab,
                             idtracker,
+                            impl_idtracker: ImplIdTracker::new(),
                             pipeline_ctx: None
                         }
                     ),
@@ -1497,6 +1548,7 @@ mod expression_visiting {
                 &mut Context {
                     symtab,
                     idtracker,
+                    impl_idtracker: ImplIdTracker::new(),
                     pipeline_ctx: None
                 }
             ),
@@ -1525,6 +1577,7 @@ mod expression_visiting {
                 &mut Context {
                     symtab,
                     idtracker,
+                    impl_idtracker: ImplIdTracker::new(),
                     pipeline_ctx: None
                 }
             ),
@@ -1559,6 +1612,7 @@ mod expression_visiting {
         let mut ctx = Context {
             symtab,
             idtracker,
+            impl_idtracker: ImplIdTracker::new(),
             pipeline_ctx: None,
         };
         assert_eq!(visit_expression(&input, &mut ctx), Ok(expected));
@@ -1613,6 +1667,7 @@ mod expression_visiting {
                 &mut Context {
                     symtab,
                     idtracker,
+                    impl_idtracker: ImplIdTracker::new(),
                     pipeline_ctx: None
                 }
             ),
@@ -1648,6 +1703,7 @@ mod expression_visiting {
                 &mut Context {
                     symtab,
                     idtracker,
+                    impl_idtracker: ImplIdTracker::new(),
                     pipeline_ctx: None
                 }
             ),
@@ -1715,6 +1771,7 @@ mod expression_visiting {
                 &mut Context {
                     symtab,
                     idtracker,
+                    impl_idtracker: ImplIdTracker::new(),
                     pipeline_ctx: None
                 }
             ),
@@ -1782,6 +1839,7 @@ mod expression_visiting {
                 &mut Context {
                     symtab,
                     idtracker,
+                    impl_idtracker: ImplIdTracker::new(),
                     pipeline_ctx: None
                 }
             ),
@@ -1836,6 +1894,7 @@ mod expression_visiting {
                 &mut Context {
                     symtab,
                     idtracker,
+                    impl_idtracker: ImplIdTracker::new(),
                     pipeline_ctx: None
                 }
             ),
@@ -1896,6 +1955,7 @@ mod expression_visiting {
                 &mut Context {
                     symtab,
                     idtracker,
+                    impl_idtracker: ImplIdTracker::new(),
                     pipeline_ctx: None
                 }
             ),
@@ -1950,12 +2010,58 @@ mod expression_visiting {
                 &mut Context {
                     symtab,
                     idtracker,
+                    impl_idtracker: ImplIdTracker::new(),
                     pipeline_ctx: None
                 }
             ),
             Ok(expected)
         );
     }
+
+    // TODO: Move tests into snapshot test
+    /*
+    test_named_argument_error!(missing_arg(
+        "a"; "a", "b"; Error::MissingArguments{..}
+    ));
+
+    test_named_argument_error!(too_many_args(
+        "a", "b", "c"; "a", "b"; Error::NoSuchArgument{..}
+    ));
+
+    test_named_argument_error!(duplicate_name_causes_error(
+        "a", "b", "b"; "a", "b"; Error::DuplicateNamedBindings{..}
+    ));
+    */
+
+    // TODO: Move tests into snapshot tests
+    /*
+    test_shorthand_named_arg!(shorthand_missing_arg(
+        "a"; "a", "b"; Error::MissingArguments{..}) {
+            let mut symtab = SymbolTable::new();
+            symtab.add_local_variable(ast_ident("a"));
+            symtab
+        }
+    );
+
+    test_shorthand_named_arg!(shorthand_too_many_args(
+        "a", "b", "c"; "a", "b"; Error::NoSuchArgument{..}) {
+            let mut symtab = SymbolTable::new();
+            symtab.add_local_variable(ast_ident("a"));
+            symtab.add_local_variable(ast_ident("b"));
+            symtab.add_local_variable(ast_ident("c"));
+            symtab
+        }
+    );
+
+    test_shorthand_named_arg!(shorthand_duplicate_name_causes_error(
+        "a", "b", "b"; "a", "b"; Error::DuplicateNamedBindings{..}) {
+            let mut symtab = SymbolTable::new();
+            symtab.add_local_variable(ast_ident("a"));
+            symtab.add_local_variable(ast_ident("b"));
+            symtab
+        }
+    );
+    */
 
     #[test]
     fn pipeline_instantiation_works() {
@@ -2007,6 +2113,7 @@ mod expression_visiting {
                 &mut Context {
                     symtab,
                     idtracker,
+                    impl_idtracker: ImplIdTracker::new(),
                     pipeline_ctx: None
                 }
             ),
@@ -2025,7 +2132,7 @@ mod pattern_visiting {
         symbol_table::{StructCallable, TypeDeclKind},
         PatternKind,
     };
-    use spade_common::name::testutil::name_id;
+    use spade_common::{name::testutil::name_id, id_tracker::ImplIdTracker};
 
     use super::*;
 
@@ -2041,6 +2148,7 @@ mod pattern_visiting {
             &mut Context {
                 symtab,
                 idtracker,
+                impl_idtracker: ImplIdTracker::new(),
                 pipeline_ctx: None,
             },
         );
@@ -2060,6 +2168,7 @@ mod pattern_visiting {
             &mut Context {
                 symtab,
                 idtracker,
+                impl_idtracker: ImplIdTracker::new(),
                 pipeline_ctx: None,
             },
         );
@@ -2108,6 +2217,7 @@ mod pattern_visiting {
             &mut Context {
                 symtab,
                 idtracker,
+                impl_idtracker: ImplIdTracker::new(),
                 pipeline_ctx: None,
             },
         );
@@ -2131,6 +2241,152 @@ mod pattern_visiting {
 
         assert_eq!(result, Ok(expected))
     }
+
+    // TODO: These test needs to be migrated to a snapshot test
+    /*
+    #[test]
+    fn named_struct_patterns_errors_if_missing_bindings() {
+        let input = ast::Pattern::Type(
+            ast_path("a"),
+            ArgumentPattern::Named(vec![(ast_ident("x"), None)]).nowhere(),
+        );
+
+        let mut symtab = SymbolTable::new();
+        let idtracker = ExprIdTracker::new();
+
+        let type_name = symtab.add_type(
+            ast_path("a").inner,
+            TypeSymbol::Declared(vec![], TypeDeclKind::Struct).nowhere(),
+        );
+
+        symtab.add_thing_with_name_id(
+            type_name.clone(),
+            Thing::Struct(
+                StructCallable {
+                    self_type: hir::TypeSpec::Declared(type_name.clone().nowhere(), vec![])
+                        .nowhere(),
+                    params: hir::ParameterList(vec![
+                        (ast_ident("x"), hir::TypeSpec::unit().nowhere()),
+                        (ast_ident("y"), hir::TypeSpec::unit().nowhere()),
+                    ]),
+                    type_params: vec![],
+                }
+                .nowhere(),
+            ),
+        );
+
+        let result = visit_pattern_normal(
+            &input,
+            &mut Context {
+                symtab,
+                idtracker,
+                impl_idtracker: ImplIdTracker::new(),
+                pipeline_ctx: None,
+            },
+        );
+
+        match result {
+            Ok(x) => panic!("Expected error, got {:?}", x),
+            Err(Error::MissingArguments { .. }) => {}
+            Err(e) => panic!("Wrong error: {:?}", e),
+        }
+    }
+
+    #[test]
+    fn named_struct_patterns_errors_if_binding_to_undefined_name() {
+        let input = ast::Pattern::Type(
+            ast_path("a"),
+            ArgumentPattern::Named(vec![(ast_ident("x"), None), (ast_ident("a"), None)]).nowhere(),
+        );
+
+        let mut symtab = SymbolTable::new();
+        let idtracker = ExprIdTracker::new();
+
+        let type_name = symtab.add_type(
+            ast_path("a").inner,
+            TypeSymbol::Declared(vec![], TypeDeclKind::Struct).nowhere(),
+        );
+
+        symtab.add_thing_with_name_id(
+            type_name.clone(),
+            Thing::Struct(
+                StructCallable {
+                    self_type: hir::TypeSpec::Declared(type_name.clone().nowhere(), vec![])
+                        .nowhere(),
+                    params: hir::ParameterList(vec![
+                        (ast_ident("x"), hir::TypeSpec::unit().nowhere()),
+                        (ast_ident("y"), hir::TypeSpec::unit().nowhere()),
+                    ]),
+                    type_params: vec![],
+                }
+                .nowhere(),
+            ),
+        );
+
+        let result = visit_pattern_normal(
+            &input,
+            &mut Context {
+                symtab,
+                idtracker,
+                impl_idtracker: ImplIdTracker::new(),
+                pipeline_ctx: None,
+            },
+        );
+
+        match result {
+            Ok(x) => panic!("Expected error, got {:?}", x),
+            Err(Error::NoSuchArgument { .. }) => {}
+            Err(e) => panic!("Wrong error: {:?}", e),
+        }
+    }
+
+    #[test]
+    fn named_struct_patterns_errors_if_multiple_bindings_to_same_name() {
+        let input = ast::Pattern::Type(
+            ast_path("a"),
+            ArgumentPattern::Named(vec![(ast_ident("x"), None), (ast_ident("x"), None)]).nowhere(),
+        );
+
+        let mut symtab = SymbolTable::new();
+        let idtracker = ExprIdTracker::new();
+
+        let type_name = symtab.add_type(
+            ast_path("a").inner,
+            TypeSymbol::Declared(vec![], TypeDeclKind::Struct).nowhere(),
+        );
+
+        symtab.add_thing_with_name_id(
+            type_name.clone(),
+            Thing::Struct(
+                StructCallable {
+                    self_type: hir::TypeSpec::Declared(type_name.clone().nowhere(), vec![])
+                        .nowhere(),
+                    params: hir::ParameterList(vec![
+                        (ast_ident("x"), hir::TypeSpec::unit().nowhere()),
+                        (ast_ident("y"), hir::TypeSpec::unit().nowhere()),
+                    ]),
+                    type_params: vec![],
+                }
+                .nowhere(),
+            ),
+        );
+
+        let result = visit_pattern_normal(
+            &input,
+            &mut Context {
+                symtab,
+                idtracker,
+                impl_idtracker: ImplIdTracker::new(),
+                pipeline_ctx: None,
+            },
+        );
+
+        match result {
+            Ok(x) => panic!("Expected error, got {:?}", x),
+            Err(Error::DuplicateNamedBindings { .. }) => {}
+            Err(e) => panic!("Wrong error: {:?}", e),
+        }
+    }*/
 }
 
 #[cfg(test)]
@@ -2185,6 +2441,7 @@ mod register_visiting {
                 &mut Context {
                     symtab,
                     idtracker,
+                    impl_idtracker: ImplIdTracker::new(),
                     pipeline_ctx: None
                 }
             ),
@@ -2255,16 +2512,140 @@ mod item_visiting {
                 &mut Context {
                     symtab,
                     idtracker,
-                    pipeline_ctx: None
-                }
+                    impl_idtracker: ImplIdTracker::new(),
+                    pipeline_ctx: None,
+                },
+                &mut ItemList::new()
             ),
-            Ok((Some(expected), None))
+            Ok((vec![expected], None))
         );
     }
 }
 
 #[cfg(test)]
+mod impl_blocks {
+    use ast::{
+        testutil::{ast_ident, ast_path},
+        ImplBlock,
+    };
+    use hir::{symbol_table::TypeDeclKind, ItemList};
+    use spade_common::name::testutil::name_id;
+
+    use pretty_assertions::assert_eq;
+
+    use super::*;
+
+    #[test]
+    fn anonymous_impl_blocks_work() {
+        let ast_block = ImplBlock {
+            r#trait: None,
+            target: ast_path("a"),
+            entities: vec![ast::Entity {
+                attributes: ast::AttributeList::empty(),
+                is_function: true,
+                name: ast_ident("x"),
+                inputs: ParameterList::with_self(().nowhere(), vec![]),
+                output_type: None,
+                body: Some(
+                    ast::Expression::Block(Box::new(ast::Block {
+                        statements: vec![],
+                        result: ast::Expression::IntLiteral(0).nowhere(),
+                    }))
+                    .nowhere(),
+                ),
+                type_params: vec![],
+            }
+            .nowhere()],
+        }
+        .nowhere();
+
+        let mut items = ItemList::new();
+        let mut ctx = Context {
+            symtab: SymbolTable::new(),
+            idtracker: ExprIdTracker::new(),
+            impl_idtracker: ImplIdTracker::new(),
+            pipeline_ctx: None,
+        };
+
+        // Add the type we are going to impl for. NOTE: Adding this as a j
+        let target_type_name = ctx.symtab.add_type(
+            ast_path("a").inner,
+            TypeSymbol::Declared(vec![], TypeDeclKind::Struct{is_port: false}).nowhere(),
+        );
+
+        let new_items = visit_impl(&ast_block, &mut items, &mut ctx).unwrap();
+
+        assert_eq!(new_items.len(), 1);
+
+        // We'll have to cheat a bit here. Since we don't know what name will be given
+        // to the entity in the impl block, we'll peek at that and use it in the expected item
+        let entity_name = match new_items.first().unwrap() {
+            hir::Item::Entity(e) => e.name.clone(),
+            _ => panic!("Expected entity"),
+        };
+
+        let param_type_spec =
+            hir::TypeSpec::Declared(target_type_name.clone().nowhere(), vec![]).nowhere();
+        let hir_param_list = hir::ParameterList(vec![(ast_ident("self"), param_type_spec.clone())]);
+        let expected_item = hir::Item::Entity(
+            hir::Entity {
+                name: entity_name.clone(),
+                head: hir::EntityHead {
+                    name: ast_ident("x"),
+                    inputs: hir_param_list.clone(),
+                    output_type: None,
+                    type_params: vec![],
+                },
+                inputs: vec![(name_id(2, "self"), param_type_spec)],
+                body: hir::ExprKind::Block(Box::new(hir::Block {
+                    statements: vec![],
+                    result: hir::ExprKind::IntLiteral(0).with_id(1).nowhere(),
+                }))
+                .with_id(0)
+                .nowhere(),
+            }
+            .nowhere(),
+        );
+
+        // Ensure that the entity is generated
+        assert_eq!(&expected_item, new_items.first().unwrap());
+
+        // Ensure that the trait is added to the item list
+        assert_eq!(items.traits.len(), 1);
+        let t = items.traits.iter().next().unwrap().clone();
+        let trait_head = hir::FunctionHead {
+            name: ast_ident("x"),
+            inputs: hir_param_list,
+            output_type: None,
+            type_params: vec![],
+        };
+        assert_eq!(t.1, &vec![(ast_ident("x").inner, trait_head)]);
+
+        let trait_name = t.0;
+
+        // Ensure that there is an impl of the trait
+        let impl_note = items
+            .impls
+            .get(&target_type_name)
+            .expect("Expected an impl list")
+            .get(&trait_name)
+            .expect("Expected an impl of trait");
+
+        assert_eq!(
+            impl_note,
+            &hir::ImplBlock {
+                fns: vec![(ast_ident("x").inner, entity_name.name_id().inner.clone())]
+                    .into_iter()
+                    .collect()
+            }
+        )
+    }
+}
+
+#[cfg(test)]
 mod module_visiting {
+    use std::collections::HashMap;
+
     use super::*;
 
     use hir::ItemList;
@@ -2323,6 +2704,8 @@ mod module_visiting {
             .into_iter()
             .collect(),
             types: vec![].into_iter().collect(),
+            traits: HashMap::new(),
+            impls: HashMap::new(),
         };
 
         let mut symtab = SymbolTable::new();
@@ -2337,6 +2720,7 @@ mod module_visiting {
                 &mut Context {
                     symtab,
                     idtracker,
+                    impl_idtracker: ImplIdTracker::new(),
                     pipeline_ctx: None
                 }
             ),

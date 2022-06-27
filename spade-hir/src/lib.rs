@@ -374,7 +374,7 @@ impl ParameterList {
     }
 }
 
-#[derive(PartialEq, Debug, Clone)]
+#[derive(Serialize, Deserialize, PartialEq, Debug, Clone)]
 pub struct FunctionHead {
     pub name: Loc<Identifier>,
     pub inputs: ParameterList,
@@ -456,6 +456,11 @@ impl Item {
     }
 }
 
+#[derive(PartialEq, Debug, Clone)]
+struct Trait {
+    fns: HashMap<Identifier, EntityHead>,
+}
+
 /// Items which have associated code that can be executed. This is different from
 /// type declarations which are items, but which do not have code on their own
 #[derive(PartialEq, Debug, Clone, Serialize, Deserialize)]
@@ -471,6 +476,19 @@ impl WithLocation for ExecutableItem {}
 
 pub type TypeList = HashMap<NameID, Loc<TypeDeclaration>>;
 
+#[derive(Serialize, Deserialize, PartialEq, Eq, Hash, Debug, Clone)]
+pub enum TraitName {
+    Named(NameID),
+    Anonymous(u64),
+}
+
+#[derive(PartialEq, Debug, Clone, Serialize, Deserialize)]
+pub struct ImplBlock {
+    /// Mapping of identifiers to the NameID of the entity which is the implementation
+    /// for the specified function
+    pub fns: HashMap<Identifier, NameID>,
+}
+
 /// A list of all the items present in the whole AST, flattened to remove module
 /// hirearchies.
 ///
@@ -480,6 +498,12 @@ pub type TypeList = HashMap<NameID, Loc<TypeDeclaration>>;
 pub struct ItemList {
     pub executables: HashMap<NameID, ExecutableItem>,
     pub types: TypeList,
+    // FIXME: Support entities and pipelines as trait members
+    /// All traits in the compilation unit. Traits consist of a list of functions
+    /// by name. Anonymous impl blocks are also members here, but their name is never
+    /// visible to the user.
+    pub traits: HashMap<TraitName, Vec<(Identifier, FunctionHead)>>,
+    pub impls: HashMap<NameID, HashMap<TraitName, ImplBlock>>,
 }
 
 impl ItemList {
@@ -487,6 +511,8 @@ impl ItemList {
         Self {
             executables: HashMap::new(),
             types: TypeList::new(),
+            traits: HashMap::new(),
+            impls: HashMap::new(),
         }
     }
 }

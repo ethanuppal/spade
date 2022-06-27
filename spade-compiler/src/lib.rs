@@ -173,9 +173,12 @@ pub fn compile(
         return Err(());
     }
 
+    let idtracker = id_tracker::ExprIdTracker::new();
+    let impl_idtracker = id_tracker::ImplIdTracker::new();
     let mut ctx = AstLoweringCtx {
         symtab,
-        idtracker: id_tracker::ExprIdTracker::new(),
+        idtracker,
+        impl_idtracker,
         pipeline_ctx: None,
     };
 
@@ -184,6 +187,7 @@ pub fn compile(
     let AstLoweringCtx {
         symtab,
         mut idtracker,
+        impl_idtracker: _,
         pipeline_ctx: _,
     } = ctx;
 

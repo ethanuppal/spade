@@ -60,7 +60,7 @@ pub fn lower_type_declaration(
                                 .as_ref()
                                 .unwrap_or(&ast::ParameterList::without_self(vec![])),
                             symtab,
-                            SelfContext::FreeStanding,
+                            &SelfContext::FreeStanding,
                         )?;
 
                         let option_path = this_path.clone().push_ident(name.clone());
@@ -86,7 +86,7 @@ pub fn lower_type_declaration(
                 let members = crate::visit_parameter_list(
                     members,
                     symtab,
-                    SelfContext::FreeStanding
+                    &SelfContext::FreeStanding
                 )?;
                 Ok(hir::Struct {
                     members,

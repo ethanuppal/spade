@@ -30,6 +30,7 @@ pub fn gather_types(module: &ast::ModuleBody, symtab: &mut SymbolTable) -> Resul
                 };
                 symtab.pop_namespace();
             }
+            ast::Item::ImplBlock(_) => {}
             ast::Item::Entity(_) => {}
             ast::Item::Pipeline(_) => {}
             ast::Item::TraitDef(_) => {}
@@ -77,13 +78,19 @@ pub fn visit_item(
 ) -> Result<()> {
     match item {
         ast::Item::Entity(e) => {
-            visit_entity(&e, symtab)?;
+            visit_entity(&e, symtab, &SelfContext::FreeStanding)?;
         }
         ast::Item::Pipeline(p) => {
-            visit_pipeline(&p, symtab)?;
+            visit_pipeline(&p, symtab, &SelfContext::FreeStanding)?;
         }
         ast::Item::TraitDef(_) => {
             todo!("Trait definitions are unsupported")
+        }
+        ast::Item::ImplBlock(block) => {
+            if block.r#trait.is_some() {
+                // TODO
+                todo!("Support non-anonymous trait impl")
+            }
         }
         ast::Item::Type(t) => {
             re_visit_type_declaration(t, symtab, item_list)?;
@@ -103,8 +110,12 @@ pub fn visit_item(
 }
 
 #[tracing::instrument(skip_all)]
-pub fn visit_entity(e: &Loc<ast::Entity>, symtab: &mut SymbolTable) -> Result<()> {
-    let head = crate::entity_head(&e, symtab)?;
+pub fn visit_entity(
+    e: &Loc<ast::Entity>,
+    symtab: &mut SymbolTable,
+    self_context: &SelfContext,
+) -> Result<()> {
+    let head = crate::entity_head(&e, symtab, self_context)?;
 
     let new_path = Path::ident(e.name.clone()).at_loc(&e.name);
 
@@ -117,8 +128,12 @@ pub fn visit_entity(e: &Loc<ast::Entity>, symtab: &mut SymbolTable) -> Result<()
     Ok(())
 }
 
-pub fn visit_pipeline(p: &Loc<ast::Pipeline>, symtab: &mut SymbolTable) -> Result<()> {
-    let head = crate::pipelines::pipeline_head(&p, symtab)?;
+pub fn visit_pipeline(
+    p: &Loc<ast::Pipeline>,
+    symtab: &mut SymbolTable,
+    self_context: &SelfContext,
+) -> Result<()> {
+    let head = crate::pipelines::pipeline_head(&p, symtab, self_context)?;
 
     let new_path = Path::ident(p.name.clone()).at_loc(&p.name);
 
@@ -223,7 +238,7 @@ pub fn re_visit_type_declaration(
                 let parameter_list = option
                     .1
                     .clone()
-                    .map(|l| visit_parameter_list(&l, symtab, SelfContext::FreeStanding))
+                    .map(|l| visit_parameter_list(&l, symtab, &SelfContext::FreeStanding))
                     .unwrap_or_else(|| Ok(hir::ParameterList(vec![])))?;
 
                 let args = option.1.clone().map(|l| {
@@ -329,7 +344,7 @@ pub fn re_visit_type_declaration(
                 }
             }
 
-            let members = visit_parameter_list(&s.members, symtab, SelfContext::FreeStanding)?;
+            let members = visit_parameter_list(&s.members, symtab, &SelfContext::FreeStanding)?;
 
             let self_type =
                 hir::TypeSpec::Declared(declaration_id.clone(), output_type_exprs.clone())

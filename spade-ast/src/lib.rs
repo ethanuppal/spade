@@ -383,6 +383,7 @@ pub enum Item {
     Module(Loc<Module>),
     Use(Loc<UseStatement>),
     Config(Loc<ComptimeConfig>),
+    ImplBlock(Loc<ImplBlock>),
 }
 impl WithLocation for Item {}
 
@@ -396,6 +397,7 @@ impl Item {
             Item::Module(m) => Some(&m.name.inner),
             Item::Use(u) => u.alias.as_ref().map(|name| &name.inner),
             Item::Config(c) => Some(&c.name.inner),
+            Item::ImplBlock(_) => None,
         }
     }
 
@@ -408,6 +410,7 @@ impl Item {
             Item::Module(_) => "module",
             Item::Use(_) => "use",
             Item::Config(_) => "config",
+            Item::ImplBlock(_) => "impl",
         }
     }
 }

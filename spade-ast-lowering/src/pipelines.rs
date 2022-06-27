@@ -41,7 +41,11 @@ impl PipelineContext {
     }
 }
 
-pub fn pipeline_head(input: &ast::Pipeline, symtab: &mut SymbolTable) -> Result<hir::PipelineHead> {
+pub fn pipeline_head(
+    input: &ast::Pipeline,
+    symtab: &mut SymbolTable,
+    self_context: &SelfContext,
+) -> Result<hir::PipelineHead> {
     let depth = input.depth.map(|u| u as usize);
 
     // FIXME: Support type parameters in pipelines
@@ -51,7 +55,7 @@ pub fn pipeline_head(input: &ast::Pipeline, symtab: &mut SymbolTable) -> Result<
         panic!("Pipelines currently do not support type parameters")
     }
 
-    let inputs = crate::visit_parameter_list(&input.inputs, symtab, SelfContext::FreeStanding)?;
+    let inputs = crate::visit_parameter_list(&input.inputs, symtab, self_context)?;
 
     let output_type = if let Some(output_type) = &input.output_type {
         Some(super::visit_type_spec(output_type, symtab)?)
@@ -212,7 +216,9 @@ mod pipeline_visiting {
 
     use spade_ast::testutil::ast_ident;
     use spade_common::{
-        id_tracker::ExprIdTracker, location_info::WithLocation, name::testutil::name_id,
+        id_tracker::{ExprIdTracker, ImplIdTracker},
+        location_info::WithLocation,
+        name::testutil::name_id,
     };
 
     use pretty_assertions::assert_eq;
@@ -281,7 +287,7 @@ mod pipeline_visiting {
         let mut symtab = SymbolTable::new();
         let idtracker = ExprIdTracker::new();
 
-        crate::global_symbols::visit_pipeline(&input, &mut symtab)
+        crate::global_symbols::visit_pipeline(&input, &mut symtab, &SelfContext::FreeStanding)
             .expect("Failed to add pipeline to symtab");
 
         let result = visit_pipeline(
@@ -289,6 +295,7 @@ mod pipeline_visiting {
             &mut Context {
                 symtab,
                 idtracker,
+                impl_idtracker: ImplIdTracker::new(),
                 pipeline_ctx: None,
             },
         );
@@ -370,7 +377,7 @@ mod pipeline_visiting {
         let mut symtab = SymbolTable::new();
         let idtracker = ExprIdTracker::new();
 
-        crate::global_symbols::visit_pipeline(&input, &mut symtab)
+        crate::global_symbols::visit_pipeline(&input, &mut symtab, &SelfContext::FreeStanding)
             .expect("Failed to add pipeline to symtab");
 
         let result = visit_pipeline(
@@ -378,6 +385,7 @@ mod pipeline_visiting {
             &mut Context {
                 symtab,
                 idtracker,
+                impl_idtracker: ImplIdTracker::new(),
                 pipeline_ctx: None,
             },
         );

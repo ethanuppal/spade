@@ -7,9 +7,9 @@ use itertools::Itertools;
 use logos::Logos;
 use pyo3::prelude::*;
 
-use spade::compiler_state::CompilerState;
 use spade::lexer;
-use spade_ast_lowering::id_tracker::ExprIdTracker;
+use spade::compiler_state::CompilerState;
+use spade_ast_lowering::id_tracker::{ExprIdTracker, ImplIdTracker};
 use spade_common::location_info::{Loc, WithLocation};
 use spade_common::name::{Identifier, Path as SpadePath};
 use spade_diagnostics::emitter::CodespanEmitter;
@@ -320,6 +320,8 @@ impl Spade {
             symtab,
             idtracker,
             pipeline_ctx: None,
+            // TODO: Verify that we can create a new tracker here
+            impl_idtracker: ImplIdTracker::new()
         };
         let hir = spade_ast_lowering::visit_expression(&ast, &mut ast_ctx)
             .report_and_convert(&mut self.error_buffer, &self.code, &mut self.diag_handler)?
@@ -439,6 +441,7 @@ impl Spade {
             symtab,
             idtracker,
             pipeline_ctx: None,
+            impl_idtracker: ImplIdTracker::new()
         };
         let hir = spade_ast_lowering::visit_expression(&ast, &mut ast_ctx)
             .report_and_convert(&mut self.error_buffer, &self.code, &mut self.diag_handler)?
