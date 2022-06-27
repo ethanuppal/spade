@@ -45,7 +45,7 @@ impl CompilationError for Error {
             Error::Eof => Diagnostic::error().with_message("Reached end of file when parsing"),
             Error::LexerError(file_id, location) => Diagnostic::error()
                 .with_message("Lexer error, unexpected symbol")
-                .with_labels(vec![Label::primary(file_id.clone(), location.clone())]),
+                .with_labels(vec![Label::primary(*file_id, *location)]),
             Error::UnexpectedToken { got, expected } => {
                 unexpected_token(got.file_id, got.clone(), expected.clone())
             }

@@ -13,7 +13,7 @@ impl Type {
         match self {
             Type::Int(len) => *len,
             Type::Bool => 1,
-            Type::Tuple(inner) => inner.iter().map(|i| Type::size(i)).sum::<u64>(),
+            Type::Tuple(inner) => inner.iter().map(Type::size).sum::<u64>(),
             Type::Enum(inner) => {
                 let discriminant_size = (inner.len() as f32).log2().ceil() as u64;
 

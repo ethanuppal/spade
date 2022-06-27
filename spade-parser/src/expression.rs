@@ -289,7 +289,7 @@ mod test {
         )
         .nowhere();
 
-        check_parse!("a + b", expression, Ok(expected_value.clone()));
+        check_parse!("a + b", expression, Ok(expected_value));
     }
 
     #[test]
@@ -300,7 +300,7 @@ mod test {
         )
         .nowhere();
 
-        check_parse!("- b", expression, Ok(expected_value.clone()));
+        check_parse!("- b", expression, Ok(expected_value));
     }
 
     #[test]
@@ -311,7 +311,7 @@ mod test {
         )
         .nowhere();
 
-        check_parse!("!b", expression, Ok(expected_value.clone()));
+        check_parse!("!b", expression, Ok(expected_value));
     }
 
     #[test]
@@ -323,7 +323,7 @@ mod test {
         )
         .nowhere();
 
-        check_parse!("a & b", expression, Ok(expected_value.clone()));
+        check_parse!("a & b", expression, Ok(expected_value));
     }
 
     #[test]
@@ -335,7 +335,7 @@ mod test {
         )
         .nowhere();
 
-        check_parse!("a | b", expression, Ok(expected_value.clone()));
+        check_parse!("a | b", expression, Ok(expected_value));
     }
 
     #[test]
@@ -347,7 +347,7 @@ mod test {
         )
         .nowhere();
 
-        check_parse!("a * b", expression, Ok(expected_value.clone()));
+        check_parse!("a * b", expression, Ok(expected_value));
     }
 
     #[test]
@@ -366,7 +366,7 @@ mod test {
         )
         .nowhere();
 
-        check_parse!("a*b + c", expression, Ok(expected_value.clone()));
+        check_parse!("a*b + c", expression, Ok(expected_value));
     }
 
     #[test]
@@ -385,7 +385,7 @@ mod test {
         )
         .nowhere();
 
-        check_parse!("a+b == c", expression, Ok(expected_value.clone()));
+        check_parse!("a+b == c", expression, Ok(expected_value));
     }
 
     #[test]
@@ -405,7 +405,7 @@ mod test {
             )
             .nowhere();
 
-            check_parse!("a == b && c", expression, Ok(expected_value.clone()));
+            check_parse!("a == b && c", expression, Ok(expected_value));
         }
         {
             let expected_value = Expression::BinaryOperator(
@@ -422,7 +422,7 @@ mod test {
             )
             .nowhere();
 
-            check_parse!("a && b == c", expression, Ok(expected_value.clone()));
+            check_parse!("a && b == c", expression, Ok(expected_value));
         }
     }
 
@@ -442,7 +442,7 @@ mod test {
         )
         .nowhere();
 
-        check_parse!("a + (b + c)", expression, Ok(expected_value.clone()));
+        check_parse!("a + (b + c)", expression, Ok(expected_value));
     }
 
     #[test]
@@ -461,7 +461,7 @@ mod test {
         )
         .nowhere();
 
-        check_parse!("((b + c) + a)", expression, Ok(expected_value.clone()));
+        check_parse!("((b + c) + a)", expression, Ok(expected_value));
     }
 
     #[test]
@@ -862,7 +862,7 @@ mod test {
         )
         .nowhere();
 
-        check_parse!("a - b - c", expression, Ok(expected_value.clone()));
+        check_parse!("a - b - c", expression, Ok(expected_value));
     }
 
     #[test]
@@ -876,7 +876,7 @@ mod test {
         )
         .nowhere();
 
-        check_parse!("!a()", expression, Ok(expected_value.clone()));
+        check_parse!("!a()", expression, Ok(expected_value));
     }
 
     #[test]
@@ -893,7 +893,7 @@ mod test {
         )
         .nowhere();
 
-        check_parse!("a[b][c]", expression, Ok(expected_value.clone()));
+        check_parse!("a[b][c]", expression, Ok(expected_value));
     }
 
     #[test]
@@ -910,7 +910,7 @@ mod test {
         )
         .nowhere();
 
-        check_parse!("!a[b]", expression, Ok(expected_value.clone()));
+        check_parse!("!a[b]", expression, Ok(expected_value));
     }
 
     #[test]

@@ -341,8 +341,7 @@ impl PatternLocal for Pattern {
 
                 let mut statements = subpatterns
                     .into_iter()
-                    .map(|sub| sub.statements.into_iter())
-                    .flatten()
+                    .flat_map(|sub| sub.statements.into_iter())
                     .collect::<Vec<_>>();
 
                 // NOTE: Safe unwrap, we're asserting !is_empty above
@@ -364,7 +363,7 @@ impl PatternLocal for Pattern {
                 })
             }
             hir::PatternKind::Type(path, _args) => {
-                let enum_variant = ctx.symtab.symtab().enum_variant_by_id(&path);
+                let enum_variant = ctx.symtab.symtab().enum_variant_by_id(path);
 
                 let self_type = ctx
                     .types
@@ -429,7 +428,7 @@ impl PatternLocal for Pattern {
             .type_of_id(self.id, ctx.symtab.symtab(), &ctx.item_list.types);
 
         let pat_stacks = vec![PatStack::new(vec![DeconstructedPattern::from_hir(
-            self, &ctx,
+            self, ctx,
         )])];
 
         // The patterns which make a wildcard useful are the ones that are missing
@@ -540,7 +539,7 @@ impl ExprLocal for Loc<Expression> {
                 }),
                 substitution::Substitution::Waiting(available_in, name) => {
                     Err(Error::UseBeforeReady {
-                        name: name.clone().at_loc(self),
+                        name: name.at_loc(self),
                         referenced_at_stage: subs.current_stage,
                         unavailable_for: available_in,
                     })
@@ -555,7 +554,7 @@ impl ExprLocal for Loc<Expression> {
             ExprKind::FieldAccess(_, _) => Ok(None),
             ExprKind::ArrayLiteral { .. } => Ok(None),
             ExprKind::Index(_, _) => Ok(None),
-            ExprKind::Block(block) => block.result.variable(subs).map(|v| Some(v)),
+            ExprKind::Block(block) => block.result.variable(subs).map(Some),
             ExprKind::If(_, _, _) => Ok(None),
             ExprKind::Match(_, _) => Ok(None),
             ExprKind::BinaryOperator(_, _, _) => Ok(None),
@@ -589,9 +588,7 @@ impl ExprLocal for Loc<Expression> {
         // If this expressions should not use the standard __expr__{} variable,
         // that is specified here
 
-        Ok(self
-            .alias(subs)?
-            .unwrap_or_else(|| mir::ValueName::Expr(self.id)))
+        Ok(self.alias(subs)?.unwrap_or(mir::ValueName::Expr(self.id)))
     }
 
     fn lower(&self, ctx: &mut Context) -> Result<Vec<mir::Statement>> {
@@ -825,7 +822,7 @@ impl ExprLocal for Loc<Expression> {
                 // Check for missing branches
                 let pat_stacks = branches
                     .iter()
-                    .map(|(pat, _)| PatStack::new(vec![DeconstructedPattern::from_hir(&pat, &ctx)]))
+                    .map(|(pat, _)| PatStack::new(vec![DeconstructedPattern::from_hir(pat, ctx)]))
                     .collect::<Vec<_>>();
 
                 // The patterns which make a wildcard useful are the ones that are missing
@@ -838,7 +835,7 @@ impl ExprLocal for Loc<Expression> {
                 if wildcard_useful.is_useful() {
                     return Err(Error::MissingPatterns {
                         match_expr: self.loc(),
-                        useful_branches: wildcard_useful.witnesses.clone(),
+                        useful_branches: wildcard_useful.witnesses,
                     });
                 }
 
@@ -942,7 +939,7 @@ impl ExprLocal for Loc<Expression> {
                         variant_count,
                     },
                     operands: args
-                        .into_iter()
+                        .iter()
                         .map(|arg| arg.value.variable(ctx.subs))
                         .collect::<Result<_>>()?,
                 }))
@@ -956,7 +953,7 @@ impl ExprLocal for Loc<Expression> {
                         .to_mir_type(),
                     operator: mir::Operator::ConstructTuple,
                     operands: args
-                        .into_iter()
+                        .iter()
                         .map(|arg| arg.value.variable(ctx.subs))
                         .collect::<Result<Vec<_>>>()?,
                 }))
@@ -997,7 +994,7 @@ impl ExprLocal for Loc<Expression> {
                     name: self.variable(ctx.subs)?,
                     operator: mir::Operator::Instance(name_string),
                     operands: args
-                        .into_iter()
+                        .iter()
                         .map(|arg| arg.value.variable(ctx.subs))
                         .collect::<Result<_>>()?,
                     ty: ctx
@@ -1036,7 +1033,7 @@ impl ExprLocal for Loc<Expression> {
                     name: self.variable(ctx.subs)?,
                     operator: mir::Operator::Instance(unit_name.mangled()),
                     operands: args
-                        .into_iter()
+                        .iter()
                         .map(|arg| arg.value.variable(ctx.subs))
                         .collect::<Result<_>>()?,
                     ty: ctx
@@ -1067,7 +1064,7 @@ impl ExprLocal for Loc<Expression> {
             params,
         } =
             ctx.types
-                .expr_type(&self, ctx.symtab.symtab(), &ctx.item_list.types)?
+                .expr_type(self, ctx.symtab.symtab(), &ctx.item_list.types)?
         {
             if let ConcreteType::Integer(size) = params[1] {
                 size
@@ -1101,7 +1098,7 @@ impl ExprLocal for Loc<Expression> {
                         elems: elem_count as u64,
                     },
                     operands: args
-                        .into_iter()
+                        .iter()
                         .map(|arg| arg.value.variable(ctx.subs))
                         .collect::<Result<Vec<_>>>()?,
                     ty: ctx
@@ -1116,7 +1113,7 @@ impl ExprLocal for Loc<Expression> {
             panic!("Clocked array write ports were not array")
         }
 
-        return Ok(result);
+        Ok(result)
     }
 
     /// Result is the initial statement list to expand and return
@@ -1378,9 +1375,9 @@ pub fn generate_entity<'a>(
 
     Ok(mir::Entity {
         name: name.mangled(),
-        inputs: inputs,
+        inputs,
         output: entity.body.variable(&subs)?,
         output_type: output_t,
-        statements: statements,
+        statements,
     })
 }

@@ -51,8 +51,8 @@ where
 pub fn identity_name_translator(
 ) -> NameTranslator<impl Fn(u64) -> Option<u64>, impl Fn(u64) -> Option<u64>> {
     NameTranslator {
-        expr: |x| Some(x),
-        name: |x| Some(x),
+        expr: Some,
+        name: Some,
     }
 }
 
@@ -122,8 +122,8 @@ where
             let reset = reset
                 .as_ref()
                 .map(|(trig, val)| {
-                    let trig = translate_val_name(&trig, lhs_trans, rhs_trans);
-                    let val = translate_val_name(&val, lhs_trans, rhs_trans);
+                    let trig = translate_val_name(trig, lhs_trans, rhs_trans);
+                    let val = translate_val_name(val, lhs_trans, rhs_trans);
                     format!(" reset ({}, {})", trig, val)
                 })
                 .unwrap_or_else(|| "".to_string());

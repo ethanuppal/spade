@@ -55,7 +55,7 @@ impl Path {
         for ident in other.0 {
             result = result.push_ident(ident);
         }
-        return result;
+        result
     }
 
     /// If the path is lib::<rest> return Some(<rest>), else None

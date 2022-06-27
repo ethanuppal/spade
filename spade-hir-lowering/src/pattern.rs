@@ -81,9 +81,7 @@ pub(crate) fn split_wildcard(
                     min,
                     max,
                     // Recursively split wildcards into ranges
-                    other_ctors
-                        .map(|ctor| ctor.split(ty, vec![].into_iter()))
-                        .flatten(),
+                    other_ctors.flat_map(|ctor| ctor.split(ty, vec![].into_iter())),
                 )
             }
             // Unsigned integers are currently unsupported so we'll leave this as todo
@@ -217,11 +215,7 @@ impl DeconstructedPattern {
     }
 
     pub(crate) fn wild_from_ctor(ctor: &Constructor, ty: &ConcreteType) -> Self {
-        let fields = ctor
-            .fields(ty)
-            .iter()
-            .map(|f_ty| Self::wildcard(f_ty))
-            .collect();
+        let fields = ctor.fields(ty).iter().map(Self::wildcard).collect();
         Self {
             ctor: ctor.clone(),
             fields,
@@ -327,7 +321,7 @@ impl std::fmt::Display for DeconstructedPattern {
                 ConcreteType::Enum { options } => {
                     let option = &options[idx];
 
-                    let fields_str = if self.fields.len() != 0 {
+                    let fields_str = if !self.fields.is_empty() {
                         format!(
                             "({})",
                             self.fields

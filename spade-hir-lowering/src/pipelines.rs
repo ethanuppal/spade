@@ -135,7 +135,7 @@ pub fn generate_pipeline<'a>(
     let output = result.variable(&subs);
 
     let output_type = types
-        .expr_type(&result, symtab.symtab(), &item_list.types)?
+        .expr_type(result, symtab.symtab(), &item_list.types)?
         .to_mir_type();
 
     Ok(mir::Entity {

@@ -15,7 +15,7 @@ impl<T> HasCodespan for Loc<T> {
 }
 impl HasCodespan for Span {
     fn codespan(&self) -> Span {
-        self.clone()
+        *self
     }
 }
 impl HasCodespan for std::ops::Range<usize> {

@@ -57,8 +57,7 @@ impl CompilationError for std::io::Error {
         if let Err(e) = buffer.write_all(self.to_string().as_bytes()) {
             eprintln!(
                 "io error when writing io error to error buffer\noriginal error: {}\nnew error: {}",
-                self.to_string(),
-                e.to_string()
+                self, e
             );
         }
     }

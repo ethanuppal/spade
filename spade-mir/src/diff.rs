@@ -78,7 +78,7 @@ impl VarMap {
         }
 
         self.name_map
-            .get(&lhs_id)
+            .get(lhs_id)
             .map(|v| rhs_id == v)
             .unwrap_or(false)
     }
@@ -93,7 +93,7 @@ impl VarMap {
                 self.compare_name((i1, n1), (i2, n2))
             }
             (ValueName::Expr(i1), ValueName::Expr(i2)) => self.compare_exprs(*i1, *i2),
-            _ => return false,
+            _ => false,
         }
     }
 }
@@ -137,14 +137,14 @@ fn compare_statements(s1: &Statement, s2: &Statement, var_map: &mut VarMap) -> b
 
             match (&r1.reset, &r2.reset) {
                 (Some((t1, v1)), Some((t2, v2))) => {
-                    check_name!(&t1, &t2);
-                    check_name!(&v1, &v2);
+                    check_name!(t1, t2);
+                    check_name!(v1, v2);
                 }
                 (None, None) => {}
                 _ => return false,
             }
 
-            return true;
+            true
         }
         (Statement::Constant(_, t1, v1), Statement::Constant(_, t2, v2)) => {
             if t1 != t2 {
@@ -173,7 +173,7 @@ fn populate_var_map(
     stmts1
         .iter()
         .zip(stmts2.iter())
-        .map(|(s1, s2)| match (s1, s2) {
+        .try_for_each(|(s1, s2)| match (s1, s2) {
             (Statement::Binding(b1), Statement::Binding(b2)) => {
                 var_map.try_update_name(&b1.name, &b2.name)
             }
@@ -186,7 +186,6 @@ fn populate_var_map(
             (Statement::Assert(_), Statement::Assert(_)) => Ok(()),
             _ => Err(Error::StatementMismatch(s1.clone(), s2.clone())),
         })
-        .collect::<Result<_, Error>>()
 }
 
 pub fn compare_entity(e1: &Entity, e2: &Entity, var_map: &mut VarMap) -> bool {
@@ -210,7 +209,7 @@ pub fn compare_entity(e1: &Entity, e2: &Entity, var_map: &mut VarMap) -> bool {
 
     check!(var_map.compare_vals(&e1.output, &e2.output));
 
-    return true;
+    true
 }
 
 #[cfg(test)]

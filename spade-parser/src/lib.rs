@@ -116,7 +116,7 @@ impl<'a> Parser<'a> {
         loop {
             result.push(self.identifier()?);
 
-            if let None = self.peek_and_eat(&TokenKind::PathSeparator)? {
+            if self.peek_and_eat(&TokenKind::PathSeparator)?.is_none() {
                 break;
             }
         }
@@ -389,7 +389,7 @@ impl<'a> Parser<'a> {
                 .no_context()?;
             let end = self.eat(&TokenKind::CloseParen)?;
 
-            let span = lspan(opener.span.clone()).merge(lspan(end.span));
+            let span = lspan(opener.span).merge(lspan(end.span));
 
             Ok(Some(ArgumentList::Positional(args).at(self.file_id, &span)))
         }
@@ -430,7 +430,7 @@ impl<'a> Parser<'a> {
         } else {
             let (path, span) = self
                 .path()
-                .map_err(|e| e.specify_unexpected_token(|t| Error::ExpectedType(t)))?
+                .map_err(|e| e.specify_unexpected_token(Error::ExpectedType))?
                 .separate();
 
             // Check if this type has generic params
@@ -559,7 +559,7 @@ impl<'a> Parser<'a> {
                     s.eat(&TokenKind::OpenParen)?;
                     let inner_parser = |s: &mut Self| {
                         let lhs = s.identifier()?;
-                        let rhs = if let Some(_) = s.peek_and_eat(&TokenKind::Colon)? {
+                        let rhs = if s.peek_and_eat(&TokenKind::Colon)?.is_some() {
                             Some(s.pattern()?)
                         } else {
                             None
@@ -638,7 +638,7 @@ impl<'a> Parser<'a> {
 
         // If this is a reg marker for a pipeline
         if self.peek_kind(&TokenKind::Semi)? || self.peek_kind(&TokenKind::Asterisk)? {
-            let count = if let Some(_) = self.peek_and_eat(&TokenKind::Asterisk)? {
+            let count = if self.peek_and_eat(&TokenKind::Asterisk)?.is_some() {
                 if let Some(val) = self.int_literal()? {
                     (val.inner) as usize
                 } else {
@@ -1039,9 +1039,9 @@ impl<'a> Parser<'a> {
         // Input types
         self.eat(&TokenKind::OpenParen)?;
         let (self_arg, more_args) = if let Some(arg) = self.self_arg()? {
-            if let Some(_) = self.peek_and_eat(&TokenKind::Comma)? {
+            if self.peek_and_eat(&TokenKind::Comma)?.is_some() {
                 (Some(arg), true)
-            } else if let Some(_) = self.peek_and_eat(&TokenKind::CloseParen)? {
+            } else if self.peek_and_eat(&TokenKind::CloseParen)?.is_some() {
                 (Some(arg), false)
             } else {
                 let next = self.eat_unconditional()?;
@@ -1087,7 +1087,7 @@ impl<'a> Parser<'a> {
     #[tracing::instrument(skip(self))]
     pub fn trait_def(&mut self, attributes: &AttributeList) -> Result<Option<Loc<TraitDef>>> {
         let start_token = peek_for!(self, &TokenKind::Trait);
-        self.disallow_attributes(&attributes, &start_token)?;
+        self.disallow_attributes(attributes, &start_token)?;
         todo!("Trait definitions are unimplemented");
 
         // let name = self.identifier()?;
@@ -1133,7 +1133,7 @@ impl<'a> Parser<'a> {
         attributes: &AttributeList,
     ) -> Result<Option<Loc<TypeDeclaration>>> {
         let start_token = peek_for!(self, &TokenKind::Enum);
-        self.disallow_attributes(&attributes, &start_token)?;
+        self.disallow_attributes(attributes, &start_token)?;
 
         let name = self.identifier()?;
 
@@ -1169,7 +1169,7 @@ impl<'a> Parser<'a> {
         attributes: &AttributeList,
     ) -> Result<Option<Loc<TypeDeclaration>>> {
         let start_token = peek_for!(self, &TokenKind::Struct);
-        self.disallow_attributes(&attributes, &start_token)?;
+        self.disallow_attributes(attributes, &start_token)?;
 
         let name = self.identifier()?;
 
@@ -1212,7 +1212,7 @@ impl<'a> Parser<'a> {
     #[trace_parser]
     pub fn module(&mut self, attributes: &AttributeList) -> Result<Option<Loc<Module>>> {
         let start = peek_for!(self, &TokenKind::Mod);
-        self.disallow_attributes(&attributes, &start)?;
+        self.disallow_attributes(attributes, &start)?;
 
         let name = self.identifier()?;
 
@@ -1236,11 +1236,11 @@ impl<'a> Parser<'a> {
     #[tracing::instrument(skip(self))]
     pub fn r#use(&mut self, attributes: &AttributeList) -> Result<Option<Loc<UseStatement>>> {
         let start = peek_for!(self, &TokenKind::Use);
-        self.disallow_attributes(&attributes, &start)?;
+        self.disallow_attributes(attributes, &start)?;
 
         let path = self.path()?;
 
-        let alias = if let Some(_) = self.peek_and_eat(&TokenKind::As)? {
+        let alias = if (self.peek_and_eat(&TokenKind::As)?).is_some() {
             Some(self.identifier()?)
         } else {
             None
@@ -1350,7 +1350,7 @@ impl<'a> Parser<'a> {
             end
         } else {
             return Err(Error::UnmatchedPair {
-                friend: opener.clone(),
+                friend: opener,
                 expected: end_kind.clone(),
                 got: self.eat_unconditional()?,
             });
@@ -1388,15 +1388,13 @@ impl<'a> Parser<'a> {
                 // search, or an end marker, in which case we abort
                 if self.peek_kind(end_marker)? {
                     break;
+                } else if !self.peek_kind(&TokenKind::Comma)? {
+                    return Err(CommaSeparatedError::UnexpectedToken {
+                        got: self.eat_unconditional()?,
+                        end_token: end_marker.clone(),
+                    });
                 } else {
-                    if !self.peek_kind(&TokenKind::Comma)? {
-                        return Err(CommaSeparatedError::UnexpectedToken {
-                            got: self.eat_unconditional()?,
-                            end_token: end_marker.clone(),
-                        });
-                    } else {
-                        self.eat_unconditional()?;
-                    }
+                    self.eat_unconditional()?;
                 }
             }
             Ok(result)

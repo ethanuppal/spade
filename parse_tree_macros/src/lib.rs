@@ -103,6 +103,5 @@ fn local_impl_impl(attrs: TokenStream2, input: TokenStream2) -> Result<TokenStre
         #trait_def
         #impl_block
     )
-    .into_token_stream()
-    .into())
+    .into_token_stream())
 }

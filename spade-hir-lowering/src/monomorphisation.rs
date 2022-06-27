@@ -65,7 +65,7 @@ impl MonoState {
 
                 self.to_compile.push_back(MonoItem {
                     source_name: source_name.name_id().inner.clone(),
-                    new_name: new_unit_name.clone(),
+                    new_name: new_unit_name,
                     params,
                 });
                 new_name
@@ -144,7 +144,7 @@ pub fn compile_items(
                             }) {
                             Ok(_) => {}
                             Err(e) => {
-                                result.push(Err(Error::UnificationError(e.into())));
+                                result.push(Err(Error::UnificationError(e)));
                             }
                         }
                     }

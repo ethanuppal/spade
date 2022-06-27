@@ -55,11 +55,7 @@ pub fn flatten_aliases(entity: &mut Entity) {
     // Remove any aliases that are now inlined
     entity.statements.retain(|stmt| {
         if let Statement::Binding(binding) = stmt {
-            if binding.operator == Operator::Alias && aliases.contains_key(&binding.operands[0]) {
-                false
-            } else {
-                true
-            }
+            !(binding.operator == Operator::Alias && aliases.contains_key(&binding.operands[0]))
         } else {
             true
         }

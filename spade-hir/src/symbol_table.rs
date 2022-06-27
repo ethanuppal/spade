@@ -508,9 +508,9 @@ impl SymbolTable {
             Thing::Pipeline(head) => head.clone()
         },
         function_by_id, lookup_function, FunctionHead, NotAFunction {
-            Thing::Function(head) => head.as_function_head().at_loc(&head),
-            Thing::EnumVariant(variant) => variant.as_function_head().at_loc(&variant),
-            Thing::Struct(s) => s.as_function_head().at_loc(&s),
+            Thing::Function(head) => head.as_function_head().at_loc(head),
+            Thing::EnumVariant(variant) => variant.as_function_head().at_loc(variant),
+            Thing::Struct(s) => s.as_function_head().at_loc(s),
         },
         enum_variant_by_id, lookup_enum_variant, EnumVariant, NotAnEnumVariant {
             Thing::EnumVariant(variant) => variant.clone()
@@ -519,11 +519,11 @@ impl SymbolTable {
             Thing::EnumVariant(variant) => Patternable{
                 kind: PatternableKind::Enum,
                 params: variant.params.clone()
-            }.at_loc(&variant),
+            }.at_loc(variant),
             Thing::Struct(variant) => Patternable {
                 kind: PatternableKind::Struct,
                 params: variant.params.clone()
-            }.at_loc(&variant),
+            }.at_loc(variant),
         },
         struct_by_id, lookup_struct, StructCallable, NotAStruct {
             Thing::Struct(s) => s.clone()
@@ -591,9 +591,9 @@ impl SymbolTable {
             .get(&full_path)
             .and_then(|id| {
                 self.things
-                    .get(&id)
+                    .get(id)
                     .map(Thing::loc)
-                    .or_else(|| self.types.get(&id).map(|t| t.loc()))
+                    .or_else(|| self.types.get(id).map(|t| t.loc()))
             });
 
         match prev {
@@ -679,7 +679,7 @@ impl SymbolTable {
         //      lookup for a::b::c is prefrormed
 
         let absolute_path = if let Some(lib_relative) = name.lib_relative() {
-            self.base_namespace.join(lib_relative).at_loc(&name)
+            self.base_namespace.join(lib_relative).at_loc(name)
         } else {
             let local_path = self.namespace.join(name.inner.clone());
             for tab in self.symbols.iter().rev() {

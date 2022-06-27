@@ -108,7 +108,7 @@ fn build_items(code: &str) -> Vec<spade_mir::Entity> {
                 base_namespace: spade_common::name::Path(vec![]),
             },
             "testinput".to_string(),
-            source.to_string(),
+            source,
         )],
         opts,
     ) {

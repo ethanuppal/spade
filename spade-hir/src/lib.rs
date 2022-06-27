@@ -82,12 +82,10 @@ impl Pattern {
                 name,
                 pre_declared: _,
             } => vec![name.inner.clone()],
-            PatternKind::Tuple(inner) => inner.iter().map(|i| i.get_names()).flatten().collect(),
-            PatternKind::Type(_, args) => args
-                .iter()
-                .map(|arg| arg.value.get_names())
-                .flatten()
-                .collect(),
+            PatternKind::Tuple(inner) => inner.iter().flat_map(|i| i.get_names()).collect(),
+            PatternKind::Type(_, args) => {
+                args.iter().flat_map(|arg| arg.value.get_names()).collect()
+            }
         }
     }
 }

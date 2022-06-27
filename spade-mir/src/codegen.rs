@@ -584,7 +584,7 @@ pub fn entity_code(entity: &mut Entity, source_code: &CodeBundle) -> Code {
             format!("input{} {},", size_spec(size), name),
             code! {
                 [0] &logic(&value_name.var_name(), size);
-                [0] &assign(&value_name.var_name(), &name)
+                [0] &assign(&value_name.var_name(), name)
             },
         )
     });

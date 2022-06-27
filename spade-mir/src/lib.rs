@@ -252,7 +252,7 @@ impl std::fmt::Display for Register {
         let reset = reset
             .as_ref()
             .map(|(trig, val)| format!("({trig}, {val})"))
-            .unwrap_or_else(|| String::new());
+            .unwrap_or_else(String::new);
 
         write!(f, "reg({clock}) {name}: {ty}{reset} = {value}")
     }
@@ -306,7 +306,7 @@ impl std::fmt::Display for Entity {
 
         let statements = statements.iter().map(|s| format!("\t{s}\n")).join("");
 
-        write!(f, "entity {name}({inputs}) -> {output_type} {{\n")?;
+        writeln!(f, "entity {name}({inputs}) -> {output_type} {{")?;
         write!(f, "{statements}")?;
         write!(f, "}} => {output}")
     }

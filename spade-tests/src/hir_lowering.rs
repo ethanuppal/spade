@@ -518,7 +518,7 @@ mod tests {
             (const 0; Type::Int(2); ConstantValue::Int(0));
             (const 1; Type::Int(2); ConstantValue::Int(1));
             (const 2; Type::Int(2); ConstantValue::Int(2));
-            (e(4); array_type.clone(); ConstructArray; e(0), e(1), e(2));
+            (e(4); array_type; ConstructArray; e(0), e(1), e(2));
         } => e(4));
 
         assert_same_mir!(&build_entity!(code), &expected);
@@ -539,7 +539,7 @@ mod tests {
         };
 
         let expected = entity!("x"; (
-                "a", n(0, "a"), array_type.clone(),
+                "a", n(0, "a"), array_type,
         ) -> Type::Int(2); {
             (const 0; Type::Int(3); ConstantValue::Int(2));
             (n(1, "idx"); Type::Int(3); Alias; e(0));
@@ -1076,7 +1076,7 @@ mod tests {
             entity! {"unwrap_or_0"; ("e", n(0, "e"), mir_type.clone()) -> Type::Int(16); {
                 // Conditions for branches
                 (n(1, "x"); Type::Int(16); EnumMember({variant: 0, member_index: 0, enum_type: mir_type.clone()}); n(0, "e"));
-                (e(2); Type::Bool; IsEnumVariant({variant: 0, enum_type: mir_type.clone()}); n(0, "e"));
+                (e(2); Type::Bool; IsEnumVariant({variant: 0, enum_type: mir_type}); n(0, "e"));
                 (const 3; Type::Bool; ConstantValue::Bool(true));
                 (const 5; Type::Int(16); ConstantValue::Int(0));
                 (e(6); Type::Int(16); Match; e(2), n(1, "x"), e(3), e(5));
@@ -1151,7 +1151,7 @@ mod tests {
         let tup_inner = vec![Type::Bool, Type::Bool];
         let tup_type = Type::Tuple(tup_inner.clone());
         let expected = entity! {"name"; (
-                "a", n(0, "a"), tup_type.clone()
+                "a", n(0, "a"), tup_type
             ) -> Type::Int(16); {
                 (e(0); Type::Bool; IndexTuple((0, tup_inner.clone())); n(0, "a"));
                 (e(1); Type::Bool; IndexTuple((1, tup_inner.clone())); n(0, "a"));

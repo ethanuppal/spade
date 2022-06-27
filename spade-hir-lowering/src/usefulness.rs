@@ -237,7 +237,7 @@ pub(crate) fn is_useful(pattern: &PatStack, prev_patterns: &Matrix) -> Usefulnes
 
         let usefullness = is_useful(&pattern, &specialized);
 
-        let usefullness = usefullness.apply_constructor(&ctor, &ty);
+        let usefullness = usefullness.apply_constructor(&ctor, ty);
 
         ret.extend(usefullness);
     }

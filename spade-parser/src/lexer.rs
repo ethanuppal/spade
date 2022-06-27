@@ -11,19 +11,19 @@ pub enum TokenKind {
     Identifier(String),
 
     #[regex(r"[0-9][0-9_]*", |lex| {
-        let without_under = lex.slice().replace("_", "");
+        let without_under = lex.slice().replace('_', "");
 
         u128::from_str_radix(&without_under, 10)
     })]
     Integer(u128),
     #[regex(r"0x[0-9A-Fa-f][0-9_A-Fa-f]*", |lex| {
-        let without_under = lex.slice().replace("_", "");
+        let without_under = lex.slice().replace('_', "");
 
         u128::from_str_radix(&without_under[2..], 16)
     })]
     HexInteger(u128),
     #[regex(r"0b[0-1][0-1_]*", |lex| {
-        let without_under = lex.slice().replace("_", "");
+        let without_under = lex.slice().replace('_', "");
 
         u128::from_str_radix(&without_under[2..], 2)
     })]

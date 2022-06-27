@@ -17,7 +17,7 @@ pub struct NamespacedFile {
 /// Parses `a::b,a::b::c,test.spade` as `root_namespace: a::b, namespace: a::b::c, file: test.spade`
 /// if no , is present, attempts to parse a path and set root and namespace to vec![]
 pub fn namespaced_file(arg: &str) -> Result<NamespacedFile, String> {
-    let parts = arg.split(",").collect::<Vec<_>>();
+    let parts = arg.split(',').collect::<Vec<_>>();
 
     match parts.len() {
         0 => Err(format!("Expected a string")),
@@ -30,21 +30,21 @@ pub fn namespaced_file(arg: &str) -> Result<NamespacedFile, String> {
             let root_namespace = if parts[0].is_empty() {
                 SpadePath(vec![])
             } else {
-                let mut root_parser = Parser::new(lexer::TokenKind::lexer(&parts[0]), 0);
+                let mut root_parser = Parser::new(lexer::TokenKind::lexer(parts[0]), 0);
                 root_parser.path().map_err(|e| format!("{e}"))?.inner
             };
 
             let namespace = if parts[1].is_empty() {
                 SpadePath(vec![])
             } else {
-                let mut namespace_parser = Parser::new(lexer::TokenKind::lexer(&parts[1]), 0);
+                let mut namespace_parser = Parser::new(lexer::TokenKind::lexer(parts[1]), 0);
                 namespace_parser.path().map_err(|e| format!("{e}"))?.inner
             };
 
             Ok(NamespacedFile {
                 base_namespace: root_namespace,
                 file: parts[2].try_into().map_err(|e| format!("{e}"))?,
-                namespace: namespace,
+                namespace,
             })
         }
         other => Err(format!(

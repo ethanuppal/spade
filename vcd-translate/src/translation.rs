@@ -91,12 +91,10 @@ fn translate_uint(value: &[Value], flip: bool) -> MaybeValue<BigUint> {
             } else {
                 intermediate <<= 1i32
             }
+        } else if v == &Value::V0 {
+            intermediate = (intermediate << 1i32) + 1;
         } else {
-            if v == &Value::V0 {
-                intermediate = (intermediate << 1i32) + 1;
-            } else {
-                intermediate <<= 1i32
-            }
+            intermediate <<= 1i32
         }
         accumulated_bits += 1;
     }
@@ -193,7 +191,7 @@ fn inner_translate_value(result: &mut String, in_value: &[Value], t: &ConcreteTy
                     if tag_digits.len() > 1 {
                         panic!("Tag digit count must be 1, was {}", tag_digits.len());
                     } else {
-                        let tag = tag_digits.get(0).cloned().unwrap_or(0);
+                        let tag = tag_digits.first().cloned().unwrap_or(0);
                         if tag >= options.len() as u64 {
                             *result += "?TAG?";
                         } else {

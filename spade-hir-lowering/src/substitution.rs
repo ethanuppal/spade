@@ -51,7 +51,7 @@ impl Substitutions {
         let mut result = vec![];
         let mut new_subs = HashMap::new();
         for original in &self.live_vars {
-            let sub = &self.inner.last().unwrap()[&original];
+            let sub = &self.inner.last().unwrap()[original];
             let new_sub = match sub {
                 Substitution::Undefined => {
                     unreachable!("Undefined substitutions should not be in the substitution map")
@@ -99,12 +99,12 @@ impl Substitutions {
             self.inner
                 .last_mut()
                 .unwrap()
-                .insert(from.clone(), Substitution::Available(from.clone()));
+                .insert(from.clone(), Substitution::Available(from));
         } else {
             self.inner
                 .last_mut()
                 .unwrap()
-                .insert(from.clone(), Substitution::Waiting(time, from.clone()));
+                .insert(from.clone(), Substitution::Waiting(time, from));
         }
     }
 
@@ -121,7 +121,7 @@ impl Substitutions {
     /// Undefined if there is no such name in that stage.
     pub fn lookup_referenced(&self, in_stage: usize, original: &NameID) -> Substitution {
         self.inner[in_stage]
-            .get(&original)
+            .get(original)
             .cloned()
             .unwrap_or(Substitution::Undefined)
     }

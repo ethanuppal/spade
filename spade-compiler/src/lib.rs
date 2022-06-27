@@ -148,27 +148,26 @@ pub fn compile(
         return Err(());
     }
 
-    let do_in_namespace =
-        |namespace: &ModuleNamespace,
-         symtab: &mut SymbolTable,
-         to_do: &mut dyn FnMut(&mut SymbolTable) -> ()| {
-            for ident in &namespace.namespace.0 {
-                // NOTE: These identifiers do not have the correct file_id. However,
-                // as far as I know, they will never be part of an error, so we *should*
-                // be safe.
-                symtab.push_namespace(ident.clone());
-            }
-            symtab.set_base_namespace(namespace.base_namespace.clone());
-            to_do(symtab);
-            symtab.set_base_namespace(SpadePath(vec![]));
-            for _ in &namespace.namespace.0 {
-                symtab.pop_namespace();
-            }
-        };
+    let do_in_namespace = |namespace: &ModuleNamespace,
+                           symtab: &mut SymbolTable,
+                           to_do: &mut dyn FnMut(&mut SymbolTable)| {
+        for ident in &namespace.namespace.0 {
+            // NOTE: These identifiers do not have the correct file_id. However,
+            // as far as I know, they will never be part of an error, so we *should*
+            // be safe.
+            symtab.push_namespace(ident.clone());
+        }
+        symtab.set_base_namespace(namespace.base_namespace.clone());
+        to_do(symtab);
+        symtab.set_base_namespace(SpadePath(vec![]));
+        for _ in &namespace.namespace.0 {
+            symtab.pop_namespace();
+        }
+    };
 
     for (namespace, module_ast) in &module_asts {
         do_in_namespace(namespace, &mut symtab, &mut |symtab| {
-            global_symbols::gather_types(&module_ast, symtab).or_report(&mut errors);
+            global_symbols::gather_types(module_ast, symtab).or_report(&mut errors);
         })
     }
 
@@ -178,7 +177,7 @@ pub fn compile(
 
     for (namespace, module_ast) in &module_asts {
         do_in_namespace(namespace, &mut symtab, &mut |symtab| {
-            global_symbols::gather_symbols(&module_ast, symtab, &mut item_list)
+            global_symbols::gather_symbols(module_ast, symtab, &mut item_list)
                 .or_report(&mut errors);
         })
     }
@@ -205,7 +204,7 @@ pub fn compile(
         }
         ctx.symtab
             .set_base_namespace(namespace.base_namespace.clone());
-        visit_module_body(&mut item_list, &module_ast, &mut ctx).or_report(&mut errors);
+        visit_module_body(&mut item_list, module_ast, &mut ctx).or_report(&mut errors);
         ctx.symtab.set_base_namespace(SpadePath(vec![]));
         for _ in &namespace.namespace.0 {
             ctx.symtab.pop_namespace();
@@ -240,7 +239,7 @@ pub fn compile(
                 let mut type_state = typeinference::TypeState::new();
 
                 if let Ok(()) = type_state
-                    .visit_entity(&e, &frozen_symtab.symtab())
+                    .visit_entity(e, frozen_symtab.symtab())
                     .report(&mut errors)
                 {
                     all_types.extend(dump_types(
@@ -262,7 +261,7 @@ pub fn compile(
                 let mut type_state = typeinference::TypeState::new();
 
                 type_state
-                    .visit_pipeline(&p, &frozen_symtab.symtab())
+                    .visit_pipeline(p, frozen_symtab.symtab())
                     .or_report(&mut errors)
                     .unwrap_or_else(|| {
                         if opts.print_type_traceback {
