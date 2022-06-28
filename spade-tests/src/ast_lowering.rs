@@ -331,3 +331,19 @@ snapshot_error! {
         use x::b as a;
     "
 }
+
+snapshot_error! {
+    inst_function_used,
+    "
+        // See https://gitlab.com/spade-lang/spade/-/issues/160
+        mod a {
+            fn foo() -> bool { true }
+        }
+
+        use a::foo;
+
+        entity test() -> bool {
+            inst foo()
+        }
+    "
+}

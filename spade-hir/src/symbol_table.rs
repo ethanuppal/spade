@@ -1,11 +1,14 @@
 use crate::{EntityHead, FunctionHead, ParameterList, PipelineHead, TypeParam, TypeSpec};
-use colored::Colorize;
+
 use spade_common::{
     id_tracker::NameIdTracker,
     location_info::{Loc, WithLocation},
     name::{Identifier, NameID, Path},
 };
+
 use std::collections::HashMap;
+
+use colored::Colorize;
 use thiserror::Error;
 
 #[derive(Error, Debug, Clone, PartialEq)]
@@ -32,6 +35,34 @@ pub enum LookupError {
     NotAValue(Loc<Path>, Thing),
     #[error("Looked up target which is a type")]
     IsAType(Loc<Path>),
+}
+
+impl LookupError {
+    fn with_path(self, path: Loc<Path>) -> Self {
+        macro_rules! match_replace_path {
+            ( $( $variant:ident $old_items:tt => $new_items:tt ),* $(,)? ) => {
+                match self {
+                    $(
+                        LookupError::$variant $old_items => LookupError::$variant $new_items,
+                    )*
+                }
+            };
+        }
+
+        match_replace_path! {
+            NoSuchSymbol(_) => (path),
+            NotATypeSymbol(_, thing) => (path, thing),
+            NotAVariable(_, thing) => (path, thing),
+            NotAnEntity(_, thing) => (path, thing),
+            NotAPipeline(_, thing) => (path, thing),
+            NotAFunction(_, thing) => (path, thing),
+            NotAnEnumVariant(_, thing) => (path, thing),
+            NotAPatternableType(_, thing) => (path, thing),
+            NotAStruct(_, thing) => (path, thing),
+            NotAValue(_, thing) => (path, thing),
+            IsAType(_) => (path),
+        }
+    }
 }
 
 #[derive(Error, Debug, Clone, PartialEq)]
@@ -463,7 +494,9 @@ macro_rules! thing_accessors {
             /// type
             pub fn $by_id_name(&self, id: &NameID) -> Loc<$result> {
                 match self.things.get(&id) {
-                    $(Some($thing) => {$conversion})*,
+                    $(
+                        Some($thing) => {$conversion}
+                    )*,
                     Some(other) => panic!("attempted to look up {} but it was {:?}", stringify!($result), other),
                     None => panic!("No thing entry found for {:?}", id)
                 }
@@ -471,14 +504,26 @@ macro_rules! thing_accessors {
 
             /// Look up an item, with errors if the item is not currently in scope, or is not
             /// convertible to the return type.
+            #[tracing::instrument(level = "trace", skip(self))]
             pub fn $lookup_name(&self, name: &Loc<Path>) -> Result<(NameID, Loc<$result>), LookupError> {
                 let id = self.lookup_id(name)?;
 
                 match self.things.get(&id) {
-                    $(Some($thing) => {Ok((id, $conversion))})*,
+                    $(
+                        Some($thing) => {Ok((id, $conversion))}
+                    )*,
+                    // Item is aliased. Same lookup but on the path.
                     Some(Thing::Alias{path, in_namespace}) => self.$lookup_name(path)
                         .or_else(|_| {
+                            // If the alias returns an error (wrong type / does not exist), try
+                            // the same lookup but starting from the namespace the use is
+                            // located in.
                             self.$lookup_name(&in_namespace.join(path.inner.clone()).at_loc(path))
+                        })
+                        .map_err(|e| {
+                            // If the lookup on the alias also errors, replace the path in the
+                            // error with the original lookup.
+                            e.with_path(name.clone())
                         }),
                     Some(other) => Err(LookupError::$err(name.clone(), other.clone())),
                     None => {

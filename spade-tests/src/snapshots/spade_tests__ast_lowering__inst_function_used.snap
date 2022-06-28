@@ -1,0 +1,14 @@
+---
+source: spade-tests/src/ast_lowering.rs
+expression: "std::str::from_utf8(buffer.as_slice()).expect(\"error contains invalid utf-8\")"
+---
+error: Expected foo to be an enity
+  ┌─ testinput:9:10
+  │
+3 │     fn foo() -> bool { true }
+  │     ------------------------- foo is a function
+  ·
+9 │     inst foo()
+  │          ^^^ Expected entity
+
+

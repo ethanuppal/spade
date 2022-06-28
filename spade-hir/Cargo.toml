@@ -10,7 +10,9 @@ edition = "2021"
 doctest = false
 
 [dependencies]
+colored = "2.0"
+thiserror = "1.0"
+tracing = "0.1.35"
+
 spade-common = {path = "../spade-common"}
 spade-types = {path = "../spade-types"}
-thiserror = "1.0"
-colored = "2.0"

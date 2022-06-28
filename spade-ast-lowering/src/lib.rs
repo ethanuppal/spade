@@ -198,7 +198,7 @@ pub fn entity_head(item: &ast::Entity, symtab: &mut SymbolTable) -> Result<Entit
     })
 }
 
-#[tracing::instrument(skip(item, ctx))]
+#[tracing::instrument(skip_all, fields(?item.name))]
 pub fn visit_entity(item: &Loc<ast::Entity>, ctx: &mut Context) -> Result<hir::Item> {
     let ast::Entity {
         body,
@@ -730,6 +730,7 @@ fn visit_argument_list(
     }
 }
 
+#[tracing::instrument(skip_all)]
 fn visit_expression(e: &ast::Expression, ctx: &mut Context) -> Result<hir::Expression> {
     let new_id = ctx.idtracker.next();
 
