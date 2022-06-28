@@ -787,6 +787,7 @@ dependencies = [
  "codespan-reporting",
  "logos",
  "serde",
+ "tracing",
 ]
 
 [[package]]

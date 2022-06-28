@@ -66,6 +66,16 @@ impl Path {
             None
         }
     }
+
+    /// The last element of the path. Panics if the path is empty
+    #[tracing::instrument(level = "trace", skip(self))]
+    pub fn tail(&self) -> Identifier {
+        self.0
+            .last()
+            .expect("Tried getting tail of empty path")
+            .inner
+            .clone()
+    }
 }
 
 impl std::fmt::Display for Path {
