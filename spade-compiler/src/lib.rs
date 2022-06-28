@@ -13,7 +13,7 @@ use thiserror::Error;
 use tracing::Level;
 
 use spade_ast::ModuleBody;
-use spade_ast_lowering::{global_symbols, visit_module_body, Context as AstLoweringCtx};
+use spade_ast_lowering::{ensure_unique_anonymous_traits, global_symbols, visit_module_body, Context as AstLoweringCtx};
 use spade_common::id_tracker;
 use spade_common::name::Path as SpadePath;
 use spade_diagnostics::{CodeBundle, CompilationError, DiagHandler};
@@ -190,6 +190,10 @@ pub fn compile(
         impl_idtracker: _,
         pipeline_ctx: _,
     } = ctx;
+
+    for e in ensure_unique_anonymous_traits(&item_list) {
+        errors.report(&e)
+    }
 
     // If we have errors during AST lowering, we need to early return becausue the
     // items have already been added to the symtab when they are detected. Further compilation

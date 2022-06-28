@@ -1209,8 +1209,23 @@ impl<'a> Parser<'a> {
     pub fn impl_body(&mut self) -> Result<Vec<Loc<Entity>>> {
         let mut result = vec![];
         while let Some(e) = self.entity(&AttributeList::empty())? {
+            if !e.is_function {
+                return Err(Error::EntityInImpl { loc: e.loc() });
+            }
             result.push(e);
         }
+
+        // Also try looking for pipelines to gracefully report an error in case
+        // the user tries to impl a pipeline. (Can be removed once we figure out
+        // the semantics of pipelines like this)
+        if let Some(pipeline) = self.pipeline(&AttributeList::empty())? {
+            return Err(Error::PipelineInImpl {
+                loc: pipeline.loc(),
+            });
+        }
+
+        // syntax error is here
+
         Ok(result)
     }
 
@@ -2351,7 +2366,7 @@ mod tests {
     fn non_anonymous_impl_blocks_work() {
         let code = r#"
         impl SomeTrait for SomeType {
-            entity some_fn() __builtin__
+            fn some_fn() __builtin__
         }
         "#;
 
@@ -2360,7 +2375,7 @@ mod tests {
             target: ast_path("SomeType"),
             entities: vec![Entity {
                 attributes: AttributeList::empty(),
-                is_function: false,
+                is_function: true,
                 name: ast_ident("some_fn"),
                 inputs: ParameterList::without_self(vec![]),
                 output_type: None,

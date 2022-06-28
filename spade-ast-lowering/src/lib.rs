@@ -432,7 +432,10 @@ pub fn visit_impl(
                     trait_members
                         .push((entity.name.inner.clone(), e.head.clone().as_function_head()));
 
-                    trait_impl.insert(entity.name.inner.clone(), e.name.name_id().inner.clone());
+                    trait_impl.insert(
+                        entity.name.inner.clone(),
+                        (e.name.name_id().inner.clone(), e.loc()),
+                    );
                 }
                 // TODO: Gracefully handle pipelines and builtins
                 hir::Item::Pipeline(_) => todo!(),
@@ -2634,12 +2637,61 @@ mod impl_blocks {
         assert_eq!(
             impl_note,
             &hir::ImplBlock {
-                fns: vec![(ast_ident("x").inner, entity_name.name_id().inner.clone())]
-                    .into_iter()
-                    .collect()
+                fns: vec![(
+                    ast_ident("x").inner,
+                    (entity_name.name_id().inner.clone(), ().nowhere())
+                )]
+                .into_iter()
+                .collect()
             }
         )
     }
+}
+
+/// Ensures that there are functions in anonymous trait impls that have conflicting
+/// names
+#[tracing::instrument(skip(item_list))]
+pub fn ensure_unique_anonymous_traits(item_list: &hir::ItemList) -> Vec<Error> {
+    item_list
+        .impls
+        .iter()
+        .map(|(type_name, impls)| {
+            let mut fns = impls
+                .iter()
+                .filter(|(trait_name, _)| trait_name.is_anonymous())
+                .flat_map(|(_, impl_block)| impl_block.fns.iter())
+                .collect::<Vec<_>>();
+
+            // For deterministic error messages, the order at which functions are seen must be
+            // deterministic. This is not the case as the impls come out of the hash map, so we'll
+            // sort them depending on the loc span of the impl. The exact ordering is
+            // completely irrelevant, as long as it is ordered the same way every time a test
+            // is run
+            fns.sort_by_key(|f| f.1 .1.span);
+
+            let mut set: HashMap<&Identifier, Loc<()>> = HashMap::new();
+
+            let mut duplicate_errs = vec![];
+            for (f, f_loc) in fns {
+                if let Some(prev) = set.get(f) {
+                    duplicate_errs.push(
+                        Diagnostic::error(
+                            f_loc.1,
+                            format!("{type_name} already has a method named {f}")
+                        )
+                        .primary_label("Duplicate method")
+                        .secondary_label(prev, "Previous definition here")
+                        .into()
+                    );
+                } else {
+                    set.insert(f, f_loc.1.clone());
+                }
+            }
+
+            duplicate_errs
+        })
+        .flatten()
+        .collect::<Vec<_>>()
 }
 
 #[cfg(test)]

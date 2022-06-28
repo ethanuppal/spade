@@ -182,4 +182,41 @@ mod trait_tests {
 
         build_items(code);
     }
+
+    snapshot_error! {
+        multiple_anonymous_impls_of_same_function_is_an_error,
+        "
+            struct X {}
+
+            impl X {
+                fn a() -> bool {true}
+            }
+
+            impl X {
+                fn a() -> bool {false}
+            }
+        "
+    }
+
+    snapshot_error! {
+        entities_in_impl_blocks_are_graceuflly_disallowed,
+        "
+            struct X {}
+
+            impl X {
+                entity a() -> bool {true}
+            }
+        "
+    }
+
+    snapshot_error! {
+        pipelines_in_impl_blocks_are_graceuflly_disallowed,
+        "
+            struct X {}
+
+            impl X {
+                pipeline(0) a() -> bool {true}
+            }
+        "
+    }
 }

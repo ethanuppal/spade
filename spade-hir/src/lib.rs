@@ -482,11 +482,17 @@ pub enum TraitName {
     Anonymous(u64),
 }
 
+impl TraitName {
+    pub fn is_anonymous(&self) -> bool {
+        matches!(self, Self::Anonymous(_))
+    }
+}
+
 #[derive(PartialEq, Debug, Clone, Serialize, Deserialize)]
 pub struct ImplBlock {
     /// Mapping of identifiers to the NameID of the entity which is the implementation
     /// for the specified function
-    pub fns: HashMap<Identifier, NameID>,
+    pub fns: HashMap<Identifier, (NameID, Loc<()>)>,
 }
 
 /// A list of all the items present in the whole AST, flattened to remove module
