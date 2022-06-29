@@ -805,6 +805,7 @@ dependencies = [
 name = "spade-hir"
 version = "0.1.0"
 dependencies = [
+ "codespan-reporting",
  "colored",
  "spade-common",
  "spade-types",

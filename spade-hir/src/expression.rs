@@ -36,7 +36,7 @@ pub enum NamedArgument {
     /// Binds the arguent named LHS in the outer scope to the expression
     Full(Loc<Identifier>, Loc<Expression>),
     /// Binds a local variable to an argument with the same name
-    Short(Loc<Identifier>, Expression),
+    Short(Loc<Identifier>, Loc<Expression>),
 }
 impl WithLocation for NamedArgument {}
 
@@ -50,12 +50,11 @@ pub enum ArgumentKind {
 }
 
 #[derive(PartialEq, Debug, Clone)]
-pub struct Argument {
-    pub target: Loc<Identifier>,
-    pub value: Loc<Expression>,
-    pub kind: ArgumentKind,
+pub enum ArgumentList {
+    Named(Vec<NamedArgument>),
+    Positional(Vec<Loc<Expression>>),
 }
-impl WithLocation for Argument {}
+impl WithLocation for ArgumentList {}
 
 #[derive(PartialEq, Debug, Clone)]
 pub enum ExprKind {
@@ -67,19 +66,16 @@ pub enum ExprKind {
     Index(Box<Loc<Expression>>, Box<Loc<Expression>>),
     TupleIndex(Box<Loc<Expression>>, Loc<u128>),
     FieldAccess(Box<Loc<Expression>>, Loc<Identifier>),
-    FnCall(Loc<NameID>, Vec<Argument>),
     BinaryOperator(Box<Loc<Expression>>, BinaryOperator, Box<Loc<Expression>>),
     UnaryOperator(UnaryOperator, Box<Loc<Expression>>),
     Match(Box<Loc<Expression>>, Vec<(Loc<Pattern>, Loc<Expression>)>),
     Block(Box<Block>),
-    /// Instantiation of an entity. While the argument contains information about
-    /// argument names, for codegen purposes, the arguments must be ordered in
-    /// the target order. I.e. they should all act as positioanl arguments
-    EntityInstance(Loc<NameID>, Vec<Argument>),
+    FnCall(Loc<NameID>, Loc<ArgumentList>),
+    EntityInstance(Loc<NameID>, Loc<ArgumentList>),
     PipelineInstance {
         depth: Loc<u128>,
         name: Loc<NameID>,
-        args: Vec<Argument>,
+        args: Loc<ArgumentList>,
     },
     If(
         Box<Loc<Expression>>,

@@ -7,9 +7,10 @@ pub mod pipelines;
 pub mod types;
 
 use attributes::{report_unused_attributes, unit_name};
+use hir::param_util::ArgumentError;
 use pipelines::PipelineContext;
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 
 use thiserror::Error;
 use tracing::{event, Level};
@@ -460,16 +461,18 @@ pub fn visit_pattern(
                                         visit_pattern(&ast_pattern, ctx, allow_declarations)?;
                                     // Check if this is a new binding
                                     if let Some(prev) = bound.get(target) {
-                                        return Err(Error::DuplicateNamedBindings {
+                                        return Err(ArgumentError::DuplicateNamedBindings {
                                             new: target.clone(),
                                             prev_loc: prev.loc(),
-                                        });
+                                        }
+                                        .into());
                                     }
                                     bound.insert(target.clone());
                                     if let None = unbound.take(target) {
-                                        return Err(Error::NoSuchArgument {
+                                        return Err(ArgumentError::NoSuchArgument {
                                             name: target.clone(),
-                                        });
+                                        }
+                                        .into());
                                     }
 
                                     let kind = match pattern {
@@ -486,10 +489,11 @@ pub fn visit_pattern(
                                 .collect::<Result<Vec<_>>>()?;
 
                             if !unbound.is_empty() {
-                                return Err(Error::MissingArguments {
+                                return Err(ArgumentError::MissingArguments {
                                     missing: unbound.into_iter().collect(),
                                     at: args.loc(),
-                                });
+                                }
+                                .into());
                             }
 
                             patterns
@@ -607,123 +611,44 @@ fn visit_statement(s: &Loc<ast::Statement>, ctx: &mut Context) -> Result<Vec<Loc
     }
 }
 
+#[tracing::instrument(skip_all)]
 fn visit_argument_list(
-    arguments: &Loc<ast::ArgumentList>,
-    inputs: &hir::ParameterList,
+    arguments: &ast::ArgumentList,
     ctx: &mut Context,
-) -> Result<Vec<hir::Argument>> {
-    match &arguments.inner {
+) -> Result<hir::ArgumentList> {
+    match arguments {
         ast::ArgumentList::Positional(args) => {
-            if args.len() != inputs.0.len() {
-                return Err(Error::ArgumentListLenghtMismatch {
-                    got: args.len(),
-                    expected: inputs.0.len(),
-                    at: arguments.loc(),
-                });
-            }
-
-            let args = args
+            let inner = args
                 .iter()
-                .map(|a| a.try_visit(visit_expression, ctx))
-                .zip(inputs.0.iter())
-                .map(|(arg, target)| {
-                    Ok(hir::Argument {
-                        target: target.0.clone(),
-                        value: arg?,
-                        kind: hir::ArgumentKind::Positional,
-                    })
-                })
-                .collect::<Result<Vec<_>>>()?;
+                .map(|arg| arg.try_visit(visit_expression, ctx))
+                .collect::<Result<_>>()?;
 
-            Ok(args)
+            Ok(hir::ArgumentList::Positional(inner))
         }
         ast::ArgumentList::Named(args) => {
-            let mut unbound_args = inputs
-                .0
+            let inner = args
                 .iter()
-                .enumerate()
-                .map(|(index, (name, _))| (name.clone(), index))
-                .collect::<HashMap<_, _>>();
-            let mut bound_args = vec![];
-
-            let mut result_args = vec![];
-            for arg in args {
-                match arg {
-                    ast::NamedArgument::Full(name, value) => {
-                        let value = value.try_visit(visit_expression, ctx)?;
-
-                        if let Some(arg_idx) = unbound_args.remove(name) {
-                            // Mark it as bound
-                            bound_args.push(name);
-
-                            result_args.push((
-                                arg_idx,
-                                hir::Argument {
-                                    target: name.clone(),
-                                    value: value,
-                                    kind: hir::ArgumentKind::Positional,
-                                },
-                            ));
-                        } else {
-                            // Check if we bound it already
-                            let prev_idx = bound_args.iter().position(|n| n == &name);
-                            if let Some(idx) = prev_idx {
-                                return Err(Error::DuplicateNamedBindings {
-                                    new: name.clone(),
-                                    prev_loc: bound_args[idx].loc(),
-                                });
-                            } else {
-                                return Err(Error::NoSuchArgument { name: name.clone() });
-                            }
-                        }
+                .map(|arg| match arg {
+                    ast::NamedArgument::Full(name, expr) => {
+                        Ok(hir::expression::NamedArgument::Full(
+                            name.clone(),
+                            expr.try_visit(visit_expression, ctx)?,
+                        ))
                     }
                     ast::NamedArgument::Short(name) => {
                         let expr =
-                            ast::Expression::Identifier(Path(vec![name.clone()]).at_loc(name));
-                        let value = visit_expression(&expr, ctx)?;
+                            ast::Expression::Identifier(Path(vec![name.clone()]).at_loc(name))
+                                .at_loc(name);
 
-                        if let Some(arg_idx) = unbound_args.remove(name) {
-                            // Mark it as bound
-                            bound_args.push(name);
-
-                            result_args.push((
-                                arg_idx,
-                                hir::Argument {
-                                    target: name.clone(),
-                                    value: value.nowhere(),
-                                    kind: hir::ArgumentKind::ShortNamed,
-                                },
-                            ));
-                        } else {
-                            // Check if we bound it already
-                            let prev_idx = bound_args.iter().position(|n| n == &name);
-                            if let Some(idx) = prev_idx {
-                                return Err(Error::DuplicateNamedBindings {
-                                    new: name.clone(),
-                                    prev_loc: bound_args[idx].loc(),
-                                });
-                            } else {
-                                return Err(Error::NoSuchArgument { name: name.clone() });
-                            }
-                        }
+                        Ok(hir::expression::NamedArgument::Short(
+                            name.clone(),
+                            expr.try_visit(visit_expression, ctx)?,
+                        ))
                     }
-                }
-            }
+                })
+                .collect::<Result<_>>()?;
 
-            if !unbound_args.is_empty() {
-                return Err(Error::MissingArguments {
-                    missing: unbound_args
-                        .into_iter()
-                        .map(|(name, _)| name.inner)
-                        .collect(),
-                    at: arguments.loc(),
-                });
-            }
-
-            // Sort the arguments based on the position of the bound arg
-            result_args.sort_by_key(|(idx, _)| *idx);
-
-            Ok(result_args.into_iter().map(|(_, name)| name).collect())
+            Ok(hir::ArgumentList::Named(inner))
         }
     }
 }
@@ -835,18 +760,16 @@ fn visit_expression(e: &ast::Expression, ctx: &mut Context) -> Result<hir::Expre
             Ok(hir::ExprKind::Block(Box::new(visit_block(block, ctx)?)))
         }
         ast::Expression::FnCall(callee, args) => {
-            let (name_id, head) = ctx.symtab.lookup_function(callee)?;
-            let head = head.clone();
+            let (name_id, _) = ctx.symtab.lookup_function(callee)?;
 
-            let args = visit_argument_list(args, &head.inputs, ctx)?;
+            let args = visit_argument_list(args, ctx)?.at_loc(args);
 
             Ok(hir::ExprKind::FnCall(name_id.at_loc(callee), args))
         }
         ast::Expression::EntityInstance(name, arg_list) => {
-            let (name_id, head) = ctx.symtab.lookup_entity(name)?;
-            let head = head.clone();
+            let (name_id, _) = ctx.symtab.lookup_entity(name)?;
 
-            let args = visit_argument_list(arg_list, &head.inputs, ctx)?;
+            let args = visit_argument_list(arg_list, ctx)?.at_loc(arg_list);
             Ok(hir::ExprKind::EntityInstance(name_id.at_loc(name), args))
         }
         ast::Expression::PipelineInstance(depth, name, arg_list) => {
@@ -860,7 +783,7 @@ fn visit_expression(e: &ast::Expression, ctx: &mut Context) -> Result<hir::Expre
                 });
             }
 
-            let args = visit_argument_list(arg_list, &head.inputs, ctx)?;
+            let args = visit_argument_list(arg_list, ctx)?.at_loc(arg_list);
             Ok(hir::ExprKind::PipelineInstance {
                 depth: depth.clone(),
                 name: name_id.at_loc(name),
@@ -1834,18 +1757,11 @@ mod expression_visiting {
 
         let expected = hir::ExprKind::EntityInstance(
             name_id(0, "test"),
-            vec![
-                hir::Argument {
-                    target: ast_ident("a"),
-                    value: hir::ExprKind::IntLiteral(1).idless().nowhere(),
-                    kind: hir::ArgumentKind::Positional,
-                },
-                hir::Argument {
-                    target: ast_ident("b"),
-                    value: hir::ExprKind::IntLiteral(2).idless().nowhere(),
-                    kind: hir::ArgumentKind::Positional,
-                },
-            ],
+            hir::ArgumentList::Positional(vec![
+                hir::ExprKind::IntLiteral(1).idless().nowhere(),
+                hir::ExprKind::IntLiteral(2).idless().nowhere(),
+            ])
+            .nowhere(),
         )
         .idless();
 
@@ -1894,18 +1810,17 @@ mod expression_visiting {
 
         let expected = hir::ExprKind::EntityInstance(
             name_id(0, "test"),
-            vec![
-                hir::Argument {
-                    target: ast_ident("a"),
-                    value: hir::ExprKind::IntLiteral(1).idless().nowhere(),
-                    kind: hir::ArgumentKind::Positional,
-                },
-                hir::Argument {
-                    target: ast_ident("b"),
-                    value: hir::ExprKind::IntLiteral(2).idless().nowhere(),
-                    kind: hir::ArgumentKind::Positional,
-                },
-            ],
+            hir::ArgumentList::Named(vec![
+                hir::expression::NamedArgument::Full(
+                    ast_ident("b"),
+                    hir::ExprKind::IntLiteral(2).idless().nowhere(),
+                ),
+                hir::expression::NamedArgument::Full(
+                    ast_ident("a"),
+                    hir::ExprKind::IntLiteral(1).idless().nowhere(),
+                ),
+            ])
+            .nowhere(),
         )
         .idless();
 
@@ -1954,18 +1869,11 @@ mod expression_visiting {
 
         let expected = hir::ExprKind::FnCall(
             name_id(0, "test"),
-            vec![
-                hir::Argument {
-                    target: ast_ident("a"),
-                    value: hir::ExprKind::IntLiteral(1).idless().nowhere(),
-                    kind: hir::ArgumentKind::Positional,
-                },
-                hir::Argument {
-                    target: ast_ident("b"),
-                    value: hir::ExprKind::IntLiteral(2).idless().nowhere(),
-                    kind: hir::ArgumentKind::Positional,
-                },
-            ],
+            hir::ArgumentList::Positional(vec![
+                hir::ExprKind::IntLiteral(1).idless().nowhere(),
+                hir::ExprKind::IntLiteral(2).idless().nowhere(),
+            ])
+            .nowhere(),
         )
         .idless();
 
@@ -2000,122 +1908,6 @@ mod expression_visiting {
         );
     }
 
-    macro_rules! test_named_argument_error {
-        ($name:ident($($input_arg:expr),*; $($expected_arg:expr),*; $err:pat)) => {
-            #[test]
-            fn $name() {
-                let input = ast::Expression::EntityInstance(
-                        ast_path("test"),
-                        ast::ArgumentList::Named(
-                            vec![
-                                $(
-                                    ast::NamedArgument::Full(
-                                        ast_ident($input_arg), ast::Expression::IntLiteral(1).nowhere(),
-                                    )
-                                ),*
-                            ]
-                        ).nowhere()
-                    ).nowhere();
-
-                let mut symtab = SymbolTable::new();
-                let idtracker = ExprIdTracker::new();
-
-                symtab.add_thing(ast_path("test").inner, Thing::Entity(EntityHead {
-                    inputs: hir::ParameterList(vec! [
-                        $(
-                            (ast_ident($expected_arg), hir::TypeSpec::unit().nowhere())
-                        ),*
-                    ]),
-                    output_type: None,
-                    type_params: vec![],
-                }.nowhere()));
-
-                matches::assert_matches!(
-                    visit_expression(&input, &mut Context{symtab, idtracker, pipeline_ctx: None}),
-                    Err($err)
-                )
-            }
-        }
-    }
-
-    test_named_argument_error!(missing_arg(
-        "a"; "a", "b"; Error::MissingArguments{..}
-    ));
-
-    test_named_argument_error!(too_many_args(
-        "a", "b", "c"; "a", "b"; Error::NoSuchArgument{..}
-    ));
-
-    test_named_argument_error!(duplicate_name_causes_error(
-        "a", "b", "b"; "a", "b"; Error::DuplicateNamedBindings{..}
-    ));
-
-    macro_rules! test_shorthand_named_arg {
-        (
-            $name:ident($($input_arg:expr),*; $($expected_arg:expr),*; $err:pat)
-                $symtab:tt
-        ) => {
-            #[test]
-            fn $name() {
-                let input = ast::Expression::EntityInstance(
-                        ast_path("test"),
-                        ast::ArgumentList::Named(
-                            vec![
-                                $(
-                                    ast::NamedArgument::Short(ast_ident($input_arg))
-                                ),*
-                            ]
-                        ).nowhere()
-                    ).nowhere();
-
-                let mut symtab = $symtab;
-                let idtracker = ExprIdTracker::new();
-
-                symtab.add_thing(ast_path("test").inner, Thing::Entity(EntityHead {
-                    inputs: hir::ParameterList(vec! [
-                        $(
-                            (ast_ident($expected_arg), hir::TypeSpec::unit().nowhere())
-                        ),*
-                    ]),
-                    output_type: None,
-                    type_params: vec![],
-                }.nowhere()));
-
-                matches::assert_matches!(
-                    visit_expression(&input, &mut Context{symtab, idtracker, pipeline_ctx: None}),
-                    Err($err)
-                )
-            }
-        }
-    }
-
-    test_shorthand_named_arg!(shorthand_missing_arg(
-        "a"; "a", "b"; Error::MissingArguments{..}) {
-            let mut symtab = SymbolTable::new();
-            symtab.add_local_variable(ast_ident("a"));
-            symtab
-        }
-    );
-
-    test_shorthand_named_arg!(shorthand_too_many_args(
-        "a", "b", "c"; "a", "b"; Error::NoSuchArgument{..}) {
-            let mut symtab = SymbolTable::new();
-            symtab.add_local_variable(ast_ident("a"));
-            symtab.add_local_variable(ast_ident("b"));
-            symtab.add_local_variable(ast_ident("c"));
-            symtab
-        }
-    );
-
-    test_shorthand_named_arg!(shorthand_duplicate_name_causes_error(
-        "a", "b", "b"; "a", "b"; Error::DuplicateNamedBindings{..}) {
-            let mut symtab = SymbolTable::new();
-            symtab.add_local_variable(ast_ident("a"));
-            symtab.add_local_variable(ast_ident("b"));
-            symtab
-        }
-    );
-
     #[test]
     fn pipeline_instanciation_works() {
         let input = ast::Expression::PipelineInstance(
@@ -2132,18 +1924,11 @@ mod expression_visiting {
         let expected = hir::ExprKind::PipelineInstance {
             depth: 2.nowhere(),
             name: name_id(0, "test"),
-            args: vec![
-                hir::Argument {
-                    target: ast_ident("a"),
-                    value: hir::ExprKind::IntLiteral(1).idless().nowhere(),
-                    kind: hir::ArgumentKind::Positional,
-                },
-                hir::Argument {
-                    target: ast_ident("b"),
-                    value: hir::ExprKind::IntLiteral(2).idless().nowhere(),
-                    kind: hir::ArgumentKind::Positional,
-                },
-            ],
+            args: hir::ArgumentList::Positional(vec![
+                hir::ExprKind::IntLiteral(1).idless().nowhere(),
+                hir::ExprKind::IntLiteral(2).idless().nowhere(),
+            ])
+            .nowhere(),
         }
         .idless();
 
@@ -2400,147 +2185,6 @@ mod pattern_visiting {
         .idless();
 
         assert_eq!(result, Ok(expected))
-    }
-
-    #[test]
-    fn named_struct_patterns_errors_if_missing_bindings() {
-        let input = ast::Pattern::Type(
-            ast_path("a"),
-            ArgumentPattern::Named(vec![(ast_ident("x"), None)]).nowhere(),
-        );
-
-        let mut symtab = SymbolTable::new();
-        let idtracker = ExprIdTracker::new();
-
-        let type_name = symtab.add_type(
-            ast_path("a").inner,
-            TypeSymbol::Declared(vec![], TypeDeclKind::Struct).nowhere(),
-        );
-
-        symtab.add_thing_with_name_id(
-            type_name.clone(),
-            Thing::Struct(
-                StructCallable {
-                    self_type: hir::TypeSpec::Declared(type_name.clone().nowhere(), vec![])
-                        .nowhere(),
-                    params: hir::ParameterList(vec![
-                        (ast_ident("x"), hir::TypeSpec::unit().nowhere()),
-                        (ast_ident("y"), hir::TypeSpec::unit().nowhere()),
-                    ]),
-                    type_params: vec![],
-                }
-                .nowhere(),
-            ),
-        );
-
-        let result = visit_pattern_normal(
-            &input,
-            &mut Context {
-                symtab,
-                idtracker,
-                pipeline_ctx: None,
-            },
-        );
-
-        match result {
-            Ok(x) => panic!("Expected error, got {:?}", x),
-            Err(Error::MissingArguments { .. }) => {}
-            Err(e) => panic!("Wrong error: {:?}", e),
-        }
-    }
-
-    #[test]
-    fn named_struct_patterns_errors_if_binding_to_undefined_name() {
-        let input = ast::Pattern::Type(
-            ast_path("a"),
-            ArgumentPattern::Named(vec![(ast_ident("x"), None), (ast_ident("a"), None)]).nowhere(),
-        );
-
-        let mut symtab = SymbolTable::new();
-        let idtracker = ExprIdTracker::new();
-
-        let type_name = symtab.add_type(
-            ast_path("a").inner,
-            TypeSymbol::Declared(vec![], TypeDeclKind::Struct).nowhere(),
-        );
-
-        symtab.add_thing_with_name_id(
-            type_name.clone(),
-            Thing::Struct(
-                StructCallable {
-                    self_type: hir::TypeSpec::Declared(type_name.clone().nowhere(), vec![])
-                        .nowhere(),
-                    params: hir::ParameterList(vec![
-                        (ast_ident("x"), hir::TypeSpec::unit().nowhere()),
-                        (ast_ident("y"), hir::TypeSpec::unit().nowhere()),
-                    ]),
-                    type_params: vec![],
-                }
-                .nowhere(),
-            ),
-        );
-
-        let result = visit_pattern_normal(
-            &input,
-            &mut Context {
-                symtab,
-                idtracker,
-                pipeline_ctx: None,
-            },
-        );
-
-        match result {
-            Ok(x) => panic!("Expected error, got {:?}", x),
-            Err(Error::NoSuchArgument { .. }) => {}
-            Err(e) => panic!("Wrong error: {:?}", e),
-        }
-    }
-
-    #[test]
-    fn named_struct_patterns_errors_if_multiple_bindings_to_same_name() {
-        let input = ast::Pattern::Type(
-            ast_path("a"),
-            ArgumentPattern::Named(vec![(ast_ident("x"), None), (ast_ident("x"), None)]).nowhere(),
-        );
-
-        let mut symtab = SymbolTable::new();
-        let idtracker = ExprIdTracker::new();
-
-        let type_name = symtab.add_type(
-            ast_path("a").inner,
-            TypeSymbol::Declared(vec![], TypeDeclKind::Struct).nowhere(),
-        );
-
-        symtab.add_thing_with_name_id(
-            type_name.clone(),
-            Thing::Struct(
-                StructCallable {
-                    self_type: hir::TypeSpec::Declared(type_name.clone().nowhere(), vec![])
-                        .nowhere(),
-                    params: hir::ParameterList(vec![
-                        (ast_ident("x"), hir::TypeSpec::unit().nowhere()),
-                        (ast_ident("y"), hir::TypeSpec::unit().nowhere()),
-                    ]),
-                    type_params: vec![],
-                }
-                .nowhere(),
-            ),
-        );
-
-        let result = visit_pattern_normal(
-            &input,
-            &mut Context {
-                symtab,
-                idtracker,
-                pipeline_ctx: None,
-            },
-        );
-
-        match result {
-            Ok(x) => panic!("Expected error, got {:?}", x),
-            Err(Error::DuplicateNamedBindings { .. }) => {}
-            Err(e) => panic!("Wrong error: {:?}", e),
-        }
     }
 }
 

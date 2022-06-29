@@ -1,10 +1,11 @@
 pub mod expression;
+pub mod param_util;
 pub mod symbol_table;
 pub mod testutil;
 
 use std::collections::HashMap;
 
-pub use expression::{Argument, ArgumentKind, ExprKind, Expression};
+pub use expression::{ArgumentKind, ArgumentList, ExprKind, Expression};
 use spade_common::{
     location_info::{Loc, WithLocation},
     name::{Identifier, NameID},
@@ -251,7 +252,7 @@ impl ParameterList {
     }
 
     /// Look up the type of an argument. Panics if no such argument exists
-    pub fn arg_type(&self, name: &Identifier) -> TypeSpec {
+    pub fn arg_type(&self, name: &Identifier) -> &TypeSpec {
         if let Some(result) = self.try_get_arg_type(name) {
             result
         } else {
@@ -263,10 +264,10 @@ impl ParameterList {
     }
 
     /// Look up the type of an argument, returning None if no such argument exists
-    pub fn try_get_arg_type(&self, name: &Identifier) -> Option<TypeSpec> {
+    pub fn try_get_arg_type(&self, name: &Identifier) -> Option<&Loc<TypeSpec>> {
         for (arg, ty) in &self.0 {
             if &arg.inner == name {
-                return Some(ty.inner.clone());
+                return Some(ty);
             }
         }
         None

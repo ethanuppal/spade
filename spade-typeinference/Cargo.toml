@@ -20,8 +20,8 @@ spade-common = {path = "../spade-common"}
 spade-types = {path = "../spade-types"}
 spade-hir = {path = "../spade-hir"}
 parse_tree_macros = {path = "../parse_tree_macros"}
-spade-ast-lowering = {path = "../spade-ast-lowering"}
 
 [dev-dependencies]
 spade-ast = {path = "../spade-ast"}
 assert_matches = "1.5"
+spade-ast-lowering = {path = "../spade-ast-lowering"}

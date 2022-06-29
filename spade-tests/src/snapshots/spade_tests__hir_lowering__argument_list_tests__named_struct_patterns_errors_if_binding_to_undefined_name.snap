@@ -1,0 +1,11 @@
+---
+source: spade-tests/src/hir_lowering.rs
+expression: "std::str::from_utf8(buffer.as_slice()).expect(\"error contains invalid utf-8\")"
+---
+error: c: No such argument
+  ┌─ testinput:4:29
+  │
+4 │     Test$(a: true, b: true, c: true)
+  │                             ^ No such argument
+
+

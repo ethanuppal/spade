@@ -1,6 +1,11 @@
 use crate::{EntityHead, FunctionHead, ParameterList, PipelineHead, TypeParam, TypeSpec};
 
+use codespan_reporting::{
+    diagnostic::Diagnostic,
+    term::{self, termcolor::Buffer},
+};
 use spade_common::{
+    error_reporting::{codespan_config, AsLabel, CodeBundle, CompilationError},
     id_tracker::NameIdTracker,
     location_info::{Loc, WithLocation},
     name::{Identifier, NameID, Path},
@@ -62,6 +67,127 @@ impl LookupError {
             NotAValue(_, thing) => (path, thing),
             IsAType(_) => (path),
         }
+    }
+}
+
+impl CompilationError for LookupError {
+    fn report(&self, buffer: &mut Buffer, code: &CodeBundle) {
+        let diag = match self {
+            LookupError::NoSuchSymbol(path) => Diagnostic::error()
+                .with_message(format!("Use of undeclared name {}", path))
+                .with_labels(vec![path.primary_label().with_message("Undeclared name")]),
+            LookupError::NotATypeSymbol(path, got) => Diagnostic::error()
+                .with_message(format!("Expected {} to be a type", path))
+                .with_labels(vec![
+                    path.primary_label().with_message(format!("Expected type")),
+                    got.loc().secondary_label().with_message(format!(
+                        "{} is a {}",
+                        path,
+                        got.kind_string()
+                    )),
+                ]),
+            LookupError::NotAVariable(path, got) => Diagnostic::error()
+                .with_message(format!("Expected {} to be a variable", path))
+                .with_labels(vec![
+                    path.primary_label()
+                        .with_message(format!("Expected variable")),
+                    got.loc().secondary_label().with_message(format!(
+                        "{} is a {}",
+                        path,
+                        got.kind_string()
+                    )),
+                ]),
+            LookupError::NotAnEntity(path, got) => Diagnostic::error()
+                .with_message(format!("Expected {} to be an enity", path))
+                .with_labels(vec![
+                    path.primary_label()
+                        .with_message(format!("Expected entity")),
+                    got.loc().secondary_label().with_message(format!(
+                        "{} is a {}",
+                        path,
+                        got.kind_string()
+                    )),
+                ]),
+            LookupError::NotAPipeline(path, got) => Diagnostic::error()
+                .with_message(format!("Expected {} to be a pipeline", path))
+                .with_labels(vec![
+                    path.primary_label()
+                        .with_message(format!("Expected pipeline")),
+                    got.loc().secondary_label().with_message(format!(
+                        "{} is a {}",
+                        path,
+                        got.kind_string()
+                    )),
+                ]),
+            LookupError::NotAPatternableType(path, got) => Diagnostic::error()
+                .with_message(format!(
+                    "{} can not be used as a pattern",
+                    got.kind_string()
+                ))
+                .with_labels(vec![
+                    path.primary_label()
+                        .with_message(format!("Expected pattern")),
+                    got.loc().secondary_label().with_message(format!(
+                        "{} is a {}",
+                        path,
+                        got.kind_string()
+                    )),
+                ]),
+            LookupError::NotAFunction(path, got) => Diagnostic::error()
+                .with_message(format!("Expected {} to be a function", path))
+                .with_labels(vec![
+                    path.primary_label()
+                        .with_message(format!("Expected function")),
+                    got.loc().secondary_label().with_message(format!(
+                        "{} is a {}",
+                        path,
+                        got.kind_string()
+                    )),
+                ]),
+            LookupError::NotAnEnumVariant(path, was) => Diagnostic::error()
+                .with_message(format!("Expected {} to be an enum variant", path))
+                .with_labels(vec![
+                    path.primary_label()
+                        .with_message(format!("Expected enum variant")),
+                    was.loc().secondary_label().with_message(format!(
+                        "{} is a {}",
+                        path,
+                        was.kind_string()
+                    )),
+                ]),
+            LookupError::NotAStruct(path, was) => Diagnostic::error()
+                .with_message(format!("Expected {} to be an struct", path))
+                .with_labels(vec![
+                    path.primary_label()
+                        .with_message(format!("Expected struct")),
+                    was.loc().secondary_label().with_message(format!(
+                        "{} is a {}",
+                        path,
+                        was.kind_string()
+                    )),
+                ]),
+            LookupError::NotAValue(path, was) => Diagnostic::error()
+                .with_message(format!("Expected {} to be a value", path))
+                .with_labels(vec![
+                    path.primary_label().with_message(format!("Expected value")),
+                    was.loc().secondary_label().with_message(format!(
+                        "{} is a {}",
+                        path,
+                        was.kind_string()
+                    )),
+                ])
+                .with_notes(vec![
+                    "Expected value".to_string(),
+                    format!("Found {}", was.kind_string().to_string()),
+                ]),
+            LookupError::IsAType(path) => Diagnostic::error()
+                .with_message(format!("Unexpected type {}", path))
+                .with_labels(vec![path
+                    .primary_label()
+                    .with_message(format!("Unexpected type"))]),
+        };
+
+        term::emit(buffer, &codespan_config(), &code.files, &diag).unwrap();
     }
 }
 

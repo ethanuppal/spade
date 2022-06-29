@@ -7,6 +7,8 @@ use crate::usefulness::Witness;
 
 #[derive(Error, Debug)]
 pub enum Error {
+    #[error("(Internal) Argument error")]
+    ArgumentError(#[from] spade_hir::param_util::ArgumentError),
     #[error("using generic type")]
     UsingGenericType { expr: Loc<Expression>, t: TypeVar },
     #[error("cast to larger")]

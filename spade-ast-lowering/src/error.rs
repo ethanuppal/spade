@@ -19,43 +19,27 @@ pub enum Error {
     DeclarationError(#[from] spade_hir::symbol_table::DeclarationError),
     #[error("Uniqueness error")]
     UniquenessError(#[from] spade_hir::symbol_table::UniqueNameError),
-    #[error("Duplicate type variable")]
-    DuplicateTypeVariable {
-        found: Loc<Identifier>,
-        previously: Loc<Identifier>,
-    },
+    #[error("Argument error")]
+    ArgumentError(#[from] spade_hir::param_util::ArgumentError),
     #[error("Duplicate argument")]
     DuplicateArgument {
         new: Loc<Identifier>,
         prev: Loc<Identifier>,
+    },
+    #[error("Duplicate type variable")]
+    DuplicateTypeVariable {
+        found: Loc<Identifier>,
+        previously: Loc<Identifier>,
     },
     #[error("Duplicate enum option")]
     DuplicateEnumOption {
         new: Loc<Identifier>,
         prev: Loc<Identifier>,
     },
-    #[error("Argument list length mismatch, expected {expected} got {got}")]
-    ArgumentListLenghtMismatch {
-        expected: usize,
-        got: usize,
-        at: Loc<()>,
-    },
     #[error("Pattern list length mismatch, expected {expected} arguments, got {got}")]
     PatternListLengthMismatch {
         expected: usize,
         got: usize,
-        at: Loc<()>,
-    },
-    #[error("{new} was bound more than once")]
-    DuplicateNamedBindings {
-        new: Loc<Identifier>,
-        prev_loc: Loc<()>,
-    },
-    #[error("No argument named {name}")]
-    NoSuchArgument { name: Loc<Identifier> },
-    #[error("Missing arguments")]
-    MissingArguments {
-        missing: Vec<Identifier>,
         at: Loc<()>,
     },
     #[error("Incorrect stage count")]

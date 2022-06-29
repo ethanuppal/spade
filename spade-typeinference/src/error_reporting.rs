@@ -20,7 +20,15 @@ pub fn type_mismatch_notes(got: &UnificationTrace, expected: &UnificationTrace) 
 
 impl CompilationError for Error {
     fn report(&self, buffer: &mut Buffer, code: &CodeBundle) {
+        match self {
+            Error::ArgumentError(inner) => {
+                inner.report(buffer, code);
+                return;
+            }
+            _ => {}
+        };
         let diag = match self {
+            Error::ArgumentError(_) => unreachable!(),
             Error::GenericTypeInstanciation => todo![],
             Error::UnknownType(expr) => Diagnostic::error()
                 .with_message(format!(

@@ -35,10 +35,16 @@ impl CompilationError for Error {
                 underlying.report(buffer, code);
                 return;
             }
+            Error::ArgumentError(e) => {
+                e.report(buffer, code);
+                return;
+            }
             _ => {}
         }
 
         let diag = match self {
+            Error::ArgumentError(_) => unreachable!(),
+            Error::UnificationError(_) => unreachable!(),
             Error::UsingGenericType { expr, t } => Diagnostic::error()
                 .with_message(format!("Type of expression is not fully known"))
                 .with_labels(vec![expr
@@ -134,7 +140,6 @@ impl CompilationError for Error {
                         format!("hint: you might want to use match statement to handle different cases")
                     ])
             }
-            Error::UnificationError(_) => unreachable!(),
             Error::InternalExpressionWithoutType(loc) => Diagnostic::error()
                 .with_message("(Internal error) expression did not have a type")
                 .with_labels(vec![loc

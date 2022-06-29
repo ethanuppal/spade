@@ -1,3 +1,4 @@
+use spade_hir::param_util::ArgumentError;
 use thiserror::Error;
 
 use crate::constraints::ConstraintSource;
@@ -245,5 +246,8 @@ pub enum Error {
 
     #[error("Attempting to instanciate generic type")]
     GenericTypeInstanciation,
+
+    #[error("Argument error")]
+    ArgumentError(#[from] ArgumentError),
 }
 pub type Result<T> = std::result::Result<T, Error>;

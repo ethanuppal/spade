@@ -183,9 +183,7 @@ impl PipelineAvailability for ExprKind {
             ExprKind::Index(lhs, idx) => try_compute_availability(&[lhs.as_ref(), idx.as_ref()]),
             ExprKind::TupleIndex(lhs, _) => lhs.inner.kind.available_in(),
             ExprKind::FieldAccess(lhs, _) => lhs.inner.kind.available_in(),
-            ExprKind::EntityInstance(_, args) | ExprKind::FnCall(_, args) => {
-                try_compute_availability(&args.iter().map(|arg| &arg.value).collect::<Vec<_>>())
-            }
+            ExprKind::EntityInstance(_, _) | ExprKind::FnCall(_, _) => Ok(0),
             ExprKind::BinaryOperator(lhs, _, rhs) => {
                 try_compute_availability(&[lhs.as_ref(), rhs.as_ref()])
             }
@@ -205,12 +203,13 @@ impl PipelineAvailability for ExprKind {
             ExprKind::PipelineInstance {
                 depth,
                 name: _,
-                args,
+                args: _,
             } => {
-                let arg_availability = try_compute_availability(
-                    &args.iter().map(|arg| &arg.value).collect::<Vec<_>>(),
-                )?;
-                Ok(arg_availability + depth.inner as usize)
+                // FIXME: Re-add this check to allow nested pipelines
+                // let arg_availability = try_compute_availability(
+                //     &args.iter().map(|arg| &arg.value).collect::<Vec<_>>(),
+                // )?;
+                Ok(depth.inner as usize)
             }
             ExprKind::If(_, t, f) => try_compute_availability(&[t.as_ref(), f.as_ref()]),
             ExprKind::PipelineRef { .. } => Ok(0),

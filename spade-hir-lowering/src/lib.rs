@@ -6,9 +6,11 @@ pub mod pipelines;
 pub mod substitution;
 mod usefulness;
 
-use hir::symbol_table::{FrozenSymtab, PatternableKind};
-use hir::{Argument, ItemList, Pattern, PatternArgument, TypeList, UnitName};
 use local_impl::local_impl;
+
+use hir::param_util::{match_args_with_params, Argument};
+use hir::symbol_table::{FrozenSymtab, PatternableKind};
+use hir::{FunctionLike, ItemList, Pattern, PatternArgument, TypeList, UnitName};
 use mir::types::Type as MirType;
 use mir::{ConstantValue, ValueName};
 use monomorphisation::MonoState;
@@ -501,7 +503,7 @@ impl StatementLocal for Statement {
                     reset: register
                         .reset
                         .as_ref()
-                        .map(|(value, trig)| {
+                        .map::<Result<_>, _>(|(value, trig)| {
                             Ok((value.variable(ctx.subs)?, trig.variable(ctx.subs)?))
                         })
                         .transpose()?,
@@ -620,7 +622,7 @@ impl ExprLocal for Loc<Expression> {
                 ));
             }
             ExprKind::BinaryOperator(lhs, op, rhs) => {
-                let binop_builder = |op| {
+                let binop_builder = |op| -> Result<()> {
                     result.append(&mut lhs.lower(ctx)?);
                     result.append(&mut rhs.lower(ctx)?);
 
@@ -652,7 +654,7 @@ impl ExprLocal for Loc<Expression> {
                 };
             }
             ExprKind::UnaryOperator(op, operand) => {
-                let binop_builder = |op| {
+                let binop_builder = |op| -> Result<()> {
                     result.append(&mut operand.lower(ctx)?);
 
                     result.push(mir::Statement::Binding(mir::Binding {
@@ -863,15 +865,25 @@ impl ExprLocal for Loc<Expression> {
                         .to_mir_type(),
                 }))
             }
-            ExprKind::FnCall(name, args) => result.append(&mut self.handle_call(name, args, ctx)?),
+            ExprKind::FnCall(name, args) => {
+                let head = ctx.symtab.symtab().function_by_id(name);
+                let args = match_args_with_params(args, head.inputs())?;
+                result.append(&mut self.handle_call(name, &args, ctx)?)
+            }
             ExprKind::EntityInstance(name, args) => {
-                result.append(&mut self.handle_call(name, args, ctx)?)
+                let head = ctx.symtab.symtab().entity_by_id(name);
+                let args = match_args_with_params(args, head.inputs())?;
+                result.append(&mut self.handle_call(name, &args, ctx)?)
             }
             ExprKind::PipelineInstance {
                 depth: _,
                 name,
                 args,
-            } => result.append(&mut self.handle_call(name, args, ctx)?),
+            } => {
+                let head = ctx.symtab.symtab().pipeline_by_id(name);
+                let args = match_args_with_params(args, head.inputs())?;
+                result.append(&mut self.handle_call(name, &args, ctx)?);
+            }
             ExprKind::PipelineRef { .. } => {
                 // Empty: Pipeline refs are lowered in the alias checking
             }

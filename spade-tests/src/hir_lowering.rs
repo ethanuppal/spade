@@ -1514,4 +1514,124 @@ mod tests {
             }
             "
     }
+
+    #[test]
+    fn named_arguments_get_passed_in_correct_order() {
+        let code = r#"
+            fn sub(x: bool, y: bool) -> bool __builtin__
+
+            fn test(a: bool, b: bool) -> bool {
+                sub$(y: a, x: b)
+            }
+        "#;
+
+        let expected = vec![entity! {"test"; (
+            "a", n(0, "a"), Type::Bool,
+            "b", n(1, "b"), Type::Bool,
+        ) -> Type::Bool; {
+            (e(0); Type::Bool; Instance(("sub".to_string())); n(1, "b"), n(0, "a"))
+        } => e(0)}];
+
+        build_and_compare_entities!(code, expected);
+    }
+}
+
+#[cfg(test)]
+mod argument_list_tests {
+    use crate::snapshot_error;
+
+    snapshot_error! {
+        too_many_args,
+        "fn test(a: bool, b: bool) -> bool __builtin__
+        fn main() -> bool {
+            test(true, true, true)
+        }
+        "
+    }
+
+    snapshot_error! {
+        too_few_args,
+        "fn test(a: bool, b: bool) -> bool __builtin__
+        fn main() -> bool {
+            test(true)
+        }
+        "
+    }
+
+    snapshot_error! {
+        shorthand_named_argument_missing,
+        "fn test(a: bool, b: bool) -> bool __builtin__
+        fn main() -> bool {
+            let (a, b, c) = (true, true, true);
+            test$(a)
+        }
+        "
+    }
+
+    snapshot_error! {
+        shorthand_duplicate_named_argument_missing,
+        "fn test(a: bool, b: bool) -> bool __builtin__
+        fn main() -> bool {
+            let (a, b, c) = (true, true, true);
+            test$(a, a, b)
+        }
+        "
+    }
+
+    snapshot_error! {
+        long_named_argument_missing,
+        "fn test(a: bool, b: bool) -> bool __builtin__
+        fn main() -> bool {
+            test$(a: true)
+        }
+        "
+    }
+
+    snapshot_error! {
+        long_duplicate_named_arg,
+        "fn test(a: bool, b: bool) -> bool __builtin__
+        fn main() -> bool {
+            test$(a: true, a: true, b: true)
+        }
+        "
+    }
+
+    snapshot_error! {
+        long_fake_named_arg,
+        "fn test(a: bool, b: bool) -> bool __builtin__
+        fn main() -> bool {
+            test$(a: true, c: true, b: true)
+        }
+        "
+    }
+
+    snapshot_error! {
+        named_struct_patterns_errors_if_missing_bindings,
+        "struct Test{a: bool, b: bool}
+
+        fn main() -> Test {
+            Test$(a: true)
+        }
+        "
+    }
+
+    snapshot_error! {
+        named_struct_patterns_errors_if_binding_to_undefined_name,
+        "struct Test{a: bool, b: bool}
+
+        fn main() -> Test {
+            Test$(a: true, b: true, c: true)
+        }
+        "
+    }
+
+    snapshot_error! {
+        named_struct_patterns_errors_if_multiple_bindings_to_same_name,
+        "struct Test{a: bool, b: bool}
+
+        fn main() -> Test {
+            Test$(a: true, a: true, b: true)
+        }
+        "
+    }
 }

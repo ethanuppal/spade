@@ -7,8 +7,9 @@
 // types according to the rules of the node.
 
 use constraints::{ConstraintExpr, ConstraintRhs, ConstraintSource, TypeConstraints};
+use hir::param_util::{match_args_with_params, Argument};
 use hir::symbol_table::{Patternable, PatternableKind, TypeSymbol};
-use hir::{Argument, FunctionLike, ParameterList, Pattern, PatternArgument, TypeParam};
+use hir::{ArgumentList, FunctionLike, Pattern, PatternArgument, TypeParam};
 use hir::{ExecutableItem, ItemList};
 use parse_tree_macros::trace_typechecker;
 use requirements::{Replacement, Requirement};
@@ -334,7 +335,6 @@ impl TypeState {
     fn visit_argument_list(
         &mut self,
         args: &[Argument],
-        params: &ParameterList,
         symtab: &SymbolTable,
         generic_list: &GenericListToken,
     ) -> Result<()> {
@@ -342,35 +342,39 @@ impl TypeState {
             i,
             Argument {
                 target,
+                target_type,
                 value,
                 kind,
             },
-        ) in args.iter().enumerate()
+        ) in args.into_iter().enumerate()
         {
             self.visit_expression(&value, symtab, generic_list)?;
-            let target_type = self.type_var_from_hir(&params.arg_type(&target), generic_list);
+            let target_type = self.type_var_from_hir(&target_type, generic_list);
 
-            self.unify(&target_type, value, symtab).map_normal_err(
-                |(expected, got)| match kind {
-                    hir::ArgumentKind::Positional => Error::PositionalArgumentMismatch {
-                        index: i,
+            self.unify(&target_type, &value.inner, symtab)
+                .map_normal_err(|(expected, got)| match kind {
+                    hir::param_util::ArgumentKind::Positional => {
+                        Error::PositionalArgumentMismatch {
+                            index: i,
+                            expr: value.loc(),
+                            expected,
+                            got,
+                        }
+                    }
+                    hir::param_util::ArgumentKind::Named => Error::NamedArgumentMismatch {
+                        name: (*target).clone(),
                         expr: value.loc(),
                         expected,
                         got,
                     },
-                    hir::ArgumentKind::Named => Error::NamedArgumentMismatch {
-                        name: target.clone(),
-                        expr: value.loc(),
-                        expected,
-                        got,
-                    },
-                    hir::ArgumentKind::ShortNamed => Error::ShortNamedArgumentMismatch {
-                        name: target.clone(),
-                        expected,
-                        got,
-                    },
-                },
-            )?;
+                    hir::param_util::ArgumentKind::ShortNamed => {
+                        Error::ShortNamedArgumentMismatch {
+                            name: (*target).clone(),
+                            expected,
+                            got,
+                        }
+                    }
+                })?;
         }
 
         Ok(())
@@ -443,7 +447,7 @@ impl TypeState {
         expression: &Loc<Expression>,
         name: &NameID,
         head: &impl FunctionLike,
-        args: &[Argument],
+        args: &Loc<ArgumentList>,
         symtab: &SymbolTable,
     ) -> Result<()> {
         // Add new symbols for all the type parameters
@@ -477,6 +481,8 @@ impl TypeState {
                 self.get_generic_list(&generic_list)[&type_params[$idx].name_id()].clone()
             };
         }
+
+        let args = match_args_with_params(args, head.inputs())?;
 
         handle_special_functions! {
             ["std", "conv", "concat"] => {
@@ -517,7 +523,7 @@ impl TypeState {
         );
 
         // Unify the types of the arguments
-        self.visit_argument_list(args, &head.inputs(), symtab, &generic_list)?;
+        self.visit_argument_list(&args, symtab, &generic_list)?;
 
         self.unify_expression_generic_error(expression, &return_type, symtab)?;
 
@@ -1378,7 +1384,7 @@ mod tests {
     };
     use hir::symbol_table::TypeDeclKind;
     use hir::PatternKind;
-    use hir::{dtype, testutil::t_num, Argument};
+    use hir::{dtype, testutil::t_num, ArgumentList};
     use spade_ast::testutil::{ast_ident, ast_path};
     use spade_common::location_info::WithLocation;
     use spade_common::name::testutil::name_id;
@@ -1966,18 +1972,11 @@ mod tests {
 
         let input = ExprKind::EntityInstance(
             entity_name.nowhere(),
-            vec![
-                Argument {
-                    target: ast_ident("a"),
-                    value: Expression::ident(0, 0, "x").nowhere(),
-                    kind: hir::ArgumentKind::Named,
-                },
-                Argument {
-                    target: ast_ident("b"),
-                    value: Expression::ident(1, 1, "b").nowhere(),
-                    kind: hir::ArgumentKind::Named,
-                },
-            ],
+            ArgumentList::Positional(vec![
+                Expression::ident(0, 0, "x").nowhere(),
+                Expression::ident(1, 1, "b").nowhere(),
+            ])
+            .nowhere(),
         )
         .with_id(2)
         .nowhere();
@@ -2049,18 +2048,11 @@ mod tests {
         let input = ExprKind::PipelineInstance {
             depth: 2.nowhere(),
             name: entity_name.nowhere(),
-            args: vec![
-                Argument {
-                    target: ast_ident("a"),
-                    value: Expression::ident(0, 0, "x").nowhere(),
-                    kind: hir::ArgumentKind::Named,
-                },
-                Argument {
-                    target: ast_ident("b"),
-                    value: Expression::ident(1, 1, "b").nowhere(),
-                    kind: hir::ArgumentKind::Named,
-                },
-            ],
+            args: ArgumentList::Positional(vec![
+                Expression::ident(0, 0, "x").nowhere(),
+                Expression::ident(1, 1, "b").nowhere(),
+            ])
+            .nowhere(),
         }
         .with_id(2)
         .nowhere();

@@ -2,11 +2,23 @@ use crate::Error;
 use codespan_reporting::diagnostic::Diagnostic;
 use codespan_reporting::term::{self, termcolor::Buffer};
 use spade_common::error_reporting::{codespan_config, AsLabel, CodeBundle, CompilationError};
-use spade_hir::symbol_table::{DeclarationError, LookupError, UniqueNameError};
+use spade_hir::symbol_table::{DeclarationError, UniqueNameError};
 
 impl CompilationError for Error {
     fn report(&self, buffer: &mut Buffer, code: &CodeBundle) {
+        match self {
+            Error::ArgumentError(e) => {
+                e.report(buffer, code);
+                return;
+            }
+            Error::LookupError(e) => {
+                e.report(buffer, code);
+                return;
+            }
+            _ => {}
+        }
         let diag = match self {
+            Error::ArgumentError(_) | Error::LookupError(_) => unreachable!("Already handled"),
             Error::DuplicateTypeVariable { found, previously } => Diagnostic::error()
                 .with_message(format!("Duplicate typename: `{}`", found.inner))
                 .with_labels(vec![
@@ -15,118 +27,6 @@ impl CompilationError for Error {
                         .secondary_label()
                         .with_message("Previously used here"),
                 ]),
-            Error::LookupError(LookupError::NoSuchSymbol(path)) => Diagnostic::error()
-                .with_message(format!("Use of undeclared name {}", path))
-                .with_labels(vec![path.primary_label().with_message("Undeclared name")]),
-            Error::LookupError(LookupError::NotATypeSymbol(path, got)) => Diagnostic::error()
-                .with_message(format!("Expected {} to be a type", path))
-                .with_labels(vec![
-                    path.primary_label().with_message(format!("Expected type")),
-                    got.loc().secondary_label().with_message(format!(
-                        "{} is a {}",
-                        path,
-                        got.kind_string()
-                    )),
-                ]),
-            Error::LookupError(LookupError::NotAVariable(path, got)) => Diagnostic::error()
-                .with_message(format!("Expected {} to be a variable", path))
-                .with_labels(vec![
-                    path.primary_label()
-                        .with_message(format!("Expected variable")),
-                    got.loc().secondary_label().with_message(format!(
-                        "{} is a {}",
-                        path,
-                        got.kind_string()
-                    )),
-                ]),
-            Error::LookupError(LookupError::NotAnEntity(path, got)) => Diagnostic::error()
-                .with_message(format!("Expected {} to be an enity", path))
-                .with_labels(vec![
-                    path.primary_label()
-                        .with_message(format!("Expected entity")),
-                    got.loc().secondary_label().with_message(format!(
-                        "{} is a {}",
-                        path,
-                        got.kind_string()
-                    )),
-                ]),
-            Error::LookupError(LookupError::NotAPipeline(path, got)) => Diagnostic::error()
-                .with_message(format!("Expected {} to be a pipeline", path))
-                .with_labels(vec![
-                    path.primary_label()
-                        .with_message(format!("Expected pipeline")),
-                    got.loc().secondary_label().with_message(format!(
-                        "{} is a {}",
-                        path,
-                        got.kind_string()
-                    )),
-                ]),
-            Error::LookupError(LookupError::NotAPatternableType(path, got)) => Diagnostic::error()
-                .with_message(format!(
-                    "{} can not be used as a pattern",
-                    got.kind_string()
-                ))
-                .with_labels(vec![
-                    path.primary_label()
-                        .with_message(format!("Expected pattern")),
-                    got.loc().secondary_label().with_message(format!(
-                        "{} is a {}",
-                        path,
-                        got.kind_string()
-                    )),
-                ]),
-            Error::LookupError(LookupError::NotAFunction(path, got)) => Diagnostic::error()
-                .with_message(format!("Expected {} to be a function", path))
-                .with_labels(vec![
-                    path.primary_label()
-                        .with_message(format!("Expected function")),
-                    got.loc().secondary_label().with_message(format!(
-                        "{} is a {}",
-                        path,
-                        got.kind_string()
-                    )),
-                ]),
-            Error::LookupError(LookupError::NotAnEnumVariant(path, was)) => Diagnostic::error()
-                .with_message(format!("Expected {} to be an enum variant", path))
-                .with_labels(vec![
-                    path.primary_label()
-                        .with_message(format!("Expected enum variant")),
-                    was.loc().secondary_label().with_message(format!(
-                        "{} is a {}",
-                        path,
-                        was.kind_string()
-                    )),
-                ]),
-            Error::LookupError(LookupError::NotAStruct(path, was)) => Diagnostic::error()
-                .with_message(format!("Expected {} to be an struct", path))
-                .with_labels(vec![
-                    path.primary_label()
-                        .with_message(format!("Expected struct")),
-                    was.loc().secondary_label().with_message(format!(
-                        "{} is a {}",
-                        path,
-                        was.kind_string()
-                    )),
-                ]),
-            Error::LookupError(LookupError::NotAValue(path, was)) => Diagnostic::error()
-                .with_message(format!("Expected {} to be a value", path))
-                .with_labels(vec![
-                    path.primary_label().with_message(format!("Expected value")),
-                    was.loc().secondary_label().with_message(format!(
-                        "{} is a {}",
-                        path,
-                        was.kind_string()
-                    )),
-                ])
-                .with_notes(vec![
-                    "Expected value".to_string(),
-                    format!("Found {}", was.kind_string().to_string()),
-                ]),
-            Error::LookupError(LookupError::IsAType(path)) => Diagnostic::error()
-                .with_message(format!("Unexpected type {}", path))
-                .with_labels(vec![path
-                    .primary_label()
-                    .with_message(format!("Unexpected type"))]),
             Error::DeclarationError(DeclarationError::DuplicateDeclaration { old, new }) => {
                 Diagnostic::error()
                     .with_message(format!("A previous declaration of {} exists", new))
@@ -147,7 +47,7 @@ impl CompilationError for Error {
                             .with_message(format!("Previous definition here")),
                     ])
             }
-            Error::DuplicateArgument { new, prev } => Diagnostic::error()
+            Self::DuplicateArgument { new, prev } => Diagnostic::error()
                 .with_message(format!("Multiple arguments called {}", new))
                 .with_labels(vec![
                     new.primary_label()
@@ -163,51 +63,11 @@ impl CompilationError for Error {
                     prev.secondary_label()
                         .with_message(format!("Previously declared here")),
                 ]),
-            Error::ArgumentListLenghtMismatch { expected, got, at } => Diagnostic::error()
-                .with_message(format!("Expected {} arguments, got {}", expected, got))
-                .with_labels(vec![at
-                    .primary_label()
-                    .with_message(format!("Expected {} arguments", expected))]),
             Error::PatternListLengthMismatch { expected, got, at } => Diagnostic::error()
                 .with_message(format!("Expected {} arguments, got {}", expected, got))
                 .with_labels(vec![at
                     .primary_label()
                     .with_message(format!("Expected {} arguments", expected))]),
-            Error::DuplicateNamedBindings { new, prev_loc } => Diagnostic::error()
-                .with_message(format!("Multiple bindings to {}", new))
-                .with_labels(vec![
-                    new.primary_label().with_message("Previously bound"),
-                    prev_loc
-                        .secondary_label()
-                        .with_message(format!("previously bound here")),
-                ]),
-            Error::NoSuchArgument { name } => Diagnostic::error()
-                .with_message(format!("{}: No such argument to", name))
-                .with_labels(vec![name
-                    .primary_label()
-                    .with_message(format!("No such argument"))]),
-            Error::MissingArguments { missing, at } => {
-                let plural = if missing.len() == 1 {
-                    "argument"
-                } else {
-                    "arguments"
-                };
-
-                let arg_list = missing
-                    .iter()
-                    .map(|i| format!("{}", i))
-                    .collect::<Vec<_>>()
-                    .join(", ");
-
-                Diagnostic::error()
-                    .with_message(format!("Missing {}: {}", plural, arg_list))
-                    .with_labels(vec![
-                        at.primary_label()
-                            .with_message(format!("Missing {}", plural)),
-                        at.secondary_label()
-                            .with_message(format!("Missing {}", arg_list)),
-                    ])
-            }
             Error::IncorrectStageCount {
                 got,
                 expected,

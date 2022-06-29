@@ -1,0 +1,13 @@
+---
+source: spade-tests/src/hir_lowering.rs
+expression: "std::str::from_utf8(buffer.as_slice()).expect(\"error contains invalid utf-8\")"
+---
+error: Multiple bindings to a
+  ┌─ testinput:4:20
+  │
+4 │     Test$(a: true, a: true, b: true)
+  │           -        ^ Previously bound
+  │           │         
+  │           previously bound here
+
+
