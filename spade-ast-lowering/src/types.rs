@@ -83,11 +83,8 @@ pub fn lower_type_declaration(
                     members,
                     port_keyword: _,
                 } = s;
-                let members = crate::visit_parameter_list(
-                    members,
-                    symtab,
-                    &SelfContext::FreeStanding
-                )?;
+                let members =
+                    crate::visit_parameter_list(members, symtab, &SelfContext::FreeStanding)?;
                 Ok(hir::Struct {
                     members,
                     is_port: s.is_port(),

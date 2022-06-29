@@ -7,8 +7,8 @@ use itertools::Itertools;
 use logos::Logos;
 use pyo3::prelude::*;
 
-use spade::lexer;
 use spade::compiler_state::CompilerState;
+use spade::lexer;
 use spade_ast_lowering::id_tracker::{ExprIdTracker, ImplIdTracker};
 use spade_common::location_info::{Loc, WithLocation};
 use spade_common::name::{Identifier, Path as SpadePath};
@@ -321,7 +321,7 @@ impl Spade {
             idtracker,
             pipeline_ctx: None,
             // TODO: Verify that we can create a new tracker here
-            impl_idtracker: ImplIdTracker::new()
+            impl_idtracker: ImplIdTracker::new(),
         };
         let hir = spade_ast_lowering::visit_expression(&ast, &mut ast_ctx)
             .report_and_convert(&mut self.error_buffer, &self.code, &mut self.diag_handler)?
@@ -332,8 +332,12 @@ impl Spade {
             .create_generic_list(GenericListSource::Anonymous, &vec![]);
         // NOTE: We need to actually have the type information about what we're assigning to here
         // available
+        let type_ctx = spade_typeinference::Context {
+            symtab: &ast_ctx.symtab,
+            items: &self.item_list,
+        };
         self.type_state
-            .visit_expression(&hir, &ast_ctx.symtab, &generic_list)
+            .visit_expression(&hir, &type_ctx, &generic_list)
             .report_and_convert(&mut self.error_buffer, &self.code, &mut self.diag_handler)?;
 
         let g = self.type_state.new_generic();
@@ -441,7 +445,7 @@ impl Spade {
             symtab,
             idtracker,
             pipeline_ctx: None,
-            impl_idtracker: ImplIdTracker::new()
+            impl_idtracker: ImplIdTracker::new(),
         };
         let hir = spade_ast_lowering::visit_expression(&ast, &mut ast_ctx)
             .report_and_convert(&mut self.error_buffer, &self.code, &mut self.diag_handler)?
@@ -453,8 +457,12 @@ impl Spade {
             .type_state
             .create_generic_list(GenericListSource::Anonymous, &vec![]);
 
+        let type_ctx = spade_typeinference::Context {
+            symtab: &symtab.symtab(),
+            items: &self.item_list,
+        };
         self.type_state
-            .visit_expression(&hir, &symtab.symtab(), &generic_list)
+            .visit_expression(&hir, &type_ctx, &generic_list)
             .report_and_convert(&mut self.error_buffer, &self.code, &mut self.diag_handler)?;
 
         self.type_state

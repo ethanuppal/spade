@@ -10,20 +10,20 @@ pub mod types;
 use attributes::{report_unused_attributes, unit_name};
 use pipelines::PipelineContext;
 use spade_diagnostics::Diagnostic;
-use tracing::{info, event, Level};
+use tracing::{event, info, Level};
 
-use std::collections::{HashSet, HashMap};
+use std::collections::{HashMap, HashSet};
 
 use thiserror::Error;
 
-use spade_ast as ast;
 use comptime::ComptimeCondExt;
+use hir::param_util::ArgumentError;
 use hir::symbol_table::DeclarationState;
 use hir::{ExecutableItem, TraitName};
-use hir::param_util::ArgumentError;
+use spade_ast as ast;
 use spade_common::id_tracker::{ExprIdTracker, ImplIdTracker};
 use spade_common::location_info::{Loc, WithLocation};
-use spade_common::name::{Path, Identifier};
+use spade_common::name::{Identifier, Path};
 use spade_hir as hir;
 
 use crate::types::IsPort;
@@ -945,6 +945,11 @@ pub fn visit_expression(e: &ast::Expression, ctx: &mut Context) -> Result<hir::E
             Box::new(target.try_visit(visit_expression, ctx)?),
             field.clone(),
         )),
+        ast::Expression::MethodCall(target, name, args) => Ok(hir::ExprKind::MethodCall(
+            Box::new(target.try_visit(visit_expression, ctx)?),
+            name.clone(),
+            visit_argument_list(args, ctx)?,
+        )),
         ast::Expression::If(cond, ontrue, onfalse) => {
             let cond = cond.try_visit(visit_expression, ctx)?;
             let ontrue = ontrue.try_visit(visit_expression, ctx)?;
@@ -1144,6 +1149,52 @@ fn visit_register(reg: &Loc<ast::Register>, ctx: &mut Context) -> Result<Loc<hir
         value_type,
     }
     .at_loc(&loc))
+}
+
+/// Ensures that there are functions in anonymous trait impls that have conflicting
+/// names
+#[tracing::instrument(skip(item_list))]
+pub fn ensure_unique_anonymous_traits(item_list: &hir::ItemList) -> Vec<Error> {
+    item_list
+        .impls
+        .iter()
+        .map(|(type_name, impls)| {
+            let mut fns = impls
+                .iter()
+                .filter(|(trait_name, _)| trait_name.is_anonymous())
+                .flat_map(|(_, impl_block)| impl_block.fns.iter())
+                .collect::<Vec<_>>();
+
+            // For deterministic error messages, the order at which functions are seen must be
+            // deterministic. This is not the case as the impls come out of the hash map, so we'll
+            // sort them depending on the loc span of the impl. The exact ordering is
+            // completely irrelevant, as long as it is ordered the same way every time a test
+            // is run
+            fns.sort_by_key(|f| f.1 .1.span);
+
+            let mut set: HashMap<&Identifier, Loc<()>> = HashMap::new();
+
+            let mut duplicate_errs = vec![];
+            for (f, f_loc) in fns {
+                if let Some(prev) = set.get(f) {
+                    duplicate_errs.push(
+                        Diagnostic::error(
+                            f_loc.1,
+                            format!("{type_name} already has a method named {f}"),
+                        )
+                        .primary_label("Duplicate method")
+                        .secondary_label(prev, "Previous definition here")
+                        .into(),
+                    );
+                } else {
+                    set.insert(f, f_loc.1.clone());
+                }
+            }
+
+            duplicate_errs
+        })
+        .flatten()
+        .collect::<Vec<_>>()
 }
 
 #[cfg(test)]
@@ -2135,7 +2186,7 @@ mod pattern_visiting {
         symbol_table::{StructCallable, TypeDeclKind},
         PatternKind,
     };
-    use spade_common::{name::testutil::name_id, id_tracker::ImplIdTracker};
+    use spade_common::{id_tracker::ImplIdTracker, name::testutil::name_id};
 
     use super::*;
 
@@ -2573,7 +2624,7 @@ mod impl_blocks {
         // Add the type we are going to impl for. NOTE: Adding this as a j
         let target_type_name = ctx.symtab.add_type(
             ast_path("a").inner,
-            TypeSymbol::Declared(vec![], TypeDeclKind::Struct{is_port: false}).nowhere(),
+            TypeSymbol::Declared(vec![], TypeDeclKind::Struct { is_port: false }).nowhere(),
         );
 
         let new_items = visit_impl(&ast_block, &mut items, &mut ctx).unwrap();
@@ -2646,52 +2697,6 @@ mod impl_blocks {
             }
         )
     }
-}
-
-/// Ensures that there are functions in anonymous trait impls that have conflicting
-/// names
-#[tracing::instrument(skip(item_list))]
-pub fn ensure_unique_anonymous_traits(item_list: &hir::ItemList) -> Vec<Error> {
-    item_list
-        .impls
-        .iter()
-        .map(|(type_name, impls)| {
-            let mut fns = impls
-                .iter()
-                .filter(|(trait_name, _)| trait_name.is_anonymous())
-                .flat_map(|(_, impl_block)| impl_block.fns.iter())
-                .collect::<Vec<_>>();
-
-            // For deterministic error messages, the order at which functions are seen must be
-            // deterministic. This is not the case as the impls come out of the hash map, so we'll
-            // sort them depending on the loc span of the impl. The exact ordering is
-            // completely irrelevant, as long as it is ordered the same way every time a test
-            // is run
-            fns.sort_by_key(|f| f.1 .1.span);
-
-            let mut set: HashMap<&Identifier, Loc<()>> = HashMap::new();
-
-            let mut duplicate_errs = vec![];
-            for (f, f_loc) in fns {
-                if let Some(prev) = set.get(f) {
-                    duplicate_errs.push(
-                        Diagnostic::error(
-                            f_loc.1,
-                            format!("{type_name} already has a method named {f}")
-                        )
-                        .primary_label("Duplicate method")
-                        .secondary_label(prev, "Previous definition here")
-                        .into()
-                    );
-                } else {
-                    set.insert(f, f_loc.1.clone());
-                }
-            }
-
-            duplicate_errs
-        })
-        .flatten()
-        .collect::<Vec<_>>()
 }
 
 #[cfg(test)]

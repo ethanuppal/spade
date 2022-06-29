@@ -241,14 +241,17 @@ pub fn re_visit_type_declaration(
                     .map(|l| visit_parameter_list(&l, symtab, &SelfContext::FreeStanding))
                     .unwrap_or_else(|| Ok(hir::ParameterList(vec![])))?;
 
-                let args = option.1.clone().map(|l| {
-                    if let Some(self_) = l.self_ {
-                        Err(Diagnostic::bug(self_, "enum meber contains self"))
-                    }
-                    else {
-                        Ok(l.args)
-                    }
-                }).unwrap_or(Ok(vec![]))?;
+                let args = option
+                    .1
+                    .clone()
+                    .map(|l| {
+                        if let Some(self_) = l.self_ {
+                            Err(Diagnostic::bug(self_, "enum meber contains self"))
+                        } else {
+                            Ok(l.args)
+                        }
+                    })
+                    .unwrap_or(Ok(vec![]))?;
 
                 // Ensure that we don't have any port types in the enum variants
                 for (_, ty) in args {

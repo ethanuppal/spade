@@ -245,13 +245,20 @@ impl<'a> Parser<'a> {
         } else if self.peek_and_eat(&TokenKind::Dot)?.is_some() {
             let field = self.identifier()?;
 
-            Ok(
-                Expression::FieldAccess(Box::new(expr.clone()), field.clone()).between(
-                    self.file_id,
-                    &expr,
-                    &field,
-                ),
-            )
+            if let Some(args) = self.argument_list()? {
+                Ok(
+                    Expression::MethodCall(Box::new(expr.clone()), field.clone(), args.clone())
+                        .between(self.file_id, &expr, &args),
+                )
+            } else {
+                Ok(
+                    Expression::FieldAccess(Box::new(expr.clone()), field.clone()).between(
+                        self.file_id,
+                        &expr,
+                        &field,
+                    ),
+                )
+            }
         } else if self.peek_kind(&TokenKind::OpenBracket)? {
             let (index, _) = self.surrounded(
                 &TokenKind::OpenBracket,
@@ -565,6 +572,39 @@ mod test {
         let expected = Expression::FieldAccess(
             Box::new(Expression::Identifier(ast_path("a")).nowhere()),
             ast_ident("b"),
+        )
+        .nowhere();
+
+        check_parse!(code, expression, Ok(expected));
+    }
+
+    #[test]
+    fn method_call_parses() {
+        let code = "a.b(x)";
+
+        let expected = Expression::MethodCall(
+            Box::new(Expression::Identifier(ast_path("a")).nowhere()),
+            ast_ident("b"),
+            ArgumentList::Positional(vec![Expression::Identifier(ast_path("x")).nowhere()])
+                .nowhere(),
+        )
+        .nowhere();
+
+        check_parse!(code, expression, Ok(expected));
+    }
+
+    #[test]
+    fn method_call_with_named_args_works() {
+        let code = "a.b$(x: y)";
+
+        let expected = Expression::MethodCall(
+            Box::new(Expression::Identifier(ast_path("a")).nowhere()),
+            ast_ident("b"),
+            ArgumentList::Named(vec![NamedArgument::Full(
+                ast_ident("x"),
+                Expression::Identifier(ast_path("y")).nowhere(),
+            )])
+            .nowhere(),
         )
         .nowhere();
 

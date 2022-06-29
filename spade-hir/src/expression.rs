@@ -77,11 +77,12 @@ pub enum ExprKind {
     Index(Box<Loc<Expression>>, Box<Loc<Expression>>),
     TupleIndex(Box<Loc<Expression>>, Loc<u128>),
     FieldAccess(Box<Loc<Expression>>, Loc<Identifier>),
+    MethodCall(Box<Loc<Expression>>, Loc<Identifier>, ArgumentList),
+    FnCall(Loc<NameID>, Loc<ArgumentList>),
     BinaryOperator(Box<Loc<Expression>>, BinaryOperator, Box<Loc<Expression>>),
     UnaryOperator(UnaryOperator, Box<Loc<Expression>>),
     Match(Box<Loc<Expression>>, Vec<(Loc<Pattern>, Loc<Expression>)>),
     Block(Box<Block>),
-    FnCall(Loc<NameID>, Loc<ArgumentList>),
     EntityInstance(Loc<NameID>, Loc<ArgumentList>),
     PipelineInstance {
         depth: Loc<u128>,
@@ -108,28 +109,6 @@ impl ExprKind {
 
     pub fn idless(self) -> Expression {
         Expression { kind: self, id: 0 }
-    }
-
-    pub fn description(&self) -> &'static str {
-        match self {
-            ExprKind::Identifier(_) => "Identifier",
-            ExprKind::IntLiteral(_) => "IntLiteral",
-            ExprKind::BoolLiteral(_) => "BoolLiteral",
-            ExprKind::TupleLiteral(_) => "TupleLiteral",
-            ExprKind::ArrayLiteral(_) => "ArrayLiteral",
-            ExprKind::Index(_, _) => "Index",
-            ExprKind::TupleIndex(_, _) => "TupleIndex",
-            ExprKind::FieldAccess(_, _) => "FieldAccess",
-            ExprKind::BinaryOperator(_, _, _) => "BinaryOperator",
-            ExprKind::UnaryOperator(_, _) => "UnaryOperator",
-            ExprKind::Match(_, _) => "Match",
-            ExprKind::Block(_) => "Block",
-            ExprKind::FnCall(_, _) => "FnCall",
-            ExprKind::EntityInstance(_, _) => "EntityInstance",
-            ExprKind::PipelineInstance { .. } => "PipelineInstance",
-            ExprKind::If(_, _, _) => "If",
-            ExprKind::PipelineRef { .. } => "PipelineRef",
-        }
     }
 }
 

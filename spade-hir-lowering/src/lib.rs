@@ -23,7 +23,7 @@ pub use pipelines::generate_pipeline;
 use spade_common::id_tracker::ExprIdTracker;
 use spade_common::location_info::WithLocation;
 use spade_common::name::{Identifier, Path};
-use spade_diagnostics::{DiagHandler, Diagnostic};
+use spade_diagnostics::{diag_assert, diag_bail, DiagHandler, Diagnostic};
 use spade_typeinference::GenericListToken;
 use statement_list::StatementList;
 use substitution::Substitutions;
@@ -685,6 +685,10 @@ impl ExprLocal for Loc<Expression> {
                     substitution::Substitution::Port => Ok(Some(name.value_name())),
                 }
             }
+            ExprKind::MethodCall(_, _, _) => diag_bail!(
+                self,
+                "method call should have been lowered to function by this point"
+            ),
         }
     }
 
@@ -859,11 +863,11 @@ impl ExprLocal for Loc<Expression> {
                         )
                         .collect::<Vec<_>>();
 
-                    assert_eq!(
-                        field_indices.len(),
-                        1,
-                        "Expected exactly 1 field with the name {}",
-                        field
+                    diag_assert!(
+                        self,
+                        field_indices.len() == 1,
+                        "Expected exactly 1 field with the name {field}, got {}",
+                        field_indices.len()
                     );
 
                     *field_indices.first().unwrap()
@@ -1020,6 +1024,12 @@ impl ExprLocal for Loc<Expression> {
             }
             ExprKind::PipelineRef { .. } => {
                 // Empty: Pipeline refs are lowered in the alias checking
+            }
+            ExprKind::MethodCall(_, _, _) => {
+                diag_bail!(
+                    self,
+                    "Method should already have been lowered at this point"
+                )
             }
         }
         Ok(result)

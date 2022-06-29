@@ -13,7 +13,9 @@ use thiserror::Error;
 use tracing::Level;
 
 use spade_ast::ModuleBody;
-use spade_ast_lowering::{ensure_unique_anonymous_traits, global_symbols, visit_module_body, Context as AstLoweringCtx};
+use spade_ast_lowering::{
+    ensure_unique_anonymous_traits, global_symbols, visit_module_body, Context as AstLoweringCtx,
+};
 use spade_common::id_tracker;
 use spade_common::name::Path as SpadePath;
 use spade_diagnostics::{CodeBundle, CompilationError, DiagHandler};
@@ -206,6 +208,11 @@ pub fn compile(
     let mut frozen_symtab = symtab.freeze();
     let mut all_types = HashMap::new();
 
+    let type_inference_ctx = typeinference::Context {
+        symtab: &frozen_symtab.symtab(),
+        items: &item_list,
+    };
+
     let executables_and_types = item_list
         .executables
         .iter()
@@ -214,7 +221,7 @@ pub fn compile(
                 let mut type_state = typeinference::TypeState::new();
 
                 if let Ok(()) = type_state
-                    .visit_entity(e, frozen_symtab.symtab())
+                    .visit_entity(e, &type_inference_ctx)
                     .report(&mut errors)
                 {
                     all_types.extend(dump_types(
@@ -236,7 +243,7 @@ pub fn compile(
                 let mut type_state = typeinference::TypeState::new();
 
                 type_state
-                    .visit_pipeline(p, frozen_symtab.symtab())
+                    .visit_pipeline(p, &type_inference_ctx)
                     .or_report(&mut errors)
                     .unwrap_or_else(|| {
                         if opts.print_type_traceback {

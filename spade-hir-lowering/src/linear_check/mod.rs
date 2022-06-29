@@ -4,7 +4,7 @@ use spade_common::{
     location_info::{Loc, WithLocation},
     name::{NameID, Path},
 };
-use spade_diagnostics::Diagnostic;
+use spade_diagnostics::{diag_bail, Diagnostic};
 use spade_hir::{
     expression::{NamedArgument, UnaryOperator},
     symbol_table::SymbolTable,
@@ -93,6 +93,10 @@ fn visit_expression(
             name: _,
             declares_name: _,
         } => false,
+        spade_hir::ExprKind::MethodCall(_, _, _) => diag_bail!(
+            expr,
+            "method call should have been lowered to function by this point"
+        ),
     };
 
     if produces_new_resource {
@@ -266,6 +270,10 @@ fn visit_expression(
             }
             linear_state.add_alias_name(expr.id.at_loc(expr), &name.clone())?
         }
+        spade_hir::ExprKind::MethodCall(_, _, _) => diag_bail!(
+            expr,
+            "method call should have been lowered to function by this point"
+        ),
     }
     Ok(())
 }

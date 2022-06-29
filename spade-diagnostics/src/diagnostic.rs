@@ -352,10 +352,13 @@ impl Diagnostic {
 #[macro_export]
 macro_rules! diag_assert {
     ($span:expr, $condition:expr) => {
+        diag_assert!($span, $condition, "Assertion {} failed", stringify!($condition))
+    };
+    ($span:expr, $condition:expr, $($rest:tt)*) => {
         if !$condition {
             return Err(Diagnostic::bug(
                 $span,
-                format!("Assertion {} failed", stringify!($condition)),
+                format!($($rest)*),
             )
             .into());
         }
@@ -374,6 +377,6 @@ macro_rules! diag_anyhow {
 #[macro_export]
 macro_rules! diag_bail {
     ($span:expr, $($arg:tt)*) => {
-        Err(spade_diagnostics::diag_anyhow!($span, $($arg)*).into())
+        return Err(spade_diagnostics::diag_anyhow!($span, $($arg)*).into())
     }
 }

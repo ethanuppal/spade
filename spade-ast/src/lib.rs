@@ -118,6 +118,7 @@ pub enum Expression {
     TupleLiteral(Vec<Loc<Expression>>),
     TupleIndex(Box<Loc<Expression>>, Loc<u128>),
     FieldAccess(Box<Loc<Expression>>, Loc<Identifier>),
+    MethodCall(Box<Loc<Expression>>, Loc<Identifier>, Loc<ArgumentList>),
     If(
         Box<Loc<Expression>>,
         Box<Loc<Expression>>,
@@ -176,6 +177,7 @@ impl Expression {
             Expression::If(_, _, _) => "if",
             Expression::Match(_, _) => "match",
             Expression::FnCall(_, _) => "fn call",
+            Expression::MethodCall(_, _, _) => "method call",
             Expression::UnaryOperator(_, _) => "unary operator",
             Expression::BinaryOperator(_, _, _) => "binary operator",
             Expression::Block(_) => "block",

@@ -1,6 +1,5 @@
 use spade_common::location_info::{Loc, WithLocation};
 use spade_hir::expression::{BinaryOperator, UnaryOperator};
-use spade_hir::symbol_table::SymbolTable;
 use spade_hir::{ExprKind, Expression};
 use spade_macros::trace_typechecker;
 use spade_types::KnownType;
@@ -10,7 +9,7 @@ use crate::equation::{TypeVar, TypedExpression};
 use crate::error::{Error, UnificationErrorExt};
 use crate::fixed_types::t_bool;
 use crate::requirements::Requirement;
-use crate::{kvar, GenericListToken, HasType, Result, TraceStackEntry, TypeState};
+use crate::{kvar, Context, GenericListToken, HasType, Result, TraceStackEntry, TypeState};
 
 macro_rules! assuming_kind {
     ($pattern:pat = $expr:expr => $block:block) => {
@@ -25,17 +24,13 @@ macro_rules! assuming_kind {
 impl TypeState {
     #[trace_typechecker]
     #[tracing::instrument(level = "trace", skip_all)]
-    pub fn visit_identifier(
-        &mut self,
-        expression: &Loc<Expression>,
-        symtab: &SymbolTable,
-    ) -> Result<()> {
+    pub fn visit_identifier(&mut self, expression: &Loc<Expression>, ctx: &Context) -> Result<()> {
         assuming_kind!(ExprKind::Identifier(ident) = &expression => {
             // Add an equation for the anonymous id
             self.unify_expression_generic_error(
                 &expression,
                 &TypedExpression::Name(ident.clone()),
-                symtab,
+                &ctx.symtab,
             )?;
         });
         Ok(())
@@ -45,7 +40,7 @@ impl TypeState {
     pub fn visit_pipeline_ref(
         &mut self,
         expression: &Loc<Expression>,
-        symtab: &SymbolTable,
+        ctx: &Context,
     ) -> Result<()> {
         assuming_kind!(ExprKind::PipelineRef{stage: _, name, declares_name} = &expression => {
             // If this reference declares the referenced name, add a new equation
@@ -58,7 +53,7 @@ impl TypeState {
             self.unify_expression_generic_error(
                 &expression,
                 &TypedExpression::Name(name.clone().inner),
-                symtab,
+                &ctx.symtab,
             )?;
         });
         Ok(())
@@ -66,14 +61,10 @@ impl TypeState {
 
     #[trace_typechecker]
     #[tracing::instrument(level = "trace", skip_all)]
-    pub fn visit_int_literal(
-        &mut self,
-        expression: &Loc<Expression>,
-        symtab: &SymbolTable,
-    ) -> Result<()> {
+    pub fn visit_int_literal(&mut self, expression: &Loc<Expression>, ctx: &Context) -> Result<()> {
         assuming_kind!(ExprKind::IntLiteral(value) = &expression => {
-            let t = self.new_generic_int(symtab);
-            self.unify(&t, &expression.inner, symtab)
+            let t = self.new_generic_int(&ctx.symtab);
+            self.unify(&t, &expression.inner, &ctx.symtab)
                 .map_normal_err(|(_, got)| Error::IntLiteralIncompatible {
                     got,
                     loc: expression.loc(),
@@ -91,10 +82,10 @@ impl TypeState {
     pub fn visit_bool_literal(
         &mut self,
         expression: &Loc<Expression>,
-        symtab: &SymbolTable,
+        ctx: &Context,
     ) -> Result<()> {
         assuming_kind!(ExprKind::BoolLiteral(_) = &expression => {
-            self.unify_expression_generic_error(&expression, &t_bool(symtab), symtab)?;
+            self.unify_expression_generic_error(&expression, &t_bool(&ctx.symtab), &ctx.symtab)?;
         });
         Ok(())
     }
@@ -104,12 +95,12 @@ impl TypeState {
     pub fn visit_tuple_literal(
         &mut self,
         expression: &Loc<Expression>,
-        symtab: &SymbolTable,
+        ctx: &Context,
         generic_list: &GenericListToken,
     ) -> Result<()> {
         assuming_kind!(ExprKind::TupleLiteral(inner) = &expression => {
             for expr in inner {
-                self.visit_expression(expr, symtab, generic_list)?;
+                self.visit_expression(expr, ctx, generic_list)?;
                 // NOTE: safe unwrap, we know this expr has a type because we just visited
             }
 
@@ -123,7 +114,7 @@ impl TypeState {
             self.unify_expression_generic_error(
                 &expression,
                 &TypeVar::Tuple(inner_types),
-                symtab,
+                &ctx.symtab,
             )?;
         });
         Ok(())
@@ -134,11 +125,11 @@ impl TypeState {
     pub fn visit_tuple_index(
         &mut self,
         expression: &Loc<Expression>,
-        symtab: &SymbolTable,
+        ctx: &Context,
         generic_list: &GenericListToken,
     ) -> Result<()> {
         assuming_kind!(ExprKind::TupleIndex(tup, index) = &expression => {
-            self.visit_expression(tup, symtab, generic_list)?;
+            self.visit_expression(tup, ctx, generic_list)?;
             let t = self.type_of(&TypedExpression::Id(tup.id))?;
 
             let inner_types = match t {
@@ -161,7 +152,7 @@ impl TypeState {
                 self.unify_expression_generic_error(
                     &expression,
                     &true_inner_type,
-                    symtab,
+                    &ctx.symtab,
                 )?
             } else {
                 return Err(Error::TupleIndexOutOfBounds {
@@ -178,11 +169,11 @@ impl TypeState {
     pub fn visit_field_access(
         &mut self,
         expression: &Loc<Expression>,
-        symtab: &SymbolTable,
+        ctx: &Context,
         generic_list: &GenericListToken,
     ) -> Result<()> {
         assuming_kind!(ExprKind::FieldAccess(target, field) = &expression => {
-            self.visit_expression(&target, symtab, generic_list)?;
+            self.visit_expression(&target, ctx, generic_list)?;
 
             let target_type = self.type_of(&TypedExpression::Id(target.id))?;
             let self_type = self.type_of(&TypedExpression::Id(expression.id))?;
@@ -193,7 +184,33 @@ impl TypeState {
                 expr: self_type.at_loc(expression)
             };
 
-            requirement.check_or_add(self, symtab)?;
+            requirement.check_or_add(self, ctx)?;
+        });
+        Ok(())
+    }
+
+    #[trace_typechecker]
+    #[tracing::instrument(level = "trace", skip_all)]
+    pub fn visit_method_call(
+        &mut self,
+        expression: &Loc<Expression>,
+        ctx: &Context,
+        generic_list: &GenericListToken,
+    ) -> Result<()> {
+        assuming_kind!(ExprKind::MethodCall(target, method, args) = &expression => {
+            self.visit_expression(target, ctx, generic_list)?;
+
+            let target_type = self.type_of(&TypedExpression::Id(target.id))?;
+            let self_type = self.type_of(&TypedExpression::Id(expression.id))?;
+
+            let requirement = Requirement::HasMethod {
+                target_type: target_type.at_loc(target),
+                method: method.clone(),
+                expr: self_type.at_loc(expression),
+                args: args.clone()
+            };
+
+            requirement.check_or_add(self, ctx)?
         });
         Ok(())
     }
@@ -203,16 +220,16 @@ impl TypeState {
     pub fn visit_array_literal(
         &mut self,
         expression: &Loc<Expression>,
-        symtab: &SymbolTable,
+        ctx: &Context,
         generic_list: &GenericListToken,
     ) -> Result<()> {
         assuming_kind!(ExprKind::ArrayLiteral(members) = &expression => {
             for expr in members {
-                self.visit_expression(expr, symtab, generic_list)?;
+                self.visit_expression(expr, ctx, generic_list)?;
             }
 
             for (l, r) in members.iter().zip(members.iter().skip(1)) {
-                self.unify(l, r, symtab)
+                self.unify(l, r, &ctx.symtab)
                     .map_normal_err(|(expected, got)| Error::ArrayElementMismatch {
                         got,
                         expected,
@@ -234,7 +251,7 @@ impl TypeState {
                 size: Box::new(size_type),
             };
 
-            self.unify_expression_generic_error(expression, &result_type, symtab)?;
+            self.unify_expression_generic_error(expression, &result_type, &ctx.symtab)?;
         });
         Ok(())
     }
@@ -244,13 +261,13 @@ impl TypeState {
     pub fn visit_index(
         &mut self,
         expression: &Loc<Expression>,
-        symtab: &SymbolTable,
+        ctx: &Context,
         generic_list: &GenericListToken,
     ) -> Result<()> {
         assuming_kind!(ExprKind::Index(target, index) = &expression => {
             // Visit child nodes
-            self.visit_expression(&target, symtab, generic_list)?;
-            self.visit_expression(&index, symtab, generic_list)?;
+            self.visit_expression(&target, ctx, generic_list)?;
+            self.visit_expression(&index, ctx, generic_list)?;
 
             // Add constraints
             let inner_type = self.new_generic();
@@ -259,11 +276,11 @@ impl TypeState {
             self.unify_expression_generic_error(
                 &expression,
                 &inner_type,
-                symtab
+                &ctx.symtab
             )?;
 
             let array_size = self.new_generic();
-            let (int_type, int_size) = self.new_split_generic_int(&symtab);
+            let (int_type, int_size) = self.new_split_generic_int(&&ctx.symtab);
 
             self.add_constraint(
                 int_size,
@@ -274,7 +291,7 @@ impl TypeState {
             );
 
             // self.add_equation(TypedExpression::Id(index.id), int_type.clone());
-            self.unify(&index.inner, &int_type, symtab)
+            self.unify(&index.inner, &int_type, &ctx.symtab)
                 .map_normal_err(|(got, _)| {
                     Error::IndexMustBeInteger{got, loc: index.loc()}
                 })?;
@@ -283,7 +300,7 @@ impl TypeState {
                 inner: Box::new(expression.get_type(self)?),
                 size: Box::new(array_size)
             };
-            self.unify(&target.inner, &array_type, symtab)
+            self.unify(&target.inner, &array_type, &ctx.symtab)
                 .map_normal_err(|(got, _)| {
                     Error::IndexeeMustBeArray{got, loc: target.loc()}
                 })?;
@@ -296,14 +313,14 @@ impl TypeState {
     pub fn visit_block_expr(
         &mut self,
         expression: &Loc<Expression>,
-        symtab: &SymbolTable,
+        ctx: &Context,
         generic_list: &GenericListToken,
     ) -> Result<()> {
         assuming_kind!(ExprKind::Block(block) = &expression => {
-            self.visit_block(block, symtab, generic_list)?;
+            self.visit_block(block, ctx, generic_list)?;
 
             // Unify the return type of the block with the type of this expression
-            self.unify(&expression.inner, &block.result.inner, symtab)
+            self.unify(&expression.inner, &block.result.inner, &ctx.symtab)
                 // NOTE: We could be more specific about this error specifying
                 // that the type of the block must match the return type, though
                 // that might just be spammy.
@@ -321,27 +338,27 @@ impl TypeState {
     pub fn visit_if(
         &mut self,
         expression: &Loc<Expression>,
-        symtab: &SymbolTable,
+        ctx: &Context,
         generic_list: &GenericListToken,
     ) -> Result<()> {
         assuming_kind!(ExprKind::If(cond, on_true, on_false) = &expression => {
-            self.visit_expression(&cond, symtab, generic_list)?;
-            self.visit_expression(&on_true, symtab, generic_list)?;
-            self.visit_expression(&on_false, symtab, generic_list)?;
+            self.visit_expression(&cond, ctx, generic_list)?;
+            self.visit_expression(&on_true, ctx, generic_list)?;
+            self.visit_expression(&on_false, ctx, generic_list)?;
 
-            self.unify(&cond.inner, &t_bool(symtab), symtab)
+            self.unify(&cond.inner, &t_bool(&ctx.symtab), &ctx.symtab)
                 .map_normal_err(|(got, _)| Error::NonBooleanCondition {
                     got,
                     loc: cond.loc(),
                 })?;
-            self.unify(&on_true.inner, &on_false.inner, symtab)
+            self.unify(&on_true.inner, &on_false.inner, &ctx.symtab)
                 .map_normal_err(|(expected, got)| Error::IfConditionMismatch {
                     expected,
                     got,
                     first_branch: on_true.loc(),
                     incorrect_branch: on_false.loc(),
                 })?;
-            self.unify(expression, &on_false.inner, symtab)
+            self.unify(expression, &on_false.inner, &ctx.symtab)
                 .map_normal_err(|(got, expected)| Error::UnspecifiedTypeError {
                     expected,
                     got,
@@ -356,17 +373,17 @@ impl TypeState {
     pub fn visit_match(
         &mut self,
         expression: &Loc<Expression>,
-        symtab: &SymbolTable,
+        ctx: &Context,
         generic_list: &GenericListToken,
     ) -> Result<()> {
         assuming_kind!(ExprKind::Match(cond, branches) = &expression => {
-            self.visit_expression(&cond, symtab, generic_list)?;
+            self.visit_expression(&cond, ctx, generic_list)?;
 
             for (i, (pattern, result)) in branches.iter().enumerate() {
-                self.visit_pattern(pattern, symtab, generic_list)?;
-                self.visit_expression(result, symtab, generic_list)?;
+                self.visit_pattern(pattern, ctx, generic_list)?;
+                self.visit_expression(result, ctx, generic_list)?;
 
-                self.unify(&cond.inner, pattern, symtab)
+                self.unify(&cond.inner, pattern, &ctx.symtab)
                     .map_normal_err(|(expected, got)| {
                         // FIXME: Consider introducing a more specific error
                         Error::UnspecifiedTypeError {
@@ -377,7 +394,7 @@ impl TypeState {
                     })?;
 
                 if i != 0 {
-                    self.unify(&branches[0].1, result, symtab).map_normal_err(
+                    self.unify(&branches[0].1, result, &ctx.symtab).map_normal_err(
                         |(expected, got)| Error::MatchBranchMismatch {
                             expected,
                             got,
@@ -393,7 +410,7 @@ impl TypeState {
                 "Empty match statements should be checked by ast lowering"
             );
 
-            self.unify_expression_generic_error(&branches[0].1, expression, symtab)?;
+            self.unify_expression_generic_error(&branches[0].1, expression, &ctx.symtab)?;
         });
         Ok(())
     }
@@ -403,17 +420,17 @@ impl TypeState {
     pub fn visit_binary_operator(
         &mut self,
         expression: &Loc<Expression>,
-        symtab: &SymbolTable,
+        ctx: &Context,
         generic_list: &GenericListToken,
     ) -> Result<()> {
         assuming_kind!(ExprKind::BinaryOperator(lhs, op, rhs) = &expression => {
-            self.visit_expression(&lhs, symtab, generic_list)?;
-            self.visit_expression(&rhs, symtab, generic_list)?;
+            self.visit_expression(&lhs, ctx, generic_list)?;
+            self.visit_expression(&rhs, ctx, generic_list)?;
             match *op {
                 BinaryOperator::Add
                 | BinaryOperator::Sub => {
-                    let (lhs_t, lhs_size) = self.new_split_generic_int(symtab);
-                    let (result_t, result_size) = self.new_split_generic_int(symtab);
+                    let (lhs_t, lhs_size) = self.new_split_generic_int(&ctx.symtab);
+                    let (result_t, result_size) = self.new_split_generic_int(&ctx.symtab);
 
                     self.add_constraint(
                         result_size.clone(),
@@ -431,14 +448,14 @@ impl TypeState {
                     );
 
                     // FIXME: Make generic over types that can be added
-                    self.unify_expression_generic_error(&lhs, &lhs_t, symtab)?;
-                    self.unify_expression_generic_error(&lhs, &rhs.inner, symtab)?;
-                    self.unify_expression_generic_error(expression, &result_t, symtab)?;
+                    self.unify_expression_generic_error(&lhs, &lhs_t, &ctx.symtab)?;
+                    self.unify_expression_generic_error(&lhs, &rhs.inner, &ctx.symtab)?;
+                    self.unify_expression_generic_error(expression, &result_t, &ctx.symtab)?;
                 }
                 BinaryOperator::Mul => {
-                    let (lhs_t, lhs_size) = self.new_split_generic_int(symtab);
-                    let (rhs_t, rhs_size) = self.new_split_generic_int(symtab);
-                    let (result_t, result_size) = self.new_split_generic_int(symtab);
+                    let (lhs_t, lhs_size) = self.new_split_generic_int(&ctx.symtab);
+                    let (rhs_t, rhs_size) = self.new_split_generic_int(&ctx.symtab);
+                    let (result_t, result_size) = self.new_split_generic_int(&ctx.symtab);
 
                     // Result size is sum of input sizes
                     self.add_constraint(
@@ -462,9 +479,9 @@ impl TypeState {
                         , ConstraintSource::MultOutput
                     );
 
-                    self.unify_expression_generic_error(&lhs, &lhs_t, symtab)?;
-                    self.unify_expression_generic_error(&rhs, &rhs_t, symtab)?;
-                    self.unify_expression_generic_error(expression, &result_t, symtab)?;
+                    self.unify_expression_generic_error(&lhs, &lhs_t, &ctx.symtab)?;
+                    self.unify_expression_generic_error(&rhs, &rhs_t, &ctx.symtab)?;
+                    self.unify_expression_generic_error(expression, &result_t, &ctx.symtab)?;
                 }
                 // Shift operators have the same width in as they do out
                 BinaryOperator::LeftShift
@@ -472,32 +489,32 @@ impl TypeState {
                 | BinaryOperator::BitwiseXor
                 | BinaryOperator::BitwiseOr
                 | BinaryOperator::RightShift => {
-                    let int_type = self.new_generic_int(symtab);
+                    let int_type = self.new_generic_int(&ctx.symtab);
 
                     // FIXME: Make generic over types that can be added
-                    self.unify_expression_generic_error(&lhs, &int_type, symtab)?;
-                    self.unify_expression_generic_error(&lhs, &rhs.inner, symtab)?;
-                    self.unify_expression_generic_error(expression, &rhs.inner, symtab)?;
+                    self.unify_expression_generic_error(&lhs, &int_type, &ctx.symtab)?;
+                    self.unify_expression_generic_error(&lhs, &rhs.inner, &ctx.symtab)?;
+                    self.unify_expression_generic_error(expression, &rhs.inner, &ctx.symtab)?;
                 }
                 BinaryOperator::Eq
                 | BinaryOperator::Gt
                 | BinaryOperator::Lt
                 | BinaryOperator::Ge
                 | BinaryOperator::Le => {
-                    let int_type = self.new_generic_int(symtab);
+                    let int_type = self.new_generic_int(&ctx.symtab);
                     // FIXME: Make generic over types that can be added
-                    self.unify_expression_generic_error(&lhs, &int_type, symtab)?;
-                    self.unify_expression_generic_error(&lhs, &rhs.inner, symtab)?;
-                    self.unify_expression_generic_error(expression, &t_bool(symtab), symtab)?;
+                    self.unify_expression_generic_error(&lhs, &int_type, &ctx.symtab)?;
+                    self.unify_expression_generic_error(&lhs, &rhs.inner, &ctx.symtab)?;
+                    self.unify_expression_generic_error(expression, &t_bool(&ctx.symtab), &ctx.symtab)?;
                 }
                 BinaryOperator::LogicalAnd
                 | BinaryOperator::LogicalOr
                 | BinaryOperator::LogicalXor => {
                     // FIXME: Make generic over types that can be ored
-                    self.unify_expression_generic_error(&lhs, &t_bool(symtab), symtab)?;
-                    self.unify_expression_generic_error(&lhs, &rhs.inner, symtab)?;
+                    self.unify_expression_generic_error(&lhs, &t_bool(&ctx.symtab), &ctx.symtab)?;
+                    self.unify_expression_generic_error(&lhs, &rhs.inner, &ctx.symtab)?;
 
-                    self.unify_expression_generic_error(expression, &t_bool(symtab), symtab)?;
+                    self.unify_expression_generic_error(expression, &t_bool(&ctx.symtab), &ctx.symtab)?;
                 }
             }
         });
@@ -509,32 +526,32 @@ impl TypeState {
     pub fn visit_unary_operator(
         &mut self,
         expression: &Loc<Expression>,
-        symtab: &SymbolTable,
+        ctx: &Context,
         generic_list: &GenericListToken,
     ) -> Result<()> {
         assuming_kind!(ExprKind::UnaryOperator(op, operand) = &expression => {
-            self.visit_expression(&operand, symtab, generic_list)?;
+            self.visit_expression(&operand, ctx, generic_list)?;
             match op {
                 UnaryOperator::Sub | UnaryOperator::BitwiseNot => {
-                    let int_type = self.new_generic_int(symtab);
-                    self.unify_expression_generic_error(operand, &int_type, symtab)?;
-                    self.unify_expression_generic_error(expression, &int_type, symtab)?
+                    let int_type = self.new_generic_int(&ctx.symtab);
+                    self.unify_expression_generic_error(operand, &int_type, &ctx.symtab)?;
+                    self.unify_expression_generic_error(expression, &int_type, &ctx.symtab)?
                 }
                 UnaryOperator::Not => {
-                    self.unify_expression_generic_error(operand, &t_bool(symtab), symtab)?;
-                    self.unify_expression_generic_error(expression, &t_bool(symtab), symtab)?
+                    self.unify_expression_generic_error(operand, &t_bool(&ctx.symtab), &ctx.symtab)?;
+                    self.unify_expression_generic_error(expression, &t_bool(&ctx.symtab), &ctx.symtab)?
                 }
                 UnaryOperator::Dereference => {
                     let result_type = self.new_generic();
                     let reference_type = TypeVar::Wire(Box::new(result_type.clone()));
-                    self.unify_expression_generic_error(operand, &reference_type, symtab)?;
-                    self.unify_expression_generic_error(expression, &result_type, symtab)?
+                    self.unify_expression_generic_error(operand, &reference_type, &ctx.symtab)?;
+                    self.unify_expression_generic_error(expression, &result_type, &ctx.symtab)?
                 }
                 UnaryOperator::Reference => {
                     let result_type = self.new_generic();
                     let reference_type = TypeVar::Wire(Box::new(result_type.clone()));
-                    self.unify_expression_generic_error(operand, &result_type, symtab)?;
-                    self.unify_expression_generic_error(expression, &reference_type, symtab)?
+                    self.unify_expression_generic_error(operand, &result_type, &ctx.symtab)?;
+                    self.unify_expression_generic_error(expression, &reference_type, &ctx.symtab)?
                 }
             }
         });

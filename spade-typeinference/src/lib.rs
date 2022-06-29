@@ -44,6 +44,11 @@ mod requirements;
 pub mod testutil;
 pub mod trace_stack;
 
+pub struct Context<'a> {
+    pub symtab: &'a SymbolTable,
+    pub items: &'a ItemList,
+}
+
 // NOTE(allow) This is a debug macro which is not normally used but can come in handy
 #[allow(unused_macros)]
 macro_rules! add_trace {
@@ -76,11 +81,7 @@ pub struct ProcessedItemList {
 }
 
 impl ProcessedItemList {
-    pub fn typecheck(
-        items: &ItemList,
-        symbol_table: &SymbolTable,
-        print_trace: bool,
-    ) -> Result<Self> {
+    pub fn typecheck(items: &ItemList, ctx: &Context, print_trace: bool) -> Result<Self> {
         Ok(Self {
             executables: items
                 .executables
@@ -107,7 +108,7 @@ impl ProcessedItemList {
                         ExecutableItem::StructInstance { .. } => Ok(ProcessedItem::StructInstance),
                         ExecutableItem::Entity(entity) => {
                             type_state
-                                .visit_entity(&entity, symbol_table)
+                                .visit_entity(&entity, ctx)
                                 .map_err(err_processor!())?;
                             Ok(ProcessedItem::Entity(ProcessedEntity {
                                 entity: entity.inner,
@@ -116,7 +117,7 @@ impl ProcessedItemList {
                         }
                         ExecutableItem::Pipeline(pipeline) => {
                             type_state
-                                .visit_pipeline(&pipeline, symbol_table)
+                                .visit_pipeline(&pipeline, ctx)
                                 .map_err(err_processor!())?;
                             Ok(ProcessedItem::Pipeline(ProcessedPipeline {
                                 pipeline: pipeline.inner,
@@ -303,7 +304,7 @@ impl TypeState {
 
     #[trace_typechecker]
     #[tracing::instrument(level = "trace", skip_all, fields(%entity.name))]
-    pub fn visit_entity(&mut self, entity: &Entity, symtab: &SymbolTable) -> Result<()> {
+    pub fn visit_entity(&mut self, entity: &Entity, ctx: &Context) -> Result<()> {
         let generic_list = self.create_generic_list(
             GenericListSource::Definition(&entity.name.name_id().inner),
             &entity.head.type_params,
@@ -315,18 +316,22 @@ impl TypeState {
             self.add_equation(TypedExpression::Name(name.inner.clone()), tvar)
         }
 
-        self.visit_expression(&entity.body, symtab, &generic_list)?;
+        self.visit_expression(&entity.body, ctx, &generic_list)?;
 
         // Ensure that the output type matches what the user specified, and unit otherwise
         if let Some(output_type) = &entity.head.output_type {
             let tvar = self.type_var_from_hir(&output_type, &generic_list);
-            self.unify(&TypedExpression::Id(entity.body.inner.id), &tvar, symtab)
-                .map_normal_err(|(got, expected)| Error::EntityOutputTypeMismatch {
-                    expected,
-                    got,
-                    type_spec: output_type.loc(),
-                    output_expr: entity.body.loc(),
-                })?;
+            self.unify(
+                &TypedExpression::Id(entity.body.inner.id),
+                &tvar,
+                &ctx.symtab,
+            )
+            .map_normal_err(|(got, expected)| Error::EntityOutputTypeMismatch {
+                expected,
+                got,
+                type_spec: output_type.loc(),
+                output_expr: entity.body.loc(),
+            })?;
         } else {
             todo!("Support unit types")
             // self.unify_types(
@@ -340,7 +345,7 @@ impl TypeState {
             // })?;
         }
 
-        self.check_requirements(symtab)?;
+        self.check_requirements(ctx)?;
 
         Ok(())
     }
@@ -349,7 +354,7 @@ impl TypeState {
     fn visit_argument_list(
         &mut self,
         args: &[Argument],
-        symtab: &SymbolTable,
+        ctx: &Context,
         generic_list: &GenericListToken,
     ) -> Result<()> {
         for (
@@ -362,10 +367,10 @@ impl TypeState {
             },
         ) in args.into_iter().enumerate()
         {
-            self.visit_expression(&value, symtab, generic_list)?;
+            self.visit_expression(&value, ctx, generic_list)?;
             let target_type = self.type_var_from_hir(&target_type, generic_list);
 
-            self.unify(&target_type, &value.inner, symtab)
+            self.unify(&target_type, &value.inner, &ctx.symtab)
                 .map_normal_err(|(expected, got)| match kind {
                     hir::param_util::ArgumentKind::Positional => {
                         Error::PositionalArgumentMismatch {
@@ -399,7 +404,7 @@ impl TypeState {
     pub fn visit_expression(
         &mut self,
         expression: &Loc<Expression>,
-        symtab: &SymbolTable,
+        ctx: &Context,
         generic_list: &GenericListToken,
     ) -> Result<()> {
         let new_type = self.new_generic();
@@ -407,49 +412,46 @@ impl TypeState {
 
         // Recurse down the expression
         match &expression.inner.kind {
-            ExprKind::Identifier(_) => self.visit_identifier(expression, symtab)?,
-            ExprKind::IntLiteral(_) => self.visit_int_literal(expression, symtab)?,
-            ExprKind::BoolLiteral(_) => self.visit_bool_literal(expression, symtab)?,
-            ExprKind::TupleLiteral(_) => {
-                self.visit_tuple_literal(expression, symtab, generic_list)?
-            }
-            ExprKind::TupleIndex(_, _) => {
-                self.visit_tuple_index(expression, symtab, generic_list)?
-            }
-            ExprKind::ArrayLiteral(_) => {
-                self.visit_array_literal(expression, symtab, generic_list)?
-            }
+            ExprKind::Identifier(_) => self.visit_identifier(expression, ctx)?,
+            ExprKind::IntLiteral(_) => self.visit_int_literal(expression, ctx)?,
+            ExprKind::BoolLiteral(_) => self.visit_bool_literal(expression, ctx)?,
+            ExprKind::TupleLiteral(_) => self.visit_tuple_literal(expression, ctx, generic_list)?,
+            ExprKind::TupleIndex(_, _) => self.visit_tuple_index(expression, ctx, generic_list)?,
+            ExprKind::ArrayLiteral(_) => self.visit_array_literal(expression, ctx, generic_list)?,
             ExprKind::FieldAccess(_, _) => {
-                self.visit_field_access(expression, symtab, generic_list)?
+                self.visit_field_access(expression, ctx, generic_list)?
             }
-            ExprKind::Index(_, _) => self.visit_index(expression, symtab, generic_list)?,
-            ExprKind::Block(_) => self.visit_block_expr(expression, symtab, generic_list)?,
-            ExprKind::If(_, _, _) => self.visit_if(expression, symtab, generic_list)?,
-            ExprKind::Match(_, _) => self.visit_match(expression, symtab, generic_list)?,
+            ExprKind::MethodCall(_, _, _) => {
+                self.visit_method_call(expression, ctx, generic_list)?
+            }
+            ExprKind::Index(_, _) => self.visit_index(expression, ctx, generic_list)?,
+            ExprKind::Block(_) => self.visit_block_expr(expression, ctx, generic_list)?,
+            ExprKind::If(_, _, _) => self.visit_if(expression, ctx, generic_list)?,
+            ExprKind::Match(_, _) => self.visit_match(expression, ctx, generic_list)?,
             ExprKind::BinaryOperator(_, _, _) => {
-                self.visit_binary_operator(expression, symtab, generic_list)?
+                self.visit_binary_operator(expression, ctx, generic_list)?
             }
             ExprKind::UnaryOperator(_, _) => {
-                self.visit_unary_operator(expression, symtab, generic_list)?
+                self.visit_unary_operator(expression, ctx, generic_list)?
             }
             ExprKind::EntityInstance(name, args) => {
-                let head = symtab.entity_by_id(&name.inner);
-                self.handle_function_like(expression, &name.inner, &head.inner, args, symtab)?;
+                let head = ctx.symtab.entity_by_id(&name.inner);
+                self.handle_function_like(expression, &name.inner, &head.inner, args, ctx)?;
             }
             ExprKind::PipelineInstance {
                 depth: _,
                 name,
                 args,
             } => {
-                let head = symtab.pipeline_by_id(&name.inner);
-                self.handle_function_like(expression, &name.inner, &head.inner, args, symtab)?;
+                let head = ctx.symtab.pipeline_by_id(&name.inner);
+                self.handle_function_like(expression, &name.inner, &head.inner, args, ctx)?;
             }
             ExprKind::FnCall(name, args) => {
-                let head = symtab.function_by_id(&name.inner);
-                self.handle_function_like(expression, &name.inner, &head.inner, args, symtab)?;
+                let head = ctx.symtab.function_by_id(&name.inner);
+                self.handle_function_like(expression, &name.inner, &head.inner, args, ctx)?;
             }
             ExprKind::PipelineRef { .. } => {
-                self.visit_pipeline_ref(expression, symtab)?;
+                self.visit_pipeline_ref(expression, ctx)?;
             }
         }
         Ok(())
@@ -464,7 +466,7 @@ impl TypeState {
         name: &NameID,
         head: &impl FunctionLike,
         args: &Loc<ArgumentList>,
-        symtab: &SymbolTable,
+        ctx: &Context,
     ) -> Result<()> {
         // Add new symbols for all the type parameters
         let generic_list = self.create_generic_list(
@@ -479,7 +481,7 @@ impl TypeState {
             ($([$($path:expr),*] => $handler:expr),*) => {
                 $(
                     let path = Path(vec![$(Identifier($path.to_string()).nowhere()),*]).nowhere();
-                    if symtab
+                    if ctx.symtab
                         .try_lookup_final_id(&path)
                         .map(|n| &n == name)
                         .unwrap_or(false)
@@ -539,9 +541,9 @@ impl TypeState {
         );
 
         // Unify the types of the arguments
-        self.visit_argument_list(&args, symtab, &generic_list)?;
+        self.visit_argument_list(&args, ctx, &generic_list)?;
 
-        self.unify_expression_generic_error(expression, &return_type, symtab)?;
+        self.unify_expression_generic_error(expression, &return_type, &ctx.symtab)?;
 
         Ok(())
     }
@@ -592,13 +594,13 @@ impl TypeState {
     pub fn visit_block(
         &mut self,
         block: &Block,
-        symtab: &SymbolTable,
+        ctx: &Context,
         generic_list: &GenericListToken,
     ) -> Result<()> {
         for statement in &block.statements {
-            self.visit_statement(statement, symtab, generic_list)?;
+            self.visit_statement(statement, ctx, generic_list)?;
         }
-        self.visit_expression(&block.result, symtab, generic_list)?;
+        self.visit_expression(&block.result, ctx, generic_list)?;
         Ok(())
     }
 
@@ -606,19 +608,19 @@ impl TypeState {
     pub fn visit_pattern(
         &mut self,
         pattern: &Loc<Pattern>,
-        symtab: &SymbolTable,
+        ctx: &Context,
         generic_list: &GenericListToken,
     ) -> Result<()> {
         let new_type = self.new_generic();
         self.add_equation(TypedExpression::Id(pattern.inner.id), new_type);
         match &pattern.inner.kind {
             hir::PatternKind::Integer(_) => {
-                let int_t = &self.new_generic_int(&symtab);
-                self.unify(pattern, int_t, symtab)
+                let int_t = &self.new_generic_int(&ctx.symtab);
+                self.unify(pattern, int_t, &ctx.symtab)
                     .expect("Failed to unify new_generic with int");
             }
             hir::PatternKind::Bool(_) => {
-                self.unify(pattern, &t_bool(symtab), symtab)
+                self.unify(pattern, &t_bool(&ctx.symtab), &ctx.symtab)
                     .expect("Expected new_generic with boolean");
             }
             hir::PatternKind::Name { name, pre_declared } => {
@@ -631,7 +633,7 @@ impl TypeState {
                 self.unify(
                     &TypedExpression::Id(pattern.id),
                     &TypedExpression::Name(name.clone().inner),
-                    symtab,
+                    &ctx.symtab,
                 )
                 .map_normal_err(|(lhs, rhs)| Error::UnspecifiedTypeError {
                     expected: lhs,
@@ -641,7 +643,7 @@ impl TypeState {
             }
             hir::PatternKind::Tuple(subpatterns) => {
                 for pattern in subpatterns {
-                    self.visit_pattern(pattern, symtab, generic_list)?;
+                    self.visit_pattern(pattern, ctx, generic_list)?;
                 }
                 let tuple_type = TypeVar::Tuple(
                     subpatterns
@@ -653,17 +655,17 @@ impl TypeState {
                         .collect::<Result<_>>()?,
                 );
 
-                self.unify(pattern, &tuple_type, symtab)
+                self.unify(pattern, &tuple_type, &ctx.symtab)
                     .expect("Unification of new_generic with tuple type can not fail");
             }
             hir::PatternKind::Type(name, args) => {
                 let (condition_type, params, generic_list) =
-                    match symtab.patternable_type_by_id(name).inner {
+                    match ctx.symtab.patternable_type_by_id(name).inner {
                         Patternable {
                             kind: PatternableKind::Enum,
                             params: _,
                         } => {
-                            let enum_variant = symtab.enum_variant_by_id(name).inner;
+                            let enum_variant = ctx.symtab.enum_variant_by_id(name).inner;
                             let generic_list = self.create_generic_list(
                                 GenericListSource::Anonymous,
                                 &enum_variant.type_params,
@@ -678,7 +680,7 @@ impl TypeState {
                             kind: PatternableKind::Struct,
                             params: _,
                         } => {
-                            let s = symtab.struct_by_id(name).inner;
+                            let s = ctx.symtab.struct_by_id(name).inner;
                             let generic_list = self
                                 .create_generic_list(GenericListSource::Anonymous, &s.type_params);
 
@@ -689,7 +691,7 @@ impl TypeState {
                         }
                     };
 
-                self.unify(pattern, &condition_type, symtab)
+                self.unify(pattern, &condition_type, &ctx.symtab)
                     .expect("Unification of new_generic with enum can not fail");
 
                 for (
@@ -704,11 +706,11 @@ impl TypeState {
                     ),
                 ) in args.iter().zip(params.0.iter()).enumerate()
                 {
-                    self.visit_pattern(pattern, symtab, &generic_list)?;
+                    self.visit_pattern(pattern, ctx, &generic_list)?;
                     let target_type = self.type_var_from_hir(&target_type, &generic_list);
 
-                    self.unify(&target_type, pattern, symtab).map_normal_err(
-                        |(expected, got)| match kind {
+                    self.unify(&target_type, pattern, &ctx.symtab)
+                        .map_normal_err(|(expected, got)| match kind {
                             hir::ArgumentKind::Positional => Error::PositionalArgumentMismatch {
                                 index: i,
                                 expr: pattern.loc(),
@@ -726,8 +728,7 @@ impl TypeState {
                                 expected,
                                 got,
                             },
-                        },
-                    )?;
+                        })?;
                 }
             }
         }
@@ -738,17 +739,17 @@ impl TypeState {
     pub fn visit_statement(
         &mut self,
         stmt: &Loc<Statement>,
-        symtab: &SymbolTable,
+        ctx: &Context,
         generic_list: &GenericListToken,
     ) -> Result<()> {
         match &stmt.inner {
             Statement::Binding(pattern, t, value) => {
                 trace!("Visiting `let {} = ..`", pattern.kind);
-                self.visit_expression(value, symtab, generic_list)?;
+                self.visit_expression(value, ctx, generic_list)?;
 
-                self.visit_pattern(pattern, symtab, generic_list)?;
+                self.visit_pattern(pattern, ctx, generic_list)?;
 
-                self.unify(&TypedExpression::Id(pattern.id), value, symtab)
+                self.unify(&TypedExpression::Id(pattern.id), value, &ctx.symtab)
                     .map_normal_err(|(got, expected)| Error::PatternTypeMismatch {
                         pattern: pattern.loc(),
                         expected,
@@ -758,7 +759,7 @@ impl TypeState {
 
                 if let Some(t) = t {
                     let tvar = self.type_var_from_hir(&t, &generic_list);
-                    self.unify(&TypedExpression::Id(pattern.id), &tvar, symtab)
+                    self.unify(&TypedExpression::Id(pattern.id), &tvar, &ctx.symtab)
                         .map_normal_err(|(got, expected)| Error::UnspecifiedTypeError {
                             expected,
                             got,
@@ -768,7 +769,7 @@ impl TypeState {
 
                 Ok(())
             }
-            Statement::Register(reg) => self.visit_register(reg, symtab, generic_list),
+            Statement::Register(reg) => self.visit_register(reg, ctx, generic_list),
             Statement::Declaration(names) => {
                 for name in names {
                     let new_type = self.new_generic();
@@ -779,18 +780,18 @@ impl TypeState {
             // These statements have no effect on the types
             Statement::PipelineRegMarker | Statement::Label(_) => Ok(()),
             Statement::Assert(expr) => {
-                self.visit_expression(expr, symtab, generic_list)?;
-                self.unify_expression_generic_error(expr, &t_bool(symtab), symtab)?;
+                self.visit_expression(expr, ctx, generic_list)?;
+                self.unify_expression_generic_error(expr, &t_bool(&ctx.symtab), &ctx.symtab)?;
                 Ok(())
             }
             Statement::Set { target, value } => {
-                self.visit_expression(target, symtab, generic_list)?;
-                self.visit_expression(value, symtab, generic_list)?;
+                self.visit_expression(target, ctx, generic_list)?;
+                self.visit_expression(value, ctx, generic_list)?;
 
                 let inner_type = self.new_generic();
                 let outer_type = TypeVar::Backward(Box::new(inner_type.clone()));
-                self.unify_expression_generic_error(target, &outer_type, symtab)?;
-                self.unify_expression_generic_error(value, &inner_type, symtab)?;
+                self.unify_expression_generic_error(target, &outer_type, &ctx.symtab)?;
+                self.unify_expression_generic_error(value, &inner_type, &ctx.symtab)?;
 
                 Ok(())
             }
@@ -801,10 +802,10 @@ impl TypeState {
     pub fn visit_register(
         &mut self,
         reg: &Register,
-        symtab: &SymbolTable,
+        ctx: &Context,
         generic_list: &GenericListToken,
     ) -> Result<()> {
-        self.visit_pattern(&reg.pattern, symtab, generic_list)?;
+        self.visit_pattern(&reg.pattern, ctx, generic_list)?;
 
         let type_spec_type = &reg
             .value_type
@@ -814,7 +815,7 @@ impl TypeState {
         // We need to do this before visiting value, in case it constrains the
         // type of the identifiers in the pattern
         if let Some(tvar) = type_spec_type {
-            self.unify(&TypedExpression::Id(reg.pattern.id), tvar, symtab)
+            self.unify(&TypedExpression::Id(reg.pattern.id), tvar, &ctx.symtab)
                 .map_normal_err(|(got, expected)| Error::PatternTypeMismatch {
                     pattern: reg.pattern.loc(),
                     reason: tvar.loc(),
@@ -823,11 +824,11 @@ impl TypeState {
                 })?;
         }
 
-        self.visit_expression(&reg.clock, symtab, generic_list)?;
-        self.visit_expression(&reg.value, symtab, generic_list)?;
+        self.visit_expression(&reg.clock, ctx, generic_list)?;
+        self.visit_expression(&reg.value, ctx, generic_list)?;
 
         if let Some(tvar) = type_spec_type {
-            self.unify(&reg.value, tvar, symtab)
+            self.unify(&reg.value, tvar, &ctx.symtab)
                 .map_normal_err(|(got, expected)| Error::UnspecifiedTypeError {
                     expected,
                     got,
@@ -836,10 +837,10 @@ impl TypeState {
         }
 
         if let Some((rst_cond, rst_value)) = &reg.reset {
-            self.visit_expression(&rst_cond, symtab, generic_list)?;
-            self.visit_expression(&rst_value, symtab, generic_list)?;
+            self.visit_expression(&rst_cond, ctx, generic_list)?;
+            self.visit_expression(&rst_value, ctx, generic_list)?;
             // Ensure cond is a boolean
-            self.unify(&rst_cond.inner, &t_bool(symtab), symtab)
+            self.unify(&rst_cond.inner, &t_bool(&ctx.symtab), &ctx.symtab)
                 .map_normal_err(|(got, expected)| Error::NonBoolReset {
                     expected,
                     got,
@@ -847,7 +848,7 @@ impl TypeState {
                 })?;
 
             // Ensure the reset value has the same type as the register itself
-            self.unify(&rst_value.inner, &reg.value.inner, symtab)
+            self.unify(&rst_value.inner, &reg.value.inner, &ctx.symtab)
                 .map_normal_err(|(got, expected)| Error::RegisterResetMismatch {
                     expected,
                     got,
@@ -855,20 +856,24 @@ impl TypeState {
                 })?;
         }
 
-        self.unify(&reg.clock, &t_clock(symtab), symtab)
+        self.unify(&reg.clock, &t_clock(&ctx.symtab), &ctx.symtab)
             .map_normal_err(|(got, expected)| Error::NonClockClock {
                 expected,
                 got,
                 loc: reg.clock.loc(),
             })?;
 
-        self.unify(&TypedExpression::Id(reg.pattern.id), &reg.value, symtab)
-            .map_normal_err(|(got, expected)| Error::PatternTypeMismatch {
-                pattern: reg.pattern.loc(),
-                reason: reg.value.loc(),
-                expected,
-                got,
-            })?;
+        self.unify(
+            &TypedExpression::Id(reg.pattern.id),
+            &reg.value,
+            &ctx.symtab,
+        )
+        .map_normal_err(|(got, expected)| Error::PatternTypeMismatch {
+            pattern: reg.pattern.loc(),
+            reason: reg.value.loc(),
+            expected,
+            got,
+        })?;
 
         Ok(())
     }
@@ -976,6 +981,21 @@ impl TypeState {
                 expr: self
                     .check_var_for_replacement(expr.inner.clone())
                     .at_loc(&expr),
+            },
+            Requirement::HasMethod {
+                target_type,
+                method,
+                expr,
+                args,
+            } => Requirement::HasMethod {
+                target_type: self
+                    .check_var_for_replacement(target_type.inner.clone())
+                    .at_loc(&target_type),
+                method,
+                expr: self
+                    .check_var_for_replacement(expr.inner.clone())
+                    .at_loc(&expr),
+                args,
             },
             Requirement::FitsIntLiteral { value, target_type } => Requirement::FitsIntLiteral {
                 value,
@@ -1346,7 +1366,7 @@ impl TypeState {
             })
     }
 
-    fn check_requirements(&mut self, symtab: &SymbolTable) -> Result<()> {
+    fn check_requirements(&mut self, ctx: &Context) -> Result<()> {
         // Once we are done type checking the rest of the entity, check all requirements
         loop {
             // Walk through all the requirements, checking each one. If the requirement
@@ -1356,7 +1376,7 @@ impl TypeState {
                 .requirements
                 .clone()
                 .iter()
-                .map(|req| match req.check(self, symtab)? {
+                .map(|req| match req.check(self, &ctx.symtab, &ctx.items)? {
                     requirements::RequirementResult::NoChange => Ok((true, None)),
                     requirements::RequirementResult::Satisfied(replacement) => {
                         Ok((false, Some(replacement)))
@@ -1376,7 +1396,7 @@ impl TypeState {
             }
 
             for Replacement { from, to } in replacements {
-                self.unify(&from, &to, symtab)
+                self.unify(&from, &to, &ctx.symtab)
                     .map_normal_err(|(got, expected)| Error::UnspecifiedTypeError {
                         got,
                         expected,
@@ -1486,7 +1506,14 @@ mod tests {
         let input = ExprKind::IntLiteral(0).with_id(0).nowhere();
 
         state
-            .visit_expression(&input, &symtab, &generic_list)
+            .visit_expression(
+                &input,
+                &Context {
+                    symtab: &symtab,
+                    items: &ItemList::new(),
+                },
+                &generic_list,
+            )
             .expect("Type error");
 
         ensure_same_type!(state, TExpr::Id(0), unsized_int(1, &symtab));
@@ -1516,7 +1543,14 @@ mod tests {
 
         let generic_list = state.create_generic_list(GenericListSource::Anonymous, &vec![]);
         state
-            .visit_expression(&input, &symtab, &generic_list)
+            .visit_expression(
+                &input,
+                &Context {
+                    symtab: &symtab,
+                    items: &ItemList::new(),
+                },
+                &generic_list,
+            )
             .unwrap();
 
         // Check the generic type variables
@@ -1554,7 +1588,14 @@ mod tests {
 
         let generic_list = state.create_generic_list(GenericListSource::Anonymous, &vec![]);
         state
-            .visit_expression(&input, &symtab, &generic_list)
+            .visit_expression(
+                &input,
+                &Context {
+                    symtab: &symtab,
+                    items: &ItemList::new(),
+                },
+                &generic_list,
+            )
             .unwrap();
 
         // Check the generic type variables
@@ -1593,7 +1634,14 @@ mod tests {
 
         let generic_list = state.create_generic_list(GenericListSource::Anonymous, &vec![]);
         assert_ne!(
-            state.visit_expression(&input, &symtab, &generic_list),
+            state.visit_expression(
+                &input,
+                &Context {
+                    symtab: &symtab,
+                    items: &ItemList::new(),
+                },
+                &generic_list
+            ),
             Ok(())
         );
     }
@@ -1634,7 +1682,14 @@ mod tests {
 
         let generic_list = state.create_generic_list(GenericListSource::Anonymous, &vec![]);
         state
-            .visit_expression(&input, &symtab, &generic_list)
+            .visit_expression(
+                &input,
+                &Context {
+                    symtab: &symtab,
+                    items: &ItemList::new(),
+                },
+                &generic_list,
+            )
             .unwrap();
 
         // Ensure branches have the same type
@@ -1683,7 +1738,14 @@ mod tests {
 
         let generic_list = state.create_generic_list(GenericListSource::Anonymous, &vec![]);
         state
-            .visit_expression(&input, &symtab, &generic_list)
+            .visit_expression(
+                &input,
+                &Context {
+                    symtab: &symtab,
+                    items: &ItemList::new(),
+                },
+                &generic_list,
+            )
             .unwrap();
 
         let expected_type = TVar::Tuple(vec![kvar!(t_bool(&symtab)), kvar!(t_bool(&symtab))]);
@@ -1720,7 +1782,14 @@ mod tests {
 
         let generic_list = state.create_generic_list(GenericListSource::Anonymous, &vec![]);
         assert!(state
-            .visit_statement(&input, &symtab, &generic_list)
+            .visit_statement(
+                &input,
+                &Context {
+                    symtab: &symtab,
+                    items: &ItemList::new(),
+                },
+                &generic_list
+            )
             .is_err());
     }
 
@@ -1740,7 +1809,14 @@ mod tests {
 
         let generic_list = state.create_generic_list(GenericListSource::Anonymous, &vec![]);
         state
-            .visit_expression(&input, &symtab, &generic_list)
+            .visit_expression(
+                &input,
+                &Context {
+                    symtab: &symtab,
+                    items: &ItemList::new(),
+                },
+                &generic_list,
+            )
             .unwrap();
 
         ensure_same_type!(state, TExpr::Id(0), unsized_int(2, &symtab));
@@ -1771,7 +1847,14 @@ mod tests {
 
         let generic_list = state.create_generic_list(GenericListSource::Anonymous, &vec![]);
         state
-            .visit_expression(&input, &symtab, &generic_list)
+            .visit_expression(
+                &input,
+                &Context {
+                    symtab: &symtab,
+                    items: &ItemList::new(),
+                },
+                &generic_list,
+            )
             .unwrap();
 
         // Check the generic type variables
@@ -1815,7 +1898,14 @@ mod tests {
 
         let generic_list = state.create_generic_list(GenericListSource::Anonymous, &vec![]);
         state
-            .visit_expression(&input, &symtab, &generic_list)
+            .visit_expression(
+                &input,
+                &Context {
+                    symtab: &symtab,
+                    items: &ItemList::new(),
+                },
+                &generic_list,
+            )
             .unwrap();
 
         // The index should be an integer
@@ -1857,7 +1947,14 @@ mod tests {
 
         let generic_list = state.create_generic_list(GenericListSource::Anonymous, &vec![]);
         state
-            .visit_register(&input, &symtab, &generic_list)
+            .visit_register(
+                &input,
+                &Context {
+                    symtab: &symtab,
+                    items: &ItemList::new(),
+                },
+                &generic_list,
+            )
             .unwrap();
 
         ensure_same_type!(state, TExpr::Id(0), unsized_int(3, &symtab));
@@ -1893,7 +1990,14 @@ mod tests {
 
         let generic_list = state.create_generic_list(GenericListSource::Anonymous, &vec![]);
         state
-            .visit_register(&input, &symtab, &generic_list)
+            .visit_register(
+                &input,
+                &Context {
+                    symtab: &symtab,
+                    items: &ItemList::new(),
+                },
+                &generic_list,
+            )
             .unwrap();
 
         ensure_same_type!(state, TExpr::Name(name_id(0, "a").inner), TVar::Unknown(2));
@@ -1931,7 +2035,14 @@ mod tests {
 
         let generic_list = state.create_generic_list(GenericListSource::Anonymous, &vec![]);
         state
-            .visit_register(&input, &symtab, &generic_list)
+            .visit_register(
+                &input,
+                &Context {
+                    symtab: &symtab,
+                    items: &ItemList::new(),
+                },
+                &generic_list,
+            )
             .unwrap();
 
         let t0 = get_type!(state, &TExpr::Id(0));
@@ -1962,7 +2073,14 @@ mod tests {
 
         let generic_list = state.create_generic_list(GenericListSource::Anonymous, &vec![]);
         state
-            .visit_statement(&input, &symtab, &generic_list)
+            .visit_statement(
+                &input,
+                &Context {
+                    symtab: &symtab,
+                    items: &ItemList::new(),
+                },
+                &generic_list,
+            )
             .unwrap();
 
         let ta = get_type!(state, &TExpr::Name(name_id(0, "a").inner));
@@ -1985,7 +2103,14 @@ mod tests {
 
         let generic_list = state.create_generic_list(GenericListSource::Anonymous, &vec![]);
         state
-            .visit_statement(&input, &symtab, &generic_list)
+            .visit_statement(
+                &input,
+                &Context {
+                    symtab: &symtab,
+                    items: &ItemList::new(),
+                },
+                &generic_list,
+            )
             .unwrap();
 
         let ta = get_type!(state, &TExpr::Name(name_id(0, "a").inner));
@@ -2025,7 +2150,14 @@ mod tests {
 
         let generic_list = state.create_generic_list(GenericListSource::Anonymous, &vec![]);
         state
-            .visit_register(&input, &symtab, &generic_list)
+            .visit_register(
+                &input,
+                &Context {
+                    symtab: &symtab,
+                    items: &ItemList::new(),
+                },
+                &generic_list,
+            )
             .unwrap();
 
         let ttup = get_type!(state, &TExpr::Id(3));
@@ -2078,7 +2210,14 @@ mod tests {
 
         let generic_list = state.create_generic_list(GenericListSource::Anonymous, &vec![]);
         state
-            .visit_expression(&input, &symtab, &generic_list)
+            .visit_expression(
+                &input,
+                &Context {
+                    symtab: &symtab,
+                    items: &ItemList::new(),
+                },
+                &generic_list,
+            )
             .unwrap();
 
         let t0 = get_type!(state, &TExpr::Id(0));
@@ -2155,7 +2294,14 @@ mod tests {
 
         let generic_list = state.create_generic_list(GenericListSource::Anonymous, &vec![]);
         state
-            .visit_expression(&input, &symtab, &generic_list)
+            .visit_expression(
+                &input,
+                &Context {
+                    symtab: &symtab,
+                    items: &ItemList::new(),
+                },
+                &generic_list,
+            )
             .unwrap();
 
         // Check the generic type variables

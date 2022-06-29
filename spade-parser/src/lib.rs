@@ -12,9 +12,9 @@ use tracing::{event, Level};
 
 use spade_ast::{
     ArgumentList, ArgumentPattern, AttributeList, Block, ComptimeConfig, Entity, Enum, Expression,
-    FunctionDecl, Item, Module, ModuleBody, NamedArgument, ParameterList, Pattern, Pipeline,
-    PipelineStageReference, Register, Statement, Struct, TraitDef, TypeDeclKind, TypeDeclaration,
-    TypeExpression, TypeParam, TypeSpec, UseStatement, ImplBlock,
+    FunctionDecl, ImplBlock, Item, Module, ModuleBody, NamedArgument, ParameterList, Pattern,
+    Pipeline, Register, Statement, Struct, TraitDef, TypeDeclKind,
+    TypeDeclaration, TypeExpression, TypeParam, TypeSpec, UseStatement, PipelineStageReference,
 };
 use spade_common::location_info::{lspan, AsLabel, FullSpan, HasCodespan, Loc, WithLocation};
 use spade_common::name::{Identifier, Path};

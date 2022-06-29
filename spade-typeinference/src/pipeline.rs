@@ -1,16 +1,15 @@
 use spade_common::location_info::WithLocation;
-use spade_hir::symbol_table::SymbolTable;
 use spade_hir::Pipeline;
 use spade_macros::trace_typechecker;
 
 use crate::equation::TypedExpression;
 use crate::error::{Error, Result, UnificationErrorExt};
 use crate::fixed_types::t_clock;
-use crate::{GenericListSource, TraceStackEntry, TypeState};
+use crate::{Context, GenericListSource, TraceStackEntry, TypeState};
 
 impl TypeState {
     #[trace_typechecker]
-    pub fn visit_pipeline(&mut self, pipeline: &Pipeline, symtab: &SymbolTable) -> Result<()> {
+    pub fn visit_pipeline(&mut self, pipeline: &Pipeline, ctx: &Context) -> Result<()> {
         let Pipeline {
             head,
             name: _,
@@ -27,8 +26,8 @@ impl TypeState {
         self.add_equation(TypedExpression::Name(inputs[0].0.clone().inner), input_tvar);
         self.unify(
             &TypedExpression::Name(inputs[0].0.clone().inner),
-            &t_clock(symtab),
-            symtab,
+            &t_clock(&ctx.symtab),
+            &ctx.symtab,
         )
         .map_normal_err(|(got, expected)| Error::FirstPipelineArgNotClock {
             expected,
@@ -41,12 +40,12 @@ impl TypeState {
             self.add_equation(TypedExpression::Name(name.clone().inner), tvar);
         }
 
-        self.visit_expression(&body, symtab, &generic_list)?;
+        self.visit_expression(&body, ctx, &generic_list)?;
 
         // Ensure that the output type matches what the user specified, and unit otherwise
         if let Some(output_type) = &head.output_type {
             let tvar = self.type_var_from_hir(&output_type, &generic_list);
-            self.unify(&TypedExpression::Id(body.inner.id), &tvar, symtab)
+            self.unify(&TypedExpression::Id(body.inner.id), &tvar, &ctx.symtab)
                 .map_normal_err(|(got, expected)| Error::EntityOutputTypeMismatch {
                     expected,
                     got,
@@ -66,7 +65,7 @@ impl TypeState {
             // })?;
         }
 
-        self.check_requirements(symtab)?;
+        self.check_requirements(ctx)?;
 
         Ok(())
     }
@@ -114,7 +113,13 @@ mod tests {
 
         let mut state = TypeState::new();
 
-        match state.visit_pipeline(&pipeline, &symtab) {
+        match state.visit_pipeline(
+            &pipeline,
+            &Context {
+                symtab: &symtab,
+                items: &ItemList::new(),
+            },
+        ) {
             Err(Error::FirstPipelineArgNotClock { .. }) => {}
             other => {
                 println!("{}", format_trace_stack(&state.trace_stack));

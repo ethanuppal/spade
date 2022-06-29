@@ -1,12 +1,15 @@
+use std::collections::HashMap;
+
 use spade_common::location_info::WithLocation;
 use spade_common::name::Path;
 use spade_common::{location_info::Loc, name::Identifier};
 use spade_diagnostics::{diag_anyhow, diag_assert, diag_bail, Diagnostic};
 use spade_hir::symbol_table::{SymbolTable, TypeDeclKind, TypeSymbol};
+use spade_hir::{ArgumentList, ItemList};
 
 use crate::equation::TypeVar;
 use crate::error::{Error, Result, UnificationErrorExt};
-use crate::{GenericListSource, TypeState};
+use crate::{Context, GenericListSource, TypeState};
 
 #[derive(Clone, Debug)]
 pub enum Requirement {
@@ -17,6 +20,15 @@ pub enum Requirement {
         field: Loc<Identifier>,
         /// The expression from which this requirement arrises
         expr: Loc<TypeVar>,
+    },
+    HasMethod {
+        /// The type which should have the associated method
+        target_type: Loc<TypeVar>,
+        /// The method which should exist on the type
+        method: Loc<Identifier>,
+        /// The expression from which this requirement arrises
+        expr: Loc<TypeVar>,
+        args: ArgumentList,
     },
     /// The type should be an integer large enough to fit the specified value
     FitsIntLiteral {
@@ -32,6 +44,15 @@ impl Requirement {
                 target_type,
                 expr,
                 field: _,
+            } => {
+                TypeState::replace_type_var(target_type, from, to);
+                TypeState::replace_type_var(expr, from, to);
+            }
+            Requirement::HasMethod {
+                target_type,
+                expr,
+                method: _,
+                args: _,
             } => {
                 TypeState::replace_type_var(target_type, from, to);
                 TypeState::replace_type_var(expr, from, to);
@@ -56,6 +77,7 @@ impl Requirement {
         &self,
         type_state: &mut TypeState,
         symtab: &SymbolTable,
+        items: &ItemList,
     ) -> Result<RequirementResult> {
         match self {
             Requirement::HasField {
@@ -129,6 +151,71 @@ impl Requirement {
                     },
                 )
             }
+            Requirement::HasMethod {
+                target_type,
+                method,
+                expr,
+                args,
+            } => target_type.expect_named(
+                |type_name, params| {
+                    // Go to the item list to check if this name has any methods
+                    let impld_traits = items
+                        .impls
+                        .get(type_name)
+                        .cloned()
+                        .unwrap_or_else(|| HashMap::new());
+
+                    // Gather all the candidate methods which we may want to call.
+                    let candidates = impld_traits
+                        .iter()
+                        .flat_map(|(trait_name, r#impl)| {
+                            r#impl.fns.iter().map(move |(fn_name, actual_fn)| {
+                                if fn_name == &method.inner {
+                                    Some((trait_name, fn_name, actual_fn))
+                                } else {
+                                    None
+                                }
+                            })
+                        })
+                        .filter_map(|r| r)
+                        .collect::<Vec<_>>();
+
+                    let final_method = match candidates.as_slice() {
+                        [m] => m,
+                        [] => {
+                            return Err(Diagnostic::error(
+                                expr,
+                                "{type_name} as no method {method}",
+                            )
+                            .primary_label("No such method")
+                            .into())
+                        }
+                        other => {
+                            let diag = Diagnostic::error(
+                                expr,
+                                "{type_name} has multiple methods named {method}",
+                            )
+                            .primary_label("Ambiguous method call");
+
+                            // TODO: List the options
+
+                            return Err(diag.into());
+                        }
+                    };
+
+                    // We now have a unique method. Take note that this is the actual target of the
+                    // compilation. Also typecheck the parameters to the method.
+
+                    todo!()
+                },
+                || Ok(RequirementResult::NoChange),
+                |other| {
+                    Err(
+                        Diagnostic::error(expr, format!("{other} does not have any methods"))
+                            .into(),
+                    )
+                },
+            ),
             Requirement::FitsIntLiteral { value, target_type } => {
                 let int_type = symtab
                     .lookup_type_symbol(&Path::from_strs(&["int"]).nowhere())
@@ -181,18 +268,18 @@ impl Requirement {
     /// Check if this requirement is satisfied. If so, apply the resulting replacements to the
     /// type state, otherwise add the requirement to the type state requirement list
     #[tracing::instrument(level = "trace", skip_all)]
-    pub fn check_or_add(self, type_state: &mut TypeState, symtab: &SymbolTable) -> Result<()> {
-        match self.check(type_state, symtab)? {
+    pub fn check_or_add(self, type_state: &mut TypeState, ctx: &Context) -> Result<()> {
+        match self.check(type_state, &ctx.symtab, &ctx.items)? {
             RequirementResult::NoChange => Ok(type_state.add_requirement(self)),
             RequirementResult::Satisfied(replacements) => {
                 for Replacement { from, to } in replacements {
-                    type_state.unify(&from.inner, &to, symtab).map_normal_err(
-                        |(got, expected)| Error::UnspecifiedTypeError {
+                    type_state
+                        .unify(&from.inner, &to, &ctx.symtab)
+                        .map_normal_err(|(got, expected)| Error::UnspecifiedTypeError {
                             expected,
                             got,
                             loc: from.loc(),
-                        },
-                    )?;
+                        })?;
                 }
                 Ok(())
             }

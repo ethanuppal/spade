@@ -2,7 +2,8 @@ use std::collections::HashMap;
 
 use local_impl::local_impl;
 use spade_common::{id_tracker::ExprIdTracker, location_info::Loc, name::NameID};
-use spade_diagnostics::DiagHandler;
+use spade_diagnostics::Diagnostic;
+use spade_diagnostics::{diag_bail, DiagHandler};
 use spade_hir::{
     symbol_table::FrozenSymtab, ExprKind, Expression, ItemList, Pattern, Pipeline, Statement,
 };
@@ -245,6 +246,10 @@ impl PipelineAvailability for ExprKind {
             }
             ExprKind::If(_, t, f) => try_compute_availability(&[t.as_ref(), f.as_ref()]),
             ExprKind::PipelineRef { .. } => Ok(0),
+            ExprKind::MethodCall(_, ident, _) => diag_bail!(
+                ident,
+                "Method call should already have been lowered by this point"
+            ),
         }
     }
 }
