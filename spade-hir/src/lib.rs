@@ -1,7 +1,6 @@
 pub mod expression;
 pub mod symbol_table;
 pub mod testutil;
-pub mod util;
 
 use std::collections::HashMap;
 
