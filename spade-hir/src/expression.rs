@@ -1,12 +1,13 @@
 use crate::Pattern;
 
 use super::{Block, NameID};
+use serde::{Deserialize, Serialize};
 use spade_common::{
     location_info::{Loc, WithLocation},
     name::{Identifier, Path},
 };
 
-#[derive(Clone, Copy, PartialEq, Debug)]
+#[derive(Clone, Copy, PartialEq, Debug, Serialize, Deserialize)]
 pub enum BinaryOperator {
     Add,
     Sub,
@@ -24,14 +25,14 @@ pub enum BinaryOperator {
     BitwiseAnd,
     Xor,
 }
-#[derive(Clone, Copy, PartialEq, Debug)]
+#[derive(Clone, Copy, PartialEq, Debug, Serialize, Deserialize)]
 pub enum UnaryOperator {
     Sub,
     Not,
     BitwiseNot,
 }
 
-#[derive(PartialEq, Debug, Clone)]
+#[derive(PartialEq, Debug, Clone, Serialize, Deserialize)]
 pub enum NamedArgument {
     /// Binds the arguent named LHS in the outer scope to the expression
     Full(Loc<Identifier>, Loc<Expression>),
@@ -42,21 +43,28 @@ impl WithLocation for NamedArgument {}
 
 /// Specifies how an argument is bound. Mainly used for error reporting without
 /// code duplication
-#[derive(PartialEq, Debug, Clone)]
+#[derive(PartialEq, Debug, Clone, Serialize, Deserialize)]
 pub enum ArgumentKind {
     Positional,
     Named,
     ShortNamed,
 }
 
-#[derive(PartialEq, Debug, Clone)]
+#[derive(PartialEq, Debug, Clone, Serialize, Deserialize)]
 pub enum ArgumentList {
     Named(Vec<NamedArgument>),
     Positional(Vec<Loc<Expression>>),
 }
+
+#[derive(PartialEq, Debug, Clone, Serialize, Deserialize)]
+pub struct Argument {
+    pub target: Loc<Identifier>,
+    pub value: Loc<Expression>,
+    pub kind: ArgumentKind,
+}
 impl WithLocation for ArgumentList {}
 
-#[derive(PartialEq, Debug, Clone)]
+#[derive(PartialEq, Debug, Clone, Serialize, Deserialize)]
 pub enum ExprKind {
     Identifier(NameID),
     IntLiteral(u128),
@@ -99,7 +107,7 @@ impl ExprKind {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Expression {
     pub kind: ExprKind,
     // This ID is used to associate types with the expression

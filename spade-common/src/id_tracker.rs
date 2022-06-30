@@ -1,6 +1,8 @@
+use serde::{Deserialize, Serialize};
+
 macro_rules! def_id_tracker {
     ($name:ident) => {
-        #[derive(Debug)]
+        #[derive(Debug, Serialize, Deserialize)]
         pub struct $name {
             id: u64,
         }
@@ -14,6 +16,10 @@ macro_rules! def_id_tracker {
                 let result = self.id;
                 self.id += 1;
                 result
+            }
+
+            pub fn peek(&self) -> u64 {
+                self.id
             }
 
             /// Clone this ID tracker. After this is done, only one of the ID trackers may

@@ -528,6 +528,10 @@ impl StatementLocal for Statement {
     }
 }
 
+pub fn expr_to_mir(expr: Loc<Expression>, ctx: &mut Context) -> Result<Vec<mir::Statement>> {
+    expr.lower(ctx)
+}
+
 #[local_impl]
 impl ExprLocal for Loc<Expression> {
     /// If the verilog code for this expression is just an alias for another variable
@@ -1336,7 +1340,7 @@ impl ExprLocal for Loc<Expression> {
     }
 }
 
-struct Context<'a> {
+pub struct Context<'a> {
     pub symtab: &'a mut FrozenSymtab,
     pub idtracker: &'a mut ExprIdTracker,
     pub types: &'a TypeState,

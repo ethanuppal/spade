@@ -12,6 +12,7 @@ logos = "0.11.4"
 codespan = "0.12.0"
 codespan-reporting = "0.12.0"
 clap = { version = "3.1.18", features = ["derive"] }
+serde = {version = "1.0.136", features = ["derive"]}
 
 anyhow = "1.0.32"
 thiserror = "1.0.20"

@@ -4,6 +4,7 @@ use codespan_reporting::{
     diagnostic::Diagnostic,
     term::{self, termcolor::Buffer},
 };
+use serde::{Deserialize, Serialize};
 use spade_common::{
     error_reporting::{codespan_config, AsLabel, CodeBundle, CompilationError},
     id_tracker::NameIdTracker,
@@ -206,7 +207,7 @@ pub enum UniqueNameError {
     MultipleDefinitions { new: Loc<Path>, prev: Loc<()> },
 }
 
-#[derive(PartialEq, Debug, Clone)]
+#[derive(PartialEq, Debug, Clone, Serialize, Deserialize)]
 pub struct EnumVariant {
     pub output_type: Loc<TypeSpec>,
     pub option: usize,
@@ -225,7 +226,7 @@ impl EnumVariant {
     }
 }
 
-#[derive(PartialEq, Debug, Clone)]
+#[derive(PartialEq, Debug, Clone, Serialize, Deserialize)]
 pub struct StructCallable {
     pub self_type: Loc<TypeSpec>,
     pub params: ParameterList,
@@ -274,7 +275,7 @@ impl FunctionHead {
 
 /// Any named thing in the language which is not a type. Structs are here for instanciation
 /// under the same NameID as the type
-#[derive(PartialEq, Debug, Clone)]
+#[derive(PartialEq, Debug, Clone, Serialize, Deserialize)]
 pub enum Thing {
     /// Defintion of a named type
     Struct(Loc<StructCallable>),
@@ -333,14 +334,14 @@ pub struct Patternable {
 }
 impl WithLocation for Patternable {}
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub enum GenericArg {
     TypeName(Identifier),
     Number(Identifier),
 }
 impl WithLocation for GenericArg {}
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub enum TypeDeclKind {
     Struct,
     Enum,
@@ -348,7 +349,7 @@ pub enum TypeDeclKind {
 }
 
 /// A previously declared type symbol
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub enum TypeSymbol {
     /// A fixed type that has been declared, like a typedef, enum or struct with the
     /// specified generic arguments
@@ -359,7 +360,7 @@ pub enum TypeSymbol {
 }
 impl WithLocation for TypeSymbol {}
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum DeclarationState {
     Undefined(NameID),
     Defined(Loc<()>),
@@ -373,7 +374,7 @@ impl WithLocation for DeclarationState {}
 /// symtab are absolute paths, that is `X` in `mod A{mod B {fn X}}` will only be
 /// stored as `A::B::X`. All variables inside X will also have the full path
 /// appended to them. This should however be invisilbe to the user.
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct SymbolTable {
     /// Each outer vec is a scope, inner vecs are symbols in that scope
     pub symbols: Vec<HashMap<Path, NameID>>,
@@ -950,6 +951,7 @@ impl SymbolTable {
 ///
 /// Mutable references to `SymbolTable` are never given out, ensuring that nothing can be added to
 /// the symtab, thus avoiding collisions with things added using the Id tracker.
+#[derive(Serialize, Deserialize)]
 pub struct FrozenSymtab {
     inner: SymbolTable,
     pub id_tracker: NameIdTracker,
@@ -962,5 +964,17 @@ impl FrozenSymtab {
 
     pub fn new_name(&mut self, description: Path) -> NameID {
         NameID(self.id_tracker.next(), description)
+    }
+
+    /// Unfreeze the symtab, removing access to the underlying id_tracker and
+    /// giving ownership of the symtab again
+    pub fn unfreeze(self) -> SymbolTable {
+        // Ensure that we will not generate any conflicting IDs by re combining
+        // this with the new ID trakcer by ensuring that the new ID tracker is further
+        // along than the symtabs
+        SymbolTable {
+            id_tracker: self.id_tracker,
+            ..self.inner
+        }
     }
 }

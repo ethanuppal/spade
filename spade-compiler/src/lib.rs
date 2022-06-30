@@ -2,6 +2,10 @@ pub mod namespaced_file;
 
 use codespan_reporting::term::termcolor::Buffer;
 use logos::Logos;
+use serde::Deserialize;
+use serde::Serialize;
+use spade_ast_lowering::id_tracker::ExprIdTracker;
+use spade_hir::symbol_table::FrozenSymtab;
 use spade_hir::symbol_table::SymbolTable;
 use spade_hir_lowering::monomorphisation::MirOutput;
 use spade_typeinference::dump::dump_types;
@@ -27,6 +31,7 @@ pub struct Opt<'b> {
     pub outfile: Option<PathBuf>,
     pub mir_output: Option<PathBuf>,
     pub type_dump_file: Option<PathBuf>,
+    pub state_dump_file: Option<PathBuf>,
     pub print_type_traceback: bool,
     pub print_parse_traceback: bool,
 }
@@ -73,7 +78,7 @@ where
     }
 }
 
-struct ErrorHandler<'a> {
+pub struct ErrorHandler<'a> {
     pub failed: bool,
     pub error_buffer: &'a mut Buffer,
     /// Using a RW lock here is just a lazy way of managing the ownership of code to
@@ -98,6 +103,16 @@ pub struct Artefacts {
     pub bumpy_mir_entities: Vec<spade_mir::Entity>,
     // MIR entities after flattening
     pub flat_mir_entities: Vec<spade_mir::Entity>,
+}
+
+/// All the state required in order to add more thigns to the compilation process
+#[derive(Serialize, Deserialize)]
+pub struct CompilerState {
+    // (filename, file content) of all the compiled files
+    pub code: Vec<(String, String)>,
+    pub symtab: FrozenSymtab,
+    pub idtracker: ExprIdTracker,
+    pub item_list: ItemList,
 }
 
 pub fn compile(
@@ -337,6 +352,22 @@ pub fn compile(
             }
             Err(e) => {
                 println!("Failed to encode type info as RON {:?}", e)
+            }
+        }
+    }
+    if let Some(state_dump_file) = opts.state_dump_file {
+        let state = CompilerState {
+            code: code.read().unwrap().dump_files(),
+            symtab: frozen_symtab,
+            idtracker,
+            item_list,
+        };
+        match ron::to_string(&state) {
+            Ok(encoded) => {
+                std::fs::write(state_dump_file, encoded).or_report(&mut errors);
+            }
+            Err(e) => {
+                println!("Failed to encode compiler state info as RON {:?}", e)
             }
         }
     }

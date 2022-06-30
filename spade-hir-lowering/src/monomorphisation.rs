@@ -29,7 +29,7 @@ pub struct MonoState {
 }
 
 impl MonoState {
-    fn new() -> MonoState {
+    pub fn new() -> MonoState {
         MonoState {
             to_compile: VecDeque::new(),
             translation: HashMap::new(),

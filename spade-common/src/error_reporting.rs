@@ -43,8 +43,32 @@ impl CodeBundle {
         Self { files }
     }
 
+    pub fn from_files(files: &[(String, String)]) -> Self {
+        let mut result = Self {
+            files: SimpleFiles::new(),
+        };
+        for (name, content) in files {
+            result.add_file(name.clone(), content.clone());
+        }
+        result
+    }
+
     pub fn add_file(&mut self, filename: String, content: String) -> usize {
         self.files.add(filename, content)
+    }
+
+    pub fn dump_files(&self) -> Vec<(String, String)> {
+        let mut all_files = vec![];
+        loop {
+            match self.files.get(all_files.len()) {
+                Ok(file) => all_files.push((file.name().clone(), file.source().clone())),
+                Err(codespan_reporting::files::Error::FileMissing) => break,
+                Err(e) => {
+                    panic!("{e}")
+                }
+            };
+        }
+        all_files
     }
 }
 

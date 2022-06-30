@@ -654,7 +654,7 @@ fn visit_argument_list(
 }
 
 #[tracing::instrument(skip_all)]
-fn visit_expression(e: &ast::Expression, ctx: &mut Context) -> Result<hir::Expression> {
+pub fn visit_expression(e: &ast::Expression, ctx: &mut Context) -> Result<hir::Expression> {
     let new_id = ctx.idtracker.next();
 
     match e {

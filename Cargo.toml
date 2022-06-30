@@ -1,16 +1,7 @@
 [workspace]
 
 members = [
-    "spade-compiler",
-    "spade-hir",
-    "spade-types",
-    "spade-common",
-    "spade-parser",
-    "spade-typeinference",
-    "spade-ast-lowering",
-    "spade-tests",
-    "spade-mir",
-    "spade-hir-lowering",
+    "spade-*",
     "spade-ast",
     "vcd-translate",
     "parse_tree_macros"

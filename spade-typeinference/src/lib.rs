@@ -138,7 +138,7 @@ impl ProcessedItemList {
     }
 }
 
-enum GenericListSource<'a> {
+pub enum GenericListSource<'a> {
     /// For when you just need a new generic list but have no need to refer back
     /// to it in the future
     Anonymous,
@@ -530,7 +530,7 @@ impl TypeState {
         Ok(())
     }
 
-    fn create_generic_list(
+    pub fn create_generic_list(
         &mut self,
         source: GenericListSource,
         params: &[Loc<TypeParam>],

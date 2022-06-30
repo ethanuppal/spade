@@ -35,6 +35,11 @@ pub struct Opt {
     #[structopt(long)]
     pub type_dump: Option<PathBuf>,
 
+    /// Write the compiler state required to continue adding modules to the project
+    /// formatted in ron https://github.com/ron-rs/ron
+    #[structopt(long)]
+    pub state_dump: Option<PathBuf>,
+
     /// Print a traceback of the type inference process if type inference or hir lowering fails
     #[structopt(long = "print-type-traceback")]
     pub print_type_traceback: bool,
@@ -94,6 +99,7 @@ fn main() -> Result<()> {
         outfile: Some(opts.outfile),
         mir_output: opts.mir_output,
         type_dump_file: opts.type_dump,
+        state_dump_file: opts.state_dump,
         print_type_traceback: opts.print_type_traceback,
         print_parse_traceback: opts.print_parse_traceback,
     };

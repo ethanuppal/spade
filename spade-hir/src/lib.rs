@@ -5,7 +5,8 @@ pub mod testutil;
 
 use std::collections::HashMap;
 
-pub use expression::{ArgumentKind, ArgumentList, ExprKind, Expression};
+pub use expression::{Argument, ArgumentKind, ArgumentList, ExprKind, Expression};
+use serde::{Deserialize, Serialize};
 use spade_common::{
     location_info::{Loc, WithLocation},
     name::{Identifier, NameID},
@@ -17,14 +18,14 @@ use spade_types::PrimitiveType;
   more correctness guaranatees than the AST, such as types actually existing.
 */
 
-#[derive(PartialEq, Debug, Clone)]
+#[derive(PartialEq, Debug, Clone, Serialize, Deserialize)]
 pub struct Block {
     pub statements: Vec<Loc<Statement>>,
     pub result: Loc<Expression>,
 }
 impl WithLocation for Block {}
 
-#[derive(PartialEq, Debug, Clone)]
+#[derive(PartialEq, Debug, Clone, Serialize, Deserialize)]
 pub struct PatternArgument {
     pub target: Loc<Identifier>,
     pub value: Loc<Pattern>,
@@ -32,7 +33,7 @@ pub struct PatternArgument {
 }
 impl WithLocation for PatternArgument {}
 
-#[derive(PartialEq, Debug, Clone)]
+#[derive(PartialEq, Debug, Clone, Serialize, Deserialize)]
 pub enum PatternKind {
     Integer(u128),
     Bool(bool),
@@ -64,7 +65,7 @@ impl PatternKind {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Pattern {
     // Unique ID of the pattern for use in type inference. Shared with expressions
     // meaning there are no expression/pattern id collisions
@@ -96,7 +97,7 @@ impl PartialEq for Pattern {
     }
 }
 
-#[derive(PartialEq, Debug, Clone)]
+#[derive(PartialEq, Debug, Clone, Serialize, Deserialize)]
 pub enum Statement {
     Binding(Loc<Pattern>, Option<Loc<TypeSpec>>, Loc<Expression>),
     Register(Loc<Register>),
@@ -118,7 +119,7 @@ impl Statement {
     }
 }
 
-#[derive(PartialEq, Debug, Clone)]
+#[derive(PartialEq, Debug, Clone, Serialize, Deserialize)]
 pub struct Register {
     pub pattern: Loc<Pattern>,
     pub clock: Loc<Expression>,
@@ -131,7 +132,7 @@ impl WithLocation for Register {}
 /// Type params have both an identifier and a NameID since they go through the
 /// ast lowering process in a few separate steps, and the identifier needs to be
 /// re-added to the symtab multiple times
-#[derive(PartialEq, Debug, Clone, Hash, Eq)]
+#[derive(PartialEq, Debug, Clone, Hash, Eq, Serialize, Deserialize)]
 pub enum TypeParam {
     TypeName(Identifier, NameID),
     Integer(Identifier, NameID),
@@ -146,7 +147,7 @@ impl TypeParam {
     }
 }
 
-#[derive(PartialEq, Debug, Clone)]
+#[derive(PartialEq, Debug, Clone, Serialize, Deserialize)]
 pub enum TypeExpression {
     /// An integer value
     Integer(u128),
@@ -157,7 +158,7 @@ impl WithLocation for TypeExpression {}
 
 /// A specification of a type to be used. For example, the types of input/output arguments the type
 /// of fields in a struct etc.
-#[derive(PartialEq, Debug, Clone)]
+#[derive(PartialEq, Debug, Clone, Serialize, Deserialize)]
 pub enum TypeSpec {
     /// The type is a declared type (struct, enum, typedef etc.) with n arguments
     Declared(Loc<NameID>, Vec<Loc<TypeExpression>>),
@@ -181,19 +182,19 @@ impl TypeSpec {
 }
 
 /// Declaration of an enum
-#[derive(PartialEq, Debug, Clone)]
+#[derive(PartialEq, Debug, Clone, Serialize, Deserialize)]
 pub struct Enum {
     pub options: Vec<(Loc<NameID>, ParameterList)>,
 }
 impl WithLocation for Enum {}
 
-#[derive(PartialEq, Debug, Clone)]
+#[derive(PartialEq, Debug, Clone, Serialize, Deserialize)]
 pub struct Struct {
     pub members: ParameterList,
 }
 impl WithLocation for Struct {}
 
-#[derive(PartialEq, Debug, Clone)]
+#[derive(PartialEq, Debug, Clone, Serialize, Deserialize)]
 pub enum TypeDeclKind {
     Enum(Loc<Enum>),
     Primitive(PrimitiveType),
@@ -201,7 +202,7 @@ pub enum TypeDeclKind {
 }
 
 /// A declaration of a new type
-#[derive(PartialEq, Debug, Clone)]
+#[derive(PartialEq, Debug, Clone, Serialize, Deserialize)]
 pub struct TypeDeclaration {
     pub name: Loc<NameID>,
     pub kind: TypeDeclKind,
@@ -209,7 +210,7 @@ pub struct TypeDeclaration {
 }
 impl WithLocation for TypeDeclaration {}
 
-#[derive(PartialEq, Debug, Clone)]
+#[derive(PartialEq, Debug, Clone, Serialize, Deserialize)]
 pub enum UnitName {
     /// The name will be mangled down to contain the NameID in order to ensure
     /// uniqueness. Emitted by generic functions
@@ -232,7 +233,7 @@ impl UnitName {
     }
 }
 
-#[derive(PartialEq, Debug, Clone)]
+#[derive(PartialEq, Debug, Clone, Serialize, Deserialize)]
 pub struct Entity {
     pub name: UnitName,
     pub head: EntityHead,
@@ -242,7 +243,7 @@ pub struct Entity {
 }
 impl WithLocation for Entity {}
 
-#[derive(PartialEq, Debug, Clone)]
+#[derive(PartialEq, Debug, Clone, Serialize, Deserialize)]
 pub struct ParameterList(pub Vec<(Loc<Identifier>, Loc<TypeSpec>)>);
 impl WithLocation for ParameterList {}
 
@@ -305,7 +306,7 @@ pub struct FunctionHead {
 }
 impl WithLocation for FunctionHead {}
 
-#[derive(PartialEq, Debug, Clone)]
+#[derive(PartialEq, Debug, Clone, Serialize, Deserialize)]
 pub struct EntityHead {
     pub inputs: ParameterList,
     pub output_type: Option<Loc<TypeSpec>>,
@@ -313,7 +314,7 @@ pub struct EntityHead {
 }
 impl WithLocation for EntityHead {}
 
-#[derive(PartialEq, Debug, Clone)]
+#[derive(PartialEq, Debug, Clone, Serialize, Deserialize)]
 pub struct PipelineHead {
     pub depth: Loc<usize>,
     pub inputs: ParameterList,
@@ -348,7 +349,7 @@ macro_rules! impl_function_like {
 
 impl_function_like!(EntityHead, FunctionHead, PipelineHead);
 
-#[derive(PartialEq, Debug, Clone)]
+#[derive(PartialEq, Debug, Clone, Serialize, Deserialize)]
 pub struct Pipeline {
     pub head: PipelineHead,
     pub name: UnitName,
@@ -358,7 +359,7 @@ pub struct Pipeline {
 }
 impl WithLocation for Pipeline {}
 
-#[derive(PartialEq, Debug, Clone)]
+#[derive(PartialEq, Debug, Clone, Serialize, Deserialize)]
 pub enum Item {
     Entity(Loc<Entity>),
     Pipeline(Loc<Pipeline>),
@@ -378,7 +379,7 @@ impl Item {
 
 /// Items which have associated code that can be executed. This is different from
 /// type declarations which are items, but which do not have code on their own
-#[derive(PartialEq, Debug, Clone)]
+#[derive(PartialEq, Debug, Clone, Serialize, Deserialize)]
 pub enum ExecutableItem {
     EnumInstance { base_enum: NameID, variant: usize },
     StructInstance,
@@ -396,7 +397,7 @@ pub type TypeList = HashMap<NameID, Loc<TypeDeclaration>>;
 ///
 /// That is, `mod a { mod b{ entity X {} } } will result in members containing `a::b::X`, but the
 /// modules will not be present
-#[derive(PartialEq, Debug, Clone)]
+#[derive(PartialEq, Debug, Clone, Serialize, Deserialize)]
 pub struct ItemList {
     pub executables: HashMap<NameID, ExecutableItem>,
     pub types: TypeList,
