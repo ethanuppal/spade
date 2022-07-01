@@ -4,6 +4,7 @@ pub mod codegen;
 pub mod diff;
 pub mod diff_printing;
 mod enum_util;
+pub mod eval;
 pub mod macros;
 pub mod types;
 mod verilog;

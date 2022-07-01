@@ -124,7 +124,7 @@ fn translate_signed_int(value: &[Value]) -> MaybeValue<BigInt> {
     }
 }
 
-fn inner_translate_value(result: &mut String, in_value: &[Value], t: &ConcreteType) {
+pub fn inner_translate_value(result: &mut String, in_value: &[Value], t: &ConcreteType) {
     let value_len = in_value.len();
     let type_size = t.to_mir_type().size();
     let missing_values = type_size as usize - value_len;
@@ -226,8 +226,15 @@ fn inner_translate_value(result: &mut String, in_value: &[Value], t: &ConcreteTy
         ConcreteType::Single {
             base: PrimitiveType::Bool,
             params: _,
+        } => {
+            *result += match value[0] {
+                Value::V0 => "false",
+                Value::V1 => "true",
+                Value::X => "UNDEF",
+                Value::Z => "HIGHIMP",
+            }
         }
-        | ConcreteType::Single {
+        ConcreteType::Single {
             base: PrimitiveType::Clock,
             params: _,
         } => {
@@ -273,6 +280,21 @@ pub fn translate_value(
     } else {
         None
     }
+}
+
+// Translates a string of `01XZ` characters into the corresponding
+// VCD values
+pub fn value_from_str(s: &str) -> Vec<Value> {
+    s.to_lowercase()
+        .chars()
+        .map(|c| match c {
+            'x' => Value::X,
+            'z' => Value::Z,
+            '0' => Value::V0,
+            '1' => Value::V1,
+            other => panic!("Found '{other}' in value string '{s}'"),
+        })
+        .collect()
 }
 
 #[cfg(test)]

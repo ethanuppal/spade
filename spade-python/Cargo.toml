@@ -25,3 +25,4 @@ spade-typeinference = {path = "../spade-typeinference"}
 spade-hir-lowering = {path = "../spade-hir-lowering"}
 spade-mir = {path = "../spade-mir"}
 spade-ast-lowering = {path = "../spade-ast-lowering"}
+vcd-translate = {path = "../vcd-translate"}

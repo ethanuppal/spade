@@ -31,8 +31,8 @@ fn mangle_entity(module: &str) -> String {
     format!("e_{}", module)
 }
 
-fn mangle_input(input: &str) -> String {
-    format!("_i_{}", input)
+pub fn mangle_input(input: &str) -> String {
+    format!("{}_i", input)
 }
 
 fn statement_declaration(statement: &Statement) -> Code {
@@ -591,9 +591,9 @@ pub fn entity_code(entity: &mut Entity, source_code: &CodeBundle) -> Code {
 
     let (inputs, input_assignments): (Vec<_>, Vec<_>) = inputs.unzip();
 
-    let output_definition = format!("output{} __output", size_spec(entity.output_type.size()));
+    let output_definition = format!("output{} output__", size_spec(entity.output_type.size()));
 
-    let output_assignment = assign("__output", &entity.output.var_name());
+    let output_assignment = assign("output__", &entity.output.var_name());
 
     let mut body = Code::new();
 
@@ -609,6 +609,13 @@ pub fn entity_code(entity: &mut Entity, source_code: &CodeBundle) -> Code {
                 [2] &inputs;
                 [2] &output_definition;
             [1] &");";
+            [1] "`ifdef COCOTB_SIM";
+            [1] "initial begin";
+            [2]  format!("$dumpfile (\"{entity_name}.vcd\");");
+            [2]  format!("$dumpvars (0, {entity_name});");
+            [2]  "#1;";
+            [1] "end";
+            [1] "`endif";
             [1] &input_assignments;
             [1] &body;
             [1] &output_assignment;
@@ -730,13 +737,13 @@ mod tests {
             r#"
             module e_pong (
                     input[5:0] _i_op,
-                    output[5:0] __output
+                    output[5:0] output__
                 );
                 logic[5:0] op_n0;
                 assign op_n0 = _i_op;
                 logic[5:0] _e_0;
                 assign _e_0 = $signed(op_n0) + $signed(_e_1);
-                assign __output = _e_0;
+                assign output__ = _e_0;
             endmodule"#
         );
 
@@ -781,7 +788,7 @@ mod tests {
             r#"
             module e_pl (
                     input _i_clk,
-                    output[15:0] __output
+                    output[15:0] output__
                 );
                 logic clk_n3;
                 assign clk_n3 = _i_clk;
@@ -791,7 +798,7 @@ mod tests {
                     x__s1_n10 <= x_n1;
                 end
                 e_A A_x_n1(x_n1);
-                assign __output = x_n1;
+                assign output__ = x_n1;
             endmodule"#
         );
 

@@ -217,7 +217,7 @@ impl TypeState {
         }
     }
 
-    fn type_var_from_hir<'a>(
+    pub fn type_var_from_hir<'a>(
         &'a self,
         hir_type: &crate::hir::TypeSpec,
         generic_list_token: &GenericListToken,
@@ -1248,7 +1248,7 @@ impl TypeState {
         // Self::replace_type_var(&mut in_constraint.from, from, replacement);
     }
 
-    fn unify_expression_generic_error<'a>(
+    pub fn unify_expression_generic_error<'a>(
         &mut self,
         expr: &Loc<Expression>,
         other: &impl HasType,

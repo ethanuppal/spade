@@ -954,7 +954,9 @@ dependencies = [
  "itertools",
  "logos",
  "nesty",
+ "num",
  "parse_tree_macros",
+ "pretty_assertions",
  "prettydiff",
  "spade-common",
  "thiserror",
@@ -995,6 +997,7 @@ dependencies = [
  "spade-parser",
  "spade-typeinference",
  "spade-types",
+ "vcd-translate",
 ]
 
 [[package]]

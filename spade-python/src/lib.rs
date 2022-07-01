@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use codespan_reporting::term::termcolor::Buffer;
 use color_eyre::eyre::anyhow;
 use logos::Logos;
@@ -5,14 +7,21 @@ use pyo3::prelude::*;
 
 use spade::{lexer, CompilerState};
 use spade_ast_lowering::id_tracker::ExprIdTracker;
+use spade_common::name::Path as SpadePath;
 use spade_common::{
     error_reporting::{CodeBundle, CompilationError},
-    location_info::WithLocation,
+    location_info::{Loc, WithLocation},
 };
-use spade_hir::{symbol_table::FrozenSymtab, ItemList};
+use spade_hir::symbol_table::{LookupError, SymbolTable};
+use spade_hir::TypeSpec;
+use spade_hir::{symbol_table::FrozenSymtab, FunctionLike, ItemList};
 use spade_hir_lowering::{expr_to_mir, monomorphisation::MonoState, substitution::Substitutions};
+use spade_mir::codegen::mangle_input;
+use spade_mir::eval::eval_statements;
 use spade_parser::Parser;
 use spade_typeinference::{GenericListSource, TypeState};
+use spade_types::ConcreteType;
+use vcd_translate::translation::{self, inner_translate_value};
 
 trait Reportable {
     type Inner;
@@ -53,26 +62,38 @@ struct OwnedState {
     idtracker: ExprIdTracker,
 }
 
-#[pyclass]
+#[pyclass(subclass)]
 struct Spade {
     // state: CompilerState,
     code: CodeBundle,
     error_buffer: Buffer,
     owned: Option<OwnedState>,
     item_list: ItemList,
+    uut: Loc<SpadePath>,
 }
 
 #[pymethods]
 impl Spade {
     #[new]
-    pub fn new(state_path: String) -> PyResult<Self> {
+    pub fn new(uut_name: String, state_path: String) -> PyResult<Self> {
         let state_str = std::fs::read_to_string(state_path)?;
         let state = ron::from_str::<CompilerState>(&state_str)
             .map_err(|e| anyhow!("Failed to deserialize compiler state {e}"))?;
 
+        let mut code = CodeBundle::from_files(&state.code);
+        let mut error_buffer = Buffer::ansi();
+
+        let file_id = code.add_file("dut".to_string(), uut_name.clone());
+        let mut parser = Parser::new(lexer::TokenKind::lexer(&uut_name), file_id);
+        let uut = parser.path().report_and_convert(&mut error_buffer, &code)?;
+
+        // TODO: Ensure that the uut name matches the DUT by looking at the name
+        // property of the DUT
+
         Ok(Self {
-            code: CodeBundle::from_files(&state.code),
-            error_buffer: Buffer::ansi(),
+            uut,
+            code,
+            error_buffer,
             item_list: state.item_list,
             owned: Some(OwnedState {
                 symtab: state.symtab,
@@ -81,9 +102,85 @@ impl Spade {
         })
     }
 
-    /// Compiles a spade constant expression into a bit vector
-    pub fn e(&mut self, expr: String) -> PyResult<String> {
-        let file_id = self.code.add_file("py".to_string(), expr.clone());
+    /// Computes expr as a value for port. If the type of expr does not match the expected an error
+    /// is returned. Likewise if uut does not have such a port.
+    ///
+    /// The returned value is the name of the port in the verilog, and the value
+    fn port_value(&mut self, port: &str, expr: &str) -> PyResult<(String, String)> {
+        let (port_name, port_ty) = self.get_port(port.into())?;
+
+        let val = self.compile_expr(expr, port_ty)?;
+        Ok((port_name, val))
+    }
+
+    /// Interprets the output value `val` as the output of `uut`, returning the
+    /// resulting spade value string
+    fn translate_output_value(&mut self, val: &str) -> PyResult<String> {
+        let owned = self.owned.as_ref().unwrap();
+        let symtab = owned.symtab.symtab();
+
+        let ty = Self::lookup_function_like(&self.uut, symtab)
+            .report_and_convert(&mut self.error_buffer, &self.code)?
+            .output_type()
+            .clone()
+            .ok_or_else(|| anyhow!("{} does not have an output type", self.uut))?;
+
+        Ok(val_to_spade(
+            val,
+            TypeState::type_spec_to_concrete(&ty, &self.item_list.types, &HashMap::new()),
+        ))
+    }
+
+    pub fn value_as_output_type(&mut self, expr: &str) -> PyResult<String> {
+        let owned = self.owned.as_ref().unwrap();
+        let symtab = owned.symtab.symtab();
+
+        let ty = Self::lookup_function_like(&self.uut, symtab)
+            .report_and_convert(&mut self.error_buffer, &self.code)?
+            .output_type()
+            .clone()
+            .ok_or_else(|| anyhow!("{} does not have an output type", self.uut))?;
+
+        self.compile_expr(expr, ty.inner)
+    }
+
+    // fn has_field()
+}
+
+impl Spade {
+    fn lookup_function_like(
+        name: &Loc<SpadePath>,
+        symtab: &SymbolTable,
+    ) -> Result<Box<dyn FunctionLike>, LookupError> {
+        if let Ok(e) = symtab.lookup_entity(name) {
+            Ok(Box::new(e.1.inner))
+        } else if let Ok(f) = symtab.lookup_function(name) {
+            Ok(Box::new(f.1.inner))
+        } else {
+            let p = symtab.lookup_pipeline(name)?;
+            Ok(Box::new(p.1.inner))
+        }
+    }
+
+    /// Tries to get the type and the name of the port in the generated verilog of the specified
+    /// input port
+    fn get_port(&mut self, port: String) -> PyResult<(String, TypeSpec)> {
+        let owned = self.owned.as_ref().unwrap();
+        let symtab = owned.symtab.symtab();
+        let head = Self::lookup_function_like(&self.uut, &symtab)
+            .report_and_convert(&mut self.error_buffer, &self.code)?;
+
+        for (name, ty) in &head.inputs().0 {
+            if port == name.0 {
+                return Ok((mangle_input(&port), ty.inner.clone()));
+            }
+        }
+
+        Err(anyhow!("{port} is not a port of {}", self.uut).into())
+    }
+
+    pub fn compile_expr(&mut self, expr: &str, type_spec: TypeSpec) -> PyResult<String> {
+        let file_id = self.code.add_file("py".to_string(), expr.into());
         let mut parser = Parser::new(lexer::TokenKind::lexer(&expr), file_id);
 
         // Parse the expression
@@ -117,6 +214,11 @@ impl Spade {
             .visit_expression(&hir, &symtab.symtab(), &generic_list)
             .report_and_convert(&mut self.error_buffer, &self.code)?;
 
+        let ty = type_state.type_var_from_hir(&type_spec, &generic_list);
+        type_state
+            .unify_expression_generic_error(&hir, &ty, &symtab.symtab())
+            .report_and_convert(&mut self.error_buffer, &self.code)?;
+
         let mut hir_ctx = spade_hir_lowering::Context {
             symtab: &mut symtab,
             idtracker: &mut ast_ctx.idtracker,
@@ -136,12 +238,17 @@ impl Spade {
             idtracker: ast_ctx.idtracker,
         });
 
-        for stmt in mir {
-            println!("{stmt}")
-        }
-
-        Ok("<done>".to_string())
+        Ok(eval_statements(&mir).as_string())
     }
+}
+
+// TODO: Move this into the symtab
+
+fn val_to_spade(val: &str, ty: ConcreteType) -> String {
+    let val_vcd = translation::value_from_str(val);
+    let mut result = String::new();
+    inner_translate_value(&mut result, &val_vcd, &ty);
+    result
 }
 
 /// A Python module implemented in Rust.
