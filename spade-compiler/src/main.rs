@@ -40,6 +40,11 @@ pub struct Opt {
     #[structopt(long)]
     pub state_dump: Option<PathBuf>,
 
+    /// Write a list of all named items along with their corresponding verilog names
+    /// to the specified fiel. See crate::name_dump for format
+    #[structopt(long)]
+    pub item_list: Option<PathBuf>,
+
     /// Print a traceback of the type inference process if type inference or hir lowering fails
     #[structopt(long = "print-type-traceback")]
     pub print_type_traceback: bool,
@@ -100,6 +105,7 @@ fn main() -> Result<()> {
         mir_output: opts.mir_output,
         type_dump_file: opts.type_dump,
         state_dump_file: opts.state_dump,
+        item_list_file: opts.item_list,
         print_type_traceback: opts.print_type_traceback,
         print_parse_traceback: opts.print_parse_traceback,
     };

@@ -1,4 +1,5 @@
 pub mod namespaced_file;
+mod name_dump;
 
 use codespan_reporting::term::termcolor::Buffer;
 use logos::Logos;
@@ -32,6 +33,7 @@ pub struct Opt<'b> {
     pub mir_output: Option<PathBuf>,
     pub type_dump_file: Option<PathBuf>,
     pub state_dump_file: Option<PathBuf>,
+    pub item_list_file: Option<PathBuf>,
     pub print_type_traceback: bool,
     pub print_parse_traceback: bool,
 }
@@ -352,6 +354,18 @@ pub fn compile(
             }
             Err(e) => {
                 println!("Failed to encode type info as RON {:?}", e)
+            }
+        }
+    }
+    if let Some(item_list_file) = opts.item_list_file {
+        let list = name_dump::list_names(&item_list);
+
+        match ron::to_string(&list) {
+            Ok(encoded) => {
+                std::fs::write(item_list_file, &encoded).or_report(&mut errors);
+            }
+            Err(e) => {
+                println!("Failed to encode item list as RON {e:?}")
             }
         }
     }

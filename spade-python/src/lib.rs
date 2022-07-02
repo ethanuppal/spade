@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use codespan_reporting::term::termcolor::Buffer;
-use color_eyre::eyre::anyhow;
+use color_eyre::eyre::{anyhow, Context};
 use logos::Logos;
 use pyo3::prelude::*;
 
@@ -76,7 +76,8 @@ struct Spade {
 impl Spade {
     #[new]
     pub fn new(uut_name: String, state_path: String) -> PyResult<Self> {
-        let state_str = std::fs::read_to_string(state_path)?;
+        let state_str = std::fs::read_to_string(&state_path)
+            .with_context(|| format!("Failed to read state file at {state_path}"))?;
         let state = ron::from_str::<CompilerState>(&state_str)
             .map_err(|e| anyhow!("Failed to deserialize compiler state {e}"))?;
 
