@@ -60,6 +60,7 @@ macro_rules! snapshot_error {
                 mir_output: None,
                 type_dump_file: None,
                 state_dump_file: None,
+                item_list_file: None,
                 print_type_traceback: false,
                 print_parse_traceback: false,
             };
@@ -99,6 +100,7 @@ fn build_items(code: &str) -> Vec<spade_mir::Entity> {
         mir_output: None,
         type_dump_file: None,
         state_dump_file: None,
+        item_list_file: None,
         print_type_traceback: false,
         print_parse_traceback: false,
     };

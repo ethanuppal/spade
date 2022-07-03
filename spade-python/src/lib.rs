@@ -55,11 +55,44 @@ where
     }
 }
 
+#[pyclass]
+#[derive(PartialEq, Eq, Clone)]
+struct BitString(pub String);
+
+#[pymethods]
+impl BitString {
+    fn inner(&self) -> &String {
+        &self.0
+    }
+}
+
+#[pyclass]
+struct SpadeType(pub TypeSpec);
+
+#[pyclass]
+struct TypedValue {
+    pub ty: TypeSpec,
+    pub val: BitString,
+}
+
+
 /// State which we need to modify later. Stored in an Option so we can
 /// take ownership of temporarily
 struct OwnedState {
     symtab: FrozenSymtab,
     idtracker: ExprIdTracker,
+}
+
+#[pyclass]
+struct ComparisonResult {
+    #[pyo3(get)]
+    pub expected_spade: String,
+    #[pyo3(get)]
+    pub expected_bits: BitString,
+    #[pyo3(get)]
+    pub got_spade: String,
+    #[pyo3(get)]
+    pub got_bits: BitString
 }
 
 #[pyclass(subclass)]
@@ -107,44 +140,53 @@ impl Spade {
     /// is returned. Likewise if uut does not have such a port.
     ///
     /// The returned value is the name of the port in the verilog, and the value
-    fn port_value(&mut self, port: &str, expr: &str) -> PyResult<(String, String)> {
+    fn port_value(&mut self, port: &str, expr: &str) -> PyResult<(String, BitString)> {
         let (port_name, port_ty) = self.get_port(port.into())?;
 
         let val = self.compile_expr(expr, port_ty)?;
         Ok((port_name, val))
     }
 
-    /// Interprets the output value `val` as the output of `uut`, returning the
-    /// resulting spade value string
-    fn translate_output_value(&mut self, val: &str) -> PyResult<String> {
-        let owned = self.owned.as_ref().unwrap();
-        let symtab = owned.symtab.symtab();
+    fn compare_values(&mut self, val: &TypedValue, expr: &str) -> PyResult<ComparisonResult> {
+        let spade_bits = self.compile_expr(expr, val.ty.clone())?;
 
-        let ty = Self::lookup_function_like(&self.uut, symtab)
-            .report_and_convert(&mut self.error_buffer, &self.code)?
-            .output_type()
-            .clone()
-            .ok_or_else(|| anyhow!("{} does not have an output type", self.uut))?;
+        let concrete_ty = TypeState::type_spec_to_concrete(&val.ty, &self.item_list.types, &HashMap::new());
 
-        Ok(val_to_spade(
-            val,
-            TypeState::type_spec_to_concrete(&ty, &self.item_list.types, &HashMap::new()),
-        ))
+        Ok(ComparisonResult {
+            expected_spade: expr.to_string(),
+            expected_bits: spade_bits,
+            got_spade: val_to_spade(&val.val, concrete_ty),
+            got_bits: val.val.clone()
+        })
     }
 
-    pub fn value_as_output_type(&mut self, expr: &str) -> PyResult<String> {
-        let owned = self.owned.as_ref().unwrap();
-        let symtab = owned.symtab.symtab();
-
-        let ty = Self::lookup_function_like(&self.uut, symtab)
-            .report_and_convert(&mut self.error_buffer, &self.code)?
-            .output_type()
-            .clone()
-            .ok_or_else(|| anyhow!("{} does not have an output type", self.uut))?;
-
-        self.compile_expr(expr, ty.inner)
+    /// Interprets `val` as the output value of DUT and returns the corresponding TypedValue
+    fn output_value(&mut self, val: &str) -> PyResult<TypedValue> {
+        let ty = self.output_type()?;
+        Ok(TypedValue {
+            ty,
+            val: BitString(val.to_string())
+        })
     }
 
+    // /// Interprets the output value `val` as the output of `uut`, returning the
+    // /// resulting spade value string
+    // fn translate_value(&mut self, val: &TypedValue) -> PyResult<String> {
+    //     Ok(val_to_spade(
+    //         val,
+    //         TypeState::type_spec_to_concrete(&ty, &self.item_list.types, &HashMap::new()),
+    //     ))
+    // }
+
+    // /// 
+    // pub fn value_as_output_type(&mut self, expr: &str) -> PyResult<TypedValue> {
+    //     let ty = self.output_type()?;
+
+    //     Ok(TypedValue {
+    //         ty: TypeState::type_spec_to_concrete(&ty, &self.item_list.types, &HashMap::new()),
+    //         val: self.compile_expr(expr, ty)?
+    //     })
+    // }
     // fn has_field()
 }
 
@@ -180,7 +222,9 @@ impl Spade {
         Err(anyhow!("{port} is not a port of {}", self.uut).into())
     }
 
-    pub fn compile_expr(&mut self, expr: &str, type_spec: TypeSpec) -> PyResult<String> {
+    /// Evaluates the provided expression as the specified type and returns the result
+    /// as a string of 01xz
+    pub fn compile_expr(&mut self, expr: &str, type_spec: TypeSpec) -> PyResult<BitString> {
         let file_id = self.code.add_file("py".to_string(), expr.into());
         let mut parser = Parser::new(lexer::TokenKind::lexer(&expr), file_id);
 
@@ -239,14 +283,28 @@ impl Spade {
             idtracker: ast_ctx.idtracker,
         });
 
-        Ok(eval_statements(&mir).as_string())
+        Ok(BitString(eval_statements(&mir).as_string()))
+    }
+
+    /// Return the output type of uut
+    fn output_type(&mut self) -> PyResult<TypeSpec> {
+        let owned = self.owned.as_ref().unwrap();
+        let symtab = owned.symtab.symtab();
+
+        let ty = Self::lookup_function_like(&self.uut, symtab)
+            .report_and_convert(&mut self.error_buffer, &self.code)?
+            .output_type()
+            .clone()
+            .ok_or_else(|| anyhow!("{} does not have an output type", self.uut))?;
+
+        Ok(ty.inner)
     }
 }
 
 // TODO: Move this into the symtab
 
-fn val_to_spade(val: &str, ty: ConcreteType) -> String {
-    let val_vcd = translation::value_from_str(val);
+fn val_to_spade(val: &BitString, ty: ConcreteType) -> String {
+    let val_vcd = translation::value_from_str(&val.0);
     let mut result = String::new();
     inner_translate_value(&mut result, &val_vcd, &ty);
     result
@@ -256,5 +314,9 @@ fn val_to_spade(val: &str, ty: ConcreteType) -> String {
 #[pymodule]
 fn spade(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_class::<Spade>()?;
+    m.add_class::<BitString>()?;
+    m.add_class::<SpadeType>()?;
+    m.add_class::<TypedValue>()?;
+    m.add_class::<ComparisonResult>()?;
     Ok(())
 }
