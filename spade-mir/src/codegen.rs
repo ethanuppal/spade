@@ -610,9 +610,15 @@ pub fn entity_code(entity: &mut Entity, source_code: &CodeBundle) -> Code {
                 [2] &output_definition;
             [1] &");";
             [1] "`ifdef COCOTB_SIM";
+            [1] "string __top_module;";
+            [1] "string __vcd_file;";
             [1] "initial begin";
-            [2]  format!("$dumpfile (\"{entity_name}.vcd\");");
-            [2]  format!("$dumpvars (0, {entity_name});");
+            [2]   format!(r#"if ($value$plusargs("TOP_MODULE=%s", __top_module) && __top_module == "{entity_name}") begin"#);
+            [3]     format!(r#"$value$plusargs("VCD_FILENAME=%s", __vcd_file);"#);
+            [3]     format!(r#"$display("%s", __vcd_file);"#);
+            [3]     format!("$dumpfile (__vcd_file);");
+            [3]     format!("$dumpvars (0, {entity_name});");
+            [2]   "end";
             [2]  "#1;";
             [1] "end";
             [1] "`endif";
