@@ -339,6 +339,9 @@ impl CompilationError for Error {
                         .secondary_label()
                         .with_message("Because this unit is generic"),
                 ]),
+            Error::NoMatchArms { body } => Diagnostic::error()
+                .with_message("Match body has no arms")
+                .with_labels(vec![body.primary_label().with_message("Empty match body")]),
         };
 
         term::emit(buffer, &codespan_config(), &code.files, &diag).unwrap();

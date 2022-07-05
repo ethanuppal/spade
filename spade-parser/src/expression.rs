@@ -641,7 +641,8 @@ mod test {
                     Pattern::Tuple(vec![Pattern::name("x"), Pattern::name("y")]).nowhere(),
                     Expression::Identifier(ast_path("x")).nowhere(),
                 ),
-            ],
+            ]
+            .nowhere(),
         )
         .nowhere();
 

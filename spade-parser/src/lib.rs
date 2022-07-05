@@ -259,6 +259,7 @@ impl<'a> Parser<'a> {
             },
             &TokenKind::CloseBrace,
         )?;
+        let patterns = patterns.at_loc(&body_loc);
 
         Ok(Some(
             Expression::Match(Box::new(expression), patterns).between(

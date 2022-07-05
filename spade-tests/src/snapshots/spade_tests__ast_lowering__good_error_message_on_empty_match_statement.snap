@@ -1,0 +1,14 @@
+---
+source: spade-tests/src/ast_lowering.rs
+expression: "std::str::from_utf8(buffer.as_slice()).expect(\"error contains invalid utf-8\")"
+---
+error: Match body has no arms
+  ┌─ testinput:2:13
+  │  
+2 │       match x {
+  │ ╭─────────────^
+3 │ │ 
+4 │ │     }
+  │ ╰─────^ Empty match body
+
+

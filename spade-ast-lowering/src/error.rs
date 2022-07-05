@@ -118,6 +118,9 @@ pub enum Error {
         generic_list: Loc<()>,
     },
 
+    #[error("Match block has no arms")]
+    NoMatchArms { body: Loc<()> },
+
     // Type related errors
     #[error("Generic parameters for generic name")]
     GenericsGivenForGeneric {

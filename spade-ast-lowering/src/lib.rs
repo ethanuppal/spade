@@ -6,13 +6,8 @@ pub mod global_symbols;
 pub mod pipelines;
 pub mod types;
 
-use ast::ParameterList;
 use attributes::{report_unused_attributes, unit_name};
-use hir::symbol_table::DeclarationState;
-use hir::ExecutableItem;
 use pipelines::PipelineContext;
-pub use spade_common::id_tracker;
-use spade_common::name::Identifier;
 
 use std::collections::{HashMap, HashSet};
 
@@ -20,15 +15,18 @@ use thiserror::Error;
 use tracing::{event, Level};
 
 use spade_ast as ast;
-use spade_common::id_tracker::ExprIdTracker;
-use spade_common::{
-    location_info::{Loc, WithLocation},
-    name::Path,
-};
 use spade_hir as hir;
-use spade_hir::symbol_table::SymbolTable;
-use spade_hir::symbol_table::{LookupError, Thing, TypeSymbol};
-use spade_hir::{expression::BinaryOperator, EntityHead};
+
+use ast::ParameterList;
+use hir::expression::BinaryOperator;
+use hir::symbol_table::{DeclarationState, LookupError, SymbolTable, Thing, TypeSymbol};
+use hir::{EntityHead, ExecutableItem};
+pub use spade_common::id_tracker;
+use spade_common::{
+    id_tracker::ExprIdTracker,
+    location_info::{Loc, WithLocation},
+    name::{Identifier, Path},
+};
 
 use error::{Error, Result};
 
@@ -813,6 +811,12 @@ fn visit_expression(e: &ast::Expression, ctx: &mut Context) -> Result<hir::Expre
         }
         ast::Expression::Match(expression, branches) => {
             let e = expression.try_visit(visit_expression, ctx)?;
+
+            if branches.is_empty() {
+                return Err(Error::NoMatchArms {
+                    body: branches.loc(),
+                });
+            }
 
             ctx.symtab.new_scope();
             let b = branches
@@ -1656,7 +1660,8 @@ mod expression_visiting {
             vec![(
                 ast::Pattern::name("x"),
                 ast::Expression::IntLiteral(2).nowhere(),
-            )],
+            )]
+            .nowhere(),
         );
 
         let expected = hir::ExprKind::Match(
@@ -1697,7 +1702,8 @@ mod expression_visiting {
                 )
                 .nowhere(),
                 ast::Expression::Identifier(ast_path("y")).nowhere(),
-            )],
+            )]
+            .nowhere(),
         );
 
         let expected = hir::ExprKind::Match(
@@ -1762,7 +1768,8 @@ mod expression_visiting {
                 )
                 .nowhere(),
                 ast::Expression::Identifier(ast_path("y")).nowhere(),
-            )],
+            )]
+            .nowhere(),
         );
 
         let expected = hir::ExprKind::Match(

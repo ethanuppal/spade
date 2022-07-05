@@ -113,7 +113,10 @@ pub enum Expression {
         Box<Loc<Expression>>,
         Box<Loc<Expression>>,
     ),
-    Match(Box<Loc<Expression>>, Vec<(Loc<Pattern>, Loc<Expression>)>),
+    Match(
+        Box<Loc<Expression>>,
+        Loc<Vec<(Loc<Pattern>, Loc<Expression>)>>,
+    ),
     FnCall(Loc<Path>, Loc<ArgumentList>),
     UnaryOperator(UnaryOperator, Box<Loc<Expression>>),
     BinaryOperator(Box<Loc<Expression>>, BinaryOperator, Box<Loc<Expression>>),

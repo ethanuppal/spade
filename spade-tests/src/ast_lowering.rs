@@ -347,3 +347,13 @@ snapshot_error! {
         }
     "
 }
+
+snapshot_error! {
+    good_error_message_on_empty_match_statement,
+    "
+        fn match_bool(x: bool) -> bool {
+            match x {
+
+            }
+        }"
+}
