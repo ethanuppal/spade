@@ -10,18 +10,18 @@ edition = "2021"
 doctest = false
 
 [dependencies]
-indoc = "1.0"
 codespan = "0.12.0"
 codespan-reporting = "0.12.0"
-thiserror = "1.0.20"
+indoc = "1.0"
 itertools = "0.10.3"
+local-impl = "0.1.0"
+thiserror = "1.0.20"
 
 spade-common = {path = "../spade-common"}
 spade-types = {path = "../spade-types"}
 spade-hir = {path = "../spade-hir"}
 spade-mir = {path = "../spade-mir"}
 spade-typeinference = {path = "../spade-typeinference"}
-parse_tree_macros = {path = "../parse_tree_macros"}
 
 [dev-dependencies]
 prettydiff = { version = "0.6.1", default-features = false }

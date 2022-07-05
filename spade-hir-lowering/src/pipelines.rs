@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use parse_tree_macros::local_impl;
+use local_impl::local_impl;
 use spade_common::{id_tracker::ExprIdTracker, location_info::Loc, name::NameID};
 use spade_hir::{
     symbol_table::FrozenSymtab, ExprKind, Expression, ItemList, Pattern, Pipeline, Statement,

@@ -357,6 +357,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7fb9b38af92608140b86b693604b9ffcc5824240a484d1ecd4795bacb2fe88f3"
 
 [[package]]
+name = "local-impl"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4c18a33a56ffe55d3098533222c5f5fea51715dd3227ada2cce873ef95ad7ee5"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
 name = "log"
 version = "0.4.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -810,7 +821,7 @@ dependencies = [
  "colored",
  "indoc",
  "itertools",
- "parse_tree_macros",
+ "local-impl",
  "pretty_assertions",
  "prettydiff",
  "spade-common",
@@ -845,6 +856,7 @@ dependencies = [
  "codespan",
  "codespan-reporting",
  "colored",
+ "local-impl",
  "logos",
  "parse_tree_macros",
  "spade-ast",

@@ -1,4 +1,4 @@
-use parse_tree_macros::local_impl;
+use local_impl::local_impl;
 use spade_common::{location_info::Loc, name::Path};
 use thiserror::Error;
 

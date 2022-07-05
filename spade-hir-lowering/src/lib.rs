@@ -8,6 +8,7 @@ mod usefulness;
 
 use hir::symbol_table::{FrozenSymtab, PatternableKind};
 use hir::{Argument, ItemList, Pattern, PatternArgument, TypeList, UnitName};
+use local_impl::local_impl;
 use mir::types::Type as MirType;
 use mir::{ConstantValue, ValueName};
 use monomorphisation::MonoState;
@@ -22,7 +23,6 @@ use thiserror::Error;
 use usefulness::{is_useful, PatStack, Usefulness};
 
 use crate::error::{Error, Result};
-use parse_tree_macros::local_impl;
 use spade_common::{location_info::Loc, name::NameID};
 use spade_hir as hir;
 use spade_hir::{
