@@ -1616,6 +1616,16 @@ mod argument_list_tests {
     }
 
     snapshot_error! {
+        named_struct_patterns_errors_if_missing_multiple_bindings,
+        "struct Test{a: bool, b: bool}
+
+        fn main() -> Test {
+            Test$()
+        }
+        "
+    }
+
+    snapshot_error! {
         named_struct_patterns_errors_if_binding_to_undefined_name,
         "struct Test{a: bool, b: bool}
 

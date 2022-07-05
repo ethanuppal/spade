@@ -45,7 +45,7 @@ impl CompilationError for ArgumentError {
                     .primary_label()
                     .with_message(format!("Expected {} arguments", expected))]),
             Self::NoSuchArgument { name } => Diagnostic::error()
-                .with_message(format!("{}: No such argument", name))
+                .with_message(format!("No such argument: {}", name))
                 .with_labels(vec![name
                     .primary_label()
                     .with_message(format!("No such argument"))]),
@@ -64,20 +64,17 @@ impl CompilationError for ArgumentError {
 
                 Diagnostic::error()
                     .with_message(format!("Missing {}: {}", plural, arg_list))
-                    .with_labels(vec![
-                        at.primary_label()
-                            .with_message(format!("Missing {}", plural)),
-                        at.secondary_label()
-                            .with_message(format!("Missing {}", arg_list)),
-                    ])
+                    .with_labels(vec![at
+                        .primary_label()
+                        .with_message(format!("Missing {}: {}", plural, arg_list))])
             }
             Self::DuplicateNamedBindings { new, prev_loc } => Diagnostic::error()
-                .with_message(format!("Multiple bindings to {}", new))
+                .with_message(format!("{} specified multiple times", new))
                 .with_labels(vec![
-                    new.primary_label().with_message("Previously bound"),
+                    new.primary_label().with_message("Later specified here"),
                     prev_loc
                         .secondary_label()
-                        .with_message(format!("previously bound here")),
+                        .with_message(format!("First specified here")),
                 ]),
         };
 

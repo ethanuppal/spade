@@ -2,10 +2,10 @@
 source: spade-tests/src/hir_lowering.rs
 expression: "std::str::from_utf8(buffer.as_slice()).expect(\"error contains invalid utf-8\")"
 ---
-error: Missing argument: b
+error: Missing arguments: b, a
   ┌─ testinput:4:10
   │
-4 │     Test$(a: true)
-  │          ^^^^^^^^^ Missing argument: b
+4 │     Test$()
+  │          ^^ Missing arguments: b, a
 
 

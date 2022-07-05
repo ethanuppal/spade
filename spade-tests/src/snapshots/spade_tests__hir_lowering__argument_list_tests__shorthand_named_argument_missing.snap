@@ -6,9 +6,6 @@ error: Missing argument: b
   ┌─ testinput:4:10
   │
 4 │     test$(a)
-  │          ^^^
-  │          │
-  │          Missing argument
-  │          Missing b
+  │          ^^^ Missing argument: b
 
 

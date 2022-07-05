@@ -2,12 +2,12 @@
 source: spade-tests/src/hir_lowering.rs
 expression: "std::str::from_utf8(buffer.as_slice()).expect(\"error contains invalid utf-8\")"
 ---
-error: Multiple bindings to a
+error: a specified multiple times
   ┌─ testinput:3:20
   │
 3 │     test$(a: true, a: true, b: true)
-  │           -        ^ Previously bound
+  │           -        ^ Later specified here
   │           │         
-  │           previously bound here
+  │           First specified here
 
 
