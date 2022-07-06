@@ -818,16 +818,16 @@ fn visit_expression(e: &ast::Expression, ctx: &mut Context) -> Result<hir::Expre
                 });
             }
 
-            ctx.symtab.new_scope();
             let b = branches
                 .iter()
                 .map(|(pattern, result)| {
+                    ctx.symtab.new_scope();
                     let p = pattern.try_visit(visit_pattern_normal, ctx)?;
                     let r = result.try_visit(visit_expression, ctx)?;
+                    ctx.symtab.close_scope();
                     Ok((p, r))
                 })
                 .collect::<Result<Vec<_>>>()?;
-            ctx.symtab.close_scope();
 
             Ok(hir::ExprKind::Match(Box::new(e), b))
         }

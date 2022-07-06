@@ -357,3 +357,21 @@ snapshot_error! {
             }
         }"
 }
+
+snapshot_error! {
+    names_do_not_leak_across_match_branches,
+    "
+        enum Option<T> {
+            Some{ t: T },
+            None
+        }
+        use Option::Some;
+        use Option::None;
+        fn test() -> int<10> {
+            match Some(true) {
+                Some(count) => 0,
+                None => count
+            }
+        }
+        "
+}
