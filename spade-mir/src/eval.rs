@@ -149,7 +149,9 @@ pub fn eval_statements(statements: &[Statement]) -> Value {
                     Operator::DeclClockedMemory { .. } => todo!(),
                     Operator::IndexArray(_) => todo!(),
                     Operator::IndexMemory => todo!(),
-                    Operator::ConstructTuple => todo!(),
+                    Operator::ConstructTuple => {
+                        Value::Concat(ops.iter().map(|op| name_vals[op].clone()).collect())
+                    }
                     Operator::ConstructEnum {
                         variant,
                         variant_count,
