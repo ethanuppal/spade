@@ -284,6 +284,9 @@ pub fn translate_value(
 
 // Translates a string of `01XZ` characters into the corresponding
 // VCD values
+// NOTE: This function is incorrectly reported as unused when vcd-translate
+// is compiled as a library
+#[allow(dead_code)]
 pub fn value_from_str(s: &str) -> Vec<Value> {
     s.to_lowercase()
         .chars()

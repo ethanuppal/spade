@@ -1,13 +1,12 @@
-use std::collections::HashMap;
-
 use codespan_reporting::term::termcolor::Buffer;
 use color_eyre::eyre::{anyhow, Context};
+use itertools::Itertools;
 use logos::Logos;
 use pyo3::prelude::*;
 
 use spade::{lexer, CompilerState};
 use spade_ast_lowering::id_tracker::ExprIdTracker;
-use spade_common::name::Path as SpadePath;
+use spade_common::name::{Identifier, Path as SpadePath};
 use spade_common::{
     error_reporting::{CodeBundle, CompilationError},
     location_info::{Loc, WithLocation},
@@ -15,12 +14,19 @@ use spade_common::{
 use spade_hir::symbol_table::{LookupError, SymbolTable};
 use spade_hir::TypeSpec;
 use spade_hir::{symbol_table::FrozenSymtab, FunctionLike, ItemList};
+use spade_hir_lowering::MirLowerable;
 use spade_hir_lowering::{expr_to_mir, monomorphisation::MonoState, substitution::Substitutions};
 use spade_mir::codegen::mangle_input;
 use spade_mir::eval::eval_statements;
 use spade_parser::Parser;
-use spade_typeinference::{GenericListSource, TypeState};
+use spade_typeinference::equation::{TypeVar, TypedExpression};
+use spade_typeinference::{GenericListSource, HasType, TypeState};
 use spade_types::ConcreteType;
+use tracing::metadata::LevelFilter;
+use tracing_subscriber::prelude::__tracing_subscriber_SubscriberExt;
+use tracing_subscriber::util::SubscriberInitExt;
+use tracing_subscriber::{EnvFilter, Layer};
+use tracing_tree::HierarchicalLayer;
 use vcd_translate::translation::{self, inner_translate_value};
 
 trait Reportable {
@@ -56,25 +62,24 @@ where
 }
 
 #[pyclass]
-#[derive(PartialEq, Eq, Clone)]
+#[derive(PartialEq, Eq, Clone, Debug)]
 struct BitString(pub String);
 
 #[pymethods]
 impl BitString {
+    #[new]
+    pub fn new(bits: String) -> Self {
+        Self(bits)
+    }
+
     fn inner(&self) -> &String {
         &self.0
     }
 }
 
 #[pyclass]
-struct SpadeType(pub TypeSpec);
-
-#[pyclass]
-struct TypedValue {
-    pub ty: TypeSpec,
-    pub val: BitString,
-}
-
+#[derive(Clone)]
+struct SpadeType(pub ConcreteType);
 
 /// State which we need to modify later. Stored in an Option so we can
 /// take ownership of temporarily
@@ -92,7 +97,15 @@ struct ComparisonResult {
     #[pyo3(get)]
     pub got_spade: String,
     #[pyo3(get)]
-    pub got_bits: BitString
+    pub got_bits: BitString,
+}
+
+#[pyclass]
+#[derive(Clone)]
+struct FieldRef {
+    #[pyo3(get)]
+    pub range: (u64, u64),
+    pub ty: TypeVar,
 }
 
 #[pyclass(subclass)]
@@ -103,12 +116,24 @@ struct Spade {
     owned: Option<OwnedState>,
     item_list: ItemList,
     uut: Loc<SpadePath>,
+    type_state: TypeState,
+    uut_head: Box<dyn FunctionLike + Send>,
 }
 
 #[pymethods]
 impl Spade {
     #[new]
     pub fn new(uut_name: String, state_path: String) -> PyResult<Self> {
+        let env_filter = EnvFilter::builder()
+            .with_default_directive(LevelFilter::OFF.into())
+            .with_env_var("SPADE_LOG")
+            .from_env_lossy();
+        let layer = HierarchicalLayer::new(2)
+            .with_targets(true)
+            .with_filter(env_filter);
+
+        tracing_subscriber::registry().with(layer).init();
+
         let state_str = std::fs::read_to_string(&state_path)
             .with_context(|| format!("Failed to read state file at {state_path}"))?;
         let state = ron::from_str::<CompilerState>(&state_str)
@@ -121,18 +146,26 @@ impl Spade {
         let mut parser = Parser::new(lexer::TokenKind::lexer(&uut_name), file_id);
         let uut = parser.path().report_and_convert(&mut error_buffer, &code)?;
 
-        // TODO: Ensure that the uut name matches the DUT by looking at the name
-        // property of the DUT
+        let uut_head = Self::lookup_function_like(&uut, state.symtab.symtab())
+            .report_and_convert(&mut error_buffer, &code)?;
+
+        if !uut_head.type_params().is_empty() {
+            return Err(anyhow!(
+                "Testing units with generics is currently unsupported"
+            ))?;
+        }
 
         Ok(Self {
             uut,
             code,
             error_buffer,
             item_list: state.item_list,
+            type_state: TypeState::new(),
             owned: Some(OwnedState {
                 symtab: state.symtab,
                 idtracker: state.idtracker,
             }),
+            uut_head,
         })
     }
 
@@ -140,61 +173,179 @@ impl Spade {
     /// is returned. Likewise if uut does not have such a port.
     ///
     /// The returned value is the name of the port in the verilog, and the value
+    #[tracing::instrument(level = "trace", skip(self))]
     fn port_value(&mut self, port: &str, expr: &str) -> PyResult<(String, BitString)> {
         let (port_name, port_ty) = self.get_port(port.into())?;
 
-        let val = self.compile_expr(expr, port_ty)?;
+        let mut type_state = TypeState::new();
+        let generic_list = type_state.create_generic_list(GenericListSource::Anonymous, &vec![]);
+        let ty = type_state.type_var_from_hir(&port_ty, &generic_list);
+
+        let val = self.compile_expr(expr, &ty)?;
         Ok((port_name, val))
     }
 
-    fn compare_values(&mut self, val: &TypedValue, expr: &str) -> PyResult<ComparisonResult> {
-        let spade_bits = self.compile_expr(expr, val.ty.clone())?;
+    #[tracing::instrument(level = "trace", skip(self, field))]
+    fn compare_field(
+        &mut self,
+        // The field to compare
+        field: FieldRef,
+        // The spade expression to compare against
+        spade_expr: &str,
+        // The bits of the whole output struct
+        output_bits: &BitString,
+    ) -> PyResult<ComparisonResult> {
+        let spade_bits = self.compile_expr(spade_expr, &field.ty)?;
 
-        let concrete_ty = TypeState::type_spec_to_concrete(&val.ty, &self.item_list.types, &HashMap::new());
+        let concrete = TypeState::ungenerify_type(
+            &field.ty,
+            self.owned.as_ref().unwrap().symtab.symtab(),
+            &self.item_list.types,
+        )
+        .unwrap();
+
+        let relevant_bits = &BitString(
+            output_bits.inner()[field.range.0 as usize..field.range.1 as usize].to_owned(),
+        );
 
         Ok(ComparisonResult {
-            expected_spade: expr.to_string(),
+            expected_spade: spade_expr.to_string(),
             expected_bits: spade_bits,
-            got_spade: val_to_spade(&val.val, concrete_ty),
-            got_bits: val.val.clone()
+            got_spade: val_to_spade(&relevant_bits.inner(), concrete),
+            got_bits: relevant_bits.clone(),
         })
     }
 
-    /// Interprets `val` as the output value of DUT and returns the corresponding TypedValue
-    fn output_value(&mut self, val: &str) -> PyResult<TypedValue> {
-        let ty = self.output_type()?;
-        Ok(TypedValue {
+    #[tracing::instrument(level = "trace", skip(self))]
+    fn output_as_field_ref(&mut self) -> PyResult<FieldRef> {
+        let output_type = self.output_type()?;
+        let generic_list = self
+            .type_state
+            .create_generic_list(GenericListSource::Anonymous, &vec![]);
+
+        let ty = self
+            .type_state
+            .type_var_from_hir(&output_type, &generic_list);
+
+        let concrete = TypeState::ungenerify_type(
+            &ty,
+            self.owned.as_ref().unwrap().symtab.symtab(),
+            &self.item_list.types,
+        )
+        .unwrap();
+
+        let size = concrete.to_mir_type().size();
+
+        Ok(FieldRef {
+            range: (0, size),
             ty,
-            val: BitString(val.to_string())
         })
     }
 
-    // /// Interprets the output value `val` as the output of `uut`, returning the
-    // /// resulting spade value string
-    // fn translate_value(&mut self, val: &TypedValue) -> PyResult<String> {
-    //     Ok(val_to_spade(
-    //         val,
-    //         TypeState::type_spec_to_concrete(&ty, &self.item_list.types, &HashMap::new()),
-    //     ))
-    // }
+    /// Access a field of the DUT output or its subfields
+    #[tracing::instrument(level = "trace", skip(self))]
+    fn output_field(&mut self, path: Vec<String>) -> PyResult<FieldRef> {
+        let output_type = self.output_type()?;
 
-    // /// 
-    // pub fn value_as_output_type(&mut self, expr: &str) -> PyResult<TypedValue> {
-    //     let ty = self.output_type()?;
+        // Create a new variable which is guaranteed to have the output type
+        let owned = self.take_owned();
+        let mut symtab = owned.symtab.unfreeze();
 
-    //     Ok(TypedValue {
-    //         ty: TypeState::type_spec_to_concrete(&ty, &self.item_list.types, &HashMap::new()),
-    //         val: self.compile_expr(expr, ty)?
-    //     })
-    // }
-    // fn has_field()
+        symtab.new_scope();
+        let o_name = symtab.add_local_variable(Identifier("o".to_string()).nowhere());
+
+        let generic_list = self
+            .type_state
+            .create_generic_list(GenericListSource::Anonymous, &vec![]);
+        let ty = self
+            .type_state
+            .type_var_from_hir(&output_type, &generic_list);
+
+        // NOTE: safe unwrap, o_name is something we just created, so it can be any type
+        let g = self.type_state.new_generic();
+        self.type_state
+            .add_equation(TypedExpression::Name(o_name.clone()), g);
+        self.type_state.unify(&o_name, &ty, &symtab).unwrap();
+
+        // Now that we have a type which we can work with, we can create a virtual expression
+        // which accesses the field in order to learn the type of the field
+        let expr = format!("o.{}", path.iter().join(","));
+        let file_id = self.code.add_file("py".to_string(), expr.clone().into());
+        let mut parser = Parser::new(lexer::TokenKind::lexer(&expr), file_id);
+
+        // Parse the expression
+        let ast = parser
+            .expression()
+            .report_and_convert(&mut self.error_buffer, &self.code)?;
+
+        let idtracker = owned.idtracker;
+
+        let mut ast_ctx = spade_ast_lowering::Context {
+            symtab,
+            idtracker,
+            pipeline_ctx: None,
+        };
+        let hir = spade_ast_lowering::visit_expression(&ast, &mut ast_ctx)
+            .report_and_convert(&mut self.error_buffer, &self.code)?
+            .at_loc(&ast);
+
+        let generic_list = self
+            .type_state
+            .create_generic_list(GenericListSource::Anonymous, &vec![]);
+        // NOTE: We need to actually have the type information about what we're assigning to here
+        // available
+        self.type_state
+            .visit_expression(&hir, &ast_ctx.symtab, &generic_list)
+            .report_and_convert(&mut self.error_buffer, &self.code)?;
+
+        let g = self.type_state.new_generic();
+        self.type_state
+            .unify_expression_generic_error(&hir, &g, &ast_ctx.symtab)
+            .report_and_convert(&mut self.error_buffer, &self.code)?;
+
+        ast_ctx.symtab.close_scope();
+
+        let result_type = hir.get_type(&self.type_state).unwrap();
+
+        // Finally, we need to figure out the range of the field in in the
+        // type. Since all previous steps passed, this can assume that
+        // the types are good so we can do lots of unwraping
+        let concrete =
+            self.type_state
+                .type_of_name(&o_name, &ast_ctx.symtab, &self.item_list.types);
+        let (mut start, mut end) = (0, concrete.to_mir_type().size());
+
+        for field in path {
+            let mut current_offset = 0;
+            for (f, ty) in concrete.assume_struct().1 {
+                let self_size = ty.to_mir_type().size();
+                if f.0 == field {
+                    start = start + current_offset;
+                    end = start + self_size;
+                    break;
+                }
+                current_offset += self_size;
+            }
+        }
+
+        self.return_owned(OwnedState {
+            symtab: ast_ctx.symtab.freeze(),
+            idtracker: ast_ctx.idtracker,
+        });
+
+        Ok(FieldRef {
+            range: (start, end),
+            ty: result_type,
+        })
+    }
 }
 
 impl Spade {
+    #[tracing::instrument(level = "trace", skip(symtab, name))]
     fn lookup_function_like(
         name: &Loc<SpadePath>,
         symtab: &SymbolTable,
-    ) -> Result<Box<dyn FunctionLike>, LookupError> {
+    ) -> Result<Box<dyn FunctionLike + Send>, LookupError> {
         if let Ok(e) = symtab.lookup_entity(name) {
             Ok(Box::new(e.1.inner))
         } else if let Ok(f) = symtab.lookup_function(name) {
@@ -207,6 +358,7 @@ impl Spade {
 
     /// Tries to get the type and the name of the port in the generated verilog of the specified
     /// input port
+    #[tracing::instrument(level = "trace", skip(self))]
     fn get_port(&mut self, port: String) -> PyResult<(String, TypeSpec)> {
         let owned = self.owned.as_ref().unwrap();
         let symtab = owned.symtab.symtab();
@@ -224,7 +376,8 @@ impl Spade {
 
     /// Evaluates the provided expression as the specified type and returns the result
     /// as a string of 01xz
-    pub fn compile_expr(&mut self, expr: &str, type_spec: TypeSpec) -> PyResult<BitString> {
+    #[tracing::instrument(level = "trace", skip(self, ty))]
+    pub fn compile_expr(&mut self, expr: &str, ty: &impl HasType) -> PyResult<BitString> {
         let file_id = self.code.add_file("py".to_string(), expr.into());
         let mut parser = Parser::new(lexer::TokenKind::lexer(&expr), file_id);
 
@@ -251,26 +404,25 @@ impl Spade {
 
         let mut symtab = ast_ctx.symtab.freeze();
 
-        let mut type_state = TypeState::new();
-        let generic_list = type_state.create_generic_list(GenericListSource::Anonymous, &vec![]);
-        // NOTE: We need to actually have the type information about what we're assigning to here
-        // available
-        type_state
+        let generic_list = self
+            .type_state
+            .create_generic_list(GenericListSource::Anonymous, &vec![]);
+
+        self.type_state
             .visit_expression(&hir, &symtab.symtab(), &generic_list)
             .report_and_convert(&mut self.error_buffer, &self.code)?;
 
-        let ty = type_state.type_var_from_hir(&type_spec, &generic_list);
-        type_state
-            .unify_expression_generic_error(&hir, &ty, &symtab.symtab())
+        self.type_state
+            .unify_expression_generic_error(&hir, ty, &symtab.symtab())
             .report_and_convert(&mut self.error_buffer, &self.code)?;
 
         let mut hir_ctx = spade_hir_lowering::Context {
             symtab: &mut symtab,
             idtracker: &mut ast_ctx.idtracker,
-            types: &type_state,
+            types: &self.type_state,
             item_list: &self.item_list,
-            // TODO: This will fail spectacularly if we try to instantiate polymorphic
-            // functions. We should probably handle that gracefully
+            // NOTE: This requires changes if we end up wanting to write tests
+            // for generic units
             mono_state: &mut MonoState::new(),
             subs: &mut Substitutions::new(),
         };
@@ -278,7 +430,7 @@ impl Spade {
         let mir = expr_to_mir(hir, &mut hir_ctx)
             .report_and_convert(&mut self.error_buffer, &self.code)?;
 
-        self.owned = Some(OwnedState {
+        self.return_owned(OwnedState {
             symtab,
             idtracker: ast_ctx.idtracker,
         });
@@ -287,24 +439,30 @@ impl Spade {
     }
 
     /// Return the output type of uut
+    #[tracing::instrument(level = "trace", skip(self))]
     fn output_type(&mut self) -> PyResult<TypeSpec> {
-        let owned = self.owned.as_ref().unwrap();
-        let symtab = owned.symtab.symtab();
-
-        let ty = Self::lookup_function_like(&self.uut, symtab)
-            .report_and_convert(&mut self.error_buffer, &self.code)?
+        let ty = self
+            .uut_head
             .output_type()
             .clone()
             .ok_or_else(|| anyhow!("{} does not have an output type", self.uut))?;
 
         Ok(ty.inner)
     }
+
+    #[tracing::instrument(level = "trace", skip(self))]
+    fn take_owned(&mut self) -> OwnedState {
+        self.owned.take().expect("Failed to take owned state")
+    }
+
+    #[tracing::instrument(level = "trace", skip(self, o))]
+    fn return_owned(&mut self, o: OwnedState) {
+        self.owned = Some(o)
+    }
 }
 
-// TODO: Move this into the symtab
-
-fn val_to_spade(val: &BitString, ty: ConcreteType) -> String {
-    let val_vcd = translation::value_from_str(&val.0);
+fn val_to_spade(val: &str, ty: ConcreteType) -> String {
+    let val_vcd = translation::value_from_str(&val);
     let mut result = String::new();
     inner_translate_value(&mut result, &val_vcd, &ty);
     result
@@ -316,7 +474,6 @@ fn spade(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_class::<Spade>()?;
     m.add_class::<BitString>()?;
     m.add_class::<SpadeType>()?;
-    m.add_class::<TypedValue>()?;
     m.add_class::<ComparisonResult>()?;
     Ok(())
 }

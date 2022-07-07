@@ -984,6 +984,7 @@ version = "0.1.0"
 dependencies = [
  "codespan-reporting",
  "color-eyre",
+ "itertools",
  "logos",
  "pyo3",
  "ron",
@@ -997,6 +998,9 @@ dependencies = [
  "spade-parser",
  "spade-typeinference",
  "spade-types",
+ "tracing",
+ "tracing-subscriber",
+ "tracing-tree",
  "vcd-translate",
 ]
 

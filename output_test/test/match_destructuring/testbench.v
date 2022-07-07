@@ -33,8 +33,8 @@ module counter_tb();
     end
 
     e_spi_receiver uut
-        ( ._i_clk(clk)
-        , ._i_rst(rst)
-        , .__output(result)
+        ( .clk_i(clk)
+        , .rst_i(rst)
+        , .output__(result)
         );
 endmodule

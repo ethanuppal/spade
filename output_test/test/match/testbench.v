@@ -36,7 +36,7 @@ module counter_tb();
     end
 
     e_counter counter
-        ( ._i_test_case(variant)
-        , .__output(result)
+        ( .test_case_i(variant)
+        , .output__(result)
         );
 endmodule

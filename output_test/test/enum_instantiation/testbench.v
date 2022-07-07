@@ -38,8 +38,8 @@ module pipeline_tb();
     end
 
     e_uut uut
-        ( ._i_x(in_x)
-        , ._i_valid(valid)
-        , .__output(result)
+        ( .x_i(in_x)
+        , .valid_i(valid)
+        , .output__(result)
         );
 endmodule

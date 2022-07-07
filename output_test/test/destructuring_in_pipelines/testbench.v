@@ -41,8 +41,8 @@ module pipeline_tb();
     end
 
     e_delay_3 delay_3
-        ( ._i_clk(clk)
-        , ._i_input(in_val)
-        , .__output(result)
+        ( .clk_i(clk)
+        , .input_i(in_val)
+        , .output__(result)
         );
 endmodule

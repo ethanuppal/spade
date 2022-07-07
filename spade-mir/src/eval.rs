@@ -8,7 +8,6 @@ use num::Zero;
 
 use crate::{enum_util, types::Type, Binding, Operator, Statement, ValueName};
 
-// TODO: Use bigint
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Value {
     Bit(bool),

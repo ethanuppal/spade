@@ -20,7 +20,7 @@ use spade_hir::symbol_table::SymbolTable;
 use spade_hir::{Block, Entity, ExprKind, Expression, Register, Statement};
 use spade_types::KnownType;
 use std::collections::HashMap;
-use std::rc::Rc;
+use std::sync::Arc;
 use trace_stack::TraceStack;
 
 mod constraints;
@@ -178,7 +178,7 @@ pub struct TypeState {
 
     replacements: HashMap<TypeVar, TypeVar>,
 
-    pub trace_stack: Rc<TraceStack>,
+    pub trace_stack: Arc<TraceStack>,
 }
 
 impl TypeState {
@@ -186,7 +186,7 @@ impl TypeState {
         Self {
             equations: HashMap::new(),
             next_typeid: 0,
-            trace_stack: Rc::new(TraceStack::new()),
+            trace_stack: Arc::new(TraceStack::new()),
             constraints: TypeConstraints::new(),
             requirements: vec![],
             replacements: HashMap::new(),
@@ -283,7 +283,7 @@ impl TypeState {
         (full, size)
     }
 
-    fn new_generic(&mut self) -> TypeVar {
+    pub fn new_generic(&mut self) -> TypeVar {
         let id = self.new_typeid();
         TypeVar::Unknown(id)
     }
@@ -873,7 +873,7 @@ impl TypeState {
         }
     }
 
-    fn add_equation(&mut self, expression: TypedExpression, var: TypeVar) {
+    pub fn add_equation(&mut self, expression: TypedExpression, var: TypeVar) {
         let var = self.check_var_for_replacement(var);
 
         self.trace_stack.push(TraceStackEntry::AddingEquation(

@@ -43,6 +43,15 @@ pub enum ConcreteType {
     Integer(u128),
 }
 
+impl ConcreteType {
+    pub fn assume_struct(&self) -> (&NameID, &Vec<(Identifier, ConcreteType)>) {
+        match self {
+            ConcreteType::Struct { name, members } => (name, members),
+            t => unreachable!("Assumed {t} was a struct"),
+        }
+    }
+}
+
 impl std::fmt::Display for ConcreteType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {

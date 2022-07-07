@@ -46,7 +46,7 @@ module pipeline_tb();
     end
 
     e_uut uut
-        ( ._i_inval(inval)
-        , .__output({extended, truncated})
+        ( .inval_i(inval)
+        , .output__({extended, truncated})
         );
 endmodule

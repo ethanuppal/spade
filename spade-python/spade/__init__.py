@@ -4,10 +4,9 @@ import cocotb
 import colors
 from cocotb.types import LogicArray
 from cocotb.handle import Force
-import cocotb.triggers as triggers
+from cocotb.triggers import *
 from spade import Spade
 
-# TODO: Consider adding a prelude so we don't import this
 import os
 
 
@@ -26,24 +25,12 @@ class SpadeExt(Spade):
 
         result.dut = dut
         result.i = InputPorts(dut, result)
+        result.o = result.o__()
         return result
 
-    def o(self):
-        return OutputValue(self, self.output_value(self.dut.output__.value.binstr))
-
-    # def assert_port(self, port, expected):
-    #     # Evaluate the expected value
-    #     expected_bits = self.value_as_output_type(expected)
-    #     if port.value.binstr.lower() != expected_bits.lower():
-    #         spade_value = self.translate_output_value(port.value.binstr)
-
-    #         message = "\n"
-    #         message += colors.red("Assertion failed") + "\n"
-    #         message += f"\t expected: {colors.green(expected)}\n";
-    #         message += f"\t      got: {colors.red(spade_value)}\n"
-    #         message += "\n"
-    #         message += f"\tverilog ({colors.green(expected_bits)} != {colors.red(port.value)})"
-    #         assert False, message
+    def o__(self):
+        """ Get a reference to the output of the DUT"""
+        return OutputField(self, [], self.output_as_field_ref(), self.dut)
 
 
 class InputPorts(object):
@@ -61,25 +48,41 @@ class InputPorts(object):
             super(InputPorts, self).__setattr__(name, value)
 
 
-class OutputValue(object):
-    def __init__(self, spade: SpadeExt, value: TypedValue):
+class OutputField(object):
+    def __init__(self, spade: SpadeExt, path: list[str], field_ref, dut):
         self.spade__ = spade
-        self.val__ = value
+        self.path__ = path
+        self.field_ref__ = field_ref
+        self.dut__ = dut
 
     def assert_eq(self, expected: str):
-        c = self.spade__.compare_values(self.val__, expected)
+        r = self.spade__.compare_field(
+            self.field_ref__,
+            expected,
+            BitString(self.dut__.output__.value.binstr)
+        )
 
-        if c.expected_bits.inner().lower() != c.got_bits.inner().lower():
+        expected_bits = r.expected_bits.inner();
+        got_bits = r.got_bits.inner();
+
+        if expected_bits.lower() != got_bits.lower():
             message = "\n"
             message += colors.red("Assertion failed") + "\n"
-            message += f"\t expected: {colors.green(c.expected_spade)}\n";
-            message += f"\t      got: {colors.red(c.got_spade)}\n"
+            message += f"\t expected: {colors.green(r.expected_spade)}\n";
+            message += f"\t      got: {colors.red(r.got_spade)}\n"
             message += "\n"
-            message += f"\tverilog ({colors.green(c.expected_bits.inner())} != {colors.red(c.got_bits.inner())})"
+            message += f"\tverilog ({colors.green(expected_bits)} != {colors.red(got_bits)})"
             assert False, message
 
     def __getattribute__(self, __name: str):
-        if not __name.endswith("__") and __name != "assert_eq":
-            pass
+        if __name.endswith("__") or __name == "assert_eq":
+            return super(OutputField, self).__getattribute__(__name)
         else:
-            return super(OutputValue, self).__getattribute__(__name)
+            new_path = self.path__ + [__name]
+            return OutputField(
+                self.spade__,
+                new_path,
+                self.spade__.output_field(new_path),
+                self.dut__
+            )
+

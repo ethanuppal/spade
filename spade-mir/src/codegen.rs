@@ -742,11 +742,24 @@ mod tests {
         let expected = indoc!(
             r#"
             module e_pong (
-                    input[5:0] _i_op,
+                    input[5:0] op_i,
                     output[5:0] output__
                 );
+                `ifdef COCOTB_SIM
+                string __top_module;
+                string __vcd_file;
+                initial begin
+                    if ($value$plusargs("TOP_MODULE=%s", __top_module) && __top_module == "e_pong") begin
+                        $value$plusargs("VCD_FILENAME=%s", __vcd_file);
+                        $display("%s", __vcd_file);
+                        $dumpfile (__vcd_file);
+                        $dumpvars (0, e_pong);
+                    end
+                    #1;
+                end
+                `endif
                 logic[5:0] op_n0;
-                assign op_n0 = _i_op;
+                assign op_n0 = op_i;
                 logic[5:0] _e_0;
                 assign _e_0 = $signed(op_n0) + $signed(_e_1);
                 assign output__ = _e_0;
@@ -793,11 +806,24 @@ mod tests {
         let expected = indoc!(
             r#"
             module e_pl (
-                    input _i_clk,
+                    input clk_i,
                     output[15:0] output__
                 );
+                `ifdef COCOTB_SIM
+                string __top_module;
+                string __vcd_file;
+                initial begin
+                    if ($value$plusargs("TOP_MODULE=%s", __top_module) && __top_module == "e_pl") begin
+                        $value$plusargs("VCD_FILENAME=%s", __vcd_file);
+                        $display("%s", __vcd_file);
+                        $dumpfile (__vcd_file);
+                        $dumpvars (0, e_pl);
+                    end
+                    #1;
+                end
+                `endif
                 logic clk_n3;
-                assign clk_n3 = _i_clk;
+                assign clk_n3 = clk_i;
                 reg[15:0] x__s1_n10;
                 logic[15:0] x_n1;
                 always @(posedge clk_n3) begin

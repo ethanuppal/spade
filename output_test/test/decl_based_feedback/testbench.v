@@ -47,8 +47,8 @@ module counter_tb();
     end
 
     e_counter counter
-        ( ._i_clk(clk)
-        , ._i_rst(rst)
-        , .__output({x, y})
+        ( .clk_i(clk)
+        , .rst_i(rst)
+        , .output__({x, y})
         );
 endmodule

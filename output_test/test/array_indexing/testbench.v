@@ -44,7 +44,7 @@ module pipeline_tb();
     end
 
     e_uut uut
-        ( ._i_index(index)
-        , .__output(result)
+        ( .index_i(index)
+        , .output__(result)
         );
 endmodule

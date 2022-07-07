@@ -1,5 +1,5 @@
-pub mod namespaced_file;
 mod name_dump;
+pub mod namespaced_file;
 
 use codespan_reporting::term::termcolor::Buffer;
 use logos::Logos;
