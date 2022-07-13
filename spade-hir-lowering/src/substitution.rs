@@ -65,16 +65,15 @@ impl Substitutions {
                     Substitution::Waiting(time_left - 1, name.clone())
                 }
                 Substitution::Available(previous) => {
-                    let mut new_path = original.1.clone();
                     // Insert the stage marker before the final name to improve order
                     // of names in the vcd dump
                     // FIXME: instead of s{num}, replace it by label if a label
                     // is present
                     // spade#128
-                    new_path.0.insert(
-                        new_path.0.len() - 1,
-                        Identifier(format!("s{}", stage_num)).nowhere(),
-                    );
+                    let old_name = original.1.tail();
+                    let new_name = Identifier(format!("s{}_{}", stage_num, old_name)).nowhere();
+                    let new_path = original.1.pop().push_ident(new_name);
+
                     let new_name = symtab.new_name(new_path);
                     result.push(SubRegister {
                         original: original.clone(),

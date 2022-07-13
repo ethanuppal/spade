@@ -10,7 +10,7 @@ use spade_typeinference::TypeState;
 
 use crate::{
     error::Error, monomorphisation::MonoState, substitution::Substitutions, Context, ExprLocal,
-    Manglable, MirLowerable, NameIDLocal, Result, StatementLocal, TypeStateLocal,
+    Manglable, MirLowerable, NameIDExt, Result, StatementLocal, TypeStateLocal,
 };
 
 pub fn handle_pattern(pat: &Pattern, live_vars: &mut Vec<NameID>) {

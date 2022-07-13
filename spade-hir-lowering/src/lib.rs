@@ -145,10 +145,14 @@ impl MirLowerable for ConcreteType {
     }
 }
 
-#[local_impl]
-impl NameIDLocal for NameID {
+pub trait NameIDExt {
+    /// Return the corresponding MIR value name for this NameID
+    fn value_name(&self) -> mir::ValueName;
+}
+
+impl NameIDExt for NameID {
     fn value_name(&self) -> mir::ValueName {
-        let mangled = format!("{}", self.1.as_strs().join("_"));
+        let mangled = format!("{}", self.1.tail());
         mir::ValueName::Named(self.0, mangled)
     }
 }

@@ -4,7 +4,7 @@ use num::{
     bigint::{Sign, ToBigUint},
     BigInt, BigUint,
 };
-use spade_hir_lowering::MirLowerable;
+use spade_hir_lowering::{MirLowerable, NameIDExt};
 use spade_mir::{codegen::escape_path, ValueName};
 use spade_typeinference::equation::TypedExpression;
 use spade_types::{ConcreteType, PrimitiveType};
@@ -18,9 +18,7 @@ pub fn translate_names(
         .map(|(key, value)| {
             let name = match key {
                 TypedExpression::Id(id) => ValueName::Expr(id).var_name(),
-                TypedExpression::Name(name_id) => {
-                    escape_path(ValueName::Named(name_id.0, name_id.1.to_string()).var_name())
-                }
+                TypedExpression::Name(name_id) => escape_path(name_id.value_name().var_name()),
             };
             (name, value)
         })
