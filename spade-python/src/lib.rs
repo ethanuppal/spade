@@ -22,11 +22,6 @@ use spade_parser::Parser;
 use spade_typeinference::equation::{TypeVar, TypedExpression};
 use spade_typeinference::{GenericListSource, HasType, TypeState};
 use spade_types::ConcreteType;
-use tracing::metadata::LevelFilter;
-use tracing_subscriber::prelude::__tracing_subscriber_SubscriberExt;
-use tracing_subscriber::util::SubscriberInitExt;
-use tracing_subscriber::{EnvFilter, Layer};
-use tracing_tree::HierarchicalLayer;
 use vcd_translate::translation::{self, inner_translate_value};
 
 trait Reportable {
@@ -124,16 +119,6 @@ struct Spade {
 impl Spade {
     #[new]
     pub fn new(uut_name: String, state_path: String) -> PyResult<Self> {
-        let env_filter = EnvFilter::builder()
-            .with_default_directive(LevelFilter::OFF.into())
-            .with_env_var("SPADE_LOG")
-            .from_env_lossy();
-        let layer = HierarchicalLayer::new(2)
-            .with_targets(true)
-            .with_filter(env_filter);
-
-        tracing_subscriber::registry().with(layer).init();
-
         let state_str = std::fs::read_to_string(&state_path)
             .with_context(|| format!("Failed to read state file at {state_path}"))?;
         let state = ron::from_str::<CompilerState>(&state_str)
