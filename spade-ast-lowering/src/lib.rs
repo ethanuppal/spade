@@ -114,7 +114,7 @@ pub fn visit_type_spec(t: &ast::TypeSpec, symtab: &mut SymbolTable) -> Result<hi
 
                     Ok(hir::TypeSpec::Declared(base_id.at_loc(path), params))
                 }
-                TypeSymbol::GenericArg => {
+                TypeSymbol::GenericArg | TypeSymbol::GenericInt => {
                     // If this typename refers to a generic argument we need to make
                     // sure that no generic arguments are passed, as generic names
                     // can't have generic parameters
@@ -129,9 +129,6 @@ pub fn visit_type_spec(t: &ast::TypeSpec, symtab: &mut SymbolTable) -> Result<hi
                     } else {
                         Ok(hir::TypeSpec::Generic(base_id.at_loc(&path)))
                     }
-                }
-                TypeSymbol::GenericInt => {
-                    todo!("Support generic ints");
                 }
             }
         }
