@@ -359,8 +359,7 @@ checksum = "0717cef1bc8b636c6e1c1bbdefc09e6322da8a9321966e8928ef80d20f7f770f"
 [[package]]
 name = "local-impl"
 version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4c18a33a56ffe55d3098533222c5f5fea51715dd3227ada2cce873ef95ad7ee5"
+source = "git+https://gitlab.com/TheZoq2/local-impl.git?branch=fix_attrs#09293b492c653d78bb2f5fd64187e0c68ea51733"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -941,6 +940,7 @@ dependencies = [
  "spade-typeinference",
  "spade-types",
  "thiserror",
+ "tracing",
 ]
 
 [[package]]
@@ -1041,6 +1041,7 @@ dependencies = [
  "spade-hir",
  "spade-types",
  "thiserror",
+ "tracing",
 ]
 
 [[package]]

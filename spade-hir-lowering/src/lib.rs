@@ -167,6 +167,7 @@ impl PatternLocal for Pattern {
     /// Lower a pattern to its individual parts. Requires the `Pattern::id` to be
     /// present in the code before this
     /// self_name is the name of the operand which this pattern matches
+    #[tracing::instrument(name = "Pattern::lower", level = "trace", skip(self, ctx))]
     fn lower(&self, self_name: ValueName, ctx: &mut Context) -> Result<Vec<mir::Statement>> {
         let mut result = vec![];
         match &self.kind {
@@ -273,6 +274,7 @@ impl PatternLocal for Pattern {
 
     /// Returns MIR code for a condition that must hold for `expr` to satisfy
     /// this pattern.
+    #[tracing::instrument(level = "trace", skip(self, ctx))]
     fn condition(&self, value_name: &ValueName, ctx: &mut Context) -> Result<PatternCondition> {
         let output_id = ctx.idtracker.next();
         let mut result_name = ValueName::Expr(output_id);
@@ -428,6 +430,7 @@ impl PatternLocal for Pattern {
 
     /// Returns an error if the pattern is refutable, i.e. it does not match all possible
     /// values it binds to
+    #[tracing::instrument(level = "trace", skip(self, ctx))]
     fn is_refutable(&self, ctx: &Context) -> Usefulness {
         let operand_ty = ctx
             .types
@@ -448,6 +451,7 @@ impl PatternLocal for Pattern {
 
 #[local_impl]
 impl StatementLocal for Statement {
+    #[tracing::instrument(name = "Statement::lower", level = "trace", skip(self, ctx))]
     fn lower(&self, ctx: &mut Context) -> Result<Vec<mir::Statement>> {
         let mut result = vec![];
         match self {
@@ -477,6 +481,13 @@ impl StatementLocal for Statement {
             Statement::Register(register) => {
                 result.append(&mut register.clock.lower(ctx)?);
 
+                if let Some((trig, value)) = &register.reset {
+                    result.append(&mut trig.lower(ctx)?);
+                    result.append(&mut value.lower(ctx)?);
+                }
+
+                result.append(&mut register.value.lower(ctx)?);
+
                 let refutability = register.pattern.is_refutable(ctx);
                 if refutability.is_useful() {
                     return Err(Error::RefutablePattern {
@@ -485,13 +496,6 @@ impl StatementLocal for Statement {
                         binding_kind: "reg",
                     });
                 }
-
-                if let Some((trig, value)) = &register.reset {
-                    result.append(&mut trig.lower(ctx)?);
-                    result.append(&mut value.lower(ctx)?);
-                }
-
-                result.append(&mut register.value.lower(ctx)?);
 
                 result.push(mir::Statement::Register(mir::Register {
                     name: register.pattern.value_name(),

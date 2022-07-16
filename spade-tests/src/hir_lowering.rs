@@ -1534,6 +1534,16 @@ mod tests {
 
         build_and_compare_entities!(code, expected);
     }
+
+    snapshot_error! {
+        graceful_message_if_type_inference_fails_for_register,
+        "
+            entity x(clk: clk) -> bool {
+                reg(clk) x = 0;
+                true
+            }
+        "
+    }
 }
 
 #[cfg(test)]

@@ -156,6 +156,7 @@ impl TypeState {
 
     /// Converts the specified type to a concrete type, returning None
     /// if it fails
+    #[tracing::instrument(level = "trace", skip(symtab, type_list))]
     pub fn ungenerify_type(
         var: &TypeVar,
         symtab: &SymbolTable,
@@ -227,6 +228,7 @@ impl TypeState {
 
     /// Returns the type of the specified name as a concrete type. If the type is not known,
     /// or tye type is Generic, panics
+    #[tracing::instrument(level = "trace", skip(self, symtab, type_list))]
     pub fn type_of_id(&self, id: u64, symtab: &SymbolTable, type_list: &TypeList) -> ConcreteType {
         Self::ungenerify_type(
             &self
