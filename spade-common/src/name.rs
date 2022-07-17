@@ -76,6 +76,11 @@ impl Path {
             .inner
             .clone()
     }
+
+    /// Returns the whole path apart from the tail. Panics if the path is empty
+    pub fn prelude(&self) -> Path {
+        Self(self.0[0..self.0.len() - 1].to_owned())
+    }
 }
 
 impl std::fmt::Display for Path {

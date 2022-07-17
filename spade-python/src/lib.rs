@@ -140,6 +140,14 @@ impl Spade {
             ))?;
         }
 
+        // Set the namespace of the module
+        let namespace = uut.prelude();
+        let mut symtab = state.symtab.unfreeze();
+        for name in namespace.0 {
+            symtab.push_namespace(name)
+        }
+        let symtab = symtab.freeze();
+
         Ok(Self {
             uut,
             code,
@@ -147,7 +155,7 @@ impl Spade {
             item_list: state.item_list,
             type_state: TypeState::new(),
             owned: Some(OwnedState {
-                symtab: state.symtab,
+                symtab,
                 idtracker: state.idtracker,
             }),
             uut_head,
