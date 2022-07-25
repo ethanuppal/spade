@@ -751,9 +751,6 @@ impl SymbolTable {
     /// such definition exists. Only an absolute path in the root name space is checked
     /// as this is intended to be used for item definitions
     pub fn ensure_is_unique(&self, name: &Loc<Path>) -> Result<(), UniqueNameError> {
-        // Ensure we only run this without scopes
-        assert_eq!(self.symbols.len(), 1);
-
         let full_path = self.current_namespace().join(name.inner.clone());
 
         let prev = self
