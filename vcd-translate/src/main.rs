@@ -118,6 +118,8 @@ fn main() -> Result<()> {
                     if let Some(translated) = translate_value(&mapped.name, &value, &types) {
                         let with_color = if translated.contains("UNDEF") && translated != "UNDEF" {
                             format!("?DarkOrange4?{translated}")
+                        } else if translated.contains("HIGHIMP") {
+                            format!("?Goldenrod?{translated}")
                         } else if translated.starts_with("Option::None") {
                             format!("?DarkSeaGreen4?{translated}")
                         } else {
