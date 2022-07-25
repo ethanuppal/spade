@@ -50,11 +50,14 @@ impl CompilationError for ArgumentError {
                     .primary_label()
                     .with_message(format!("No such argument"))]),
             Self::MissingArguments { missing, at } => {
+                let mut missing = missing.clone();
                 let plural = if missing.len() == 1 {
                     "argument"
                 } else {
                     "arguments"
                 };
+
+                missing.sort_by_key(|arg| arg.0.clone());
 
                 let arg_list = missing
                     .iter()

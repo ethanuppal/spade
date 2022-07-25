@@ -359,7 +359,7 @@ checksum = "0717cef1bc8b636c6e1c1bbdefc09e6322da8a9321966e8928ef80d20f7f770f"
 [[package]]
 name = "local-impl"
 version = "0.1.0"
-source = "git+https://gitlab.com/TheZoq2/local-impl.git?branch=fix_attrs#09293b492c653d78bb2f5fd64187e0c68ea51733"
+source = "git+https://gitlab.com/sornas/local-impl#09293b492c653d78bb2f5fd64187e0c68ea51733"
 dependencies = [
  "proc-macro2",
  "quote",

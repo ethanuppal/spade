@@ -10,4 +10,4 @@ members = [
 [patch.crates-io]
 codespan = { git = "https://gitlab.com/spade-lang/codespan.git" }
 codespan-reporting = { git = "https://gitlab.com/spade-lang/codespan.git" }
-local-impl = {git = "https://gitlab.com/TheZoq2/local-impl.git", branch = "fix_attrs"}
+local-impl = {git = "https://gitlab.com/sornas/local-impl"}
