@@ -178,14 +178,11 @@ fn statement_code(statement: &Statement, source_code: &CodeBundle) -> Code {
                     let divisor = &ops[1];
                     code! {
                         [0] "always_comb begin";
-                        [1]     format!("if ({dividend} == 0) begin");
+                        [1]     format!("if ({divisor} == 0) begin");
                         [2]         format!("{name} = {dividend};");
                         [1]     "end";
-                        [1]     format!("else if ($signed({divisor}) < 0) begin");
-                        [2]         format!("{name} = $signed({dividend} + (1 << ({divisor} - 1))) >>> {divisor};");
-                        [1]     "end";
-                        [1]     "else begin";
-                        [2]         format!("{name} = {dividend} >> {divisor};");
+                        [1]     format!("else begin");
+                        [2]         format!("{name} = $signed($signed({dividend}) + $signed(1 << ({divisor} - 1))) >>> $signed({divisor});");
                         [1]     "end";
                         [0] "end";
                     }.to_string()
@@ -1427,14 +1424,11 @@ mod expression_tests {
             r#"
             logic[2:0] _e_0;
             always_comb begin
-                if (_e_1 == 0) begin
+                if (_e_2 == 0) begin
                     _e_0 = _e_1;
                 end
-                else if ($signed(_e_2) < 0) begin
-                    _e_0 = $signed(_e_1 + (1 << (_e_2 - 1))) >>> _e_2;
-                end
                 else begin
-                    _e_0 = _e_1 >> _e_2;
+                    _e_0 = $signed($signed(_e_1) + $signed(1 << (_e_2 - 1))) >>> $signed(_e_2);
                 end
             end"#
         };
