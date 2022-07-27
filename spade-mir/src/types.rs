@@ -3,9 +3,19 @@ pub enum Type {
     Int(u64),
     Bool,
     Tuple(Vec<Type>),
-    Array { inner: Box<Type>, length: u64 },
-    Memory { inner: Box<Type>, length: u64 },
+    Array {
+        inner: Box<Type>,
+        length: u64,
+    },
+    Memory {
+        inner: Box<Type>,
+        length: u64,
+    },
     Enum(Vec<Vec<Type>>),
+    /// A wire to which a value of the inner type can be written, rather than read from as normal
+    /// types. When a type containing an OutputWire is returned, the module 'returning' it has an
+    /// additional *input* for the wire.
+    OutputWire(Box<Type>),
 }
 
 impl Type {
@@ -27,6 +37,32 @@ impl Type {
             }
             Type::Array { inner, length } => inner.size() * length,
             Type::Memory { inner, length } => inner.size() * length,
+            Type::OutputWire(_) => 0,
+        }
+    }
+
+    pub fn output_size(&self) -> u64 {
+        match self {
+            Type::OutputWire(inner) => inner.size(),
+            Type::Int(_) | Type::Bool => 0,
+            Type::Array { inner, length } => inner.output_size() * length,
+            Type::Enum(inner) => {
+                for v in inner {
+                    for i in v {
+                        if i.output_size() != 0 {
+                            unreachable!("Enums can not have output wires as payload")
+                        }
+                    }
+                }
+                0
+            }
+            Type::Memory { inner, .. } => {
+                if inner.output_size() != 0 {
+                    unreachable!("Memory can not contain output wires")
+                };
+                0
+            }
+            Type::Tuple(inner) => inner.iter().map(Type::output_size).sum::<u64>(),
         }
     }
 
@@ -73,6 +109,9 @@ impl std::fmt::Display for Type {
                     .join(", ");
 
                 write!(f, "enum {}", inner)
+            }
+            Type::OutputWire(inner) => {
+                write!(f, "=>({inner})")
             }
         }
     }

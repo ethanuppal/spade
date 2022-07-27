@@ -21,6 +21,17 @@ impl ValueName {
             }
         }
     }
+
+    pub fn output_var_name(&self) -> String {
+        match self {
+            ValueName::Named(id, name) => {
+                format!("{}_n{}_o", name, id)
+            }
+            ValueName::Expr(id) => {
+                format!("_e_{}_o", id)
+            }
+        }
+    }
 }
 
 pub fn escape_path(path: String) -> String {
@@ -33,6 +44,10 @@ fn mangle_entity(module: &str) -> String {
 
 pub fn mangle_input(input: &str) -> String {
     format!("{}_i", input)
+}
+
+pub fn mangle_output(input: &str) -> String {
+    format!("{}_o", input)
 }
 
 fn statement_declaration(statement: &Statement) -> Code {
@@ -569,28 +584,80 @@ pub fn entity_code(entity: &mut Entity, source_code: &CodeBundle) -> Code {
     let inputs: Vec<_> = entity
         .inputs
         .iter()
-        .map(|(name, value_name, ty)| {
-            let name = mangle_input(&escape_path(name.clone()));
-            (name, value_name, ty)
-        })
+        .map(|(name, value_name, ty)| (name, value_name, ty))
         .collect();
 
     let inputs = inputs.iter().map(|(name, value_name, ty)| {
         let size = ty.size();
+        let (input_head, input_code) = if size != 0 {
+            let name = mangle_input(name);
+            (
+                format!("input{} {},", size_spec(size), name),
+                code! {
+                    [0] &logic(&value_name.var_name(), size);
+                    [0] &assign(&value_name.var_name(), &name)
+                },
+            )
+        } else {
+            (String::new(), code! {})
+        };
+
+        let output_size = ty.output_size();
+        let (output_head, output_code) = if output_size != 0 {
+            let name = mangle_output(name);
+            (
+                format!("output{} {},", size_spec(output_size), name),
+                code! {
+                    [0] &logic(&value_name.output_var_name(), output_size);
+                    [0] &assign(&name, &value_name.output_var_name())
+                },
+            )
+        } else {
+            (String::new(), code! {})
+        };
+
+        let spacing = if !input_head.is_empty() && !output_head.is_empty() {
+            " "
+        } else {
+            ""
+        };
         (
-            format!("input{} {},", size_spec(size), name),
+            format!("{input_head}{spacing}{output_head}"),
             code! {
-                [0] &logic(&value_name.var_name(), size);
-                [0] &assign(&value_name.var_name(), name)
+                [0] input_code;
+                [0] output_code;
             },
         )
     });
 
     let (inputs, input_assignments): (Vec<_>, Vec<_>) = inputs.unzip();
 
-    let output_definition = format!("output{} output__", size_spec(entity.output_type.size()));
+    let output_size = entity.output_type.size();
+    let (output_definition, output_assignment) = if output_size != 0 {
+        let def = code! {
+            [0] format!("output{} output__", size_spec(output_size))
+        };
+        let assignment = code! {[0] assign("output__", &entity.output.var_name())};
+        (def, assignment)
+    } else {
+        (code! {}, code! {})
+    };
 
-    let output_assignment = assign("output__", &entity.output.var_name());
+    let back_port_size = entity.output_type.output_size();
+    let (back_port_definition, back_port_assignment) = if back_port_size != 0 {
+        let def = code! {
+            [0] format!(
+                "input{} input__",
+                size_spec(entity.output_type.output_size())
+            );
+        };
+        let assignment = code! {
+            [0] assign(&entity.output.output_var_name(), "input__")
+        };
+        (def, assignment)
+    } else {
+        (code! {}, code! {})
+    };
 
     let mut body = Code::new();
 
@@ -605,6 +672,7 @@ pub fn entity_code(entity: &mut Entity, source_code: &CodeBundle) -> Code {
         [0] &format!("module {} (", entity_name);
                 [2] &inputs;
                 [2] &output_definition;
+                [2] &back_port_definition;
             [1] &");";
             [1] "`ifdef COCOTB_SIM";
             [1] "string __top_module;";
@@ -620,6 +688,7 @@ pub fn entity_code(entity: &mut Entity, source_code: &CodeBundle) -> Code {
             [1] &input_assignments;
             [1] &body;
             [1] &output_assignment;
+            [1] &back_port_assignment;
         [0] &"endmodule"
     }
 }
@@ -756,6 +825,121 @@ mod tests {
                 logic[5:0] _e_0;
                 assign _e_0 = $signed(op_n0) + $signed(_e_1);
                 assign output__ = _e_0;
+            endmodule"#
+        );
+
+        assert_same_code!(
+            &entity_code(&mut input.clone(), &CodeBundle::new("".to_string())).to_string(),
+            expected
+        );
+    }
+
+    #[test]
+    fn pure_output_wire_input_produces_output_port() {
+        let ty = Type::OutputWire(Box::new(Type::Int(3)));
+        let input = entity!("test"; ("a", n(0, "a"), ty) -> Type::Int(6); {
+            (const 0; Type::Int(6); crate::ConstantValue::Int(3))
+        } => e(0));
+
+        let expected = indoc!(
+            r#"module e_test (
+                    output[2:0] a_o,
+                    output[5:0] output__
+                );
+                `ifdef COCOTB_SIM
+                string __top_module;
+                string __vcd_file;
+                initial begin
+                    if ($value$plusargs("TOP_MODULE=%s", __top_module) && __top_module == "e_test") begin
+                        $value$plusargs("VCD_FILENAME=%s", __vcd_file);
+                        $display("%s", __vcd_file);
+                        $dumpfile (__vcd_file);
+                        $dumpvars (0, e_test);
+                    end
+                    #1;
+                end
+                `endif
+                logic[2:0] a_n0_o;
+                assign a_o = a_n0_o;
+                logic[5:0] _e_0;
+                assign _e_0 = 3;
+                assign output__ = _e_0;
+            endmodule"#
+        );
+
+        assert_same_code!(
+            &entity_code(&mut input.clone(), &CodeBundle::new("".to_string())).to_string(),
+            expected
+        );
+    }
+
+    #[test]
+    fn mixed_output_wire_input_works() {
+        let ty = Type::Tuple(vec![Type::Int(4), Type::OutputWire(Box::new(Type::Int(3)))]);
+        let input = entity!("test"; ("a", n(0, "a"), ty) -> Type::Int(6); {
+            (const 0; Type::Int(6); crate::ConstantValue::Int(3))
+        } => e(0));
+
+        let expected = indoc!(
+            r#"module e_test (
+                    input[3:0] a_i, output[2:0] a_o,
+                    output[5:0] output__
+                );
+                `ifdef COCOTB_SIM
+                string __top_module;
+                string __vcd_file;
+                initial begin
+                    if ($value$plusargs("TOP_MODULE=%s", __top_module) && __top_module == "e_test") begin
+                        $value$plusargs("VCD_FILENAME=%s", __vcd_file);
+                        $display("%s", __vcd_file);
+                        $dumpfile (__vcd_file);
+                        $dumpvars (0, e_test);
+                    end
+                    #1;
+                end
+                `endif
+                logic[3:0] a_n0;
+                assign a_n0 = a_i;
+                logic[2:0] a_n0_o;
+                assign a_o = a_n0_o;
+                logic[5:0] _e_0;
+                assign _e_0 = 3;
+                assign output__ = _e_0;
+            endmodule"#
+        );
+
+        assert_same_code!(
+            &entity_code(&mut input.clone(), &CodeBundle::new("".to_string())).to_string(),
+            expected
+        );
+    }
+
+    #[test]
+    fn mixed_output_wire_output_works() {
+        let ty = Type::Tuple(vec![Type::Int(4), Type::OutputWire(Box::new(Type::Int(3)))]);
+        let input = entity!("test"; () -> ty; {
+        } => e(0));
+
+        let expected = indoc!(
+            r#"module e_test (
+                    output[3:0] output__
+                    input[2:0] input__
+                );
+                `ifdef COCOTB_SIM
+                string __top_module;
+                string __vcd_file;
+                initial begin
+                    if ($value$plusargs("TOP_MODULE=%s", __top_module) && __top_module == "e_test") begin
+                        $value$plusargs("VCD_FILENAME=%s", __vcd_file);
+                        $display("%s", __vcd_file);
+                        $dumpfile (__vcd_file);
+                        $dumpvars (0, e_test);
+                    end
+                    #1;
+                end
+                `endif
+                assign output__ = _e_0;
+                assign _e_0_o = input__;
             endmodule"#
         );
 
