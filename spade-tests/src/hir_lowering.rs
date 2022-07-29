@@ -1077,9 +1077,11 @@ mod tests {
                 // Conditions for branches
                 (n(1, "x"); Type::Int(16); EnumMember({variant: 0, member_index: 0, enum_type: mir_type.clone()}); n(0, "e"));
                 (e(2); Type::Bool; IsEnumVariant({variant: 0, enum_type: mir_type}); n(0, "e"));
+                (const 10; Type::Bool; ConstantValue::Bool(true));
+                (e(11); Type::Bool; LogicalAnd; e(2), e(10));
                 (const 3; Type::Bool; ConstantValue::Bool(true));
                 (const 5; Type::Int(16); ConstantValue::Int(0));
-                (e(6); Type::Int(16); Match; e(2), n(1, "x"), e(3), e(5));
+                (e(6); Type::Int(16); Match; e(11), n(1, "x"), e(3), e(5));
             } => e(6)},
         ];
 
@@ -1170,6 +1172,50 @@ mod tests {
         };
 
         assert_same_mir!(&build_entity!(code), &expected);
+    }
+
+    #[test]
+    fn enum_match_with_sub_pattern_conditions_work() {
+        let code = r#"
+            enum Option<T> {
+                Some{ payload: T },
+                None
+            }
+
+            entity unwrap_or_0(e: Option<int<16>>) -> int<16> {
+                match e {
+                    Option::Some(10) => 5,
+                    Option::Some(x) => x,
+                    other => 0
+                }
+            }
+        "#;
+
+        let mir_type = Type::Enum(vec![vec![Type::Int(16)], vec![]]);
+
+        let expected = vec![
+            entity! {"unwrap_or_0"; ("e", n(0, "e"), mir_type.clone()) -> Type::Int(16); {
+                // Conditions fo branch 1
+                (e(11); Type::Int(16); EnumMember({variant: 0, member_index: 0, enum_type: mir_type.clone()}); n(0, "e"));
+                (e(15); Type::Bool; IsEnumVariant({variant: 0, enum_type: mir_type.clone()}); n(0, "e"));
+                (const 10; Type::Int(16); ConstantValue::Int(10));
+                (e(12); Type::Bool; Eq; e(11), e(10));
+                (e(14); Type::Bool; LogicalAnd; e(15), e(12));
+                (const 13; Type::Int(16); ConstantValue::Int(5));
+
+                // Condition for branch 2
+                (n(1, "x"); Type::Int(16); EnumMember({variant: 0, member_index: 0, enum_type: mir_type.clone()}); n(0, "e"));
+                (e(2); Type::Bool; IsEnumVariant({variant: 0, enum_type: mir_type}); n(0, "e"));
+                (const 3; Type::Bool; ConstantValue::Bool(true));
+                (e(20); Type::Bool; LogicalAnd; e(2), e(3));
+
+                (const 21; Type::Bool; ConstantValue::Bool(true));
+                (const 5; Type::Int(16); ConstantValue::Int(0));
+                (e(6); Type::Int(16); Match; e(14), e(13), e(20), n(1, "x"), e(21), e(5));
+            } => e(6)},
+        ];
+
+        build_and_compare_entities!(code, expected);
     }
 
     #[test]

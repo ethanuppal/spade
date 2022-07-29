@@ -162,6 +162,39 @@ struct PatternCondition {
     pub result_name: ValueName,
 }
 
+/// Returns a name which is `true` if all of `ops` are true, along with helper
+/// statements required for that computation. If `ops` is empt, a single `true` constant
+/// is returned
+pub fn all_conditions(ops: Vec<ValueName>, ctx: &mut Context) -> (Vec<mir::Statement>, ValueName) {
+    if ops.len() == 0 {
+        let id = ctx.idtracker.next();
+        (
+            vec![mir::Statement::Constant(
+                id,
+                MirType::Bool,
+                ConstantValue::Bool(true),
+            )],
+            ValueName::Expr(id),
+        )
+    } else if ops.len() == 1 {
+        (vec![], ops[0].clone())
+    } else {
+        let mut result_name = ops[0].clone();
+        let mut statements = vec![];
+        for op in &ops[1..] {
+            let new_name = ValueName::Expr(ctx.idtracker.next());
+            statements.push(mir::Statement::Binding(mir::Binding {
+                name: new_name.clone(),
+                operator: mir::Operator::LogicalAnd,
+                operands: vec![result_name, op.clone()],
+                ty: MirType::Bool,
+            }));
+            result_name = new_name;
+        }
+        (statements, result_name)
+    }
+}
+
 #[local_impl]
 impl PatternLocal for Pattern {
     /// Lower a pattern to its individual parts. Requires the `Pattern::id` to be
@@ -277,7 +310,7 @@ impl PatternLocal for Pattern {
     #[tracing::instrument(level = "trace", skip(self, ctx))]
     fn condition(&self, value_name: &ValueName, ctx: &mut Context) -> Result<PatternCondition> {
         let output_id = ctx.idtracker.next();
-        let mut result_name = ValueName::Expr(output_id);
+        let result_name = ValueName::Expr(output_id);
         match &self.kind {
             hir::PatternKind::Integer(val) => {
                 let self_type =
@@ -339,11 +372,8 @@ impl PatternLocal for Pattern {
                     .map(|pat| pat.condition(&pat.value_name(), ctx))
                     .collect::<Result<Vec<_>>>()?;
 
-                let mut conditions = subpatterns
+                let conditions = subpatterns
                     .iter()
-                    // Rev is not strictly nessecary but it makes conditions get generated
-                    // left to right
-                    .rev()
                     .map(|sub| sub.result_name.clone())
                     .collect::<Vec<_>>();
 
@@ -352,25 +382,15 @@ impl PatternLocal for Pattern {
                     .flat_map(|sub| sub.statements.into_iter())
                     .collect::<Vec<_>>();
 
-                // NOTE: Safe unwrap, we're asserting !is_empty above
-                result_name = conditions.pop().unwrap();
-                for cond in conditions {
-                    let new_result_name = ValueName::Expr(ctx.idtracker.next());
-                    statements.push(mir::Statement::Binding(mir::Binding {
-                        name: new_result_name.clone(),
-                        ty: MirType::Bool,
-                        operator: mir::Operator::LogicalAnd,
-                        operands: vec![result_name, cond],
-                    }));
-                    result_name = new_result_name;
-                }
+                let (mut new_statements, result_name) = all_conditions(conditions, ctx);
+                statements.append(&mut new_statements);
 
                 Ok(PatternCondition {
                     statements,
                     result_name,
                 })
             }
-            hir::PatternKind::Type(path, _args) => {
+            hir::PatternKind::Type(path, args) => {
                 let enum_variant = ctx.symtab.symtab().enum_variant_by_id(path);
 
                 let self_type = ctx
@@ -378,7 +398,7 @@ impl PatternLocal for Pattern {
                     .type_of_id(self.id, ctx.symtab.symtab(), &ctx.item_list.types)
                     .to_mir_type();
 
-                let statement = mir::Statement::Binding(mir::Binding {
+                let self_condition = mir::Statement::Binding(mir::Binding {
                     name: result_name.clone(),
                     operator: mir::Operator::IsEnumVariant {
                         variant: enum_variant.option,
@@ -388,8 +408,24 @@ impl PatternLocal for Pattern {
                     ty: MirType::Bool,
                 });
 
+                let mut conditions = vec![result_name];
+                let mut cond_statements = vec![];
+                cond_statements.push(self_condition);
+                for p in args.iter() {
+                    // NOTE: We know that `lower` will generate a binding for this
+                    // argument with the specified value_name, so we can just use that
+                    let value_name = p.value.value_name();
+
+                    let mut cond = p.value.condition(&value_name, ctx)?;
+                    conditions.push(cond.result_name.clone());
+                    cond_statements.append(&mut cond.statements);
+                }
+
+                let (mut extra_statements, result_name) = all_conditions(conditions, ctx);
+                cond_statements.append(&mut extra_statements);
+
                 Ok(PatternCondition {
-                    statements: vec![statement],
+                    statements: cond_statements,
                     result_name,
                 })
             }
