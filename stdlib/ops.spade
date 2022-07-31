@@ -13,3 +13,15 @@
 // FIXME: pow and result should probably not be `N` but type inference is not good
 // enough for that yet
 fn div_pow2<#N>(x: int<N>, pow: int<N>) -> int<N> __builtin__
+
+
+/// Computes the absolute value of x. The result is truncated, meaning that
+/// `abs(-2^(N-1)) == -2^(N-1))`.
+fn abs_trunc<#N>(x: int<N>) -> int<N> {
+    if x < 0 {
+        -x
+    }
+    else {
+        x
+    }
+}
