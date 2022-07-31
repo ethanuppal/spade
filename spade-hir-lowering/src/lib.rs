@@ -391,24 +391,39 @@ impl PatternLocal for Pattern {
                 })
             }
             hir::PatternKind::Type(path, args) => {
-                let enum_variant = ctx.symtab.symtab().enum_variant_by_id(path);
+                let patternable = ctx.symtab.symtab().patternable_type_by_id(path);
 
                 let self_type = ctx
                     .types
                     .type_of_id(self.id, ctx.symtab.symtab(), &ctx.item_list.types)
                     .to_mir_type();
 
-                let self_condition = mir::Statement::Binding(mir::Binding {
-                    name: result_name.clone(),
-                    operator: mir::Operator::IsEnumVariant {
-                        variant: enum_variant.option,
-                        enum_type: self_type,
-                    },
-                    operands: vec![value_name.clone()],
-                    ty: MirType::Bool,
-                });
+                let self_condition_id = ctx.idtracker.next();
+                let self_condition_name = ValueName::Expr(self_condition_id);
+                let self_condition = match patternable.kind {
+                    PatternableKind::Enum => {
+                        let enum_variant = ctx.symtab.symtab().enum_variant_by_id(path);
 
-                let mut conditions = vec![result_name];
+                        mir::Statement::Binding(mir::Binding {
+                            name: self_condition_name.clone(),
+                            operator: mir::Operator::IsEnumVariant {
+                                variant: enum_variant.option,
+                                enum_type: self_type,
+                            },
+                            operands: vec![value_name.clone()],
+                            ty: MirType::Bool,
+                        })
+                    }
+                    PatternableKind::Struct => mir::Statement::Constant(
+                        self_condition_id,
+                        MirType::Bool,
+                        ConstantValue::Bool(true),
+                    ),
+                };
+
+                // let enum_variant = ctx.symtab.symtab().enum_variant_by_id(path);
+
+                let mut conditions = vec![self_condition_name];
                 let mut cond_statements = vec![];
                 cond_statements.push(self_condition);
                 for p in args.iter() {
