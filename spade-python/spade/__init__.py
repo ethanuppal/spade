@@ -71,7 +71,7 @@ class OutputField(object):
             message += f"\t expected: {colors.green(r.expected_spade)}\n";
             message += f"\t      got: {colors.red(r.got_spade)}\n"
             message += "\n"
-            message += f"\tverilog ({colors.green(expected_bits)} != {colors.red(got_bits)})"
+            message += f"\tverilog ('{colors.green(expected_bits)}' != '{colors.red(got_bits)}')"
             assert False, message
 
     def __getattribute__(self, __name: str):

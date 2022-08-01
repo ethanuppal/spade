@@ -4,6 +4,7 @@ use itertools::Itertools;
 use num::range;
 use num::BigInt;
 use num::BigUint;
+use num::ToPrimitive;
 use num::Zero;
 
 use crate::{enum_util, types::Type, Binding, Operator, Statement, ValueName};
@@ -43,18 +44,24 @@ impl Value {
         match self {
             Value::Bit(val) => format!("{}", if *val { 1 } else { 0 }),
             Value::Int { size, val } => {
-                let val_str = if *val > 0i64.into() {
-                    format!("{val:b}")
+                if *val >= 0i64.into() {
+                    let val_str = format!("{val:b}");
+                    let needed_0s: BigUint = size - val_str.len();
+                    let extra_0 = range(0u64.into(), needed_0s).map(|_| "0").join("");
+                    assert!(*size >= val_str.len().into());
+                    format!("{extra_0}{val_str}")
                 } else {
-                    format!("{:b}", (!val) + 1i64)
-                };
-                let to_repeat = if *val < 0i64.into() { "1" } else { "0" };
-                let needed_0s: BigUint = size - val_str.len();
-                let extra_0 = range(0u64.into(), needed_0s).map(|_| to_repeat).join("");
-
-                assert!(*size >= val_str.len().into());
-
-                format!("{extra_0}{val_str}")
+                    // Negative numbers in 2's complement are represented by all leadingdigits
+                    // being 1. That is a bit difficult to achieve when our numbers have infinite
+                    // bits (as is the case for BigInt). To fix that, we mask out the bits we do
+                    // want which gives a positive number with the correct binary representation.
+                    // https://stackoverflow.com/questions/12946116/twos-complement-binary-in-python
+                    let size_usize = size.to_usize().expect(&format!(
+                        "Variable size {size} is too large to fit a 'usize'"
+                    ));
+                    let mask = BigInt::from((BigInt::from(1) << size_usize) - 1);
+                    format!("{:b}", val & mask)
+                }
             }
             Value::UInt { size, val } => {
                 let val_str = format!("{val:b}");
@@ -134,7 +141,10 @@ pub fn eval_statements(statements: &[Statement]) -> Value {
                     Operator::BitwiseAnd => todo!(),
                     Operator::BitwiseOr => todo!(),
                     Operator::Xor => todo!(),
-                    Operator::USub => todo!(),
+                    Operator::USub => Value::Int {
+                        size: ty.size().into(),
+                        val: -name_vals[&ops[0]].assume_int(),
+                    },
                     Operator::Not => todo!(),
                     Operator::BitwiseNot => todo!(),
                     Operator::DivPow2 => todo!(),
@@ -230,6 +240,15 @@ mod string_value_tests {
         let value = Value::int(8, -8);
 
         let expected = "11111000";
+
+        assert_eq!(value.as_string(), expected)
+    }
+
+    #[test]
+    fn minus_10_works() {
+        let value = Value::int(8, -10);
+
+        let expected = "11110110";
 
         assert_eq!(value.as_string(), expected)
     }
