@@ -14,6 +14,7 @@ use spade_hir as hir;
 use crate::{visit_parameter_list, Error, Result};
 use spade_hir::symbol_table::{GenericArg, SymbolTable, Thing, TypeSymbol};
 
+#[tracing::instrument(skip_all)]
 pub fn gather_types(module: &ast::ModuleBody, symtab: &mut SymbolTable) -> Result<()> {
     for item in &module.members {
         match item {
@@ -48,6 +49,7 @@ pub fn gather_types(module: &ast::ModuleBody, symtab: &mut SymbolTable) -> Resul
 }
 
 /// Collect global symbols as a first pass before generating HIR
+#[tracing::instrument(skip_all)]
 pub fn gather_symbols(
     module: &ast::ModuleBody,
     symtab: &mut SymbolTable,
@@ -60,6 +62,7 @@ pub fn gather_symbols(
     Ok(())
 }
 
+#[tracing::instrument(skip_all)]
 pub fn visit_item(
     item: &ast::Item,
     symtab: &mut SymbolTable,
@@ -91,6 +94,7 @@ pub fn visit_item(
     Ok(())
 }
 
+#[tracing::instrument(skip_all)]
 pub fn visit_entity(e: &Loc<ast::Entity>, symtab: &mut SymbolTable) -> Result<()> {
     let head = crate::entity_head(&e, symtab)?;
 

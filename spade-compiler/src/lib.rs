@@ -15,7 +15,7 @@ use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::RwLock;
 use thiserror::Error;
-use typeinference::equation::TypedExpression;
+use tracing::Level;
 
 use spade_ast_lowering::{global_symbols, visit_module_body, Context as AstLoweringCtx};
 use spade_common::error_reporting::CodeBundle;
@@ -25,6 +25,7 @@ use spade_hir::{ExecutableItem, ItemList};
 pub use spade_parser::lexer;
 use spade_parser::Parser;
 use spade_typeinference as typeinference;
+use typeinference::equation::TypedExpression;
 use typeinference::trace_stack::format_trace_stack;
 
 pub struct Opt<'b> {
@@ -117,6 +118,7 @@ pub struct CompilerState {
     pub item_list: ItemList,
 }
 
+#[tracing::instrument(skip_all)]
 pub fn compile(
     sources: Vec<(ModuleNamespace, String, String)>,
     opts: Opt,
@@ -143,6 +145,7 @@ pub fn compile(
     let mut module_asts = vec![];
     // Read and parse input files
     for (namespace, name, content) in sources {
+        let _span = tracing::span!(Level::TRACE, "source", ?name).entered();
         let file_id = code.write().unwrap().add_file(name, content.clone());
         let mut parser = Parser::new(lexer::TokenKind::lexer(&content), file_id);
 

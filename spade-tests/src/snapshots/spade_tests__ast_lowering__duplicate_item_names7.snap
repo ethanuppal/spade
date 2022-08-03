@@ -2,13 +2,13 @@
 source: spade-tests/src/ast_lowering.rs
 expression: "std::str::from_utf8(buffer.as_slice()).expect(\"error contains invalid utf-8\")"
 ---
-error: Multiple definitions of a
+error: Multiple definitions of b
   ┌─ testinput:1:4
   │
-1 │ fn a() -> bool {
-  │    ^ Multiple items named a
+1 │ fn b() -> bool {
+  │    ^ Multiple items named b
   ·
-5 │ use x::b as a;
-  │     --------- Previous definition here
+5 │ use x::b;
+  │     ---- Previous definition here
 
 

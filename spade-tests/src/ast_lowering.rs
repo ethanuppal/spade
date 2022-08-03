@@ -333,6 +333,17 @@ snapshot_error! {
 }
 
 snapshot_error! {
+    duplicate_item_names7,
+    "
+        fn b() -> bool {
+            true
+        }
+        mod x {fn b() -> bool {true}}
+        use x::b;
+    "
+}
+
+snapshot_error! {
     inst_function_used,
     "
         // See https://gitlab.com/spade-lang/spade/-/issues/160

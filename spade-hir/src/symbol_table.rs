@@ -465,6 +465,7 @@ impl SymbolTable {
         self.add_thing_with_id_at_offset(0, id, name, item)
     }
 
+    #[tracing::instrument(skip_all, fields(?name))]
     pub fn add_unique_thing(
         &mut self,
         name: Loc<Path>,
@@ -508,6 +509,7 @@ impl SymbolTable {
         Ok(self.add_type(name.inner, t))
     }
 
+    #[tracing::instrument(skip_all, fields(?name, ?target))]
     pub fn add_alias(
         &mut self,
         name: Loc<Path>,
@@ -519,10 +521,11 @@ impl SymbolTable {
         } else {
             target.inner.clone()
         };
+        let path = absolute_path.between(name.file_id, &name, &target);
         Ok(self.add_thing(
             name.inner,
             Thing::Alias {
-                path: absolute_path.at_loc(&target),
+                path,
                 in_namespace: self.current_namespace().clone(),
             },
         ))
