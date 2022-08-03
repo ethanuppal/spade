@@ -24,7 +24,12 @@ before_script:
   - source ./cargo/env
   - rustup install 1.58
 
+stages:
+    - test
+    - trawler
+
 clippy:
+    stage: test
     script:
         - rustup component add clippy
         - cargo install gitlab_clippy
@@ -44,6 +49,7 @@ clippy:
             - $CARGO_HOME
 
 test:
+    stage: test
     script:
         - cargo test --color=always
     cache:
@@ -75,6 +81,7 @@ output_test:
     image: ubuntu:22.04
     variables:
         APT_PYTHON_VERSION: "3.10"
+    stage: test
     script:
         - apt install -y iverilog
         - cd output_test && make
@@ -87,15 +94,21 @@ output_test:
             - $CARGO_HOME
 
 cargo-fmt:
+    stage: test
     script:
         - rustup component add rustfmt
         # pass --check to rustfmt to error if un-formatted
         - cargo fmt -- --check
 
 grep-todo:
-    # We don't want to apt install and such.
-    before_script:
-        - echo "This stage deliberately left blank"
+    stage: test
     script:
         # invert exit code of grep while still printing all matches
         - set -e; find . -name "*.rs" | xargs grep -E "// ?TODO" || exit 0 && exit 1
+
+trawler:
+    stage: trawler
+    variables:
+        UPSTREAM_BRANCH: $CI_COMMIT_REF_NAME
+    trigger: spade-lang/trawler
+
