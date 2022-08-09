@@ -441,9 +441,9 @@ dependencies = [
 
 [[package]]
 name = "nesty"
-version = "0.1.0"
+version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d7038971f0fc8e4fc6641d98895a05cd133fc9c4c5126763fad39096a1440b0e"
+checksum = "dac700f47763ee1984f0034c1b606e84fb00002cd2fbaabdd5a5473cf9e90ef5"
 
 [[package]]
 name = "num"

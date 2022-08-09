@@ -3,7 +3,7 @@ use crate::{
     assertion_codegen::AssertedExpression,
     enum_util,
     verilog::{self, assign, logic, size_spec},
-    ConstantValue, Entity, Operator, Statement, ValueName,
+    Binding, ConstantValue, Entity, Operator, Statement, ValueName,
 };
 use codespan_reporting::term::termcolor;
 use itertools::Itertools;
@@ -22,7 +22,7 @@ impl ValueName {
         }
     }
 
-    pub fn output_var_name(&self) -> String {
+    pub fn backward_var_name(&self) -> String {
         match self {
             ValueName::Named(id, name) => {
                 format!("{}_n{}_o", name, id)
@@ -55,16 +55,29 @@ fn statement_declaration(statement: &Statement) -> Code {
         Statement::Binding(binding) => {
             let name = binding.name.var_name();
 
-            let declaration = match &binding.ty {
-                crate::types::Type::Memory { inner, length } => {
-                    let inner_w = inner.size();
-                    if inner_w > 1 {
-                        format!("logic[{inner_w}-1:0] {name}[{length}-1:0];")
-                    } else {
-                        logic(&name, binding.ty.size())
+            let forward_declaration = if binding.ty.size() != 0 {
+                vec![match &binding.ty {
+                    crate::types::Type::Memory { inner, length } => {
+                        let inner_w = inner.size();
+                        if inner_w > 1 {
+                            format!("logic[{inner_w}-1:0] {name}[{length}-1:0];")
+                        } else {
+                            logic(&name, binding.ty.size())
+                        }
                     }
-                }
-                _ => logic(&name, binding.ty.size()),
+                    _ => logic(&name, binding.ty.size()),
+                }]
+            } else {
+                vec![]
+            };
+
+            let backward_declaration = if binding.ty.backward_size() != 0 {
+                vec![logic(
+                    &binding.name.backward_var_name(),
+                    binding.ty.backward_size(),
+                )]
+            } else {
+                vec![]
             };
 
             let ops = &binding
@@ -86,11 +99,15 @@ fn statement_declaration(statement: &Statement) -> Code {
             };
 
             code! {
-                [0] &declaration;
+                [0] &forward_declaration;
+                [0] &backward_declaration;
                 [0] &assignment;
             }
         }
         Statement::Register(reg) => {
+            if reg.ty.backward_size() != 0 {
+                panic!("Attempting to put value with a backward_size != 0 in a register")
+            }
             let name = reg.name.var_name();
             let declaration = verilog::reg(&name, reg.ty.size());
             code! {
@@ -111,10 +128,388 @@ fn statement_declaration(statement: &Statement) -> Code {
     }
 }
 
+fn forward_expression_code(binding: &Binding, ops: &[String]) -> String {
+    let name = binding.name.var_name();
+    macro_rules! binop {
+        ($verilog:expr) => {{
+            assert!(
+                binding.operands.len() == 2,
+                "expected 2 operands to binary operator"
+            );
+            format!("{} {} {}", ops[0], $verilog, ops[1])
+        }};
+    }
+
+    macro_rules! signed_binop {
+        ($verilog:expr) => {{
+            assert!(
+                binding.operands.len() == 2,
+                "expected 2 operands to binary operator"
+            );
+            format!("$signed({}) {} $signed({})", ops[0], $verilog, ops[1])
+        }};
+    }
+
+    macro_rules! unop {
+        ($verilog:expr) => {{
+            assert!(
+                binding.operands.len() == 1,
+                "expected 1 operands to binary operator"
+            );
+            format!("{}{}", $verilog, ops[0])
+        }};
+    }
+
+    match &binding.operator {
+        Operator::Add => signed_binop!("+"),
+        Operator::Sub => signed_binop!("-"),
+        Operator::Mul => signed_binop!("*"),
+        Operator::Eq => binop!("=="),
+        Operator::Gt => signed_binop!(">"),
+        Operator::Lt => signed_binop!("<"),
+        Operator::Ge => signed_binop!(">="),
+        Operator::Le => signed_binop!("<="),
+        Operator::LeftShift => binop!("<<"),
+        Operator::RightShift => binop!(">>"),
+        Operator::LogicalAnd => binop!("&&"),
+        Operator::LogicalOr => binop!("||"),
+        Operator::LogicalNot => {
+            assert!(ops.len() == 1, "Expected exactly 1 operand to not operator");
+            format!("!{}", ops[0])
+        }
+        Operator::BitwiseNot => {
+            assert!(
+                ops.len() == 1,
+                "Expected exactly 1 operand to bitwise not operator"
+            );
+            format!("~{}", ops[0])
+        }
+        Operator::BitwiseAnd => binop!("&"),
+        Operator::BitwiseOr => binop!("|"),
+        Operator::Xor => binop!("^"),
+        Operator::USub => unop!("-"),
+        Operator::Not => unop!("!"),
+        Operator::DivPow2 => {
+            // Split into 3 cases: if the division amount is 2^0, nothing should
+            // be done. Must be handled as a special case of the rest of the computation
+            //
+            // If the dividend is negative, we want to round the result towards 0, rather
+            // than towards -inf. To do so, we add a 1 in the most significant bit
+            // which is shifted away
+
+            let dividend = &ops[0];
+            let divisor = &ops[1];
+            code! {
+                [0] "always_comb begin";
+                [1]     format!("if ({divisor} == 0) begin");
+                [2]         format!("{name} = {dividend};");
+                [1]     "end";
+                [1]     format!("else begin");
+                [2]         format!("{name} = $signed($signed({dividend}) + $signed(1 << ({divisor} - 1))) >>> $signed({divisor});");
+                [1]     "end";
+                [0] "end";
+            }.to_string()
+        }
+        Operator::Truncate => {
+            format!("{}[{}:0]", ops[0], binding.ty.size() - 1)
+        }
+        Operator::Concat => {
+            format!("{{{}}}", ops.iter().map(|op| format!("{op}")).join(", "))
+        }
+        Operator::SignExtend {
+            extra_bits,
+            operand_size,
+        } => match extra_bits {
+            0 => format!("{}", ops[0]),
+            1 => format!("{{{}[{}], {}}}", ops[0], operand_size - 1, ops[0]),
+            2.. => format!(
+                "#[#[ {extra_bits} #[ {op}[{last_index}] #]#], {op}#]",
+                op = ops[0],
+                last_index = operand_size - 1,
+            )
+            // For readability with the huge amount of braces that both
+            // rust and verilog want here, we'll insert them at the end
+            // like this
+            .replace("#[", "{")
+            .replace("#]", "}"),
+        },
+        Operator::ZeroExtend { extra_bits } => match extra_bits {
+            0 => format!("{}", ops[0]),
+            1.. => format!("{{{}'b0, {}}}", extra_bits, ops[0]),
+        },
+        Operator::Match => {
+            assert!(
+                ops.len() % 2 == 0,
+                "Match statements must have an even number of operands"
+            );
+
+            let num_branches = ops.len() / 2;
+
+            let mut conditions = vec![];
+            let mut cases = vec![];
+            for i in 0..num_branches {
+                let cond = &ops[i * 2];
+                let result = &ops[i * 2 + 1];
+
+                conditions.push(cond.clone());
+
+                let zeros = (0..i).map(|_| '0').collect::<String>();
+                let unknowns = (0..(num_branches - i - 1)).map(|_| '?').collect::<String>();
+                cases.push(format!(
+                    "{}'b{}1{}: {} = {};",
+                    num_branches, zeros, unknowns, name, result
+                ))
+            }
+
+            code! (
+                [0] "always_comb begin";
+                [1]     format!("priority casez ({{{}}})", conditions.join(", "));
+                [2]         cases;
+                [2]         format!("{num_branches}'b?: {name} = 'x;");
+                [1]     "endcase";
+                [0] "end";
+            )
+            .to_string()
+        }
+        Operator::Select => {
+            assert!(
+                binding.operands.len() == 3,
+                "expected 3 operands to Select operator"
+            );
+            format!("{} ? {} : {}", ops[0], ops[1], ops[2])
+        }
+        Operator::IndexTuple(idx, ref types) => {
+            // Compute the start index of the element we're looking for
+            let mut start_bit = 0;
+            for i in 0..*idx {
+                start_bit += types[i as usize].size();
+            }
+
+            let target_width = types[*idx as usize].size();
+            let end_bit = start_bit + target_width;
+
+            let total_width: u64 = types.iter().map(crate::types::Type::size).sum();
+
+            // Check if this is a single bit, if so, index using just it
+            let index = if target_width == 1 {
+                format!("{}", total_width - start_bit - 1)
+            } else {
+                format!("{}:{}", total_width - start_bit - 1, total_width - end_bit)
+            };
+
+            format!("{}[{}]", ops[0], index)
+        }
+        Operator::ConstructArray { .. } => {
+            // NOTE: Reversing because we declare the array as logic[SIZE:0] and
+            // we want the [x*width+:width] indexing to work
+            format!(
+                "{{{}}}",
+                ops.iter().cloned().rev().collect::<Vec<_>>().join(", ")
+            )
+        }
+        Operator::IndexArray(member_size) => {
+            if *member_size == 1 {
+                format!("{}[{}]", ops[0], ops[1])
+            } else {
+                let end_index = format!("{} * {}", ops[1], member_size);
+                let offset = member_size;
+
+                // Strange indexing explained here https://stackoverflow.com/questions/18067571/indexing-vectors-and-arrays-with#18068296
+                format!("{}[{}+:{}]", ops[0], end_index, offset)
+            }
+        }
+        Operator::IndexMemory => {
+            format!("{}[{}]", ops[0], ops[1])
+        }
+        Operator::DeclClockedMemory {
+            write_ports,
+            addr_w,
+            inner_w,
+            elems: _,
+        } => {
+            let full_port_width = 1 + addr_w + inner_w;
+            let update_blocks = (0..*write_ports)
+                .map(|port| {
+                    let we_index = full_port_width * (port + 1) - 1;
+
+                    let addr_start = full_port_width * port + inner_w;
+                    let addr = if *addr_w == 1 {
+                        format!("{}[{}]", ops[1], addr_start)
+                    } else {
+                        format!("{}[{}:{}]", ops[1], addr_start + addr_w - 1, addr_start)
+                    };
+
+                    let write_value_start = port * full_port_width;
+                    let (write_index, write_value) = if *inner_w == 1 {
+                        (
+                            format!("{}[{addr}]", name),
+                            format!("{}[{write_value_start}]", ops[1]),
+                        )
+                    } else {
+                        (
+                            format!("{}[{addr}]", name),
+                            format!(
+                                "{}[{end}:{write_value_start}]",
+                                ops[1],
+                                end = write_value_start + inner_w - 1
+                            ),
+                        )
+                    };
+                    let we_signal = format!("{}[{we_index}]", ops[1]);
+
+                    code! {
+                        [0] format!("if ({we_signal}) begin");
+                        [1]     format!("{write_index} <= {write_value};");
+                        [0] "end"
+                    }
+                    .to_string()
+                })
+                .join("\n");
+
+            code! {
+                [0] format!("always @(posedge {clk}) begin", clk = ops[0]);
+                [1]     update_blocks;
+                [0] "end";
+            }
+            .to_string()
+        }
+        Operator::ConstructEnum {
+            variant,
+            variant_count,
+        } => {
+            let tag_size = enum_util::tag_size(*variant_count);
+
+            // Compute the amount of undefined bits to put at the end of the literal.
+            // First compute the size of this variant
+            let variant_member_size = match &binding.ty {
+                crate::types::Type::Enum(options) => {
+                    options[*variant].iter().map(|t| t.size()).sum::<u64>()
+                }
+                _ => panic!("Attempted enum construction of non-enum"),
+            };
+
+            let padding_size = binding.ty.size() as usize - tag_size - variant_member_size as usize;
+
+            let padding_text = if padding_size != 0 {
+                format!(", {}'bX", padding_size)
+            } else {
+                String::new()
+            };
+
+            let ops_text = if ops.is_empty() {
+                String::new()
+            } else {
+                format!(", {}", ops.join(", "))
+            };
+
+            format!("{{{}'d{}{}{}}}", tag_size, variant, ops_text, padding_text)
+        }
+        Operator::IsEnumVariant { variant, enum_type } => {
+            let tag_size = enum_util::tag_size(enum_type.assume_enum().len());
+            let total_size = enum_type.size();
+
+            let tag_end = total_size - 1;
+            let tag_start = total_size - tag_size as u64;
+
+            if tag_end == tag_start {
+                format!("{}[{}] == {}'d{}", ops[0], tag_end, tag_size, variant)
+            } else {
+                format!(
+                    "{}[{}:{}] == {}'d{}",
+                    ops[0], tag_end, tag_start, tag_size, variant
+                )
+            }
+        }
+        Operator::EnumMember {
+            variant,
+            member_index,
+            enum_type,
+        } => {
+            let variant_list = enum_type.assume_enum();
+            let tag_size = enum_util::tag_size(variant_list.len());
+            let full_size = enum_type.size();
+
+            let member_start = (tag_size as u64)
+                + variant_list[*variant][0..*member_index]
+                    .iter()
+                    .map(|t| t.size() as u64)
+                    .sum::<u64>();
+
+            let member_end = member_start + variant_list[*variant][*member_index].size();
+
+            format!(
+                "{}[{}:{}]",
+                ops[0],
+                full_size - member_start - 1,
+                full_size - member_end
+            )
+        }
+        Operator::ConstructTuple => {
+            // To make index calculations easier, we will store tuples in "inverse order".
+            // i.e. the left-most element is stored to the right in the bit vector.
+            format!("{{{}}}", ops.join(", "))
+        }
+        Operator::Instance(_) => {
+            // NOTE: dummy. Set in the next match statement
+            format!("")
+        }
+        Operator::Alias => {
+            // NOTE Dummy. Set in the next match statement
+            format!("") //format!("{}", ops[0])
+        }
+    }
+}
+
+fn backward_expression_code(binding: &Binding, ops: &[String]) -> String {
+    match binding.operator {
+        Operator::Add
+        | Operator::Sub
+        | Operator::Mul
+        | Operator::Eq
+        | Operator::Gt
+        | Operator::Lt
+        | Operator::Ge
+        | Operator::Le
+        | Operator::LeftShift
+        | Operator::RightShift
+        | Operator::LogicalAnd
+        | Operator::LogicalOr
+        | Operator::LogicalNot
+        | Operator::BitwiseAnd
+        | Operator::BitwiseOr
+        | Operator::Xor
+        | Operator::USub
+        | Operator::Not
+        | Operator::BitwiseNot
+        | Operator::DivPow2
+        | Operator::SignExtend { .. }
+        | Operator::ZeroExtend { .. }
+        | Operator::Concat
+        | Operator::DeclClockedMemory { .. }
+        | Operator::ConstructEnum { .. }
+        | Operator::IsEnumVariant { .. }
+        | Operator::EnumMember { .. }
+        | Operator::Truncate => panic!(
+            "{} can not be used on types with backward size",
+            binding.operator
+        ),
+        Operator::Select => todo!(),
+        Operator::Match => todo!(),
+        Operator::ConstructArray => todo!(),
+        Operator::IndexArray(_) => todo!(),
+        Operator::IndexMemory => todo!(),
+        Operator::ConstructTuple => todo!(),
+        Operator::IndexTuple(_, _) => todo!(),
+        Operator::Instance(_) => todo!(),
+        Operator::Alias => todo!(),
+    }
+}
+
 fn statement_code(statement: &Statement, source_code: &CodeBundle) -> Code {
     match statement {
         Statement::Binding(binding) => {
             let name = binding.name.var_name();
+            let back_name = binding.name.backward_var_name();
 
             let ops = &binding
                 .operands
@@ -122,334 +517,15 @@ fn statement_code(statement: &Statement, source_code: &CodeBundle) -> Code {
                 .map(ValueName::var_name)
                 .collect::<Vec<_>>();
 
-            macro_rules! binop {
-                ($verilog:expr) => {{
-                    assert!(
-                        binding.operands.len() == 2,
-                        "expected 2 operands to binary operator"
-                    );
-                    format!("{} {} {}", ops[0], $verilog, ops[1])
-                }};
-            }
-
-            macro_rules! signed_binop {
-                ($verilog:expr) => {{
-                    assert!(
-                        binding.operands.len() == 2,
-                        "expected 2 operands to binary operator"
-                    );
-                    format!("$signed({}) {} $signed({})", ops[0], $verilog, ops[1])
-                }};
-            }
-
-            macro_rules! unop {
-                ($verilog:expr) => {{
-                    assert!(
-                        binding.operands.len() == 1,
-                        "expected 1 operands to binary operator"
-                    );
-                    format!("{}{}", $verilog, ops[0])
-                }};
-            }
-
-            let expression = match &binding.operator {
-                Operator::Add => signed_binop!("+"),
-                Operator::Sub => signed_binop!("-"),
-                Operator::Mul => signed_binop!("*"),
-                Operator::Eq => binop!("=="),
-                Operator::Gt => signed_binop!(">"),
-                Operator::Lt => signed_binop!("<"),
-                Operator::Ge => signed_binop!(">="),
-                Operator::Le => signed_binop!("<="),
-                Operator::LeftShift => binop!("<<"),
-                Operator::RightShift => binop!(">>"),
-                Operator::LogicalAnd => binop!("&&"),
-                Operator::LogicalOr => binop!("||"),
-                Operator::LogicalNot => {
-                    assert!(ops.len() == 1, "Expected exactly 1 operand to not operator");
-                    format!("!{}", ops[0])
-                }
-                Operator::BitwiseNot => {
-                    assert!(
-                        ops.len() == 1,
-                        "Expected exactly 1 operand to bitwise not operator"
-                    );
-                    format!("~{}", ops[0])
-                }
-                Operator::BitwiseAnd => binop!("&"),
-                Operator::BitwiseOr => binop!("|"),
-                Operator::Xor => binop!("^"),
-                Operator::USub => unop!("-"),
-                Operator::Not => unop!("!"),
-                Operator::DivPow2 => {
-                    // Split into 3 cases: if the division amount is 2^0, nothing should
-                    // be done. Must be handled as a special case of the rest of the computation
-                    //
-                    // If the dividend is negative, we want to round the result towards 0, rather
-                    // than towards -inf. To do so, we add a 1 in the most significant bit
-                    // which is shifted away
-
-                    let dividend = &ops[0];
-                    let divisor = &ops[1];
-                    code! {
-                        [0] "always_comb begin";
-                        [1]     format!("if ({divisor} == 0) begin");
-                        [2]         format!("{name} = {dividend};");
-                        [1]     "end";
-                        [1]     format!("else begin");
-                        [2]         format!("{name} = $signed($signed({dividend}) + $signed(1 << ({divisor} - 1))) >>> $signed({divisor});");
-                        [1]     "end";
-                        [0] "end";
-                    }.to_string()
-                }
-                Operator::Truncate => {
-                    format!("{}[{}:0]", ops[0], binding.ty.size() - 1)
-                }
-                Operator::Concat => {
-                    format!("{{{}}}", ops.iter().map(|op| format!("{op}")).join(", "))
-                }
-                Operator::SignExtend {
-                    extra_bits,
-                    operand_size,
-                } => match extra_bits {
-                    0 => format!("{}", ops[0]),
-                    1 => format!("{{{}[{}], {}}}", ops[0], operand_size - 1, ops[0]),
-                    2.. => format!(
-                        "#[#[ {extra_bits} #[ {op}[{last_index}] #]#], {op}#]",
-                        op = ops[0],
-                        last_index = operand_size - 1,
-                    )
-                    // For readability with the huge amount of braces that both
-                    // rust and verilog want here, we'll insert them at the end
-                    // like this
-                    .replace("#[", "{")
-                    .replace("#]", "}"),
-                },
-                Operator::ZeroExtend { extra_bits } => match extra_bits {
-                    0 => format!("{}", ops[0]),
-                    1.. => format!("{{{}'b0, {}}}", extra_bits, ops[0]),
-                },
-                Operator::Match => {
-                    assert!(
-                        ops.len() % 2 == 0,
-                        "Match statements must have an even number of operands"
-                    );
-
-                    let num_branches = ops.len() / 2;
-
-                    let mut conditions = vec![];
-                    let mut cases = vec![];
-                    for i in 0..num_branches {
-                        let cond = &ops[i * 2];
-                        let result = &ops[i * 2 + 1];
-
-                        conditions.push(cond.clone());
-
-                        let zeros = (0..i).map(|_| '0').collect::<String>();
-                        let unknowns = (0..(num_branches - i - 1)).map(|_| '?').collect::<String>();
-                        cases.push(format!(
-                            "{}'b{}1{}: {} = {};",
-                            num_branches, zeros, unknowns, name, result
-                        ))
-                    }
-
-                    code! (
-                        [0] "always_comb begin";
-                        [1]     format!("priority casez ({{{}}})", conditions.join(", "));
-                        [2]         cases;
-                        [2]         format!("{num_branches}'b?: {name} = 'x;");
-                        [1]     "endcase";
-                        [0] "end";
-                    )
-                    .to_string()
-                }
-                Operator::Select => {
-                    assert!(
-                        binding.operands.len() == 3,
-                        "expected 3 operands to Select operator"
-                    );
-                    format!("{} ? {} : {}", ops[0], ops[1], ops[2])
-                }
-                Operator::IndexTuple(idx, ref types) => {
-                    // Compute the start index of the element we're looking for
-                    let mut start_bit = 0;
-                    for i in 0..*idx {
-                        start_bit += types[i as usize].size();
-                    }
-
-                    let target_width = types[*idx as usize].size();
-                    let end_bit = start_bit + target_width;
-
-                    let total_width: u64 = types.iter().map(crate::types::Type::size).sum();
-
-                    // Check if this is a single bit, if so, index using just it
-                    let index = if target_width == 1 {
-                        format!("{}", total_width - start_bit - 1)
-                    } else {
-                        format!("{}:{}", total_width - start_bit - 1, total_width - end_bit)
-                    };
-
-                    format!("{}[{}]", ops[0], index)
-                }
-                Operator::ConstructArray { .. } => {
-                    // NOTE: Reversing because we declare the array as logic[SIZE:0] and
-                    // we want the [x*width+:width] indexing to work
-                    format!(
-                        "{{{}}}",
-                        ops.iter().cloned().rev().collect::<Vec<_>>().join(", ")
-                    )
-                }
-                Operator::IndexArray(member_size) => {
-                    if *member_size == 1 {
-                        format!("{}[{}]", ops[0], ops[1])
-                    } else {
-                        let end_index = format!("{} * {}", ops[1], member_size);
-                        let offset = member_size;
-
-                        // Strange indexing explained here https://stackoverflow.com/questions/18067571/indexing-vectors-and-arrays-with#18068296
-                        format!("{}[{}+:{}]", ops[0], end_index, offset)
-                    }
-                }
-                Operator::IndexMemory => {
-                    format!("{}[{}]", ops[0], ops[1])
-                }
-                Operator::DeclClockedMemory {
-                    write_ports,
-                    addr_w,
-                    inner_w,
-                    elems: _,
-                } => {
-                    let full_port_width = 1 + addr_w + inner_w;
-                    let update_blocks = (0..*write_ports)
-                        .map(|port| {
-                            let we_index = full_port_width * (port + 1) - 1;
-
-                            let addr_start = full_port_width * port + inner_w;
-                            let addr = if *addr_w == 1 {
-                                format!("{}[{}]", ops[1], addr_start)
-                            } else {
-                                format!("{}[{}:{}]", ops[1], addr_start + addr_w - 1, addr_start)
-                            };
-
-                            let write_value_start = port * full_port_width;
-                            let (write_index, write_value) = if *inner_w == 1 {
-                                (
-                                    format!("{}[{addr}]", name),
-                                    format!("{}[{write_value_start}]", ops[1]),
-                                )
-                            } else {
-                                (
-                                    format!("{}[{addr}]", name),
-                                    format!(
-                                        "{}[{end}:{write_value_start}]",
-                                        ops[1],
-                                        end = write_value_start + inner_w - 1
-                                    ),
-                                )
-                            };
-                            let we_signal = format!("{}[{we_index}]", ops[1]);
-
-                            code! {
-                                [0] format!("if ({we_signal}) begin");
-                                [1]     format!("{write_index} <= {write_value};");
-                                [0] "end"
-                            }
-                            .to_string()
-                        })
-                        .join("\n");
-
-                    code! {
-                        [0] format!("always @(posedge {clk}) begin", clk = ops[0]);
-                        [1]     update_blocks;
-                        [0] "end";
-                    }
-                    .to_string()
-                }
-                Operator::ConstructEnum {
-                    variant,
-                    variant_count,
-                } => {
-                    let tag_size = enum_util::tag_size(*variant_count);
-
-                    // Compute the amount of undefined bits to put at the end of the literal.
-                    // First compute the size of this variant
-                    let variant_member_size = match &binding.ty {
-                        crate::types::Type::Enum(options) => {
-                            options[*variant].iter().map(|t| t.size()).sum::<u64>()
-                        }
-                        _ => panic!("Attempted enum construction of non-enum"),
-                    };
-
-                    let padding_size =
-                        binding.ty.size() as usize - tag_size - variant_member_size as usize;
-
-                    let padding_text = if padding_size != 0 {
-                        format!(", {}'bX", padding_size)
-                    } else {
-                        String::new()
-                    };
-
-                    let ops_text = if ops.is_empty() {
-                        String::new()
-                    } else {
-                        format!(", {}", ops.join(", "))
-                    };
-
-                    format!("{{{}'d{}{}{}}}", tag_size, variant, ops_text, padding_text)
-                }
-                Operator::IsEnumVariant { variant, enum_type } => {
-                    let tag_size = enum_util::tag_size(enum_type.assume_enum().len());
-                    let total_size = enum_type.size();
-
-                    let tag_end = total_size - 1;
-                    let tag_start = total_size - tag_size as u64;
-
-                    if tag_end == tag_start {
-                        format!("{}[{}] == {}'d{}", ops[0], tag_end, tag_size, variant)
-                    } else {
-                        format!(
-                            "{}[{}:{}] == {}'d{}",
-                            ops[0], tag_end, tag_start, tag_size, variant
-                        )
-                    }
-                }
-                Operator::EnumMember {
-                    variant,
-                    member_index,
-                    enum_type,
-                } => {
-                    let variant_list = enum_type.assume_enum();
-                    let tag_size = enum_util::tag_size(variant_list.len());
-                    let full_size = enum_type.size();
-
-                    let member_start = (tag_size as u64)
-                        + variant_list[*variant][0..*member_index]
-                            .iter()
-                            .map(|t| t.size() as u64)
-                            .sum::<u64>();
-
-                    let member_end = member_start + variant_list[*variant][*member_index].size();
-
-                    format!(
-                        "{}[{}:{}]",
-                        ops[0],
-                        full_size - member_start - 1,
-                        full_size - member_end
-                    )
-                }
-                Operator::ConstructTuple => {
-                    // To make index calculations easier, we will store tuples in "inverse order".
-                    // i.e. the left-most element is stored to the right in the bit vector.
-                    format!("{{{}}}", ops.join(", "))
-                }
-                Operator::Instance(_) => {
-                    // NOTE: dummy. Set in the next match statement
-                    format!("")
-                }
-                Operator::Alias => {
-                    // NOTE Dummy. Set in the next match statement
-                    format!("") //format!("{}", ops[0])
-                }
+            let forward_expression = if binding.ty.size() != 0 {
+                Some(forward_expression_code(binding, ops))
+            } else {
+                None
+            };
+            let backward_expression = if binding.ty.backward_size() != 0 {
+                Some(backward_expression_code(binding, ops))
+            } else {
+                None
             };
 
             // Unless this is a special operator, we just use assign value = expression
@@ -482,10 +558,14 @@ fn statement_code(statement: &Statement, source_code: &CodeBundle) -> Code {
                     }
                     _ => format!("assign {} = {};", name, ops[0]),
                 },
-                Operator::Match => format!("{}", expression),
-                Operator::DivPow2 => format!("{}", expression),
-                Operator::DeclClockedMemory { .. } => format!("{}", expression),
-                _ => format!("assign {} = {};", name, expression),
+                Operator::Match => format!("{}", forward_expression.unwrap()),
+                Operator::DivPow2 => format!("{}", forward_expression.unwrap()),
+                Operator::DeclClockedMemory { .. } => format!("{}", forward_expression.unwrap()),
+                _ => code! {
+                    [0] forward_expression.map(|f| format!("assign {} = {};", name, f));
+                    [0] backward_expression.map(|b| format!("assign {} = {};", b, back_name));
+                }
+                .to_string(),
             };
 
             code! {
@@ -602,14 +682,14 @@ pub fn entity_code(entity: &mut Entity, source_code: &CodeBundle) -> Code {
             (String::new(), code! {})
         };
 
-        let output_size = ty.output_size();
-        let (output_head, output_code) = if output_size != 0 {
+        let backward_size = ty.backward_size();
+        let (output_head, output_code) = if backward_size != 0 {
             let name = mangle_output(name);
             (
-                format!("output{} {},", size_spec(output_size), name),
+                format!("output{} {},", size_spec(backward_size), name),
                 code! {
-                    [0] &logic(&value_name.output_var_name(), output_size);
-                    [0] &assign(&name, &value_name.output_var_name())
+                    [0] &logic(&value_name.backward_var_name(), backward_size);
+                    [0] &assign(&name, &value_name.backward_var_name())
                 },
             )
         } else {
@@ -643,16 +723,16 @@ pub fn entity_code(entity: &mut Entity, source_code: &CodeBundle) -> Code {
         (code! {}, code! {})
     };
 
-    let back_port_size = entity.output_type.output_size();
+    let back_port_size = entity.output_type.backward_size();
     let (back_port_definition, back_port_assignment) = if back_port_size != 0 {
         let def = code! {
             [0] format!(
                 "input{} input__",
-                size_spec(entity.output_type.output_size())
+                size_spec(entity.output_type.backward_size())
             );
         };
         let assignment = code! {
-            [0] assign(&entity.output.output_var_name(), "input__")
+            [0] assign(&entity.output.backward_var_name(), "input__")
         };
         (def, assignment)
     } else {
@@ -850,9 +930,7 @@ mod tests {
                 string __top_module;
                 string __vcd_file;
                 initial begin
-                    if ($value$plusargs("TOP_MODULE=%s", __top_module) && __top_module == "e_test") begin
-                        $value$plusargs("VCD_FILENAME=%s", __vcd_file);
-                        $display("%s", __vcd_file);
+                    if ($value$plusargs("TOP_MODULE=%s", __top_module) && __top_module == "e_test" && $value$plusargs("VCD_FILENAME=%s", __vcd_file)) begin
                         $dumpfile (__vcd_file);
                         $dumpvars (0, e_test);
                     end
@@ -889,9 +967,7 @@ mod tests {
                 string __top_module;
                 string __vcd_file;
                 initial begin
-                    if ($value$plusargs("TOP_MODULE=%s", __top_module) && __top_module == "e_test") begin
-                        $value$plusargs("VCD_FILENAME=%s", __vcd_file);
-                        $display("%s", __vcd_file);
+                    if ($value$plusargs("TOP_MODULE=%s", __top_module) && __top_module == "e_test" && $value$plusargs("VCD_FILENAME=%s", __vcd_file)) begin
                         $dumpfile (__vcd_file);
                         $dumpvars (0, e_test);
                     end
@@ -929,9 +1005,7 @@ mod tests {
                 string __top_module;
                 string __vcd_file;
                 initial begin
-                    if ($value$plusargs("TOP_MODULE=%s", __top_module) && __top_module == "e_test") begin
-                        $value$plusargs("VCD_FILENAME=%s", __vcd_file);
-                        $display("%s", __vcd_file);
+                    if ($value$plusargs("TOP_MODULE=%s", __top_module) && __top_module == "e_test" && $value$plusargs("VCD_FILENAME=%s", __vcd_file)) begin
                         $dumpfile (__vcd_file);
                         $dumpvars (0, e_test);
                     end

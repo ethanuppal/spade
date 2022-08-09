@@ -41,15 +41,15 @@ impl Type {
         }
     }
 
-    pub fn output_size(&self) -> u64 {
+    pub fn backward_size(&self) -> u64 {
         match self {
             Type::OutputWire(inner) => inner.size(),
             Type::Int(_) | Type::Bool => 0,
-            Type::Array { inner, length } => inner.output_size() * length,
+            Type::Array { inner, length } => inner.backward_size() * length,
             Type::Enum(inner) => {
                 for v in inner {
                     for i in v {
-                        if i.output_size() != 0 {
+                        if i.backward_size() != 0 {
                             unreachable!("Enums can not have output wires as payload")
                         }
                     }
@@ -57,12 +57,12 @@ impl Type {
                 0
             }
             Type::Memory { inner, .. } => {
-                if inner.output_size() != 0 {
+                if inner.backward_size() != 0 {
                     unreachable!("Memory can not contain output wires")
                 };
                 0
             }
-            Type::Tuple(inner) => inner.iter().map(Type::output_size).sum::<u64>(),
+            Type::Tuple(inner) => inner.iter().map(Type::backward_size).sum::<u64>(),
         }
     }
 
