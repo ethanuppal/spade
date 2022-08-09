@@ -135,6 +135,28 @@ impl Expression {
             panic!("Expected block")
         }
     }
+
+    pub fn variant_str(&self) -> &'static str {
+        match self {
+            Expression::Identifier(_) => "identifier",
+            Expression::IntLiteral(_) => "int literal",
+            Expression::BoolLiteral(_) => "bool literal",
+            Expression::ArrayLiteral(_) => "array literal",
+            Expression::Index(_, _) => "index",
+            Expression::TupleLiteral(_) => "tuple literal",
+            Expression::TupleIndex(_, _) => "tuple index",
+            Expression::FieldAccess(_, _) => "field access",
+            Expression::If(_, _, _) => "if",
+            Expression::Match(_, _) => "match",
+            Expression::FnCall(_, _) => "fn call",
+            Expression::UnaryOperator(_, _) => "unary operator",
+            Expression::BinaryOperator(_, _, _) => "binary operator",
+            Expression::Block(_) => "block",
+            Expression::EntityInstance(_, _) => "entity instance",
+            Expression::PipelineInstance(_, _, _) => "pipeline instance",
+            Expression::PipelineReference(_, _) => "pipeline reference",
+        }
+    }
 }
 
 #[derive(PartialEq, Debug, Clone)]
@@ -300,6 +322,17 @@ impl Item {
             Item::Type(t) => Some(&t.name.inner),
             Item::Module(m) => Some(&m.name.inner),
             Item::Use(u) => u.alias.as_ref().map(|name| &name.inner),
+        }
+    }
+
+    pub fn variant_str(&self) -> &'static str {
+        match self {
+            Item::Entity(_) => "entity",
+            Item::Pipeline(_) => "pipeline",
+            Item::TraitDef(_) => "trait definition",
+            Item::Type(_) => "type",
+            Item::Module(_) => "module",
+            Item::Use(_) => "use",
         }
     }
 }

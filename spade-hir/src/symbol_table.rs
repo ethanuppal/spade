@@ -634,7 +634,7 @@ macro_rules! thing_accessors {
 
             /// Look up an item, with errors if the item is not currently in scope, or is not
             /// convertible to the return type.
-            #[tracing::instrument(level = "trace", skip(self))]
+            #[tracing::instrument(level = "trace", skip_all, fields(%name.inner, %name.span, %name.file_id))]
             pub fn $lookup_name(&self, name: &Loc<Path>) -> Result<(NameID, Loc<$result>), LookupError> {
                 let id = self.lookup_id(name)?;
 

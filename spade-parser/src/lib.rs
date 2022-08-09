@@ -1355,14 +1355,17 @@ impl<'a> Parser<'a> {
 
 // Helper functions for combining parsers
 impl<'a> Parser<'a> {
-    #[tracing::instrument(skip(self, parsers))]
+    #[tracing::instrument(skip_all, fields(parsers = parsers.len()))]
     fn first_successful<T>(
         &mut self,
         parsers: Vec<&dyn Fn(&mut Self) -> Result<Option<T>>>,
     ) -> Result<Option<T>> {
         for parser in parsers {
             match parser(self) {
-                Ok(Some(val)) => return Ok(Some(val)),
+                Ok(Some(val)) => {
+                    event!(Level::INFO, "Parser matched");
+                    return Ok(Some(val));
+                }
                 Ok(None) => continue,
                 Err(e) => return Err(e),
             }
@@ -1576,7 +1579,6 @@ impl<'a> Parser<'a> {
 
     fn next_token(&mut self) -> Result<Token> {
         let kind = self.lex.next().ok_or(Error::Eof)?;
-        event!(Level::TRACE, "Next token: {kind:?}");
 
         if let TokenKind::Error = kind {
             Err(Error::LexerError(self.file_id, lspan(self.lex.span())))?

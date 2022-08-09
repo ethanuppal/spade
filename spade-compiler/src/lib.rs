@@ -17,14 +17,17 @@ use std::sync::RwLock;
 use thiserror::Error;
 use tracing::Level;
 
+use spade_ast::ModuleBody;
 use spade_ast_lowering::{global_symbols, visit_module_body, Context as AstLoweringCtx};
 use spade_common::error_reporting::CodeBundle;
 use spade_common::error_reporting::CompilationError;
 use spade_common::{id_tracker, name::Path as SpadePath};
 use spade_hir::{ExecutableItem, ItemList};
+use spade_hir_lowering::error::Error as HirLoweringError;
 pub use spade_parser::lexer;
 use spade_parser::Parser;
 use spade_typeinference as typeinference;
+use spade_types::ConcreteType;
 use typeinference::equation::TypedExpression;
 use typeinference::trace_stack::format_trace_stack;
 
@@ -108,7 +111,14 @@ pub struct Artefacts {
     pub flat_mir_entities: Vec<spade_mir::Entity>,
 }
 
-/// All the state required in order to add more thigns to the compilation process
+struct CodegenArtefacts {
+    bumpy_mir_entities: Vec<spade_mir::Entity>,
+    flat_mir_entities: Vec<spade_mir::Entity>,
+    module_code: Vec<String>,
+    mir_code: Vec<String>,
+}
+
+/// All the state required in order to add more things to the compilation process
 #[derive(Serialize, Deserialize)]
 pub struct CompilerState {
     // (filename, file content) of all the compiled files
@@ -126,12 +136,6 @@ pub fn compile(
     let mut symtab = SymbolTable::new();
     let mut item_list = ItemList::new();
 
-    // Declared early in order to be able to return early in case this is only
-    // partial compilation
-
-    let mut bumpy_mir_entities = vec![];
-    let mut flat_mir_entities = vec![];
-
     spade_ast_lowering::builtins::populate_symtab(&mut symtab, &mut item_list);
 
     let code = Rc::new(RwLock::new(CodeBundle::new("".to_string())));
@@ -142,48 +146,16 @@ pub fn compile(
         code: code.clone(),
     };
 
-    let mut module_asts = vec![];
-    // Read and parse input files
-    for (namespace, name, content) in sources {
-        let _span = tracing::span!(Level::TRACE, "source", ?name).entered();
-        let file_id = code.write().unwrap().add_file(name, content.clone());
-        let mut parser = Parser::new(lexer::TokenKind::lexer(&content), file_id);
-
-        let result = parser
-            .top_level_module_body()
-            .map_err(|e| {
-                if opts.print_parse_traceback {
-                    println!("{}", spade_parser::format_parse_stack(&parser.parse_stack));
-                };
-                e
-            })
-            .or_report(&mut errors);
-
-        if let Some(ast) = result {
-            module_asts.push((namespace, ast))
-        }
-    }
+    let module_asts = parse(
+        sources,
+        Rc::clone(&code),
+        opts.print_parse_traceback,
+        &mut errors,
+    );
 
     if errors.failed {
         return Err(());
     }
-
-    let do_in_namespace = |namespace: &ModuleNamespace,
-                           symtab: &mut SymbolTable,
-                           to_do: &mut dyn FnMut(&mut SymbolTable)| {
-        for ident in &namespace.namespace.0 {
-            // NOTE: These identifiers do not have the correct file_id. However,
-            // as far as I know, they will never be part of an error, so we *should*
-            // be safe.
-            symtab.push_namespace(ident.clone());
-        }
-        symtab.set_base_namespace(namespace.base_namespace.clone());
-        to_do(symtab);
-        symtab.set_base_namespace(SpadePath(vec![]));
-        for _ in &namespace.namespace.0 {
-            symtab.pop_namespace();
-        }
-    };
 
     for (namespace, module_ast) in &module_asts {
         do_in_namespace(namespace, &mut symtab, &mut |symtab| {
@@ -206,30 +178,13 @@ pub fn compile(
         return Err(());
     }
 
-    let idtracker = id_tracker::ExprIdTracker::new();
     let mut ctx = AstLoweringCtx {
         symtab,
-        idtracker,
+        idtracker: id_tracker::ExprIdTracker::new(),
         pipeline_ctx: None,
     };
 
-    for (namespace, module_ast) in &module_asts {
-        // Can not be done by do_in_namespace because the symtab has been moved
-        // into `ctx`
-        for ident in &namespace.namespace.0 {
-            // NOTE: These identifiers do not have the correct file_id. However,
-            // as far as I know, they will never be part of an error, so we *should*
-            // be safe.
-            ctx.symtab.push_namespace(ident.clone());
-        }
-        ctx.symtab
-            .set_base_namespace(namespace.base_namespace.clone());
-        visit_module_body(&mut item_list, module_ast, &mut ctx).or_report(&mut errors);
-        ctx.symtab.set_base_namespace(SpadePath(vec![]));
-        for _ in &namespace.namespace.0 {
-            ctx.symtab.pop_namespace();
-        }
-    }
+    lower_ast(&module_asts, &mut item_list, &mut ctx, &mut errors);
 
     let AstLoweringCtx {
         symtab,
@@ -246,9 +201,6 @@ pub fn compile(
     }
 
     let mut frozen_symtab = symtab.freeze();
-    let mut module_code = vec![];
-    let mut mir_code = vec![];
-
     let mut all_types = HashMap::new();
 
     let executables_and_types = item_list
@@ -302,6 +254,7 @@ pub fn compile(
     if errors.failed {
         return Err(());
     }
+
     let mir_entities = spade_hir_lowering::monomorphisation::compile_items(
         &executables_and_types,
         &mut frozen_symtab,
@@ -309,40 +262,19 @@ pub fn compile(
         &item_list,
     );
 
-    for mir in mir_entities {
-        if let Some(MirOutput {
-            mut mir,
-            type_state,
-            reg_name_map,
-        }) = mir.or_report(&mut errors)
-        {
-            bumpy_mir_entities.push(mir.clone());
-
-            let code = spade_mir::codegen::entity_code(&mut mir, &code.read().unwrap());
-
-            mir_code.push(format!("{}", mir));
-
-            flat_mir_entities.push(mir);
-
-            module_code.push(code.to_string());
-
-            all_types.extend(dump_types(
-                &type_state,
-                &item_list.types,
-                frozen_symtab.symtab(),
-            ));
-
-            // Map the types of names generated by pipeline lowering
-            for (new, original) in reg_name_map {
-                let original_type = all_types
-                    .get(&TypedExpression::Name(original))
-                    .cloned()
-                    .flatten();
-
-                all_types.insert(TypedExpression::Name(new), original_type);
-            }
-        }
-    }
+    let CodegenArtefacts {
+        bumpy_mir_entities,
+        flat_mir_entities,
+        module_code,
+        mir_code,
+    } = codegen(
+        mir_entities,
+        Rc::clone(&code),
+        &item_list,
+        &frozen_symtab,
+        &mut all_types,
+        &mut errors,
+    );
 
     if let Some(outfile) = opts.outfile {
         std::fs::write(outfile, module_code.join("\n\n")).or_report(&mut errors);
@@ -396,5 +328,139 @@ pub fn compile(
             bumpy_mir_entities,
             flat_mir_entities,
         })
+    }
+}
+
+fn do_in_namespace(
+    namespace: &ModuleNamespace,
+    symtab: &mut SymbolTable,
+    to_do: &mut dyn FnMut(&mut SymbolTable),
+) {
+    for ident in &namespace.namespace.0 {
+        // NOTE: These identifiers do not have the correct file_id. However,
+        // as far as I know, they will never be part of an error, so we *should*
+        // be safe.
+        symtab.push_namespace(ident.clone());
+    }
+    symtab.set_base_namespace(namespace.base_namespace.clone());
+    to_do(symtab);
+    symtab.set_base_namespace(SpadePath(vec![]));
+    for _ in &namespace.namespace.0 {
+        symtab.pop_namespace();
+    }
+}
+
+#[tracing::instrument(skip_all)]
+fn parse(
+    sources: Vec<(ModuleNamespace, String, String)>,
+    code: Rc<RwLock<CodeBundle>>,
+    print_parse_traceback: bool,
+    errors: &mut ErrorHandler,
+) -> Vec<(ModuleNamespace, ModuleBody)> {
+    let mut module_asts = vec![];
+    // Read and parse input files
+    for (namespace, name, content) in sources {
+        let _span = tracing::span!(Level::TRACE, "source", ?name).entered();
+        let file_id = code.write().unwrap().add_file(name, content.clone());
+        let mut parser = Parser::new(lexer::TokenKind::lexer(&content), file_id);
+
+        let result = parser
+            .top_level_module_body()
+            .map_err(|e| {
+                if print_parse_traceback {
+                    println!("{}", spade_parser::format_parse_stack(&parser.parse_stack));
+                };
+                e
+            })
+            .or_report(errors);
+
+        if let Some(ast) = result {
+            module_asts.push((namespace, ast))
+        }
+    }
+
+    module_asts
+}
+
+#[tracing::instrument(skip_all)]
+fn lower_ast(
+    module_asts: &[(ModuleNamespace, ModuleBody)],
+    item_list: &mut ItemList,
+    ctx: &mut AstLoweringCtx,
+    errors: &mut ErrorHandler,
+) {
+    for (namespace, module_ast) in module_asts {
+        // Can not be done by do_in_namespace because the symtab has been moved
+        // into `ctx`
+        for ident in &namespace.namespace.0 {
+            // NOTE: These identifiers do not have the correct file_id. However,
+            // as far as I know, they will never be part of an error, so we *should*
+            // be safe.
+            ctx.symtab.push_namespace(ident.clone());
+        }
+        ctx.symtab
+            .set_base_namespace(namespace.base_namespace.clone());
+        visit_module_body(item_list, module_ast, ctx).or_report(errors);
+        ctx.symtab.set_base_namespace(SpadePath(vec![]));
+        for _ in &namespace.namespace.0 {
+            ctx.symtab.pop_namespace();
+        }
+    }
+}
+
+#[tracing::instrument(skip_all)]
+fn codegen(
+    mir_entities: Vec<Result<MirOutput, HirLoweringError>>,
+    code: Rc<RwLock<CodeBundle>>,
+    item_list: &ItemList,
+    frozen_symtab: &FrozenSymtab,
+    all_types: &mut HashMap<TypedExpression, Option<ConcreteType>>,
+    errors: &mut ErrorHandler,
+) -> CodegenArtefacts {
+    let mut bumpy_mir_entities = vec![];
+    let mut flat_mir_entities = vec![];
+    let mut module_code = vec![];
+    let mut mir_code = vec![];
+
+    for mir in mir_entities {
+        if let Some(MirOutput {
+            mut mir,
+            type_state,
+            reg_name_map,
+        }) = mir.or_report(errors)
+        {
+            bumpy_mir_entities.push(mir.clone());
+
+            let code = spade_mir::codegen::entity_code(&mut mir, &code.read().unwrap());
+
+            mir_code.push(format!("{}", mir));
+
+            flat_mir_entities.push(mir);
+
+            module_code.push(code.to_string());
+
+            all_types.extend(dump_types(
+                &type_state,
+                &item_list.types,
+                frozen_symtab.symtab(),
+            ));
+
+            // Map the types of names generated by pipeline lowering
+            for (new, original) in reg_name_map {
+                let original_type = all_types
+                    .get(&TypedExpression::Name(original))
+                    .cloned()
+                    .flatten();
+
+                all_types.insert(TypedExpression::Name(new), original_type);
+            }
+        }
+    }
+
+    CodegenArtefacts {
+        bumpy_mir_entities,
+        flat_mir_entities,
+        module_code,
+        mir_code,
     }
 }

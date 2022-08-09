@@ -13,7 +13,6 @@ use pipelines::PipelineContext;
 use std::collections::HashSet;
 
 use thiserror::Error;
-use tracing::{event, Level};
 
 use spade_ast as ast;
 use spade_hir as hir;
@@ -194,7 +193,7 @@ pub fn entity_head(item: &ast::Entity, symtab: &mut SymbolTable) -> Result<Entit
     })
 }
 
-#[tracing::instrument(skip_all, fields(?item.name))]
+#[tracing::instrument(skip_all, fields(%item.name, %item.is_function))]
 pub fn visit_entity(item: &Loc<ast::Entity>, ctx: &mut Context) -> Result<hir::Item> {
     let ast::Entity {
         body,
@@ -258,7 +257,7 @@ pub fn visit_entity(item: &Loc<ast::Entity>, ctx: &mut Context) -> Result<hir::I
     ))
 }
 
-#[tracing::instrument(skip(item, ctx))]
+#[tracing::instrument(skip_all, fields(kind = item.variant_str()))]
 pub fn visit_item(
     item: &ast::Item,
     ctx: &mut Context,
@@ -271,13 +270,12 @@ pub fn visit_item(
         }
         ast::Item::Type(_) => {
             // Global symbol lowering already visits type declarations
-            event!(Level::INFO, "Type definition");
             Ok((None, None))
         }
         ast::Item::Module(m) => {
             ctx.symtab.push_namespace(m.name.clone());
             let mut new_item_list = hir::ItemList::new();
-            let result = match visit_module_body(&mut new_item_list, &m.body, ctx) {
+            let result = match visit_module(&mut new_item_list, m, ctx) {
                 Ok(()) => Ok((None, Some(new_item_list))),
                 Err(e) => Err(e),
             };
@@ -288,13 +286,22 @@ pub fn visit_item(
     }
 }
 
-#[tracing::instrument(skip(item_list, module, ctx))]
-pub fn visit_module_body(
+#[tracing::instrument(skip_all, fields(module.name = %module.name.inner))]
+pub fn visit_module(
     item_list: &mut hir::ItemList,
-    module: &ast::ModuleBody,
+    module: &ast::Module,
     ctx: &mut Context,
 ) -> Result<()> {
-    let all_items = module
+    visit_module_body(item_list, &module.body, ctx)
+}
+
+#[tracing::instrument(skip_all)]
+pub fn visit_module_body(
+    item_list: &mut hir::ItemList,
+    body: &ast::ModuleBody,
+    ctx: &mut Context,
+) -> Result<()> {
+    let all_items = body
         .members
         .iter()
         .map(|i| visit_item(i, ctx))
@@ -650,7 +657,7 @@ fn visit_argument_list(
     }
 }
 
-#[tracing::instrument(skip_all)]
+#[tracing::instrument(skip_all, fields(kind = e.variant_str()))]
 pub fn visit_expression(e: &ast::Expression, ctx: &mut Context) -> Result<hir::Expression> {
     let new_id = ctx.idtracker.next();
 
