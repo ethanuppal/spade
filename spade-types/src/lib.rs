@@ -47,7 +47,7 @@ impl ConcreteType {
     pub fn assume_struct(&self) -> (&NameID, &Vec<(Identifier, ConcreteType)>) {
         match self {
             ConcreteType::Struct { name, members } => (name, members),
-            t => unreachable!("Assumed {t} was a struct"),
+            t => unreachable!("Assumed {} was a struct", t),
         }
     }
 }

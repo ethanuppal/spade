@@ -1,16 +1,33 @@
-# image: "scorpil/rust:nightly"
-image: rust:1.59
+# Ubuntu 18.04:
+# - glibc-2.27
+# - python3-3.7.5 (required by pyo3 for spade-python) <-- limiting factor
+# Ubuntu 18.04 is planned EOL April 2030 according to https://wiki.ubuntu.com/Releases (2022-08-03)
+image: ubuntu:18.04
 
 variables:
     CARGO_HOME: $CI_PROJECT_DIR/cargo
     FF_ENABLE_BASH_EXIT_CODE_CHECK: "true"
     GIT_SUBMODULE_STRATEGY: normal
+    # Since we mix Ubuntu 18.04 and Ubuntu 22.04 (see the job output_test) we
+    # have to specify the Python version per job, since they don't have the
+    # same version _and_ `python3` refers to 3.6 in 18.04 but we need 3.7 for
+    # pyo3.
+    APT_PYTHON_VERSION: "3.7"  
+
+# Setup environment for spade as a whole.
+before_script:
+  - apt update
+  - apt install -y curl gcc make python$APT_PYTHON_VERSION
+  # pyo3 expects `python3` in the path. `python3.7` isn't enough.
+  - ln -s /usr/bin/python$APT_PYTHON_VERSION /usr/bin/python3
+  - curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain none
+  - source ./cargo/env
+  - rustup install 1.58
 
 clippy:
-    before_script:
+    script:
         - rustup component add clippy
         - cargo install gitlab_clippy
-    script:
         - cargo clippy -- --allow clippy::useless_format
     after_script:
         - cargo clippy --message-format=json -- --allow clippy::useless_format | $CARGO_HOME/bin/gitlab-clippy > gl-code-quality-report.json
@@ -37,11 +54,29 @@ test:
             - target
             - $CARGO_HOME
 
+build:linux:
+  script:
+    - cargo build --release
+    - mv target/release/spade spadec
+    - mv target/release/libspade.so libspade.so
+  artifacts:
+    name: spade-linux
+    # Artifacts are kept indefinitely for the latest successful pipeline on a
+    # ref. For us, this means we keep at least one compiler for the master
+    # branch. Choose an arbitrary expiry just in case.
+    expire_in: 1 day
+    paths:
+      - spadec
+      - stdlib
+      - libspade.so
+
 output_test:
-    before_script:
-        - apt update
-        - apt install -y iverilog
+    # Ubuntu 18.04 only has iverilog-10.1 but 22.04 has 11.0, which it seems like we need.
+    image: ubuntu:22.04
+    variables:
+        APT_PYTHON_VERSION: "3.10"
     script:
+        - apt install -y iverilog
         - cd output_test && make
     cache:
         key:
@@ -52,13 +87,15 @@ output_test:
             - $CARGO_HOME
 
 cargo-fmt:
-    before_script:
-        - rustup component add rustfmt
     script:
+        - rustup component add rustfmt
         # pass --check to rustfmt to error if un-formatted
         - cargo fmt -- --check
 
 grep-todo:
+    # We don't want to apt install and such.
+    before_script:
+        - echo "This stage deliberately left blank"
     script:
         # invert exit code of grep while still printing all matches
         - set -e; find . -name "*.rs" | xargs grep -E "// ?TODO" || exit 0 && exit 1
