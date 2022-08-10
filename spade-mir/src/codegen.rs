@@ -610,9 +610,7 @@ pub fn entity_code(entity: &mut Entity, source_code: &CodeBundle) -> Code {
             [1] "string __top_module;";
             [1] "string __vcd_file;";
             [1] "initial begin";
-            [2]   format!(r#"if ($value$plusargs("TOP_MODULE=%s", __top_module) && __top_module == "{entity_name}") begin"#);
-            [3]     format!(r#"$value$plusargs("VCD_FILENAME=%s", __vcd_file);"#);
-            [3]     format!(r#"$display("%s", __vcd_file);"#);
+            [2]   format!(r#"if ($value$plusargs("TOP_MODULE=%s", __top_module) && __top_module == "{entity_name}" && $value$plusargs("VCD_FILENAME=%s", __vcd_file)) begin"#);
             [3]     format!("$dumpfile (__vcd_file);");
             [3]     format!("$dumpvars (0, {entity_name});");
             [2]   "end";
@@ -746,9 +744,7 @@ mod tests {
                 string __top_module;
                 string __vcd_file;
                 initial begin
-                    if ($value$plusargs("TOP_MODULE=%s", __top_module) && __top_module == "e_pong") begin
-                        $value$plusargs("VCD_FILENAME=%s", __vcd_file);
-                        $display("%s", __vcd_file);
+                    if ($value$plusargs("TOP_MODULE=%s", __top_module) && __top_module == "e_pong" && $value$plusargs("VCD_FILENAME=%s", __vcd_file)) begin
                         $dumpfile (__vcd_file);
                         $dumpvars (0, e_pong);
                     end
@@ -810,9 +806,7 @@ mod tests {
                 string __top_module;
                 string __vcd_file;
                 initial begin
-                    if ($value$plusargs("TOP_MODULE=%s", __top_module) && __top_module == "e_pl") begin
-                        $value$plusargs("VCD_FILENAME=%s", __vcd_file);
-                        $display("%s", __vcd_file);
+                    if ($value$plusargs("TOP_MODULE=%s", __top_module) && __top_module == "e_pl" && $value$plusargs("VCD_FILENAME=%s", __vcd_file)) begin
                         $dumpfile (__vcd_file);
                         $dumpvars (0, e_pl);
                     end
