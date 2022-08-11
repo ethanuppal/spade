@@ -1,0 +1,4 @@
+#!/bin/bash
+
+cargo tarpaulin --workspace -e spade-python --out html --output-dir .coverage --target-dir target/tarpaulin && echo "Coverage report created in .coverage/tarpaulin-report.html"
+
