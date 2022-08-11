@@ -174,7 +174,7 @@ pub enum TypeSpec {
 }
 impl WithLocation for TypeSpec {}
 
-// Quick functions for creating types wihtout typing so much
+// Quick functions for creating types without typing so much
 impl TypeSpec {
     pub fn unit() -> Self {
         TypeSpec::Unit(().nowhere())

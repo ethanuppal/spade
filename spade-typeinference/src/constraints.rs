@@ -8,7 +8,7 @@ pub enum ConstraintExpr {
     Var(TypeVar),
     Sum(Box<ConstraintExpr>, Box<ConstraintExpr>),
     Sub(Box<ConstraintExpr>),
-    /// The number of bits requried to represent the specified number. In practice
+    /// The number of bits required to represent the specified number. In practice
     /// inner.log2().floor()+1
     BitsToRepresent(Box<ConstraintExpr>),
 }

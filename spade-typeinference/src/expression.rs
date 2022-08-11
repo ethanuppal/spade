@@ -455,7 +455,7 @@ impl TypeState {
                     self.unify_expression_generic_error(&rhs, &rhs_t, symtab)?;
                     self.unify_expression_generic_error(expression, &result_t, symtab)?;
                 }
-                // Shift operators have the same widht in as they do out
+                // Shift operators have the same width in as they do out
                 BinaryOperator::LeftShift
                 | BinaryOperator::BitwiseAnd
                 | BinaryOperator::BitwiseOr

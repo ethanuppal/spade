@@ -37,7 +37,7 @@ mod tests {
     }
 
     #[test]
-    fn entity_defintions_are_correct() {
+    fn entity_definitions_are_correct() {
         let code = r#"
         entity name(a: int<16>, b: int<16>) -> int<16> {
             a
@@ -358,7 +358,7 @@ mod tests {
     }
 
     #[test]
-    fn usub_codegens_corectly() {
+    fn usub_codegens_correctly() {
         let code = r#"
         entity name(a: int<16>) -> int<16> {
             -a
@@ -376,7 +376,7 @@ mod tests {
     }
 
     #[test]
-    fn not_codegens_corectly() {
+    fn not_codegens_correctly() {
         let code = r#"
         entity name(a: bool) -> bool {
             !a
@@ -587,7 +587,7 @@ mod tests {
         let expected = entity!("name"; (
                 "x", n(0, "x"), tup_type.clone(),
             ) -> Type::Int(16); {
-                // NOTE: This line techinically isn't required in this case as it is just an alias,
+                // NOTE: This line technically isn't required in this case as it is just an alias,
                 // but removing it seems a bit pointless as it would introduce a special case in
                 // the code
                 (e(0); tup_type; Alias; n(0, "x"));
@@ -600,7 +600,7 @@ mod tests {
     }
 
     #[test]
-    fn entity_instanciation_works() {
+    fn entity_instantiation_works() {
         let code = r#"
             entity sub(a: int<16>) -> int<16> {
                 a
@@ -634,7 +634,7 @@ mod tests {
     }
 
     #[test]
-    fn pipeline_instanciation_works() {
+    fn pipeline_instantiation_works() {
         let code = r#"
             pipeline(2) sub(clk: clk, a: int<16>) -> int<16> {
                 reg;
@@ -1524,7 +1524,7 @@ mod tests {
     }
 
     snapshot_error! {
-        refering_to_unavailable_variable_causes_error,
+        referring_to_unavailable_variable_causes_error,
         "
         pipeline(5) X(clk: clk) -> bool {reg*5; false}
 
@@ -1539,7 +1539,7 @@ mod tests {
     }
 
     snapshot_error! {
-        absolute_refering_to_unavailable_variable_causes_error,
+        absolute_referring_to_unavailable_variable_causes_error,
         "
         pipeline(5) X(clk: clk) -> bool {reg*5; false}
 

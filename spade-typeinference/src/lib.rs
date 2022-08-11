@@ -1,4 +1,4 @@
-// This algorithm is based off the excelent lecture here
+// This algorithm is based off the excellent lecture here
 // https://www.youtube.com/watch?v=xJXcZp2vgLs
 //
 // The basic idea is to go through every node in the HIR tree, for every typed thing,
@@ -145,7 +145,7 @@ pub enum GenericListSource<'a> {
     /// For managing the generics of callable with the specified name when type checking
     /// their body
     Definition(&'a NameID),
-    /// For expressions which instanciate generic items
+    /// For expressions which instantiate generic items
     Expression(u64),
 }
 
@@ -171,7 +171,7 @@ pub struct TypeState {
 
     constraints: TypeConstraints,
 
-    /// Requirements which must be fullfilled but which do not guide further type inference.
+    /// Requirements which must be fulfilled but which do not guide further type inference.
     /// For example, if seeing `let y = x.a` before knowing the type of `x`, a requirement is
     /// added to say "x has field a, and y should be the type of that field"
     requirements: Vec<Requirement>,
@@ -198,7 +198,7 @@ impl TypeState {
         &self.equations
     }
 
-    // Get a generic list with a safe unwrap since a token is aquired
+    // Get a generic list with a safe unwrap since a token is acquired
     pub fn get_generic_list<'a>(
         &'a self,
         generic_list_token: &'a GenericListToken,
@@ -932,7 +932,7 @@ impl TypeState {
     }
 
     /// Performs unification but does not update constraints. This is done to avoid
-    /// updating constraints more often than nessecary. Technically, constraints can
+    /// updating constraints more often than necessary. Technically, constraints can
     /// be updated even less often, but `unify` is a pretty natural point to do so.
 
     fn unify_inner(
@@ -1139,7 +1139,7 @@ impl TypeState {
                 let ((var, replacement), loc) = constraint.split_loc();
 
                 self.trace_stack
-                    .push(TraceStackEntry::InferingFromConstraints(
+                    .push(TraceStackEntry::InferringFromConstraints(
                         var.clone(),
                         replacement.val,
                     ));
@@ -1148,7 +1148,7 @@ impl TypeState {
 
                 if replacement.val < 0 {
                     // lifeguard spade#126
-                    panic!("Infered a negative integer from constraints");
+                    panic!("Inferred a negative integer from constraints");
                 }
 
                 let expected_type = &KnownType::Integer(replacement.val as u128);
@@ -1407,7 +1407,7 @@ mod tests {
     }
 
     #[test]
-    fn if_statements_have_correctly_infered_types() {
+    fn if_statements_have_correctly_inferred_types() {
         let mut state = TypeState::new();
         let mut symtab = SymbolTable::new();
         spade_ast_lowering::builtins::populate_symtab(&mut symtab, &mut ItemList::new());
@@ -1513,7 +1513,7 @@ mod tests {
     }
 
     #[test]
-    fn match_expressions_have_correctly_infered_types() {
+    fn match_expressions_have_correctly_inferred_types() {
         let mut state = TypeState::new();
         let mut symtab = SymbolTable::new();
         spade_ast_lowering::builtins::populate_symtab(&mut symtab, &mut ItemList::new());
@@ -1701,7 +1701,7 @@ mod tests {
     }
 
     #[test]
-    fn array_indexing_infers_all_types_corectly() {
+    fn array_indexing_infers_all_types_correctly() {
         let mut state = TypeState::new();
         let mut symtab = SymbolTable::new();
         spade_ast_lowering::builtins::populate_symtab(&mut symtab, &mut ItemList::new());

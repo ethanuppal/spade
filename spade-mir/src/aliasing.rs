@@ -10,7 +10,7 @@ fn try_rename(name: &mut ValueName, replacements: &HashMap<ValueName, ValueName>
 
 /// Resolves aliases where a var name is only aliased once.
 ///
-/// That is if a -> b, then all occurences of a will be replaced by b
+/// That is if a -> b, then all occurrences of a will be replaced by b
 /// unless a is also aliased for something else
 pub fn flatten_aliases(entity: &mut Entity) {
     let mut aliased_by = HashMap::new();
@@ -226,7 +226,7 @@ mod tests {
     }
 
     #[test]
-    fn ouptuts_are_aliased() {
+    fn outputs_are_aliased() {
         let mut input = entity!("pong"; ("_i_op", n(0, "op"), Type::Int(6)) -> Type::Int(6); {
             (n(0, "a"); Type::Int(6); Alias; e(0));
         } => e(0));

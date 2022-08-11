@@ -91,7 +91,7 @@ impl std::fmt::Display for Path {
 /// Anything named will get assigned a unique name ID during AST lowering in order to avoid caring
 /// about scopes once HIR has been generated. This is the type of those IDs
 ///
-/// The associated string is only used for formating when printing. The hash and eq methods do not
+/// The associated string is only used for formatting when printing. The hash and eq methods do not
 /// use it
 #[derive(Clone, Serialize, Deserialize)]
 pub struct NameID(pub u64, pub Path);

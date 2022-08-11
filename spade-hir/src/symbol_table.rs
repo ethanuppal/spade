@@ -99,7 +99,7 @@ impl CompilationError for LookupError {
                     )),
                 ]),
             LookupError::NotAnEntity(path, got) => Diagnostic::error()
-                .with_message(format!("Expected {} to be an enity", path))
+                .with_message(format!("Expected {} to be an entity", path))
                 .with_labels(vec![
                     path.primary_label()
                         .with_message(format!("Expected entity")),
@@ -273,11 +273,11 @@ impl FunctionHead {
     }
 }
 
-/// Any named thing in the language which is not a type. Structs are here for instanciation
+/// Any named thing in the language which is not a type. Structs are here for instantiation
 /// under the same NameID as the type
 #[derive(PartialEq, Debug, Clone, Serialize, Deserialize)]
 pub enum Thing {
-    /// Defintion of a named type
+    /// Definition of a named type
     Struct(Loc<StructCallable>),
     EnumVariant(Loc<EnumVariant>),
     Function(Loc<EntityHead>),
@@ -785,7 +785,7 @@ impl SymbolTable {
             Some(other) => Err(LookupError::NotAVariable(name.clone(), other.clone())),
             None => match self.types.get(&id) {
                 Some(_) => Err(LookupError::IsAType(name.clone())),
-                None => panic!("{:?} is in symtab but not a thign or type", id),
+                None => panic!("{:?} is in symtab but not a thing or type", id),
             },
         }
     }

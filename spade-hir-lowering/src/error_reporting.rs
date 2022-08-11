@@ -105,8 +105,8 @@ impl CompilationError for Error {
                     prev.secondary_label()
                         .with_message(format!("But this has delay {prev}")),
                 ]),
-            Error::InstanciatingGenericBuiltin { loc, head } => Diagnostic::error()
-                .with_message("Generic builtins can not be instanciated")
+            Error::InstantiatingGenericBuiltin { loc, head } => Diagnostic::error()
+                .with_message("Generic builtins can not be instantiated")
                 .with_labels(vec![
                     loc.primary_label().with_message("Invalid instance"),
                     head.secondary_label()

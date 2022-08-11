@@ -451,7 +451,7 @@ impl PatternLocal for Pattern {
     /// this will be the pattern ID unless the pattern is just a name, in
     /// which case it will be a name
     ///
-    /// This is done to avoid creating too many unnessecary ExprID variables
+    /// This is done to avoid creating too many unnecessary ExprID variables
     /// in the output code to make it more readable
     fn value_name(&self) -> ValueName {
         match &self.kind {
@@ -1096,14 +1096,14 @@ impl ExprLocal for Loc<Expression> {
                 // builtin. However, at the moment, the compiler does not know if the generic
                 // is an intrinsic until here when it has gone through the list of intrinsics
                 if !type_params.is_empty() {
-                    return Err(Error::InstanciatingGenericBuiltin {
+                    return Err(Error::InstantiatingGenericBuiltin {
                         loc: self.loc(),
                         head: head_loc,
                     });
                 }
 
                 // NOTE: Builtin entities are not part of the item list, but we
-                // should still emit the code for instanciating them
+                // should still emit the code for instantiating them
                 result.push(mir::Statement::Binding(mir::Binding {
                     name: self.variable(ctx.subs)?,
                     operator: mir::Operator::Instance(unit_name.mangled()),

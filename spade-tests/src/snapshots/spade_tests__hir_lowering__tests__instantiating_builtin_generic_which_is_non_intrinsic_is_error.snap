@@ -2,7 +2,7 @@
 source: spade-tests/src/hir_lowering.rs
 expression: "std::str::from_utf8(buffer.as_slice()).expect(\"error contains invalid utf-8\")"
 ---
-error: Generic builtins can not be instanciated
+error: Generic builtins can not be instantiated
   ┌─ testinput:4:5
   │
 1 │ fn a<T>() -> T __builtin__

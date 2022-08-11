@@ -84,7 +84,7 @@ macro_rules! snapshot_error {
     };
 }
 
-/// Builds mutliple items and types from a source string.
+/// Builds multiple items and types from a source string.
 /// Panics if the compilation fails
 /// Returns all MIR entities in unflattened format
 #[cfg(test)]
@@ -119,7 +119,7 @@ fn build_items(code: &str) -> Vec<spade_mir::Entity> {
         Ok(artefacts) => artefacts.bumpy_mir_entities,
         Err(()) => {
             // I'm not 100% sure why this is needed. The bufferwriter should output
-            // to stdout and buffer.flush() should be enough. Unfortunatley, that does
+            // to stdout and buffer.flush() should be enough. Unfortunately, that does
             // not seem to be the case
             if !buffer.is_empty() {
                 println!("{}", String::from_utf8_lossy(&buffer.into_inner()));
@@ -129,7 +129,7 @@ fn build_items(code: &str) -> Vec<spade_mir::Entity> {
     }
 }
 
-/// Builds mutliple entities and types from a source string, then compares the resulting
+/// Builds multiple entities and types from a source string, then compares the resulting
 /// entities. $expected should be a vector of mir entities. If any pipelines or other
 /// non-entities or types are included in $code, this panics
 #[macro_export]

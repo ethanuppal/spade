@@ -12,7 +12,7 @@ pub enum Substitution {
     /// The variable will not be available for another `n` cycles. When available,
     /// the variable name will be `NameID`
     Waiting(usize, NameID),
-    /// The value is availalbe now and the true name is `NameID`
+    /// The value is available now and the true name is `NameID`
     Available(NameID),
 }
 
@@ -56,7 +56,7 @@ impl Substitutions {
                 Substitution::Undefined => {
                     unreachable!("Undefined substitutions should not be in the substitution map")
                 }
-                // The name of the value in the first stage at which it is avilable will be the
+                // The name of the value in the first stage at which it is available will be the
                 // original name.
                 // 1 because we would now replace it with 0, indicating that the value is in fact
                 // available.

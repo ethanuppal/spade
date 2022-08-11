@@ -186,7 +186,7 @@ impl CompilationError for Error {
                     .with_labels(vec![
                         at.primary_label()
                             .with_message("Stage reference is not allowed here"),
-                        entity_keyword.secondary_label().with_message("Because this is an enity")
+                        entity_keyword.secondary_label().with_message("Because this is an entity")
                     ])
             }
             Error::ExpectedType(found) => Diagnostic::error()
@@ -211,7 +211,7 @@ impl CompilationError for Error {
                     .primary_label()
                     .with_message("decl doesn't declare anything")]),
             Error::InstInFunction {at, fn_keyword} => Diagnostic::error()
-                .with_message("Entities or pipelines can not be instanciated in functions")
+                .with_message("Entities or pipelines can not be instantiated in functions")
                 .with_labels(vec![
                     at
                         .primary_label()

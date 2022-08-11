@@ -112,7 +112,7 @@ snapshot_error! {
         match x {
             A(_) => A(4),
             // If this test works, B, being in scope should not be a variable but remain
-            // refering to X::B. In the incorrect behaviour, the single identifier path B
+            // referring to X::B. In the incorrect behaviour, the single identifier path B
             // binds to X and B() is calling a variable as a function
             B => B(), 
         }

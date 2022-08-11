@@ -117,7 +117,7 @@ impl Requirement {
         }
     }
 
-    /// Check if this requirement is satisfied. If so, apply the resulting replacments to the
+    /// Check if this requirement is satisfied. If so, apply the resulting replacements to the
     /// type state, otherwise add the requirement to the type state requirement list
     pub fn check_or_add(
         self,

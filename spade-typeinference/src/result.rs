@@ -244,8 +244,8 @@ pub enum Error {
         spec: Loc<UnificationTrace>,
     },
 
-    #[error("Attempting to instanciate generic type")]
-    GenericTypeInstanciation,
+    #[error("Attempting to instantiate generic type")]
+    GenericTypeInstantiation,
 
     #[error("Argument error")]
     ArgumentError(#[from] ArgumentError),

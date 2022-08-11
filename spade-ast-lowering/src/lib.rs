@@ -315,7 +315,7 @@ pub fn visit_module_body(
         macro_rules! add_item {
             ($map:expr, $name:expr, $item:expr) => {{
                 if let Some(_) = $map.insert($name, $item) {
-                    panic!("Internal error: Multiple thigns named {}", $name)
+                    panic!("Internal error: Multiple things named {}", $name)
                 }
             }};
         }
@@ -1748,7 +1748,7 @@ mod expression_visiting {
     }
 
     #[test]
-    fn entity_instanciation_works() {
+    fn entity_instantiation_works() {
         let input = ast::Expression::EntityInstance(
             ast_path("test"),
             ast::ArgumentList::Positional(vec![
@@ -1801,7 +1801,7 @@ mod expression_visiting {
     }
 
     #[test]
-    fn entity_instanciation_with_named_args_works() {
+    fn entity_instantiation_with_named_args_works() {
         let input = ast::Expression::EntityInstance(
             ast_path("test"),
             ast::ArgumentList::Named(vec![
@@ -1913,7 +1913,7 @@ mod expression_visiting {
     }
 
     #[test]
-    fn pipeline_instanciation_works() {
+    fn pipeline_instantiation_works() {
         let input = ast::Expression::PipelineInstance(
             2.nowhere(),
             ast_path("test"),

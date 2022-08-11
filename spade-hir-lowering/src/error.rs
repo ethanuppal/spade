@@ -33,7 +33,7 @@ pub enum Error {
     #[error("Availability mismatch")]
     AvailabilityMismatch { prev: Loc<usize>, new: Loc<usize> },
     #[error("Generic builtin")]
-    InstanciatingGenericBuiltin { loc: Loc<()>, head: Loc<()> },
+    InstantiatingGenericBuiltin { loc: Loc<()>, head: Loc<()> },
     #[error("Missing patterns")]
     MissingPatterns {
         match_expr: Loc<()>,

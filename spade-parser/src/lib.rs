@@ -506,7 +506,7 @@ impl<'a> Parser<'a> {
     }
 
     /// A name with an associated type, as used in argument definitions as well
-    /// as struct defintions
+    /// as struct definitions
     ///
     /// name: Type
     #[trace_parser]
@@ -609,7 +609,7 @@ impl<'a> Parser<'a> {
         }
     }
 
-    // Statemenets
+    // Statements
 
     #[trace_parser]
     pub fn binding(&mut self) -> Result<Option<Loc<Statement>>> {
@@ -2021,7 +2021,7 @@ mod tests {
     }
 
     #[test]
-    fn invaild_top_level_tokens_cause_errors() {
+    fn invalid_top_level_tokens_cause_errors() {
         let code = r#"+ x() -> bool {
             false
         }
@@ -2396,7 +2396,7 @@ mod tests {
     }
 
     #[test]
-    fn entity_instanciation() {
+    fn entity_instantiation() {
         let code = "inst some_entity(x, y, z)";
 
         let expected = Expression::EntityInstance(
@@ -2414,7 +2414,7 @@ mod tests {
     }
 
     #[test]
-    fn entity_instanciation_with_a_named_arg() {
+    fn entity_instantiation_with_a_named_arg() {
         let code = "inst some_entity$(z: a)";
 
         let expected = Expression::EntityInstance(
@@ -2583,7 +2583,7 @@ mod tests {
     }
 
     #[test]
-    fn pipeline_instanciation_works() {
+    fn pipeline_instantiation_works() {
         let code = "inst(2) some_pipeline(x, y, z)";
 
         let expected = Expression::PipelineInstance(

@@ -64,7 +64,7 @@ trait Reportable<T> {
     /// Report the error, then discard the error, returning Some if it was Ok
     fn or_report(self, errors: &mut ErrorHandler) -> Option<T>;
 
-    // Reprot the error and continue without modifying the result
+    // Report the error and continue without modifying the result
     fn report(self, errors: &mut ErrorHandler) -> Self;
 }
 

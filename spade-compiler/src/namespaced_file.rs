@@ -6,7 +6,7 @@ use spade_parser::{lexer, Parser};
 
 #[derive(Clone, Debug)]
 pub struct NamespacedFile {
-    /// The namespace which is the root of this file, i.e. what is refered
+    /// The namespace which is the root of this file, i.e. what is referred
     /// to when when starting a path with lib::
     pub base_namespace: SpadePath,
     /// The namespace of the items added in this file.

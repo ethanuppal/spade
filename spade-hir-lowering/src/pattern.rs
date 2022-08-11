@@ -135,7 +135,7 @@ impl Constructor {
     pub fn is_covered_by(&self, other: &Self) -> bool {
         use Constructor::*;
         match (self, other) {
-            // Everythign is covered by a wildcard
+            // Everything is covered by a wildcard
             (_, Wildcard) => true,
             (Single, Single) => true,
             (Variant(self_id), Variant(other_id)) => self_id == other_id,
@@ -185,7 +185,7 @@ impl Constructor {
         }
     }
 
-    /// Reutrns the number of subpatterns which this constructor matches
+    /// Returns the number of subpatterns which this constructor matches
     pub fn arity(&self, ty: &ConcreteType) -> usize {
         self.fields(ty).len()
     }

@@ -29,7 +29,7 @@ impl CompilationError for Error {
         };
         let diag = match self {
             Error::ArgumentError(_) => unreachable!(),
-            Error::GenericTypeInstanciation => todo![],
+            Error::GenericTypeInstantiation => todo![],
             Error::UnknownType(expr) => Diagnostic::error()
                 .with_message(format!(
                     "Tried looking up the type of {:?} but it was not found",
@@ -247,9 +247,7 @@ impl CompilationError for Error {
             Error::FieldAccessOnIncomplete { loc } => Diagnostic::error()
                 .with_message(format!("Field access on incomplete type"))
                 .with_labels(vec![loc.primary_label().with_message("Incomplete type")])
-                .with_notes(vec![
-                    "Try specifiying the type of the expression".to_string()
-                ]),
+                .with_notes(vec!["Try specifying the type of the expression".to_string()]),
             Error::FieldAccessOnNonStruct { loc, got } => Diagnostic::error()
                 .with_message(format!("Field access on {} which is not a struct", got))
                 .with_labels(vec![loc

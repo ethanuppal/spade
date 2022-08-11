@@ -17,7 +17,7 @@ use crate::{ArgumentList, Expression, ParameterList, TypeSpec};
 #[derive(Error, Debug, PartialEq, Clone)]
 pub enum ArgumentError {
     #[error("Argument list length mismatch, expected {expected} got {got}")]
-    ArgumentListLenghtMismatch {
+    ArgumentListLengthMismatch {
         expected: usize,
         got: usize,
         at: Loc<()>,
@@ -39,7 +39,7 @@ pub enum ArgumentError {
 impl CompilationError for ArgumentError {
     fn report(&self, buffer: &mut Buffer, code: &CodeBundle) {
         let diag = match self {
-            Self::ArgumentListLenghtMismatch { expected, got, at } => Diagnostic::error()
+            Self::ArgumentListLengthMismatch { expected, got, at } => Diagnostic::error()
                 .with_message(format!("Expected {} arguments, got {}", expected, got))
                 .with_labels(vec![at
                     .primary_label()
@@ -108,7 +108,7 @@ pub fn match_args_with_params<'a>(
     match &arg_list.inner {
         ArgumentList::Positional(inner) => {
             if inner.len() != params.0.len() {
-                return Err(ArgumentError::ArgumentListLenghtMismatch {
+                return Err(ArgumentError::ArgumentListLengthMismatch {
                     expected: params.0.len(),
                     got: inner.len(),
                     at: arg_list.loc(),

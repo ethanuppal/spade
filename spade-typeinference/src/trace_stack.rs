@@ -28,8 +28,8 @@ pub enum TraceStackEntry {
     /// Unified .0 with .1 producing .2
     Unified(TypeVar, TypeVar, TypeVar),
     AddingEquation(TypedExpression, TypeVar),
-    /// Infering more from constraints
-    InferingFromConstraints(TypeVar, i128),
+    /// Inferring more from constraints
+    InferringFromConstraints(TypeVar, i128),
     /// Arbitrary message
     Message(String),
 }
@@ -56,8 +56,8 @@ pub fn format_trace_stack(stack: &TraceStack) -> String {
                 next_indent_amount += 1;
                 format!("{} of {} with {}", "trying unification".cyan(), lhs, rhs)
             }
-            TraceStackEntry::InferingFromConstraints(lhs, rhs) => {
-                format!("{} {lhs} as {rhs} from constraints", "infering".purple())
+            TraceStackEntry::InferringFromConstraints(lhs, rhs) => {
+                format!("{} {lhs} as {rhs} from constraints", "inferring".purple())
             }
             TraceStackEntry::Message(msg) => {
                 format!("{}: {}", "m".purple(), msg)

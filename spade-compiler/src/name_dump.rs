@@ -7,7 +7,7 @@ use spade_hir_lowering::Manglable;
 #[derive(Serialize, Deserialize)]
 pub enum ItemKind {
     /// The item is a unit which is not generic and can thus easily be
-    /// refered to
+    /// referred to
     Normal(String),
     /// The item exist, is a unit but is generic and there is therefore
     /// not an easy mapping between the path and name

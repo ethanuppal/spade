@@ -2,7 +2,7 @@
 source: spade-tests/src/suggestions.rs
 expression: "std::str::from_utf8(buffer.as_slice()).expect(\"error contains invalid utf-8\")"
 ---
-error: Entities or pipelines can not be instanciated in functions
+error: Entities or pipelines can not be instantiated in functions
   ┌─ testinput:6:5
   │
 5 │ fn bar() -> int<1> {

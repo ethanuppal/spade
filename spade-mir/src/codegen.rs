@@ -1205,7 +1205,7 @@ mod expression_tests {
     }
 
     #[test]
-    fn entity_instanciation_works() {
+    fn entity_instantiation_works() {
         let stmt = statement!(e(0); Type::Bool; Instance(("test".to_string())); e(1), e(2));
 
         let expected = indoc!(
@@ -1453,7 +1453,7 @@ mod expression_tests {
     fn assertion_codegen_works() {
         let stmt = Statement::Assert(value_name!(e(0)).at(0, &Span::new(1, 2)));
 
-        // NOTE: The escape sequences here are a bit annoying when this test failes,
+        // NOTE: The escape sequences here are a bit annoying when this test fails,
         // but where to add an option to turn them off isn't obvious. To update this test
         // verify that the output is correct, then run `cargo test | sed -e 's/\x1b/_x1b_/g'`
         // and copy paste the output here. Escape the " characters and replace _x1b_ with \x1b
