@@ -835,19 +835,9 @@ impl ExprLocal for Loc<Expression> {
                 result.append(&mut target.lower(ctx)?);
                 result.append(&mut index.lower(ctx)?);
 
-                let inner_size = if let mir::types::Type::Array { inner, .. } = &ctx
-                    .types
-                    .expr_type(target, ctx.symtab.symtab(), &ctx.item_list.types)?
-                    .to_mir_type()
-                {
-                    inner.size()
-                } else {
-                    unreachable!("Array indexing of non array: {:?}", self_type);
-                };
-
                 result.push(mir::Statement::Binding(mir::Binding {
                     name: self.variable(ctx.subs)?,
-                    operator: mir::Operator::IndexArray(inner_size as usize),
+                    operator: mir::Operator::IndexArray,
                     operands: vec![target.variable(ctx.subs)?, index.variable(ctx.subs)?],
                     ty: self_type,
                 }))

@@ -2,7 +2,7 @@ use crate::{
     aliasing::flatten_aliases,
     assertion_codegen::AssertedExpression,
     enum_util,
-    types::Type,
+    type_list::TypeList,
     verilog::{self, assign, logic, size_spec},
     Binding, ConstantValue, Entity, Operator, Statement, ValueName,
 };
@@ -11,45 +11,9 @@ use itertools::Itertools;
 use nesty::{code, Code};
 use spade_common::error_reporting::{CodeBundle, CompilationError};
 
-impl ValueName {
-    pub fn var_name(&self) -> String {
-        match self {
-            ValueName::Named(id, name) => {
-                format!("{}_n{}", name, id)
-            }
-            ValueName::Expr(id) => {
-                format!("_e_{}", id)
-            }
-        }
-    }
+pub mod util;
 
-    pub fn backward_var_name(&self) -> String {
-        match self {
-            ValueName::Named(id, name) => {
-                format!("{}_n{}_o", name, id)
-            }
-            ValueName::Expr(id) => {
-                format!("_e_{}_o", id)
-            }
-        }
-    }
-}
-
-pub fn escape_path(path: String) -> String {
-    path.replace("::", "_")
-}
-
-fn mangle_entity(module: &str) -> String {
-    format!("e_{}", module)
-}
-
-pub fn mangle_input(input: &str) -> String {
-    format!("{}_i", input)
-}
-
-pub fn mangle_output(input: &str) -> String {
-    format!("{}_o", input)
-}
+pub use util::{escape_path, mangle_entity, mangle_input, mangle_output, TupleIndex};
 
 fn statement_declaration(statement: &Statement) -> Code {
     match statement {
@@ -129,22 +93,6 @@ fn statement_declaration(statement: &Statement) -> Code {
     }
 }
 
-enum TupleIndex {
-    /// The index is a single bit, i.e. codegens as [val]
-    Single(u64),
-    /// The index is a range of bits, codegens as [left:right]
-    Range { left: u64, right: u64 },
-}
-
-impl TupleIndex {
-    fn verilog_code(&self) -> String {
-        match self {
-            TupleIndex::Single(i) => format!("[{i}]"),
-            TupleIndex::Range { left, right } => format!("[{left}:{right}]"),
-        }
-    }
-}
-
 fn compute_tuple_index(idx: u64, sizes: &[u64]) -> TupleIndex {
     // Compute the start index of the element we're looking for
     let mut start_bit = 0;
@@ -168,15 +116,19 @@ fn compute_tuple_index(idx: u64, sizes: &[u64]) -> TupleIndex {
     }
 }
 
-fn forward_expression_code(binding: &Binding, ops: &[String]) -> String {
+fn forward_expression_code(binding: &Binding, types: &TypeList, ops: &[ValueName]) -> String {
+    let self_type = &binding.ty;
+    let op_names = ops.iter().map(|op| op.var_name()).collect::<Vec<_>>();
+
     let name = binding.name.var_name();
+
     macro_rules! binop {
         ($verilog:expr) => {{
             assert!(
                 binding.operands.len() == 2,
                 "expected 2 operands to binary operator"
             );
-            format!("{} {} {}", ops[0], $verilog, ops[1])
+            format!("{} {} {}", op_names[0], $verilog, op_names[1])
         }};
     }
 
@@ -186,7 +138,10 @@ fn forward_expression_code(binding: &Binding, ops: &[String]) -> String {
                 binding.operands.len() == 2,
                 "expected 2 operands to binary operator"
             );
-            format!("$signed({}) {} $signed({})", ops[0], $verilog, ops[1])
+            format!(
+                "$signed({}) {} $signed({})",
+                op_names[0], $verilog, op_names[1]
+            )
         }};
     }
 
@@ -196,7 +151,7 @@ fn forward_expression_code(binding: &Binding, ops: &[String]) -> String {
                 binding.operands.len() == 1,
                 "expected 1 operands to binary operator"
             );
-            format!("{}{}", $verilog, ops[0])
+            format!("{}{}", $verilog, op_names[0])
         }};
     }
 
@@ -214,15 +169,18 @@ fn forward_expression_code(binding: &Binding, ops: &[String]) -> String {
         Operator::LogicalAnd => binop!("&&"),
         Operator::LogicalOr => binop!("||"),
         Operator::LogicalNot => {
-            assert!(ops.len() == 1, "Expected exactly 1 operand to not operator");
-            format!("!{}", ops[0])
+            assert!(
+                op_names.len() == 1,
+                "Expected exactly 1 operand to not operator"
+            );
+            format!("!{}", op_names[0])
         }
         Operator::BitwiseNot => {
             assert!(
-                ops.len() == 1,
+                op_names.len() == 1,
                 "Expected exactly 1 operand to bitwise not operator"
             );
-            format!("~{}", ops[0])
+            format!("~{}", op_names[0])
         }
         Operator::BitwiseAnd => binop!("&"),
         Operator::BitwiseOr => binop!("|"),
@@ -237,8 +195,8 @@ fn forward_expression_code(binding: &Binding, ops: &[String]) -> String {
             // than towards -inf. To do so, we add a 1 in the most significant bit
             // which is shifted away
 
-            let dividend = &ops[0];
-            let divisor = &ops[1];
+            let dividend = &op_names[0];
+            let divisor = &op_names[1];
             code! {
                 [0] "always_comb begin";
                 [1]     format!("if ({divisor} == 0) begin");
@@ -251,20 +209,23 @@ fn forward_expression_code(binding: &Binding, ops: &[String]) -> String {
             }.to_string()
         }
         Operator::Truncate => {
-            format!("{}[{}:0]", ops[0], binding.ty.size() - 1)
+            format!("{}[{}:0]", op_names[0], binding.ty.size() - 1)
         }
         Operator::Concat => {
-            format!("{{{}}}", ops.iter().map(|op| format!("{op}")).join(", "))
+            format!(
+                "{{{}}}",
+                op_names.iter().map(|op| format!("{op}")).join(", ")
+            )
         }
         Operator::SignExtend {
             extra_bits,
             operand_size,
         } => match extra_bits {
-            0 => format!("{}", ops[0]),
-            1 => format!("{{{}[{}], {}}}", ops[0], operand_size - 1, ops[0]),
+            0 => format!("{}", op_names[0]),
+            1 => format!("{{{}[{}], {}}}", op_names[0], operand_size - 1, op_names[0]),
             2.. => format!(
                 "#[#[ {extra_bits} #[ {op}[{last_index}] #]#], {op}#]",
-                op = ops[0],
+                op = op_names[0],
                 last_index = operand_size - 1,
             )
             // For readability with the huge amount of braces that both
@@ -274,22 +235,22 @@ fn forward_expression_code(binding: &Binding, ops: &[String]) -> String {
             .replace("#]", "}"),
         },
         Operator::ZeroExtend { extra_bits } => match extra_bits {
-            0 => format!("{}", ops[0]),
-            1.. => format!("{{{}'b0, {}}}", extra_bits, ops[0]),
+            0 => format!("{}", op_names[0]),
+            1.. => format!("{{{}'b0, {}}}", extra_bits, op_names[0]),
         },
         Operator::Match => {
             assert!(
-                ops.len() % 2 == 0,
+                op_names.len() % 2 == 0,
                 "Match statements must have an even number of operands"
             );
 
-            let num_branches = ops.len() / 2;
+            let num_branches = op_names.len() / 2;
 
             let mut conditions = vec![];
             let mut cases = vec![];
             for i in 0..num_branches {
-                let cond = &ops[i * 2];
-                let result = &ops[i * 2 + 1];
+                let cond = &op_names[i * 2];
+                let result = &op_names[i * 2 + 1];
 
                 conditions.push(cond.clone());
 
@@ -316,34 +277,40 @@ fn forward_expression_code(binding: &Binding, ops: &[String]) -> String {
                 binding.operands.len() == 3,
                 "expected 3 operands to Select operator"
             );
-            format!("{} ? {} : {}", ops[0], ops[1], ops[2])
+            format!("{} ? {} : {}", op_names[0], op_names[1], op_names[2])
         }
         Operator::IndexTuple(idx, ref types) => {
             let idx =
                 compute_tuple_index(*idx, &types.iter().map(|t| t.size()).collect::<Vec<_>>());
-            format!("{}{}", ops[0], idx.verilog_code())
+            format!("{}{}", op_names[0], idx.verilog_code())
         }
         Operator::ConstructArray { .. } => {
             // NOTE: Reversing because we declare the array as logic[SIZE:0] and
             // we want the [x*width+:width] indexing to work
             format!(
                 "{{{}}}",
-                ops.iter().cloned().rev().collect::<Vec<_>>().join(", ")
+                op_names
+                    .iter()
+                    .cloned()
+                    .rev()
+                    .collect::<Vec<_>>()
+                    .join(", ")
             )
         }
-        Operator::IndexArray(member_size) => {
-            if *member_size == 1 {
-                format!("{}[{}]", ops[0], ops[1])
+        Operator::IndexArray => {
+            let member_size = self_type.size();
+            if member_size == 1 {
+                format!("{}[{}]", op_names[0], op_names[1])
             } else {
-                let end_index = format!("{} * {}", ops[1], member_size);
+                let end_index = format!("{} * {}", op_names[1], member_size);
                 let offset = member_size;
 
                 // Strange indexing explained here https://stackoverflow.com/questions/18067571/indexing-vectors-and-arrays-with#18068296
-                format!("{}[{}+:{}]", ops[0], end_index, offset)
+                format!("{}[{}+:{}]", op_names[0], end_index, offset)
             }
         }
         Operator::IndexMemory => {
-            format!("{}[{}]", ops[0], ops[1])
+            format!("{}[{}]", op_names[0], op_names[1])
         }
         Operator::DeclClockedMemory {
             write_ports,
@@ -358,28 +325,33 @@ fn forward_expression_code(binding: &Binding, ops: &[String]) -> String {
 
                     let addr_start = full_port_width * port + inner_w;
                     let addr = if *addr_w == 1 {
-                        format!("{}[{}]", ops[1], addr_start)
+                        format!("{}[{}]", op_names[1], addr_start)
                     } else {
-                        format!("{}[{}:{}]", ops[1], addr_start + addr_w - 1, addr_start)
+                        format!(
+                            "{}[{}:{}]",
+                            op_names[1],
+                            addr_start + addr_w - 1,
+                            addr_start
+                        )
                     };
 
                     let write_value_start = port * full_port_width;
                     let (write_index, write_value) = if *inner_w == 1 {
                         (
                             format!("{}[{addr}]", name),
-                            format!("{}[{write_value_start}]", ops[1]),
+                            format!("{}[{write_value_start}]", op_names[1]),
                         )
                     } else {
                         (
                             format!("{}[{addr}]", name),
                             format!(
                                 "{}[{end}:{write_value_start}]",
-                                ops[1],
+                                op_names[1],
                                 end = write_value_start + inner_w - 1
                             ),
                         )
                     };
-                    let we_signal = format!("{}[{we_index}]", ops[1]);
+                    let we_signal = format!("{}[{we_index}]", op_names[1]);
 
                     code! {
                         [0] format!("if ({we_signal}) begin");
@@ -391,7 +363,7 @@ fn forward_expression_code(binding: &Binding, ops: &[String]) -> String {
                 .join("\n");
 
             code! {
-                [0] format!("always @(posedge {clk}) begin", clk = ops[0]);
+                [0] format!("always @(posedge {clk}) begin", clk = op_names[0]);
                 [1]     update_blocks;
                 [0] "end";
             }
@@ -420,10 +392,10 @@ fn forward_expression_code(binding: &Binding, ops: &[String]) -> String {
                 String::new()
             };
 
-            let ops_text = if ops.is_empty() {
+            let ops_text = if op_names.is_empty() {
                 String::new()
             } else {
-                format!(", {}", ops.join(", "))
+                format!(", {}", op_names.join(", "))
             };
 
             format!("{{{}'d{}{}{}}}", tag_size, variant, ops_text, padding_text)
@@ -436,11 +408,11 @@ fn forward_expression_code(binding: &Binding, ops: &[String]) -> String {
             let tag_start = total_size - tag_size as u64;
 
             if tag_end == tag_start {
-                format!("{}[{}] == {}'d{}", ops[0], tag_end, tag_size, variant)
+                format!("{}[{}] == {}'d{}", op_names[0], tag_end, tag_size, variant)
             } else {
                 format!(
                     "{}[{}:{}] == {}'d{}",
-                    ops[0], tag_end, tag_start, tag_size, variant
+                    op_names[0], tag_end, tag_start, tag_size, variant
                 )
             }
         }
@@ -463,15 +435,19 @@ fn forward_expression_code(binding: &Binding, ops: &[String]) -> String {
 
             format!(
                 "{}[{}:{}]",
-                ops[0],
+                op_names[0],
                 full_size - member_start - 1,
                 full_size - member_end
             )
         }
         Operator::ConstructTuple => {
+            let mut members = ops
+                .iter()
+                .filter(|op| types[op].size() != 0)
+                .map(|op| op.var_name());
             // To make index calculations easier, we will store tuples in "inverse order".
             // i.e. the left-most element is stored to the right in the bit vector.
-            format!("{{{}}}", ops.join(", "))
+            format!("{{{}}}", members.join(", "))
         }
         Operator::Instance(_) => {
             // NOTE: dummy. Set in the next match statement
@@ -484,7 +460,12 @@ fn forward_expression_code(binding: &Binding, ops: &[String]) -> String {
     }
 }
 
-fn backward_expression_code(self_type: &Type, binding: &Binding, back_ops: &[String]) -> String {
+fn backward_expression_code(binding: &Binding, types: &TypeList, ops: &[ValueName]) -> String {
+    let self_type = &binding.ty;
+    let op_names = ops
+        .iter()
+        .map(ValueName::backward_var_name)
+        .collect::<Vec<_>>();
     match &binding.operator {
         Operator::Add
         | Operator::Sub
@@ -513,16 +494,45 @@ fn backward_expression_code(self_type: &Type, binding: &Binding, back_ops: &[Str
         | Operator::ConstructEnum { .. }
         | Operator::IsEnumVariant { .. }
         | Operator::EnumMember { .. }
+        | Operator::IndexMemory
+        | Operator::Select
+        | Operator::Match
         | Operator::Truncate => panic!(
             "{} can not be used on types with backward size",
             binding.operator
         ),
-        Operator::Select => todo!(),
-        Operator::Match => todo!(),
-        Operator::ConstructArray => todo!(),
-        Operator::IndexArray(_) => todo!(),
-        Operator::IndexMemory => todo!(),
-        Operator::ConstructTuple => todo!(),
+        Operator::ConstructArray => {
+            // NOTE: Reversing because we declare the array as logic[SIZE:0] and
+            // we want the [x*width+:width] indexing to work
+            format!(
+                "{{{}}}",
+                op_names
+                    .iter()
+                    .cloned()
+                    .rev()
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            )
+        }
+        Operator::IndexArray => {
+            let member_size = self_type.backward_size();
+            if member_size == 1 {
+                format!("{}[{}]", op_names[0], op_names[1])
+            } else {
+                let end_index = format!("{} * {}", op_names[1], member_size);
+                let offset = member_size;
+
+                // Strange indexing explained here https://stackoverflow.com/questions/18067571/indexing-vectors-and-arrays-with#18068296
+                format!("{}[{}+:{}]", op_names[0], end_index, offset)
+            }
+        }
+        Operator::ConstructTuple => {
+            let mut members = ops
+                .iter()
+                .filter(|op| types[op].backward_size() != 0)
+                .map(|op| op.backward_var_name());
+            format!("{{{}}}", members.join(", "))
+        }
         Operator::IndexTuple(index, inner_types) => {
             assert_eq!(&inner_types[*index as usize], self_type);
             let index = compute_tuple_index(
@@ -532,7 +542,7 @@ fn backward_expression_code(self_type: &Type, binding: &Binding, back_ops: &[Str
                     .map(|t| t.backward_size())
                     .collect::<Vec<_>>(),
             );
-            format!("{}{}", back_ops[0], index.verilog_code())
+            format!("{}{}", op_names[0], index.verilog_code())
         }
         Operator::Instance(_) => todo!(),
         Operator::Alias => {
@@ -542,7 +552,7 @@ fn backward_expression_code(self_type: &Type, binding: &Binding, back_ops: &[Str
     }
 }
 
-fn statement_code(statement: &Statement, source_code: &CodeBundle) -> Code {
+fn statement_code(statement: &Statement, types: &TypeList, source_code: &CodeBundle) -> Code {
     match statement {
         Statement::Binding(binding) => {
             let name = binding.name.var_name();
@@ -561,12 +571,12 @@ fn statement_code(statement: &Statement, source_code: &CodeBundle) -> Code {
                 .collect::<Vec<_>>();
 
             let forward_expression = if binding.ty.size() != 0 {
-                Some(forward_expression_code(binding, ops))
+                Some(forward_expression_code(binding, types, &binding.operands))
             } else {
                 None
             };
             let backward_expression = if binding.ty.backward_size() != 0 {
-                Some(backward_expression_code(&binding.ty, binding, back_ops))
+                Some(backward_expression_code(binding, types, &binding.operands))
             } else {
                 None
             };
@@ -695,15 +705,21 @@ fn statement_code(statement: &Statement, source_code: &CodeBundle) -> Code {
 }
 
 #[cfg(test)]
-fn statement_code_and_declaration(statement: &Statement, source_code: &CodeBundle) -> Code {
+fn statement_code_and_declaration(
+    statement: &Statement,
+    types: &TypeList,
+    source_code: &CodeBundle,
+) -> Code {
     code! {
         [0] statement_declaration(statement);
-        [0] statement_code(statement, source_code);
+        [0] statement_code(statement, types, source_code);
     }
 }
 
 pub fn entity_code(entity: &mut Entity, source_code: &CodeBundle) -> Code {
     flatten_aliases(entity);
+
+    let types = &TypeList::from_entity(&entity);
 
     let entity_name = mangle_entity(&escape_path(entity.name.clone()));
 
@@ -791,7 +807,7 @@ pub fn entity_code(entity: &mut Entity, source_code: &CodeBundle) -> Code {
         body.join(&statement_declaration(stmt))
     }
     for stmt in &entity.statements {
-        body.join(&statement_code(stmt, source_code))
+        body.join(&statement_code(stmt, types, source_code))
     }
 
     code! {
@@ -861,7 +877,12 @@ mod tests {
         );
 
         assert_same_code!(
-            &statement_code_and_declaration(&binding, &CodeBundle::new("".to_string())).to_string(),
+            &statement_code_and_declaration(
+                &binding,
+                &TypeList::empty(),
+                &CodeBundle::new("".to_string())
+            )
+            .to_string(),
             expected
         );
     }
@@ -877,7 +898,12 @@ mod tests {
         );
 
         assert_same_code!(
-            &statement_code_and_declaration(&binding, &CodeBundle::new("".to_string())).to_string(),
+            &statement_code_and_declaration(
+                &binding,
+                &TypeList::empty(),
+                &CodeBundle::new("".to_string())
+            )
+            .to_string(),
             expected
         );
     }
@@ -895,7 +921,12 @@ mod tests {
         );
 
         assert_same_code!(
-            &statement_code_and_declaration(&reg, &CodeBundle::new("".to_string())).to_string(),
+            &statement_code_and_declaration(
+                &reg,
+                &TypeList::empty(),
+                &CodeBundle::new("".to_string())
+            )
+            .to_string(),
             expected
         );
     }
@@ -918,7 +949,12 @@ mod tests {
         );
 
         assert_same_code!(
-            &statement_code_and_declaration(&reg, &CodeBundle::new("".to_string())).to_string(),
+            &statement_code_and_declaration(
+                &reg,
+                &TypeList::empty(),
+                &CodeBundle::new("".to_string())
+            )
+            .to_string(),
             expected
         );
     }
@@ -1080,7 +1116,12 @@ mod tests {
         );
 
         assert_same_code!(
-            &statement_code_and_declaration(&input, &CodeBundle::new("".to_string())).to_string(),
+            &statement_code_and_declaration(
+                &input,
+                &TypeList::empty(),
+                &CodeBundle::new("".to_string())
+            )
+            .to_string(),
             expected
         )
     }
@@ -1158,7 +1199,12 @@ mod backward_expression_tests {
         };
 
         assert_same_code!(
-            &statement_code_and_declaration(&stmt, &CodeBundle::new("".to_string())).to_string(),
+            &statement_code_and_declaration(
+                &stmt,
+                &TypeList::empty(),
+                &CodeBundle::new("".to_string())
+            )
+            .to_string(),
             expected
         );
     }
@@ -1179,7 +1225,12 @@ mod backward_expression_tests {
         };
 
         assert_same_code!(
-            &statement_code_and_declaration(&stmt, &CodeBundle::new("".to_string())).to_string(),
+            &statement_code_and_declaration(
+                &stmt,
+                &TypeList::empty(),
+                &CodeBundle::new("".to_string())
+            )
+            .to_string(),
             expected
         );
     }
@@ -1190,8 +1241,82 @@ mod backward_expression_tests {
             Type::output_wire(Type::Int(8)),
             Type::output_wire(Type::Int(4)),
         ];
-        let ty = Type::output_wire(Type::Int(4));
-        let stmt = statement!(e(0); ty; IndexTuple((1, tuple_members)); e(1));
+        let ty = Type::Tuple(tuple_members);
+        let stmt = statement!(e(0); ty; ConstructTuple; e(1), e(2));
+
+        let type_list = TypeList::empty()
+            .with(ValueName::Expr(1), Type::output_wire(Type::Int(8)))
+            .with(ValueName::Expr(2), Type::output_wire(Type::Int(4)));
+
+        let expected = indoc! {
+            r#"
+            logic[11:0] _e_0_o;
+            assign {_e_1_o, _e_2_o} = _e_0_o;"#
+        };
+
+        assert_same_code!(
+            &statement_code_and_declaration(&stmt, &type_list, &CodeBundle::new("".to_string()))
+                .to_string(),
+            expected
+        );
+    }
+
+    #[test]
+    fn construct_tuple_works_on_mixed_direction_types() {
+        let tuple_members = vec![
+            Type::output_wire(Type::Int(8)),
+            Type::Tuple(vec![Type::output_wire(Type::Int(4)), Type::Int(4)]),
+            Type::Int(3),
+        ];
+        let ty = Type::Tuple(tuple_members);
+        let stmt = statement!(e(0); ty; ConstructTuple; e(1), e(2), e(3));
+
+        let expected = indoc! {
+            r#"
+            logic[6:0] _e_0;
+            logic[11:0] _e_0_o;
+            assign _e_0 = {_e_2, _e_3};
+            assign {_e_1_o, _e_2_o} = _e_0_o;"#
+        };
+
+        let type_list = TypeList::empty()
+            .with(ValueName::Expr(1), Type::output_wire(Type::Int(8)))
+            .with(
+                ValueName::Expr(2),
+                Type::Tuple(vec![Type::output_wire(Type::Int(4)), Type::Int(4)]),
+            )
+            .with(ValueName::Expr(3), Type::Int(3));
+
+        assert_same_code!(
+            &statement_code_and_declaration(&stmt, &type_list, &CodeBundle::new("".to_string()))
+                .to_string(),
+            expected
+        );
+    }
+
+    #[test]
+    fn construct_array_works() {
+        let ty = Type::Array {
+            inner: Box::new(Type::output_wire(Type::Int(5))),
+            length: 3,
+        };
+        let stmt = statement!(e(0); ty; ConstructArray; e(1), e(2), e(3));
+
+        let expected = indoc! {
+            r#"
+            logic[14:0] _e_0_o;
+            assign {_e_3_o, _e_2_o, _e_1_o} = _e_0_o;"#
+        };
+
+        assert_same_code!(
+            &statement_code_and_declaration(
+                &stmt,
+                &TypeList::empty(),
+                &CodeBundle::new("".to_string())
+            )
+            .to_string(),
+            expected
+        );
     }
 }
 
@@ -1219,7 +1344,7 @@ mod expression_tests {
                     assign _e_0 = _e_1 {} _e_2;"#, $verilog_ty, $verilog_op
                 );
 
-                assert_same_code!(&statement_code_and_declaration(&stmt, &CodeBundle::new("".to_string())).to_string(), &expected)
+                assert_same_code!(&statement_code_and_declaration(&stmt, &TypeList::empty(), &CodeBundle::new("".to_string())).to_string(), &expected)
             }
         }
     }
@@ -1236,7 +1361,7 @@ mod expression_tests {
                     assign _e_0 = $signed(_e_1) {} $signed(_e_2);"#, $verilog_ty, $verilog_op
                 );
 
-                assert_same_code!(&statement_code_and_declaration(&stmt, &CodeBundle::new("".to_string())).to_string(), &expected)
+                assert_same_code!(&statement_code_and_declaration(&stmt, &TypeList::empty(), &CodeBundle::new("".to_string())).to_string(), &expected)
             }
         }
     }
@@ -1253,7 +1378,7 @@ mod expression_tests {
                     assign _e_0 = {}_e_1;"#, $verilog_ty, $verilog_op
                 );
 
-                assert_same_code!(&statement_code_and_declaration(&stmt, &CodeBundle::new("".to_string())).to_string(), &expected)
+                assert_same_code!(&statement_code_and_declaration(&stmt, &TypeList::empty(), &CodeBundle::new("".to_string())).to_string(), &expected)
             }
         }
     }
@@ -1297,7 +1422,12 @@ mod expression_tests {
         );
 
         assert_same_code!(
-            &statement_code_and_declaration(&stmt, &CodeBundle::new("".to_string())).to_string(),
+            &statement_code_and_declaration(
+                &stmt,
+                &TypeList::empty(),
+                &CodeBundle::new("".to_string())
+            )
+            .to_string(),
             expected
         );
     }
@@ -1313,7 +1443,12 @@ mod expression_tests {
         );
 
         assert_same_code!(
-            &statement_code_and_declaration(&stmt, &CodeBundle::new("".to_string())).to_string(),
+            &statement_code_and_declaration(
+                &stmt,
+                &TypeList::empty(),
+                &CodeBundle::new("".to_string())
+            )
+            .to_string(),
             expected
         );
     }
@@ -1335,7 +1470,12 @@ mod expression_tests {
         );
 
         assert_same_code!(
-            &statement_code_and_declaration(&stmt, &CodeBundle::new("".to_string())).to_string(),
+            &statement_code_and_declaration(
+                &stmt,
+                &TypeList::empty(),
+                &CodeBundle::new("".to_string())
+            )
+            .to_string(),
             expected
         );
     }
@@ -1351,7 +1491,12 @@ mod expression_tests {
         );
 
         assert_same_code!(
-            &statement_code_and_declaration(&stmt, &CodeBundle::new("".to_string())).to_string(),
+            &statement_code_and_declaration(
+                &stmt,
+                &TypeList::empty(),
+                &CodeBundle::new("".to_string())
+            )
+            .to_string(),
             expected
         );
     }
@@ -1368,7 +1513,14 @@ mod expression_tests {
         );
 
         assert_same_code!(
-            &statement_code_and_declaration(&stmt, &CodeBundle::new("".to_string())).to_string(),
+            &statement_code_and_declaration(
+                &stmt,
+                &TypeList::empty()
+                    .with(ValueName::Expr(1), Type::Int(6))
+                    .with(ValueName::Expr(2), Type::Int(3)),
+                &CodeBundle::new("".to_string())
+            )
+            .to_string(),
             expected
         );
     }
@@ -1385,7 +1537,12 @@ mod expression_tests {
         );
 
         assert_same_code!(
-            &statement_code_and_declaration(&stmt, &CodeBundle::new("".to_string())).to_string(),
+            &statement_code_and_declaration(
+                &stmt,
+                &TypeList::empty(),
+                &CodeBundle::new("".to_string())
+            )
+            .to_string(),
             expected
         );
     }
@@ -1402,7 +1559,12 @@ mod expression_tests {
         );
 
         assert_same_code!(
-            &statement_code_and_declaration(&stmt, &CodeBundle::new("".to_string())).to_string(),
+            &statement_code_and_declaration(
+                &stmt,
+                &TypeList::empty(),
+                &CodeBundle::new("".to_string())
+            )
+            .to_string(),
             expected
         );
     }
@@ -1419,7 +1581,12 @@ mod expression_tests {
         );
 
         assert_same_code!(
-            &statement_code_and_declaration(&stmt, &CodeBundle::new("".to_string())).to_string(),
+            &statement_code_and_declaration(
+                &stmt,
+                &TypeList::empty(),
+                &CodeBundle::new("".to_string())
+            )
+            .to_string(),
             expected
         );
     }
@@ -1436,7 +1603,12 @@ mod expression_tests {
         );
 
         assert_same_code!(
-            &statement_code_and_declaration(&stmt, &CodeBundle::new("".to_string())).to_string(),
+            &statement_code_and_declaration(
+                &stmt,
+                &TypeList::empty(),
+                &CodeBundle::new("".to_string())
+            )
+            .to_string(),
             expected
         );
     }
@@ -1457,7 +1629,12 @@ mod expression_tests {
         );
 
         assert_same_code!(
-            &statement_code_and_declaration(&stmt, &CodeBundle::new("".to_string())).to_string(),
+            &statement_code_and_declaration(
+                &stmt,
+                &TypeList::empty(),
+                &CodeBundle::new("".to_string())
+            )
+            .to_string(),
             expected
         );
     }
@@ -1474,7 +1651,12 @@ mod expression_tests {
         );
 
         assert_same_code!(
-            &statement_code_and_declaration(&stmt, &CodeBundle::new("".to_string())).to_string(),
+            &statement_code_and_declaration(
+                &stmt,
+                &TypeList::empty(),
+                &CodeBundle::new("".to_string())
+            )
+            .to_string(),
             expected
         );
     }
@@ -1490,7 +1672,12 @@ mod expression_tests {
         );
 
         assert_same_code!(
-            &statement_code_and_declaration(&stmt, &CodeBundle::new("".to_string())).to_string(),
+            &statement_code_and_declaration(
+                &stmt,
+                &TypeList::empty(),
+                &CodeBundle::new("".to_string())
+            )
+            .to_string(),
             expected
         );
     }
@@ -1507,7 +1694,12 @@ mod expression_tests {
         );
 
         assert_same_code!(
-            &statement_code_and_declaration(&stmt, &CodeBundle::new("".to_string())).to_string(),
+            &statement_code_and_declaration(
+                &stmt,
+                &TypeList::empty(),
+                &CodeBundle::new("".to_string())
+            )
+            .to_string(),
             expected
         );
     }
@@ -1527,15 +1719,19 @@ mod expression_tests {
         );
 
         assert_same_code!(
-            &statement_code_and_declaration(&statement, &CodeBundle::new("".to_string()))
-                .to_string(),
+            &statement_code_and_declaration(
+                &statement,
+                &TypeList::empty(),
+                &CodeBundle::new("".to_string())
+            )
+            .to_string(),
             expected
         );
     }
 
     #[test]
     fn array_indexing_works() {
-        let statement = statement!(e(0); Type::Int(3); IndexArray((3)); e(1), e(2));
+        let statement = statement!(e(0); Type::Int(3); IndexArray; e(1), e(2));
 
         let expected = indoc!(
             r#"
@@ -1544,15 +1740,19 @@ mod expression_tests {
         );
 
         assert_same_code!(
-            &statement_code_and_declaration(&statement, &CodeBundle::new("".to_string()))
-                .to_string(),
+            &statement_code_and_declaration(
+                &statement,
+                &TypeList::empty(),
+                &CodeBundle::new("".to_string())
+            )
+            .to_string(),
             expected
         );
     }
 
     #[test]
     fn array_indexing_works_for_1_bit_values() {
-        let statement = statement!(e(0); Type::Bool; IndexArray((1)); e(1), e(2));
+        let statement = statement!(e(0); Type::Bool; IndexArray; e(1), e(2));
 
         let expected = indoc!(
             r#"
@@ -1561,8 +1761,12 @@ mod expression_tests {
         );
 
         assert_same_code!(
-            &statement_code_and_declaration(&statement, &CodeBundle::new("".to_string()))
-                .to_string(),
+            &statement_code_and_declaration(
+                &statement,
+                &TypeList::empty(),
+                &CodeBundle::new("".to_string())
+            )
+            .to_string(),
             expected
         );
     }
@@ -1578,7 +1782,12 @@ mod expression_tests {
         );
 
         assert_same_code!(
-            &statement_code_and_declaration(&stmt, &CodeBundle::new("".to_string())).to_string(),
+            &statement_code_and_declaration(
+                &stmt,
+                &TypeList::empty(),
+                &CodeBundle::new("".to_string())
+            )
+            .to_string(),
             expected
         );
     }
@@ -1607,7 +1816,12 @@ mod expression_tests {
         );
 
         assert_same_code!(
-            &statement_code_and_declaration(&stmt, &CodeBundle::new("".to_string())).to_string(),
+            &statement_code_and_declaration(
+                &stmt,
+                &TypeList::empty(),
+                &CodeBundle::new("".to_string())
+            )
+            .to_string(),
             expected
         );
     }
@@ -1631,7 +1845,12 @@ mod expression_tests {
         );
 
         assert_same_code!(
-            &statement_code_and_declaration(&stmt, &CodeBundle::new("".to_string())).to_string(),
+            &statement_code_and_declaration(
+                &stmt,
+                &TypeList::empty(),
+                &CodeBundle::new("".to_string())
+            )
+            .to_string(),
             expected
         );
     }
@@ -1657,7 +1876,12 @@ mod expression_tests {
         );
 
         assert_same_code!(
-            &statement_code_and_declaration(&stmt, &CodeBundle::new("".to_string())).to_string(),
+            &statement_code_and_declaration(
+                &stmt,
+                &TypeList::empty(),
+                &CodeBundle::new("".to_string())
+            )
+            .to_string(),
             expected
         );
     }
@@ -1673,7 +1897,12 @@ mod expression_tests {
         };
 
         assert_same_code!(
-            &statement_code_and_declaration(&stmt, &CodeBundle::new("".to_string())).to_string(),
+            &statement_code_and_declaration(
+                &stmt,
+                &TypeList::empty(),
+                &CodeBundle::new("".to_string())
+            )
+            .to_string(),
             expected
         );
     }
@@ -1690,7 +1919,12 @@ mod expression_tests {
         };
 
         assert_same_code!(
-            &statement_code_and_declaration(&stmt, &CodeBundle::new("".to_string())).to_string(),
+            &statement_code_and_declaration(
+                &stmt,
+                &TypeList::empty(),
+                &CodeBundle::new("".to_string())
+            )
+            .to_string(),
             expected
         );
     }
@@ -1706,7 +1940,12 @@ mod expression_tests {
         };
 
         assert_same_code!(
-            &statement_code_and_declaration(&stmt, &CodeBundle::new("".to_string())).to_string(),
+            &statement_code_and_declaration(
+                &stmt,
+                &TypeList::empty(),
+                &CodeBundle::new("".to_string())
+            )
+            .to_string(),
             expected
         );
     }
@@ -1722,7 +1961,12 @@ mod expression_tests {
         };
 
         assert_same_code!(
-            &statement_code_and_declaration(&stmt, &CodeBundle::new("".to_string())).to_string(),
+            &statement_code_and_declaration(
+                &stmt,
+                &TypeList::empty(),
+                &CodeBundle::new("".to_string())
+            )
+            .to_string(),
             expected
         );
     }
@@ -1738,7 +1982,12 @@ mod expression_tests {
         };
 
         assert_same_code!(
-            &statement_code_and_declaration(&stmt, &CodeBundle::new("".to_string())).to_string(),
+            &statement_code_and_declaration(
+                &stmt,
+                &TypeList::empty(),
+                &CodeBundle::new("".to_string())
+            )
+            .to_string(),
             expected
         );
     }
@@ -1753,10 +2002,16 @@ mod expression_tests {
         };
 
         assert_same_code!(
-            &statement_code_and_declaration(&stmt, &CodeBundle::new("".to_string())).to_string(),
+            &statement_code_and_declaration(
+                &stmt,
+                &TypeList::empty(),
+                &CodeBundle::new("".to_string())
+            )
+            .to_string(),
             expected
         );
     }
+
     #[test]
     fn zext_works_for_zero_bits() {
         let stmt = statement!(e(0); Type::Int(3); ZeroExtend({extra_bits: 0}); e(1));
@@ -1768,7 +2023,12 @@ mod expression_tests {
         };
 
         assert_same_code!(
-            &statement_code_and_declaration(&stmt, &CodeBundle::new("".to_string())).to_string(),
+            &statement_code_and_declaration(
+                &stmt,
+                &TypeList::empty(),
+                &CodeBundle::new("".to_string())
+            )
+            .to_string(),
             expected
         );
     }
@@ -1791,7 +2051,12 @@ mod expression_tests {
         };
 
         assert_same_code!(
-            &statement_code_and_declaration(&stmt, &CodeBundle::new("".to_string())).to_string(),
+            &statement_code_and_declaration(
+                &stmt,
+                &TypeList::empty(),
+                &CodeBundle::new("".to_string())
+            )
+            .to_string(),
             expected
         )
     }
@@ -1807,7 +2072,12 @@ mod expression_tests {
         };
 
         assert_same_code!(
-            &statement_code_and_declaration(&stmt, &CodeBundle::new("".to_string())).to_string(),
+            &statement_code_and_declaration(
+                &stmt,
+                &TypeList::empty(),
+                &CodeBundle::new("".to_string())
+            )
+            .to_string(),
             expected
         );
     }
@@ -1841,7 +2111,7 @@ mod expression_tests {
         let source_code = CodeBundle::new("abcd".to_string());
 
         assert_same_code!(
-            &statement_code_and_declaration(&stmt, &source_code).to_string(),
+            &statement_code_and_declaration(&stmt, &TypeList::empty(), &source_code).to_string(),
             expected
         );
     }

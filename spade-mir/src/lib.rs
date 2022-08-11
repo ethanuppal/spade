@@ -6,6 +6,7 @@ pub mod diff_printing;
 mod enum_util;
 pub mod eval;
 pub mod macros;
+mod type_list;
 pub mod types;
 mod verilog;
 
@@ -111,7 +112,7 @@ pub enum Operator {
         elems: u64,
     },
     /// Index an array with elements of the specified size
-    IndexArray(usize),
+    IndexArray,
     IndexMemory,
     /// Construct a tuple from all the operand expressions
     ConstructTuple,
@@ -198,7 +199,7 @@ impl std::fmt::Display for Operator {
                 f,
                 "DeclClockedMemory({write_ports}, {addr_w}, {inner_w}, {elems})"
             ),
-            Operator::IndexArray(member_size) => write!(f, "IndexArray({})", member_size),
+            Operator::IndexArray => write!(f, "IndexArray"),
             Operator::IndexTuple(idx, _) => write!(f, "IndexTuple({})", idx),
             Operator::IndexMemory => write!(f, "IndexMemory"),
             Operator::Instance(name) => write!(f, "Instance({})", name),

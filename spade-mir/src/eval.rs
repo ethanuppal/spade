@@ -156,7 +156,7 @@ pub fn eval_statements(statements: &[Statement]) -> Value {
                     Operator::Match => todo!(),
                     Operator::ConstructArray => todo!(),
                     Operator::DeclClockedMemory { .. } => todo!(),
-                    Operator::IndexArray(_) => todo!(),
+                    Operator::IndexArray => todo!(),
                     Operator::IndexMemory => todo!(),
                     Operator::ConstructTuple => {
                         Value::Concat(ops.iter().map(|op| name_vals[op].clone()).collect())

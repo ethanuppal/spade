@@ -543,7 +543,7 @@ mod tests {
         ) -> Type::Int(2); {
             (const 0; Type::Int(3); ConstantValue::Int(2));
             (n(1, "idx"); Type::Int(3); Alias; e(0));
-            (e(4); Type::Int(2); IndexArray((2)); n(0, "a"), n(1, "idx"));
+            (e(4); Type::Int(2); IndexArray; n(0, "a"), n(1, "idx"));
         } => e(4));
 
         assert_same_mir!(&build_entity!(code), &expected);
