@@ -172,6 +172,7 @@ impl<'a> Parser<'a> {
     }
 
     #[trace_parser]
+    #[tracing::instrument(skip(self))]
     fn entity_instance(&mut self) -> Result<Option<Loc<Expression>>> {
         let start = peek_for!(self, &TokenKind::Instance);
 
@@ -193,10 +194,15 @@ impl<'a> Parser<'a> {
         };
 
         let name = self.path()?;
+        let next_token = self.peek()?.ok_or(Error::Eof)?;
 
         let args = self
             .argument_list()?
-            .ok_or(Error::ExpectedArgumentList(name.clone()))?;
+            .ok_or_else(|| Error::ExpectedArgumentList {
+                name: name.inner.clone(),
+                inst: ().between(self.file_id, &start, &name),
+                expected_at: ().at(self.file_id, &next_token),
+            })?;
 
         if let Some(depth) = pipeline_depth {
             Ok(Some(
@@ -299,6 +305,7 @@ impl<'a> Parser<'a> {
     }
 
     #[trace_parser]
+    #[tracing::instrument(skip(self))]
     pub fn block(&mut self, is_pipeline: bool) -> Result<Option<Loc<Block>>> {
         let start = peek_for!(self, &TokenKind::OpenBrace);
 
@@ -377,27 +384,24 @@ impl<'a> Parser<'a> {
         let is_named = self.peek_and_eat(&TokenKind::Dollar)?.is_some();
         let opener = peek_for!(self, &TokenKind::OpenParen);
 
-        if is_named {
+        let argument_list = if is_named {
             let args = self
                 .comma_separated(Self::named_argument, &TokenKind::CloseParen)
                 .extra_expected(vec![":"])?
                 .into_iter()
                 .map(Loc::strip)
                 .collect();
-            let end = self.eat(&TokenKind::CloseParen)?;
-
-            let span = lspan(opener.span).merge(lspan(end.span));
-            Ok(Some(ArgumentList::Named(args).at(self.file_id, &span)))
+            ArgumentList::Named(args)
         } else {
             let args = self
                 .comma_separated(Self::expression, &TokenKind::CloseParen)
                 .no_context()?;
-            let end = self.eat(&TokenKind::CloseParen)?;
 
-            let span = lspan(opener.span).merge(lspan(end.span));
-
-            Ok(Some(ArgumentList::Positional(args).at(self.file_id, &span)))
-        }
+            ArgumentList::Positional(args)
+        };
+        let end = self.eat(&TokenKind::CloseParen)?;
+        let span = lspan(opener.span).merge(lspan(end.span));
+        Ok(Some(argument_list.at(self.file_id, &span)))
     }
     #[trace_parser]
     fn named_argument(&mut self) -> Result<Loc<NamedArgument>> {

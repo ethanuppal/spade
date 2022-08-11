@@ -1,0 +1,16 @@
+---
+source: spade-tests/src/parser.rs
+expression: "std::str::from_utf8(buffer.as_slice()).expect(\"error contains invalid utf-8\")"
+---
+error: Expected arguments for instantiation of foo
+  ┌─ testinput:7:13
+  │
+7 │     inst foo{clk, true}
+  │     --------^ Expected argument list here
+  │     │        
+  │     For this entity instantiation
+  │
+  = help: Argument lists start with either `$(` for named arguments
+          or `(` for unnamed arguments
+
+

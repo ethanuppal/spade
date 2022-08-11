@@ -35,3 +35,17 @@ snapshot_error! {
     }
     "
 }
+
+snapshot_error! {
+    wrong_argument_list_points_to_correct_token,
+    "
+    entity foo(clk: clk, a: bool) -> bool {
+        reg(clk) a = a;
+        a
+    }
+
+    entity main(clk: clk) -> bool {
+        inst foo{clk, true}
+    }
+    "
+}

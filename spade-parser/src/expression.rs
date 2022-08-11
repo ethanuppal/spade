@@ -84,6 +84,7 @@ impl<'a> Parser<'a> {
         }
     }
 
+    #[tracing::instrument(skip(self))]
     pub fn expression(&mut self) -> Result<Loc<Expression>> {
         self.custom_infix_operator()
     }

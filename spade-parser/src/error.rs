@@ -57,8 +57,12 @@ pub enum Error {
     #[error("Expected type, got {0:?}")]
     ExpectedType(Token),
 
-    #[error("Expected argument list for {0}")]
-    ExpectedArgumentList(Loc<Path>),
+    #[error("Expected argument list for instantiation of {name}")]
+    ExpectedArgumentList {
+        name: Path,
+        inst: Loc<()>,
+        expected_at: Loc<()>,
+    },
 
     #[error("Missing tuple index")]
     MissingTupleIndex { hash_loc: Loc<()> },
