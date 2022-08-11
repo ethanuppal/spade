@@ -19,6 +19,10 @@ pub enum Type {
 }
 
 impl Type {
+    pub fn output_wire(inner: Type) -> Self {
+        Self::OutputWire(Box::new(inner))
+    }
+
     pub fn size(&self) -> u64 {
         match self {
             Type::Int(len) => *len,

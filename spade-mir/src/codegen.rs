@@ -2,6 +2,7 @@ use crate::{
     aliasing::flatten_aliases,
     assertion_codegen::AssertedExpression,
     enum_util,
+    types::Type,
     verilog::{self, assign, logic, size_spec},
     Binding, ConstantValue, Entity, Operator, Statement, ValueName,
 };
@@ -124,6 +125,45 @@ fn statement_declaration(statement: &Statement) -> Code {
         }
         Statement::Assert(_) => {
             code! {}
+        }
+    }
+}
+
+enum TupleIndex {
+    /// The index is a single bit, i.e. codegens as [val]
+    Single(u64),
+    /// The index is a range of bits, codegens as [left:right]
+    Range { left: u64, right: u64 },
+}
+
+impl TupleIndex {
+    fn verilog_code(&self) -> String {
+        match self {
+            TupleIndex::Single(i) => format!("[{i}]"),
+            TupleIndex::Range { left, right } => format!("[{left}:{right}]"),
+        }
+    }
+}
+
+fn compute_tuple_index(idx: u64, sizes: &[u64]) -> TupleIndex {
+    // Compute the start index of the element we're looking for
+    let mut start_bit = 0;
+    for i in 0..idx {
+        start_bit += sizes[i as usize];
+    }
+
+    let target_width = sizes[idx as usize];
+    let end_bit = start_bit + target_width;
+
+    let total_width: u64 = sizes.iter().sum();
+
+    // Check if this is a single bit, if so, index using just it
+    if target_width == 1 {
+        TupleIndex::Single(total_width - start_bit - 1)
+    } else {
+        TupleIndex::Range {
+            left: total_width - start_bit - 1,
+            right: total_width - end_bit,
         }
     }
 }
@@ -279,25 +319,9 @@ fn forward_expression_code(binding: &Binding, ops: &[String]) -> String {
             format!("{} ? {} : {}", ops[0], ops[1], ops[2])
         }
         Operator::IndexTuple(idx, ref types) => {
-            // Compute the start index of the element we're looking for
-            let mut start_bit = 0;
-            for i in 0..*idx {
-                start_bit += types[i as usize].size();
-            }
-
-            let target_width = types[*idx as usize].size();
-            let end_bit = start_bit + target_width;
-
-            let total_width: u64 = types.iter().map(crate::types::Type::size).sum();
-
-            // Check if this is a single bit, if so, index using just it
-            let index = if target_width == 1 {
-                format!("{}", total_width - start_bit - 1)
-            } else {
-                format!("{}:{}", total_width - start_bit - 1, total_width - end_bit)
-            };
-
-            format!("{}[{}]", ops[0], index)
+            let idx =
+                compute_tuple_index(*idx, &types.iter().map(|t| t.size()).collect::<Vec<_>>());
+            format!("{}{}", ops[0], idx.verilog_code())
         }
         Operator::ConstructArray { .. } => {
             // NOTE: Reversing because we declare the array as logic[SIZE:0] and
@@ -460,8 +484,8 @@ fn forward_expression_code(binding: &Binding, ops: &[String]) -> String {
     }
 }
 
-fn backward_expression_code(binding: &Binding, ops: &[String]) -> String {
-    match binding.operator {
+fn backward_expression_code(self_type: &Type, binding: &Binding, back_ops: &[String]) -> String {
+    match &binding.operator {
         Operator::Add
         | Operator::Sub
         | Operator::Mul
@@ -499,9 +523,22 @@ fn backward_expression_code(binding: &Binding, ops: &[String]) -> String {
         Operator::IndexArray(_) => todo!(),
         Operator::IndexMemory => todo!(),
         Operator::ConstructTuple => todo!(),
-        Operator::IndexTuple(_, _) => todo!(),
+        Operator::IndexTuple(index, inner_types) => {
+            assert_eq!(&inner_types[*index as usize], self_type);
+            let index = compute_tuple_index(
+                *index,
+                &inner_types
+                    .iter()
+                    .map(|t| t.backward_size())
+                    .collect::<Vec<_>>(),
+            );
+            format!("{}{}", back_ops[0], index.verilog_code())
+        }
         Operator::Instance(_) => todo!(),
-        Operator::Alias => todo!(),
+        Operator::Alias => {
+            // NOTE: Set in statement_code
+            format!("")
+        }
     }
 }
 
@@ -517,13 +554,19 @@ fn statement_code(statement: &Statement, source_code: &CodeBundle) -> Code {
                 .map(ValueName::var_name)
                 .collect::<Vec<_>>();
 
+            let back_ops = &binding
+                .operands
+                .iter()
+                .map(ValueName::backward_var_name)
+                .collect::<Vec<_>>();
+
             let forward_expression = if binding.ty.size() != 0 {
                 Some(forward_expression_code(binding, ops))
             } else {
                 None
             };
             let backward_expression = if binding.ty.backward_size() != 0 {
-                Some(backward_expression_code(binding, ops))
+                Some(backward_expression_code(&binding.ty, binding, back_ops))
             } else {
                 None
             };
@@ -556,7 +599,10 @@ fn statement_code(statement: &Statement, source_code: &CodeBundle) -> Code {
                         // Aliasing of memories happens at definition
                         "".to_string()
                     }
-                    _ => format!("assign {} = {};", name, ops[0]),
+                    _ => code! {
+                        [0] forward_expression.map(|_| format!("assign {} = {};", name, ops[0]));
+                        [0] backward_expression.map(|_| format!("assign {} = {};", back_ops[0], back_name));
+                    }.to_string()
                 },
                 Operator::Match => format!("{}", forward_expression.unwrap()),
                 Operator::DivPow2 => format!("{}", forward_expression.unwrap()),
@@ -1087,6 +1133,65 @@ mod tests {
             &entity_code(&mut input.clone(), &CodeBundle::new("".to_string())).to_string(),
             expected
         );
+    }
+}
+
+#[cfg(test)]
+mod backward_expression_tests {
+    use super::*;
+    use colored::Colorize;
+
+    use crate as spade_mir;
+    use crate::{statement, types::Type};
+
+    use indoc::indoc;
+
+    #[test]
+    fn backward_alias_works() {
+        let ty = Type::OutputWire(Box::new(Type::Int(8)));
+        let stmt = statement!(e(0); ty; Alias; e(1));
+
+        let expected = indoc! {
+            r#"
+            logic[7:0] _e_0_o;
+            assign _e_1_o = _e_0_o;"#
+        };
+
+        assert_same_code!(
+            &statement_code_and_declaration(&stmt, &CodeBundle::new("".to_string())).to_string(),
+            expected
+        );
+    }
+
+    #[test]
+    fn backward_index_tuple_works() {
+        let tuple_members = vec![
+            Type::output_wire(Type::Int(8)),
+            Type::output_wire(Type::Int(4)),
+        ];
+        let ty = Type::output_wire(Type::Int(4));
+        let stmt = statement!(e(0); ty; IndexTuple((1, tuple_members)); e(1));
+
+        let expected = indoc! {
+            r#"
+            logic[3:0] _e_0_o;
+            assign _e_1_o[3:0] = _e_0_o;"#
+        };
+
+        assert_same_code!(
+            &statement_code_and_declaration(&stmt, &CodeBundle::new("".to_string())).to_string(),
+            expected
+        );
+    }
+
+    #[test]
+    fn construct_tuple_works() {
+        let tuple_members = vec![
+            Type::output_wire(Type::Int(8)),
+            Type::output_wire(Type::Int(4)),
+        ];
+        let ty = Type::output_wire(Type::Int(4));
+        let stmt = statement!(e(0); ty; IndexTuple((1, tuple_members)); e(1));
     }
 }
 
