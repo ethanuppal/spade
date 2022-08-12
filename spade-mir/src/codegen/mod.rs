@@ -684,6 +684,7 @@ fn statement_code(statement: &Statement, types: &TypeList, source_code: &CodeBun
 
             let val_var = val.var_name();
             code! {
+                [0] format!("`ifndef SYNTHESIS");
                 [0] format!("always @({val_var}) begin");
                     // This #0 is a bit unintiutive, but it seems to prevent assertions
                     // triggering too early. For example, in the case of !(x == 1 && y == 2)
@@ -699,6 +700,7 @@ fn statement_code(statement: &Statement, types: &TypeList, source_code: &CodeBun
                         [2] r#"$fatal(1);"#;
                     [1] "end";
                 [0] "end";
+                [0] format!("`endif")
             }
         }
     }
@@ -2086,6 +2088,7 @@ mod expression_tests {
         // and copy paste the output here. Escape the " characters and replace _x1b_ with \x1b
         let expected = indoc! {
             "
+            `ifndef SYNTHESIS
             always @(_e_0) begin
                 #0
                 assert (_e_0)
@@ -2099,7 +2102,8 @@ mod expression_tests {
                     $error(\"Assertion failed\");
                     $fatal(1);
                 end
-            end"
+            end
+            `endif"
         };
 
         let source_code = CodeBundle::new("abcd".to_string());
