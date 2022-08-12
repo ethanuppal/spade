@@ -12,15 +12,15 @@ pub enum Type {
         length: u64,
     },
     Enum(Vec<Vec<Type>>),
-    /// A wire to which a value of the inner type can be written, rather than read from as normal
-    /// types. When a type containing an OutputWire is returned, the module 'returning' it has an
-    /// additional *input* for the wire.
-    OutputWire(Box<Type>),
+    /// A type in which values flow the opposite way compared to normal types. When a type
+    /// containing a Backward<T> is returned, the module 'returning' it has an additional *input*
+    /// for the wire, and if it takes an input with, n additional *output* port is created.
+    Backward(Box<Type>),
 }
 
 impl Type {
-    pub fn output_wire(inner: Type) -> Self {
-        Self::OutputWire(Box::new(inner))
+    pub fn backward(inner: Type) -> Self {
+        Self::Backward(Box::new(inner))
     }
 
     pub fn size(&self) -> u64 {
@@ -41,13 +41,13 @@ impl Type {
             }
             Type::Array { inner, length } => inner.size() * length,
             Type::Memory { inner, length } => inner.size() * length,
-            Type::OutputWire(_) => 0,
+            Type::Backward(_) => 0,
         }
     }
 
     pub fn backward_size(&self) -> u64 {
         match self {
-            Type::OutputWire(inner) => inner.size(),
+            Type::Backward(inner) => inner.size(),
             Type::Int(_) | Type::Bool => 0,
             Type::Array { inner, length } => inner.backward_size() * length,
             Type::Enum(inner) => {
@@ -114,8 +114,8 @@ impl std::fmt::Display for Type {
 
                 write!(f, "enum {}", inner)
             }
-            Type::OutputWire(inner) => {
-                write!(f, "=>({inner})")
+            Type::Backward(inner) => {
+                write!(f, "~({inner})")
             }
         }
     }

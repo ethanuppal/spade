@@ -997,8 +997,8 @@ mod tests {
     }
 
     #[test]
-    fn pure_output_wire_input_produces_output_port() {
-        let ty = Type::OutputWire(Box::new(Type::Int(3)));
+    fn pure_backward_input_produces_output_port() {
+        let ty = Type::Backward(Box::new(Type::Int(3)));
         let input = entity!("test"; ("a", n(0, "a"), ty) -> Type::Int(6); {
             (const 0; Type::Int(6); crate::ConstantValue::Int(3))
         } => e(0));
@@ -1034,8 +1034,8 @@ mod tests {
     }
 
     #[test]
-    fn mixed_output_wire_input_works() {
-        let ty = Type::Tuple(vec![Type::Int(4), Type::OutputWire(Box::new(Type::Int(3)))]);
+    fn mixed_backward_input_works() {
+        let ty = Type::Tuple(vec![Type::Int(4), Type::Backward(Box::new(Type::Int(3)))]);
         let input = entity!("test"; ("a", n(0, "a"), ty) -> Type::Int(6); {
             (const 0; Type::Int(6); crate::ConstantValue::Int(3))
         } => e(0));
@@ -1073,8 +1073,8 @@ mod tests {
     }
 
     #[test]
-    fn mixed_output_wire_output_works() {
-        let ty = Type::Tuple(vec![Type::Int(4), Type::OutputWire(Box::new(Type::Int(3)))]);
+    fn mixed_backward_output_works() {
+        let ty = Type::Tuple(vec![Type::Int(4), Type::Backward(Box::new(Type::Int(3)))]);
         let input = entity!("test"; () -> ty; {
         } => e(0));
 
@@ -1189,7 +1189,7 @@ mod backward_expression_tests {
 
     #[test]
     fn backward_alias_works() {
-        let ty = Type::OutputWire(Box::new(Type::Int(8)));
+        let ty = Type::Backward(Box::new(Type::Int(8)));
         let stmt = statement!(e(0); ty; Alias; e(1));
 
         let expected = indoc! {
@@ -1211,11 +1211,8 @@ mod backward_expression_tests {
 
     #[test]
     fn backward_index_tuple_works() {
-        let tuple_members = vec![
-            Type::output_wire(Type::Int(8)),
-            Type::output_wire(Type::Int(4)),
-        ];
-        let ty = Type::output_wire(Type::Int(4));
+        let tuple_members = vec![Type::backward(Type::Int(8)), Type::backward(Type::Int(4))];
+        let ty = Type::backward(Type::Int(4));
         let stmt = statement!(e(0); ty; IndexTuple((1, tuple_members)); e(1));
 
         let expected = indoc! {
@@ -1237,16 +1234,13 @@ mod backward_expression_tests {
 
     #[test]
     fn construct_tuple_works() {
-        let tuple_members = vec![
-            Type::output_wire(Type::Int(8)),
-            Type::output_wire(Type::Int(4)),
-        ];
+        let tuple_members = vec![Type::backward(Type::Int(8)), Type::backward(Type::Int(4))];
         let ty = Type::Tuple(tuple_members);
         let stmt = statement!(e(0); ty; ConstructTuple; e(1), e(2));
 
         let type_list = TypeList::empty()
-            .with(ValueName::Expr(1), Type::output_wire(Type::Int(8)))
-            .with(ValueName::Expr(2), Type::output_wire(Type::Int(4)));
+            .with(ValueName::Expr(1), Type::backward(Type::Int(8)))
+            .with(ValueName::Expr(2), Type::backward(Type::Int(4)));
 
         let expected = indoc! {
             r#"
@@ -1264,8 +1258,8 @@ mod backward_expression_tests {
     #[test]
     fn construct_tuple_works_on_mixed_direction_types() {
         let tuple_members = vec![
-            Type::output_wire(Type::Int(8)),
-            Type::Tuple(vec![Type::output_wire(Type::Int(4)), Type::Int(4)]),
+            Type::backward(Type::Int(8)),
+            Type::Tuple(vec![Type::backward(Type::Int(4)), Type::Int(4)]),
             Type::Int(3),
         ];
         let ty = Type::Tuple(tuple_members);
@@ -1280,10 +1274,10 @@ mod backward_expression_tests {
         };
 
         let type_list = TypeList::empty()
-            .with(ValueName::Expr(1), Type::output_wire(Type::Int(8)))
+            .with(ValueName::Expr(1), Type::backward(Type::Int(8)))
             .with(
                 ValueName::Expr(2),
-                Type::Tuple(vec![Type::output_wire(Type::Int(4)), Type::Int(4)]),
+                Type::Tuple(vec![Type::backward(Type::Int(4)), Type::Int(4)]),
             )
             .with(ValueName::Expr(3), Type::Int(3));
 
@@ -1297,7 +1291,7 @@ mod backward_expression_tests {
     #[test]
     fn construct_array_works() {
         let ty = Type::Array {
-            inner: Box::new(Type::output_wire(Type::Int(5))),
+            inner: Box::new(Type::backward(Type::Int(5))),
             length: 3,
         };
         let stmt = statement!(e(0); ty; ConstructArray; e(1), e(2), e(3));
