@@ -111,6 +111,7 @@ fn visit_pipeline_statement(
                 }
             }
         }
+        ast::Statement::Set { .. } => {}
     };
     Ok(())
 }

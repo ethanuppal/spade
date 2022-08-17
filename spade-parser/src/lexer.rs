@@ -51,6 +51,8 @@ pub enum TokenKind {
     Else,
     #[token("match")]
     Match,
+    #[token("set")]
+    Set,
 
     #[token("pipeline")]
     Pipeline,
@@ -207,6 +209,7 @@ impl TokenKind {
             TokenKind::As => "as",
             TokenKind::Use => "use",
             TokenKind::Assert => "assert",
+            TokenKind::Set => "set",
 
             TokenKind::ComptimeConfig => "$config",
             TokenKind::ComptimeIf => "$if",

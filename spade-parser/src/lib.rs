@@ -792,6 +792,25 @@ impl<'a> Parser<'a> {
         result
     }
 
+    #[trace_parser]
+    pub fn set(&mut self) -> Result<Option<Loc<Statement>>> {
+        let tok = peek_for!(self, &TokenKind::Set);
+
+        let target = self.expression()?;
+
+        self.eat(&TokenKind::Assignment)?;
+
+        let value = self.expression()?;
+
+        Ok(Some(
+            Statement::Set {
+                target,
+                value: value.clone(),
+            }
+            .between(self.file_id, &tok.span, &value),
+        ))
+    }
+
     /// If the next token is the start of a statement, return that statement,
     /// otherwise None
     #[trace_parser]
@@ -803,6 +822,7 @@ impl<'a> Parser<'a> {
             &Self::declaration,
             &Self::label,
             &Self::assert,
+            &Self::set,
             &|s| s.comptime_statement(allow_stages),
         ])?;
 
@@ -2990,5 +3010,18 @@ mod tests {
         })
         .nowhere();
         check_parse!(code, statement(true), Ok(Some(expected)));
+    }
+
+    #[test]
+    fn set_statements_work() {
+        let code = r#"set x = y;"#;
+
+        let expected = Statement::Set {
+            target: Expression::Identifier(ast_path("x")).nowhere(),
+            value: Expression::Identifier(ast_path("y")).nowhere(),
+        }
+        .nowhere();
+
+        check_parse!(code, statement(false), Ok(Some(expected)));
     }
 }

@@ -631,6 +631,12 @@ fn visit_statement(s: &Loc<ast::Statement>, ctx: &mut Context) -> Result<Vec<Loc
                 Ok(vec![])
             }
         }
+        ast::Statement::Set { target, value } => {
+            let target = target.try_visit(visit_expression, ctx)?;
+            let value = value.try_visit(visit_expression, ctx)?;
+
+            Ok(vec![hir::Statement::Set { target, value }.at_loc(s)])
+        }
     }
 }
 
