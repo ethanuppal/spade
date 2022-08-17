@@ -1781,6 +1781,22 @@ mod tests {
             }
         "
     }
+
+    #[test]
+    fn assigning_ports_to_variables_works() {
+        let code = r#"
+            mod std {mod ports{
+                entity make_port<T>() -> ~T __builtin__
+            }}
+
+            entity test() -> ~int<10> {
+                let x = inst std::ports::make_port();
+                x
+            }
+        "#;
+
+        build_items(code);
+    }
 }
 
 #[cfg(test)]
