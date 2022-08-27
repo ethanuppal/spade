@@ -49,11 +49,14 @@ an overview of the inner workings of the compiler.
 
 ## Editor integration
 
-There is a vim plugin for syntax highlighting and auto indentation at
-https://gitlab.com/spade-lang/spade-vim
+There are editor plugins for syntax highlighting available for some editors
 
-There is an Emacs plugin at
-https://github.com/Emiluren/.emacs.d/blob/master/lisp/spade-mode/spade-mode.el
+ - vim: https://gitlab.com/spade-lang/spade-vim
+ - vscode: https://git.ablecorp.us/elfein/spade_highlighting/
+ - emacs: https://github.com/Emiluren/.emacs.d/blob/master/lisp/spade-mode/spade-mode.el
+
+Note that most of these are maintained by third parties and may be out of date. If you make a plugin
+for your favourite editor, feel free to add it to the list!
 
 ## Features
 
