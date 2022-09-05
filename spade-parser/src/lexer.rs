@@ -102,6 +102,8 @@ pub enum TokenKind {
     LogicalOr,
     #[token("&&")]
     LogicalAnd,
+    #[token("^^")]
+    LogicalXor,
     #[token("&")]
     BitwiseAnd,
     #[token("|")]
@@ -111,7 +113,7 @@ pub enum TokenKind {
     #[token("!")]
     Not,
     #[token("^")]
-    Xor,
+    BitwiseXor,
     #[token("`")]
     InfixOperatorSeparator,
     #[token("'")]
@@ -213,11 +215,12 @@ impl TokenKind {
             TokenKind::RightShift => ">>",
             TokenKind::LogicalOr => "||",
             TokenKind::LogicalAnd => "&&",
+            TokenKind::LogicalXor => "^^",
             TokenKind::BitwiseAnd => "&",
             TokenKind::BitwiseOr => "|",
             TokenKind::BitwiseNot => "~",
             TokenKind::Not => "!",
-            TokenKind::Xor => "^",
+            TokenKind::BitwiseXor => "^",
             TokenKind::InfixOperatorSeparator => "`",
 
             TokenKind::OpenParen => "(",

@@ -707,13 +707,14 @@ impl ExprLocal for Loc<Expression> {
                     BinaryOperator::Lt => binop_builder(Lt)?,
                     BinaryOperator::Ge => binop_builder(Ge)?,
                     BinaryOperator::Le => binop_builder(Le)?,
-                    BinaryOperator::Xor => binop_builder(Xor)?,
+                    BinaryOperator::LogicalXor => binop_builder(LogicalXor)?,
                     BinaryOperator::LeftShift => binop_builder(LeftShift)?,
                     BinaryOperator::RightShift => binop_builder(RightShift)?,
                     BinaryOperator::LogicalAnd => binop_builder(LogicalAnd)?,
                     BinaryOperator::LogicalOr => binop_builder(LogicalOr)?,
                     BinaryOperator::BitwiseAnd => binop_builder(BitwiseAnd)?,
                     BinaryOperator::BitwiseOr => binop_builder(BitwiseOr)?,
+                    BinaryOperator::BitwiseXor => binop_builder(BitwiseXor)?,
                 };
             }
             ExprKind::UnaryOperator(op, operand) => {

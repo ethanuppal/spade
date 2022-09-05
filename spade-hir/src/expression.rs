@@ -21,9 +21,10 @@ pub enum BinaryOperator {
     RightShift,
     LogicalAnd,
     LogicalOr,
+    LogicalXor,
     BitwiseOr,
     BitwiseAnd,
-    Xor,
+    BitwiseXor,
 }
 #[derive(Clone, Copy, PartialEq, Debug, Serialize, Deserialize)]
 pub enum UnaryOperator {

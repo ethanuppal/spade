@@ -683,9 +683,10 @@ pub fn visit_expression(e: &ast::Expression, ctx: &mut Context) -> Result<hir::E
                 ast::BinaryOperator::RightShift => Ok(operator(BinaryOperator::RightShift)),
                 ast::BinaryOperator::LogicalAnd => Ok(operator(BinaryOperator::LogicalAnd)),
                 ast::BinaryOperator::LogicalOr => Ok(operator(BinaryOperator::LogicalOr)),
+                ast::BinaryOperator::LogicalXor => Ok(operator(BinaryOperator::LogicalXor)),
                 ast::BinaryOperator::BitwiseOr => Ok(operator(BinaryOperator::BitwiseOr)),
                 ast::BinaryOperator::BitwiseAnd => Ok(operator(BinaryOperator::BitwiseAnd)),
-                ast::BinaryOperator::Xor => Ok(operator(BinaryOperator::Xor)),
+                ast::BinaryOperator::BitwiseXor => Ok(operator(BinaryOperator::BitwiseXor)),
             }
         }
         ast::Expression::UnaryOperator(operator, operand) => {

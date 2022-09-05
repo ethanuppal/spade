@@ -168,6 +168,7 @@ fn forward_expression_code(binding: &Binding, types: &TypeList, ops: &[ValueName
         Operator::RightShift => binop!(">>"),
         Operator::LogicalAnd => binop!("&&"),
         Operator::LogicalOr => binop!("||"),
+        Operator::LogicalXor => binop!("^"),
         Operator::LogicalNot => {
             assert!(
                 op_names.len() == 1,
@@ -184,7 +185,7 @@ fn forward_expression_code(binding: &Binding, types: &TypeList, ops: &[ValueName
         }
         Operator::BitwiseAnd => binop!("&"),
         Operator::BitwiseOr => binop!("|"),
-        Operator::Xor => binop!("^"),
+        Operator::BitwiseXor => binop!("^"),
         Operator::USub => unop!("-"),
         Operator::Not => unop!("!"),
         Operator::DivPow2 => {
@@ -479,10 +480,11 @@ fn backward_expression_code(binding: &Binding, types: &TypeList, ops: &[ValueNam
         | Operator::RightShift
         | Operator::LogicalAnd
         | Operator::LogicalOr
+        | Operator::LogicalXor
         | Operator::LogicalNot
         | Operator::BitwiseAnd
         | Operator::BitwiseOr
-        | Operator::Xor
+        | Operator::BitwiseXor
         | Operator::USub
         | Operator::Not
         | Operator::BitwiseNot
@@ -1403,7 +1405,9 @@ mod expression_tests {
     signed_binop_test!(binop_le_works, Type::Bool, "", Le, "<=");
     binop_test!(binop_logical_and_works, Type::Bool, "", LogicalAnd, "&&");
     binop_test!(binop_logical_or_works, Type::Bool, "", LogicalOr, "||");
-    binop_test!(xor_works, Type::Bool, "", Xor, "^");
+    binop_test!(bitwise_xor_works, Type::Int(32), "[31:0]", BitwiseXor, "^");
+    // NOTE: The resulting verilog uses `^` on a 1 bit value
+    binop_test!(logical_xor_works, Type::Bool, "", LogicalXor, "^");
     unop_test!(not_works, Type::Bool, "", Not, "!");
     unop_test!(usub_works, Type::Int(2), "[1:0]", USub, "-");
 

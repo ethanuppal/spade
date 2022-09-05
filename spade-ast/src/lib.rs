@@ -77,11 +77,12 @@ pub enum BinaryOperator {
     Ge,
     LogicalAnd,
     LogicalOr,
+    LogicalXor,
     LeftShift,
     RightShift,
     BitwiseAnd,
     BitwiseOr,
-    Xor,
+    BitwiseXor,
 }
 
 #[derive(PartialEq, Debug, Clone)]

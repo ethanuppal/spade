@@ -10,6 +10,7 @@ enum OpBindingPower {
     None,
     LogicalOr,
     LogicalAnd,
+    LogicalXor,
     BitwiseOr,
     BitwiseXor,
     BitwiseAnd,
@@ -35,11 +36,12 @@ fn binop_binding_power(op: &BinaryOperator) -> OpBindingPower {
         BinaryOperator::Ge => OpBindingPower::RelationalCmp,
         BinaryOperator::LogicalAnd => OpBindingPower::LogicalAnd,
         BinaryOperator::LogicalOr => OpBindingPower::LogicalOr,
+        BinaryOperator::LogicalXor => OpBindingPower::LogicalXor,
         BinaryOperator::LeftShift => OpBindingPower::Shift,
         BinaryOperator::RightShift => OpBindingPower::Shift,
         BinaryOperator::BitwiseAnd => OpBindingPower::BitwiseAnd,
         BinaryOperator::BitwiseOr => OpBindingPower::BitwiseOr,
-        BinaryOperator::Xor => OpBindingPower::BitwiseXor,
+        BinaryOperator::BitwiseXor => OpBindingPower::BitwiseXor,
     }
 }
 
@@ -68,9 +70,10 @@ impl<'a> Parser<'a> {
             TokenKind::LeftShift => Some(BinaryOperator::LeftShift),
             TokenKind::LogicalOr => Some(BinaryOperator::LogicalOr),
             TokenKind::LogicalAnd => Some(BinaryOperator::LogicalAnd),
+            TokenKind::LogicalXor => Some(BinaryOperator::LogicalXor),
             TokenKind::BitwiseAnd => Some(BinaryOperator::BitwiseAnd),
             TokenKind::BitwiseOr => Some(BinaryOperator::BitwiseOr),
-            TokenKind::Xor => Some(BinaryOperator::Xor),
+            TokenKind::BitwiseXor => Some(BinaryOperator::BitwiseXor),
             _ => None,
         }
     }

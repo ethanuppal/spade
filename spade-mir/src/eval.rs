@@ -137,10 +137,11 @@ pub fn eval_statements(statements: &[Statement]) -> Value {
                     Operator::RightShift => todo!(),
                     Operator::LogicalAnd => todo!(),
                     Operator::LogicalOr => todo!(),
+                    Operator::LogicalXor => todo!(),
                     Operator::LogicalNot => todo!(),
                     Operator::BitwiseAnd => todo!(),
                     Operator::BitwiseOr => todo!(),
-                    Operator::Xor => todo!(),
+                    Operator::BitwiseXor => todo!(),
                     Operator::USub => Value::Int {
                         size: ty.size().into(),
                         val: -name_vals[&ops[0]].assume_int(),

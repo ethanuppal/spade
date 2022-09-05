@@ -458,6 +458,7 @@ impl TypeState {
                 // Shift operators have the same width in as they do out
                 BinaryOperator::LeftShift
                 | BinaryOperator::BitwiseAnd
+                | BinaryOperator::BitwiseXor
                 | BinaryOperator::BitwiseOr
                 | BinaryOperator::RightShift => {
                     let int_type = self.new_generic_int(symtab);
@@ -480,7 +481,7 @@ impl TypeState {
                 }
                 BinaryOperator::LogicalAnd
                 | BinaryOperator::LogicalOr
-                | BinaryOperator::Xor => {
+                | BinaryOperator::LogicalXor => {
                     // FIXME: Make generic over types that can be ored
                     self.unify_expression_generic_error(&lhs, &t_bool(symtab), symtab)?;
                     self.unify_expression_generic_error(&lhs, &rhs.inner, symtab)?;

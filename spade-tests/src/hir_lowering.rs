@@ -247,7 +247,7 @@ mod tests {
     fn xor_operator_codegens_correctly() {
         let code = r#"
         entity name(a: bool, b: bool) -> bool {
-            a ^ b
+            a ^^ b
         }
         "#;
 
@@ -255,7 +255,26 @@ mod tests {
                 "a", n(0, "a"), Type::Bool,
                 "b", n(1, "b"), Type::Bool
             ) -> Type::Bool; {
-                (e(0); Type::Bool; Xor; n(0, "a"), n(1, "b"))
+                (e(0); Type::Bool; LogicalXor; n(0, "a"), n(1, "b"))
+            } => e(0)
+        );
+
+        assert_same_mir!(&build_entity!(code), &expected);
+    }
+
+    #[test]
+    fn bitwise_xor_operator_codegens_correctly() {
+        let code = r#"
+        entity name(a: int<3>, b: int<3>) -> int<3> {
+            a ^ b
+        }
+        "#;
+
+        let expected = entity!("name"; (
+                "a", n(0, "a"), Type::Int(3),
+                "b", n(1, "b"), Type::Int(3)
+            ) -> Type::Int(3); {
+                (e(0); Type::Int(3); BitwiseXor; n(0, "a"), n(1, "b"))
             } => e(0)
         );
 
