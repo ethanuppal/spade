@@ -76,6 +76,8 @@ pub enum TokenKind {
     As,
     #[token("assert")]
     Assert,
+    #[token("mut")]
+    Mut,
 
     #[token("$config")]
     ComptimeConfig,
@@ -114,15 +116,15 @@ pub enum TokenKind {
     #[token("^^")]
     LogicalXor,
     #[token("&")]
-    BitwiseAnd,
+    Ampersand,
     #[token("|")]
     BitwiseOr,
-    #[token("~")]
-    Tilde,
     #[token("!")]
     Not,
     #[token("^")]
     BitwiseXor,
+    #[token("~")]
+    Tilde,
     #[token("`")]
     InfixOperatorSeparator,
     #[token("'")]
@@ -210,6 +212,7 @@ impl TokenKind {
             TokenKind::Use => "use",
             TokenKind::Assert => "assert",
             TokenKind::Set => "set",
+            TokenKind::Mut => "mut",
 
             TokenKind::ComptimeConfig => "$config",
             TokenKind::ComptimeIf => "$if",
@@ -230,10 +233,10 @@ impl TokenKind {
             TokenKind::LogicalOr => "||",
             TokenKind::LogicalAnd => "&&",
             TokenKind::LogicalXor => "^^",
-            TokenKind::BitwiseAnd => "&",
+            TokenKind::Ampersand => "&",
             TokenKind::BitwiseOr => "|",
-            TokenKind::Tilde => "~",
             TokenKind::Not => "!",
+            TokenKind::Tilde => "~",
             TokenKind::BitwiseXor => "^",
             TokenKind::InfixOperatorSeparator => "`",
 
