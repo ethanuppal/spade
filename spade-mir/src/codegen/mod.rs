@@ -1891,7 +1891,7 @@ mod expression_tests {
             r#"
             logic _e_0;
             logic _e_0_o;
-            e_test test__e_0(_e_1, _e_2, _e_0, _e_0_o);"#
+            e_test _e_0_i(_e_1, _e_2, _e_0, _e_0_o);"#
         );
 
         assert_same_code!(
@@ -1915,7 +1915,7 @@ mod expression_tests {
         let expected = indoc!(
             r#"
             logic _e_0_o;
-            e_test test__e_0(_e_1, _e_2, _e_0_o);"#
+            e_test _e_0_i(_e_1, _e_2, _e_0_o);"#
         );
 
         assert_same_code!(
@@ -1939,7 +1939,7 @@ mod expression_tests {
         let expected = indoc!(
             r#"
             logic _e_0;
-            e_test test__e_0(_e_1, _e_1_o, _e_2_o, _e_0);"#
+            e_test _e_0_i(_e_1, _e_1_o, _e_2_o, _e_0);"#
         );
 
         let type_list = TypeList::empty()

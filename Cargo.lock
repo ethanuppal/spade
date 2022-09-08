@@ -1041,6 +1041,7 @@ dependencies = [
  "codespan",
  "codespan-reporting",
  "colored",
+ "local-impl",
  "parse_tree_macros",
  "serde",
  "spade-ast",

@@ -241,6 +241,7 @@ impl std::fmt::Display for TypeSpec {
             TypeSpec::Array { inner, size } => write!(f, "[{inner}; {size}]"),
             TypeSpec::Unit(_) => write!(f, "()"),
             TypeSpec::Backward(inner) => write!(f, "&mut {inner}"),
+            TypeSpec::Wire(inner) => write!(f, "&{inner}"),
         }
     }
 }
@@ -255,6 +256,7 @@ impl WithLocation for Enum {}
 #[derive(PartialEq, Debug, Clone, Serialize, Deserialize)]
 pub struct Struct {
     pub members: ParameterList,
+    pub is_port: bool,
 }
 impl WithLocation for Struct {}
 
