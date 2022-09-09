@@ -98,6 +98,7 @@ pub enum UnaryOperator {
     Not,
     BitwiseNot,
     Dereference,
+    Reference,
 }
 impl WithLocation for UnaryOperator {}
 
