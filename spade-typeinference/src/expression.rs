@@ -26,6 +26,7 @@ macro_rules! assuming_kind {
 
 impl TypeState {
     #[trace_typechecker]
+    #[tracing::instrument(level = "trace", skip_all)]
     pub fn visit_identifier(
         &mut self,
         expression: &Loc<Expression>,
@@ -42,6 +43,7 @@ impl TypeState {
         Ok(())
     }
 
+    #[tracing::instrument(level = "trace", skip_all)]
     pub fn visit_pipeline_ref(
         &mut self,
         expression: &Loc<Expression>,
@@ -71,6 +73,7 @@ impl TypeState {
     }
 
     #[trace_typechecker]
+    #[tracing::instrument(level = "trace", skip_all)]
     pub fn visit_int_literal(
         &mut self,
         expression: &Loc<Expression>,
@@ -88,6 +91,7 @@ impl TypeState {
     }
 
     #[trace_typechecker]
+    #[tracing::instrument(level = "trace", skip_all)]
     pub fn visit_bool_literal(
         &mut self,
         expression: &Loc<Expression>,
@@ -100,6 +104,7 @@ impl TypeState {
     }
 
     #[trace_typechecker]
+    #[tracing::instrument(level = "trace", skip_all)]
     pub fn visit_tuple_literal(
         &mut self,
         expression: &Loc<Expression>,
@@ -129,6 +134,7 @@ impl TypeState {
     }
 
     #[trace_typechecker]
+    #[tracing::instrument(level = "trace", skip_all)]
     pub fn visit_tuple_index(
         &mut self,
         expression: &Loc<Expression>,
@@ -170,6 +176,7 @@ impl TypeState {
     }
 
     #[trace_typechecker]
+    #[tracing::instrument(level = "trace", skip_all)]
     pub fn visit_field_access(
         &mut self,
         expression: &Loc<Expression>,
@@ -188,12 +195,13 @@ impl TypeState {
                 expr: self_type.at_loc(expression)
             };
 
-            requirement.check_or_add(self, symtab, generic_list)?;
+            requirement.check_or_add(self, symtab)?;
         });
         Ok(())
     }
 
     #[trace_typechecker]
+    #[tracing::instrument(level = "trace", skip_all)]
     pub fn visit_array_literal(
         &mut self,
         expression: &Loc<Expression>,
@@ -234,6 +242,7 @@ impl TypeState {
     }
 
     #[trace_typechecker]
+    #[tracing::instrument(level = "trace", skip_all)]
     pub fn visit_index(
         &mut self,
         expression: &Loc<Expression>,
@@ -285,6 +294,7 @@ impl TypeState {
     }
 
     #[trace_typechecker]
+    #[tracing::instrument(level = "trace", skip_all)]
     pub fn visit_block_expr(
         &mut self,
         expression: &Loc<Expression>,
@@ -309,6 +319,7 @@ impl TypeState {
     }
 
     #[trace_typechecker]
+    #[tracing::instrument(level = "trace", skip_all)]
     pub fn visit_if(
         &mut self,
         expression: &Loc<Expression>,
@@ -343,6 +354,7 @@ impl TypeState {
     }
 
     #[trace_typechecker]
+    #[tracing::instrument(level = "trace", skip_all)]
     pub fn visit_match(
         &mut self,
         expression: &Loc<Expression>,
@@ -389,6 +401,7 @@ impl TypeState {
     }
 
     #[trace_typechecker]
+    #[tracing::instrument(level = "trace", skip_all)]
     pub fn visit_binary_operator(
         &mut self,
         expression: &Loc<Expression>,
@@ -494,6 +507,7 @@ impl TypeState {
     }
 
     #[trace_typechecker]
+    #[tracing::instrument(level = "trace", skip_all)]
     pub fn visit_unary_operator(
         &mut self,
         expression: &Loc<Expression>,

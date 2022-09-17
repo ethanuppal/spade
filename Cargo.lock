@@ -915,6 +915,7 @@ version = "0.1.0"
 dependencies = [
  "codespan-reporting",
  "colored",
+ "itertools",
  "serde",
  "spade-common",
  "spade-types",

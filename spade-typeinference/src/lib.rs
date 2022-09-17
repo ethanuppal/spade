@@ -22,6 +22,7 @@ use spade_types::KnownType;
 use std::collections::HashMap;
 use std::sync::Arc;
 use trace_stack::TraceStack;
+use tracing::{info, trace};
 
 mod constraints;
 pub mod dump;
@@ -138,6 +139,7 @@ impl ProcessedItemList {
     }
 }
 
+#[derive(Debug)]
 pub enum GenericListSource<'a> {
     /// For when you just need a new generic list but have no need to refer back
     /// to it in the future
@@ -206,36 +208,44 @@ impl TypeState {
         &self.generic_lists[&generic_list_token]
     }
 
+    #[tracing::instrument(level = "trace", skip_all)]
     fn hir_type_expr_to_var<'a>(
         &'a self,
-        e: &hir::TypeExpression,
+        e: &Loc<hir::TypeExpression>,
         generic_list_token: &GenericListToken,
     ) -> TypeVar {
-        match e {
+        match &e.inner {
             hir::TypeExpression::Integer(i) => TypeVar::Known(KnownType::Integer(*i), vec![]),
-            hir::TypeExpression::TypeSpec(spec) => self.type_var_from_hir(spec, generic_list_token),
+            hir::TypeExpression::TypeSpec(spec) => {
+                self.type_var_from_hir(&spec.clone().at_loc(&e.loc()), generic_list_token)
+            }
         }
     }
 
+    #[tracing::instrument(level = "trace", skip_all, fields(%hir_type))]
     pub fn type_var_from_hir<'a>(
         &'a self,
         hir_type: &crate::hir::TypeSpec,
         generic_list_token: &GenericListToken,
     ) -> TypeVar {
         let generic_list = self.get_generic_list(generic_list_token);
-        match hir_type {
+        match &hir_type {
             hir::TypeSpec::Declared(base, params) => {
                 let params = params
                     .into_iter()
-                    .map(|e| self.hir_type_expr_to_var(e, generic_list_token))
+                    .map(|e| self.hir_type_expr_to_var(&e, generic_list_token))
                     .collect();
 
                 TypeVar::Known(KnownType::Type(base.inner.clone()), params)
             }
-            hir::TypeSpec::Generic(name) => match generic_list.get(name) {
+            hir::TypeSpec::Generic(name) => match generic_list.get(&name.inner) {
                 Some(t) => t.clone(),
                 None => {
-                    panic!("No entry for {} in generic_list", name)
+                    for (list_source, _) in &self.generic_lists {
+                        info!("Generic lists exist for {list_source:?}");
+                    }
+                    info!("Current source is {generic_list_token:?}");
+                    panic!("No entry in generic list for {name}");
                 }
             },
             hir::TypeSpec::Tuple(inner) => {
@@ -246,8 +256,8 @@ impl TypeState {
                 TypeVar::Tuple(inner)
             }
             hir::TypeSpec::Array { inner, size } => {
-                let inner = self.type_var_from_hir(inner, generic_list_token);
-                let size = self.hir_type_expr_to_var(size, generic_list_token);
+                let inner = self.type_var_from_hir(&inner, generic_list_token);
+                let size = self.hir_type_expr_to_var(&size, generic_list_token);
 
                 TypeVar::Array {
                     inner: Box::new(inner),
@@ -289,6 +299,7 @@ impl TypeState {
     }
 
     #[trace_typechecker]
+    #[tracing::instrument(level = "trace", skip_all, fields(%entity.name))]
     pub fn visit_entity(&mut self, entity: &Entity, symtab: &SymbolTable) -> Result<()> {
         let generic_list = self.create_generic_list(
             GenericListSource::Definition(&entity.name.name_id().inner),
@@ -326,7 +337,7 @@ impl TypeState {
             // })?;
         }
 
-        self.check_requirements(symtab, &generic_list)?;
+        self.check_requirements(symtab)?;
 
         Ok(())
     }
@@ -380,6 +391,7 @@ impl TypeState {
         Ok(())
     }
 
+    #[tracing::instrument(level = "trace", skip_all)]
     #[trace_typechecker]
     pub fn visit_expression(
         &mut self,
@@ -441,6 +453,7 @@ impl TypeState {
     }
 
     // Common handler for entities, functions and pipelines
+    #[tracing::instrument(level = "trace", skip_all, fields(%name))]
     #[trace_typechecker]
     fn handle_function_like(
         &mut self,
@@ -530,16 +543,12 @@ impl TypeState {
         Ok(())
     }
 
+    #[tracing::instrument(level = "trace", skip(self))]
     pub fn create_generic_list(
         &mut self,
         source: GenericListSource,
         params: &[Loc<TypeParam>],
     ) -> GenericListToken {
-        let reference = match source {
-            GenericListSource::Anonymous => GenericListToken::Anonymous(self.generic_lists.len()),
-            GenericListSource::Definition(name) => GenericListToken::Definition(name.clone()),
-            GenericListSource::Expression(id) => GenericListToken::Expression(id),
-        };
         let new_list = params
             .iter()
             .map(|param| {
@@ -554,12 +563,28 @@ impl TypeState {
             .map(|(name, t)| (name, t.clone()))
             .collect();
 
-        if let Some(_) = self.generic_lists.insert(reference.clone(), new_list) {
+        self.add_mapped_generic_list(source, new_list)
+    }
+
+    /// Adds a generic list with parameters already mapped to types
+    pub fn add_mapped_generic_list(
+        &mut self,
+        source: GenericListSource,
+        mapping: HashMap<NameID, TypeVar>,
+    ) -> GenericListToken {
+        let reference = match source {
+            GenericListSource::Anonymous => GenericListToken::Anonymous(self.generic_lists.len()),
+            GenericListSource::Definition(name) => GenericListToken::Definition(name.clone()),
+            GenericListSource::Expression(id) => GenericListToken::Expression(id),
+        };
+
+        if let Some(_) = self.generic_lists.insert(reference.clone(), mapping) {
             panic!("A generic list already existed for {reference:?}");
         }
         reference
     }
 
+    #[tracing::instrument(level = "trace", skip_all)]
     #[trace_typechecker]
     pub fn visit_block(
         &mut self,
@@ -715,6 +740,7 @@ impl TypeState {
     ) -> Result<()> {
         match &stmt.inner {
             Statement::Binding(pattern, t, value) => {
+                trace!("Visiting `let {} = ..`", pattern.kind);
                 self.visit_expression(value, symtab, generic_list)?;
 
                 self.visit_pattern(pattern, symtab, generic_list)?;
@@ -948,6 +974,8 @@ impl TypeState {
             .get_type(self)
             .expect("Tried to unify types but the rhs was not found");
 
+        trace!("Unifying {v1} with {v2}");
+
         let v1 = self.check_var_for_replacement(v1);
         let v2 = self.check_var_for_replacement(v2);
 
@@ -1118,6 +1146,7 @@ impl TypeState {
         Ok(new_type)
     }
 
+    #[tracing::instrument(level = "trace", skip_all)]
     pub fn unify(
         &mut self,
         e1: &impl HasType,
@@ -1129,6 +1158,7 @@ impl TypeState {
         // With replacement done, some of our constraints may have been updated to provide
         // more type inference information. Try to do unification of those new constraints too
         loop {
+            trace!("Updating constraints");
             let new_info = self.constraints.update_constraints();
 
             if new_info.is_empty() {
@@ -1262,11 +1292,7 @@ impl TypeState {
             })
     }
 
-    fn check_requirements(
-        &mut self,
-        symtab: &SymbolTable,
-        generic_list: &GenericListToken,
-    ) -> Result<()> {
+    fn check_requirements(&mut self, symtab: &SymbolTable) -> Result<()> {
         // Once we are done type checking the rest of the entity, check all requirements
         loop {
             // Walk through all the requirements, checking each one. If the requirement
@@ -1274,8 +1300,9 @@ impl TypeState {
             // replacement to be performed
             let (retain, replacements): (Vec<_>, Vec<_>) = self
                 .requirements
+                .clone()
                 .iter()
-                .map(|req| match req.check(self, symtab, &generic_list)? {
+                .map(|req| match req.check(self, symtab)? {
                     requirements::RequirementResult::NoChange => Ok((true, None)),
                     requirements::RequirementResult::Satisfied(replacement) => {
                         Ok((false, Some(replacement)))

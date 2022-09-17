@@ -6,6 +6,7 @@ pub mod testutil;
 use std::collections::HashMap;
 
 pub use expression::{Argument, ArgumentKind, ArgumentList, ExprKind, Expression};
+use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 use spade_common::{
     location_info::{Loc, WithLocation},
@@ -62,6 +63,23 @@ impl PatternKind {
 
     pub fn idless(self) -> Pattern {
         Pattern { id: 0, kind: self }
+    }
+}
+impl std::fmt::Display for PatternKind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            PatternKind::Integer(val) => write!(f, "{val}"),
+            PatternKind::Bool(val) => write!(f, "{val}"),
+            PatternKind::Name { name, .. } => write!(f, "{name}"),
+            PatternKind::Tuple(members) => {
+                write!(
+                    f,
+                    "({})",
+                    members.iter().map(|m| format!("{}", m.kind)).join(", ")
+                )
+            }
+            PatternKind::Type(name, _) => write!(f, "{name}(..)"),
+        }
     }
 }
 
@@ -156,6 +174,15 @@ pub enum TypeExpression {
 }
 impl WithLocation for TypeExpression {}
 
+impl std::fmt::Display for TypeExpression {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            TypeExpression::Integer(val) => write!(f, "{val}"),
+            TypeExpression::TypeSpec(val) => write!(f, "{val}"),
+        }
+    }
+}
+
 /// A specification of a type to be used. For example, the types of input/output arguments the type
 /// of fields in a struct etc.
 #[derive(PartialEq, Debug, Clone, Serialize, Deserialize)]
@@ -178,6 +205,36 @@ impl WithLocation for TypeSpec {}
 impl TypeSpec {
     pub fn unit() -> Self {
         TypeSpec::Unit(().nowhere())
+    }
+}
+
+impl std::fmt::Display for TypeSpec {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            TypeSpec::Declared(name, params) => write!(
+                f,
+                "{name}<{}>",
+                params
+                    .iter()
+                    .map(|g| format!("{g}"))
+                    .collect::<Vec<_>>()
+                    .join(",")
+            ),
+            TypeSpec::Generic(name) => write!(f, "{name}"),
+            TypeSpec::Tuple(members) => {
+                write!(
+                    f,
+                    "({})",
+                    members
+                        .iter()
+                        .map(|m| format!("{m}"))
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                )
+            }
+            TypeSpec::Array { inner, size } => write!(f, "[{inner}; {size}]"),
+            TypeSpec::Unit(_) => write!(f, "()"),
+        }
     }
 }
 
@@ -229,6 +286,16 @@ impl UnitName {
             UnitName::WithID(name) => name,
             UnitName::FullPath(name) => name,
             UnitName::Unmangled(_, name) => name,
+        }
+    }
+}
+
+impl std::fmt::Display for UnitName {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            UnitName::WithID(name) | UnitName::FullPath(name) | UnitName::Unmangled(_, name) => {
+                write!(f, "{name}")
+            }
         }
     }
 }

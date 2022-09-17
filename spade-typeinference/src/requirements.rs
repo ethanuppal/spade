@@ -5,7 +5,7 @@ use spade_types::KnownType;
 use crate::{
     equation::TypeVar,
     result::{Error, Result, UnificationErrorExt},
-    GenericListToken, TypeState,
+    GenericListSource, TypeState,
 };
 
 #[derive(Clone, Debug)]
@@ -43,9 +43,8 @@ impl Requirement {
     /// and can be dropped
     pub fn check(
         &self,
-        type_state: &TypeState,
+        type_state: &mut TypeState,
         symtab: &SymbolTable,
-        generic_list: &GenericListToken,
     ) -> Result<RequirementResult> {
         match self {
             Requirement::HasField {
@@ -54,7 +53,7 @@ impl Requirement {
                 expr,
             } => {
                 match &target_type.inner {
-                    TypeVar::Known(inner, _) => {
+                    TypeVar::Known(inner, params) => {
                         // Look up the type of the known var
                         match inner {
                             KnownType::Type(inner) => {
@@ -94,8 +93,19 @@ impl Requirement {
                                         });
                                     };
 
+                                // The generic list here refers to the generics being passed to the
+                                // types of the struct here. We need to construct it from the
+                                // infered generics.
+                                let mapping = s
+                                    .type_params
+                                    .iter()
+                                    .map(|p| p.clone().name_id())
+                                    .zip(params.iter().cloned())
+                                    .collect();
+                                let generic_list = type_state
+                                    .add_mapped_generic_list(GenericListSource::Anonymous, mapping);
                                 let field_type =
-                                    type_state.type_var_from_hir(&field_spec, generic_list);
+                                    type_state.type_var_from_hir(&field_spec, &generic_list);
 
                                 Ok(RequirementResult::Satisfied(vec![Replacement {
                                     from: expr.clone(),
@@ -119,13 +129,9 @@ impl Requirement {
 
     /// Check if this requirement is satisfied. If so, apply the resulting replacements to the
     /// type state, otherwise add the requirement to the type state requirement list
-    pub fn check_or_add(
-        self,
-        type_state: &mut TypeState,
-        symtab: &SymbolTable,
-        generic_list: &GenericListToken,
-    ) -> Result<()> {
-        match self.check(type_state, symtab, generic_list)? {
+    #[tracing::instrument(level = "trace", skip_all)]
+    pub fn check_or_add(self, type_state: &mut TypeState, symtab: &SymbolTable) -> Result<()> {
+        match self.check(type_state, symtab)? {
             RequirementResult::NoChange => Ok(type_state.add_requirement(self)),
             RequirementResult::Satisfied(replacements) => {
                 for Replacement { from, to } in replacements {

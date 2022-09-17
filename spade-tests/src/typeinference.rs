@@ -339,3 +339,17 @@ snapshot_error! {
         }
     "
 }
+
+#[test]
+fn accessing_a_generic_fixed_field_works() {
+    let code = "
+        struct A<T> {
+            a: T
+        }
+
+        fn x(a: A<bool>) -> bool {
+            a.a
+        }
+        ";
+    build_items(code);
+}

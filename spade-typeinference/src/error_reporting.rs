@@ -326,6 +326,11 @@ impl CompilationError for Error {
                 .with_labels(vec![spec
                     .primary_label()
                     .with_message(format!("Expected {}", expected))]),
+            Error::InternalNoEntryInGenericList(name) => Diagnostic::error()
+                .with_message(format!("(internal) no entry for {name} in generic list"))
+                .with_labels(vec![name
+                    .primary_label()
+                    .with_message("No entry in generic list")]),
         };
 
         term::emit(buffer, &codespan_config(), &code.files, &diag).unwrap();

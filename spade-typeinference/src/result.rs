@@ -249,5 +249,8 @@ pub enum Error {
 
     #[error("Argument error")]
     ArgumentError(#[from] ArgumentError),
+
+    #[error("(internal)No entry in generic list")]
+    InternalNoEntryInGenericList(Loc<NameID>),
 }
 pub type Result<T> = std::result::Result<T, Error>;

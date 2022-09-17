@@ -156,7 +156,7 @@ impl TypeState {
 
     /// Converts the specified type to a concrete type, returning None
     /// if it fails
-    #[tracing::instrument(level = "trace", skip(symtab, type_list))]
+    #[tracing::instrument(level = "trace", skip_all, fields(%var))]
     pub fn ungenerify_type(
         var: &TypeVar,
         symtab: &SymbolTable,
