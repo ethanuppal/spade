@@ -100,6 +100,7 @@ where
             operator,
             operands,
             ty,
+            loc: _,
         }) => {
             let name = translate_val_name(name, lhs_trans, rhs_trans);
             let operands = operands
@@ -116,6 +117,7 @@ where
             clock,
             reset,
             value,
+            loc: _,
         }) => {
             let name = translate_val_name(name, lhs_trans, rhs_trans);
             let clock = translate_val_name(clock, lhs_trans, rhs_trans);

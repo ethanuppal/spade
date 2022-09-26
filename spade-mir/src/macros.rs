@@ -32,7 +32,8 @@ macro_rules! statement {
             operands: vec![
                 $(spade_mir::value_name!($arg_kind $arg_name)),*
             ],
-            ty: $type
+            ty: $type,
+            loc: None,
         })
     };
     //register with async reset
@@ -51,7 +52,8 @@ macro_rules! statement {
                 spade_mir::value_name!($rst_trig_kind $rst_trig_name),
                 spade_mir::value_name!($rst_val_kind $rst_val_name)
             )),
-            value: spade_mir::value_name!($val_kind $val_name)
+            value: spade_mir::value_name!($val_kind $val_name),
+            loc: None
         })
     };
     // Register without reset
@@ -66,7 +68,8 @@ macro_rules! statement {
             ty: $type,
             clock: spade_mir::value_name!($clk_name_kind $clk_name),
             reset: None,
-            value: spade_mir::value_name!($val_kind $val_name)
+            value: spade_mir::value_name!($val_kind $val_name),
+            loc: None,
         })
     };
     (
@@ -135,6 +138,7 @@ mod tests {
             operator: Operator::Add,
             operands: vec![ValueName::Expr(1), ValueName::Named(1, "test".to_string())],
             ty: Type::Bool,
+            loc: None,
         });
 
         assert_eq!(
@@ -150,6 +154,7 @@ mod tests {
             operator: Operator::Add,
             operands: vec![ValueName::Expr(1), ValueName::Named(1, "test".to_string())],
             ty: Type::Bool,
+            loc: None,
         });
 
         assert_eq!(
@@ -166,6 +171,7 @@ mod tests {
             clock: ValueName::Named(1, "clk".into()),
             reset: None,
             value: ValueName::Expr(0),
+            loc: None,
         });
 
         assert_eq!(
@@ -182,6 +188,7 @@ mod tests {
             clock: ValueName::Named(1, "clk".into()),
             reset: Some((ValueName::Expr(1), ValueName::Expr(2))),
             value: ValueName::Expr(0),
+            loc: None,
         });
 
         assert_eq!(

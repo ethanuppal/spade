@@ -114,6 +114,7 @@ pub fn eval_statements(statements: &[Statement]) -> Value {
                     operator,
                     operands: ops,
                     ty,
+                    loc: _,
                 } = b;
 
                 name_types.insert(name.clone(), ty.clone());
@@ -195,7 +196,7 @@ pub fn eval_statements(statements: &[Statement]) -> Value {
                     Operator::IsEnumVariant { .. } => todo!(),
                     Operator::EnumMember { .. } => todo!(),
                     Operator::IndexTuple(_, _) => todo!(),
-                    Operator::Instance(_) => todo!(),
+                    Operator::Instance(_, _) => todo!(),
                     Operator::Alias => todo!(),
                 };
 

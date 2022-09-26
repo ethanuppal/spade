@@ -431,7 +431,8 @@ fn codegen(
         {
             bumpy_mir_entities.push(mir.clone());
 
-            let code = spade_mir::codegen::entity_code(&mut mir, &code.read().unwrap());
+            let code =
+                spade_mir::codegen::entity_code(&mut mir, &Some(code.read().unwrap().clone()));
 
             mir_code.push(format!("{}", mir));
 

@@ -10,7 +10,9 @@ mod type_list;
 pub mod types;
 mod verilog;
 
+use derivative::Derivative;
 use itertools::Itertools;
+
 use spade_common::location_info::{Loc, WithLocation};
 use types::Type;
 
@@ -52,7 +54,9 @@ impl std::fmt::Display for ValueName {
     }
 }
 
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Derivative)]
+#[derivative(PartialEq)]
+#[derive(Clone, Debug)]
 pub enum Operator {
     /// Binary arithmetic operators
     Add,
@@ -138,8 +142,10 @@ pub enum Operator {
     IndexTuple(u64, Vec<Type>),
     /// Instantiation of another module with the specified name. The operands are passed
     /// positionally to the entity. The target module can only have a single output which
-    /// must be the last argument
-    Instance(String),
+    /// must be the last argument.
+    /// The location of the instantiation is optional but can be passed to improve
+    /// critical path report readability
+    Instance(String, #[derivative(PartialEq = "ignore")] Option<Loc<()>>),
     /// Alias another named value
     Alias,
 }
@@ -204,7 +210,7 @@ impl std::fmt::Display for Operator {
             Operator::IndexArray => write!(f, "IndexArray"),
             Operator::IndexTuple(idx, _) => write!(f, "IndexTuple({})", idx),
             Operator::IndexMemory => write!(f, "IndexMemory"),
-            Operator::Instance(name) => write!(f, "Instance({})", name),
+            Operator::Instance(name, _) => write!(f, "Instance({})", name),
             Operator::Alias => write!(f, "Alias"),
         }
     }
@@ -216,6 +222,7 @@ pub struct Binding {
     pub operator: Operator,
     pub operands: Vec<ValueName>,
     pub ty: Type,
+    pub loc: Option<Loc<()>>,
 }
 
 impl std::fmt::Display for Binding {
@@ -225,6 +232,7 @@ impl std::fmt::Display for Binding {
             operator,
             operands,
             ty,
+            loc: _,
         } = self;
         write!(
             f,
@@ -241,6 +249,7 @@ pub struct Register {
     pub clock: ValueName,
     pub reset: Option<(ValueName, ValueName)>,
     pub value: ValueName,
+    pub loc: Option<Loc<()>>,
 }
 
 impl std::fmt::Display for Register {
@@ -251,6 +260,7 @@ impl std::fmt::Display for Register {
             clock,
             reset,
             value,
+            loc: _,
         } = self;
 
         let reset = reset

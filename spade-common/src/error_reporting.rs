@@ -1,5 +1,5 @@
 use codespan_reporting::diagnostic::Label;
-use codespan_reporting::files::SimpleFiles;
+use codespan_reporting::files::{Files, SimpleFiles};
 use codespan_reporting::term::termcolor::Buffer;
 use codespan_reporting::term::termcolor::{Color, ColorChoice, ColorSpec};
 use std::io::Write;
@@ -31,6 +31,7 @@ pub fn codespan_config() -> codespan_reporting::term::Config {
 }
 
 /// A bundle of all the source code included in the current compilation
+#[derive(Clone)]
 pub struct CodeBundle {
     pub files: SimpleFiles<String, String>,
 }
@@ -69,6 +70,19 @@ impl CodeBundle {
             };
         }
         all_files
+    }
+
+    pub fn source_loc<T>(&self, loc: &Loc<T>) -> String {
+        let location = self
+            .files
+            .location(loc.file_id(), loc.span.start().to_usize())
+            .expect("Loc was not in code bundle");
+        format!(
+            "{}:{},{}",
+            self.files.get(loc.file_id()).unwrap().name(),
+            location.line_number,
+            location.column_number
+        )
     }
 }
 

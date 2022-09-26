@@ -246,7 +246,7 @@ mod tests {
             ) -> Type::Int(16); {
                 (reg n(10, "x__s1"); Type::Int(16); clock(n(3, "clk")); n(0, "x_"));
                 // Stage 0
-                (e(0); Type::Int(16); Instance(("A".to_string())););
+                (e(0); Type::Int(16); Instance(("A".to_string(), None)););
                 (n(0, "x_"); Type::Int(16); Alias; e(0));
                 // Stage 1
                 (n(1, "x"); Type::Int(16); Alias; n(0, "x_"));
@@ -258,7 +258,7 @@ mod tests {
             ) -> Type::Int(16); {
                 (reg n(10, "x__s1"); Type::Int(16); clock(n(3, "clk")); n(1, "x"));
                 // Stage 0
-                (n(1, "x"); Type::Int(16); Instance(("A".to_string())););
+                (n(1, "x"); Type::Int(16); Instance(("A".to_string(), None)););
                 // Stage 1
             } => n(1, "x")
         );

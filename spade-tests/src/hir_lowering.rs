@@ -638,7 +638,7 @@ mod tests {
             ),
             entity!("top"; () -> Type::Int(16); {
                 (const 1; Type::Int(16); ConstantValue::Int(0));
-                (e(0); Type::Int(16); Instance(("sub".to_string())); e(1))
+                (e(0); Type::Int(16); Instance(("sub".to_string(), None)); e(1))
             } => e(0)),
         ];
 
@@ -677,7 +677,7 @@ mod tests {
             ),
             entity!("top"; ("clk", n(100, "clk"), Type::Bool) -> Type::Int(16); {
                 (const 1; Type::Int(16); ConstantValue::Int(0));
-                (e(0); Type::Int(16); Instance(("sub".to_string())); n(100, "clk"), e(1))
+                (e(0); Type::Int(16); Instance(("sub".to_string(), None)); n(100, "clk"), e(1))
             } => e(0)),
         ];
 
@@ -754,7 +754,7 @@ mod tests {
                 "clk", n(3, "clk"), Type::Bool,
             ) -> Type::Int(18); {
                 // Stage 0
-                (e(0); Type::Int(18); Instance(("sub".to_string())); n(3, "clk"));
+                (e(0); Type::Int(18); Instance(("sub".to_string(), None)); n(3, "clk"));
                 (n(1, "res"); Type::Int(18); Alias; e(0));
             } => n(1, "res")
         );
@@ -911,7 +911,7 @@ mod tests {
             ) -> Type::Int(16); {
                 (reg n(10, "s1_x_"); Type::Int(16); clock(n(3, "clk")); n(0, "x_"));
                 // Stage 0
-                (e(0); Type::Int(16); Instance(("A".to_string())););
+                (e(0); Type::Int(16); Instance(("A".to_string(), None)););
                 (n(0, "x_"); Type::Int(16); Alias; e(0));
                 // Stage 1
                 (n(1, "x"); Type::Int(16); Alias; n(0, "x_"));
@@ -1468,7 +1468,7 @@ mod tests {
             entity! {"x"; (
                 "x", n(0, "x"), Type::Bool,
             ) -> Type::Bool; {
-                (e(0); Type::Bool; Instance(("identity_n6".to_string())); n(0, "x"))
+                (e(0); Type::Bool; Instance(("identity_n6".to_string(), None)); n(0, "x"))
             } => e(0)},
             // Monomorphised identity function
             entity! {"identity_n6"; (
@@ -1626,7 +1626,7 @@ mod tests {
             "a", n(0, "a"), Type::Bool,
             "b", n(1, "b"), Type::Bool,
         ) -> Type::Bool; {
-            (e(0); Type::Bool; Instance(("sub".to_string())); n(1, "b"), n(0, "a"))
+            (e(0); Type::Bool; Instance(("sub".to_string(), None)); n(1, "b"), n(0, "a"))
         } => e(0)}];
 
         build_and_compare_entities!(code, expected);

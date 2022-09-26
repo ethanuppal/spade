@@ -105,6 +105,9 @@ pub fn generate_pipeline<'a>(
                         clock: clock.value_name(),
                         reset: None,
                         value: reg.previous.value_name(),
+                        // NOTE: Do we/can we also want to point to the declaration
+                        // of the variable?
+                        loc: Some(statement.loc()),
                     }));
                 }
             }

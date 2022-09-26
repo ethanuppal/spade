@@ -9,13 +9,24 @@ use crate::{
 use codespan_reporting::term::termcolor;
 use itertools::Itertools;
 use nesty::{code, Code};
-use spade_common::error_reporting::{CodeBundle, CompilationError};
+use spade_common::{
+    error_reporting::{CodeBundle, CompilationError},
+    location_info::Loc,
+};
 
 pub mod util;
 
 pub use util::{escape_path, mangle_entity, mangle_input, mangle_output, TupleIndex};
 
-fn statement_declaration(statement: &Statement) -> Code {
+/// Produces a source location verilog attribute if the loc and code bundle are defined
+fn source_attribute(loc: &Option<Loc<()>>, code: &Option<CodeBundle>) -> Option<String> {
+    match (loc, code) {
+        (Some(l), Some(c)) => Some(format!(r#"(* src = "{}" *)"#, c.source_loc(&l))),
+        _ => None,
+    }
+}
+
+fn statement_declaration(statement: &Statement, code: &Option<CodeBundle>) -> Code {
     match statement {
         Statement::Binding(binding) => {
             let name = binding.name.var_name();
@@ -64,6 +75,7 @@ fn statement_declaration(statement: &Statement) -> Code {
             };
 
             code! {
+                [0] source_attribute(&binding.loc, code);
                 [0] &forward_declaration;
                 [0] &backward_declaration;
                 [0] &assignment;
@@ -76,6 +88,7 @@ fn statement_declaration(statement: &Statement) -> Code {
             let name = reg.name.var_name();
             let declaration = verilog::reg(&name, reg.ty.size());
             code! {
+                [0] source_attribute(&reg.loc, code);
                 [0] &declaration;
             }
         }
@@ -450,7 +463,7 @@ fn forward_expression_code(binding: &Binding, types: &TypeList, ops: &[ValueName
             // i.e. the left-most element is stored to the right in the bit vector.
             format!("{{{}}}", members.join(", "))
         }
-        Operator::Instance(_) => {
+        Operator::Instance(_, _) => {
             // NOTE: dummy. Set in the next match statement
             format!("")
         }
@@ -546,7 +559,7 @@ fn backward_expression_code(binding: &Binding, types: &TypeList, ops: &[ValueNam
             );
             format!("{}{}", op_names[0], index.verilog_code())
         }
-        Operator::Instance(_) => todo!(),
+        Operator::Instance(_, _) => todo!(),
         Operator::Alias => {
             // NOTE: Set in statement_code
             format!("")
@@ -554,7 +567,11 @@ fn backward_expression_code(binding: &Binding, types: &TypeList, ops: &[ValueNam
     }
 }
 
-fn statement_code(statement: &Statement, types: &TypeList, source_code: &CodeBundle) -> Code {
+fn statement_code(
+    statement: &Statement,
+    types: &TypeList,
+    source_code: &Option<CodeBundle>,
+) -> Code {
     match statement {
         Statement::Binding(binding) => {
             let name = binding.name.var_name();
@@ -585,7 +602,7 @@ fn statement_code(statement: &Statement, types: &TypeList, source_code: &CodeBun
 
             // Unless this is a special operator, we just use assign value = expression
             let assignment = match &binding.operator {
-                Operator::Instance(module_name) => {
+                Operator::Instance(module_name, loc) => {
                     // Input args
                     let mut args = ops.join(", ");
 
@@ -599,12 +616,15 @@ fn statement_code(statement: &Statement, types: &TypeList, source_code: &CodeBun
 
                     let instance_name = format!("{}_{}", module_name, name);
 
-                    format!(
-                        "{} {}({});",
-                        mangle_entity(&module_name),
-                        instance_name,
-                        args
-                    )
+                    code!{
+                        [0] source_attribute(loc, source_code);
+                        [0] format!(
+                            "{} {}({});",
+                            mangle_entity(&module_name),
+                            instance_name,
+                            args
+                        )
+                    }.to_string()
                 }
                 Operator::Alias => match binding.ty {
                     crate::types::Type::Memory { .. } => {
@@ -671,7 +691,9 @@ fn statement_code(statement: &Statement, types: &TypeList, source_code: &CodeBun
         Statement::Assert(val) => {
             let mut msg_buf = termcolor::Buffer::ansi();
 
-            AssertedExpression(val.clone()).report(&mut msg_buf, source_code);
+            // NOTE: Unwrap is semi-safe. Non-tests are expected to pass an actual
+            // source code
+            AssertedExpression(val.clone()).report(&mut msg_buf, &source_code.as_ref().unwrap());
 
             let msg = String::from_utf8(msg_buf.as_slice().into())
                 .map_err(|e| {
@@ -715,12 +737,17 @@ fn statement_code_and_declaration(
     source_code: &CodeBundle,
 ) -> Code {
     code! {
-        [0] statement_declaration(statement);
-        [0] statement_code(statement, types, source_code);
+        [0] statement_declaration(statement, &Some(source_code.clone()));
+        [0] statement_code(statement, types, &Some(source_code.clone()));
     }
 }
 
-pub fn entity_code(entity: &mut Entity, source_code: &CodeBundle) -> Code {
+/// Source code is used for two things: mapping expressions back to their original source code
+/// location, and for assertions. If source_code is None, no (* src = *) attributes will be
+/// emitted, however, assertions will cause a panic. This is convenient for tests where specifying
+/// source location is annoying to specify.
+/// In actual compilation this should be Some
+pub fn entity_code(entity: &mut Entity, source_code: &Option<CodeBundle>) -> Code {
     flatten_aliases(entity);
 
     let types = &TypeList::from_entity(&entity);
@@ -808,7 +835,7 @@ pub fn entity_code(entity: &mut Entity, source_code: &CodeBundle) -> Code {
     let mut body = Code::new();
 
     for stmt in &entity.statements {
-        body.join(&statement_declaration(stmt))
+        body.join(&statement_declaration(stmt, source_code))
     }
     for stmt in &entity.statements {
         body.join(&statement_code(stmt, types, source_code))
@@ -995,7 +1022,7 @@ mod tests {
         );
 
         assert_same_code!(
-            &entity_code(&mut input.clone(), &CodeBundle::new("".to_string())).to_string(),
+            &entity_code(&mut input.clone(), &None).to_string(),
             expected
         );
     }
@@ -1032,7 +1059,7 @@ mod tests {
         );
 
         assert_same_code!(
-            &entity_code(&mut input.clone(), &CodeBundle::new("".to_string())).to_string(),
+            &entity_code(&mut input.clone(), &None).to_string(),
             expected
         );
     }
@@ -1071,7 +1098,7 @@ mod tests {
         );
 
         assert_same_code!(
-            &entity_code(&mut input.clone(), &CodeBundle::new("".to_string())).to_string(),
+            &entity_code(&mut input.clone(), &None).to_string(),
             expected
         );
     }
@@ -1104,7 +1131,7 @@ mod tests {
         );
 
         assert_same_code!(
-            &entity_code(&mut input.clone(), &CodeBundle::new("".to_string())).to_string(),
+            &entity_code(&mut input.clone(), &None).to_string(),
             expected
         );
     }
@@ -1137,7 +1164,7 @@ mod tests {
             ) -> Type::Int(16); {
                 (reg n(10, "x__s1"); Type::Int(16); clock(n(3, "clk")); n(0, "x_"));
                 // Stage 0
-                (e(0); Type::Int(16); Instance(("A".to_string())););
+                (e(0); Type::Int(16); Instance(("A".to_string(), None)););
                 (n(0, "x_"); Type::Int(16); Alias; e(0));
                 // Stage 1
                 (n(1, "x"); Type::Int(16); Alias; n(0, "x_"));
@@ -1175,7 +1202,7 @@ mod tests {
         );
 
         assert_same_code!(
-            &entity_code(&mut input.clone(), &CodeBundle::new("".to_string())).to_string(),
+            &entity_code(&mut input.clone(), &None).to_string(),
             expected
         );
     }
@@ -1773,7 +1800,7 @@ mod expression_tests {
 
     #[test]
     fn entity_instantiation_works() {
-        let stmt = statement!(e(0); Type::Bool; Instance(("test".to_string())); e(1), e(2));
+        let stmt = statement!(e(0); Type::Bool; Instance(("test".to_string(), None)); e(1), e(2));
 
         let expected = indoc!(
             r#"

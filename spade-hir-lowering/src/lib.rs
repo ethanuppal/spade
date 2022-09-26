@@ -188,6 +188,7 @@ pub fn all_conditions(ops: Vec<ValueName>, ctx: &mut Context) -> (Vec<mir::State
                 operator: mir::Operator::LogicalAnd,
                 operands: vec![result_name, op.clone()],
                 ty: MirType::Bool,
+                loc: None,
             }));
             result_name = new_name;
         }
@@ -227,6 +228,7 @@ impl PatternLocal for Pattern {
                             .types
                             .type_of_id(p.id, ctx.symtab.symtab(), &ctx.item_list.types)
                             .to_mir_type(),
+                        loc: None,
                     }));
 
                     result.append(&mut p.lower(p.value_name(), ctx)?)
@@ -264,6 +266,7 @@ impl PatternLocal for Pattern {
                                     .types
                                     .type_of_id(value.id, ctx.symtab.symtab(), &ctx.item_list.types)
                                     .to_mir_type(),
+                                loc: None,
                             }));
 
                             result.append(&mut value.lower(value.value_name(), ctx)?)
@@ -293,6 +296,7 @@ impl PatternLocal for Pattern {
                                         &ctx.item_list.types,
                                     )
                                     .to_mir_type(),
+                                loc: None,
                             }));
 
                             result.append(&mut p.value.lower(p.value.value_name(), ctx)?)
@@ -328,6 +332,7 @@ impl PatternLocal for Pattern {
                         ty: MirType::Bool,
                         operator: mir::Operator::Eq,
                         operands: vec![value_name.clone(), ValueName::Expr(const_id)],
+                        loc: None,
                     }),
                 ];
 
@@ -346,6 +351,7 @@ impl PatternLocal for Pattern {
                     ty: MirType::Bool,
                     operator: mir::Operator::LogicalNot,
                     operands: vec![value_name.clone()],
+                    loc: None,
                 })];
 
                 Ok(PatternCondition {
@@ -412,6 +418,7 @@ impl PatternLocal for Pattern {
                             },
                             operands: vec![value_name.clone()],
                             ty: MirType::Bool,
+                            loc: None,
                         })
                     }
                     PatternableKind::Struct => mir::Statement::Constant(
@@ -526,6 +533,7 @@ impl StatementLocal for Statement {
                         .types
                         .type_of_id(pattern.id, ctx.symtab.symtab(), &ctx.item_list.types)
                         .to_mir_type(),
+                    loc: Some(pattern.loc()),
                 }));
                 result.append(&mut pattern.lower(value.variable(ctx.subs)?, ctx)?);
             }
@@ -567,6 +575,7 @@ impl StatementLocal for Statement {
                         })
                         .transpose()?,
                     value: register.value.variable(ctx.subs)?,
+                    loc: Some(register.pattern.loc()),
                 }));
 
                 result.append(&mut register.pattern.lower(register.pattern.value_name(), ctx)?);
@@ -694,6 +703,7 @@ impl ExprLocal for Loc<Expression> {
                         operator: op,
                         operands: vec![lhs.variable(ctx.subs)?, rhs.variable(ctx.subs)?],
                         ty: self_type,
+                        loc: Some(self.loc()),
                     }));
                     Ok(())
                 };
@@ -726,6 +736,7 @@ impl ExprLocal for Loc<Expression> {
                         operator: op,
                         operands: vec![operand.variable(ctx.subs)?],
                         ty: self_type,
+                        loc: Some(self.loc()),
                     }));
                     Ok(())
                 };
@@ -749,6 +760,7 @@ impl ExprLocal for Loc<Expression> {
                         .map(|e| e.variable(ctx.subs))
                         .collect::<Result<_>>()?,
                     ty: self_type,
+                    loc: Some(self.loc()),
                 }))
             }
             ExprKind::TupleIndex(tup, idx) => {
@@ -769,6 +781,7 @@ impl ExprLocal for Loc<Expression> {
                     operator: mir::Operator::IndexTuple(idx.inner as u64, types),
                     operands: vec![tup.variable(ctx.subs)?],
                     ty: self_type,
+                    loc: Some(self.loc()),
                 }))
             }
             ExprKind::FieldAccess(target, field) => {
@@ -816,6 +829,7 @@ impl ExprLocal for Loc<Expression> {
                     operator: mir::Operator::IndexTuple(field_index as u64, member_types),
                     operands: vec![target.variable(ctx.subs)?],
                     ty: self_type,
+                    loc: Some(self.loc()),
                 }))
             }
             ExprKind::ArrayLiteral(values) => {
@@ -830,6 +844,7 @@ impl ExprLocal for Loc<Expression> {
                         .map(|v| v.variable(ctx.subs))
                         .collect::<Result<_>>()?,
                     ty: self_type,
+                    loc: Some(self.loc()),
                 }))
             }
             ExprKind::Index(target, index) => {
@@ -841,6 +856,7 @@ impl ExprLocal for Loc<Expression> {
                     operator: mir::Operator::IndexArray,
                     operands: vec![target.variable(ctx.subs)?, index.variable(ctx.subs)?],
                     ty: self_type,
+                    loc: Some(self.loc()),
                 }))
             }
             ExprKind::Block(block) => {
@@ -868,6 +884,7 @@ impl ExprLocal for Loc<Expression> {
                         .types
                         .expr_type(self, ctx.symtab.symtab(), &ctx.item_list.types)?
                         .to_mir_type(),
+                    loc: Some(self.loc()),
                 }));
             }
             ExprKind::Match(operand, branches) => {
@@ -917,6 +934,7 @@ impl ExprLocal for Loc<Expression> {
                         .types
                         .expr_type(self, ctx.symtab.symtab(), &ctx.item_list.types)?
                         .to_mir_type(),
+                    loc: Some(self.loc()),
                 }))
             }
             ExprKind::FnCall(name, args) => {
@@ -1008,6 +1026,7 @@ impl ExprLocal for Loc<Expression> {
                         .iter()
                         .map(|arg| arg.value.variable(ctx.subs))
                         .collect::<Result<_>>()?,
+                    loc: Some(self.loc()),
                 }))
             }
             Some(hir::ExecutableItem::StructInstance) => {
@@ -1022,6 +1041,7 @@ impl ExprLocal for Loc<Expression> {
                         .iter()
                         .map(|arg| arg.value.variable(ctx.subs))
                         .collect::<Result<Vec<_>>>()?,
+                    loc: Some(self.loc()),
                 }))
             }
             Some(i @ hir::ExecutableItem::Pipeline(_))
@@ -1058,7 +1078,7 @@ impl ExprLocal for Loc<Expression> {
 
                 result.push(mir::Statement::Binding(mir::Binding {
                     name: self.variable(ctx.subs)?,
-                    operator: mir::Operator::Instance(name_string),
+                    operator: mir::Operator::Instance(name_string, Some(self.loc())),
                     operands: args
                         .iter()
                         .map(|arg| arg.value.variable(ctx.subs))
@@ -1067,6 +1087,7 @@ impl ExprLocal for Loc<Expression> {
                         .types
                         .expr_type(self, ctx.symtab.symtab(), &ctx.item_list.types)?
                         .to_mir_type(),
+                    loc: Some(self.loc()),
                 }));
             }
             Some(
@@ -1097,7 +1118,7 @@ impl ExprLocal for Loc<Expression> {
                 // should still emit the code for instantiating them
                 result.push(mir::Statement::Binding(mir::Binding {
                     name: self.variable(ctx.subs)?,
-                    operator: mir::Operator::Instance(unit_name.mangled()),
+                    operator: mir::Operator::Instance(unit_name.mangled(), Some(self.loc())),
                     operands: args
                         .iter()
                         .map(|arg| arg.value.variable(ctx.subs))
@@ -1106,6 +1127,7 @@ impl ExprLocal for Loc<Expression> {
                         .types
                         .expr_type(self, ctx.symtab.symtab(), &ctx.item_list.types)?
                         .to_mir_type(),
+                    loc: Some(self.loc()),
                 }));
             }
             None => {
@@ -1171,6 +1193,7 @@ impl ExprLocal for Loc<Expression> {
                         .types
                         .expr_type(self, ctx.symtab.symtab(), &ctx.item_list.types)?
                         .to_mir_type(),
+                    loc: Some(self.loc()),
                 }))
             } else {
                 panic!("Clocked array write port inner was not tuple")
@@ -1205,6 +1228,7 @@ impl ExprLocal for Loc<Expression> {
             operator: mir::Operator::IndexMemory,
             operands: vec![target.variable(ctx.subs)?, index.variable(ctx.subs)?],
             ty: self_type,
+            loc: Some(self.loc()),
         }));
 
         Ok(result)
@@ -1243,6 +1267,7 @@ impl ExprLocal for Loc<Expression> {
                 .types
                 .expr_type(self, ctx.symtab.symtab(), &ctx.item_list.types)?
                 .to_mir_type(),
+            loc: Some(self.loc()),
         }));
 
         Ok(result)
@@ -1280,6 +1305,7 @@ impl ExprLocal for Loc<Expression> {
             },
             operands: vec![args[0].value.variable(ctx.subs)?],
             ty: self_type,
+            loc: Some(self.loc()),
         }));
 
         Ok(result)
@@ -1314,6 +1340,7 @@ impl ExprLocal for Loc<Expression> {
             operator: mir::Operator::ZeroExtend { extra_bits },
             operands: vec![args[0].value.variable(ctx.subs)?],
             ty: self_type,
+            loc: None,
         }));
 
         Ok(result)
@@ -1357,6 +1384,7 @@ impl ExprLocal for Loc<Expression> {
                     args[1].value.variable(ctx.subs)?,
                 ],
                 ty: self_type,
+                loc: None,
             }));
 
             Ok(result)
@@ -1384,6 +1412,7 @@ impl ExprLocal for Loc<Expression> {
                 args[1].value.variable(ctx.subs)?,
             ],
             ty: self_type,
+            loc: Some(self.loc()),
         }));
 
         Ok(result)
