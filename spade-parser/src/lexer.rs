@@ -75,6 +75,13 @@ pub enum TokenKind {
     #[token("assert")]
     Assert,
 
+    #[token("$config")]
+    ComptimeConfig,
+    #[token("$if")]
+    ComptimeIf,
+    #[token("$else")]
+    ComptimeElse,
+
     // Math operators
     #[token("+")]
     Plus,
@@ -200,6 +207,10 @@ impl TokenKind {
             TokenKind::As => "as",
             TokenKind::Use => "use",
             TokenKind::Assert => "assert",
+
+            TokenKind::ComptimeConfig => "$config",
+            TokenKind::ComptimeIf => "$if",
+            TokenKind::ComptimeElse => "$else",
 
             TokenKind::Assignment => "=",
             TokenKind::Plus => "+",

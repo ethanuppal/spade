@@ -32,6 +32,12 @@ pub fn gather_types(module: &ast::ModuleBody, symtab: &mut SymbolTable) -> Resul
             ast::Item::Entity(_) => {}
             ast::Item::Pipeline(_) => {}
             ast::Item::TraitDef(_) => {}
+            ast::Item::Config(cfg) => {
+                symtab.add_unique_thing(
+                    Path::ident(cfg.name.clone()).at_loc(&cfg.name),
+                    Thing::ComptimeConfig(cfg.val),
+                )?;
+            }
             ast::Item::Use(u) => {
                 let new_name = match &u.alias {
                     Some(name) => name.clone(),
@@ -90,6 +96,7 @@ pub fn visit_item(
             symtab.pop_namespace();
         }
         ast::Item::Use(_) => {}
+        ast::Item::Config(_) => {}
     }
     Ok(())
 }

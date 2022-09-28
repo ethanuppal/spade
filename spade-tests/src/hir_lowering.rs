@@ -1641,6 +1641,31 @@ mod tests {
             }
         "
     }
+
+    #[test]
+    fn comptime_exclusion_works() {
+        let code = r#"
+            $config USE_B = 0
+
+            fn test(a: bool, b: bool, c: bool) -> bool {
+                let a_ = a;
+                $if USE_B == 0 {let b_ = b;}
+                $if USE_B == 1 {let c_ = c;}
+                a_
+            }
+        "#;
+
+        let expected = vec![entity! {"test"; (
+            "a", n(0, "a"), Type::Bool,
+            "b", n(1, "b"), Type::Bool,
+            "c", n(2, "c"), Type::Bool,
+        ) -> Type::Bool; {
+                (n(3, "a_"); Type::Bool; Alias; n(0, "a"));
+                (n(4, "b_"); Type::Bool; Alias; n(1, "b"));
+        } => n(3, "a_")}];
+
+        build_and_compare_entities!(code, expected);
+    }
 }
 
 #[cfg(test)]

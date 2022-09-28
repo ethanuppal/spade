@@ -1,8 +1,10 @@
+use comptime::ComptimeCondition;
 use spade_common::{
     location_info::{Loc, WithLocation},
     name::{Identifier, Path},
 };
 
+pub mod comptime;
 pub mod testutil;
 
 #[derive(PartialEq, Debug, Clone)]
@@ -175,6 +177,7 @@ pub enum Statement {
     PipelineRegMarker(usize),
     Register(Loc<Register>),
     Assert(Loc<Expression>),
+    Comptime(ComptimeCondition<Loc<Statement>>),
 }
 impl WithLocation for Statement {}
 
@@ -301,6 +304,13 @@ pub struct UseStatement {
 }
 impl WithLocation for UseStatement {}
 
+#[derive(PartialEq, Debug, Clone)]
+pub struct ComptimeConfig {
+    pub name: Loc<Identifier>,
+    pub val: Loc<u128>,
+}
+impl WithLocation for ComptimeConfig {}
+
 /// Items are things typically present at the top level of a module such as
 /// entities, pipelines, submodules etc.
 #[derive(PartialEq, Debug, Clone)]
@@ -311,6 +321,7 @@ pub enum Item {
     Type(Loc<TypeDeclaration>),
     Module(Loc<Module>),
     Use(Loc<UseStatement>),
+    Config(Loc<ComptimeConfig>),
 }
 impl WithLocation for Item {}
 
@@ -323,6 +334,7 @@ impl Item {
             Item::Type(t) => Some(&t.name.inner),
             Item::Module(m) => Some(&m.name.inner),
             Item::Use(u) => u.alias.as_ref().map(|name| &name.inner),
+            Item::Config(c) => Some(&c.name.inner),
         }
     }
 
@@ -334,6 +346,7 @@ impl Item {
             Item::Type(_) => "type",
             Item::Module(_) => "module",
             Item::Use(_) => "use",
+            Item::Config(_) => "config",
         }
     }
 }

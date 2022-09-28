@@ -1,5 +1,6 @@
 mod attributes;
 pub mod builtins;
+mod comptime;
 pub mod error;
 pub mod error_reporting;
 pub mod global_symbols;
@@ -7,6 +8,7 @@ pub mod pipelines;
 pub mod types;
 
 use attributes::{report_unused_attributes, unit_name};
+use comptime::ComptimeCondExt;
 use hir::param_util::ArgumentError;
 use pipelines::PipelineContext;
 
@@ -283,6 +285,7 @@ pub fn visit_item(
             result
         }
         ast::Item::Use(_) => Ok((None, None)),
+        ast::Item::Config(_) => Ok((None, None)),
     }
 }
 
@@ -611,6 +614,13 @@ fn visit_statement(s: &Loc<ast::Statement>, ctx: &mut Context) -> Result<Vec<Loc
             let expr = expr.try_visit(visit_expression, ctx)?;
 
             Ok(vec![hir::Statement::Assert(expr).at_loc(s)])
+        }
+        ast::Statement::Comptime(condition) => {
+            if let Some(ast_statement) = condition.maybe_unpack(&ctx.symtab)? {
+                visit_statement(&ast_statement, ctx)
+            } else {
+                Ok(vec![])
+            }
         }
     }
 }

@@ -1,3 +1,4 @@
+mod comptime;
 pub mod error;
 pub mod error_reporting;
 mod expression;
@@ -7,10 +8,11 @@ pub mod lexer;
 use error::{CommaSeparatedResult, Error, Result};
 
 use spade_ast::{
-    ArgumentList, ArgumentPattern, AttributeList, Block, Entity, Enum, Expression, FunctionDecl,
-    Item, Module, ModuleBody, NamedArgument, ParameterList, Pattern, Pipeline, PipelineReference,
-    Register, Statement, Struct, TraitDef, TypeDeclKind, TypeDeclaration, TypeExpression,
-    TypeParam, TypeSpec, UseStatement,
+    comptime::ComptimeCondition, ArgumentList, ArgumentPattern, AttributeList, Block,
+    ComptimeConfig, Entity, Enum, Expression, FunctionDecl, Item, Module, ModuleBody,
+    NamedArgument, ParameterList, Pattern, Pipeline, PipelineReference, Register, Statement,
+    Struct, TraitDef, TypeDeclKind, TypeDeclaration, TypeExpression, TypeParam, TypeSpec,
+    UseStatement,
 };
 use spade_common::{
     error_reporting::AsLabel,
@@ -777,7 +779,7 @@ impl<'a> Parser<'a> {
     /// otherwise None
     #[trace_parser]
     #[tracing::instrument(skip(self))]
-    pub fn statement(&mut self, allow_stages: bool) -> Result<Option<Loc<Statement>>> {
+    pub fn statement_inner(&mut self, allow_stages: bool) -> Result<Option<Loc<Statement>>> {
         let result = self.first_successful(vec![
             &Self::binding,
             &Self::register,
@@ -799,6 +801,14 @@ impl<'a> Parser<'a> {
             }
         }
         Ok(result)
+    }
+
+    #[trace_parser]
+    #[tracing::instrument(skip(self))]
+    pub fn statement(&mut self, allow_stages: bool) -> Result<Option<Loc<Statement>>> {
+        self.maybe_comptime_condition(&|s| s.statement_inner(allow_stages), &|i| {
+            Statement::Comptime(i)
+        })
     }
 
     #[trace_parser]
@@ -1301,6 +1311,35 @@ impl<'a> Parser<'a> {
     }
 
     #[trace_parser]
+    #[tracing::instrument(skip(self))]
+    pub fn comptime_item(
+        &mut self,
+        attributes: &AttributeList,
+    ) -> Result<Option<Loc<ComptimeConfig>>> {
+        let start = peek_for!(self, &TokenKind::ComptimeConfig);
+        self.disallow_attributes(attributes, &start)?;
+
+        let name = self.identifier()?;
+        self.eat(&TokenKind::Assignment)?;
+
+        let val = if let Some(v) = self.int_literal()? {
+            v
+        } else {
+            return Err(Error::UnexpectedToken {
+                got: self.eat_unconditional()?,
+                expected: vec!["integer"],
+                context: None,
+            });
+        };
+
+        Ok(Some(ComptimeConfig { name, val }.between(
+            self.file_id,
+            &start.span(),
+            &val.span(),
+        )))
+    }
+
+    #[trace_parser]
     pub fn attributes(&mut self) -> Result<AttributeList> {
         // peek_for!(self, &TokenKind::Hash)
         let mut result = AttributeList(vec![]);
@@ -1329,6 +1368,7 @@ impl<'a> Parser<'a> {
             &|s: &mut Self| s.type_declaration(&attrs).map(|e| e.map(Item::Type)),
             &|s: &mut Self| s.module(&attrs).map(|e| e.map(Item::Module)),
             &|s: &mut Self| s.r#use(&attrs).map(|e| e.map(Item::Use)),
+            &|s: &mut Self| s.comptime_item(&attrs).map(|e| e.map(Item::Config)),
         ])
     }
 
@@ -1692,6 +1732,7 @@ pub fn format_parse_stack(stack: &[ParseStackEntry]) -> String {
 
 #[cfg(test)]
 mod tests {
+    use ast::comptime::ComptimeCondOp;
     use spade_ast as ast;
     use spade_ast::testutil::{ast_ident, ast_path};
     use spade_ast::*;
@@ -2864,5 +2905,41 @@ mod tests {
         let expected = Statement::Assert(Expression::Identifier(ast_path("x")).nowhere()).nowhere();
 
         check_parse!(code, statement(false), Ok(Some(expected)));
+    }
+
+    #[test]
+    fn config_define_works() {
+        let code = r#"$config A = 5"#;
+
+        let expected = Item::Config(
+            ComptimeConfig {
+                name: ast_ident("A"),
+                val: 5u128.nowhere(),
+            }
+            .nowhere(),
+        );
+        check_parse!(code, item, Ok(Some(expected)));
+    }
+
+    #[test]
+    fn comptime_if_can_conditionally_bind_statement() {
+        let code = r#"$if A == 1 {
+            let a = 0;
+        }"#;
+
+        let expected = Statement::Comptime(ComptimeCondition {
+            condition: (ast_path("A"), ComptimeCondOp::Eq, 1u128.nowhere()),
+            on_true: Box::new(
+                Statement::Binding(
+                    Pattern::name("a"),
+                    None,
+                    Expression::IntLiteral(0).nowhere(),
+                )
+                .nowhere(),
+            ),
+            on_false: None,
+        })
+        .nowhere();
+        check_parse!(code, statement(true), Ok(Some(expected)));
     }
 }

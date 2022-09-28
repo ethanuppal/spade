@@ -7,6 +7,7 @@ use spade_hir as hir;
 
 use crate::{
     attributes::report_unused_attributes,
+    comptime::ComptimeCondExt,
     error::{Error, Result},
     unit_name, visit_expression, Context, LocExt,
 };
@@ -67,6 +68,51 @@ pub fn pipeline_head(input: &ast::Pipeline, symtab: &mut SymbolTable) -> Result<
     })
 }
 
+fn visit_pipeline_statement(
+    statement: &ast::Statement,
+    current_stage: &mut usize,
+    ctx: &mut Context,
+    pipeline_ctx: &mut PipelineContext,
+) -> Result<()> {
+    match &statement {
+        ast::Statement::Label(name) => {
+            if let Some(previous) = &pipeline_ctx.stages[*current_stage] {
+                // FIXME: We might actually want to support multiple labels
+                // for the same stage... If so we need to rewrite
+                // some other parts
+                return Err(Error::MultipleStageLabels {
+                    new: name.clone(),
+                    previous: previous.clone(),
+                });
+            }
+
+            if let Some(prev) = pipeline_ctx.previous_def(name) {
+                return Err(Error::DuplicatePipelineStage {
+                    stage: name.clone(),
+                    previous: prev,
+                });
+            }
+            pipeline_ctx.stages[*current_stage] = Some(name.clone());
+        }
+        ast::Statement::Declaration(_) => {}
+        ast::Statement::Binding(_, _, _) => {}
+        ast::Statement::PipelineRegMarker(count) => {
+            for _ in 0..*count {
+                *current_stage += 1;
+                pipeline_ctx.stages.push(None)
+            }
+        }
+        ast::Statement::Register(_) => {}
+        ast::Statement::Assert(_) => {}
+        ast::Statement::Comptime(inner) => {
+            if let Some(inner_stmt) = inner.maybe_unpack(&ctx.symtab)? {
+                visit_pipeline_statement(&inner_stmt, current_stage, ctx, pipeline_ctx)?;
+            }
+        }
+    };
+    Ok(())
+}
+
 #[tracing::instrument(skip(pipeline, ctx))]
 pub fn visit_pipeline(pipeline: &Loc<ast::Pipeline>, ctx: &mut Context) -> Result<hir::Item> {
     let ast::Pipeline {
@@ -115,37 +161,7 @@ pub fn visit_pipeline(pipeline: &Loc<ast::Pipeline>, ctx: &mut Context) -> Resul
 
     let mut current_stage = 0;
     for statement in &body.as_ref().unwrap().assume_block().statements {
-        match &statement.inner {
-            ast::Statement::Label(name) => {
-                if let Some(previous) = &context.stages[current_stage] {
-                    // FIXME: We might actually want to support multiple labels
-                    // for the same stage... If so we need to rewrite
-                    // some other parts
-                    return Err(Error::MultipleStageLabels {
-                        new: name.clone(),
-                        previous: previous.clone(),
-                    });
-                }
-
-                if let Some(prev) = context.previous_def(name) {
-                    return Err(Error::DuplicatePipelineStage {
-                        stage: name.clone(),
-                        previous: prev,
-                    });
-                }
-                context.stages[current_stage] = Some(name.clone());
-            }
-            ast::Statement::Declaration(_) => {}
-            ast::Statement::Binding(_, _, _) => {}
-            ast::Statement::PipelineRegMarker(count) => {
-                for _ in 0..*count {
-                    current_stage += 1;
-                    context.stages.push(None)
-                }
-            }
-            ast::Statement::Register(_) => {}
-            ast::Statement::Assert(_) => {}
-        }
+        visit_pipeline_statement(statement, &mut current_stage, ctx, &mut context)?;
     }
 
     if current_stage as u128 != depth.inner {

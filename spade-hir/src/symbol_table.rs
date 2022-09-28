@@ -39,6 +39,8 @@ pub enum LookupError {
     NotAStruct(Loc<Path>, Thing),
     #[error("Not a value")]
     NotAValue(Loc<Path>, Thing),
+    #[error("Not a comptime value")]
+    NotAComptimeValue(Loc<Path>, Thing),
     #[error("Looked up target which is a type")]
     IsAType(Loc<Path>),
 }
@@ -66,6 +68,7 @@ impl LookupError {
             NotAPatternableType(_, thing) => (path, thing),
             NotAStruct(_, thing) => (path, thing),
             NotAValue(_, thing) => (path, thing),
+            NotAComptimeValue(_, thing) => (path, thing),
             IsAType(_) => (path),
         }
     }
@@ -181,6 +184,23 @@ impl CompilationError for LookupError {
                     "Expected value".to_string(),
                     format!("Found {}", was.kind_string().to_string()),
                 ]),
+            LookupError::NotAComptimeValue(path, was) => Diagnostic::error()
+                .with_message(format!("Expected {} to be a compile time value", path))
+                .with_labels(vec![
+                    path.primary_label()
+                        .with_message(format!("Expected compile time value")),
+                    was.loc().secondary_label().with_message(format!(
+                        "{} is a {}",
+                        path,
+                        was.kind_string()
+                    )),
+                ])
+                .with_notes(vec![
+                    "Expected value".to_string(),
+                    format!("Found {}", was.kind_string().to_string()),
+                    "Hint: compile time values can be defined with $config <name> = value"
+                        .to_string(),
+                ]),
             LookupError::IsAType(path) => Diagnostic::error()
                 .with_message(format!("Unexpected type {}", path))
                 .with_labels(vec![path
@@ -289,6 +309,7 @@ pub enum Thing {
         in_namespace: Path,
     },
     PipelineStage(Loc<Identifier>),
+    ComptimeConfig(Loc<u128>),
 }
 
 impl Thing {
@@ -302,6 +323,7 @@ impl Thing {
             Thing::EnumVariant(_) => "enum variant",
             Thing::Alias { .. } => "alias",
             Thing::PipelineStage(_) => "pipeline stage",
+            Thing::ComptimeConfig(_) => "$config",
         }
     }
 
@@ -318,6 +340,7 @@ impl Thing {
                 in_namespace: _,
             } => path.loc(),
             Thing::PipelineStage(i) => i.loc(),
+            Thing::ComptimeConfig(val) => val.loc(),
         }
     }
 }
@@ -702,6 +725,9 @@ impl SymbolTable {
         },
         struct_by_id, lookup_struct, StructCallable, NotAStruct {
             Thing::Struct(s) => s.clone()
+        },
+        comptime_config_by_id, lookup_comptime_config, u128, NotAComptimeValue {
+            Thing::ComptimeConfig(val) => val.clone()
         }
     }
 
@@ -746,6 +772,7 @@ impl SymbolTable {
             Err(LookupError::NotAnEnumVariant(_, _)) => unreachable!(),
             Err(LookupError::NotAStruct(_, _)) => unreachable!(),
             Err(LookupError::NotAValue(_, _)) => unreachable!(),
+            Err(LookupError::NotAComptimeValue(_, _)) => unreachable!(),
             Err(LookupError::IsAType(_)) => unreachable!(),
         }
     }
@@ -935,6 +962,7 @@ impl SymbolTable {
                     println!("{}", format!("alias => {path} in {in_namespace}").green())
                 }
                 Thing::PipelineStage(stage) => println!("'{stage}"),
+                Thing::ComptimeConfig(val) => println!("$config {}", val),
             }
         }
 

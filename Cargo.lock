@@ -893,6 +893,7 @@ version = "0.1.0"
 dependencies = [
  "codespan",
  "codespan-reporting",
+ "local-impl",
  "matches",
  "pretty_assertions",
  "spade-ast",

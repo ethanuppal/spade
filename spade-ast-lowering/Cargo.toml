@@ -16,6 +16,7 @@ thiserror.workspace = true
 codespan.workspace = true
 codespan-reporting.workspace = true
 tracing.workspace = true
+local-impl.workspace = true
 
 spade-common = {path = "../spade-common"}
 spade-ast = {path = "../spade-ast"}
