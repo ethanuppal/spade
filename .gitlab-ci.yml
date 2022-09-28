@@ -22,7 +22,7 @@ before_script:
   - command -v /usr/bin/python3 || ln -s /usr/bin/python$APT_PYTHON_VERSION /usr/bin/python3
   - curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain none
   - source ./cargo/env
-  - rustup install 1.58
+  - rustup install 1.64
 
 stages:
     - test

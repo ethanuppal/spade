@@ -2,9 +2,9 @@ use std::fs::File;
 use std::io::prelude::*;
 use std::path::PathBuf;
 
-use anyhow::{anyhow, Context, Result};
 use clap::Parser;
 use codespan_reporting::term::termcolor::Buffer;
+use color_eyre::eyre::{anyhow, Context, Result};
 use tracing_subscriber::filter::{EnvFilter, LevelFilter};
 use tracing_subscriber::prelude::*;
 use tracing_tree::HierarchicalLayer;

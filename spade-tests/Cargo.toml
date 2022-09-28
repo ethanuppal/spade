@@ -1,8 +1,10 @@
 [package]
 name = "spade-tests"
-version = "0.1.0"
+version.workspace = true
 authors = ["TheZoq2 <frans.skarman@protonmail.com>"]
-edition = "2021"
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -10,9 +12,9 @@ edition = "2021"
 doctest = false
 
 [dependencies]
-codespan-reporting = "0.12.0"
-logos = "0.11"
-indoc = "1.0"
+codespan-reporting.workspace = true
+logos.workspace = true
+indoc.workspace = true
 
 spade-ast-lowering = {path = "../spade-ast-lowering"}
 spade-parser = {path = "../spade-parser"}
@@ -26,6 +28,6 @@ spade = {path = "../spade-compiler"}
 [dev-dependencies]
 insta = "1.14.0"
 unindent = "0.1.8"
-colored = "2.0"
-prettydiff = { version = "0.6.1", default-features = false }
+colored.workspace = true
+prettydiff.workspace = true
 

@@ -1,8 +1,10 @@
 [package]
 name = "spade-hir"
-version = "0.1.0"
+version.workspace = true
 authors = ["TheZoq2 <frans.skarman@protonmail.com>"]
-edition = "2021"
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -10,12 +12,12 @@ edition = "2021"
 doctest = false
 
 [dependencies]
-colored = "2.0"
-thiserror = "1.0"
-tracing = "0.1.35"
-codespan-reporting = "0.12.0"
-serde = {version = "1.0.136", features = ["derive"]}
-itertools = "0.10.3"
+colored.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+codespan-reporting.workspace = true
+serde.workspace = true
+itertools.workspace = true
 
 spade-common = {path = "../spade-common"}
 spade-types = {path = "../spade-types"}

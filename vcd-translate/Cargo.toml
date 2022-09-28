@@ -2,13 +2,15 @@
 name = "vcd-translate"
 version = "0.1.0"
 edition = "2021"
+license.workspace = true
+rust-version.workspace = true
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
 vcd = "0.6.1"
-color-eyre = "0.6.1"
-clap = {version = "3.1.8", features = ["derive"]}
+color-eyre.workspace = true
+clap.workspace = true
 ron = "0.7.0"
 num = "0.4.0"
 itertools = "0.10.3"
