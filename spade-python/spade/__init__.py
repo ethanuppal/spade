@@ -56,6 +56,8 @@ class OutputField(object):
         self.dut__ = dut
 
     def assert_eq(self, expected: str):
+        # This shares a bit of code with is_eq, but since we need access to intermediate
+        # values, we'll duplicate things for now
         r = self.spade__.compare_field(
             self.field_ref__,
             expected,
@@ -74,8 +76,30 @@ class OutputField(object):
             message += f"\tverilog ('{colors.green(expected_bits)}' != '{colors.red(got_bits)}')"
             assert False, message
 
+    def value(self):
+        """
+            Returns the value of the field as a string representation of the spade value.
+        """
+        # This shares a bit of code with is_eq, but since we need access to intermediate
+        # values, we'll duplicate things for now
+        return self.spade__.field_value(
+            self.field_ref__,
+            BitString(self.dut__.output__.value.binstr)
+        )
+
+    def is_eq(self, other: str) -> bool:
+        r = self.spade__.compare_field(
+            self.field_ref__,
+            other,
+            BitString(self.dut__.output__.value.binstr)
+        )
+        expected_bits = r.expected_bits.inner();
+        got_bits = r.got_bits.inner();
+        return expected_bits.lower() == got_bits.lower()
+
+
     def __getattribute__(self, __name: str):
-        if __name.endswith("__") or __name == "assert_eq":
+        if __name.endswith("__") or __name == "assert_eq" or __name == "is_eq" or __name == "value":
             return super(OutputField, self).__getattribute__(__name)
         else:
             new_path = self.path__ + [__name]

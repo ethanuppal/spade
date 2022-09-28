@@ -209,6 +209,27 @@ impl Spade {
         })
     }
 
+    fn field_value(
+        &mut self,
+        // The field to get the value of
+        field: FieldRef,
+        // The bits of the whole output struct
+        output_bits: &BitString,
+    ) -> PyResult<String> {
+        let concrete = TypeState::ungenerify_type(
+            &field.ty,
+            self.owned.as_ref().unwrap().symtab.symtab(),
+            &self.item_list.types,
+        )
+        .unwrap();
+
+        let relevant_bits = &BitString(
+            output_bits.inner()[field.range.0 as usize..field.range.1 as usize].to_owned(),
+        );
+
+        Ok(val_to_spade(&relevant_bits.inner(), concrete))
+    }
+
     #[tracing::instrument(level = "trace", skip(self))]
     fn output_as_field_ref(&mut self) -> PyResult<FieldRef> {
         let output_type = self.output_type()?;
