@@ -349,6 +349,7 @@ mod pipeline_visiting {
                 hir::ExprKind::PipelineRef {
                     stage: 1usize.nowhere(),
                     name: name_id(2, "a"),
+                    declares_name: false,
                 }
                 .idless(),
             )
@@ -435,6 +436,7 @@ mod pipeline_visiting {
                 hir::ExprKind::PipelineRef {
                     stage: 1usize.nowhere(),
                     name: name_id(2, "a"),
+                    declares_name: false,
                 }
                 .idless(),
             )

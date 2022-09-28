@@ -166,7 +166,6 @@ impl TypeState {
 
     /// Converts the specified type to a concrete type, returning None
     /// if it fails
-    #[tracing::instrument(level = "trace", skip_all, fields(%var))]
     pub fn ungenerify_type(
         var: &TypeVar,
         symtab: &SymbolTable,
@@ -225,7 +224,35 @@ impl TypeState {
     /// Returns the type of the specified name as a concrete type. If the type is not known,
     /// or the type is Generic, panics
     #[tracing::instrument(level = "trace", skip(self, symtab, type_list))]
+    /// returns None
+    pub fn try_get_type_of_name(
+        &self,
+        name: &NameID,
+        symtab: &SymbolTable,
+        type_list: &TypeList,
+    ) -> Option<ConcreteType> {
+        Self::ungenerify_type(
+            &self
+                .type_of(&TypedExpression::Name(name.clone()))
+                .expect("Expression had no specified type"),
+            symtab,
+            type_list,
+        )
+    }
+
+    /// Returns the type of the specified expression ID as a concrete type. If the type is not
+    /// known, or the type is Generic, panics
     pub fn type_of_id(&self, id: u64, symtab: &SymbolTable, type_list: &TypeList) -> ConcreteType {
+        self.try_get_type_of_id(id, symtab, type_list)
+            .expect("Expr had generic type")
+    }
+
+    pub fn try_get_type_of_id(
+        &self,
+        id: u64,
+        symtab: &SymbolTable,
+        type_list: &TypeList,
+    ) -> Option<ConcreteType> {
         Self::ungenerify_type(
             &self
                 .type_of(&TypedExpression::Id(id))
@@ -233,7 +260,6 @@ impl TypeState {
             symtab,
             type_list,
         )
-        .expect("Expr had generic type")
     }
 
     /// Returns the type of the expression as a concrete type. If the type is not

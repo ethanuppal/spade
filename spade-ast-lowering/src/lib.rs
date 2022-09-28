@@ -964,15 +964,15 @@ pub fn visit_expression(e: &ast::Expression, ctx: &mut Context) -> Result<hir::E
             };
 
             let path = Path(vec![name.clone()]).at_loc(name);
-            let name_id = match ctx.symtab.try_lookup_variable(&path)? {
-                Some(id) => id,
-                None => ctx.symtab.add_declaration(name.clone())?,
-            }
-            .at_loc(name);
+            let (name_id, declares_name) = match ctx.symtab.try_lookup_variable(&path)? {
+                Some(id) => (id.at_loc(name), false),
+                None => (ctx.symtab.add_declaration(name.clone())?.at_loc(name), true),
+            };
 
             Ok(hir::ExprKind::PipelineRef {
                 stage: stage_index.at_loc(&loc),
                 name: name_id,
+                declares_name,
             })
         }
     }

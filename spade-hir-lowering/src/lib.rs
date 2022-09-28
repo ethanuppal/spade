@@ -1,3 +1,4 @@
+mod affine_check;
 pub mod error;
 pub mod error_reporting;
 pub mod monomorphisation;
@@ -661,7 +662,11 @@ impl ExprLocal for Loc<Expression> {
             ExprKind::UnaryOperator(_, _) => Ok(None),
             ExprKind::EntityInstance(_, _) => Ok(None),
             ExprKind::PipelineInstance { .. } => Ok(None),
-            ExprKind::PipelineRef { stage, name } => {
+            ExprKind::PipelineRef {
+                stage,
+                name,
+                declares_name: _,
+            } => {
                 match subs.lookup_referenced(stage.inner, name) {
                     substitution::Substitution::Undefined => {
                         Err(Error::UndefinedVariable { name: name.clone() })
@@ -1637,6 +1642,14 @@ pub fn generate_entity<'a>(
         .to_mir_type();
 
     let subs = Substitutions::new();
+
+    affine_check::check_affine_types(
+        &entity.inputs,
+        &entity.body,
+        types,
+        symtab.symtab(),
+        &item_list.types,
+    )?;
 
     Ok(mir::Entity {
         name: name.mangled(),

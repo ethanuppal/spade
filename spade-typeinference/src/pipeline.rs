@@ -23,8 +23,8 @@ impl TypeState {
         );
 
         // Add an equation for the clock
-        let input_tvar = self.type_var_from_hir(&inputs[0].1, &generic_list);
-        self.add_equation(TypedExpression::Name(inputs[0].0.inner.clone()), input_tvar);
+        let input_tvar = self.type_var_from_hir(&inputs[0].1.inner, &generic_list);
+        self.add_equation(TypedExpression::Name(inputs[0].0.clone().inner), input_tvar);
         self.unify(
             &TypedExpression::Name(inputs[0].0.clone().inner),
             &t_clock(symtab),

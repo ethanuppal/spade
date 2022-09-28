@@ -10,7 +10,7 @@ use spade_mir as mir;
 use spade_typeinference::TypeState;
 
 use crate::{
-    error::Error, monomorphisation::MonoState, name_map::NameSourceMap,
+    affine_check, error::Error, monomorphisation::MonoState, name_map::NameSourceMap,
     statement_list::StatementList, substitution::Substitutions, Context, ExprLocal, Manglable,
     MirLowerable, NameIDExt, Result, StatementLocal,
 };
@@ -161,6 +161,14 @@ pub fn generate_pipeline<'a>(
     let output_type = types
         .expr_type(result, symtab.symtab(), &item_list.types)?
         .to_mir_type();
+
+    affine_check::check_affine_types(
+        &pipeline.inputs,
+        &pipeline.body,
+        types,
+        symtab.symtab(),
+        &item_list.types,
+    )?;
 
     Ok(mir::Entity {
         name: name.mangled(),
