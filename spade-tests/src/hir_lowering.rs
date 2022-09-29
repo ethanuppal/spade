@@ -1692,6 +1692,82 @@ mod tests {
 
         build_and_compare_entities!(code, expected);
     }
+
+    #[test]
+    fn comptime_exclusion_works_with_else_statements() {
+        let code = r#"
+            $config X = 1
+
+            fn test(a: bool, b: bool, c: bool) -> bool {
+                let a_ = a;
+                $if X == 0 {
+                    let b_ = b;
+                } $else {
+                    let c_ = c;
+                }
+                a_
+            }
+        "#;
+
+        let expected = vec![entity! {"test"; (
+            "a", n(0, "a"), Type::Bool,
+            "b", n(1, "b"), Type::Bool,
+            "c", n(2, "c"), Type::Bool,
+        ) -> Type::Bool; {
+                (n(3, "a_"); Type::Bool; Alias; n(0, "a"));
+                (n(4, "c_"); Type::Bool; Alias; n(2, "c"))
+        } => n(3, "a_")}];
+
+        build_and_compare_entities!(code, expected);
+    }
+
+    #[test]
+    fn comptime_exclusion_works_for_all_operators() {
+        let code = r#"
+            $config X = 1
+
+            fn test(a: bool, b: bool, c: bool) -> bool {
+                $if X < 1 {
+                    let a_ = a;
+                }
+                $if X < 2 {
+                    let b_ = a;
+                }
+                $if X <= 1 {
+                    let c_ = a;
+                }
+                $if X <= 0 {
+                    let d_ = a;
+                }
+                $if X > 0 {
+                    let e_ = a;
+                }
+                $if X > 1 {
+                    let f_ = a;
+                }
+                $if X >= 1 {
+                    let g_ = a;
+                }
+                $if X >= 2 {
+                    let h_ = a;
+                }
+                a
+            }
+        "#;
+
+        let expected = vec![entity! {"test"; (
+            "a", n(0, "a"), Type::Bool,
+            "b", n(1, "b"), Type::Bool,
+            "c", n(2, "c"), Type::Bool,
+        ) -> Type::Bool; {
+                (n(3, "b_"); Type::Bool; Alias; n(0, "a"));
+                (n(4, "c_"); Type::Bool; Alias; n(0, "a"));
+                (n(5, "e_"); Type::Bool; Alias; n(0, "a"));
+                (n(6, "g_"); Type::Bool; Alias; n(0, "a"));
+        } => n(0, "a")}];
+
+        build_and_compare_entities!(code, expected);
+    }
 }
 
 #[cfg(test)]

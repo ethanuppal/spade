@@ -2940,4 +2940,33 @@ mod tests {
         .nowhere();
         check_parse!(code, statement(true), Ok(Some(expected)));
     }
+
+    #[test]
+    fn comptime_if_else_works() {
+        let code = r#"$if A == 1 {
+            let a = 0;
+        }
+        $else
+        {
+            let b = 0;
+        }"#;
+
+        let expected = Statement::Comptime(ComptimeCondition {
+            condition: (ast_path("A"), ComptimeCondOp::Eq, 1u128.nowhere()),
+            on_true: Box::new(vec![Statement::Binding(
+                Pattern::name("a"),
+                None,
+                Expression::IntLiteral(0).nowhere(),
+            )
+            .nowhere()]),
+            on_false: Some(Box::new(vec![Statement::Binding(
+                Pattern::name("b"),
+                None,
+                Expression::IntLiteral(0).nowhere(),
+            )
+            .nowhere()])),
+        })
+        .nowhere();
+        check_parse!(code, statement(true), Ok(Some(expected)));
+    }
 }

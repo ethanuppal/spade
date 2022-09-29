@@ -43,17 +43,26 @@ impl<'a> Parser<'a> {
                 });
             };
 
-            let (inner, inner_loc) =
+            let (on_true, on_true_loc) =
                 self.surrounded(&TokenKind::OpenBrace, inner_parser, &TokenKind::CloseBrace)?;
 
-            // TODO: Do we want to return None here, or should we throw an error
+            let (on_false, on_false_loc) = if self.peek_and_eat(&TokenKind::ComptimeElse)?.is_some()
+            {
+                let (inner, on_false_loc) =
+                    self.surrounded(&TokenKind::OpenBrace, inner_parser, &TokenKind::CloseBrace)?;
+
+                (Some(Box::new(inner)), Some(on_false_loc))
+            } else {
+                (None, None)
+            };
+
             Ok(Some(wrapper(
                 ComptimeCondition {
                     condition: (name, op, val),
-                    on_true: Box::new(inner),
-                    on_false: None,
+                    on_true: Box::new(on_true),
+                    on_false: on_false,
                 },
-                ().between(self.file_id, &start, &inner_loc),
+                ().between(self.file_id, &start, &on_false_loc.unwrap_or(on_true_loc)),
             )))
         } else {
             Ok(None)
