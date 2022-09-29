@@ -616,8 +616,14 @@ fn visit_statement(s: &Loc<ast::Statement>, ctx: &mut Context) -> Result<Vec<Loc
             Ok(vec![hir::Statement::Assert(expr).at_loc(s)])
         }
         ast::Statement::Comptime(condition) => {
-            if let Some(ast_statement) = condition.maybe_unpack(&ctx.symtab)? {
-                visit_statement(&ast_statement, ctx)
+            if let Some(ast_statements) = condition.maybe_unpack(&ctx.symtab)? {
+                Ok(ast_statements
+                    .iter()
+                    .map(|s| visit_statement(&s, ctx))
+                    .collect::<Result<Vec<_>>>()?
+                    .into_iter()
+                    .flatten()
+                    .collect())
             } else {
                 Ok(vec![])
             }

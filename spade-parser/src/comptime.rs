@@ -1,5 +1,5 @@
 use spade_ast::comptime::ComptimeCondOp;
-use spade_ast::{comptime::ComptimeCondition, ComptimeConfig};
+use spade_ast::comptime::ComptimeCondition;
 use spade_common::location_info::{Loc, WithLocation};
 
 use crate::error::{Error, Result};
@@ -7,14 +7,13 @@ use crate::lexer::TokenKind;
 use crate::Parser;
 
 impl<'a> Parser<'a> {
-    pub fn maybe_comptime_condition<T>(
+    /// Tries to parse a comptime condition containing an ast node T. If there
+    /// is no comptime condition present, Ok(None) is returned
+    pub fn comptime_condition<I, T>(
         &mut self,
-        inner_parser: &impl Fn(&mut Self) -> Result<Option<Loc<T>>>,
-        wrapper: &impl Fn(ComptimeCondition<Loc<T>>) -> T,
-    ) -> Result<Option<Loc<T>>>
-    where
-        T: WithLocation,
-    {
+        inner_parser: &impl Fn(&mut Self) -> Result<I>,
+        wrapper: &impl Fn(ComptimeCondition<I>, Loc<()>) -> Loc<T>,
+    ) -> Result<Option<Loc<T>>> {
         if let Some(start) = self.peek_and_eat(&TokenKind::ComptimeIf)? {
             let name = self.path()?;
 
@@ -44,28 +43,20 @@ impl<'a> Parser<'a> {
                 });
             };
 
-            let (inner, inner_loc) = self.surrounded(
-                &TokenKind::OpenBrace,
-                |s| s.maybe_comptime_condition(inner_parser, wrapper),
-                &TokenKind::CloseBrace,
-            )?;
+            let (inner, inner_loc) =
+                self.surrounded(&TokenKind::OpenBrace, inner_parser, &TokenKind::CloseBrace)?;
 
             // TODO: Do we want to return None here, or should we throw an error
-            if let Some(inner) = inner {
-                // TODO: Handle else
-                Ok(Some(
-                    wrapper(ComptimeCondition {
-                        condition: (name, op, val),
-                        on_true: Box::new(inner),
-                        on_false: None,
-                    })
-                    .between(self.file_id, &start, &inner_loc),
-                ))
-            } else {
-                Ok(None)
-            }
+            Ok(Some(wrapper(
+                ComptimeCondition {
+                    condition: (name, op, val),
+                    on_true: Box::new(inner),
+                    on_false: None,
+                },
+                ().between(self.file_id, &start, &inner_loc),
+            )))
         } else {
-            inner_parser(self)
+            Ok(None)
         }
     }
 }

@@ -8,11 +8,10 @@ pub mod lexer;
 use error::{CommaSeparatedResult, Error, Result};
 
 use spade_ast::{
-    comptime::ComptimeCondition, ArgumentList, ArgumentPattern, AttributeList, Block,
-    ComptimeConfig, Entity, Enum, Expression, FunctionDecl, Item, Module, ModuleBody,
-    NamedArgument, ParameterList, Pattern, Pipeline, PipelineReference, Register, Statement,
-    Struct, TraitDef, TypeDeclKind, TypeDeclaration, TypeExpression, TypeParam, TypeSpec,
-    UseStatement,
+    ArgumentList, ArgumentPattern, AttributeList, Block, ComptimeConfig, Entity, Enum, Expression,
+    FunctionDecl, Item, Module, ModuleBody, NamedArgument, ParameterList, Pattern, Pipeline,
+    PipelineReference, Register, Statement, Struct, TraitDef, TypeDeclKind, TypeDeclaration,
+    TypeExpression, TypeParam, TypeSpec, UseStatement,
 };
 use spade_common::{
     error_reporting::AsLabel,
@@ -775,21 +774,30 @@ impl<'a> Parser<'a> {
         )))
     }
 
+    #[trace_parser]
+    pub fn comptime_statement(&mut self, allow_stages: bool) -> Result<Option<Loc<Statement>>> {
+        let result = self.comptime_condition(&|s| s.statements(allow_stages), &|condition, loc| {
+            Statement::Comptime(condition).at_loc(&loc)
+        });
+        result
+    }
+
     /// If the next token is the start of a statement, return that statement,
     /// otherwise None
     #[trace_parser]
     #[tracing::instrument(skip(self))]
-    pub fn statement_inner(&mut self, allow_stages: bool) -> Result<Option<Loc<Statement>>> {
+    pub fn statement(&mut self, allow_stages: bool) -> Result<Option<Loc<Statement>>> {
         let result = self.first_successful(vec![
             &Self::binding,
             &Self::register,
             &Self::declaration,
             &Self::label,
             &Self::assert,
+            &|s| s.comptime_statement(allow_stages),
         ])?;
 
         if let Some(statement) = &result {
-            if let Statement::Label(_) = statement.inner {
+            if let Statement::Label(_) | Statement::Comptime(_) = statement.inner {
             } else {
                 self.eat(&TokenKind::Semi)?;
             }
@@ -801,14 +809,6 @@ impl<'a> Parser<'a> {
             }
         }
         Ok(result)
-    }
-
-    #[trace_parser]
-    #[tracing::instrument(skip(self))]
-    pub fn statement(&mut self, allow_stages: bool) -> Result<Option<Loc<Statement>>> {
-        self.maybe_comptime_condition(&|s| s.statement_inner(allow_stages), &|i| {
-            Statement::Comptime(i)
-        })
     }
 
     #[trace_parser]
@@ -1732,7 +1732,7 @@ pub fn format_parse_stack(stack: &[ParseStackEntry]) -> String {
 
 #[cfg(test)]
 mod tests {
-    use ast::comptime::ComptimeCondOp;
+    use ast::comptime::{ComptimeCondOp, ComptimeCondition};
     use spade_ast as ast;
     use spade_ast::testutil::{ast_ident, ast_path};
     use spade_ast::*;
@@ -2929,14 +2929,12 @@ mod tests {
 
         let expected = Statement::Comptime(ComptimeCondition {
             condition: (ast_path("A"), ComptimeCondOp::Eq, 1u128.nowhere()),
-            on_true: Box::new(
-                Statement::Binding(
-                    Pattern::name("a"),
-                    None,
-                    Expression::IntLiteral(0).nowhere(),
-                )
-                .nowhere(),
-            ),
+            on_true: Box::new(vec![Statement::Binding(
+                Pattern::name("a"),
+                None,
+                Expression::IntLiteral(0).nowhere(),
+            )
+            .nowhere()]),
             on_false: None,
         })
         .nowhere();

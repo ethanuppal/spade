@@ -105,8 +105,10 @@ fn visit_pipeline_statement(
         ast::Statement::Register(_) => {}
         ast::Statement::Assert(_) => {}
         ast::Statement::Comptime(inner) => {
-            if let Some(inner_stmt) = inner.maybe_unpack(&ctx.symtab)? {
-                visit_pipeline_statement(&inner_stmt, current_stage, ctx, pipeline_ctx)?;
+            if let Some(inner_stmts) = inner.maybe_unpack(&ctx.symtab)? {
+                for inner_stmt in inner_stmts {
+                    visit_pipeline_statement(&inner_stmt, current_stage, ctx, pipeline_ctx)?;
+                }
             }
         }
     };

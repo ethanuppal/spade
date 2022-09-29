@@ -1666,6 +1666,32 @@ mod tests {
 
         build_and_compare_entities!(code, expected);
     }
+
+    #[test]
+    fn comptime_exclusion_works_with_many_statements() {
+        let code = r#"
+            $config X = 1
+
+            fn test(a: bool, b: bool, c: bool) -> bool {
+                let a_ = a;
+                $if X == 0 {
+                    let b_ = b;
+                    let c_ = c;
+                }
+                a_
+            }
+        "#;
+
+        let expected = vec![entity! {"test"; (
+            "a", n(0, "a"), Type::Bool,
+            "b", n(1, "b"), Type::Bool,
+            "c", n(2, "c"), Type::Bool,
+        ) -> Type::Bool; {
+                (n(3, "a_"); Type::Bool; Alias; n(0, "a"));
+        } => n(3, "a_")}];
+
+        build_and_compare_entities!(code, expected);
+    }
 }
 
 #[cfg(test)]

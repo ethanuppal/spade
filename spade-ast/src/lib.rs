@@ -177,7 +177,7 @@ pub enum Statement {
     PipelineRegMarker(usize),
     Register(Loc<Register>),
     Assert(Loc<Expression>),
-    Comptime(ComptimeCondition<Loc<Statement>>),
+    Comptime(ComptimeCondition<Vec<Loc<Statement>>>),
 }
 impl WithLocation for Statement {}
 
