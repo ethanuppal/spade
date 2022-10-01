@@ -614,7 +614,7 @@ fn statement_code(
 
                     let module_name = escape_path(module_name.to_string());
 
-                    let instance_name = format!("{}_{}", module_name, name);
+                    let instance_name = format!("{}_i", name);
 
                     code!{
                         [0] source_attribute(loc, source_code);
@@ -1196,7 +1196,7 @@ mod tests {
                 always @(posedge clk_n3) begin
                     x__s1_n10 <= x_n1;
                 end
-                e_A A_x_n1(x_n1);
+                e_A x_n1_i(x_n1);
                 assign output__ = x_n1;
             endmodule"#
         );
@@ -1805,7 +1805,7 @@ mod expression_tests {
         let expected = indoc!(
             r#"
             logic _e_0;
-            e_test test__e_0(_e_1, _e_2, _e_0);"#
+            e_test _e_0_i(_e_1, _e_2, _e_0);"#
         );
 
         assert_same_code!(
