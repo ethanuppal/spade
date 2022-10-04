@@ -1768,6 +1768,19 @@ mod tests {
 
         build_and_compare_entities!(code, expected);
     }
+
+    snapshot_error! {
+        useful_error_message_when_passing_non_comptime_value_as_comptime,
+        "
+            fn test() -> bool {
+                let x = 0;
+                $if x < 1 {
+                    let a_ = a;
+                }
+                false
+            }
+        "
+    }
 }
 
 #[cfg(test)]

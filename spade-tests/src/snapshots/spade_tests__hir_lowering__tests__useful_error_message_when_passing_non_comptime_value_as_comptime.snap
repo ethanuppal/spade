@@ -1,0 +1,17 @@
+---
+source: spade-tests/src/hir_lowering.rs
+expression: "std::str::from_utf8(buffer.as_slice()).expect(\"error contains invalid utf-8\")"
+---
+error: Expected x to be a compile time value
+  ┌─ testinput:3:9
+  │
+2 │     let x = 0;
+  │         - x is a variable
+3 │     $if x < 1 {
+  │         ^ Expected compile time value
+  │
+  = Expected value
+  = Found variable
+  = Hint: compile time values can be defined with $config <name> = value
+
+
