@@ -368,7 +368,7 @@ impl WithLocation for GenericArg {}
 pub enum TypeDeclKind {
     Struct { is_port: bool },
     Enum,
-    Primitive,
+    Primitive { is_port: bool },
 }
 
 impl TypeDeclKind {
