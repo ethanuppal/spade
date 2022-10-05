@@ -809,8 +809,34 @@ impl TypeState {
     ) -> Result<()> {
         self.visit_pattern(&reg.pattern, symtab, generic_list)?;
 
+        let type_spec_type = &reg
+            .value_type
+            .as_ref()
+            .map(|t| self.type_var_from_hir(&t, &generic_list).at_loc(&t));
+
+        // We need to do this before visiting value, in case it constrains the
+        // type of the identifiers in the pattern
+        if let Some(tvar) = type_spec_type {
+            self.unify(&TypedExpression::Id(reg.pattern.id), tvar, symtab)
+                .map_normal_err(|(got, expected)| Error::PatternTypeMismatch {
+                    pattern: reg.pattern.loc(),
+                    reason: tvar.loc(),
+                    expected,
+                    got,
+                })?;
+        }
+
         self.visit_expression(&reg.clock, symtab, generic_list)?;
         self.visit_expression(&reg.value, symtab, generic_list)?;
+
+        if let Some(tvar) = type_spec_type {
+            self.unify(&reg.value, tvar, symtab)
+                .map_normal_err(|(got, expected)| Error::UnspecifiedTypeError {
+                    expected,
+                    got,
+                    loc: reg.value.loc(),
+                })?;
+        }
 
         if let Some((rst_cond, rst_value)) = &reg.reset {
             self.visit_expression(&rst_cond, symtab, generic_list)?;
@@ -828,7 +854,7 @@ impl TypeState {
                 .map_normal_err(|(got, expected)| Error::RegisterResetMismatch {
                     expected,
                     got,
-                    loc: rst_cond.loc(),
+                    loc: rst_value.loc(),
                 })?;
         }
 
@@ -839,24 +865,10 @@ impl TypeState {
                 loc: reg.clock.loc(),
             })?;
 
-        if let Some(t) = &reg.value_type {
-            let tvar = self.type_var_from_hir(&t, &generic_list);
-            self.unify(&reg.value, &tvar, symtab)
-                .map_normal_err(|(got, expected)| Error::UnspecifiedTypeError {
-                    expected,
-                    got,
-                    loc: reg.value.loc(),
-                })?;
-        }
-
         self.unify(&TypedExpression::Id(reg.pattern.id), &reg.value, symtab)
             .map_normal_err(|(got, expected)| Error::PatternTypeMismatch {
                 pattern: reg.pattern.loc(),
-                reason: reg
-                    .value_type
-                    .as_ref()
-                    .map(|t| t.loc())
-                    .unwrap_or_else(|| reg.value.loc()),
+                reason: reg.value.loc(),
                 expected,
                 got,
             })?;
