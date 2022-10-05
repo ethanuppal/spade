@@ -246,3 +246,15 @@ fn wires_can_be_created() {
 
     build_items(code);
 }
+
+// TODO: The port tests are piling up, we should move them into their own
+// module
+snapshot_error! {
+    assigning_ports_to_ports_is_disallowed,
+    "
+        entity not_allowed(a: &mut (&bool, &bool), b: (&bool, &bool)) -> bool {
+            set a = b;
+            true
+        }
+        "
+}
