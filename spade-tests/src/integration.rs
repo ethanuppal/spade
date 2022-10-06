@@ -258,3 +258,12 @@ snapshot_error! {
         }
         "
 }
+
+snapshot_error! {
+    ports_are_not_allowed_in_functions,
+    "
+        fn not_allowed(a: &bool) -> bool {
+            true
+        }
+        "
+}

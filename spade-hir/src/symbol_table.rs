@@ -434,21 +434,25 @@ impl SymbolTable {
             base_namespace: Path(vec![]),
         }
     }
+    #[tracing::instrument(skip_all)]
     pub fn new_scope(&mut self) {
         self.symbols.push(HashMap::new());
         self.declarations.push(HashMap::new());
     }
 
+    #[tracing::instrument(skip_all)]
     pub fn close_scope(&mut self) {
         self.symbols.pop();
         self.declarations.pop();
     }
 
     /// Push an identifier onto the current namespace
+    #[tracing::instrument(skip_all, fields(%new_ident))]
     pub fn push_namespace(&mut self, new_ident: Loc<Identifier>) {
         self.namespace = self.namespace.push_ident(new_ident);
     }
 
+    #[tracing::instrument(skip_all)]
     pub fn pop_namespace(&mut self) {
         self.namespace = self.namespace.pop();
     }

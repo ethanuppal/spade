@@ -102,6 +102,7 @@ pub fn lower_type_declaration(
 
 #[local_impl]
 impl IsPort for ast::TypeSpec {
+    #[tracing::instrument(skip(symtab))]
     fn is_port(&self, symtab: &SymbolTable) -> Result<bool> {
         match self {
             ast::TypeSpec::Tuple(inner) => {

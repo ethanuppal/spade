@@ -11,6 +11,7 @@ use attributes::{report_unused_attributes, unit_name};
 use comptime::ComptimeCondExt;
 use hir::param_util::ArgumentError;
 use pipelines::PipelineContext;
+use tracing::info;
 
 use std::collections::HashSet;
 
@@ -57,6 +58,7 @@ impl<T> LocExt<T> for Loc<T> {
 /// Visit an AST type parameter, converting it to a HIR type parameter. The name is not
 /// added to the symbol table as this function is re-used for both global symbol collection
 /// and normal HIR lowering.
+#[tracing::instrument(skip_all, fields(name=%param.name()))]
 pub fn visit_type_param(
     param: &ast::TypeParam,
     symtab: &mut SymbolTable,
@@ -228,6 +230,7 @@ fn visit_parameter_list(l: &ParameterList, symtab: &mut SymbolTable) -> Result<h
 }
 
 /// Visit the head of an entity to generate an entity head
+#[tracing::instrument(skip_all, fields(name=%item.name))]
 pub fn entity_head(item: &ast::Entity, symtab: &mut SymbolTable) -> Result<EntityHead> {
     symtab.new_scope();
 
@@ -244,7 +247,23 @@ pub fn entity_head(item: &ast::Entity, symtab: &mut SymbolTable) -> Result<Entit
     };
     let inputs = visit_parameter_list(&item.inputs, symtab)?;
 
+    // Check for ports in functions
+    // We need to have the scope open to check this, but we also need to close
+    // the scope if we fail here, so we'll store port_error in a variable
+    let mut port_error = Ok(());
+    if item.is_function {
+        for (_, ty) in &item.inputs.0 {
+            if ty.is_port(symtab)? {
+                info!("Aborting due to port in function parameters");
+                port_error = Err(Error::PortInFunction {
+                    type_spec: ty.loc(),
+                });
+            }
+        }
+    }
+
     symtab.close_scope();
+    port_error?;
 
     Ok(EntityHead {
         inputs,
@@ -264,6 +283,7 @@ pub fn visit_entity(item: &Loc<ast::Entity>, ctx: &mut Context) -> Result<hir::I
         output_type: _,
         type_params,
     } = &item.inner;
+
     ctx.symtab.new_scope();
 
     let path = Path(vec![name.clone()]).at_loc(&name.loc());
@@ -305,6 +325,8 @@ pub fn visit_entity(item: &Loc<ast::Entity>, ctx: &mut Context) -> Result<hir::I
 
     // Any remaining attributes are unused and will have an error reported
     report_unused_attributes(&attributes)?;
+
+    info!("Checked all function arguments");
 
     Ok(hir::Item::Entity(
         hir::Entity {

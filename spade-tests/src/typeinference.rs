@@ -395,10 +395,10 @@ fn accessing_a_generic_fixed_field_works() {
 snapshot_error! {
     backward_type_in_generic_is_an_error,
     "
-    fn takes_generic<T>(x: T) -> bool {true}
+    entity takes_generic<T>(x: T) -> bool {true}
 
-    fn x(b: &mut bool) -> bool {
-        takes_generic(b)
+    entity x(b: &mut bool) -> bool {
+        inst takes_generic(b)
     }
     "
 }
@@ -409,10 +409,10 @@ snapshot_error! {
     struct port X {
         x: &mut bool
     }
-    fn takes_generic<T>(x: T) -> bool {true}
+    entity takes_generic<T>(x: T) -> bool {true}
 
-    fn x(b: X) -> bool {
-        takes_generic(b)
+    entity x(b: X) -> bool {
+        inst takes_generic(b)
     }
     "
 }

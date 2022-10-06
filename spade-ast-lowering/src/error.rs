@@ -62,6 +62,8 @@ pub enum Error {
         full_type: Loc<()>,
         inner_type: Loc<()>,
     },
+    #[error("Port in function")]
+    PortInFunction { type_spec: Loc<()> },
     #[error("Pattern list length mismatch, expected {expected} arguments, got {got}")]
     PatternListLengthMismatch {
         expected: usize,
