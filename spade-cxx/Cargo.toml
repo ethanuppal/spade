@@ -1,0 +1,19 @@
+[package]
+name = "spade-cxx"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[lib]
+crate-type = ["staticlib"]
+
+[dependencies]
+color-eyre.workspace = true
+ron.workspace = true
+cxx = "1.0"
+
+spade = {path = "../spade-compiler"}
+
+[build-dependencies]
+cxx-build = "1.0"

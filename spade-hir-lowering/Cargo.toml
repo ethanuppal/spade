@@ -19,6 +19,7 @@ itertools.workspace = true
 local-impl.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
+serde.workspace = true
 
 spade-common = {path = "../spade-common"}
 spade-diagnostics = { path = "../spade-diagnostics" }

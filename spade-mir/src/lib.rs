@@ -33,7 +33,7 @@ impl std::fmt::Display for ConstantValue {
 
 /// A name of a value. Can either come from the NameID of the underlying
 /// variable, or the id of the underlying expression
-#[derive(Clone, PartialEq, Debug, Hash, Eq)]
+#[derive(Clone, PartialEq, Debug, Hash, Eq, serde::Serialize, serde::Deserialize)]
 pub enum ValueName {
     /// A named value in the code with with an index to make that name globally unique
     /// In the resulting verilog, this is translated as _n_$id_$name

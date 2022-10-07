@@ -10,8 +10,9 @@ use spade_mir as mir;
 use spade_typeinference::TypeState;
 
 use crate::{
-    error::Error, monomorphisation::MonoState, substitution::Substitutions, Context, ExprLocal,
-    Manglable, MirLowerable, NameIDExt, Result, StatementLocal,
+    error::Error, monomorphisation::MonoState, name_map::NameSourceMap,
+    statement_list::StatementList, substitution::Substitutions, Context, ExprLocal, Manglable,
+    MirLowerable, NameIDExt, Result, StatementLocal,
 };
 
 pub fn handle_pattern(pat: &Pattern, live_vars: &mut Vec<NameID>) {
@@ -31,6 +32,7 @@ pub fn generate_pipeline<'a>(
     name_map: &mut HashMap<NameID, NameID>,
     mono_state: &mut MonoState,
     diag_handler: &mut DiagHandler,
+    name_source_map: &mut NameSourceMap,
 ) -> Result<mir::Entity> {
     let Pipeline {
         head: _,
@@ -50,7 +52,7 @@ pub fn generate_pipeline<'a>(
         subs.set_available(input, 0, is_port)
     }
 
-    let mut statements = vec![];
+    let mut statements = StatementList::new();
 
     let (body_statements, result) = if let ExprKind::Block(block) = &body.kind {
         (&block.statements, &block.result)
@@ -108,18 +110,22 @@ pub fn generate_pipeline<'a>(
                         panic!("inserted duplicate in name map");
                     }
 
-                    statements.push(mir::Statement::Register(mir::Register {
-                        name: reg.new.value_name(),
-                        ty: types
-                            .name_type(&reg.original, symtab.symtab(), &item_list.types)?
-                            .to_mir_type(),
-                        clock: clock.value_name(),
-                        reset: None,
-                        value: reg.previous.value_name(),
-                        // NOTE: Do we/can we also want to point to the declaration
-                        // of the variable?
-                        loc: Some(statement.loc()),
-                    }));
+                    statements.push_secondary(
+                        mir::Statement::Register(mir::Register {
+                            name: reg.new.value_name(),
+                            ty: types
+                                .name_type(&reg.original, symtab.symtab(), &item_list.types)?
+                                .to_mir_type(),
+                            clock: clock.value_name(),
+                            reset: None,
+                            value: reg.previous.value_name(),
+                            // NOTE: Do we/can we also want to point to the declaration
+                            // of the variable?
+                            loc: Some(statement.loc()),
+                        }),
+                        &reg.original,
+                        "Pipelined",
+                    );
                 }
             }
             Statement::Label(_) => {
@@ -145,10 +151,10 @@ pub fn generate_pipeline<'a>(
     };
 
     for statement in body_statements {
-        statements.append(&mut statement.lower(&mut ctx)?);
+        statements.append(statement.lower(&mut ctx)?);
     }
 
-    statements.append(&mut result.lower(&mut ctx)?);
+    statements.append(result.lower(&mut ctx)?);
 
     let output = result.variable(&subs);
 
@@ -161,7 +167,7 @@ pub fn generate_pipeline<'a>(
         inputs: lowered_inputs,
         output: output?,
         output_type,
-        statements,
+        statements: statements.to_vec(name_source_map),
     })
 }
 

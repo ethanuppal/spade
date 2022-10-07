@@ -19,6 +19,7 @@ codespan-reporting.workspace = true
 indoc.workspace = true
 nesty = "0.2"
 itertools.workspace = true
+serde.workspace = true
 num = "0.4.0"
 derivative = "2.2.0"
 

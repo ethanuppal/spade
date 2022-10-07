@@ -9,7 +9,7 @@ use spade_typeinference::error::UnificationErrorExt;
 use spade_typeinference::{GenericListToken, TypeState};
 
 use crate::error::{Error, Result};
-use crate::{generate_entity, generate_pipeline};
+use crate::{generate_entity, generate_pipeline, name_map::NameSourceMap};
 
 /// An item to be monomorphised
 struct MonoItem {
@@ -90,6 +90,7 @@ pub fn compile_items(
     items: &HashMap<&NameID, (&ExecutableItem, TypeState)>,
     symtab: &mut FrozenSymtab,
     idtracker: &mut ExprIdTracker,
+    name_source_map: &mut NameSourceMap,
     item_list: &ItemList,
     diag_handler: &mut DiagHandler,
 ) -> Vec<Result<MirOutput>> {
@@ -159,6 +160,7 @@ pub fn compile_items(
                     item_list,
                     &mut state,
                     diag_handler,
+                    name_source_map,
                 )
                 .map(|mir| MirOutput {
                     mir,
@@ -180,6 +182,7 @@ pub fn compile_items(
                     &mut reg_name_map,
                     &mut state,
                     diag_handler,
+                    name_source_map,
                 )
                 .map(|mir| MirOutput {
                     mir,

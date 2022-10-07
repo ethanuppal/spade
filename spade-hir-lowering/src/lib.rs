@@ -1,8 +1,10 @@
 pub mod error;
 pub mod error_reporting;
 pub mod monomorphisation;
+mod name_map;
 mod pattern;
 pub mod pipelines;
+mod statement_list;
 pub mod substitution;
 mod usefulness;
 
@@ -14,6 +16,7 @@ use hir::{FunctionLike, ItemList, Pattern, PatternArgument, UnitName};
 use mir::types::Type as MirType;
 use mir::{ConstantValue, ValueName};
 use monomorphisation::MonoState;
+pub use name_map::NameSourceMap;
 use pattern::DeconstructedPattern;
 pub use pipelines::generate_pipeline;
 use spade_common::id_tracker::ExprIdTracker;
@@ -21,6 +24,7 @@ use spade_common::location_info::WithLocation;
 use spade_common::name::{Identifier, Path};
 use spade_diagnostics::{DiagHandler, Diagnostic};
 use spade_typeinference::GenericListToken;
+use statement_list::StatementList;
 use substitution::Substitutions;
 use thiserror::Error;
 use usefulness::{is_useful, PatStack, Usefulness};
@@ -175,13 +179,13 @@ pub fn all_conditions(ops: Vec<ValueName>, ctx: &mut Context) -> (Vec<mir::State
 }
 
 #[local_impl]
-impl PatternLocal for Pattern {
+impl PatternLocal for Loc<Pattern> {
     /// Lower a pattern to its individual parts. Requires the `Pattern::id` to be
     /// present in the code before this
     /// self_name is the name of the operand which this pattern matches
     #[tracing::instrument(name = "Pattern::lower", level = "trace", skip(self, ctx))]
-    fn lower(&self, self_name: ValueName, ctx: &mut Context) -> Result<Vec<mir::Statement>> {
-        let mut result = vec![];
+    fn lower(&self, self_name: ValueName, ctx: &mut Context) -> Result<StatementList> {
+        let mut result = StatementList::new();
         match &self.kind {
             hir::PatternKind::Integer(_) => {}
             hir::PatternKind::Bool(_) => {}
@@ -198,18 +202,21 @@ impl PatternLocal for Pattern {
                 };
 
                 for (i, p) in inner.iter().enumerate() {
-                    result.push(mir::Statement::Binding(mir::Binding {
-                        name: p.value_name(),
-                        operator: mir::Operator::IndexTuple(i as u64, inner_types.clone()),
-                        operands: vec![self_name.clone()],
-                        ty: ctx
-                            .types
-                            .type_of_id(p.id, ctx.symtab.symtab(), &ctx.item_list.types)
-                            .to_mir_type(),
-                        loc: None,
-                    }));
+                    result.push_primary(
+                        mir::Statement::Binding(mir::Binding {
+                            name: p.value_name(),
+                            operator: mir::Operator::IndexTuple(i as u64, inner_types.clone()),
+                            operands: vec![self_name.clone()],
+                            ty: ctx
+                                .types
+                                .type_of_id(p.id, ctx.symtab.symtab(), &ctx.item_list.types)
+                                .to_mir_type(),
+                            loc: None,
+                        }),
+                        p,
+                    );
 
-                    result.append(&mut p.lower(p.value_name(), ctx)?)
+                    result.append(p.lower(p.value_name(), ctx)?)
                 }
             }
             hir::PatternKind::Type(path, args) => {
@@ -236,18 +243,28 @@ impl PatternLocal for Pattern {
                         {
                             let i = s.params.arg_index(target).unwrap();
 
-                            result.push(mir::Statement::Binding(mir::Binding {
-                                name: value.value_name(),
-                                operator: mir::Operator::IndexTuple(i as u64, inner_types.clone()),
-                                operands: vec![self_name.clone()],
-                                ty: ctx
-                                    .types
-                                    .type_of_id(value.id, ctx.symtab.symtab(), &ctx.item_list.types)
-                                    .to_mir_type(),
-                                loc: None,
-                            }));
+                            result.push_primary(
+                                mir::Statement::Binding(mir::Binding {
+                                    name: value.value_name(),
+                                    operator: mir::Operator::IndexTuple(
+                                        i as u64,
+                                        inner_types.clone(),
+                                    ),
+                                    operands: vec![self_name.clone()],
+                                    ty: ctx
+                                        .types
+                                        .type_of_id(
+                                            value.id,
+                                            ctx.symtab.symtab(),
+                                            &ctx.item_list.types,
+                                        )
+                                        .to_mir_type(),
+                                    loc: None,
+                                }),
+                                value,
+                            );
 
-                            result.append(&mut value.lower(value.value_name(), ctx)?)
+                            result.append(value.lower(value.value_name(), ctx)?)
                         }
                     }
                     PatternableKind::Enum => {
@@ -258,26 +275,29 @@ impl PatternLocal for Pattern {
                             .to_mir_type();
 
                         for (i, p) in args.iter().enumerate() {
-                            result.push(mir::Statement::Binding(mir::Binding {
-                                name: p.value.value_name(),
-                                operator: mir::Operator::EnumMember {
-                                    variant: enum_variant.option,
-                                    member_index: i,
-                                    enum_type: self_type.clone(),
-                                },
-                                operands: vec![self_name.clone()],
-                                ty: ctx
-                                    .types
-                                    .type_of_id(
-                                        p.value.id,
-                                        ctx.symtab.symtab(),
-                                        &ctx.item_list.types,
-                                    )
-                                    .to_mir_type(),
-                                loc: None,
-                            }));
+                            result.push_primary(
+                                mir::Statement::Binding(mir::Binding {
+                                    name: p.value.value_name(),
+                                    operator: mir::Operator::EnumMember {
+                                        variant: enum_variant.option,
+                                        member_index: i,
+                                        enum_type: self_type.clone(),
+                                    },
+                                    operands: vec![self_name.clone()],
+                                    ty: ctx
+                                        .types
+                                        .type_of_id(
+                                            p.value.id,
+                                            ctx.symtab.symtab(),
+                                            &ctx.item_list.types,
+                                        )
+                                        .to_mir_type(),
+                                    loc: None,
+                                }),
+                                &p.value,
+                            );
 
-                            result.append(&mut p.value.lower(p.value.value_name(), ctx)?)
+                            result.append(p.value.lower(p.value.value_name(), ctx)?)
                         }
                     }
                 }
@@ -488,11 +508,11 @@ impl PatternLocal for Pattern {
 #[local_impl]
 impl StatementLocal for Statement {
     #[tracing::instrument(name = "Statement::lower", level = "trace", skip(self, ctx))]
-    fn lower(&self, ctx: &mut Context) -> Result<Vec<mir::Statement>> {
-        let mut result = vec![];
+    fn lower(&self, ctx: &mut Context) -> Result<StatementList> {
+        let mut result = StatementList::new();
         match self {
             Statement::Binding(pattern, _t, value) => {
-                result.append(&mut value.lower(ctx)?);
+                result.append(value.lower(ctx)?);
 
                 let refutability = pattern.is_refutable(ctx);
                 if refutability.is_useful() {
@@ -503,27 +523,30 @@ impl StatementLocal for Statement {
                     });
                 }
 
-                result.push(mir::Statement::Binding(mir::Binding {
-                    name: pattern.value_name(),
-                    operator: mir::Operator::Alias,
-                    operands: vec![value.variable(ctx.subs)?],
-                    ty: ctx
-                        .types
-                        .type_of_id(pattern.id, ctx.symtab.symtab(), &ctx.item_list.types)
-                        .to_mir_type(),
-                    loc: Some(pattern.loc()),
-                }));
-                result.append(&mut pattern.lower(value.variable(ctx.subs)?, ctx)?);
+                result.push_primary(
+                    mir::Statement::Binding(mir::Binding {
+                        name: pattern.value_name(),
+                        operator: mir::Operator::Alias,
+                        operands: vec![value.variable(ctx.subs)?],
+                        ty: ctx
+                            .types
+                            .type_of_id(pattern.id, ctx.symtab.symtab(), &ctx.item_list.types)
+                            .to_mir_type(),
+                        loc: Some(pattern.loc()),
+                    }),
+                    pattern,
+                );
+                result.append(pattern.lower(value.variable(ctx.subs)?, ctx)?);
             }
             Statement::Register(register) => {
-                result.append(&mut register.clock.lower(ctx)?);
+                result.append(register.clock.lower(ctx)?);
 
                 if let Some((trig, value)) = &register.reset {
-                    result.append(&mut trig.lower(ctx)?);
-                    result.append(&mut value.lower(ctx)?);
+                    result.append(trig.lower(ctx)?);
+                    result.append(value.lower(ctx)?);
                 }
 
-                result.append(&mut register.value.lower(ctx)?);
+                result.append(register.value.lower(ctx)?);
 
                 let refutability = register.pattern.is_refutable(ctx);
                 if refutability.is_useful() {
@@ -547,22 +570,25 @@ impl StatementLocal for Statement {
                     });
                 }
 
-                result.push(mir::Statement::Register(mir::Register {
-                    name: register.pattern.value_name(),
-                    ty: ty.to_mir_type(),
-                    clock: register.clock.variable(ctx.subs)?,
-                    reset: register
-                        .reset
-                        .as_ref()
-                        .map::<Result<_>, _>(|(value, trig)| {
-                            Ok((value.variable(ctx.subs)?, trig.variable(ctx.subs)?))
-                        })
-                        .transpose()?,
-                    value: register.value.variable(ctx.subs)?,
-                    loc: Some(register.pattern.loc()),
-                }));
+                result.push_primary(
+                    mir::Statement::Register(mir::Register {
+                        name: register.pattern.value_name(),
+                        ty: ty.to_mir_type(),
+                        clock: register.clock.variable(ctx.subs)?,
+                        reset: register
+                            .reset
+                            .as_ref()
+                            .map::<Result<_>, _>(|(value, trig)| {
+                                Ok((value.variable(ctx.subs)?, trig.variable(ctx.subs)?))
+                            })
+                            .transpose()?,
+                        value: register.value.variable(ctx.subs)?,
+                        loc: Some(register.pattern.loc()),
+                    }),
+                    &register.pattern,
+                );
 
-                result.append(&mut register.pattern.lower(register.pattern.value_name(), ctx)?);
+                result.append(register.pattern.lower(register.pattern.value_name(), ctx)?);
             }
             Statement::Declaration(_) => {}
             Statement::PipelineRegMarker => {
@@ -570,15 +596,15 @@ impl StatementLocal for Statement {
             }
             Statement::Label(_) => {}
             Statement::Assert(expr) => {
-                result.append(&mut expr.lower(ctx)?);
-                result.push(mir::Statement::Assert(
+                result.append(expr.lower(ctx)?);
+                result.push_anonymous(mir::Statement::Assert(
                     expr.variable(ctx.subs)?.at_loc(expr),
                 ))
             }
             Statement::Set { target, value } => {
-                result.append(&mut target.lower(ctx)?);
-                result.append(&mut value.lower(ctx)?);
-                result.push(mir::Statement::Set {
+                result.append(target.lower(ctx)?);
+                result.append(value.lower(ctx)?);
+                result.push_anonymous(mir::Statement::Set {
                     target: target.variable(ctx.subs)?.at_loc(target),
                     value: value.variable(ctx.subs)?.at_loc(value),
                 })
@@ -588,7 +614,7 @@ impl StatementLocal for Statement {
     }
 }
 
-pub fn expr_to_mir(expr: Loc<Expression>, ctx: &mut Context) -> Result<Vec<mir::Statement>> {
+pub fn expr_to_mir(expr: Loc<Expression>, ctx: &mut Context) -> Result<StatementList> {
     expr.lower(ctx)
 }
 
@@ -659,8 +685,8 @@ impl ExprLocal for Loc<Expression> {
         Ok(self.alias(subs)?.unwrap_or(mir::ValueName::Expr(self.id)))
     }
 
-    fn lower(&self, ctx: &mut Context) -> Result<Vec<mir::Statement>> {
-        let mut result = vec![];
+    fn lower(&self, ctx: &mut Context) -> Result<StatementList> {
+        let mut result = StatementList::new();
 
         let self_type = ctx
             .types
@@ -673,32 +699,33 @@ impl ExprLocal for Loc<Expression> {
             }
             ExprKind::IntLiteral(value) => {
                 let ty = self_type;
-                result.push(mir::Statement::Constant(
-                    self.id,
-                    ty,
-                    mir::ConstantValue::Int(*value as u64),
-                ));
+                result.push_primary(
+                    mir::Statement::Constant(self.id, ty, mir::ConstantValue::Int(*value as u64)),
+                    self,
+                );
             }
             ExprKind::BoolLiteral(value) => {
                 let ty = self_type;
-                result.push(mir::Statement::Constant(
-                    self.id,
-                    ty,
-                    mir::ConstantValue::Bool(*value),
-                ));
+                result.push_primary(
+                    mir::Statement::Constant(self.id, ty, mir::ConstantValue::Bool(*value)),
+                    self,
+                );
             }
             ExprKind::BinaryOperator(lhs, op, rhs) => {
                 let binop_builder = |op| -> Result<()> {
-                    result.append(&mut lhs.lower(ctx)?);
-                    result.append(&mut rhs.lower(ctx)?);
+                    result.append(lhs.lower(ctx)?);
+                    result.append(rhs.lower(ctx)?);
 
-                    result.push(mir::Statement::Binding(mir::Binding {
-                        name: self.variable(ctx.subs)?,
-                        operator: op,
-                        operands: vec![lhs.variable(ctx.subs)?, rhs.variable(ctx.subs)?],
-                        ty: self_type,
-                        loc: Some(self.loc()),
-                    }));
+                    result.push_primary(
+                        mir::Statement::Binding(mir::Binding {
+                            name: self.variable(ctx.subs)?,
+                            operator: op,
+                            operands: vec![lhs.variable(ctx.subs)?, rhs.variable(ctx.subs)?],
+                            ty: self_type,
+                            loc: Some(self.loc()),
+                        }),
+                        self,
+                    );
                     Ok(())
                 };
                 use mir::Operator::*;
@@ -723,15 +750,18 @@ impl ExprLocal for Loc<Expression> {
             }
             ExprKind::UnaryOperator(op, operand) => {
                 let unop_builder = |op| -> Result<()> {
-                    result.append(&mut operand.lower(ctx)?);
+                    result.append(operand.lower(ctx)?);
 
-                    result.push(mir::Statement::Binding(mir::Binding {
-                        name: self.variable(ctx.subs)?,
-                        operator: op,
-                        operands: vec![operand.variable(ctx.subs)?],
-                        ty: self_type,
-                        loc: Some(self.loc()),
-                    }));
+                    result.push_primary(
+                        mir::Statement::Binding(mir::Binding {
+                            name: self.variable(ctx.subs)?,
+                            operator: op,
+                            operands: vec![operand.variable(ctx.subs)?],
+                            ty: self_type,
+                            loc: Some(self.loc()),
+                        }),
+                        self,
+                    );
                     Ok(())
                 };
                 use mir::Operator::*;
@@ -747,22 +777,25 @@ impl ExprLocal for Loc<Expression> {
             }
             ExprKind::TupleLiteral(elems) => {
                 for elem in elems {
-                    result.append(&mut elem.lower(ctx)?)
+                    result.append(elem.lower(ctx)?)
                 }
 
-                result.push(mir::Statement::Binding(mir::Binding {
-                    name: self.variable(ctx.subs)?,
-                    operator: mir::Operator::ConstructTuple,
-                    operands: elems
-                        .iter()
-                        .map(|e| e.variable(ctx.subs))
-                        .collect::<Result<_>>()?,
-                    ty: self_type,
-                    loc: Some(self.loc()),
-                }))
+                result.push_primary(
+                    mir::Statement::Binding(mir::Binding {
+                        name: self.variable(ctx.subs)?,
+                        operator: mir::Operator::ConstructTuple,
+                        operands: elems
+                            .iter()
+                            .map(|e| e.variable(ctx.subs))
+                            .collect::<Result<_>>()?,
+                        ty: self_type,
+                        loc: Some(self.loc()),
+                    }),
+                    self,
+                )
             }
             ExprKind::TupleIndex(tup, idx) => {
-                result.append(&mut tup.lower(ctx)?);
+                result.append(tup.lower(ctx)?);
 
                 let types = if let mir::types::Type::Tuple(inner) = &ctx
                     .types
@@ -774,16 +807,19 @@ impl ExprLocal for Loc<Expression> {
                     unreachable!("Tuple indexing of non-tuple: {:?}", self_type);
                 };
 
-                result.push(mir::Statement::Binding(mir::Binding {
-                    name: self.variable(ctx.subs)?,
-                    operator: mir::Operator::IndexTuple(idx.inner as u64, types),
-                    operands: vec![tup.variable(ctx.subs)?],
-                    ty: self_type,
-                    loc: Some(self.loc()),
-                }))
+                result.push_primary(
+                    mir::Statement::Binding(mir::Binding {
+                        name: self.variable(ctx.subs)?,
+                        operator: mir::Operator::IndexTuple(idx.inner as u64, types),
+                        operands: vec![tup.variable(ctx.subs)?],
+                        ty: self_type,
+                        loc: Some(self.loc()),
+                    }),
+                    self,
+                )
             }
             ExprKind::FieldAccess(target, field) => {
-                result.append(&mut target.lower(ctx)?);
+                result.append(target.lower(ctx)?);
 
                 let ctype =
                     ctx.types
@@ -823,68 +859,80 @@ impl ExprLocal for Loc<Expression> {
                     unreachable!("Field access on non-struct {:?}", self_type)
                 };
 
-                result.push(mir::Statement::Binding(mir::Binding {
-                    name: self.variable(ctx.subs)?,
-                    operator: mir::Operator::IndexTuple(field_index as u64, member_types),
-                    operands: vec![target.variable(ctx.subs)?],
-                    ty: self_type,
-                    loc: Some(self.loc()),
-                }))
+                result.push_primary(
+                    mir::Statement::Binding(mir::Binding {
+                        name: self.variable(ctx.subs)?,
+                        operator: mir::Operator::IndexTuple(field_index as u64, member_types),
+                        operands: vec![target.variable(ctx.subs)?],
+                        ty: self_type,
+                        loc: Some(self.loc()),
+                    }),
+                    self,
+                )
             }
             ExprKind::ArrayLiteral(values) => {
                 for elem in values {
-                    result.append(&mut elem.lower(ctx)?)
+                    result.append(elem.lower(ctx)?)
                 }
-                result.push(mir::Statement::Binding(mir::Binding {
-                    name: self.variable(ctx.subs)?,
-                    operator: mir::Operator::ConstructArray,
-                    operands: values
-                        .iter()
-                        .map(|v| v.variable(ctx.subs))
-                        .collect::<Result<_>>()?,
-                    ty: self_type,
-                    loc: Some(self.loc()),
-                }))
+                result.push_primary(
+                    mir::Statement::Binding(mir::Binding {
+                        name: self.variable(ctx.subs)?,
+                        operator: mir::Operator::ConstructArray,
+                        operands: values
+                            .iter()
+                            .map(|v| v.variable(ctx.subs))
+                            .collect::<Result<_>>()?,
+                        ty: self_type,
+                        loc: Some(self.loc()),
+                    }),
+                    self,
+                )
             }
             ExprKind::Index(target, index) => {
-                result.append(&mut target.lower(ctx)?);
-                result.append(&mut index.lower(ctx)?);
+                result.append(target.lower(ctx)?);
+                result.append(index.lower(ctx)?);
 
-                result.push(mir::Statement::Binding(mir::Binding {
-                    name: self.variable(ctx.subs)?,
-                    operator: mir::Operator::IndexArray,
-                    operands: vec![target.variable(ctx.subs)?, index.variable(ctx.subs)?],
-                    ty: self_type,
-                    loc: Some(self.loc()),
-                }))
+                result.push_primary(
+                    mir::Statement::Binding(mir::Binding {
+                        name: self.variable(ctx.subs)?,
+                        operator: mir::Operator::IndexArray,
+                        operands: vec![target.variable(ctx.subs)?, index.variable(ctx.subs)?],
+                        ty: self_type,
+                        loc: Some(self.loc()),
+                    }),
+                    self,
+                )
             }
             ExprKind::Block(block) => {
                 for statement in &block.statements {
-                    result.append(&mut statement.lower(ctx)?);
+                    result.append(statement.lower(ctx)?);
                 }
-                result.append(&mut block.result.lower(ctx)?);
+                result.append(block.result.lower(ctx)?);
 
                 // Empty. The block result will always be the last expression
             }
             ExprKind::If(cond, on_true, on_false) => {
-                result.append(&mut cond.lower(ctx)?);
-                result.append(&mut on_true.lower(ctx)?);
-                result.append(&mut on_false.lower(ctx)?);
+                result.append(cond.lower(ctx)?);
+                result.append(on_true.lower(ctx)?);
+                result.append(on_false.lower(ctx)?);
 
-                result.push(mir::Statement::Binding(mir::Binding {
-                    name: self.variable(ctx.subs)?,
-                    operator: mir::Operator::Select,
-                    operands: vec![
-                        cond.variable(ctx.subs)?,
-                        on_true.variable(ctx.subs)?,
-                        on_false.variable(ctx.subs)?,
-                    ],
-                    ty: ctx
-                        .types
-                        .expr_type(self, ctx.symtab.symtab(), &ctx.item_list.types)?
-                        .to_mir_type(),
-                    loc: Some(self.loc()),
-                }));
+                result.push_primary(
+                    mir::Statement::Binding(mir::Binding {
+                        name: self.variable(ctx.subs)?,
+                        operator: mir::Operator::Select,
+                        operands: vec![
+                            cond.variable(ctx.subs)?,
+                            on_true.variable(ctx.subs)?,
+                            on_false.variable(ctx.subs)?,
+                        ],
+                        ty: ctx
+                            .types
+                            .expr_type(self, ctx.symtab.symtab(), &ctx.item_list.types)?
+                            .to_mir_type(),
+                        loc: Some(self.loc()),
+                    }),
+                    self,
+                );
             }
             ExprKind::Match(operand, branches) => {
                 let operand_ty =
@@ -911,40 +959,43 @@ impl ExprLocal for Loc<Expression> {
                     });
                 }
 
-                result.append(&mut operand.lower(ctx)?);
+                result.append(operand.lower(ctx)?);
                 let mut operands = vec![];
                 for (pat, result_expr) in branches {
-                    result.append(&mut pat.lower(operand.variable(ctx.subs)?, ctx)?);
+                    result.append(pat.lower(operand.variable(ctx.subs)?, ctx)?);
 
-                    let mut cond = pat.condition(&operand.variable(ctx.subs)?, ctx)?;
-                    result.append(&mut cond.statements);
+                    let cond = pat.condition(&operand.variable(ctx.subs)?, ctx)?;
+                    result.append_secondary(cond.statements, pat, "Pattern condition");
 
-                    result.append(&mut result_expr.lower(ctx)?);
+                    result.append(result_expr.lower(ctx)?);
 
                     operands.push(cond.result_name);
                     operands.push(result_expr.variable(ctx.subs)?);
                 }
 
-                result.push(mir::Statement::Binding(mir::Binding {
-                    name: self.variable(ctx.subs)?,
-                    operator: mir::Operator::Match,
-                    operands,
-                    ty: ctx
-                        .types
-                        .expr_type(self, ctx.symtab.symtab(), &ctx.item_list.types)?
-                        .to_mir_type(),
-                    loc: Some(self.loc()),
-                }))
+                result.push_primary(
+                    mir::Statement::Binding(mir::Binding {
+                        name: self.variable(ctx.subs)?,
+                        operator: mir::Operator::Match,
+                        operands,
+                        ty: ctx
+                            .types
+                            .expr_type(self, ctx.symtab.symtab(), &ctx.item_list.types)?
+                            .to_mir_type(),
+                        loc: Some(self.loc()),
+                    }),
+                    self,
+                )
             }
             ExprKind::FnCall(name, args) => {
                 let head = ctx.symtab.symtab().function_by_id(name);
                 let args = match_args_with_params(args, head.inputs())?;
-                result.append(&mut self.handle_call(name, &args, ctx)?)
+                result.append(self.handle_call(name, &args, ctx)?)
             }
             ExprKind::EntityInstance(name, args) => {
                 let head = ctx.symtab.symtab().entity_by_id(name);
                 let args = match_args_with_params(args, head.inputs())?;
-                result.append(&mut self.handle_call(name, &args, ctx)?)
+                result.append(self.handle_call(name, &args, ctx)?)
             }
             ExprKind::PipelineInstance {
                 depth: _,
@@ -953,7 +1004,7 @@ impl ExprLocal for Loc<Expression> {
             } => {
                 let head = ctx.symtab.symtab().pipeline_by_id(name);
                 let args = match_args_with_params(args, head.inputs())?;
-                result.append(&mut self.handle_call(name, &args, ctx)?);
+                result.append(self.handle_call(name, &args, ctx)?);
             }
             ExprKind::PipelineRef { .. } => {
                 // Empty: Pipeline refs are lowered in the alias checking
@@ -967,10 +1018,10 @@ impl ExprLocal for Loc<Expression> {
         name: &NameID,
         args: &[Argument],
         ctx: &mut Context,
-    ) -> Result<Vec<mir::Statement>> {
-        let mut result = vec![];
+    ) -> Result<StatementList> {
+        let mut result = StatementList::new();
         for param in args {
-            result.append(&mut param.value.lower(ctx)?);
+            result.append(param.value.lower(ctx)?);
         }
 
         // Check if this is a standard library function which we are supposed to
@@ -1029,25 +1080,28 @@ impl ExprLocal for Loc<Expression> {
                     None => panic!("No type declaration found for {}", base_enum),
                 };
 
-                result.push(mir::Statement::Binding(mir::Binding {
-                    name: self.variable(ctx.subs)?,
-                    ty: ctx
-                        .types
-                        .expr_type(self, ctx.symtab.symtab(), &ctx.item_list.types)?
-                        .to_mir_type(),
-                    operator: mir::Operator::ConstructEnum {
-                        variant: *variant,
-                        variant_count,
-                    },
-                    operands: args
-                        .iter()
-                        .map(|arg| arg.value.variable(ctx.subs))
-                        .collect::<Result<_>>()?,
-                    loc: Some(self.loc()),
-                }))
+                result.push_primary(
+                    mir::Statement::Binding(mir::Binding {
+                        name: self.variable(ctx.subs)?,
+                        ty: ctx
+                            .types
+                            .expr_type(self, ctx.symtab.symtab(), &ctx.item_list.types)?
+                            .to_mir_type(),
+                        operator: mir::Operator::ConstructEnum {
+                            variant: *variant,
+                            variant_count,
+                        },
+                        operands: args
+                            .iter()
+                            .map(|arg| arg.value.variable(ctx.subs))
+                            .collect::<Result<_>>()?,
+                        loc: Some(self.loc()),
+                    }),
+                    self,
+                )
             }
-            Some(hir::ExecutableItem::StructInstance) => {
-                result.push(mir::Statement::Binding(mir::Binding {
+            Some(hir::ExecutableItem::StructInstance) => result.push_primary(
+                mir::Statement::Binding(mir::Binding {
                     name: self.variable(ctx.subs)?,
                     ty: ctx
                         .types
@@ -1059,8 +1113,9 @@ impl ExprLocal for Loc<Expression> {
                         .map(|arg| arg.value.variable(ctx.subs))
                         .collect::<Result<Vec<_>>>()?,
                     loc: Some(self.loc()),
-                }))
-            }
+                }),
+                self,
+            ),
             Some(i @ hir::ExecutableItem::Pipeline(_))
             | Some(i @ hir::ExecutableItem::Entity(_)) => {
                 let (type_params, unit_name) = match i {
@@ -1090,19 +1145,22 @@ impl ExprLocal for Loc<Expression> {
 
                 let name_string = instance_name.mangled();
 
-                result.push(mir::Statement::Binding(mir::Binding {
-                    name: self.variable(ctx.subs)?,
-                    operator: mir::Operator::Instance(name_string, Some(self.loc())),
-                    operands: args
-                        .iter()
-                        .map(|arg| arg.value.variable(ctx.subs))
-                        .collect::<Result<_>>()?,
-                    ty: ctx
-                        .types
-                        .expr_type(self, ctx.symtab.symtab(), &ctx.item_list.types)?
-                        .to_mir_type(),
-                    loc: Some(self.loc()),
-                }));
+                result.push_primary(
+                    mir::Statement::Binding(mir::Binding {
+                        name: self.variable(ctx.subs)?,
+                        operator: mir::Operator::Instance(name_string, Some(self.loc())),
+                        operands: args
+                            .iter()
+                            .map(|arg| arg.value.variable(ctx.subs))
+                            .collect::<Result<_>>()?,
+                        ty: ctx
+                            .types
+                            .expr_type(self, ctx.symtab.symtab(), &ctx.item_list.types)?
+                            .to_mir_type(),
+                        loc: Some(self.loc()),
+                    }),
+                    self,
+                );
             }
             Some(
                 i @ hir::ExecutableItem::BuiltinPipeline(_, _)
@@ -1130,19 +1188,22 @@ impl ExprLocal for Loc<Expression> {
 
                 // NOTE: Builtin entities are not part of the item list, but we
                 // should still emit the code for instantiating them
-                result.push(mir::Statement::Binding(mir::Binding {
-                    name: self.variable(ctx.subs)?,
-                    operator: mir::Operator::Instance(unit_name.mangled(), Some(self.loc())),
-                    operands: args
-                        .iter()
-                        .map(|arg| arg.value.variable(ctx.subs))
-                        .collect::<Result<_>>()?,
-                    ty: ctx
-                        .types
-                        .expr_type(self, ctx.symtab.symtab(), &ctx.item_list.types)?
-                        .to_mir_type(),
-                    loc: Some(self.loc()),
-                }));
+                result.push_primary(
+                    mir::Statement::Binding(mir::Binding {
+                        name: self.variable(ctx.subs)?,
+                        operator: mir::Operator::Instance(unit_name.mangled(), Some(self.loc())),
+                        operands: args
+                            .iter()
+                            .map(|arg| arg.value.variable(ctx.subs))
+                            .collect::<Result<_>>()?,
+                        ty: ctx
+                            .types
+                            .expr_type(self, ctx.symtab.symtab(), &ctx.item_list.types)?
+                            .to_mir_type(),
+                        loc: Some(self.loc()),
+                    }),
+                    self,
+                );
             }
             None => {
                 unreachable!("Instantiating an item which is not known")
@@ -1154,10 +1215,10 @@ impl ExprLocal for Loc<Expression> {
     /// Result is the initial statement list to expand and return
     fn handle_clocked_memory_decl(
         &self,
-        result: Vec<mir::Statement>,
+        result: StatementList,
         args: &[Argument],
         ctx: &mut Context,
-    ) -> Result<Vec<mir::Statement>> {
+    ) -> Result<StatementList> {
         // The localimpl macro is a bit stupid
         let mut result = result;
 
@@ -1191,24 +1252,27 @@ impl ExprLocal for Loc<Expression> {
                 let addr_w = tup_inner[1].to_mir_type().size();
                 let inner_w = tup_inner[2].to_mir_type().size();
 
-                result.push(mir::Statement::Binding(mir::Binding {
-                    name: self.variable(ctx.subs)?,
-                    operator: mir::Operator::DeclClockedMemory {
-                        addr_w,
-                        inner_w,
-                        write_ports,
-                        elems: elem_count as u64,
-                    },
-                    operands: args
-                        .iter()
-                        .map(|arg| arg.value.variable(ctx.subs))
-                        .collect::<Result<Vec<_>>>()?,
-                    ty: ctx
-                        .types
-                        .expr_type(self, ctx.symtab.symtab(), &ctx.item_list.types)?
-                        .to_mir_type(),
-                    loc: Some(self.loc()),
-                }))
+                result.push_primary(
+                    mir::Statement::Binding(mir::Binding {
+                        name: self.variable(ctx.subs)?,
+                        operator: mir::Operator::DeclClockedMemory {
+                            addr_w,
+                            inner_w,
+                            write_ports,
+                            elems: elem_count as u64,
+                        },
+                        operands: args
+                            .iter()
+                            .map(|arg| arg.value.variable(ctx.subs))
+                            .collect::<Result<Vec<_>>>()?,
+                        ty: ctx
+                            .types
+                            .expr_type(self, ctx.symtab.symtab(), &ctx.item_list.types)?
+                            .to_mir_type(),
+                        loc: Some(self.loc()),
+                    }),
+                    self,
+                )
             } else {
                 panic!("Clocked array write port inner was not tuple")
             }
@@ -1222,10 +1286,10 @@ impl ExprLocal for Loc<Expression> {
     /// Result is the initial statement list to expand and return
     fn handle_read_memory(
         &self,
-        result: Vec<mir::Statement>,
+        result: StatementList,
         args: &[Argument],
         ctx: &mut Context,
-    ) -> Result<Vec<mir::Statement>> {
+    ) -> Result<StatementList> {
         // The localimpl macro is a bit stupid
         let mut result = result;
 
@@ -1237,23 +1301,26 @@ impl ExprLocal for Loc<Expression> {
             .expr_type(self, ctx.symtab.symtab(), &ctx.item_list.types)?
             .to_mir_type();
 
-        result.push(mir::Statement::Binding(mir::Binding {
-            name: self.variable(ctx.subs)?,
-            operator: mir::Operator::IndexMemory,
-            operands: vec![target.variable(ctx.subs)?, index.variable(ctx.subs)?],
-            ty: self_type,
-            loc: Some(self.loc()),
-        }));
+        result.push_primary(
+            mir::Statement::Binding(mir::Binding {
+                name: self.variable(ctx.subs)?,
+                operator: mir::Operator::IndexMemory,
+                operands: vec![target.variable(ctx.subs)?, index.variable(ctx.subs)?],
+                ty: self_type,
+                loc: Some(self.loc()),
+            }),
+            self,
+        );
 
         Ok(result)
     }
 
     fn handle_trunc(
         &self,
-        result: Vec<mir::Statement>,
+        result: StatementList,
         args: &[Argument],
         ctx: &mut Context,
-    ) -> Result<Vec<mir::Statement>> {
+    ) -> Result<StatementList> {
         let mut result = result;
 
         let self_type = ctx
@@ -1278,26 +1345,29 @@ impl ExprLocal for Loc<Expression> {
                 .into());
         }
 
-        result.push(mir::Statement::Binding(mir::Binding {
-            name: self.variable(ctx.subs)?,
-            operator: mir::Operator::Truncate,
-            operands: vec![args[0].value.variable(ctx.subs)?],
-            ty: ctx
-                .types
-                .expr_type(self, ctx.symtab.symtab(), &ctx.item_list.types)?
-                .to_mir_type(),
-            loc: Some(self.loc()),
-        }));
+        result.push_primary(
+            mir::Statement::Binding(mir::Binding {
+                name: self.variable(ctx.subs)?,
+                operator: mir::Operator::Truncate,
+                operands: vec![args[0].value.variable(ctx.subs)?],
+                ty: ctx
+                    .types
+                    .expr_type(self, ctx.symtab.symtab(), &ctx.item_list.types)?
+                    .to_mir_type(),
+                loc: Some(self.loc()),
+            }),
+            self,
+        );
 
         Ok(result)
     }
 
     fn handle_sext(
         &self,
-        result: Vec<mir::Statement>,
+        result: StatementList,
         args: &[Argument],
         ctx: &mut Context,
-    ) -> Result<Vec<mir::Statement>> {
+    ) -> Result<StatementList> {
         let mut result = result;
 
         let self_type = ctx
@@ -1316,26 +1386,29 @@ impl ExprLocal for Loc<Expression> {
             0
         };
 
-        result.push(mir::Statement::Binding(mir::Binding {
-            name: self.variable(ctx.subs)?,
-            operator: mir::Operator::SignExtend {
-                extra_bits,
-                operand_size: input_type.size(),
-            },
-            operands: vec![args[0].value.variable(ctx.subs)?],
-            ty: self_type,
-            loc: Some(self.loc()),
-        }));
+        result.push_primary(
+            mir::Statement::Binding(mir::Binding {
+                name: self.variable(ctx.subs)?,
+                operator: mir::Operator::SignExtend {
+                    extra_bits,
+                    operand_size: input_type.size(),
+                },
+                operands: vec![args[0].value.variable(ctx.subs)?],
+                ty: self_type,
+                loc: Some(self.loc()),
+            }),
+            self,
+        );
 
         Ok(result)
     }
 
     fn handle_zext(
         &self,
-        result: Vec<mir::Statement>,
+        result: StatementList,
         args: &[Argument],
         ctx: &mut Context,
-    ) -> Result<Vec<mir::Statement>> {
+    ) -> Result<StatementList> {
         let mut result = result;
 
         let self_type = ctx
@@ -1354,23 +1427,26 @@ impl ExprLocal for Loc<Expression> {
             0
         };
 
-        result.push(mir::Statement::Binding(mir::Binding {
-            name: self.variable(ctx.subs)?,
-            operator: mir::Operator::ZeroExtend { extra_bits },
-            operands: vec![args[0].value.variable(ctx.subs)?],
-            ty: self_type,
-            loc: None,
-        }));
+        result.push_primary(
+            mir::Statement::Binding(mir::Binding {
+                name: self.variable(ctx.subs)?,
+                operator: mir::Operator::ZeroExtend { extra_bits },
+                operands: vec![args[0].value.variable(ctx.subs)?],
+                ty: self_type,
+                loc: None,
+            }),
+            self,
+        );
 
         Ok(result)
     }
 
     fn handle_concat(
         &self,
-        result: Vec<mir::Statement>,
+        result: StatementList,
         args: &[Argument],
         ctx: &mut Context,
-    ) -> Result<Vec<mir::Statement>> {
+    ) -> Result<StatementList> {
         let mut result = result;
 
         let arg0_type = ctx
@@ -1395,16 +1471,19 @@ impl ExprLocal for Loc<Expression> {
                 result: self_type.size().at_loc(self),
             })
         } else {
-            result.push(mir::Statement::Binding(mir::Binding {
-                name: self.variable(ctx.subs)?,
-                operator: mir::Operator::Concat,
-                operands: vec![
-                    args[0].value.variable(ctx.subs)?,
-                    args[1].value.variable(ctx.subs)?,
-                ],
-                ty: self_type,
-                loc: None,
-            }));
+            result.push_primary(
+                mir::Statement::Binding(mir::Binding {
+                    name: self.variable(ctx.subs)?,
+                    operator: mir::Operator::Concat,
+                    operands: vec![
+                        args[0].value.variable(ctx.subs)?,
+                        args[1].value.variable(ctx.subs)?,
+                    ],
+                    ty: self_type,
+                    loc: None,
+                }),
+                self,
+            );
 
             Ok(result)
         }
@@ -1412,10 +1491,10 @@ impl ExprLocal for Loc<Expression> {
 
     fn handle_div_pow2(
         &self,
-        result: Vec<mir::Statement>,
+        result: StatementList,
         args: &[Argument],
         ctx: &mut Context,
-    ) -> Result<Vec<mir::Statement>> {
+    ) -> Result<StatementList> {
         let mut result = result;
 
         let self_type = ctx
@@ -1423,26 +1502,29 @@ impl ExprLocal for Loc<Expression> {
             .expr_type(self, ctx.symtab.symtab(), &ctx.item_list.types)?
             .to_mir_type();
 
-        result.push(mir::Statement::Binding(mir::Binding {
-            name: self.variable(ctx.subs)?,
-            operator: mir::Operator::DivPow2,
-            operands: vec![
-                args[0].value.variable(ctx.subs)?,
-                args[1].value.variable(ctx.subs)?,
-            ],
-            ty: self_type,
-            loc: Some(self.loc()),
-        }));
+        result.push_primary(
+            mir::Statement::Binding(mir::Binding {
+                name: self.variable(ctx.subs)?,
+                operator: mir::Operator::DivPow2,
+                operands: vec![
+                    args[0].value.variable(ctx.subs)?,
+                    args[1].value.variable(ctx.subs)?,
+                ],
+                ty: self_type,
+                loc: Some(self.loc()),
+            }),
+            self,
+        );
 
         Ok(result)
     }
 
     fn handle_make_port(
         &self,
-        result: Vec<mir::Statement>,
+        result: StatementList,
         args: &[Argument],
         ctx: &mut Context,
-    ) -> Result<Vec<mir::Statement>> {
+    ) -> Result<StatementList> {
         let mut result = result;
 
         assert!(args.is_empty());
@@ -1452,23 +1534,26 @@ impl ExprLocal for Loc<Expression> {
             .expr_type(self, ctx.symtab.symtab(), &ctx.item_list.types)?
             .to_mir_type();
 
-        result.push(mir::Statement::Binding(mir::Binding {
-            name: self.variable(ctx.subs)?,
-            operator: mir::Operator::Nop,
-            operands: vec![],
-            ty: self_type,
-            loc: None,
-        }));
+        result.push_primary(
+            mir::Statement::Binding(mir::Binding {
+                name: self.variable(ctx.subs)?,
+                operator: mir::Operator::Nop,
+                operands: vec![],
+                ty: self_type,
+                loc: None,
+            }),
+            self,
+        );
 
         Ok(result)
     }
 
     fn handle_read_port(
         &self,
-        result: Vec<mir::Statement>,
+        result: StatementList,
         args: &[Argument],
         ctx: &mut Context,
-    ) -> Result<Vec<mir::Statement>> {
+    ) -> Result<StatementList> {
         let mut result = result;
 
         assert_eq!(args.len(), 1);
@@ -1478,13 +1563,16 @@ impl ExprLocal for Loc<Expression> {
             .expr_type(self, ctx.symtab.symtab(), &ctx.item_list.types)?
             .to_mir_type();
 
-        result.push(mir::Statement::Binding(mir::Binding {
-            name: self.variable(ctx.subs)?,
-            operator: mir::Operator::ReadPort,
-            operands: vec![args[0].value.variable(ctx.subs)?],
-            ty: self_type,
-            loc: None,
-        }));
+        result.push_primary(
+            mir::Statement::Binding(mir::Binding {
+                name: self.variable(ctx.subs)?,
+                operator: mir::Operator::ReadPort,
+                operands: vec![args[0].value.variable(ctx.subs)?],
+                ty: self_type,
+                loc: None,
+            }),
+            self,
+        );
 
         Ok(result)
     }
@@ -1509,6 +1597,7 @@ pub fn generate_entity<'a>(
     item_list: &ItemList,
     mono_state: &mut MonoState,
     diag_handler: &mut DiagHandler,
+    name_map: &mut NameSourceMap,
 ) -> Result<mir::Entity> {
     let inputs = entity
         .inputs
@@ -1547,6 +1636,6 @@ pub fn generate_entity<'a>(
         inputs,
         output: entity.body.variable(&subs)?,
         output_type: output_t,
-        statements,
+        statements: statements.to_vec(name_map),
     })
 }

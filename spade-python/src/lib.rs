@@ -480,8 +480,9 @@ impl Spade {
             idtracker: ast_ctx.idtracker,
         });
 
-        let val = eval_statements(&mir);
-        Ok(BitString(val.as_string()))
+        Ok(BitString(
+            eval_statements(&mir.to_vec_no_source_map()).as_string(),
+        ))
     }
 
     /// Return the output type of uut

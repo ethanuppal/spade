@@ -22,6 +22,7 @@ use spade_hir::symbol_table::{FrozenSymtab, SymbolTable};
 use spade_hir::{ExecutableItem, ItemList};
 use spade_hir_lowering::error::Error as HirLoweringError;
 use spade_hir_lowering::monomorphisation::MirOutput;
+use spade_hir_lowering::NameSourceMap;
 pub use spade_parser::lexer;
 use spade_parser::Parser;
 use spade_typeinference as typeinference;
@@ -130,6 +131,7 @@ pub struct CompilerState {
     pub symtab: FrozenSymtab,
     pub idtracker: ExprIdTracker,
     pub item_list: ItemList,
+    pub name_source_map: NameSourceMap,
 }
 
 #[tracing::instrument(skip_all)]
@@ -261,10 +263,12 @@ pub fn compile(
         return Err(());
     }
 
+    let mut name_source_map = NameSourceMap::new();
     let mir_entities = spade_hir_lowering::monomorphisation::compile_items(
         &executables_and_types,
         &mut frozen_symtab,
         &mut idtracker,
+        &mut name_source_map,
         &item_list,
         errors.diag_handler,
     );
@@ -317,6 +321,7 @@ pub fn compile(
             symtab: frozen_symtab,
             idtracker,
             item_list,
+            name_source_map,
         };
         match ron::to_string(&state) {
             Ok(encoded) => {
