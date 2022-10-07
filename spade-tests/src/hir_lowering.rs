@@ -1214,7 +1214,7 @@ mod tests {
 
         let expected = vec![
             entity! {"unwrap_or_0"; ("e", n(0, "e"), mir_type.clone()) -> Type::Int(16); {
-                // Conditions fo branch 1
+                // Conditions for branch 1
                 (e(11); Type::Int(16); EnumMember({variant: 0, member_index: 0, enum_type: mir_type.clone()}); n(0, "e"));
                 (e(15); Type::Bool; IsEnumVariant({variant: 0, enum_type: mir_type.clone()}); n(0, "e"));
                 (const 10; Type::Int(16); ConstantValue::Int(10));

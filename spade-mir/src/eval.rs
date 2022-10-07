@@ -215,7 +215,7 @@ pub fn eval_statements(statements: &[Statement]) -> Value {
                 name_types.insert(name.clone(), ty.clone());
                 (name, val)
             }
-            Statement::Assert(_) => panic!("trying to evaluate an assert statemnet"),
+            Statement::Assert(_) => panic!("trying to evaluate an assert statement"),
         };
 
         name_vals.insert(n, v.clone());

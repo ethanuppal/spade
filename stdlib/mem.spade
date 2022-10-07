@@ -4,7 +4,7 @@
 //
 // The write array defines all the write ports to the memory. It consists of a
 // `write enable`, `address` and `data` field. When WE is enabled, data is written
-// to addres. Otherwise no change takes effect
+// to address. Otherwise no change takes effect
 // NOTE: We when possible, we should make compute AddrWidth from NumElements
 entity clocked_memory<#NumElements, #WritePorts, #AddrWidth, D>(
     clk: clk,

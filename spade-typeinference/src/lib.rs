@@ -1274,7 +1274,7 @@ impl TypeState {
         Self::replace_type_var_in_constraint_expr(&mut in_constraint.constraint, from, replacement);
         // NOTE: We do not want to replace type variables here as that that removes
         // information about where the constraint relates. Instead, this replacement
-        // is preformed when reporting ther error
+        // is performed when reporting the error
         // Self::replace_type_var(&mut in_constraint.from, from, replacement);
     }
 

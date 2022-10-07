@@ -36,7 +36,7 @@ impl Requirement {
 
     /// Check if there are updates that allow us to resolve the requirement.
     /// - If target_type is still `Unknown`, we don't know how to resolve the requirement
-    /// - Otherwise it will either be unsatsifieable. i.e. the new type does not fullfill the
+    /// - Otherwise it will either be unsatsifieable. i.e. the new type does not fulfil the
     /// requirement, in which case an error is returned
     /// - Or the requirement is now satisfied, in which case new unification tasks which are
     /// applied due to the result are returned. After this, the constraint is no longer needed
@@ -95,7 +95,7 @@ impl Requirement {
 
                                 // The generic list here refers to the generics being passed to the
                                 // types of the struct here. We need to construct it from the
-                                // infered generics.
+                                // inferred generics.
                                 let mapping = s
                                     .type_params
                                     .iter()

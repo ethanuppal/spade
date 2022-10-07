@@ -222,7 +222,7 @@ type in the HIR, in the MIR they are lowered to booleans.
 
 Type inference does not care about the details of the types, essentially it
 only carers about the left hand side of the definition. The type arguments, the
-constraints etc., but not wether or not a type is an enum or a struct. During
+constraints etc., but not whether or not a type is an enum or a struct. During
 MIR to HIR lowering however, this information is needed. Thus, types from the
 TypeState produced by the type inferer are converted to `ConcreteType`s. At
 this point, items will also be monomorphised, i.e. generic items are turned

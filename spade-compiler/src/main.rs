@@ -41,7 +41,7 @@ pub struct Opt {
     pub state_dump: Option<PathBuf>,
 
     /// Write a list of all named items along with their corresponding verilog names
-    /// to the specified fiel. See crate::name_dump for format
+    /// to the specified file. See crate::name_dump for format
     #[structopt(long)]
     pub item_list: Option<PathBuf>,
 

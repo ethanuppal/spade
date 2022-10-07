@@ -935,7 +935,7 @@ impl<'a> Parser<'a> {
 
             (None, ().at(self.file_id, &tok.span).span)
         } else {
-            // The end of the entity definition depends on wether or not
+            // The end of the entity definition depends on whether or not
             // a type is present.
             let end_loc = output_type
                 .map(|t| t.loc().span)
@@ -1011,7 +1011,7 @@ impl<'a> Parser<'a> {
 
             (None, ().at(self.file_id, &tok.span).span)
         } else {
-            // The end of the entity definition depends on wether or not
+            // The end of the entity definition depends on whether or not
             // a type is present.
             let end_loc = output_type
                 .map(|t| t.loc().span)
@@ -1418,7 +1418,7 @@ impl<'a> Parser<'a> {
         Ok(None)
     }
 
-    /// Attempts to parse an inner structure surrouned by two tokens, like `( x )`.
+    /// Attempts to parse an inner structure surrounded by two tokens, like `( x )`.
     ///
     /// If the `start` token is not found, an error is produced.
     ///

@@ -6,7 +6,7 @@ members = [
     "parse_tree_macros"
 ]
 
-# Shared between internal crates. Can be overriden per-crate if needed.
+# Shared between internal crates. Can be overridden per-crate if needed.
 
 [workspace.package]
 version = "0.1.0"

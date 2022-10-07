@@ -129,6 +129,18 @@ grep-todo:
         # invert exit code of grep while still printing all matches
         - set -e; find . -name "*.rs" | xargs grep -E "// ?TODO" || exit 0 && exit 1
 
+typos:
+    stage: test
+    before_script:
+        - apt update
+        - apt install -y wget
+        - wget https://github.com/crate-ci/typos/releases/download/v1.10.3/typos-v1.10.3-x86_64-unknown-linux-musl.tar.gz -O typos.tar.gz
+        # Extract only the typos executable to not get a docs folder which the typo checker
+        # will find typos in
+        - tar xzf typos.tar.gz ./typos
+    script:
+        - ./typos
+
 trawler:
     stage: trawler
     variables:

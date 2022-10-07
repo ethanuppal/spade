@@ -1,4 +1,4 @@
-// This module is instanciated with sub as its base namespace, so refering to lib::sub
+// This module is instantiated with sub as its base namespace, so referring to lib::sub
 // should refer to the sub defined there
 use lib::in_sub;
 

@@ -209,7 +209,7 @@ impl TypeState {
     }
 
     /// Returns the type of the specified name as a concrete type. If the type is not known,
-    /// or tye type is Generic, panics
+    /// or the type is Generic, panics
     pub fn type_of_name(
         &self,
         name: &NameID,
@@ -227,7 +227,7 @@ impl TypeState {
     }
 
     /// Returns the type of the specified name as a concrete type. If the type is not known,
-    /// or tye type is Generic, panics
+    /// or the type is Generic, panics
     #[tracing::instrument(level = "trace", skip(self, symtab, type_list))]
     pub fn type_of_id(&self, id: u64, symtab: &SymbolTable, type_list: &TypeList) -> ConcreteType {
         Self::ungenerify_type(

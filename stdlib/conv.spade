@@ -2,7 +2,7 @@
 /// larger than the input, an error is emitted
 fn trunc<#N, #M>(x: int<N>) -> int<M> __builtin__
 
-/// Sign extend the provided integer. Has no effect if the the output is smaller
+/// Sign extend the provided integer. Has no effect if the output is smaller
 /// than the input
 fn sext<#N, #M>(x: int<N>) -> int<M> __builtin__
 
@@ -11,6 +11,6 @@ fn sext<#N, #M>(x: int<N>) -> int<M> __builtin__
 fn zext<#N, #M>(x: int<N>) -> int<M> __builtin__
 
 // Concatenate 2 integers. The resulting integer must be of length N+M, and this
-// checked, but not inferred by the bulit in handling. Once we get type constraints
+// checked, but not inferred by the built in handling. Once we get type constraints
 // implemented, this should be changed
 fn concat<#N, #M, #K>(x: int<N>, y: int<M>) -> int<K> __builtin__
