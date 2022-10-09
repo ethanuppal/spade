@@ -110,7 +110,7 @@ impl Requirement {
 
                         // The generic list here refers to the generics being passed to the
                         // types of the struct here. We need to construct it from the
-                        // infered generics.
+                        // inferred generics.
                         let mapping = s
                             .type_params
                             .iter()

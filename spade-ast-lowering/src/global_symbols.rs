@@ -274,7 +274,7 @@ pub fn re_visit_type_declaration(
             )
         }
         ast::TypeDeclKind::Struct(s) => {
-            // Disallow normal argumetns if the struct is a port, and port types
+            // Disallow normal arguments if the struct is a port, and port types
             // if it is not
             if s.is_port() {
                 for (f, ty) in &s.members.0 {
