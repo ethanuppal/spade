@@ -12,6 +12,8 @@ mod integration;
 #[cfg(test)]
 mod parser;
 #[cfg(test)]
+mod ports_integration;
+#[cfg(test)]
 mod suggestions;
 #[cfg(test)]
 mod typeinference;

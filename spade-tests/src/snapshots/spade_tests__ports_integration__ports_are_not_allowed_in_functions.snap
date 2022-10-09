@@ -1,0 +1,13 @@
+---
+source: spade-tests/src/ports_integration.rs
+expression: "std::str::from_utf8(buffer.as_slice()).expect(\"error contains invalid utf-8\")"
+---
+error: Port in function
+  ┌─ testinput:1:19
+  │
+1 │ fn not_allowed(a: &bool) -> bool {
+  │                   ^^^^^ Functions can not take ports
+  │
+  = Did you mean to declare an entity?
+
+
