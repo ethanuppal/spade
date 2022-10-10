@@ -53,7 +53,7 @@ impl CompilerState {
                     "(id) {}",
                     &self.code[e.file_id].1[e.span.start().to_usize()..e.span.end().to_usize()]
                 )
-            },
+            }
         }
     }
 }

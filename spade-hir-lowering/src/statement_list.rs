@@ -29,7 +29,7 @@ impl StatementList {
             Statement::Register(r) => Some(r.name.clone()),
             Statement::Constant(id, _, _) => Some(ValueName::Expr(*id)),
             Statement::Assert(_) => None,
-            Statement::Set{..} => None
+            Statement::Set { .. } => None,
         };
         self.stmts.push(stmt);
         if let Some(name) = name {

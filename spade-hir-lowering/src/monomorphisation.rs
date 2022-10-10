@@ -9,7 +9,8 @@ use spade_typeinference::error::UnificationErrorExt;
 use spade_typeinference::{GenericListToken, TypeState};
 
 use crate::error::{Error, Result};
-use crate::{generate_entity, generate_pipeline, name_map::NameSourceMap};
+use crate::generate_entity;
+use crate::{generate_pipeline, name_map::NameSourceMap};
 
 /// An item to be monomorphised
 struct MonoItem {

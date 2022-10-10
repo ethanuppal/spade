@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 use spade_common::{location_info::Loc, name::NameID};
 use spade_hir::{Expression, Pattern};
 use spade_mir::ValueName;

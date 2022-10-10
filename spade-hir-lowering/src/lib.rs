@@ -573,7 +573,14 @@ impl StatementLocal for Statement {
                 result.push_primary(
                     mir::Statement::Register(mir::Register {
                         name: register.pattern.value_name(),
-                        ty: ty.to_mir_type(),
+                        ty: ctx
+                            .types
+                            .type_of_id(
+                                register.pattern.id,
+                                ctx.symtab.symtab(),
+                                &ctx.item_list.types,
+                            )
+                            .to_mir_type(),
                         clock: register.clock.variable(ctx.subs)?,
                         reset: register
                             .reset
