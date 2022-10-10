@@ -7,7 +7,8 @@ use itertools::Itertools;
 use logos::Logos;
 use pyo3::prelude::*;
 
-use spade::{lexer, CompilerState};
+use spade::compiler_state::CompilerState;
+use spade::lexer;
 use spade_ast_lowering::id_tracker::ExprIdTracker;
 use spade_common::location_info::{Loc, WithLocation};
 use spade_common::name::{Identifier, Path as SpadePath};

@@ -3,7 +3,7 @@ use std::ops::Deref;
 use color_eyre::eyre::Context;
 use color_eyre::eyre::Result;
 
-struct CompilerState(spade::CompilerState);
+struct CompilerState(pub spade::compiler_state::CompilerState);
 
 impl CompilerState {
     fn list_names(&self) {
@@ -11,10 +11,16 @@ impl CompilerState {
             println!("{from} -> {to}")
         }
     }
+
+    fn demangle_name(&self, name: &str) -> String {
+        self.0
+            .demangle_string(name)
+            .unwrap_or(format!("(not demangled) {name}"))
+    }
 }
 
 impl Deref for CompilerState {
-    type Target = spade::CompilerState;
+    type Target = spade::compiler_state::CompilerState;
 
     fn deref(&self) -> &Self::Target {
         &self.0
@@ -28,6 +34,7 @@ mod ffi {
 
         fn read_state(path: &str) -> Result<Box<CompilerState>>;
         fn list_names(&self);
+        fn demangle_name(&self, name: &str) -> String;
     }
 }
 

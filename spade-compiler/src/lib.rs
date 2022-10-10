@@ -1,9 +1,10 @@
+pub mod compiler_state;
 mod name_dump;
 pub mod namespaced_file;
 
 use codespan_reporting::term::termcolor::Buffer;
+use compiler_state::CompilerState;
 use logos::Logos;
-use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::rc::Rc;
@@ -12,7 +13,6 @@ use thiserror::Error;
 use tracing::Level;
 
 use spade_ast::ModuleBody;
-use spade_ast_lowering::id_tracker::ExprIdTracker;
 use spade_ast_lowering::{global_symbols, visit_module_body, Context as AstLoweringCtx};
 use spade_common::id_tracker;
 use spade_common::name::Path as SpadePath;
@@ -121,17 +121,6 @@ struct CodegenArtefacts {
     flat_mir_entities: Vec<spade_mir::Entity>,
     module_code: Vec<String>,
     mir_code: Vec<String>,
-}
-
-/// All the state required in order to add more things to the compilation process
-#[derive(Serialize, Deserialize)]
-pub struct CompilerState {
-    // (filename, file content) of all the compiled files
-    pub code: Vec<(String, String)>,
-    pub symtab: FrozenSymtab,
-    pub idtracker: ExprIdTracker,
-    pub item_list: ItemList,
-    pub name_source_map: NameSourceMap,
 }
 
 #[tracing::instrument(skip_all)]

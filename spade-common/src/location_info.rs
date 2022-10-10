@@ -118,9 +118,7 @@ pub fn dummy() -> Span {
 #[derive(Clone, Copy, Serialize, Deserialize)]
 pub struct Loc<T> {
     pub inner: T,
-    #[serde(skip)]
     pub span: Span,
-    #[serde(skip)]
     pub file_id: usize,
 }
 

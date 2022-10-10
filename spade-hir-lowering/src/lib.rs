@@ -1,7 +1,7 @@
 pub mod error;
 pub mod error_reporting;
 pub mod monomorphisation;
-mod name_map;
+pub mod name_map;
 mod pattern;
 pub mod pipelines;
 mod statement_list;

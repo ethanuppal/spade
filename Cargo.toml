@@ -17,7 +17,7 @@ rust-version = "1.64" # workspade-inheritance is only supported in 1.64
 [workspace.dependencies]
 clap = { version = "3.1.18", features = ["derive"] }
 color-eyre = "0.6.1"
-codespan = { git = "https://gitlab.com/spade-lang/codespan.git" }
+codespan = { git = "https://gitlab.com/spade-lang/codespan.git", features=["serialization"] }
 codespan-reporting = { git = "https://gitlab.com/spade-lang/codespan.git" }
 colored = "2.0"
 indoc = "1.0"
