@@ -1,18 +1,21 @@
-use crate::Error;
 use codespan_reporting::diagnostic::{Diagnostic, Suggestion, SuggestionPart};
 use codespan_reporting::term::{self, termcolor::Buffer};
-use spade_common::error_reporting::{codespan_config, AsLabel, CodeBundle, CompilationError};
+use spade_common::location_info::AsLabel;
+use spade_diagnostics::emitter::codespan_config;
+use spade_diagnostics::{CodeBundle, CompilationError, DiagHandler};
 use spade_hir::symbol_table::{DeclarationError, UniqueNameError};
 
+use crate::Error;
+
 impl CompilationError for Error {
-    fn report(&self, buffer: &mut Buffer, code: &CodeBundle) {
+    fn report(&self, buffer: &mut Buffer, code: &CodeBundle, diag_handler: &mut DiagHandler) {
         match self {
             Error::ArgumentError(e) => {
-                e.report(buffer, code);
+                e.report(buffer, code, diag_handler);
                 return;
             }
             Error::LookupError(e) => {
-                e.report(buffer, code);
+                e.report(buffer, code, diag_handler);
                 return;
             }
             _ => {}
@@ -282,6 +285,9 @@ impl CompilationError for Error {
             Error::NoMatchArms { body } => Diagnostic::error()
                 .with_message("Match body has no arms")
                 .with_labels(vec![body.primary_label().with_message("Empty match body")]),
+            Error::SpadeDiagnostic(diag) => {
+                return diag_handler.emit(diag, buffer, code);
+            }
         };
 
         term::emit(buffer, &codespan_config(), &code.files, &diag).unwrap();

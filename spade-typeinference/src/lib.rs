@@ -6,46 +6,43 @@
 // and should be done by the visitor for that node. The visitor should then unify
 // types according to the rules of the node.
 
-use constraints::{ConstraintExpr, ConstraintRhs, ConstraintSource, TypeConstraints};
-use hir::param_util::{match_args_with_params, Argument};
-use hir::symbol_table::{Patternable, PatternableKind, TypeSymbol};
-use hir::{ArgumentList, FunctionLike, Pattern, PatternArgument, TypeParam};
-use hir::{ExecutableItem, ItemList};
+use std::collections::HashMap;
+use std::sync::Arc;
+
 use parse_tree_macros::trace_typechecker;
-use requirements::{Replacement, Requirement};
+use trace_stack::TraceStack;
+use tracing::{info, trace};
+
 use spade_common::location_info::{Loc, WithLocation};
 use spade_common::name::{Identifier, NameID, Path};
 use spade_hir as hir;
-use spade_hir::symbol_table::SymbolTable;
-use spade_hir::{Block, Entity, ExprKind, Expression, Register, Statement};
+use spade_hir::param_util::{match_args_with_params, Argument};
+use spade_hir::symbol_table::{Patternable, PatternableKind, SymbolTable, TypeSymbol};
+use spade_hir::{
+    ArgumentList, Block, Entity, ExecutableItem, ExprKind, Expression, FunctionLike, ItemList,
+    Pattern, PatternArgument, Register, Statement, TypeParam,
+};
 use spade_types::KnownType;
-use std::collections::HashMap;
-use std::sync::Arc;
-use trace_stack::TraceStack;
-use tracing::{info, trace};
+
+use constraints::{ce_var, ConstraintExpr, ConstraintRhs, ConstraintSource, TypeConstraints};
+use equation::{TypeEquations, TypeVar, TypedExpression};
+use error::{Error, Result, UnificationError, UnificationErrorExt, UnificationTrace};
+use fixed_types::{t_bool, t_clock, t_int};
+use requirements::{Replacement, Requirement};
+use trace_stack::{format_trace_stack, TraceStackEntry};
 
 mod constraints;
 pub mod dump;
 pub mod equation;
+pub mod error;
 pub mod error_reporting;
 pub mod expression;
 pub mod fixed_types;
 pub mod mir_type_lowering;
 pub mod pipeline;
 mod requirements;
-pub mod result;
 pub mod testutil;
 pub mod trace_stack;
-
-use crate::constraints::ce_var;
-use crate::fixed_types::t_clock;
-use crate::fixed_types::{t_bool, t_int};
-use crate::trace_stack::{format_trace_stack, TraceStackEntry};
-
-use equation::{TypeEquations, TypeVar, TypedExpression};
-use result::{Error, Result};
-
-use self::result::{UnificationError, UnificationErrorExt, UnificationTrace};
 
 // NOTE(allow) This is a debug macro which is not normally used but can come in handy
 #[allow(unused_macros)]

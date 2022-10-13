@@ -49,3 +49,28 @@ snapshot_error! {
     }
     "
 }
+
+snapshot_error! {
+    functions_do_not_allow_inst_entity,
+    "
+    entity Y() -> bool { false }
+
+    fn X() -> bool {
+        inst Y()
+    }
+    "
+}
+
+snapshot_error! {
+    functions_do_not_allow_inst_pipeline,
+    "
+    pipeline(2) P() -> bool {
+        reg;
+            false
+    }
+
+    fn X() -> bool {
+        inst(2) Y()
+    }
+    "
+}

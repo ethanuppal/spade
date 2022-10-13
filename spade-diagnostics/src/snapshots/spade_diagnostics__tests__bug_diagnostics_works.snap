@@ -1,0 +1,15 @@
+---
+source: spade-diagnostics/src/lib.rs
+expression: "String::from_utf8(buffer.into_inner()).unwrap()"
+---
+bug: oof
+  ┌─ <str>:1:7
+  │
+1 │ hello goodbye
+  │       ^^^^^^^
+  │
+  = note: This is an internal bug in the compiler.
+    We would appreciate if you opened an issue in the repository:
+    https://gitlab.com/spade-lang/spade/-/issues/new?issuable_template=Internal%20bug
+
+

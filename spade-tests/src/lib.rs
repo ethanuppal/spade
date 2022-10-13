@@ -1,7 +1,9 @@
-use codespan_reporting::term::termcolor::Buffer;
 use std::io::Write;
 
-use spade_common::error_reporting::{CodeBundle, CompilationError};
+use codespan_reporting::term::termcolor::Buffer;
+
+use spade_diagnostics::emitter::CodespanEmitter;
+use spade_diagnostics::{CodeBundle, CompilationError, DiagHandler};
 
 #[cfg(test)]
 mod ast_lowering;
@@ -29,7 +31,8 @@ impl<T> ResultExt<T> for spade_hir_lowering::error::Result<T> {
             Err(e) => {
                 let code_bundle = CodeBundle::new(code.to_string());
                 let mut buffer = Buffer::no_color();
-                e.report(&mut buffer, &code_bundle);
+                let mut diag_handler = DiagHandler::new(Box::new(CodespanEmitter));
+                e.report(&mut buffer, &code_bundle, &mut diag_handler);
                 std::io::stderr().write_all(buffer.as_slice()).unwrap();
                 panic!("Compilation error")
             }

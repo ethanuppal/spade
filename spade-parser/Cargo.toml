@@ -21,5 +21,6 @@ thiserror.workspace = true
 tracing.workspace = true
 
 spade-common = {path = "../spade-common"}
+spade-diagnostics = {path = "../spade-diagnostics"}
 spade-ast = {path = "../spade-ast"}
 parse_tree_macros = {path = "../parse_tree_macros"}

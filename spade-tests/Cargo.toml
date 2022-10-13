@@ -19,6 +19,7 @@ indoc.workspace = true
 spade-ast-lowering = {path = "../spade-ast-lowering"}
 spade-parser = {path = "../spade-parser"}
 spade-common = {path = "../spade-common"}
+spade-diagnostics = {path = "../spade-diagnostics"}
 spade-hir = {path = "../spade-hir"}
 spade-mir = {path = "../spade-mir"}
 spade-hir-lowering = {path = "../spade-hir-lowering"}
@@ -26,8 +27,7 @@ spade-typeinference = {path = "../spade-typeinference"}
 spade = {path = "../spade-compiler"}
 
 [dev-dependencies]
-insta = "1.14.0"
 unindent = "0.1.8"
 colored.workspace = true
+insta.workspace = true
 prettydiff.workspace = true
-

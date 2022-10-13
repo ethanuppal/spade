@@ -1,21 +1,18 @@
-use crate::{EntityHead, FunctionHead, ParameterList, PipelineHead, TypeParam, TypeSpec};
-
-use codespan_reporting::{
-    diagnostic::Diagnostic,
-    term::{self, termcolor::Buffer},
-};
-use serde::{Deserialize, Serialize};
-use spade_common::{
-    error_reporting::{codespan_config, AsLabel, CodeBundle, CompilationError},
-    id_tracker::NameIdTracker,
-    location_info::{Loc, WithLocation},
-    name::{Identifier, NameID, Path},
-};
-
 use std::collections::HashMap;
 
+use codespan_reporting::diagnostic::Diagnostic;
+use codespan_reporting::term::{self, termcolor::Buffer};
 use colored::Colorize;
+use serde::{Deserialize, Serialize};
 use thiserror::Error;
+
+use spade_common::id_tracker::NameIdTracker;
+use spade_common::location_info::{AsLabel, Loc, WithLocation};
+use spade_common::name::{Identifier, NameID, Path};
+use spade_diagnostics::emitter::codespan_config;
+use spade_diagnostics::{CodeBundle, CompilationError, DiagHandler};
+
+use crate::{EntityHead, FunctionHead, ParameterList, PipelineHead, TypeParam, TypeSpec};
 
 #[derive(Error, Debug, Clone, PartialEq)]
 pub enum LookupError {
@@ -75,7 +72,7 @@ impl LookupError {
 }
 
 impl CompilationError for LookupError {
-    fn report(&self, buffer: &mut Buffer, code: &CodeBundle) {
+    fn report(&self, buffer: &mut Buffer, code: &CodeBundle, _diag_handler: &mut DiagHandler) {
         let diag = match self {
             LookupError::NoSuchSymbol(path) => Diagnostic::error()
                 .with_message(format!("Use of undeclared name {}", path))

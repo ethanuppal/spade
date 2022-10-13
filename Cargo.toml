@@ -21,6 +21,7 @@ codespan = { git = "https://gitlab.com/spade-lang/codespan.git" }
 codespan-reporting = { git = "https://gitlab.com/spade-lang/codespan.git" }
 colored = "2.0"
 indoc = "1.0"
+insta = "1.14.0"
 itertools = "0.10.3"
 local-impl = { git = "https://gitlab.com/sornas/local-impl" }
 logos = "0.11"

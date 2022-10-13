@@ -2,11 +2,9 @@ use spade_common::{location_info::Loc, name::Identifier};
 use spade_hir::symbol_table::{SymbolTable, TypeDeclKind, TypeSymbol};
 use spade_types::KnownType;
 
-use crate::{
-    equation::TypeVar,
-    result::{Error, Result, UnificationErrorExt},
-    GenericListSource, TypeState,
-};
+use crate::equation::TypeVar;
+use crate::error::{Error, Result, UnificationErrorExt};
+use crate::{GenericListSource, TypeState};
 
 #[derive(Clone, Debug)]
 pub enum Requirement {

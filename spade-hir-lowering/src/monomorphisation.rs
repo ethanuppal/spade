@@ -1,15 +1,15 @@
 use std::collections::{HashMap, VecDeque};
 
-use crate::{
-    error::{Error, Result},
-    generate_entity, generate_pipeline,
-};
 use spade_common::{id_tracker::ExprIdTracker, location_info::WithLocation, name::NameID};
+use spade_diagnostics::DiagHandler;
 use spade_hir::{symbol_table::FrozenSymtab, ExecutableItem, ItemList, UnitName};
 use spade_mir as mir;
-use spade_typeinference::{
-    equation::TypeVar, result::UnificationErrorExt, GenericListToken, TypeState,
-};
+use spade_typeinference::equation::TypeVar;
+use spade_typeinference::error::UnificationErrorExt;
+use spade_typeinference::{GenericListToken, TypeState};
+
+use crate::error::{Error, Result};
+use crate::{generate_entity, generate_pipeline};
 
 /// An item to be monomorphised
 struct MonoItem {
@@ -91,6 +91,7 @@ pub fn compile_items(
     symtab: &mut FrozenSymtab,
     idtracker: &mut ExprIdTracker,
     item_list: &ItemList,
+    diag_handler: &mut DiagHandler,
 ) -> Vec<Result<MirOutput>> {
     // Build a map of items to use for compilation later. Also push all non
     // generic items to the compilation queue
@@ -136,7 +137,7 @@ pub fn compile_items(
                         match type_state
                             .unify(source_var, new, symtab.symtab())
                             .map_normal_err(|(expected, got)| {
-                                spade_typeinference::result::Error::UnspecifiedTypeError {
+                                spade_typeinference::error::Error::UnspecifiedTypeError {
                                     expected,
                                     got,
                                     loc: e.loc(),
@@ -157,6 +158,7 @@ pub fn compile_items(
                     &type_state,
                     item_list,
                     &mut state,
+                    diag_handler,
                 )
                 .map(|mir| MirOutput {
                     mir,
@@ -177,6 +179,7 @@ pub fn compile_items(
                     item_list,
                     &mut reg_name_map,
                     &mut state,
+                    diag_handler,
                 )
                 .map(|mir| MirOutput {
                     mir,

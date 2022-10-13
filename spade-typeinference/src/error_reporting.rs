@@ -1,8 +1,12 @@
-use crate::constraints::ConstraintSource;
-use crate::{result::UnificationTrace, Error};
 use codespan_reporting::diagnostic::Diagnostic;
 use codespan_reporting::term::{self, termcolor::Buffer};
-use spade_common::error_reporting::{codespan_config, AsLabel, CodeBundle, CompilationError};
+
+use spade_common::location_info::AsLabel;
+use spade_diagnostics::emitter::codespan_config;
+use spade_diagnostics::{CodeBundle, CompilationError, DiagHandler};
+
+use crate::constraints::ConstraintSource;
+use crate::error::{Error, UnificationTrace};
 
 pub fn type_mismatch_notes(got: &UnificationTrace, expected: &UnificationTrace) -> Vec<String> {
     let mut result = vec![];
@@ -19,10 +23,10 @@ pub fn type_mismatch_notes(got: &UnificationTrace, expected: &UnificationTrace) 
 }
 
 impl CompilationError for Error {
-    fn report(&self, buffer: &mut Buffer, code: &CodeBundle) {
+    fn report(&self, buffer: &mut Buffer, code: &CodeBundle, diag_handler: &mut DiagHandler) {
         match self {
             Error::ArgumentError(inner) => {
-                inner.report(buffer, code);
+                inner.report(buffer, code, diag_handler);
                 return;
             }
             _ => {}
@@ -331,6 +335,9 @@ impl CompilationError for Error {
                 .with_labels(vec![name
                     .primary_label()
                     .with_message("No entry in generic list")]),
+            Error::SpadeDiagnostic(diagnostic) => {
+                return diag_handler.emit(diagnostic, buffer, code);
+            }
         };
 
         term::emit(buffer, &codespan_config(), &code.files, &diag).unwrap();

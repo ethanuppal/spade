@@ -20,4 +20,5 @@ serde.workspace = true
 itertools.workspace = true
 
 spade-common = {path = "../spade-common"}
+spade-diagnostics = {path = "../spade-diagnostics"}
 spade-types = {path = "../spade-types"}

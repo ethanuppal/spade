@@ -19,6 +19,7 @@ pub use pipelines::generate_pipeline;
 use spade_common::id_tracker::ExprIdTracker;
 use spade_common::location_info::WithLocation;
 use spade_common::name::{Identifier, Path};
+use spade_diagnostics::{DiagHandler, Diagnostic};
 use spade_typeinference::GenericListToken;
 use substitution::Substitutions;
 use thiserror::Error;
@@ -63,17 +64,20 @@ impl TypeStateLocal for TypeState {
         symtab: &SymbolTable,
         types: &TypeList,
     ) -> Result<ConcreteType> {
-        let t = self
-            .type_of(&TypedExpression::Id(expr.id))
-            .map_err(|_| Error::InternalExpressionWithoutType(expr.loc()))?;
+        let t = self.type_of(&TypedExpression::Id(expr.id)).map_err(|_| {
+            Diagnostic::bug(expr, "Expression had no type")
+                .primary_label("This expression had no type")
+        })?;
 
         if let Some(t) = Self::ungenerify_type(&t, symtab, types) {
             Ok(t)
         } else {
-            Err(Error::UsingGenericType {
-                expr: expr.clone(),
-                t: t.clone(),
-            })
+            Err(
+                Diagnostic::error(expr, "Type of expression is not fully known")
+                    .primary_label("The type of this expression is not fully known")
+                    .note(format!("Found incomplete type: {t}"))
+                    .into(),
+            )
         }
     }
 }
@@ -1293,10 +1297,15 @@ impl ExprLocal for Loc<Expression> {
             .to_mir_type();
 
         if self_type.size() > input_type.size() {
-            return Err(Error::CastToLarger {
-                to: self_type.size().at_loc(self),
-                from: input_type.size().at_loc(&args[0].value),
-            });
+            let input_loc = args[0].value.loc();
+            return Err(Diagnostic::error(input_loc, "Truncating to a larger value")
+                .primary_label(format!("This value is {} bytes", input_type.size()))
+                .secondary_label(
+                    self,
+                    format!("The value is truncated to {} bytes here", self_type.size()),
+                )
+                .note("Truncation can only remove bits")
+                .into());
         }
 
         result.push(mir::Statement::Binding(mir::Binding {
@@ -1518,6 +1527,7 @@ pub struct Context<'a> {
     pub item_list: &'a ItemList,
     pub mono_state: &'a mut MonoState,
     pub subs: &'a mut Substitutions,
+    pub diag_handler: &'a mut DiagHandler,
 }
 
 pub fn generate_entity<'a>(
@@ -1528,6 +1538,7 @@ pub fn generate_entity<'a>(
     types: &TypeState,
     item_list: &ItemList,
     mono_state: &mut MonoState,
+    diag_handler: &mut DiagHandler,
 ) -> Result<mir::Entity> {
     let inputs = entity
         .inputs
@@ -1550,6 +1561,7 @@ pub fn generate_entity<'a>(
         subs: &mut Substitutions::new(),
         item_list,
         mono_state,
+        diag_handler,
     };
 
     let statements = entity.body.lower(&mut ctx)?;

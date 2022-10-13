@@ -1,6 +1,5 @@
 use spade_common::{location_info::Loc, name::NameID};
-use spade_hir::Expression;
-use spade_typeinference::equation::TypeVar;
+use spade_diagnostics::Diagnostic;
 use spade_types::ConcreteType;
 use thiserror::Error;
 
@@ -10,10 +9,6 @@ use crate::usefulness::Witness;
 pub enum Error {
     #[error("(Internal) Argument error")]
     ArgumentError(#[from] spade_hir::param_util::ArgumentError),
-    #[error("using generic type")]
-    UsingGenericType { expr: Loc<Expression>, t: TypeVar },
-    #[error("cast to larger")]
-    CastToLarger { from: Loc<u64>, to: Loc<u64> },
     #[error("concat size mismatch")]
     ConcatSizeMismatch {
         lhs: Loc<u64>,
@@ -56,8 +51,9 @@ pub enum Error {
         actual: ConcreteType,
     },
     #[error("Unification error")]
-    UnificationError(#[source] spade_typeinference::result::Error),
-    #[error("(Internal) Expression without type")]
-    InternalExpressionWithoutType(Loc<()>),
+    UnificationError(#[source] spade_typeinference::error::Error),
+
+    #[error("Spade diagnostic")]
+    SpadeDiagnostic(#[from] Diagnostic),
 }
 pub type Result<T> = std::result::Result<T, Error>;

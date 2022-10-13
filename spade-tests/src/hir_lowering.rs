@@ -1930,4 +1930,20 @@ mod argument_list_tests {
         }
         "
     }
+
+    snapshot_error! {
+        truncating_to_larger_value,
+        "
+        // lifeguard spade#125
+        mod std{mod conv{ 
+            fn trunc<#N, #M>(x: int<N>) -> int<M> __builtin__
+        }}
+        use std::conv::trunc;
+        fn main() -> int<8> {
+            let a: int<4> = 0;
+            let b: int<8> = std::conv::trunc(a);
+            b
+        }
+        "
+    }
 }

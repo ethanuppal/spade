@@ -1,34 +1,15 @@
-use codespan_reporting::diagnostic::Label;
-use codespan_reporting::files::{Files, SimpleFiles};
-use codespan_reporting::term::termcolor::Buffer;
-use codespan_reporting::term::termcolor::{Color, ColorChoice, ColorSpec};
 use std::io::Write;
 
-use crate::location_info::Loc;
+use codespan_reporting::files::{Files, SimpleFiles};
+use codespan_reporting::term::termcolor::Buffer;
 
-pub fn color_choice(no_color: bool) -> ColorChoice {
-    if no_color {
-        ColorChoice::Never
-    } else {
-        ColorChoice::Auto
-    }
-}
+use spade_common::location_info::{AsLabel, Loc};
 
-pub fn codespan_config() -> codespan_reporting::term::Config {
-    let mut primary_label_error = ColorSpec::new();
-    primary_label_error
-        .set_fg(Some(Color::Red))
-        .set_intense(true);
+pub use diagnostic::Diagnostic;
+pub use emitter::Emitter;
 
-    let style = codespan_reporting::term::Styles {
-        primary_label_error,
-        ..Default::default()
-    };
-    codespan_reporting::term::Config {
-        styles: style,
-        ..Default::default()
-    }
-}
+pub mod diagnostic;
+pub mod emitter;
 
 /// A bundle of all the source code included in the current compilation
 #[derive(Clone)]
@@ -87,11 +68,11 @@ impl CodeBundle {
 }
 
 pub trait CompilationError {
-    fn report(&self, buffer: &mut Buffer, code: &CodeBundle);
+    fn report(&self, buffer: &mut Buffer, code: &CodeBundle, diag_handler: &mut DiagHandler);
 }
 
 impl CompilationError for std::io::Error {
-    fn report(&self, buffer: &mut Buffer, _code: &CodeBundle) {
+    fn report(&self, buffer: &mut Buffer, _code: &CodeBundle, _diag_handler: &mut DiagHandler) {
         if let Err(e) = buffer.write_all(self.to_string().as_bytes()) {
             eprintln!(
                 "io error when writing io error to error buffer\noriginal error: {}\nnew error: {}",
@@ -101,18 +82,37 @@ impl CompilationError for std::io::Error {
     }
 }
 
-pub fn primary_label<T>(loc: Loc<T>) -> Label<usize> {
-    Label::primary(loc.file_id, loc)
+pub struct DiagHandler {
+    emitter: Box<dyn Emitter + Send>,
+    // Here we can add more shared state for diagnostics. For example, rustc can
+    // stash diagnostics that can be retrieved in later stages, indexed by (Span, StashKey).
 }
 
-pub trait AsLabel {
-    fn file_id(&self) -> usize;
-    fn span(&self) -> std::ops::Range<usize>;
-
-    fn primary_label(&self) -> Label<usize> {
-        Label::primary(self.file_id(), self.span())
+impl DiagHandler {
+    pub fn new(emitter: Box<dyn Emitter + Send>) -> Self {
+        Self { emitter }
     }
-    fn secondary_label(&self) -> Label<usize> {
-        Label::secondary(self.file_id(), self.span())
+
+    pub fn emit(&mut self, diagnostic: &Diagnostic, buffer: &mut Buffer, code: &CodeBundle) {
+        self.emitter.emit_diagnostic(diagnostic, buffer, code);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use codespan_reporting::term::termcolor::Buffer;
+
+    use crate::emitter::CodespanEmitter;
+    use crate::{CodeBundle, Diagnostic, Emitter};
+
+    #[test]
+    fn bug_diagnostics_works() {
+        let code = CodeBundle::new("hello goodbye".to_string());
+        let sp = ((6..13).into(), 0);
+        let mut buffer = Buffer::no_color();
+        let mut emitter = CodespanEmitter;
+        let diagnostic = Diagnostic::bug(sp, "oof");
+        emitter.emit_diagnostic(&diagnostic, &mut buffer, &code);
+        insta::assert_display_snapshot!(String::from_utf8(buffer.into_inner()).unwrap());
     }
 }

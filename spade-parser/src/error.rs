@@ -1,16 +1,9 @@
 use local_impl::local_impl;
 use spade_common::{location_info::Loc, name::Path};
+use spade_diagnostics::Diagnostic;
 use thiserror::Error;
 
 use crate::{lexer::TokenKind, Token, TypeSpec};
-
-#[derive(Debug, Clone, PartialEq)]
-pub enum UnexpectedTokenContext {
-    SuggestEnumVariantItems {
-        open_paren: Token,
-        close_paren: Token,
-    },
-}
 
 #[derive(Error, Debug, Clone, PartialEq)]
 pub enum Error {
@@ -22,7 +15,6 @@ pub enum Error {
     UnexpectedToken {
         got: Token,
         expected: Vec<&'static str>,
-        context: Option<UnexpectedTokenContext>,
     },
     #[error("Expected to find a {} to match {friend:?}, got {got:?}", expected.as_str())]
     UnmatchedPair {
@@ -84,8 +76,6 @@ pub enum Error {
 
     #[error("Reg in function")]
     RegInFunction { at: Loc<()>, fn_keyword: Loc<()> },
-    #[error("Inst in function")]
-    InstInFunction { at: Loc<()>, fn_keyword: Loc<()> },
     #[error("Stage references are not allowed in functions")]
     PipelineRefInFunction { at: Loc<()>, fn_keyword: Loc<()> },
     #[error("Stage references are not allowed in entities")]
@@ -113,6 +103,9 @@ pub enum Error {
         attributes: Loc<()>,
         item_start: Loc<TokenKind>,
     },
+
+    #[error("Spade diagnostic")]
+    SpadeDiagnostic(#[from] Diagnostic),
 }
 
 impl Error {
@@ -150,7 +143,6 @@ impl CommaSeparatedError {
                 Error::UnexpectedToken {
                     got,
                     expected: extra,
-                    context: None,
                 }
             }
         }

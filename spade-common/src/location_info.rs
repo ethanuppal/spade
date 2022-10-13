@@ -1,23 +1,60 @@
-use std::ops::Range;
-
 use codespan::Span;
+use codespan_reporting::diagnostic::Label;
 use serde::{Deserialize, Serialize};
 
-use crate::error_reporting::AsLabel;
+pub trait AsLabel {
+    fn file_id(&self) -> usize;
+    fn span(&self) -> std::ops::Range<usize>;
+
+    fn primary_label(&self) -> Label<usize> {
+        Label::primary(self.file_id(), self.span())
+    }
+
+    fn secondary_label(&self) -> Label<usize> {
+        Label::secondary(self.file_id(), self.span())
+    }
+}
+
+pub type FullSpan = (Span, usize);
+
+impl<T> From<&Loc<T>> for FullSpan {
+    fn from(loc: &Loc<T>) -> Self {
+        (loc.span, loc.file_id)
+    }
+}
+
+impl<T> From<Loc<T>> for FullSpan {
+    fn from(loc: Loc<T>) -> Self {
+        FullSpan::from(&loc)
+    }
+}
+
+impl AsLabel for FullSpan {
+    fn span(&self) -> std::ops::Range<usize> {
+        self.0.into()
+    }
+
+    fn file_id(&self) -> usize {
+        self.1
+    }
+}
 
 pub trait HasCodespan {
     fn codespan(&self) -> Span;
 }
+
 impl<T> HasCodespan for Loc<T> {
     fn codespan(&self) -> Span {
         self.span
     }
 }
+
 impl HasCodespan for Span {
     fn codespan(&self) -> Span {
         *self
     }
 }
+
 impl HasCodespan for std::ops::Range<usize> {
     fn codespan(&self) -> Span {
         lspan(self.clone())
@@ -65,6 +102,8 @@ impl WithLocation for u64 {}
 impl WithLocation for i64 {}
 impl WithLocation for usize {}
 impl WithLocation for bool {}
+impl WithLocation for String {}
+impl<'a> WithLocation for &'a str {}
 impl<T> WithLocation for Vec<T> {}
 
 pub fn lspan(s: logos::Span) -> Span {
@@ -161,12 +200,6 @@ impl<T> Loc<T> {
             span: self.span,
             file_id: self.file_id,
         }
-    }
-}
-
-impl<T> Into<Range<usize>> for Loc<T> {
-    fn into(self) -> Range<usize> {
-        self.span.into()
     }
 }
 

@@ -7,12 +7,10 @@ use spade_types::KnownType;
 
 use crate::constraints::{bits_to_store, ce_int, ce_var, ConstraintSource};
 use crate::equation::{TypeVar, TypedExpression};
+use crate::error::{Error, UnificationErrorExt};
 use crate::fixed_types::t_bool;
 use crate::requirements::Requirement;
-use crate::result::{Error, UnificationErrorExt};
-use crate::{kvar, Result};
-use crate::{GenericListToken, TypeState};
-use crate::{HasType, TraceStackEntry};
+use crate::{kvar, GenericListToken, HasType, Result, TraceStackEntry, TypeState};
 
 macro_rules! assuming_kind {
     ($pattern:pat = $expr:expr => $block:block) => {

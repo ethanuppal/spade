@@ -6,8 +6,8 @@ error: Type of expression is not fully known
   ┌─ testinput:2:18
   │
 2 │     reg(clk) x = 0;
-  │                  ^ Incomplete type
+  │                  ^ The type of this expression is not fully known
   │
-  = Found incomplete type: int<_>
+  = note: Found incomplete type: int<_>
 
 

@@ -139,6 +139,9 @@ pub enum Error {
         at_loc: Loc<()>,
         for_type: Loc<Path>,
     },
+
+    #[error("Spade diagnostic")]
+    SpadeDiagnostic(#[from] spade_diagnostics::Diagnostic),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;

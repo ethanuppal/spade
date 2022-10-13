@@ -1,18 +1,16 @@
-use crate::{
-    aliasing::flatten_aliases,
-    assertion_codegen::AssertedExpression,
-    enum_util,
-    type_list::TypeList,
-    verilog::{self, assign, logic, size_spec},
-    Binding, ConstantValue, Entity, Operator, Statement, ValueName,
-};
 use codespan_reporting::term::termcolor;
 use itertools::Itertools;
 use nesty::{code, Code};
-use spade_common::{
-    error_reporting::{CodeBundle, CompilationError},
-    location_info::Loc,
-};
+
+use spade_common::location_info::Loc;
+use spade_diagnostics::emitter::CodespanEmitter;
+use spade_diagnostics::{CodeBundle, CompilationError, DiagHandler};
+
+use crate::aliasing::flatten_aliases;
+use crate::assertion_codegen::AssertedExpression;
+use crate::type_list::TypeList;
+use crate::verilog::{self, assign, logic, size_spec};
+use crate::{enum_util, Binding, ConstantValue, Entity, Operator, Statement, ValueName};
 
 pub mod util;
 
@@ -734,11 +732,17 @@ fn statement_code(
             }
         }
         Statement::Assert(val) => {
-            let mut msg_buf = termcolor::Buffer::ansi();
-
-            // NOTE: Unwrap is semi-safe. Non-tests are expected to pass an actual
+            // NOTE: Source code unwrap is semi-safe. Non-tests are expected to pass an actual
             // source code
-            AssertedExpression(val.clone()).report(&mut msg_buf, &source_code.as_ref().unwrap());
+
+            let mut msg_buf = termcolor::Buffer::ansi();
+            let mut diag_handler = DiagHandler::new(Box::new(CodespanEmitter));
+
+            AssertedExpression(val.clone()).report(
+                &mut msg_buf,
+                &source_code.as_ref().unwrap(),
+                &mut diag_handler,
+            );
 
             let msg = String::from_utf8(msg_buf.as_slice().into())
                 .map_err(|e| {

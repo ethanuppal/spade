@@ -18,10 +18,11 @@ codespan-reporting.workspace = true
 tracing.workspace = true
 local-impl.workspace = true
 
-spade-common = {path = "../spade-common"}
 spade-ast = {path = "../spade-ast"}
-spade-types = {path = "../spade-types"}
+spade-common = {path = "../spade-common"}
+spade-diagnostics = {path = "../spade-diagnostics"}
 spade-hir = {path = "../spade-hir"}
+spade-types = {path = "../spade-types"}
 
 [dev-dependencies]
 # spade-testutil = {path = "../spade-testutil"}

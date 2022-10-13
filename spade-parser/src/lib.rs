@@ -5,31 +5,27 @@ mod expression;
 pub mod item_type;
 pub mod lexer;
 
-use error::{CommaSeparatedResult, Error, Result};
+use colored::*;
+use logos::Lexer;
+use tracing::{event, Level};
 
+use parse_tree_macros::trace_parser;
 use spade_ast::{
     ArgumentList, ArgumentPattern, AttributeList, Block, ComptimeConfig, Entity, Enum, Expression,
     FunctionDecl, Item, Module, ModuleBody, NamedArgument, ParameterList, Pattern, Pipeline,
     PipelineReference, Register, Statement, Struct, TraitDef, TypeDeclKind, TypeDeclaration,
     TypeExpression, TypeParam, TypeSpec, UseStatement,
 };
-use spade_common::{
-    error_reporting::AsLabel,
-    location_info::{lspan, Loc, WithLocation},
-    name::{Identifier, Path},
+use spade_common::location_info::{lspan, AsLabel, FullSpan, HasCodespan, Loc, WithLocation};
+use spade_common::name::{Identifier, Path};
+use spade_diagnostics::{diagnostic::SuggestionParts, Diagnostic};
+
+use crate::error::{
+    CSErrorTransformations, CommaSeparatedError, CommaSeparatedResult, Error, Result,
 };
-
-use colored::*;
-use logos::Lexer;
-use tracing::{event, Level};
-
-use parse_tree_macros::trace_parser;
-
-use crate::{
-    error::{CSErrorTransformations, CommaSeparatedError, UnexpectedTokenContext},
-    item_type::{ItemType, ItemTypeLocal},
-    lexer::TokenKind,
-};
+use crate::error_reporting::unexpected_token_message;
+use crate::item_type::{ItemType, ItemTypeLocal};
+use crate::lexer::TokenKind;
 
 /// A token with location info
 #[derive(Clone, Debug, PartialEq)]
@@ -49,7 +45,7 @@ impl Token {
     }
 }
 
-impl spade_common::location_info::HasCodespan for Token {
+impl HasCodespan for Token {
     fn codespan(&self) -> codespan::Span {
         self.span().codespan()
     }
@@ -62,6 +58,12 @@ impl AsLabel for Token {
 
     fn span(&self) -> std::ops::Range<usize> {
         self.span.clone()
+    }
+}
+
+impl From<Token> for FullSpan {
+    fn from(token: Token) -> FullSpan {
+        (token.codespan(), token.file_id)
     }
 }
 
@@ -359,7 +361,6 @@ impl<'a> Parser<'a> {
                 return Err(Error::UnexpectedToken {
                     got: next.unwrap(),
                     expected: vec!["+", "-", "identifier"],
-                    context: None,
                 })
             }
             _ => return Err(Error::Eof),
@@ -626,7 +627,6 @@ impl<'a> Parser<'a> {
             Err(Error::UnexpectedToken {
                 got: self.eat_unconditional()?,
                 expected: vec!["Pattern"],
-                context: None,
             })
         }
     }
@@ -1110,7 +1110,6 @@ impl<'a> Parser<'a> {
                 return Err(Error::UnexpectedToken {
                     got: next,
                     expected: vec![TokenKind::Comma.as_str(), TokenKind::CloseParen.as_str()],
-                    context: None,
                 });
             }
         } else {
@@ -1186,40 +1185,37 @@ impl<'a> Parser<'a> {
         } else if self.peek_kind(&TokenKind::Comma)? || self.peek_kind(&TokenKind::CloseBrace)? {
             None
         } else {
-            let maybe_paren = self.peek_and_eat(&TokenKind::OpenParen)?;
-            let (token, context) = if let Some(open_paren) = maybe_paren {
-                event!(Level::INFO, "Found OpenParen after enum option identifier. Checking if we should suggest OpenBrace and CloseBrace.");
-
-                let mut try_parameter_list = self.clone();
-                let has_parameter_list = try_parameter_list.parameter_list().is_ok();
-                let close_paren = try_parameter_list.peek();
-
-                let context = match (has_parameter_list, close_paren) {
-                    (true, Ok(Some(close_paren))) => {
-                        Some(UnexpectedTokenContext::SuggestEnumVariantItems {
-                            open_paren: open_paren.clone(),
-                            close_paren,
-                        })
-                    }
-                    _ => None,
-                };
-                (open_paren, context)
-            } else {
-                (self.eat_unconditional()?, None)
-            };
-
-            return Err(Error::UnexpectedToken {
-                got: token,
-                expected: vec![
-                    TokenKind::OpenBrace.as_str(),
-                    TokenKind::Comma.as_str(),
-                    TokenKind::CloseBrace.as_str(),
-                ],
-                context,
-            });
+            let token = self.peek()?.ok_or(Error::Eof)?;
+            let message = unexpected_token_message(&token.kind, "`{`, `,` or `}`");
+            // FIXME: Error::Eof => Diagnostic
+            let mut err = Diagnostic::error(token, message);
+            self.maybe_suggest_brace_enum_variant(&mut err)?;
+            return Err(err.into());
         };
 
         Ok((name, args))
+    }
+
+    fn maybe_suggest_brace_enum_variant(&mut self, err: &mut Diagnostic) -> Result<bool> {
+        let open_paren = match self.peek_and_eat(&TokenKind::OpenParen)? {
+            Some(open_paren) => open_paren,
+            _ => return Ok(false),
+        };
+        let mut try_parameter_list = self.clone();
+        if try_parameter_list.parameter_list().is_err() {
+            return Ok(false);
+        }
+        let close_paren = match try_parameter_list.peek_and_eat(&TokenKind::CloseParen)? {
+            Some(close_paren) => close_paren,
+            _ => return Ok(false),
+        };
+        err.push_span_suggest_multipart(
+            "Use `{` if you want to add items to this enum variant",
+            SuggestionParts::new()
+                .part(open_paren, "{")
+                .part(close_paren, "}"),
+        );
+        Ok(true)
     }
 
     #[trace_parser]
@@ -1376,7 +1372,6 @@ impl<'a> Parser<'a> {
             return Err(Error::UnexpectedToken {
                 got: self.eat_unconditional()?,
                 expected: vec!["integer"],
-                context: None,
             });
         };
 
@@ -1572,7 +1567,6 @@ impl<'a> Parser<'a> {
             Err(Error::UnexpectedToken {
                 got: next,
                 expected: vec![expected.as_str()],
-                context: None,
             })
         }
     }
@@ -1590,7 +1584,6 @@ impl<'a> Parser<'a> {
             Err(Error::UnexpectedToken {
                 got: next,
                 expected: vec![expected_description],
-                context: None,
             })
         } else {
             Ok(next)
@@ -2493,22 +2486,6 @@ mod tests {
     }
 
     #[test]
-    fn functions_do_not_allow_inst() {
-        let code = "fn X() {
-            inst Y()
-        }";
-
-        check_parse!(
-            code,
-            entity(&AttributeList::empty()),
-            Err(Error::InstInFunction {
-                at: ().nowhere(),
-                fn_keyword: ().nowhere()
-            })
-        );
-    }
-
-    #[test]
     fn entity_instantiation() {
         let code = "inst some_entity(x, y, z)";
 
@@ -2569,7 +2546,6 @@ mod tests {
                     span: (4..5),
                     file_id: 0,
                 },
-                context: None,
             })
         );
     }
@@ -2916,7 +2892,6 @@ mod tests {
                     span: 10..13,
                     file_id: 0,
                 },
-                context: None,
             })
         );
     }

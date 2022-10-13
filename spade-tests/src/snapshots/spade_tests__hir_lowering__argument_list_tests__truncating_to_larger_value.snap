@@ -1,0 +1,16 @@
+---
+source: spade-tests/src/hir_lowering.rs
+expression: "std::str::from_utf8(buffer.as_slice()).expect(\"error contains invalid utf-8\")"
+---
+error: Truncating to a larger value
+  ┌─ testinput:8:38
+  │
+8 │     let b: int<8> = std::conv::trunc(a);
+  │                     -----------------^-
+  │                     │                │
+  │                     │                This value is 4 bytes
+  │                     The value is truncated to 8 bytes here
+  │
+  = note: Truncation can only remove bits
+
+

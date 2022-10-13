@@ -1,0 +1,19 @@
+---
+source: spade-tests/src/parser.rs
+expression: "std::str::from_utf8(buffer.as_slice()).expect(\"error contains invalid utf-8\")"
+---
+error: Entities and pipelines can not be instantiated in functions
+  ┌─ testinput:4:5
+  │
+3 │ fn X() -> bool {
+  │ -- This is a function
+4 │     inst Y()
+  │     ^^^^ inst not allowed here
+  │
+  = note: Functions can only contain combinatorial logic
+  = Consider making the function an entity
+  │
+3 │ entity X() -> bool {
+  │ ~~~~~~
+
+

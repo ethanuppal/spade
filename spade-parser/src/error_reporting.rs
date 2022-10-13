@@ -1,8 +1,10 @@
 use crate::lexer::TokenKind;
-use crate::{Error, Token, UnexpectedTokenContext};
+use crate::{Error, Token};
 use codespan_reporting::diagnostic::{Diagnostic, Label, Suggestion, SuggestionPart};
 use codespan_reporting::term::{self, termcolor::Buffer};
-use spade_common::error_reporting::{codespan_config, AsLabel, CodeBundle, CompilationError};
+use spade_common::location_info::AsLabel;
+use spade_diagnostics::emitter::codespan_config;
+use spade_diagnostics::{CodeBundle, CompilationError, DiagHandler};
 
 fn unexpected_token_list<'a>(expected: impl IntoIterator<Item = &'a str>) -> String {
     let expected = expected
@@ -22,7 +24,7 @@ fn unexpected_token_list<'a>(expected: impl IntoIterator<Item = &'a str>) -> Str
     }
 }
 
-fn unexpected_token_message<'a>(got: &TokenKind, expected_list: &str) -> String {
+pub fn unexpected_token_message<'a>(got: &TokenKind, expected_list: &str) -> String {
     format!("Unexpected `{}`, expected {}", got.as_str(), expected_list,)
 }
 
@@ -30,51 +32,27 @@ fn unexpected_token<'a>(
     file_id: usize,
     got: Token,
     expected: impl IntoIterator<Item = &'a str>,
-    context: Option<UnexpectedTokenContext>,
 ) -> Diagnostic<usize> {
     let expected_list = unexpected_token_list(expected);
     let message = unexpected_token_message(&got.kind, &expected_list);
-    let suggestions = match context {
-        Some(UnexpectedTokenContext::SuggestEnumVariantItems {
-            open_paren,
-            close_paren,
-        }) => vec![Suggestion {
-            file_id,
-            message: format!("Use `{{` if you want to add items to this enum variant"),
-            parts: vec![
-                SuggestionPart {
-                    range: open_paren.span(),
-                    replacement: format!("{{"),
-                },
-                SuggestionPart {
-                    range: close_paren.span(),
-                    replacement: format!("}}"),
-                },
-            ],
-        }],
-        None => vec![],
-    };
 
-    Diagnostic::error()
-        .with_message(message)
-        .with_labels(vec![
-            Label::primary(file_id, got.span).with_message(format!("expected {}", expected_list))
-        ])
-        .with_suggestions(suggestions)
+    Diagnostic::error().with_message(message).with_labels(vec![
+        Label::primary(file_id, got.span).with_message(format!("expected {}", expected_list))
+    ])
 }
 
 impl CompilationError for Error {
-    fn report(&self, buffer: &mut Buffer, code: &CodeBundle) {
+    fn report(&self, buffer: &mut Buffer, code: &CodeBundle, diag_handler: &mut DiagHandler) {
         let diag = match self {
             Error::Eof => Diagnostic::error().with_message("Reached end of file when parsing"),
             Error::LexerError(file_id, location) => Diagnostic::error()
                 .with_message("Lexer error, unexpected symbol")
                 .with_labels(vec![Label::primary(*file_id, *location)]),
-            Error::UnexpectedToken { got, expected, context } => {
-                unexpected_token(got.file_id, got.clone(), expected.clone(), context.clone())
+            Error::UnexpectedToken { got, expected } => {
+                unexpected_token(got.file_id, got.clone(), expected.clone())
             }
             Error::UnexpectedEndOfArgList { got, expected } => {
-                unexpected_token(got.file_id, got.clone(), expected.iter().map(|tok| tok.as_str()), None)
+                unexpected_token(got.file_id, got.clone(), expected.iter().map(|tok| tok.as_str()))
             }
             Error::UnmatchedPair {
                 friend,
@@ -210,29 +188,6 @@ impl CompilationError for Error {
                 .with_labels(vec![at
                     .primary_label()
                     .with_message("decl doesn't declare anything")]),
-            Error::InstInFunction {at, fn_keyword} => Diagnostic::error()
-                .with_message("Entities or pipelines can not be instantiated in functions")
-                .with_labels(vec![
-                    at
-                        .primary_label()
-                        .with_message("inst not allowed here"),
-                    fn_keyword
-                        .secondary_label()
-                        .with_message("Because this is a function")
-                ])
-                .with_notes(vec![
-                    format!("Functions can only contain combinatorial logic"),
-                ])
-                .with_suggestions(vec![Suggestion {
-                    file_id: fn_keyword.file_id,
-                    message: format!("Consider making the function an entity"),
-                    parts: vec![
-                        SuggestionPart {
-                            range: fn_keyword.span.into(),
-                            replacement: format!("entity"),
-                        },
-                    ],
-                }]),
             Error::RegInFunction{at, fn_keyword} => Diagnostic::error()
                 .with_message("Functions can not contain registers")
                 .with_labels(vec![
@@ -287,6 +242,9 @@ impl CompilationError for Error {
                 .with_message("Stage outside pipeline")
                 .with_labels(vec![loc.primary_label().with_message("stage is not allowed here")])
                 .with_notes(vec![format!("Stages are only allowed in the root block of a pipeline")]),
+            Error::SpadeDiagnostic(diagnostic) => {
+                return diag_handler.emit(diagnostic, buffer, code);
+            }
         };
 
         term::emit(buffer, &codespan_config(), &code.files, &diag).unwrap();

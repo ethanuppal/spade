@@ -1,9 +1,13 @@
-use crate::usefulness::Witness;
-use crate::Error;
 use codespan_reporting::diagnostic::Diagnostic;
 use codespan_reporting::term::{self, termcolor::Buffer};
 use itertools::Itertools;
-use spade_common::error_reporting::{codespan_config, AsLabel, CodeBundle, CompilationError};
+
+use spade_common::location_info::AsLabel;
+use spade_diagnostics::emitter::codespan_config;
+use spade_diagnostics::{CodeBundle, CompilationError, DiagHandler};
+
+use crate::usefulness::Witness;
+use crate::Error;
 
 fn format_witnesses(witnesses: &[Witness]) -> String {
     // Print 1 or 2 missing patterns in full, if more print and X more not covered
@@ -28,15 +32,15 @@ fn format_witnesses(witnesses: &[Witness]) -> String {
 }
 
 impl CompilationError for Error {
-    fn report(&self, buffer: &mut Buffer, code: &CodeBundle) {
+    fn report(&self, buffer: &mut Buffer, code: &CodeBundle, diag_handler: &mut DiagHandler) {
         // Errors which require special handling
         match self {
             Error::UnificationError(underlying) => {
-                underlying.report(buffer, code);
+                underlying.report(buffer, code, diag_handler);
                 return;
             }
             Error::ArgumentError(e) => {
-                e.report(buffer, code);
+                e.report(buffer, code, diag_handler);
                 return;
             }
             _ => {}
@@ -45,21 +49,6 @@ impl CompilationError for Error {
         let diag = match self {
             Error::ArgumentError(_) => unreachable!(),
             Error::UnificationError(_) => unreachable!(),
-            Error::UsingGenericType { expr, t } => Diagnostic::error()
-                .with_message(format!("Type of expression is not fully known"))
-                .with_labels(vec![expr
-                    .primary_label()
-                    .with_message(format!("Incomplete type"))])
-                .with_notes(vec![format!("Found incomplete type: {}", t)]),
-            Error::CastToLarger { from, to } => Diagnostic::error()
-                .with_message(format!("Truncating to a larger value"))
-                .with_labels(vec![
-                    from.primary_label()
-                        .with_message(format!("This value is {from} bytes")),
-                    to.secondary_label()
-                        .with_message(format!("But it is truncated to {to} bytes")),
-                ])
-                .with_notes(vec![format!("Truncation can only remove bits")]),
             Error::ConcatSizeMismatch {
                 lhs,
                 rhs,
@@ -149,11 +138,9 @@ impl CompilationError for Error {
                 .with_labels(vec![loc.primary_label().with_message(format!(
                     "Parameter {param} is {actual} which is a port type"
                 ))]),
-            Error::InternalExpressionWithoutType(loc) => Diagnostic::error()
-                .with_message("(Internal error) expression did not have a type")
-                .with_labels(vec![loc
-                    .primary_label()
-                    .with_message("Expression had no type")]),
+            Error::SpadeDiagnostic(diag) => {
+                return diag_handler.emit(diag, buffer, code);
+            }
         };
 
         term::emit(buffer, &codespan_config(), &code.files, &diag).unwrap();

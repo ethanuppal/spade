@@ -252,5 +252,8 @@ pub enum Error {
 
     #[error("(internal)No entry in generic list")]
     InternalNoEntryInGenericList(Loc<NameID>),
+
+    #[error("Spade diagnostic")]
+    SpadeDiagnostic(#[from] spade_diagnostics::Diagnostic),
 }
 pub type Result<T> = std::result::Result<T, Error>;

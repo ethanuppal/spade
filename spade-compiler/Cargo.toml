@@ -27,15 +27,16 @@ tracing.workspace = true
 tracing-subscriber.workspace = true
 tracing-tree.workspace = true
 
-spade-common = {path = "../spade-common"}
-spade-hir = {path = "../spade-hir"}
 spade-ast = {path = "../spade-ast"}
-spade-types = {path = "../spade-types"}
-spade-parser = {path = "../spade-parser"}
-spade-typeinference = {path = "../spade-typeinference"}
+spade-ast-lowering = {path = "../spade-ast-lowering"}
+spade-common = {path = "../spade-common"}
+spade-diagnostics = { path = "../spade-diagnostics" }
+spade-hir = {path = "../spade-hir"}
 spade-hir-lowering = {path = "../spade-hir-lowering"}
 spade-mir = {path = "../spade-mir"}
-spade-ast-lowering = {path = "../spade-ast-lowering"}
+spade-parser = {path = "../spade-parser"}
+spade-typeinference = {path = "../spade-typeinference"}
+spade-types = {path = "../spade-types"}
 
 
 [dev-dependencies]

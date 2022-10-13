@@ -6,9 +6,11 @@ use std::collections::HashSet;
 
 use codespan_reporting::diagnostic::Diagnostic;
 use codespan_reporting::term::{self, termcolor::Buffer};
+use spade_common::location_info::AsLabel;
+use spade_diagnostics::emitter::codespan_config;
+use spade_diagnostics::{CodeBundle, CompilationError, DiagHandler};
 use thiserror::Error;
 
-use spade_common::error_reporting::{codespan_config, AsLabel, CodeBundle, CompilationError};
 use spade_common::{location_info::Loc, name::Identifier};
 
 use crate::expression::NamedArgument;
@@ -37,7 +39,7 @@ pub enum ArgumentError {
 }
 
 impl CompilationError for ArgumentError {
-    fn report(&self, buffer: &mut Buffer, code: &CodeBundle) {
+    fn report(&self, buffer: &mut Buffer, code: &CodeBundle, _diag_handler: &mut DiagHandler) {
         let diag = match self {
             Self::ArgumentListLengthMismatch { expected, got, at } => Diagnostic::error()
                 .with_message(format!("Expected {} arguments, got {}", expected, got))

@@ -1,18 +1,16 @@
-use codespan_reporting::{
-    diagnostic::Diagnostic,
-    term::{self, termcolor::Buffer},
-};
-use spade_common::{
-    error_reporting::{codespan_config, AsLabel, CodeBundle, CompilationError},
-    location_info::Loc,
-};
+use codespan_reporting::diagnostic::Diagnostic;
+use codespan_reporting::term::{self, termcolor::Buffer};
+
+use spade_common::location_info::{AsLabel, Loc};
+use spade_diagnostics::emitter::codespan_config;
+use spade_diagnostics::{CodeBundle, CompilationError, DiagHandler};
 
 use crate::ValueName;
 
 pub struct AssertedExpression(pub Loc<ValueName>);
 
 impl CompilationError for AssertedExpression {
-    fn report(&self, buffer: &mut Buffer, code: &CodeBundle) {
+    fn report(&self, buffer: &mut Buffer, code: &CodeBundle, _diag_handler: &mut DiagHandler) {
         let diag = Diagnostic::error()
             .with_message("Assertion failed")
             .with_labels(vec![self

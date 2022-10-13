@@ -3,13 +3,7 @@ pub mod namespaced_file;
 
 use codespan_reporting::term::termcolor::Buffer;
 use logos::Logos;
-use serde::Deserialize;
-use serde::Serialize;
-use spade_ast_lowering::id_tracker::ExprIdTracker;
-use spade_hir::symbol_table::FrozenSymtab;
-use spade_hir::symbol_table::SymbolTable;
-use spade_hir_lowering::monomorphisation::MirOutput;
-use spade_typeinference::dump::dump_types;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::rc::Rc;
@@ -18,18 +12,23 @@ use thiserror::Error;
 use tracing::Level;
 
 use spade_ast::ModuleBody;
+use spade_ast_lowering::id_tracker::ExprIdTracker;
 use spade_ast_lowering::{global_symbols, visit_module_body, Context as AstLoweringCtx};
-use spade_common::error_reporting::CodeBundle;
-use spade_common::error_reporting::CompilationError;
-use spade_common::{id_tracker, name::Path as SpadePath};
+use spade_common::id_tracker;
+use spade_common::name::Path as SpadePath;
+use spade_diagnostics::emitter::CodespanEmitter;
+use spade_diagnostics::{CodeBundle, CompilationError, DiagHandler};
+use spade_hir::symbol_table::{FrozenSymtab, SymbolTable};
 use spade_hir::{ExecutableItem, ItemList};
 use spade_hir_lowering::error::Error as HirLoweringError;
+use spade_hir_lowering::monomorphisation::MirOutput;
 pub use spade_parser::lexer;
 use spade_parser::Parser;
 use spade_typeinference as typeinference;
+use spade_typeinference::dump::dump_types;
+use spade_typeinference::equation::TypedExpression;
+use spade_typeinference::trace_stack::format_trace_stack;
 use spade_types::ConcreteType;
-use typeinference::equation::TypedExpression;
-use typeinference::trace_stack::format_trace_stack;
 
 pub struct Opt<'b> {
     pub error_buffer: &'b mut Buffer,
@@ -54,7 +53,7 @@ pub enum Error {
     HirLoweringError(#[from] spade_hir_lowering::error::Error),
 
     #[error("type inference error")]
-    TypeInferenceError(#[from] spade_typeinference::result::Error),
+    TypeInferenceError(#[from] spade_typeinference::error::Error),
 
     #[error("io error")]
     IoError(#[from] std::io::Error),
@@ -87,6 +86,7 @@ where
 pub struct ErrorHandler<'a> {
     pub failed: bool,
     pub error_buffer: &'a mut Buffer,
+    pub diag_handler: &'a mut DiagHandler,
     /// Using a RW lock here is just a lazy way of managing the ownership of code to
     /// be able to report errors even while modifying CodeBundle
     pub code: Rc<RwLock<CodeBundle>>,
@@ -95,7 +95,11 @@ pub struct ErrorHandler<'a> {
 impl<'a> ErrorHandler<'a> {
     fn report(&mut self, err: &impl CompilationError) {
         self.failed = true;
-        err.report(self.error_buffer, &self.code.read().unwrap());
+        err.report(
+            self.error_buffer,
+            &self.code.read().unwrap(),
+            self.diag_handler,
+        );
     }
 }
 
@@ -140,10 +144,12 @@ pub fn compile(
 
     let code = Rc::new(RwLock::new(CodeBundle::new("".to_string())));
 
+    let mut diag_handler = DiagHandler::new(Box::new(CodespanEmitter));
     let mut errors = ErrorHandler {
         failed: false,
         error_buffer: opts.error_buffer,
-        code: code.clone(),
+        diag_handler: &mut diag_handler,
+        code: Rc::clone(&code),
     };
 
     let module_asts = parse(
@@ -260,6 +266,7 @@ pub fn compile(
         &mut frozen_symtab,
         &mut idtracker,
         &item_list,
+        errors.diag_handler,
     );
 
     let CodegenArtefacts {

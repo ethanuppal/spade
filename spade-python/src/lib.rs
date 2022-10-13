@@ -1,3 +1,6 @@
+use std::rc::Rc;
+use std::sync::RwLock;
+
 use codespan_reporting::term::termcolor::Buffer;
 use color_eyre::eyre::{anyhow, Context};
 use itertools::Itertools;
@@ -6,16 +9,16 @@ use pyo3::prelude::*;
 
 use spade::{lexer, CompilerState};
 use spade_ast_lowering::id_tracker::ExprIdTracker;
+use spade_common::location_info::{Loc, WithLocation};
 use spade_common::name::{Identifier, Path as SpadePath};
-use spade_common::{
-    error_reporting::{CodeBundle, CompilationError},
-    location_info::{Loc, WithLocation},
-};
+use spade_diagnostics::emitter::CodespanEmitter;
+use spade_diagnostics::{CodeBundle, CompilationError, DiagHandler};
 use spade_hir::symbol_table::{LookupError, SymbolTable};
 use spade_hir::TypeSpec;
 use spade_hir::{symbol_table::FrozenSymtab, FunctionLike, ItemList};
-use spade_hir_lowering::MirLowerable;
-use spade_hir_lowering::{expr_to_mir, monomorphisation::MonoState, substitution::Substitutions};
+use spade_hir_lowering::monomorphisation::MonoState;
+use spade_hir_lowering::substitution::Substitutions;
+use spade_hir_lowering::{expr_to_mir, MirLowerable};
 use spade_mir::codegen::mangle_input;
 use spade_mir::eval::eval_statements;
 use spade_parser::Parser;
@@ -30,6 +33,7 @@ trait Reportable {
         self,
         error_buffer: &mut Buffer,
         code: &CodeBundle,
+        diag_handler: &mut DiagHandler,
     ) -> PyResult<Self::Inner>;
 }
 
@@ -42,11 +46,12 @@ where
         self,
         error_buffer: &mut Buffer,
         code: &CodeBundle,
+        diag_handler: &mut DiagHandler,
     ) -> PyResult<Self::Inner> {
         match self {
             Ok(val) => Ok(val),
             Err(e) => {
-                e.report(error_buffer, code);
+                e.report(error_buffer, code, diag_handler);
                 if !error_buffer.is_empty() {
                     println!("{}", String::from_utf8_lossy(error_buffer.as_slice()));
                 }
@@ -108,6 +113,7 @@ struct Spade {
     // state: CompilerState,
     code: CodeBundle,
     error_buffer: Buffer,
+    diag_handler: DiagHandler,
     owned: Option<OwnedState>,
     item_list: ItemList,
     uut: Loc<SpadePath>,
@@ -124,15 +130,26 @@ impl Spade {
         let state = ron::from_str::<CompilerState>(&state_str)
             .map_err(|e| anyhow!("Failed to deserialize compiler state {e}"))?;
 
-        let mut code = CodeBundle::from_files(&state.code);
+        let code = Rc::new(RwLock::new(CodeBundle::from_files(&state.code)));
         let mut error_buffer = Buffer::ansi();
+        let mut diag_handler = DiagHandler::new(Box::new(CodespanEmitter));
 
-        let file_id = code.add_file("dut".to_string(), uut_name.clone());
+        let file_id = code
+            .write()
+            .unwrap()
+            .add_file("dut".to_string(), uut_name.clone());
         let mut parser = Parser::new(lexer::TokenKind::lexer(&uut_name), file_id);
-        let uut = parser.path().report_and_convert(&mut error_buffer, &code)?;
+        let uut = parser.path().report_and_convert(
+            &mut error_buffer,
+            &code.read().unwrap(),
+            &mut diag_handler,
+        )?;
 
-        let uut_head = Self::lookup_function_like(&uut, state.symtab.symtab())
-            .report_and_convert(&mut error_buffer, &code)?;
+        let uut_head = Self::lookup_function_like(&uut, state.symtab.symtab()).report_and_convert(
+            &mut error_buffer,
+            &code.read().unwrap(),
+            &mut diag_handler,
+        )?;
 
         if !uut_head.type_params().is_empty() {
             return Err(anyhow!(
@@ -148,10 +165,12 @@ impl Spade {
         }
         let symtab = symtab.freeze();
 
+        let code = code.read().unwrap().clone();
         Ok(Self {
             uut,
             code,
             error_buffer,
+            diag_handler,
             item_list: state.item_list,
             type_state: TypeState::new(),
             owned: Some(OwnedState {
@@ -288,9 +307,11 @@ impl Spade {
         let mut parser = Parser::new(lexer::TokenKind::lexer(&expr), file_id);
 
         // Parse the expression
-        let ast = parser
-            .expression()
-            .report_and_convert(&mut self.error_buffer, &self.code)?;
+        let ast = parser.expression().report_and_convert(
+            &mut self.error_buffer,
+            &self.code,
+            &mut self.diag_handler,
+        )?;
 
         let idtracker = owned.idtracker;
 
@@ -300,7 +321,7 @@ impl Spade {
             pipeline_ctx: None,
         };
         let hir = spade_ast_lowering::visit_expression(&ast, &mut ast_ctx)
-            .report_and_convert(&mut self.error_buffer, &self.code)?
+            .report_and_convert(&mut self.error_buffer, &self.code, &mut self.diag_handler)?
             .at_loc(&ast);
 
         let generic_list = self
@@ -310,12 +331,12 @@ impl Spade {
         // available
         self.type_state
             .visit_expression(&hir, &ast_ctx.symtab, &generic_list)
-            .report_and_convert(&mut self.error_buffer, &self.code)?;
+            .report_and_convert(&mut self.error_buffer, &self.code, &mut self.diag_handler)?;
 
         let g = self.type_state.new_generic();
         self.type_state
             .unify_expression_generic_error(&hir, &g, &ast_ctx.symtab)
-            .report_and_convert(&mut self.error_buffer, &self.code)?;
+            .report_and_convert(&mut self.error_buffer, &self.code, &mut self.diag_handler)?;
 
         ast_ctx.symtab.close_scope();
 
@@ -376,8 +397,11 @@ impl Spade {
     fn get_port(&mut self, port: String) -> PyResult<(String, TypeSpec)> {
         let owned = self.owned.as_ref().unwrap();
         let symtab = owned.symtab.symtab();
-        let head = Self::lookup_function_like(&self.uut, &symtab)
-            .report_and_convert(&mut self.error_buffer, &self.code)?;
+        let head = Self::lookup_function_like(&self.uut, &symtab).report_and_convert(
+            &mut self.error_buffer,
+            &self.code,
+            &mut self.diag_handler,
+        )?;
 
         for (name, ty) in &head.inputs().0 {
             if port == name.0 {
@@ -396,9 +420,11 @@ impl Spade {
         let mut parser = Parser::new(lexer::TokenKind::lexer(&expr), file_id);
 
         // Parse the expression
-        let ast = parser
-            .expression()
-            .report_and_convert(&mut self.error_buffer, &self.code)?;
+        let ast = parser.expression().report_and_convert(
+            &mut self.error_buffer,
+            &self.code,
+            &mut self.diag_handler,
+        )?;
 
         let OwnedState { symtab, idtracker } = self
             .owned
@@ -413,7 +439,7 @@ impl Spade {
             pipeline_ctx: None,
         };
         let hir = spade_ast_lowering::visit_expression(&ast, &mut ast_ctx)
-            .report_and_convert(&mut self.error_buffer, &self.code)?
+            .report_and_convert(&mut self.error_buffer, &self.code, &mut self.diag_handler)?
             .at_loc(&ast);
 
         let mut symtab = ast_ctx.symtab.freeze();
@@ -424,11 +450,11 @@ impl Spade {
 
         self.type_state
             .visit_expression(&hir, &symtab.symtab(), &generic_list)
-            .report_and_convert(&mut self.error_buffer, &self.code)?;
+            .report_and_convert(&mut self.error_buffer, &self.code, &mut self.diag_handler)?;
 
         self.type_state
             .unify_expression_generic_error(&hir, ty, &symtab.symtab())
-            .report_and_convert(&mut self.error_buffer, &self.code)?;
+            .report_and_convert(&mut self.error_buffer, &self.code, &mut self.diag_handler)?;
 
         let mut hir_ctx = spade_hir_lowering::Context {
             symtab: &mut symtab,
@@ -439,10 +465,14 @@ impl Spade {
             // for generic units
             mono_state: &mut MonoState::new(),
             subs: &mut Substitutions::new(),
+            diag_handler: &mut self.diag_handler,
         };
 
-        let mir = expr_to_mir(hir, &mut hir_ctx)
-            .report_and_convert(&mut self.error_buffer, &self.code)?;
+        let mir = expr_to_mir(hir, &mut hir_ctx).report_and_convert(
+            &mut self.error_buffer,
+            &self.code,
+            &mut self.diag_handler,
+        )?;
 
         self.return_owned(OwnedState {
             symtab,

@@ -3,11 +3,10 @@ use spade_common::location_info::WithLocation;
 use spade_hir::symbol_table::SymbolTable;
 use spade_hir::Pipeline;
 
-use crate::result::UnificationErrorExt;
-use crate::GenericListSource;
-use crate::{equation::TypedExpression, fixed_types::t_clock, result::Error};
-
-use super::{Result, TraceStackEntry, TypeState};
+use crate::equation::TypedExpression;
+use crate::error::{Error, Result, UnificationErrorExt};
+use crate::fixed_types::t_clock;
+use crate::{GenericListSource, TraceStackEntry, TypeState};
 
 impl TypeState {
     #[trace_typechecker]

@@ -868,6 +868,7 @@ dependencies = [
  "spade-ast",
  "spade-ast-lowering",
  "spade-common",
+ "spade-diagnostics",
  "spade-hir",
  "spade-hir-lowering",
  "spade-mir",
@@ -898,6 +899,7 @@ dependencies = [
  "pretty_assertions",
  "spade-ast",
  "spade-common",
+ "spade-diagnostics",
  "spade-hir",
  "spade-types",
  "thiserror",
@@ -916,6 +918,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "spade-diagnostics"
+version = "0.1.0"
+dependencies = [
+ "codespan",
+ "codespan-reporting",
+ "colored",
+ "insta",
+ "local-impl",
+ "logos",
+ "parse_tree_macros",
+ "spade-ast",
+ "spade-common",
+ "thiserror",
+ "tracing",
+]
+
+[[package]]
 name = "spade-hir"
 version = "0.1.0"
 dependencies = [
@@ -924,6 +943,7 @@ dependencies = [
  "itertools",
  "serde",
  "spade-common",
+ "spade-diagnostics",
  "spade-types",
  "thiserror",
  "tracing",
@@ -942,6 +962,7 @@ dependencies = [
  "pretty_assertions",
  "prettydiff",
  "spade-common",
+ "spade-diagnostics",
  "spade-hir",
  "spade-mir",
  "spade-typeinference",
@@ -967,6 +988,7 @@ dependencies = [
  "pretty_assertions",
  "prettydiff",
  "spade-common",
+ "spade-diagnostics",
  "thiserror",
 ]
 
@@ -982,6 +1004,7 @@ dependencies = [
  "parse_tree_macros",
  "spade-ast",
  "spade-common",
+ "spade-diagnostics",
  "thiserror",
  "tracing",
 ]
@@ -1000,6 +1023,7 @@ dependencies = [
  "spade-ast",
  "spade-ast-lowering",
  "spade-common",
+ "spade-diagnostics",
  "spade-hir",
  "spade-hir-lowering",
  "spade-mir",
@@ -1025,6 +1049,7 @@ dependencies = [
  "spade",
  "spade-ast-lowering",
  "spade-common",
+ "spade-diagnostics",
  "spade-hir",
  "spade-hir-lowering",
  "spade-mir",
@@ -1047,6 +1072,7 @@ dependencies = [
  "spade-ast",
  "spade-ast-lowering",
  "spade-common",
+ "spade-diagnostics",
  "spade-hir",
  "spade-types",
  "thiserror",

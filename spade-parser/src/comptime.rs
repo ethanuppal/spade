@@ -28,7 +28,6 @@ impl<'a> Parser<'a> {
                     return Err(Error::UnexpectedToken {
                         got: op_tok,
                         expected: vec!["<", ">", "<=", ">="],
-                        context: None,
                     })
                 }
             };
@@ -39,7 +38,6 @@ impl<'a> Parser<'a> {
                 return Err(Error::UnexpectedToken {
                     got: self.eat_unconditional()?,
                     expected: vec!["integer"],
-                    context: None,
                 });
             };
 
