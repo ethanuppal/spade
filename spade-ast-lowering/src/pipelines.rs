@@ -154,7 +154,12 @@ pub fn visit_pipeline(pipeline: &Loc<ast::Pipeline>, ctx: &mut Context) -> Resul
         .inputs
         .0
         .iter()
-        .map(|(ident, ty)| (ctx.symtab.add_local_variable(ident.clone()), ty.clone()))
+        .map(|(ident, ty)| {
+            (
+                ctx.symtab.add_local_variable(ident.clone()).at_loc(ident),
+                ty.clone(),
+            )
+        })
         .collect();
 
     let mut context = PipelineContext {

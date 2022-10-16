@@ -1,0 +1,13 @@
+---
+source: spade-tests/src/hir_lowering.rs
+expression: "std::str::from_utf8(buffer.as_slice()).expect(\"error contains invalid utf-8\")"
+---
+error: Type of x is not fully known
+  ┌─ testinput:2:13
+  │
+2 │         let x = 0;
+  │             ^ The type of x is not fully known
+  │
+  = note: Found incomplete type: int<_>
+
+

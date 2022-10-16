@@ -93,14 +93,14 @@ pub struct Pattern {
 impl WithLocation for Pattern {}
 
 impl Pattern {
-    pub fn get_names(&self) -> Vec<NameID> {
+    pub fn get_names(&self) -> Vec<Loc<NameID>> {
         match &self.kind {
             PatternKind::Integer(_) => vec![],
             PatternKind::Bool(_) => vec![],
             PatternKind::Name {
                 name,
                 pre_declared: _,
-            } => vec![name.inner.clone()],
+            } => vec![name.clone()],
             PatternKind::Tuple(inner) => inner.iter().flat_map(|i| i.get_names()).collect(),
             PatternKind::Type(_, args) => {
                 args.iter().flat_map(|arg| arg.value.get_names()).collect()
@@ -314,7 +314,7 @@ pub struct Entity {
     pub name: UnitName,
     pub head: EntityHead,
     // This is needed here because the head does not have NameIDs
-    pub inputs: Vec<(NameID, Loc<TypeSpec>)>,
+    pub inputs: Vec<(Loc<NameID>, Loc<TypeSpec>)>,
     pub body: Loc<Expression>,
 }
 impl WithLocation for Entity {}
@@ -430,7 +430,7 @@ pub struct Pipeline {
     pub head: PipelineHead,
     pub name: UnitName,
     // This is needed here because the head does not have NameIDs
-    pub inputs: Vec<(NameID, Loc<TypeSpec>)>,
+    pub inputs: Vec<(Loc<NameID>, Loc<TypeSpec>)>,
     pub body: Loc<Expression>,
 }
 impl WithLocation for Pipeline {}

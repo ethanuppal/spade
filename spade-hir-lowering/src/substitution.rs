@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use spade_common::{
-    location_info::WithLocation,
+    location_info::{Loc, WithLocation},
     name::{Identifier, NameID},
 };
 use spade_hir::symbol_table::FrozenSymtab;
@@ -19,7 +19,7 @@ pub enum Substitution {
 }
 
 pub struct SubRegister {
-    pub original: NameID,
+    pub original: Loc<NameID>,
     pub previous: NameID,
     pub new: NameID,
 }
@@ -31,7 +31,7 @@ pub struct Substitutions {
     /// A mapping of names to their corresponding registers at each pipeline
     /// stage.
     inner: Vec<HashMap<NameID, Substitution>>,
-    live_vars: Vec<NameID>,
+    live_vars: Vec<Loc<NameID>>,
 
     /// The stage we are currently lowering
     pub current_stage: usize,
@@ -86,7 +86,7 @@ impl Substitutions {
                 }
                 Substitution::Port => Substitution::Port,
             };
-            new_subs.insert(original.clone(), new_sub);
+            new_subs.insert(original.inner.clone(), new_sub);
         }
         self.inner.push(new_subs);
 
@@ -95,24 +95,24 @@ impl Substitutions {
 
     /// Mark the variable as available in the current pipeline stage under its
     /// own name
-    pub fn set_available(&mut self, from: NameID, time: usize, is_port: bool) {
+    pub fn set_available(&mut self, from: Loc<NameID>, time: usize, is_port: bool) {
         self.live_vars.push(from.clone());
         if is_port {
             self.inner
                 .last_mut()
                 .unwrap()
-                .insert(from.clone(), Substitution::Port);
+                .insert(from.inner.clone(), Substitution::Port);
         } else {
             if time == 0 {
                 self.inner
                     .last_mut()
                     .unwrap()
-                    .insert(from.clone(), Substitution::Available(from));
+                    .insert(from.inner.clone(), Substitution::Available(from.inner));
             } else {
                 self.inner
                     .last_mut()
                     .unwrap()
-                    .insert(from.clone(), Substitution::Waiting(time, from));
+                    .insert(from.inner.clone(), Substitution::Waiting(time, from.inner));
             }
         }
     }

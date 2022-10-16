@@ -345,9 +345,10 @@ impl Spade {
         // Finally, we need to figure out the range of the field in in the
         // type. Since all previous steps passed, this can assume that
         // the types are good so we can do lots of unwraping
-        let concrete =
-            self.type_state
-                .type_of_name(&o_name, &ast_ctx.symtab, &self.item_list.types);
+        let concrete = self
+            .type_state
+            .name_type(&o_name.nowhere(), &ast_ctx.symtab, &self.item_list.types)
+            .unwrap();
         let (mut start, mut end) = (0, concrete.to_mir_type().size());
 
         for field in path {

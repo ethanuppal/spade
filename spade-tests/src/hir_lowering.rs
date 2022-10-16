@@ -1665,6 +1665,17 @@ mod tests {
         "
     }
 
+    snapshot_error! {
+        graceful_message_if_type_inference_fails_for_binding_in_pipeline,
+        "
+            pipeline(1) x(clk: clk) -> bool {
+                    let x = 0;
+                reg;
+                    true
+            }
+        "
+    }
+
     #[test]
     fn comptime_exclusion_works() {
         let code = r#"

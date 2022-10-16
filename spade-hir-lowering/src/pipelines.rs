@@ -11,13 +11,13 @@ use spade_typeinference::TypeState;
 
 use crate::{
     error::Error, monomorphisation::MonoState, substitution::Substitutions, Context, ExprLocal,
-    Manglable, MirLowerable, NameIDExt, Result, StatementLocal, TypeStateLocal,
+    Manglable, MirLowerable, NameIDExt, Result, StatementLocal,
 };
 
 pub fn handle_pattern(pat: &Pattern, live_vars: &mut Vec<NameID>) {
     // Add this variable to the live vars list
     for name in pat.get_names() {
-        live_vars.push(name.clone());
+        live_vars.push(name.inner.clone());
     }
 }
 
@@ -45,7 +45,7 @@ pub fn generate_pipeline<'a>(
 
     for input in inputs.iter().map(|var| var.0.clone()) {
         let is_port = types
-            .type_of_name(&input, symtab.symtab(), &item_list.types)
+            .name_type(&input, symtab.symtab(), &item_list.types)?
             .is_port();
         subs.set_available(input, 0, is_port)
     }
@@ -66,12 +66,12 @@ pub fn generate_pipeline<'a>(
             let name = name_id.1.tail().to_string();
             let val_name = name_id.value_name();
             let ty = types
-                .type_of_name(name_id, symtab.symtab(), &item_list.types)
+                .name_type(name_id, symtab.symtab(), &item_list.types)?
                 .to_mir_type();
 
-            (name, val_name, ty)
+            Ok((name, val_name, ty))
         })
-        .collect::<Vec<_>>();
+        .collect::<Result<Vec<_>>>()?;
 
     for statement in body_statements {
         match &statement.inner {
@@ -79,7 +79,7 @@ pub fn generate_pipeline<'a>(
                 let time = expr.inner.kind.available_in()?;
                 for name in pat.get_names() {
                     let is_port = types
-                        .type_of_name(&name, symtab.symtab(), &item_list.types)
+                        .name_type(&name, symtab.symtab(), &item_list.types)?
                         .is_port();
 
                     subs.set_available(name, time, is_port)
@@ -89,7 +89,7 @@ pub fn generate_pipeline<'a>(
                 let time = reg.inner.value.kind.available_in()?;
                 for name in reg.pattern.get_names() {
                     let is_port = types
-                        .type_of_name(&name, symtab.symtab(), &item_list.types)
+                        .name_type(&name, symtab.symtab(), &item_list.types)?
                         .is_port();
                     subs.set_available(name, time, is_port)
                 }
@@ -101,7 +101,7 @@ pub fn generate_pipeline<'a>(
                 // Generate pipeline regs for previous live vars
                 for reg in &live_vars {
                     if name_map
-                        .insert(reg.new.clone(), reg.original.clone())
+                        .insert(reg.new.clone(), reg.original.inner.clone())
                         .is_some()
                     {
                         // NOTE: Panic because this should not occur in user code
@@ -111,7 +111,7 @@ pub fn generate_pipeline<'a>(
                     statements.push(mir::Statement::Register(mir::Register {
                         name: reg.new.value_name(),
                         ty: types
-                            .type_of_name(&reg.original, symtab.symtab(), &item_list.types)
+                            .name_type(&reg.original, symtab.symtab(), &item_list.types)?
                             .to_mir_type(),
                         clock: clock.value_name(),
                         reset: None,

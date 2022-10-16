@@ -316,7 +316,12 @@ pub fn visit_entity(item: &Loc<ast::Entity>, ctx: &mut Context) -> Result<hir::I
         .inputs
         .0
         .iter()
-        .map(|(ident, ty)| (ctx.symtab.add_local_variable(ident.clone()), ty.clone()))
+        .map(|(ident, ty)| {
+            (
+                ctx.symtab.add_local_variable(ident.clone()).at_loc(ident),
+                ty.clone(),
+            )
+        })
         .collect();
 
     let body = body.as_ref().unwrap().try_visit(visit_expression, ctx)?;
@@ -1069,7 +1074,7 @@ mod entity_visiting {
                 output_type: None,
                 type_params: vec![],
             },
-            inputs: vec![((name_id(1, "a").inner, hir::TypeSpec::unit().nowhere()))],
+            inputs: vec![((name_id(1, "a"), hir::TypeSpec::unit().nowhere()))],
             body: hir::ExprKind::Block(Box::new(hir::Block {
                 statements: vec![hir::Statement::Binding(
                     hir::PatternKind::name(name_id(2, "var")).idless().nowhere(),

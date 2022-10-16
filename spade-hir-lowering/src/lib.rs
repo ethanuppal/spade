@@ -10,7 +10,7 @@ use local_impl::local_impl;
 
 use hir::param_util::{match_args_with_params, Argument};
 use hir::symbol_table::{FrozenSymtab, PatternableKind};
-use hir::{FunctionLike, ItemList, Pattern, PatternArgument, TypeList, UnitName};
+use hir::{FunctionLike, ItemList, Pattern, PatternArgument, UnitName};
 use mir::types::Type as MirType;
 use mir::{ConstantValue, ValueName};
 use monomorphisation::MonoState;
@@ -28,11 +28,9 @@ use usefulness::{is_useful, PatStack, Usefulness};
 use crate::error::{Error, Result};
 use spade_common::{location_info::Loc, name::NameID};
 use spade_hir as hir;
-use spade_hir::{
-    expression::BinaryOperator, symbol_table::SymbolTable, Entity, ExprKind, Expression, Statement,
-};
+use spade_hir::{expression::BinaryOperator, Entity, ExprKind, Expression, Statement};
 use spade_mir as mir;
-use spade_typeinference::{equation::TypedExpression, TypeState};
+use spade_typeinference::TypeState;
 use spade_types::{ConcreteType, PrimitiveType};
 
 pub trait Manglable {
@@ -50,34 +48,6 @@ impl Manglable for UnitName {
             UnitName::WithID(name) => name.mangled(),
             UnitName::FullPath(name) => name.1.as_strs().join("_"),
             UnitName::Unmangled(raw, _) => raw.clone(),
-        }
-    }
-}
-
-#[local_impl]
-impl TypeStateLocal for TypeState {
-    /// Returns the type of the expression as a concrete type. If the type is not
-    /// fully ungenerified, returns an error
-    fn expr_type(
-        &self,
-        expr: &Loc<Expression>,
-        symtab: &SymbolTable,
-        types: &TypeList,
-    ) -> Result<ConcreteType> {
-        let t = self.type_of(&TypedExpression::Id(expr.id)).map_err(|_| {
-            Diagnostic::bug(expr, "Expression had no type")
-                .primary_label("This expression had no type")
-        })?;
-
-        if let Some(t) = Self::ungenerify_type(&t, symtab, types) {
-            Ok(t)
-        } else {
-            Err(
-                Diagnostic::error(expr, "Type of expression is not fully known")
-                    .primary_label("The type of this expression is not fully known")
-                    .note(format!("Found incomplete type: {t}"))
-                    .into(),
-            )
         }
     }
 }
@@ -1547,12 +1517,12 @@ pub fn generate_entity<'a>(
             let name = name_id.1.tail().to_string();
             let val_name = name_id.value_name();
             let ty = types
-                .type_of_name(name_id, symtab.symtab(), &item_list.types)
+                .name_type(name_id, symtab.symtab(), &item_list.types)?
                 .to_mir_type();
 
-            (name, val_name, ty)
+            Ok((name, val_name, ty))
         })
-        .collect();
+        .collect::<Result<_>>()?;
 
     let mut ctx = Context {
         symtab,

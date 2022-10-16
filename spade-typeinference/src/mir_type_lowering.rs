@@ -2,7 +2,9 @@ use std::collections::HashMap;
 
 use hir::symbol_table::SymbolTable;
 use hir::{TypeExpression, TypeSpec};
+use spade_common::location_info::Loc;
 use spade_common::name::NameID;
+use spade_diagnostics::Diagnostic;
 use spade_hir as hir;
 use spade_hir::{TypeDeclaration, TypeList};
 use spade_types::{ConcreteType, KnownType};
@@ -222,24 +224,6 @@ impl TypeState {
 
     /// Returns the type of the specified name as a concrete type. If the type is not known,
     /// or the type is Generic, panics
-    pub fn type_of_name(
-        &self,
-        name: &NameID,
-        symtab: &SymbolTable,
-        type_list: &TypeList,
-    ) -> ConcreteType {
-        Self::ungenerify_type(
-            &self
-                .type_of(&TypedExpression::Name(name.clone()))
-                .expect("Expression had no specified type"),
-            symtab,
-            type_list,
-        )
-        .expect("Expr had generic type")
-    }
-
-    /// Returns the type of the specified name as a concrete type. If the type is not known,
-    /// or the type is Generic, panics
     #[tracing::instrument(level = "trace", skip(self, symtab, type_list))]
     pub fn type_of_id(&self, id: u64, symtab: &SymbolTable, type_list: &TypeList) -> ConcreteType {
         Self::ungenerify_type(
@@ -250,5 +234,57 @@ impl TypeState {
             type_list,
         )
         .expect("Expr had generic type")
+    }
+
+    /// Returns the type of the expression as a concrete type. If the type is not
+    /// fully ungenerified, returns an error
+    pub fn expr_type(
+        &self,
+        expr: &Loc<hir::Expression>,
+        symtab: &SymbolTable,
+        types: &TypeList,
+    ) -> Result<ConcreteType, Diagnostic> {
+        let t = self.type_of(&TypedExpression::Id(expr.id)).map_err(|_| {
+            Diagnostic::bug(expr, "Expression had no type")
+                .primary_label("This expression had no type")
+        })?;
+
+        if let Some(t) = Self::ungenerify_type(&t, symtab, types) {
+            Ok(t)
+        } else {
+            Err(
+                Diagnostic::error(expr, "Type of expression is not fully known")
+                    .primary_label("The type of this expression is not fully known")
+                    .note(format!("Found incomplete type: {t}"))
+                    .into(),
+            )
+        }
+    }
+
+    /// Returns the type of the name as a concrete type. If the type is not
+    /// fully ungenerified, returns an error
+    pub fn name_type(
+        &self,
+        name: &Loc<NameID>,
+        symtab: &SymbolTable,
+        types: &TypeList,
+    ) -> Result<ConcreteType, Diagnostic> {
+        let t = self
+            .type_of(&TypedExpression::Name(name.inner.clone()))
+            .map_err(|_| {
+                Diagnostic::bug(name, format!("{name}) had no type"))
+                    .primary_label("This value had no type")
+            })?;
+
+        if let Some(t) = Self::ungenerify_type(&t, symtab, types) {
+            Ok(t)
+        } else {
+            Err(
+                Diagnostic::error(name, format!("Type of {name} is not fully known"))
+                    .primary_label(format!("The type of {name} is not fully known"))
+                    .note(format!("Found incomplete type: {t}"))
+                    .into(),
+            )
+        }
     }
 }
