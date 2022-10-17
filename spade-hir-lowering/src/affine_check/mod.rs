@@ -2,12 +2,13 @@ use tracing::trace;
 
 use spade_common::{
     location_info::{Loc, WithLocation},
-    name::NameID,
+    name::{NameID, Path},
 };
 use spade_diagnostics::Diagnostic;
 use spade_hir::{
-    expression::NamedArgument, symbol_table::SymbolTable, ArgumentList, Expression, Register,
-    Statement, TypeList, TypeSpec,
+    expression::{NamedArgument, UnaryOperator},
+    symbol_table::SymbolTable,
+    ArgumentList, Expression, Register, Statement, TypeList, TypeSpec,
 };
 use spade_typeinference::TypeState;
 
@@ -77,15 +78,10 @@ fn visit_expression(
         spade_hir::ExprKind::TupleLiteral(_) => true,
         spade_hir::ExprKind::ArrayLiteral(_) => true,
         spade_hir::ExprKind::Index(_, _) => true,
-        // TODO
         spade_hir::ExprKind::TupleIndex(_, _) => false,
-        // TODO
         spade_hir::ExprKind::FieldAccess(_, _) => false,
-        // TODO
         spade_hir::ExprKind::BinaryOperator(_, _, _) => true,
-        // TODO
         spade_hir::ExprKind::UnaryOperator(_, _) => true,
-        // TODO
         spade_hir::ExprKind::Match(_, _) => true,
         spade_hir::ExprKind::Block(_) => true,
         spade_hir::ExprKind::FnCall(_, _) => true,
@@ -142,13 +138,21 @@ fn visit_expression(
         spade_hir::ExprKind::BinaryOperator(lhs, _, rhs) => {
             visit_expression(lhs, affine_state, ctx)?;
             visit_expression(rhs, affine_state, ctx)?;
-            // TODO
+            affine_state.consume_expression(lhs)?;
+            affine_state.consume_expression(rhs)?;
         }
-        spade_hir::ExprKind::UnaryOperator(_, operand) => {
+        spade_hir::ExprKind::UnaryOperator(op, operand) => {
             visit_expression(operand, affine_state, ctx)?;
-            // TODO
+            match op {
+                UnaryOperator::Sub
+                | UnaryOperator::Not
+                | UnaryOperator::BitwiseNot
+                | UnaryOperator::Reference => {
+                    affine_state.consume_expression(&operand)?;
+                }
+                UnaryOperator::Dereference => {}
+            }
         }
-        // TODO
         spade_hir::ExprKind::Match(cond, variants) => {
             visit_expression(cond, affine_state, ctx)?;
             for (pat, expr) in variants {
@@ -193,42 +197,62 @@ fn visit_expression(
                     Statement::PipelineRegMarker => {}
                     Statement::Label(_) => {}
                     Statement::Assert(_) => {}
-                    Statement::Set { .. } => {}
+                    Statement::Set { target, value } => {
+                        visit_expression(target, affine_state, ctx)?;
+                        visit_expression(value, affine_state, ctx)?;
+                        affine_state.consume_expression(target)?;
+                        affine_state.consume_expression(value)?;
+                    }
                 }
             }
             visit_expression(&b.result, affine_state, ctx)?;
             trace!("Consuming block {}", expr.id);
             affine_state.consume_expression(&b.result)?;
         }
-        spade_hir::ExprKind::FnCall(_, list)
-        | spade_hir::ExprKind::EntityInstance(_, list)
+        spade_hir::ExprKind::FnCall(name, list)
+        | spade_hir::ExprKind::EntityInstance(name, list)
         | spade_hir::ExprKind::PipelineInstance {
             depth: _,
-            name: _,
+            name,
             args: list,
-        } => match &list.inner {
-            ArgumentList::Named(args) => {
-                for arg in args {
-                    match arg {
-                        NamedArgument::Full(_, expr) | NamedArgument::Short(_, expr) => {
-                            visit_expression(expr, affine_state, ctx)?;
-                            affine_state.consume_expression(expr)?;
+        } => {
+            // The read_port function is special and should not consume the port
+            // it is reading.
+            // FIXME: When spade is more generic and can handle the * operator
+            // doing more fancy things, we should consider getting rid of this function
+            let consume = ctx
+                .symtab
+                .try_lookup_final_id(&Path::from_strs(&vec!["std", "ports", "read_port"]).nowhere())
+                .map(|n| &n != &name.inner)
+                .unwrap_or(true);
+
+            match &list.inner {
+                ArgumentList::Named(args) => {
+                    for arg in args {
+                        match arg {
+                            NamedArgument::Full(_, expr) | NamedArgument::Short(_, expr) => {
+                                visit_expression(expr, affine_state, ctx)?;
+                                if consume {
+                                    affine_state.consume_expression(expr)?;
+                                }
+                            }
+                        }
+                    }
+                }
+                ArgumentList::Positional(args) => {
+                    for arg in args {
+                        visit_expression(arg, affine_state, ctx)?;
+                        if consume {
+                            affine_state.consume_expression(arg)?;
                         }
                     }
                 }
             }
-            ArgumentList::Positional(args) => {
-                for arg in args {
-                    visit_expression(arg, affine_state, ctx)?;
-                    affine_state.consume_expression(arg)?;
-                }
-            }
-        },
+        }
         spade_hir::ExprKind::If(cond, on_true, on_false) => {
             visit_expression(cond, affine_state, ctx)?;
             visit_expression(on_true, affine_state, ctx)?;
             visit_expression(on_false, affine_state, ctx)?;
-            // TODO
         }
         spade_hir::ExprKind::PipelineRef {
             stage: _,

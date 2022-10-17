@@ -35,7 +35,6 @@ impl MutWireWitness {
     /// Array,Field => Because A<[..].a is of type &mut _>
     pub fn motivation(&self) -> String {
         match self {
-            // TODO: T is a bad name
             MutWireWitness::This => format!(""),
             MutWireWitness::Field(ident, rest) => format!(".{}{}", ident, rest.motivation()),
             MutWireWitness::TupleIndex(idx, rest) => format!("#{}{}", idx, rest.motivation()),
@@ -562,9 +561,9 @@ impl AffineState {
         let mut trees_to_consume = vec![];
 
         while let Some(reference) = references.pop() {
-            let tree = self.trees.get(&reference).expect(&format!(
-                "Failed to find affine tree for {reference} when consuming {id}"
-            ));
+            let tree = self.trees.get(&reference).ok_or_else(|| {
+                Diagnostic::bug(id, format!("Failed to get affine tree for {reference}"))
+            })?;
 
             if seen_pointers.contains(&tree.as_ptr()) {
                 break;

@@ -432,8 +432,11 @@ fn destructuring_a_read_port_gives_real_values() {
 
     fn takes_normal(x: bool, y: int<3>) -> bool __builtin__
 
+    entity consumer(x: HasA) -> bool __builtin__
+
     entity uut(val: HasA) -> bool {
         let A$(x, y) = inst std::ports::read_port(val.inner);
+        let _ = inst consumer(val);
         takes_normal(x, y)
     }
     ";

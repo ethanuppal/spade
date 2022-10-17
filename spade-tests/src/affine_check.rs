@@ -169,3 +169,49 @@ snapshot_error! {
     }
     "
 }
+
+snapshot_error! {
+    function_calls_consume_ports,
+    "
+        entity make_port() -> &mut bool __builtin__
+
+        entity consumer(x: &mut bool) -> bool __builtin__
+
+        entity test() -> (bool, bool) {
+            let p = inst make_port();
+            (inst consumer(p), inst consumer(p))
+        }
+    "
+}
+
+#[test]
+fn reading_from_a_port_does_not_consume_it() {
+    let code = "
+        mod std { mod ports {
+            entity read_port<T>(p: &mut T) -> T __builtin__
+        }}
+
+        entity make_port() -> &mut bool __builtin__
+        entity consumer(x: &mut bool) -> bool __builtin__
+
+        use std::ports::read_port;
+
+        entity test() -> (bool, bool) {
+            let p = inst make_port();
+            let _ = inst consumer(p);
+            (inst read_port(p), inst read_port(p))
+        }
+    ";
+    build_items(code);
+}
+
+#[test]
+fn set_statement_consumes_port() {
+    let code = "
+        entity e(p: &mut bool) -> bool {
+            set p = false;
+            false
+        }";
+
+    build_items(code);
+}
