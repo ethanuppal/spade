@@ -154,7 +154,18 @@ fn affine_checking_on_registers_works() {
     build_items(code);
 }
 
-// TODO: Decl
-// TODO: Using field then using whole struct
-// TODO: Using member then using whole tuple
-// TODO: Using array
+snapshot_error! {
+    checking_works_with_decld_value,
+    "
+    entity make_port() -> &mut bool __builtin__
+    entity consume(p: &mut bool) -> bool __builtin__
+
+    entity test() -> bool {
+        decl x;
+        let _ = inst consume(x);
+        let x = inst make_port();
+        let _ = inst consume(x);
+        true
+    }
+    "
+}
