@@ -28,11 +28,11 @@ impl MutWireWitness {
     /// Expected to be used in a sentence like `Because A{motivation} is of type &mut _`
     ///
     /// Examples:
-    /// This => Becase A <is of type &mut _>
-    /// Field => Becase A<.x is of type &mut _>
-    /// Tuple => Becase A<#0 is of type &mut _>
-    /// Array => Becase A<[..] is of type &mut _>
-    /// Array,Field => Becase A<[..].a is of type &mut _>
+    /// This => Because A <is of type &mut _>
+    /// Field => Because A<.x is of type &mut _>
+    /// Tuple => Because A<#0 is of type &mut _>
+    /// Array => Because A<[..] is of type &mut _>
+    /// Array,Field => Because A<[..].a is of type &mut _>
     pub fn motivation(&self) -> String {
         match self {
             // TODO: T is a bad name
@@ -94,7 +94,7 @@ Each node has an associated usage info, initially starting out as unused.
 [5]: unused
 ```
 
-The expression `x` with id 0 adds an additional referer to the corresponding node `[1]`
+The expression `x` with id 0 adds an additional reference to the corresponding node `[1]`
 ```
 x: [1]
 0: [1]
@@ -491,7 +491,7 @@ impl AffineState {
     /// Adds `from` as an alias to the tree at `base_expr#tuple_member`. Panics if base_expr is not
     /// a tuple with at least idx elements
     #[tracing::instrument(level = "trace", skip_all, fields(%base_expr, %idx, %to))]
-    pub fn alias_tuple_memeber(
+    pub fn alias_tuple_member(
         &mut self,
         to: Loc<u64>,
         base_expr: u64,
@@ -506,7 +506,7 @@ impl AffineState {
     /// Adds `from` as an alias to the tree at `base_expr#tuple_member`. Panics if base_expr is not
     /// a tuple with at least idx elements
     #[tracing::instrument(level = "trace", skip_all, fields(%base_expr, %field, %to))]
-    pub fn alias_struct_memeber(
+    pub fn alias_struct_member(
         &mut self,
         to: Loc<u64>,
         base_expr: u64,

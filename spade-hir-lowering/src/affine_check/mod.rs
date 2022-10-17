@@ -133,11 +133,11 @@ fn visit_expression(
         }
         spade_hir::ExprKind::TupleIndex(base, idx) => {
             visit_expression(base, affine_state, ctx)?;
-            affine_state.alias_tuple_memeber(expr.id.at_loc(expr), base.id, idx)?
+            affine_state.alias_tuple_member(expr.id.at_loc(expr), base.id, idx)?
         }
         spade_hir::ExprKind::FieldAccess(base, field) => {
             visit_expression(base, affine_state, ctx)?;
-            affine_state.alias_struct_memeber(expr.id.at_loc(expr), base.id, field)?
+            affine_state.alias_struct_member(expr.id.at_loc(expr), base.id, field)?
         }
         spade_hir::ExprKind::BinaryOperator(lhs, _, rhs) => {
             visit_expression(lhs, affine_state, ctx)?;
