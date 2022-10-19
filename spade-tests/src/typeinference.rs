@@ -3,7 +3,7 @@ use crate::{build_items, snapshot_error};
 #[test]
 fn type_inference_works_for_arrays() {
     let code = r#"
-        entity x() -> [int<2>; 3] {
+        entity x() -> [int<3>; 3] {
             [0, 1, 2]
         }
     "#;
@@ -504,4 +504,13 @@ snapshot_error! {
         };
         true
     }"
+}
+
+snapshot_error! {
+    error_on_oversized_int_literal,
+    "
+        fn x() -> int<8> {
+            128
+        }
+        "
 }

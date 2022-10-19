@@ -77,13 +77,17 @@ impl TypeState {
         expression: &Loc<Expression>,
         symtab: &SymbolTable,
     ) -> Result<()> {
-        assuming_kind!(ExprKind::IntLiteral(_) = &expression => {
+        assuming_kind!(ExprKind::IntLiteral(value) = &expression => {
             let t = self.new_generic_int(symtab);
             self.unify(&t, &expression.inner, symtab)
                 .map_normal_err(|(_, got)| Error::IntLiteralIncompatible {
                     got,
                     loc: expression.loc(),
                 })?;
+            self.add_requirement(Requirement::FitsIntLiteral {
+                value: *value,
+                target_type: t.at_loc(&expression)
+            });
         });
         Ok(())
     }

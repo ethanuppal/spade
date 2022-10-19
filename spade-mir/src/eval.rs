@@ -78,6 +78,22 @@ impl Value {
     }
 }
 
+impl std::fmt::Display for Value {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Value::Bit(val) => write!(f, "bit({})", if *val { "1" } else { "0" }),
+            Value::Int { size, val } => write!(f, "int<{size}>({val})"),
+            Value::UInt { size, val } => write!(f, "uint<{size}>({val})"),
+            Value::Concat(inner) => write!(
+                f,
+                "concat([{}])",
+                inner.iter().map(|v| format!("{v}")).join(", ")
+            ),
+            Value::Undef(_) => write!(f, "X"),
+        }
+    }
+}
+
 #[cfg(test)]
 impl Value {
     fn uint(size: u64, val: u64) -> Self {
@@ -217,7 +233,7 @@ pub fn eval_statements(statements: &[Statement]) -> Value {
                 name_types.insert(name.clone(), ty.clone());
                 (name, val)
             }
-            Statement::Assert(_) => panic!("trying to evaluate an assert statemnet"),
+            Statement::Assert(_) => panic!("trying to evaluate an assert statement"),
             Statement::Set { .. } => panic!("trying to evaluate a `set` statement"),
         };
 

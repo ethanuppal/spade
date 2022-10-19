@@ -1,4 +1,7 @@
+use spade_common::location_info::WithLocation;
+use spade_common::name::Path;
 use spade_common::{location_info::Loc, name::Identifier};
+use spade_diagnostics::Diagnostic;
 use spade_hir::symbol_table::{SymbolTable, TypeDeclKind, TypeSymbol};
 use spade_types::KnownType;
 
@@ -16,6 +19,11 @@ pub enum Requirement {
         /// The expression from which this requirement arrises
         expr: Loc<TypeVar>,
     },
+    /// The type should be an integer large enough to fit the specified value
+    FitsIntLiteral {
+        value: u128,
+        target_type: Loc<TypeVar>,
+    },
 }
 
 impl Requirement {
@@ -28,6 +36,12 @@ impl Requirement {
             } => {
                 TypeState::replace_type_var(target_type, from, to);
                 TypeState::replace_type_var(expr, from, to);
+            }
+            Requirement::FitsIntLiteral {
+                value: _,
+                target_type,
+            } => {
+                TypeState::replace_type_var(target_type, from, to);
             }
         }
     }
@@ -129,6 +143,54 @@ impl Requirement {
                     KnownType::Integer(_) => Err(Error::FieldAccessOnInteger { loc: expr.loc() }),
                 }
             }
+            Requirement::FitsIntLiteral { value, target_type } => {
+                let int_type = symtab
+                    .lookup_type_symbol(&Path::from_strs(&["int"]).nowhere())
+                    .map_err(|_| {
+                        Diagnostic::bug(target_type, "The type `int` was not in the symtab")
+                            .primary_label(format!("When evaluating requirement for this type"))
+                    })?
+                    .0;
+
+                match &target_type.inner {
+                    TypeVar::Known(KnownType::Type(name), params) if name == &int_type => {
+                        match params.as_slice() {
+                            [param] => {
+                                match param {
+                                    TypeVar::Known(KnownType::Integer(size), _) => {
+                                        // If the value is 0, we can fit it into any integer and
+                                        // can get rid of the requirement
+                                        if *value == 0 {
+                                            return Ok(RequirementResult::Satisfied(vec![]))
+                                        }
+
+                                        // +1 for signed
+                                        let minimum_size = ((*value) as f64).log2() + 1.;
+                                        if *value > 0 && *size <= minimum_size as u128 {
+                                            Err(Diagnostic::error(target_type, format!("Integer value does not fit in int<{size}>"))
+                                                .primary_label(format!("{value} does not fit in an int<{size}>")).into())
+                                        }
+                                        else {
+                                            Ok(RequirementResult::NoChange)
+                                        }
+                                    },
+                                    TypeVar::Unknown(_) => Ok(RequirementResult::NoChange),
+                                    _ => Err(Diagnostic::bug(target_type, "Inferred non-integer type for integer literal").into())
+                                }
+                            },
+                            _ => Err(Diagnostic::bug(target_type, "Integer without exactly one type params when evaluating requirement").into())
+                        }
+                    }
+                    TypeVar::Unknown(_) => Ok(RequirementResult::NoChange),
+                    other => Err(Diagnostic::bug(
+                        target_type,
+                        format!(
+                            "Found non-integer for type '{other}' with integer size constraint"
+                        ),
+                    )
+                    .into()),
+                }
+            }
         }
     }
 
@@ -154,6 +216,7 @@ impl Requirement {
     }
 }
 
+#[derive(Debug)]
 pub struct Replacement {
     pub from: Loc<TypeVar>,
     pub to: TypeVar,

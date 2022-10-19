@@ -977,6 +977,12 @@ impl TypeState {
                     .check_var_for_replacement(expr.inner.clone())
                     .at_loc(&expr),
             },
+            Requirement::FitsIntLiteral { value, target_type } => Requirement::FitsIntLiteral {
+                value,
+                target_type: self
+                    .check_var_for_replacement(target_type.inner.clone())
+                    .at_loc(&target_type),
+            },
         };
 
         self.requirements.push(replaced)
@@ -1346,7 +1352,7 @@ impl TypeState {
             // Walk through all the requirements, checking each one. If the requirement
             // is still undetermined, take note to retain that id, otherwise store the
             // replacement to be performed
-            let (retain, replacements): (Vec<_>, Vec<_>) = self
+            let (retain, replacements_option): (Vec<_>, Vec<_>) = self
                 .requirements
                 .clone()
                 .iter()
@@ -1360,11 +1366,16 @@ impl TypeState {
                 .into_iter()
                 .unzip();
 
+            let replacements = replacements_option
+                .into_iter()
+                .filter_map(|x| x)
+                .flatten()
+                .collect::<Vec<_>>();
             if replacements.is_empty() {
                 break;
             }
 
-            for Replacement { from, to } in replacements.into_iter().filter_map(|x| x).flatten() {
+            for Replacement { from, to } in replacements {
                 self.unify(&from, &to, symtab)
                     .map_normal_err(|(got, expected)| Error::UnspecifiedTypeError {
                         got,
