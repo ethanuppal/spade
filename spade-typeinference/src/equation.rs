@@ -28,6 +28,72 @@ pub enum TypeVar {
 
 impl WithLocation for TypeVar {}
 
+impl TypeVar {
+    pub fn expect_known<T, U, K, O>(&self, on_known: K, on_unknown: U, on_other: O) -> T
+    where
+        U: FnOnce() -> T,
+        K: FnOnce(&KnownType, &[TypeVar]) -> T,
+        O: FnOnce(&TypeVar) -> T,
+    {
+        match self {
+            TypeVar::Unknown(_) => on_unknown(),
+            TypeVar::Known(k, v) => on_known(k, v),
+            other => on_other(other),
+        }
+    }
+
+    pub fn expect_named<T, U, K, O>(&self, on_named: K, on_unknown: U, on_other: O) -> T
+    where
+        U: FnOnce() -> T,
+        K: FnOnce(&NameID, &[TypeVar]) -> T,
+        O: FnOnce(&TypeVar) -> T,
+    {
+        match self {
+            TypeVar::Unknown(_) => on_unknown(),
+            TypeVar::Known(KnownType::Type(name), params) => on_named(name, params),
+            other => on_other(other),
+        }
+    }
+
+    pub fn expect_specific_named<T, U, K, O>(
+        &self,
+        name: NameID,
+        on_correct: K,
+        on_unknown: U,
+        on_other: O,
+    ) -> T
+    where
+        U: FnOnce() -> T,
+        K: FnOnce(&[TypeVar]) -> T,
+        O: FnOnce(&TypeVar) -> T,
+    {
+        match self {
+            TypeVar::Unknown(_) => on_unknown(),
+            TypeVar::Known(k, v) if k == &KnownType::Type(name) => on_correct(v),
+            other => on_other(other),
+        }
+    }
+
+    /// Assumes that this type is KnownType::Integer(size) and calls on_integer then. Otherwise
+    /// calls on_unknown or on_other depending on the type. If the integer is given type params,
+    /// panics
+    pub fn expect_integer<T, U, K, O>(&self, on_integer: K, on_unknown: U, on_other: O) -> T
+    where
+        U: FnOnce() -> T,
+        K: FnOnce(u128) -> T,
+        O: FnOnce(&TypeVar) -> T,
+    {
+        match self {
+            TypeVar::Known(KnownType::Integer(size), params) => {
+                assert!(params.is_empty());
+                on_integer(*size)
+            }
+            TypeVar::Unknown(_) => on_unknown(),
+            other => on_other(other),
+        }
+    }
+}
+
 impl std::fmt::Display for TypeVar {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {

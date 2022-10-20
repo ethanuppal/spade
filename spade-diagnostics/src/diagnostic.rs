@@ -288,3 +288,34 @@ impl Diagnostic {
         self
     }
 }
+
+// Assert that something holds, if it does not, return a Diagnostic::bug with the specified
+// span
+#[macro_export]
+macro_rules! diag_assert {
+    ($span:expr, $condition:expr) => {
+        if !$condition {
+            return Err(Diagnostic::bug(
+                $span,
+                format!("Assertion {} failed", stringify!($condition)),
+            )
+            .into());
+        }
+    };
+}
+
+// Like anyhow::anyhow but for diagnostics. Attaches the message to the specified expression
+#[macro_export]
+macro_rules! diag_anyhow {
+    ($span:expr, $($arg:tt)*) => {
+        Diagnostic::bug($span, format!($($arg)*))
+    }
+}
+
+// Like anyhow::bail but for diagnostics. Attaches the message to the specified expression
+#[macro_export]
+macro_rules! diag_bail {
+    ($span:expr, $($arg:tt)*) => {
+        Err(spade_diagnostics::diag_anyhow!($span, $($arg)*).into())
+    }
+}

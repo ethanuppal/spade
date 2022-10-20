@@ -481,7 +481,6 @@ impl Spade {
         });
 
         let val = eval_statements(&mir);
-        println!("{val}");
         Ok(BitString(val.as_string()))
     }
 

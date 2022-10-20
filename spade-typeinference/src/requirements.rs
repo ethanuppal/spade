@@ -1,9 +1,8 @@
 use spade_common::location_info::WithLocation;
 use spade_common::name::Path;
 use spade_common::{location_info::Loc, name::Identifier};
-use spade_diagnostics::Diagnostic;
+use spade_diagnostics::{diag_anyhow, diag_assert, diag_bail, Diagnostic};
 use spade_hir::symbol_table::{SymbolTable, TypeDeclKind, TypeSymbol};
-use spade_types::KnownType;
 
 use crate::equation::TypeVar;
 use crate::error::{Error, Result, UnificationErrorExt};
@@ -64,27 +63,8 @@ impl Requirement {
                 field,
                 expr,
             } => {
-                let (known_type, params) = match &target_type.inner {
-                    // To know if we can access the field, we need to see if this type is actually
-                    // known in the first place
-                    TypeVar::Known(t, params) => (t, params),
-                    other @ TypeVar::Backward(_) => {
-                        return Err(Error::FieldAccessOnNonStruct {
-                            loc: expr.loc(),
-                            got: other.clone(),
-                        });
-                    }
-                    TypeVar::Unknown(_) => return Ok(RequirementResult::NoChange),
-                    other => {
-                        return Err(Error::FieldAccessOnNonStruct {
-                            loc: expr.loc(),
-                            got: other.clone(),
-                        })
-                    }
-                };
-
-                match known_type {
-                    KnownType::Type(type_name) => {
+                target_type.expect_named(
+                    |type_name, params| {
                         // Check if we're dealing with a struct
                         match symtab.type_symbol_by_id(&type_name).inner {
                             TypeSymbol::Declared(_, TypeDeclKind::Struct { is_port: _ }) => {}
@@ -139,57 +119,61 @@ impl Requirement {
                             from: expr.clone(),
                             to: field_type,
                         }]))
-                    }
-                    KnownType::Integer(_) => Err(Error::FieldAccessOnInteger { loc: expr.loc() }),
-                }
+                    },
+                    || Ok(RequirementResult::NoChange),
+                    |other| {
+                        Err(Error::FieldAccessOnNonStruct {
+                            loc: expr.loc(),
+                            got: other.clone(),
+                        })
+                    },
+                )
             }
             Requirement::FitsIntLiteral { value, target_type } => {
                 let int_type = symtab
                     .lookup_type_symbol(&Path::from_strs(&["int"]).nowhere())
-                    .map_err(|_| {
-                        Diagnostic::bug(target_type, "The type `int` was not in the symtab")
-                            .primary_label(format!("When evaluating requirement for this type"))
-                    })?
+                    .map_err(|_| diag_anyhow!(target_type, "The type int was not in the symtab"))?
                     .0;
 
-                match &target_type.inner {
-                    TypeVar::Known(KnownType::Type(name), params) if name == &int_type => {
-                        match params.as_slice() {
-                            [param] => {
-                                match param {
-                                    TypeVar::Known(KnownType::Integer(size), _) => {
-                                        // If the value is 0, we can fit it into any integer and
-                                        // can get rid of the requirement
-                                        if *value == 0 {
-                                            return Ok(RequirementResult::Satisfied(vec![]))
-                                        }
+                target_type.expect_specific_named(
+                    int_type,
+                    |params| {
+                        diag_assert!(target_type, params.len() == 1);
+                        params[0].expect_integer(
+                            |size| {
+                                // If the value is 0, we can fit it into any integer and
+                                // can get rid of the requirement
+                                if *value == 0 {
+                                    return Ok(RequirementResult::Satisfied(vec![]));
+                                }
 
-                                        // +1 for signed
-                                        let minimum_size = ((*value) as f64).log2() + 1.;
-                                        if *value > 0 && *size <= minimum_size as u128 {
-                                            Err(Diagnostic::error(target_type, format!("Integer value does not fit in int<{size}>"))
-                                                .primary_label(format!("{value} does not fit in an int<{size}>")).into())
-                                        }
-                                        else {
-                                            Ok(RequirementResult::NoChange)
-                                        }
-                                    },
-                                    TypeVar::Unknown(_) => Ok(RequirementResult::NoChange),
-                                    _ => Err(Diagnostic::bug(target_type, "Inferred non-integer type for integer literal").into())
+                                // +1 for signed
+                                let minimum_size = ((*value) as f64).log2() + 1.;
+                                if *value > 0 && size <= minimum_size as u128 {
+                                    Err(Diagnostic::error(
+                                        target_type,
+                                        format!("Integer value does not fit in int<{size}>"),
+                                    )
+                                    .primary_label(format!(
+                                        "{value} does not fit in an int<{size}>"
+                                    ))
+                                    .note(format!(
+                                        "int<{size}> fits integers in the range (-{}, {})",
+                                        (2u128).pow((size - 1) as u32),
+                                        (2u128).pow((size - 1) as u32) - 1,
+                                    ))
+                                    .into())
+                                } else {
+                                    Ok(RequirementResult::Satisfied(vec![]))
                                 }
                             },
-                            _ => Err(Diagnostic::bug(target_type, "Integer without exactly one type params when evaluating requirement").into())
-                        }
-                    }
-                    TypeVar::Unknown(_) => Ok(RequirementResult::NoChange),
-                    other => Err(Diagnostic::bug(
-                        target_type,
-                        format!(
-                            "Found non-integer for type '{other}' with integer size constraint"
-                        ),
-                    )
-                    .into()),
-                }
+                            || Ok(RequirementResult::NoChange),
+                            |_| diag_bail!(target_type, "Inferred {target_type} for int"),
+                        )
+                    },
+                    || Ok(RequirementResult::NoChange),
+                    |other| diag_bail!(target_type, "Inferred {other} for integer literal"),
+                )
             }
         }
     }

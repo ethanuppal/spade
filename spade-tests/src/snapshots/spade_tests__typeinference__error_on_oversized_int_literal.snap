@@ -7,5 +7,7 @@ error: Integer value does not fit in int<8>
   │
 2 │     128
   │     ^^^ 128 does not fit in an int<8>
+  │
+  = note: int<8> fits integers in the range (-128, 127)
 
 
