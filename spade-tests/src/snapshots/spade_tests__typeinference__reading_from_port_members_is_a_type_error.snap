@@ -6,6 +6,6 @@ error: Field access on &mut A which is not a struct
    ┌─ testinput:13:28
    │
 13 │     let x = inst read_port(val.x);
-   │                            ^^^^^ Expected strcut, found &mut A
+   │                            ^^^^^ Expected struct, found &mut A
 
 

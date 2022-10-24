@@ -256,7 +256,7 @@ impl CompilationError for Error {
                 .with_message(format!("Field access on {} which is not a struct", got))
                 .with_labels(vec![loc
                     .primary_label()
-                    .with_message(format!("Expected strcut, found {}", got))]),
+                    .with_message(format!("Expected struct, found {}", got))]),
             Error::NoSuchField { field, _struct } => Diagnostic::error()
                 .with_message(format!("{_struct} has no field named {field}"))
                 .with_labels(vec![field
