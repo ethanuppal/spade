@@ -143,6 +143,7 @@ typos:
 
 trawler:
     stage: trawler
+    allow_failure: true
     variables:
         UPSTREAM_BRANCH: $CI_COMMIT_REF_NAME
     trigger: spade-lang/trawler
