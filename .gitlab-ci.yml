@@ -64,7 +64,6 @@ build:linux:
   script:
     - cargo build --release
     - mv target/release/spade spadec
-    - mv target/release/libspade.so libspade.so
   artifacts:
     name: spade-linux
     # Artifacts are kept indefinitely for the latest successful pipeline on a
@@ -101,7 +100,7 @@ coverage:
         - apt-get install -y pkg-config
         # spade-python currently does not build with tarpaulin, but we also don't
         # have many tests there so we'll ignore it
-        - cargo tarpaulin --workspace -e spade-python --out Xml --target-dir target/tarpaulin
+        - cargo tarpaulin --workspace -e spade-python -e spade-cxx --out Xml --target-dir target/tarpaulin
     coverage: '/^\d+.\d+% coverage/'
     artifacts:
         reports:
@@ -140,6 +139,14 @@ typos:
         - tar xzf typos.tar.gz ./typos
     script:
         - ./typos
+
+cxx:
+    image: thezoq2/trawl
+    stage: test
+    variables:
+        APT_PYTHON_VERSION: "3"
+    script:
+        cargo build --workspace --package spade-cxx
 
 trawler:
     stage: trawler

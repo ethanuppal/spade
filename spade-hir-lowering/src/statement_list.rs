@@ -22,7 +22,7 @@ impl StatementList {
         self.stmts.push(stmt)
     }
 
-    /// Pushes a statement which is the primrary statement associated with the specified expression
+    /// Pushes a statement which is the primary statement associated with the specified expression
     pub fn push_primary(&mut self, stmt: Statement, source: impl Into<NameSource>) {
         let name = match &stmt {
             Statement::Binding(b) => Some(b.name.clone()),
