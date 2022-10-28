@@ -6,6 +6,13 @@ members = [
     "parse_tree_macros"
 ]
 
+# Unless otherwise specified, only build workspace members which requires no external
+# programs to be installed (yosys for spade-cxx, maturin etc. for spade-python)
+default-members = [
+    "spade-compiler",
+    "vcd-translate",
+]
+
 # Shared between internal crates. Can be overridden per-crate if needed.
 
 [workspace.package]
