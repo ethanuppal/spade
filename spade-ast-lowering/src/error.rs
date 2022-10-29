@@ -31,11 +31,6 @@ pub enum Error {
         found: Loc<Identifier>,
         previously: Loc<Identifier>,
     },
-    #[error("Duplicate enum option")]
-    DuplicateEnumOption {
-        new: Loc<Identifier>,
-        prev: Loc<Identifier>,
-    },
     #[error("Non-port in port struct")]
     NonPortInPortStruct {
         type_spec: Loc<()>,

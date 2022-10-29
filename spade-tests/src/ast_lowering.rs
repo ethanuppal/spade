@@ -484,3 +484,14 @@ snapshot_error! {
     fn mangling_time<#N>() -> int<N> __builtin__
     "
 }
+
+snapshot_error! {
+    duplicate_enum_variants,
+    "
+    enum E {
+        A,
+        B,
+        A,
+    }
+    "
+}

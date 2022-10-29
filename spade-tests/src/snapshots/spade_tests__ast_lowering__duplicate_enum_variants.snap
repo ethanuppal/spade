@@ -1,0 +1,14 @@
+---
+source: spade-tests/src/ast_lowering.rs
+expression: "std::str::from_utf8(buffer.as_slice()).expect(\"error contains invalid utf-8\")"
+---
+error: Multiple options called A
+  ┌─ testinput:4:5
+  │
+2 │     A,
+  │     - Previously occured here
+3 │     B,
+4 │     A,
+  │     ^ A occurs more than once
+
+

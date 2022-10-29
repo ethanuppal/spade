@@ -58,14 +58,6 @@ impl CompilationError for Error {
                     prev.secondary_label()
                         .with_message(format!("Previously declared here")),
                 ]),
-            Error::DuplicateEnumOption { new, prev } => Diagnostic::error()
-                .with_message(format!("Multiple options called {}", new))
-                .with_labels(vec![
-                    new.primary_label()
-                        .with_message(format!("{} is an option more than once", new)),
-                    prev.secondary_label()
-                        .with_message(format!("Previously declared here")),
-                ]),
             Error::PatternListLengthMismatch { expected, got, at } => Diagnostic::error()
                 .with_message(format!("Expected {} arguments, got {}", expected, got))
                 .with_labels(vec![at

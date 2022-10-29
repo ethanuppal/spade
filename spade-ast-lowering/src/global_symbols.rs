@@ -9,6 +9,7 @@ use spade_common::{
     location_info::{Loc, WithLocation},
     name::{Identifier, Path},
 };
+use spade_diagnostics::Diagnostic;
 use spade_hir as hir;
 
 use crate::{types::IsPort, visit_parameter_list, Error, Result};
@@ -211,10 +212,13 @@ pub fn re_visit_type_declaration(
 
             for (i, option) in e.options.iter().enumerate() {
                 if let Some(prev) = member_names.get(&option.0) {
-                    return Err(Error::DuplicateEnumOption {
-                        new: option.0.clone(),
-                        prev: prev.clone(),
-                    });
+                    let new = &option.0;
+                    return Err(
+                        Diagnostic::error(new, format!("Multiple options called {}", new))
+                            .primary_label(format!("{} occurs more than once", new))
+                            .secondary_label(prev, "Previously occured here")
+                            .into(),
+                    );
                 }
                 member_names.insert(option.0.clone());
                 // Check the parameter list
@@ -225,7 +229,7 @@ pub fn re_visit_type_declaration(
                     .unwrap_or_else(|| Ok(hir::ParameterList(vec![])))?;
 
                 // Ensure that we don't have any port types in the enum variants
-                for (_, ty) in option.1.clone().map(|l| l.0).unwrap_or(vec![]) {
+                for (_, ty) in option.1.clone().map(|l| l.0).unwrap_or_default() {
                     if ty.is_port(symtab)? {
                         return Err(Error::PortInEnum {
                             type_spec: ty.loc(),
