@@ -16,7 +16,6 @@ use spade_ast::ModuleBody;
 use spade_ast_lowering::{global_symbols, visit_module_body, Context as AstLoweringCtx};
 use spade_common::id_tracker;
 use spade_common::name::Path as SpadePath;
-use spade_diagnostics::emitter::CodespanEmitter;
 use spade_diagnostics::{CodeBundle, CompilationError, DiagHandler};
 use spade_hir::symbol_table::{FrozenSymtab, SymbolTable};
 use spade_hir::{ExecutableItem, ItemList};
@@ -87,7 +86,7 @@ where
 pub struct ErrorHandler<'a> {
     pub failed: bool,
     pub error_buffer: &'a mut Buffer,
-    pub diag_handler: &'a mut DiagHandler,
+    pub diag_handler: DiagHandler,
     /// Using a RW lock here is just a lazy way of managing the ownership of code to
     /// be able to report errors even while modifying CodeBundle
     pub code: Rc<RwLock<CodeBundle>>,
@@ -99,7 +98,7 @@ impl<'a> ErrorHandler<'a> {
         err.report(
             self.error_buffer,
             &self.code.read().unwrap(),
-            self.diag_handler,
+            &mut self.diag_handler,
         );
     }
 }
@@ -127,6 +126,7 @@ struct CodegenArtefacts {
 pub fn compile(
     sources: Vec<(ModuleNamespace, String, String)>,
     opts: Opt,
+    diag_handler: DiagHandler,
 ) -> Result<Artefacts, ()> {
     let mut symtab = SymbolTable::new();
     let mut item_list = ItemList::new();
@@ -134,12 +134,10 @@ pub fn compile(
     spade_ast_lowering::builtins::populate_symtab(&mut symtab, &mut item_list);
 
     let code = Rc::new(RwLock::new(CodeBundle::new("".to_string())));
-
-    let mut diag_handler = DiagHandler::new(Box::new(CodespanEmitter));
     let mut errors = ErrorHandler {
         failed: false,
         error_buffer: opts.error_buffer,
-        diag_handler: &mut diag_handler,
+        diag_handler,
         code: Rc::clone(&code),
     };
 
@@ -259,7 +257,7 @@ pub fn compile(
         &mut idtracker,
         &mut name_source_map,
         &item_list,
-        errors.diag_handler,
+        &mut errors.diag_handler,
     );
 
     let CodegenArtefacts {

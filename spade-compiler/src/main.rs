@@ -5,6 +5,8 @@ use std::path::PathBuf;
 use clap::Parser;
 use codespan_reporting::term::termcolor::Buffer;
 use color_eyre::eyre::{anyhow, Context, Result};
+use spade_diagnostics::emitter::CodespanEmitter;
+use spade_diagnostics::DiagHandler;
 use tracing_subscriber::filter::{EnvFilter, LevelFilter};
 use tracing_subscriber::prelude::*;
 use tracing_tree::HierarchicalLayer;
@@ -110,7 +112,8 @@ fn main() -> Result<()> {
         print_parse_traceback: opts.print_parse_traceback,
     };
 
-    match spade::compile(sources?, spade_opts) {
+    let diag_handler = DiagHandler::new(Box::new(CodespanEmitter));
+    match spade::compile(sources?, spade_opts, diag_handler) {
         Ok(_) => Ok(()),
         Err(_) => {
             std::io::stderr().write_all(buffer.as_slice())?;

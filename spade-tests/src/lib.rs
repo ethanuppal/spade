@@ -80,6 +80,9 @@ macro_rules! snapshot_error {
                     source.to_string(),
                 )],
                 opts,
+                spade_diagnostics::DiagHandler::new(Box::new(
+                    spade_diagnostics::emitter::CodespanEmitter,
+                )),
             );
 
             insta::assert_snapshot!(
@@ -120,6 +123,7 @@ fn build_items(code: &str) -> Vec<spade_mir::Entity> {
             source,
         )],
         opts,
+        spade_diagnostics::DiagHandler::new(Box::new(spade_diagnostics::emitter::CodespanEmitter)),
     ) {
         Ok(artefacts) => artefacts.bumpy_mir_entities,
         Err(()) => {
