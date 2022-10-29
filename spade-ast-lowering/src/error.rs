@@ -42,11 +42,6 @@ pub enum Error {
         struct_name: Loc<Identifier>,
         type_spec: Loc<()>,
     },
-    #[error("Port in enum")]
-    PortInEnum {
-        enum_name: Loc<Identifier>,
-        type_spec: Loc<()>,
-    },
     #[error("Non port in port tuple")]
     NonPortInPortTuple {
         offending_type: Loc<()>,

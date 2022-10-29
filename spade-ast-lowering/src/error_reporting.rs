@@ -101,15 +101,6 @@ impl CompilationError for Error {
                         replacement: format!("port "),
                     }],
                 }]),
-            Error::PortInEnum {
-                enum_name,
-                type_spec,
-            } => Diagnostic::error()
-                .with_message(format!("Port in enum"))
-                .with_labels(vec![
-                    type_spec.primary_label().with_message("This is a port"),
-                    enum_name.secondary_label().with_message("This is an enum"),
-                ]),
             Error::PortInFunction { type_spec } => Diagnostic::error()
                 .with_message(format!("Port in function"))
                 .with_labels(vec![type_spec

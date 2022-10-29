@@ -231,10 +231,10 @@ pub fn re_visit_type_declaration(
                 // Ensure that we don't have any port types in the enum variants
                 for (_, ty) in option.1.clone().map(|l| l.0).unwrap_or_default() {
                     if ty.is_port(symtab)? {
-                        return Err(Error::PortInEnum {
-                            type_spec: ty.loc(),
-                            enum_name: e.name.clone(),
-                        });
+                        return Err(Diagnostic::error(ty, "Port in enum")
+                            .primary_label("This is a port")
+                            .secondary_label(&e.name, "This is an enum")
+                            .into());
                     }
                 }
 
