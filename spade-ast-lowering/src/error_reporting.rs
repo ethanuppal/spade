@@ -271,17 +271,6 @@ impl CompilationError for Error {
                 .with_labels(vec![attribute
                     .primary_label()
                     .with_message("Unrecognised attribute")]),
-            Error::NoMangleGeneric {
-                attribute,
-                generic_list,
-            } => Diagnostic::error()
-                .with_message("no_mangle is not allowed on generic units")
-                .with_labels(vec![
-                    attribute.primary_label().with_message("Not allowed here"),
-                    generic_list
-                        .secondary_label()
-                        .with_message("Because this unit is generic"),
-                ]),
             Error::NoMatchArms { body } => Diagnostic::error()
                 .with_message("Match body has no arms")
                 .with_labels(vec![body.primary_label().with_message("Empty match body")]),

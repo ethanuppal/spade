@@ -124,12 +124,6 @@ pub enum Error {
     #[error("Unrecognised attribute")]
     UnrecognisedAttribute { attribute: Loc<Identifier> },
 
-    #[error("Nomangle on generic")]
-    NoMangleGeneric {
-        attribute: Loc<Identifier>,
-        generic_list: Loc<()>,
-    },
-
     #[error("Match block has no arms")]
     NoMatchArms { body: Loc<()> },
 

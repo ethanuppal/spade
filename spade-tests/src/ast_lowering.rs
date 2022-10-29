@@ -114,7 +114,7 @@ snapshot_error! {
             // If this test works, B, being in scope should not be a variable but remain
             // referring to X::B. In the incorrect behaviour, the single identifier path B
             // binds to X and B() is calling a variable as a function
-            B => B(), 
+            B => B(),
         }
     }
     "
@@ -451,7 +451,7 @@ snapshot_error! {
 snapshot_error! {
     enums_can_not_have_transitive_ports,
     "
-    struct port A {} 
+    struct port A {}
     enum X {
         A{x: A}
     }"
@@ -474,5 +474,13 @@ snapshot_error! {
 
 
     entity x(a: &mut A) -> bool __builtin__
+    "
+}
+
+snapshot_error! {
+    no_mangle_generics,
+    "
+    #[no_mangle]
+    fn mangling_time<#N>() -> int<N> __builtin__
     "
 }

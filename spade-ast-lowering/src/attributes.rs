@@ -3,6 +3,7 @@ use spade_common::{
     location_info::{Loc, WithLocation},
     name::{Identifier, NameID},
 };
+use spade_diagnostics::Diagnostic;
 use spade_hir as hir;
 
 use crate::error::{Error, Result};
@@ -30,10 +31,12 @@ pub fn unit_name(
         if !type_params.is_empty() {
             let generic_list =
                 ().between_locs(type_params.first().unwrap(), type_params.last().unwrap());
-            Err(Error::NoMangleGeneric {
-                attribute: attribute.clone(),
-                generic_list,
-            })
+            Err(
+                Diagnostic::error(attribute, "no_mangle is not allowed on generic units")
+                    .primary_label("no_mangle not allowed here")
+                    .secondary_label(generic_list, "Because this unit is generic")
+                    .into(),
+            )
         } else {
             Ok(hir::UnitName::Unmangled(
                 identifier.0.clone(),

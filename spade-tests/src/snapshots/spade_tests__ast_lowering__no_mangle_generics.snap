@@ -1,0 +1,13 @@
+---
+source: spade-tests/src/ast_lowering.rs
+expression: "std::str::from_utf8(buffer.as_slice()).expect(\"error contains invalid utf-8\")"
+---
+error: no_mangle is not allowed on generic units
+  ┌─ testinput:1:1
+  │
+1 │ #[no_mangle]
+  │ ^^^^^^^^^^^^ no_mangle not allowed here
+2 │ fn mangling_time<#N>() -> int<N> __builtin__
+  │                  -- Because this unit is generic
+
+
