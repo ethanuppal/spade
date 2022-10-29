@@ -266,11 +266,6 @@ impl CompilationError for Error {
                 .with_notes(vec![format!(
                     "Consider defining {name} with a let or reg binding"
                 )]),
-            Error::UnrecognisedAttribute { attribute } => Diagnostic::error()
-                .with_message("Unrecognised attribute")
-                .with_labels(vec![attribute
-                    .primary_label()
-                    .with_message("Unrecognised attribute")]),
             Error::NoMatchArms { body } => Diagnostic::error()
                 .with_message("Match body has no arms")
                 .with_labels(vec![body.primary_label().with_message("Empty match body")]),

@@ -121,9 +121,6 @@ pub enum Error {
         previous: Loc<()>,
     },
 
-    #[error("Unrecognised attribute")]
-    UnrecognisedAttribute { attribute: Loc<Identifier> },
-
     #[error("Match block has no arms")]
     NoMatchArms { body: Loc<()> },
 

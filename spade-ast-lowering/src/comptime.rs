@@ -11,7 +11,7 @@ impl<T: Clone> ComptimeCondExt for ComptimeCondition<T> {
     fn maybe_unpack(&self, symtab: &SymbolTable) -> Result<Option<T>> {
         let (var, op, val) = &self.condition;
 
-        let var_val = symtab.lookup_comptime_config(&var)?.1.inner;
+        let var_val = symtab.lookup_comptime_config(var)?.1.inner;
 
         let result_bool = match op {
             ComptimeCondOp::Eq => var_val == val.inner,

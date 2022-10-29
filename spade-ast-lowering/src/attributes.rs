@@ -6,7 +6,7 @@ use spade_common::{
 use spade_diagnostics::Diagnostic;
 use spade_hir as hir;
 
-use crate::error::{Error, Result};
+use crate::error::Result;
 
 /// Walks through the attribute list to get the unit name. Removes the attributes
 /// used to determine that
@@ -54,9 +54,9 @@ pub fn unit_name(
 
 pub fn report_unused_attributes(attributes: &ast::AttributeList) -> Result<()> {
     if let Some(attr) = attributes.0.first() {
-        return Err(Error::UnrecognisedAttribute {
-            attribute: attr.clone(),
-        });
+        return Err(Diagnostic::error(attr, "Unrecognised attribute")
+            .primary_label("Unrecognised attribute")
+            .into());
     }
     Ok(())
 }
