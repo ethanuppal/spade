@@ -287,8 +287,9 @@ pub fn re_visit_type_declaration(
                             .primary_label("This is not a port type")
                             .secondary_label(
                                 s.port_keyword.unwrap(),
-                                "All members of a port must be ports",
+                                format!("{} is a port struct", s.name),
                             )
+                            .note("All members of a port struct must be ports")
                             .span_suggest_insert_before(
                                 format!("Consider making {f} a wire"),
                                 ty,
