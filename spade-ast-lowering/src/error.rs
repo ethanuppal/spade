@@ -1,11 +1,25 @@
 use spade_ast as ast;
 use spade_common::{location_info::Loc, name::Identifier};
+use spade_diagnostics::Diagnostic;
 use spade_hir as hir;
 use thiserror::Error;
 
 pub enum ItemKind {
     Pipeline,
     Entity,
+}
+
+pub(crate) struct WireOfPort {
+    pub(crate) full_type: Loc<()>,
+    pub(crate) inner_type: Loc<()>,
+}
+
+impl From<WireOfPort> for Diagnostic {
+    fn from(err: WireOfPort) -> Self {
+        Diagnostic::error(err.full_type, "Can't create a wire of ports")
+            .primary_label("This can't be a wire")
+            .secondary_label(err.inner_type, "Because this is a port")
+    }
 }
 
 #[derive(Error, Debug, PartialEq, Clone)]
@@ -27,11 +41,6 @@ pub enum Error {
     DuplicateTypeVariable {
         found: Loc<Identifier>,
         previously: Loc<Identifier>,
-    },
-    #[error("Aire of port")]
-    WireOfPort {
-        full_type: Loc<()>,
-        inner_type: Loc<()>,
     },
     #[error("Port in function")]
     PortInFunction { type_spec: Loc<()> },

@@ -134,7 +134,7 @@ pub fn visit_type_spec(
                                 .note("A generic argument can not have generic types"),
                         ))
                     } else {
-                        Ok(hir::TypeSpec::Generic(base_id.at_loc(&path)))
+                        Ok(hir::TypeSpec::Generic(base_id.at_loc(path)))
                     }
                 }
             }
@@ -186,13 +186,14 @@ pub fn visit_type_spec(
 
             Ok(hir::TypeSpec::Tuple(inner))
         }
-        ast::TypeSpec::Unit(w) => Ok(hir::TypeSpec::Unit(w.clone())),
+        ast::TypeSpec::Unit(w) => Ok(hir::TypeSpec::Unit(*w)),
         ast::TypeSpec::Backward(inner) => {
             if inner.is_port(symtab)? {
-                return Err(Error::WireOfPort {
+                return Err(Diagnostic::from(error::WireOfPort {
                     full_type: t.loc(),
                     inner_type: inner.loc(),
-                });
+                })
+                .into());
             }
             Ok(hir::TypeSpec::Backward(Box::new(visit_type_spec(
                 inner, symtab,
@@ -200,12 +201,12 @@ pub fn visit_type_spec(
         }
         ast::TypeSpec::Wire(inner) => {
             if inner.is_port(symtab)? {
-                return Err(Error::WireOfPort {
+                return Err(Diagnostic::from(error::WireOfPort {
                     full_type: t.loc(),
                     inner_type: inner.loc(),
-                });
+                })
+                .into());
             }
-
             Ok(hir::TypeSpec::Wire(Box::new(visit_type_spec(
                 inner, symtab,
             )?)))

@@ -69,17 +69,6 @@ impl CompilationError for Error {
                     .primary_label()
                     .with_message("Functions can not take ports")])
                 .with_notes(vec![format!("Did you mean to declare an entity?")]),
-            Error::WireOfPort {
-                full_type,
-                inner_type,
-            } => Diagnostic::error()
-                .with_message(format!("Can not create a wire of ports"))
-                .with_labels(vec![
-                    full_type
-                        .primary_label()
-                        .with_message("This can not be a wire"),
-                    inner_type.secondary_label().with_message("This is a port"),
-                ]),
             Error::IncorrectStageCount {
                 got,
                 expected,
