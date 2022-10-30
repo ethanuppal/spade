@@ -5,10 +5,12 @@ expression: "std::str::from_utf8(buffer.as_slice()).expect(\"error contains inva
 error: Port in non-port struct
   ┌─ testinput:2:8
   │
+1 │ struct A {
+  │        - This is not a port struct
 2 │     x: &mut int<32>
   │        ^^^^^^^^^^^^ This is a port
   │
-  = Consider making A a port
+  = Consider making A a port struct
   │
 1 │ struct port A {
   │        +++++

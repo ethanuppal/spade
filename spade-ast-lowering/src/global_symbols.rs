@@ -303,8 +303,9 @@ pub fn re_visit_type_declaration(
                     if ty.is_port(symtab)? {
                         return Err(Diagnostic::error(ty, "Port in non-port struct")
                             .primary_label("This is a port")
+                            .secondary_label(&s.name, "This is not a port struct")
                             .span_suggest_insert_before(
-                                format!("Consider making {} a port", s.name),
+                                format!("Consider making {} a port struct", s.name),
                                 &s.name,
                                 "port ",
                             )
