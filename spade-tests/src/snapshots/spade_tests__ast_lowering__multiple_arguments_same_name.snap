@@ -1,0 +1,13 @@
+---
+source: spade-tests/src/ast_lowering.rs
+expression: "std::str::from_utf8(buffer.as_slice()).expect(\"error contains invalid utf-8\")"
+---
+error: Multiple arguments with the same name
+  ┌─ testinput:1:35
+  │
+1 │ fn multiple(foo: bool, bar: bool, foo: bool) __builtin__
+  │             ---                   ^^^ foo later declared here
+  │             │                      
+  │             foo previously declared here
+
+

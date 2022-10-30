@@ -221,10 +221,12 @@ fn visit_parameter_list(l: &ParameterList, symtab: &mut SymbolTable) -> Result<h
     let mut result = vec![];
     for (name, input_type) in &l.0 {
         if let Some(prev) = arg_names.get(name) {
-            return Err(Error::DuplicateArgument {
-                new: name.clone(),
-                prev: prev.clone(),
-            });
+            return Err(
+                Diagnostic::error(name, "Multiple arguments with the same name")
+                    .primary_label(format!("{name} later declared here"))
+                    .secondary_label(prev, format!("{name} previously declared here"))
+                    .into(),
+            );
         }
         arg_names.insert(name.clone());
         let t = visit_type_spec(input_type, symtab)?;

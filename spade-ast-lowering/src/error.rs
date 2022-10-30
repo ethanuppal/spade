@@ -32,11 +32,6 @@ pub enum Error {
     UniquenessError(#[from] spade_hir::symbol_table::UniqueNameError),
     #[error("Argument error")]
     ArgumentError(#[from] spade_hir::param_util::ArgumentError),
-    #[error("Duplicate argument")]
-    DuplicateArgument {
-        new: Loc<Identifier>,
-        prev: Loc<Identifier>,
-    },
     #[error("Duplicate type variable")]
     DuplicateTypeVariable {
         found: Loc<Identifier>,

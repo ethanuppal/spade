@@ -505,3 +505,8 @@ snapshot_error! {
     }
     "
 }
+
+snapshot_error! {
+    multiple_arguments_same_name,
+    "fn multiple(foo: bool, bar: bool, foo: bool) __builtin__"
+}
