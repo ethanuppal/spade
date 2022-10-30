@@ -212,14 +212,6 @@ impl CompilationError for Error {
                         .secondary_label()
                         .with_message(format!("Previously labeled here")),
                 ]),
-            Error::GenericsGivenForGeneric { at_loc, for_type } => Diagnostic::error()
-                .with_message("Generic arguments given for a generic type")
-                .with_labels(vec![at_loc
-                    .primary_label()
-                    .with_message(format!("{} is a generic type", for_type))])
-                .with_notes(vec![format!(
-                    "A generic argument can not have generic types"
-                )]),
             Error::DeclarationOfNonReg {
                 at,
                 declaration_location,

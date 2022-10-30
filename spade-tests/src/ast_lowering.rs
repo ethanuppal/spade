@@ -495,3 +495,13 @@ snapshot_error! {
     }
     "
 }
+
+snapshot_error! {
+    generics_given_for_generic_type,
+    "
+
+    enum Test<T, U> {
+        B { value: T<U> },
+    }
+    "
+}

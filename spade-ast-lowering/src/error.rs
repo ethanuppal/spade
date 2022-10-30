@@ -1,8 +1,5 @@
 use spade_ast as ast;
-use spade_common::{
-    location_info::Loc,
-    name::{Identifier, Path},
-};
+use spade_common::{location_info::Loc, name::Identifier};
 use spade_hir as hir;
 use thiserror::Error;
 
@@ -113,13 +110,6 @@ pub enum Error {
 
     #[error("Match block has no arms")]
     NoMatchArms { body: Loc<()> },
-
-    // Type related errors
-    #[error("Generic parameters for generic name")]
-    GenericsGivenForGeneric {
-        at_loc: Loc<()>,
-        for_type: Loc<Path>,
-    },
 
     #[error("Spade diagnostic")]
     SpadeDiagnostic(#[from] spade_diagnostics::Diagnostic),

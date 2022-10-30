@@ -11,6 +11,7 @@ use attributes::{report_unused_attributes, unit_name};
 use comptime::ComptimeCondExt;
 use hir::param_util::ArgumentError;
 use pipelines::PipelineContext;
+use spade_diagnostics::Diagnostic;
 use tracing::info;
 
 use std::collections::HashSet;
@@ -105,9 +106,7 @@ pub fn visit_type_spec(
     let result = match &t.inner {
         ast::TypeSpec::Named(path, params) => {
             // Lookup the referenced type
-            // NOTE: this weird scope is required because the borrow of t lasts
-            // until the end of the outer scope even if we clone here.
-            let (base_id, t) = { symtab.lookup_type_symbol(path)?.clone() };
+            let (base_id, t) = symtab.lookup_type_symbol(path)?;
 
             // Check if the type is a declared type or a generic argument.
             match &t.inner {
@@ -129,10 +128,11 @@ pub fn visit_type_spec(
                     if !params.is_empty() {
                         let at_loc =
                             ().between_locs(params.first().unwrap(), params.last().unwrap());
-                        Err(Error::GenericsGivenForGeneric {
-                            at_loc,
-                            for_type: base_id.1.clone().at_loc(&t.loc()),
-                        })
+                        Err(Error::SpadeDiagnostic(
+                            Diagnostic::error(at_loc, "Generic arguments given for a generic type")
+                                .primary_label(format!("{} is a generic type", base_id.1))
+                                .note("A generic argument can not have generic types"),
+                        ))
                     } else {
                         Ok(hir::TypeSpec::Generic(base_id.at_loc(&path)))
                     }
