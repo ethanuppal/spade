@@ -12,7 +12,7 @@ use spade_common::{
 use spade_diagnostics::Diagnostic;
 use spade_hir as hir;
 
-use crate::{types::IsPort, visit_parameter_list, Error, Result};
+use crate::{types::IsPort, visit_parameter_list, Result};
 use spade_hir::symbol_table::{GenericArg, SymbolTable, Thing, TypeSymbol};
 
 #[tracing::instrument(skip_all)]
@@ -301,10 +301,14 @@ pub fn re_visit_type_declaration(
             } else {
                 for (_, ty) in &s.members.0 {
                     if ty.is_port(symtab)? {
-                        return Err(Error::PortInNonPortStruct {
-                            struct_name: s.name.clone(),
-                            type_spec: ty.loc(),
-                        });
+                        return Err(Diagnostic::error(ty, "Port in non-port struct")
+                            .primary_label("This is a port")
+                            .span_suggest_insert_before(
+                                format!("Consider making {} a port", s.name),
+                                &s.name,
+                                "port ",
+                            )
+                            .into());
                     }
                 }
             }

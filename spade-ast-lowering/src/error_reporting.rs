@@ -1,4 +1,4 @@
-use codespan_reporting::diagnostic::{Diagnostic, Suggestion, SuggestionPart};
+use codespan_reporting::diagnostic::Diagnostic;
 use codespan_reporting::term::{self, termcolor::Buffer};
 use spade_common::location_info::AsLabel;
 use spade_diagnostics::emitter::codespan_config;
@@ -63,22 +63,6 @@ impl CompilationError for Error {
                 .with_labels(vec![at
                     .primary_label()
                     .with_message(format!("Expected {} arguments", expected))]),
-            Error::PortInNonPortStruct {
-                struct_name,
-                type_spec,
-            } => Diagnostic::error()
-                .with_message(format!("Port in non-port struct"))
-                .with_labels(vec![type_spec
-                    .primary_label()
-                    .with_message("This is a port")])
-                .with_suggestions(vec![Suggestion {
-                    file_id: struct_name.file_id,
-                    message: format!("Consider making {struct_name} a port"),
-                    parts: vec![SuggestionPart {
-                        range: struct_name.span().start..struct_name.span().start,
-                        replacement: format!("port "),
-                    }],
-                }]),
             Error::PortInFunction { type_spec } => Diagnostic::error()
                 .with_message(format!("Port in function"))
                 .with_labels(vec![type_spec

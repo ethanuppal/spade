@@ -28,11 +28,6 @@ pub enum Error {
         found: Loc<Identifier>,
         previously: Loc<Identifier>,
     },
-    #[error("Non-port in port struct")]
-    PortInNonPortStruct {
-        struct_name: Loc<Identifier>,
-        type_spec: Loc<()>,
-    },
     #[error("Non port in port tuple")]
     NonPortInPortTuple {
         offending_type: Loc<()>,
