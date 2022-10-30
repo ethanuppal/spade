@@ -167,10 +167,14 @@ pub fn visit_type_spec(
                 // Since this type has 1 port, all members must be ports
                 for ty in inner {
                     if !ty.is_port(symtab)? {
-                        return Err(Error::NonPortInPortTuple {
-                            offending_type: ty.loc(),
-                            port_witness: witness.loc(),
-                        });
+                        return Err(Diagnostic::error(
+                            ty,
+                            "Can't mix ports and non-ports in a tuple",
+                        )
+                        .primary_label("This is not a port")
+                        .secondary_label(witness, "This is a port")
+                        .note("A tuple must either contain only ports or no ports")
+                        .into());
                     }
                 }
             }

@@ -28,11 +28,6 @@ pub enum Error {
         found: Loc<Identifier>,
         previously: Loc<Identifier>,
     },
-    #[error("Non port in port tuple")]
-    NonPortInPortTuple {
-        offending_type: Loc<()>,
-        port_witness: Loc<()>,
-    },
     #[error("Aire of port")]
     WireOfPort {
         full_type: Loc<()>,

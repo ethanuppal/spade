@@ -69,22 +69,6 @@ impl CompilationError for Error {
                     .primary_label()
                     .with_message("Functions can not take ports")])
                 .with_notes(vec![format!("Did you mean to declare an entity?")]),
-            Error::NonPortInPortTuple {
-                offending_type,
-                port_witness,
-            } => Diagnostic::error()
-                .with_message(format!("Can not mix ports and non-ports in a tuple"))
-                .with_labels(vec![
-                    offending_type
-                        .primary_label()
-                        .with_message("This is not a port"),
-                    port_witness
-                        .secondary_label()
-                        .with_message("This is a port"),
-                ])
-                .with_notes(vec![format!(
-                    "A tuple must either be all ports or no ports"
-                )]),
             Error::WireOfPort {
                 full_type,
                 inner_type,
