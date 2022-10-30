@@ -63,28 +63,6 @@ impl CompilationError for Error {
                 .with_labels(vec![at
                     .primary_label()
                     .with_message(format!("Expected {} arguments", expected))]),
-            Error::NonPortInPortStruct {
-                type_spec,
-                port_keyword,
-                field,
-            } => Diagnostic::error()
-                .with_message(format!("Non-port in port struct"))
-                .with_labels(vec![
-                    type_spec
-                        .primary_label()
-                        .with_message("This is not a port type"),
-                    port_keyword
-                        .secondary_label()
-                        .with_message("All members of a port must be ports"),
-                ])
-                .with_suggestions(vec![Suggestion {
-                    file_id: port_keyword.file_id,
-                    message: format!("Consider making {field} a wire"),
-                    parts: vec![SuggestionPart {
-                        range: type_spec.span().start..type_spec.span().start,
-                        replacement: format!("&"),
-                    }],
-                }]),
             Error::PortInNonPortStruct {
                 struct_name,
                 type_spec,

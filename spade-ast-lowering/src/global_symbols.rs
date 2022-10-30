@@ -283,11 +283,18 @@ pub fn re_visit_type_declaration(
             if s.is_port() {
                 for (f, ty) in &s.members.0 {
                     if !ty.is_port(symtab)? {
-                        return Err(Error::NonPortInPortStruct {
-                            type_spec: ty.loc(),
-                            port_keyword: s.port_keyword.unwrap(),
-                            field: f.clone(),
-                        });
+                        return Err(Diagnostic::error(ty, "Non-port in port struct")
+                            .primary_label("This is not a port type")
+                            .secondary_label(
+                                s.port_keyword.unwrap(),
+                                "All members of a port must be ports",
+                            )
+                            .span_suggest_insert_before(
+                                format!("Consider making {f} a wire"),
+                                ty,
+                                "&",
+                            )
+                            .into());
                     }
                 }
             } else {

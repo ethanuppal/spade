@@ -29,12 +29,6 @@ pub enum Error {
         previously: Loc<Identifier>,
     },
     #[error("Non-port in port struct")]
-    NonPortInPortStruct {
-        type_spec: Loc<()>,
-        port_keyword: Loc<()>,
-        field: Loc<Identifier>,
-    },
-    #[error("Non-port in port struct")]
     PortInNonPortStruct {
         struct_name: Loc<Identifier>,
         type_spec: Loc<()>,
