@@ -22,6 +22,22 @@ impl From<WireOfPort> for Diagnostic {
     }
 }
 
+pub(crate) struct PatternListLengthMismatch {
+    pub(crate) expected: usize,
+    pub(crate) got: usize,
+    pub(crate) at: Loc<()>,
+}
+
+impl From<PatternListLengthMismatch> for Diagnostic {
+    fn from(err: PatternListLengthMismatch) -> Self {
+        Diagnostic::error(
+            err.at,
+            format!("Expected {} arguments, got {}", err.expected, err.got),
+        )
+        .primary_label(format!("Expected {} arguments here", err.expected))
+    }
+}
+
 #[derive(Error, Debug, PartialEq, Clone)]
 pub enum Error {
     #[error("Lookup error")]
@@ -36,12 +52,6 @@ pub enum Error {
     DuplicateTypeVariable {
         found: Loc<Identifier>,
         previously: Loc<Identifier>,
-    },
-    #[error("Pattern list length mismatch, expected {expected} arguments, got {got}")]
-    PatternListLengthMismatch {
-        expected: usize,
-        got: usize,
-        at: Loc<()>,
     },
     #[error("Incorrect stage count")]
     IncorrectStageCount {

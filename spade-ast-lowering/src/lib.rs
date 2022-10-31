@@ -459,14 +459,16 @@ pub fn visit_module_body(
 fn try_lookup_enum_variant(path: &Loc<Path>, ctx: &mut Context) -> Result<hir::PatternKind> {
     match ctx.symtab.lookup_enum_variant(path) {
         Ok((name_id, variant)) => {
-            if variant.inner.params.argument_num() != 0 {
-                return Err(Error::PatternListLengthMismatch {
+            if variant.inner.params.argument_num() == 0 {
+                Ok(hir::PatternKind::Type(name_id.at_loc(path), vec![]))
+            } else {
+                // FIXME: When is this raised?
+                Err(Diagnostic::from(error::PatternListLengthMismatch {
                     expected: variant.inner.params.argument_num(),
                     got: 0,
                     at: path.loc(),
-                });
-            } else {
-                Ok(hir::PatternKind::Type(name_id.at_loc(path), vec![]))
+                })
+                .into())
             }
         }
         Err(e) => Err(e.into()),
@@ -605,11 +607,13 @@ pub fn visit_pattern(
                         ast::ArgumentPattern::Positional(patterns) => {
                             // Ensure we have the correct amount of arguments
                             if p.params.argument_num() != patterns.len() {
-                                return Err(Error::PatternListLengthMismatch {
+                                // FIXME: When is this raised?
+                                return Err(Diagnostic::from(error::PatternListLengthMismatch {
                                     expected: p.params.argument_num(),
                                     got: patterns.len(),
                                     at: args.loc(),
-                                });
+                                })
+                                .into());
                             }
 
                             let patterns = patterns

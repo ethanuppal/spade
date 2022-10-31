@@ -50,11 +50,6 @@ impl CompilationError for Error {
                             .with_message(format!("Previous definition here")),
                     ])
             }
-            Error::PatternListLengthMismatch { expected, got, at } => Diagnostic::error()
-                .with_message(format!("Expected {} arguments, got {}", expected, got))
-                .with_labels(vec![at
-                    .primary_label()
-                    .with_message(format!("Expected {} arguments", expected))]),
             Error::IncorrectStageCount {
                 got,
                 expected,
