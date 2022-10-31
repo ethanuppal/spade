@@ -216,7 +216,7 @@ pub fn re_visit_type_declaration(
                     return Err(
                         Diagnostic::error(new, format!("Multiple options called {}", new))
                             .primary_label(format!("{} occurs more than once", new))
-                            .secondary_label(prev, "Previously occured here")
+                            .secondary_label(prev, "Previously occurred here")
                             .into(),
                     );
                 }

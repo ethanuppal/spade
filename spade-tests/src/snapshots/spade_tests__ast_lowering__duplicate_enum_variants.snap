@@ -6,7 +6,7 @@ error: Multiple options called A
   ┌─ testinput:4:5
   │
 2 │     A,
-  │     - Previously occured here
+  │     - Previously occurred here
 3 │     B,
 4 │     A,
   │     ^ A occurs more than once
