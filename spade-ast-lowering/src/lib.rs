@@ -264,9 +264,9 @@ pub fn entity_head(item: &ast::Entity, symtab: &mut SymbolTable) -> Result<Entit
         for (_, ty) in &item.inputs.0 {
             if ty.is_port(symtab)? {
                 info!("Aborting due to port in function parameters");
-                port_error = Err(Error::PortInFunction {
-                    type_spec: ty.loc(),
-                });
+                port_error = Err(Diagnostic::error(ty, "Port in function")
+                    .primary_label("This is a port")
+                    .note("Only entities and pipelines can take ports as arguments"))
             }
         }
     }

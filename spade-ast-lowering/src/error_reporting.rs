@@ -55,12 +55,6 @@ impl CompilationError for Error {
                 .with_labels(vec![at
                     .primary_label()
                     .with_message(format!("Expected {} arguments", expected))]),
-            Error::PortInFunction { type_spec } => Diagnostic::error()
-                .with_message(format!("Port in function"))
-                .with_labels(vec![type_spec
-                    .primary_label()
-                    .with_message("Functions can not take ports")])
-                .with_notes(vec![format!("Did you mean to declare an entity?")]),
             Error::IncorrectStageCount {
                 got,
                 expected,

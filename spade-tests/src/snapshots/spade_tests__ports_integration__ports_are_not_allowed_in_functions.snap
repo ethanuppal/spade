@@ -6,8 +6,8 @@ error: Port in function
   ┌─ testinput:1:19
   │
 1 │ fn not_allowed(a: &bool) -> bool {
-  │                   ^^^^^ Functions can not take ports
+  │                   ^^^^^ This is a port
   │
-  = Did you mean to declare an entity?
+  = note: Only entities and pipelines can take ports as arguments
 
 
