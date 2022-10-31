@@ -106,15 +106,19 @@ pub fn visit_type_spec(
     let result = match &t.inner {
         ast::TypeSpec::Named(path, params) => {
             // Lookup the referenced type
-            let (base_id, t) = symtab.lookup_type_symbol(path)?;
+            let (base_id, base_t) = symtab.lookup_type_symbol(path)?;
 
             // Check if the type is a declared type or a generic argument.
-            match &t.inner {
+            match &base_t.inner {
                 TypeSymbol::Declared(_, _) => {
                     // We'll defer checking the validity of generic args to the type checker,
                     // but we still have to visit them now
                     let params = params
-                        .iter()
+                        // We can't flatten "through" Option<Loc<Vec<...>>>, so map it away.
+                        .as_ref()
+                        .map(|o| &o.inner)
+                        .into_iter()
+                        .flatten()
                         .map(|p| p.try_map_ref(|p| visit_type_expression(p, symtab)))
                         .collect::<Result<Vec<_>>>()?;
 
@@ -125,13 +129,11 @@ pub fn visit_type_spec(
                     // sure that no generic arguments are passed, as generic names
                     // can't have generic parameters
 
-                    if !params.is_empty() {
-                        let at_loc =
-                            ().between_locs(params.first().unwrap(), params.last().unwrap());
+                    if let Some(params) = params {
                         Err(Error::SpadeDiagnostic(
-                            Diagnostic::error(at_loc, "Generic arguments given for a generic type")
-                                .primary_label(format!("{} is a generic type", base_id.1))
-                                .note("A generic argument can not have generic types"),
+                            Diagnostic::error(params, "Generic arguments given for a generic type")
+                                .primary_label("Generic arguments not allowed here")
+                                .secondary_label(base_t, format!("{path} is a generic type")),
                         ))
                     } else {
                         Ok(hir::TypeSpec::Generic(base_id.at_loc(path)))

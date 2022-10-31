@@ -576,8 +576,8 @@ mod test {
         let code = "(int, bool)";
 
         let expected = TypeSpec::Tuple(vec![
-            TypeSpec::Named(ast_path("int"), vec![]).nowhere(),
-            TypeSpec::Named(ast_path("bool"), vec![]).nowhere(),
+            TypeSpec::Named(ast_path("int"), None).nowhere(),
+            TypeSpec::Named(ast_path("bool"), None).nowhere(),
         ])
         .nowhere();
 

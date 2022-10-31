@@ -446,29 +446,26 @@ impl<'a> Parser<'a> {
         } else if let Some(array) = self.array_spec()? {
             array
         } else {
+            // Single type, maybe with generics
             let (path, span) = self
                 .path()
                 .map_err(|e| e.specify_unexpected_token(Error::ExpectedType))?
                 .separate();
 
             // Check if this type has generic params
-            let (params, generic_span) = if self.peek_kind(&TokenKind::Lt)? {
+            let generics = if self.peek_kind(&TokenKind::Lt)? {
                 let generic_start = self.eat_unconditional()?;
                 let type_exprs = self
                     .comma_separated(Self::type_expression, &TokenKind::Gt)
                     .extra_expected(vec!["type expression"])?;
                 let generic_end = self.eat(&TokenKind::Gt)?;
-
-                (
-                    type_exprs,
-                    ().between(self.file_id, &generic_start.span, &generic_end.span)
-                        .span,
-                )
+                Some(type_exprs.between(self.file_id, &generic_start.span, &generic_end.span))
             } else {
-                (vec![], span)
+                None
             };
 
-            TypeSpec::Named(path, params).between(self.file_id, &span, &generic_span)
+            let span_end = generics.as_ref().map(|g| g.span.clone()).unwrap_or(span);
+            TypeSpec::Named(path, generics).between(self.file_id, &span, &span_end)
         };
 
         let result = match (wire_sign, mut_sign) {
@@ -1856,7 +1853,7 @@ mod tests {
     fn bindings_with_types_work() {
         let expected = Statement::Binding(
             Pattern::name("test"),
-            Some(TypeSpec::Named(ast_path("bool"), vec![]).nowhere()),
+            Some(TypeSpec::Named(ast_path("bool"), None).nowhere()),
             Expression::IntLiteral(123).nowhere(),
         )
         .nowhere();
@@ -1911,7 +1908,7 @@ mod tests {
             is_function: false,
             name: ast_ident("with_inputs"),
             inputs: aparams![("clk", tspec!("bool")), ("rst", tspec!("bool"))],
-            output_type: Some(TypeSpec::Named(ast_path("bool"), vec![]).nowhere()),
+            output_type: Some(TypeSpec::Named(ast_path("bool"), None).nowhere()),
             body: Some(
                 Expression::Block(Box::new(Block {
                     statements: vec![],
@@ -2016,7 +2013,7 @@ mod tests {
                     Expression::IntLiteral(0).nowhere(),
                 )),
                 value: Expression::IntLiteral(1).nowhere(),
-                value_type: Some(TypeSpec::Named(ast_path("Type"), vec![]).nowhere()),
+                value_type: Some(TypeSpec::Named(ast_path("Type"), None).nowhere()),
             }
             .nowhere(),
         )
@@ -2034,7 +2031,7 @@ mod tests {
     fn size_types_work() {
         let expected = TypeSpec::Named(
             ast_path("uint"),
-            vec![TypeExpression::Integer(10).nowhere()],
+            Some(vec![TypeExpression::Integer(10).nowhere()].nowhere()),
         )
         .nowhere();
         check_parse!("uint<10>", type_spec, Ok(expected));
@@ -2046,11 +2043,17 @@ mod tests {
 
         let expected = TypeSpec::Named(
             ast_path("Option"),
-            vec![TypeExpression::TypeSpec(Box::new(
-                TypeSpec::Named(ast_path("int"), vec![TypeExpression::Integer(5).nowhere()])
+            Some(
+                vec![TypeExpression::TypeSpec(Box::new(
+                    TypeSpec::Named(
+                        ast_path("int"),
+                        Some(vec![TypeExpression::Integer(5).nowhere()].nowhere()),
+                    )
                     .nowhere(),
-            ))
-            .nowhere()],
+                ))
+                .nowhere()]
+                .nowhere(),
+            ),
         )
         .nowhere();
 
@@ -2062,7 +2065,11 @@ mod tests {
         let code = "&int<5>";
 
         let expected = TypeSpec::Wire(Box::new(
-            TypeSpec::Named(ast_path("int"), vec![TypeExpression::Integer(5).nowhere()]).nowhere(),
+            TypeSpec::Named(
+                ast_path("int"),
+                Some(vec![TypeExpression::Integer(5).nowhere()].nowhere()),
+            )
+            .nowhere(),
         ))
         .nowhere();
 
@@ -2074,7 +2081,11 @@ mod tests {
         let code = "&mut int<5>";
 
         let expected = TypeSpec::Backward(Box::new(
-            TypeSpec::Named(ast_path("int"), vec![TypeExpression::Integer(5).nowhere()]).nowhere(),
+            TypeSpec::Named(
+                ast_path("int"),
+                Some(vec![TypeExpression::Integer(5).nowhere()].nowhere()),
+            )
+            .nowhere(),
         ))
         .nowhere();
 
@@ -2158,7 +2169,7 @@ mod tests {
             name: ast_ident("some_fn"),
             self_arg: Some(().nowhere()),
             inputs: aparams![("a", tspec!("bit"))],
-            return_type: Some(TypeSpec::Named(ast_path("bit"), vec![]).nowhere()),
+            return_type: Some(TypeSpec::Named(ast_path("bit"), None).nowhere()),
             type_params: vec![],
         }
         .nowhere();
@@ -2178,7 +2189,7 @@ mod tests {
             name: ast_ident("some_fn"),
             self_arg: Some(().nowhere()),
             inputs: aparams![],
-            return_type: Some(TypeSpec::Named(ast_path("bit"), vec![]).nowhere()),
+            return_type: Some(TypeSpec::Named(ast_path("bit"), None).nowhere()),
             type_params: vec![],
         }
         .nowhere();
@@ -2244,7 +2255,7 @@ mod tests {
             name: ast_ident("some_fn"),
             self_arg: Some(().nowhere()),
             inputs: aparams![("a", tspec!("bit"))],
-            return_type: Some(TypeSpec::Named(ast_path("bit"), vec![]).nowhere()),
+            return_type: Some(TypeSpec::Named(ast_path("bit"), None).nowhere()),
             type_params: vec![],
         }
         .nowhere();
@@ -2252,7 +2263,7 @@ mod tests {
             name: ast_ident("another_fn"),
             self_arg: Some(().nowhere()),
             inputs: aparams![],
-            return_type: Some(TypeSpec::Named(ast_path("bit"), vec![]).nowhere()),
+            return_type: Some(TypeSpec::Named(ast_path("bit"), None).nowhere()),
             type_params: vec![],
         }
         .nowhere();
@@ -2311,7 +2322,7 @@ mod tests {
         let code = "[int; 5]";
 
         let expected = TypeSpec::Array {
-            inner: Box::new(TypeSpec::Named(ast_path("int"), vec![]).nowhere()),
+            inner: Box::new(TypeSpec::Named(ast_path("int"), None).nowhere()),
             size: Box::new(TypeExpression::Integer(5).nowhere()),
         }
         .nowhere();
@@ -2325,16 +2336,19 @@ mod tests {
 
         let expected = TypeSpec::Named(
             ast_path("A"),
-            vec![
-                TypeExpression::TypeSpec(Box::new(
-                    TypeSpec::Named(ast_path("X"), vec![]).nowhere(),
-                ))
+            Some(
+                vec![
+                    TypeExpression::TypeSpec(Box::new(
+                        TypeSpec::Named(ast_path("X"), None).nowhere(),
+                    ))
+                    .nowhere(),
+                    TypeExpression::TypeSpec(Box::new(
+                        TypeSpec::Named(ast_path("Y"), None).nowhere(),
+                    ))
+                    .nowhere(),
+                ]
                 .nowhere(),
-                TypeExpression::TypeSpec(Box::new(
-                    TypeSpec::Named(ast_path("Y"), vec![]).nowhere(),
-                ))
-                .nowhere(),
-            ],
+            ),
         )
         .nowhere();
 
@@ -2578,7 +2592,7 @@ mod tests {
             depth: Loc::new(2, lspan(0..0), 0),
             name: ast_ident("test"),
             inputs: aparams![("a", tspec!("bool"))],
-            output_type: Some(TypeSpec::Named(ast_path("bool"), vec![]).nowhere()),
+            output_type: Some(TypeSpec::Named(ast_path("bool"), None).nowhere()),
             body: Some(
                 Expression::Block(Box::new(Block {
                     statements: vec![
@@ -2624,7 +2638,7 @@ mod tests {
             depth: Loc::new(2, lspan(0..0), 0),
             name: ast_ident("test"),
             inputs: aparams![("a", tspec!("bool"))],
-            output_type: Some(TypeSpec::Named(ast_path("bool"), vec![]).nowhere()),
+            output_type: Some(TypeSpec::Named(ast_path("bool"), None).nowhere()),
             body: Some(
                 Expression::Block(Box::new(Block {
                     statements: vec![Statement::PipelineRegMarker(3).nowhere()],
@@ -2654,7 +2668,7 @@ mod tests {
                     depth: Loc::new(2, lspan(0..0), 0),
                     name: ast_ident("test"),
                     inputs: aparams![("a", tspec!("bool"))],
-                    output_type: Some(TypeSpec::Named(ast_path("bool"), vec![]).nowhere()),
+                    output_type: Some(TypeSpec::Named(ast_path("bool"), None).nowhere()),
                     body: Some(
                         Expression::Block(Box::new(Block {
                             statements: vec![],

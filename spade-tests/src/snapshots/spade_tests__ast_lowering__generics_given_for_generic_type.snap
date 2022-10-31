@@ -3,11 +3,11 @@ source: spade-tests/src/ast_lowering.rs
 expression: "std::str::from_utf8(buffer.as_slice()).expect(\"error contains invalid utf-8\")"
 ---
 error: Generic arguments given for a generic type
-  ┌─ testinput:3:18
+  ┌─ testinput:2:17
   │
-3 │     B { value: T<U> },
-  │                  ^ T is a generic type
-  │
-  = note: A generic argument can not have generic types
+1 │ enum Test<T, U> {
+  │           - T is a generic type
+2 │     B { value: T<U> },
+  │                 ^^^ Generic arguments not allowed here
 
 

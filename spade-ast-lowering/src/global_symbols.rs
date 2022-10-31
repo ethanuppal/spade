@@ -389,7 +389,7 @@ mod tests {
                             ast_ident("B"),
                             Some(ast::ParameterList(vec![(
                                 ast_ident("x"),
-                                ast::TypeSpec::Named(ast_path("bool"), vec![]).nowhere(),
+                                ast::TypeSpec::Named(ast_path("bool"), None).nowhere(),
                             )])),
                         ),
                         // Builtin type with no args
@@ -399,7 +399,9 @@ mod tests {
                                 ast_ident("x"),
                                 ast::TypeSpec::Named(
                                     ast_path("int"),
-                                    vec![ast::TypeExpression::Integer(10).nowhere()],
+                                    Some(
+                                        vec![ast::TypeExpression::Integer(10).nowhere()].nowhere(),
+                                    ),
                                 )
                                 .nowhere(),
                             )])),
