@@ -139,16 +139,6 @@ impl CompilationError for Error {
                         .secondary_label()
                         .with_message(format!("{} declared here", at)),
                 ]),
-            Error::RedefinitionOfDeclaration { at, previous } => Diagnostic::error()
-                .with_message(format!("{} was already defined", at))
-                .with_labels(vec![
-                    at.primary_label()
-                        .with_message(format!("{} was defined previously", at)),
-                    previous
-                        .secondary_label()
-                        .with_message(format!("previous definition")),
-                ])
-                .with_notes(vec![format!("Declared variables can only be defined once")]),
             Error::UndefinedDeclaration(name) => Diagnostic::error()
                 .with_message(format!("{name} is declared but not defined"))
                 .with_labels(vec![name

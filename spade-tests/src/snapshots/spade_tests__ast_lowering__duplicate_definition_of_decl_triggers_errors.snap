@@ -5,11 +5,13 @@ expression: "std::str::from_utf8(buffer.as_slice()).expect(\"error contains inva
 error: x was already defined
   ┌─ testinput:4:9
   │
+2 │     decl x;
+  │          - x declared here
 3 │     let x = 0;
-  │         - previous definition
+  │         - First defined here
 4 │     let x = 1;
-  │         ^ x was defined previously
+  │         ^ Later defined here
   │
-  = Declared variables can only be defined once
+  = note: Declared variables can only be defined once
 
 

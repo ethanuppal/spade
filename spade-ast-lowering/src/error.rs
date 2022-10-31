@@ -98,12 +98,6 @@ pub enum Error {
     #[error("Variable declared but not defined")]
     UndefinedDeclaration(Loc<Identifier>),
 
-    #[error("Redefinition of declaration")]
-    RedefinitionOfDeclaration {
-        at: Loc<Identifier>,
-        previous: Loc<()>,
-    },
-
     #[error("Match block has no arms")]
     NoMatchArms { body: Loc<()> },
 

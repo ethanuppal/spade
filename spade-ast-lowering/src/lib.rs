@@ -488,37 +488,43 @@ pub fn visit_pattern(
                 (Ok(kind), _) => kind,
                 (_, [ident]) => {
                     // Check if this is declaring a variable
-                    let (name_id, pre_declared) =
-                        if let Some(state) = ctx.symtab.get_declaration(ident) {
-                            if allow_declarations {
-                                match state.inner {
-                                    DeclarationState::Undefined(id) => {
-                                        ctx.symtab
-                                            .mark_declaration_defined(ident.clone(), ident.loc());
-                                        (id, true)
-                                    }
-                                    DeclarationState::Defined(previous) => {
-                                        return Err(Error::RedefinitionOfDeclaration {
-                                            at: ident.clone(),
-                                            previous: previous.loc(),
-                                        })
-                                    }
+                    let (name_id, pre_declared) = if let Some(state) =
+                        ctx.symtab.get_declaration(ident)
+                    {
+                        if allow_declarations {
+                            match state.inner {
+                                DeclarationState::Undefined(id) => {
+                                    ctx.symtab
+                                        .mark_declaration_defined(ident.clone(), ident.loc());
+                                    (id, true)
                                 }
-                            } else {
-                                return Err(Error::DeclarationOfNonReg {
-                                    at: ident.clone(),
-                                    declaration_location: state.loc(),
-                                });
+                                DeclarationState::Defined(previous) => {
+                                    return Err(Diagnostic::error(
+                                        ident,
+                                        format!("{ident} was already defined"),
+                                    )
+                                    .secondary_label(previous, "First defined here")
+                                    .primary_label("Later defined here")
+                                    .secondary_label(state.loc(), format!("{ident} declared here"))
+                                    .note("Declared variables can only be defined once")
+                                    .into());
+                                }
                             }
                         } else {
-                            (
-                                ctx.symtab.add_thing(
-                                    Path::ident(ident.clone()),
-                                    Thing::Variable(ident.clone()),
-                                ),
-                                false,
-                            )
-                        };
+                            return Err(Error::DeclarationOfNonReg {
+                                at: ident.clone(),
+                                declaration_location: state.loc(),
+                            });
+                        }
+                    } else {
+                        (
+                            ctx.symtab.add_thing(
+                                Path::ident(ident.clone()),
+                                Thing::Variable(ident.clone()),
+                            ),
+                            false,
+                        )
+                    };
 
                     hir::PatternKind::Name {
                         name: name_id.at_loc(&ident),
@@ -1407,36 +1413,6 @@ mod statement_visiting {
         );
 
         assert_matches!(result, Err(Error::DeclarationOfNonReg { .. }));
-    }
-
-    #[test]
-    fn multiple_definitions_of_declared_variables_are_not_allowed() {
-        let input = ast::Statement::Register(
-            ast::Register {
-                pattern: ast::Pattern::name("regname"),
-                clock: ast::Expression::Identifier(ast_path("clk")).nowhere(),
-                reset: None,
-                value: ast::Expression::IntLiteral(0).nowhere(),
-                value_type: None,
-            }
-            .nowhere(),
-        )
-        .nowhere();
-
-        let symtab = SymbolTable::new();
-        let idtracker = ExprIdTracker::new();
-        let mut ctx = Context {
-            symtab,
-            idtracker,
-            pipeline_ctx: None,
-        };
-
-        ctx.symtab.add_local_variable(ast_ident("clk"));
-        ctx.symtab.add_declaration(ast_ident("regname")).unwrap();
-
-        visit_statement(&input, &mut ctx).unwrap();
-        let result = visit_statement(&input, &mut ctx);
-        assert_matches!(result, Err(Error::RedefinitionOfDeclaration { .. }));
     }
 }
 
