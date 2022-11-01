@@ -133,7 +133,7 @@ snapshot_error! {
 }
 
 snapshot_error! {
-    destructuring_affine_type_requires_use_of_subtypes,
+    destructuring_linear_type_requires_use_of_subtypes,
     "
     entity x(a: (&mut bool, &mut bool)) -> &mut bool {
         let (x, y) = a;
@@ -143,7 +143,7 @@ snapshot_error! {
 }
 
 snapshot_error! {
-    using_a_single_affine_field_does_not_use_the_whole_struct,
+    using_a_single_linear_field_does_not_use_the_whole_struct,
     "
     struct port A {
         a: &mut bool,
@@ -156,7 +156,7 @@ snapshot_error! {
 }
 
 #[test]
-fn affine_checking_on_registers_works() {
+fn linear_checking_on_registers_works() {
     let code = "
     entity test(clk: clk) -> int<8> {
         reg(clk) x = x;

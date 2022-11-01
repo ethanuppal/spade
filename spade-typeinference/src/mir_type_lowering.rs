@@ -222,7 +222,7 @@ impl TypeState {
     }
 
     /// Returns the type of the specified name as a concrete type. If the type is not known,
-    /// or the type is generic, panics returns none
+    /// or the type is generic, panics
     #[tracing::instrument(level = "trace", skip(self, symtab, type_list))]
     pub fn try_get_type_of_name(
         &self,

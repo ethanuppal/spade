@@ -6,13 +6,13 @@ use spade_diagnostics::emitter::CodespanEmitter;
 use spade_diagnostics::{CodeBundle, CompilationError, DiagHandler};
 
 #[cfg(test)]
-mod affine_check;
-#[cfg(test)]
 mod ast_lowering;
 #[cfg(test)]
 mod hir_lowering;
 #[cfg(test)]
 mod integration;
+#[cfg(test)]
+mod linear_check;
 #[cfg(test)]
 mod parser;
 #[cfg(test)]

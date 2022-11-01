@@ -10,7 +10,7 @@ use spade_mir as mir;
 use spade_typeinference::TypeState;
 
 use crate::{
-    affine_check, error::Error, monomorphisation::MonoState, name_map::NameSourceMap,
+    error::Error, linear_check, monomorphisation::MonoState, name_map::NameSourceMap,
     statement_list::StatementList, substitution::Substitutions, Context, ExprLocal, Manglable,
     MirLowerable, NameIDExt, Result, StatementLocal,
 };
@@ -162,7 +162,7 @@ pub fn generate_pipeline<'a>(
         .expr_type(result, symtab.symtab(), &item_list.types)?
         .to_mir_type();
 
-    affine_check::check_affine_types(
+    linear_check::check_linear_types(
         &pipeline.inputs,
         &pipeline.body,
         types,

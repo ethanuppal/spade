@@ -10,7 +10,7 @@ use spade_common::{
 use spade_hir::{Expression, Pattern, PatternKind};
 use spade_types::ConcreteType;
 
-use super::AffineCtx;
+use super::LinearCtx;
 
 /// A witness for a type having a mut wire
 #[derive(Debug, Clone)]
@@ -42,11 +42,11 @@ impl MutWireWitness {
     }
 }
 
-pub fn is_affine(ty: &ConcreteType) -> bool {
+pub fn is_linear(ty: &ConcreteType) -> bool {
     match ty {
-        ConcreteType::Tuple(inner) => inner.iter().any(is_affine),
-        ConcreteType::Struct { name: _, members } => members.iter().any(|(_, ty)| is_affine(ty)),
-        ConcreteType::Array { inner, size: _ } => is_affine(inner),
+        ConcreteType::Tuple(inner) => inner.iter().any(is_linear),
+        ConcreteType::Struct { name: _, members } => members.iter().any(|(_, ty)| is_linear(ty)),
+        ConcreteType::Array { inner, size: _ } => is_linear(inner),
         ConcreteType::Enum { .. } => false,
         ConcreteType::Single { base, params: _ } => match base {
             spade_types::PrimitiveType::Int => false,
@@ -142,28 +142,28 @@ pub enum UsageInfo {
 }
 
 #[derive(Debug)]
-struct AffineTree {
-    pub kind: AffineTreeKind,
+struct LinearTree {
+    pub kind: LinearTreeKind,
     pub aliases: Vec<Loc<ItemReference>>,
 }
 
 #[derive(Debug)]
-enum AffineTreeKind {
+enum LinearTreeKind {
     Leaf(UsageInfo),
-    Struct(HashMap<Identifier, Rc<RefCell<AffineTree>>>),
-    Tuple(Vec<Rc<RefCell<AffineTree>>>),
+    Struct(HashMap<Identifier, Rc<RefCell<LinearTree>>>),
+    Tuple(Vec<Rc<RefCell<LinearTree>>>),
 }
 
 pub type ConsumptionError = (MutWireWitness, Loc<()>);
 
-impl AffineTree {
+impl LinearTree {
     /// Attempts to mark this node as consumed, returning a witness to a node
     /// which is being doubly consumed if consumption is not possible.
     ///
     /// If consumption is possible, returns the new state of the tree.
     pub fn try_consume(&mut self, loc: Loc<()>) -> Result<(), ConsumptionError> {
         match &mut self.kind {
-            AffineTreeKind::Leaf(state) => match state {
+            LinearTreeKind::Leaf(state) => match state {
                 UsageInfo::Unlimited => Ok(()),
                 UsageInfo::Unused => {
                     let new_state = UsageInfo::Consumed(loc);
@@ -172,7 +172,7 @@ impl AffineTree {
                 }
                 UsageInfo::Consumed(prev) => Err((MutWireWitness::This, prev.clone())),
             },
-            AffineTreeKind::Struct(members) => {
+            LinearTreeKind::Struct(members) => {
                 members
                     .iter()
                     .map(|(ident, sub)| {
@@ -183,7 +183,7 @@ impl AffineTree {
                     .collect::<Result<_, ConsumptionError>>()?;
                 Ok(())
             }
-            AffineTreeKind::Tuple(members) => {
+            LinearTreeKind::Tuple(members) => {
                 members
                     .iter()
                     .enumerate()
@@ -206,21 +206,21 @@ impl AffineTree {
         };
 
         Self {
-            kind: AffineTreeKind::Leaf(usage),
+            kind: LinearTreeKind::Leaf(usage),
             aliases: vec![],
         }
     }
 
-    fn tuple(inner: Vec<Rc<RefCell<AffineTree>>>) -> Self {
+    fn tuple(inner: Vec<Rc<RefCell<LinearTree>>>) -> Self {
         Self {
-            kind: AffineTreeKind::Tuple(inner),
+            kind: LinearTreeKind::Tuple(inner),
             aliases: vec![],
         }
     }
 
-    fn struct_(fields: HashMap<Identifier, Rc<RefCell<AffineTree>>>) -> Self {
+    fn struct_(fields: HashMap<Identifier, Rc<RefCell<LinearTree>>>) -> Self {
         Self {
-            kind: AffineTreeKind::Struct(fields),
+            kind: LinearTreeKind::Struct(fields),
             aliases: vec![],
         }
     }
@@ -229,28 +229,28 @@ impl AffineTree {
         self.aliases.push(alias)
     }
 
-    pub fn assume_tuple(&self) -> &Vec<Rc<RefCell<AffineTree>>> {
+    pub fn assume_tuple(&self) -> &Vec<Rc<RefCell<LinearTree>>> {
         match &self.kind {
-            AffineTreeKind::Tuple(inner) => &inner,
+            LinearTreeKind::Tuple(inner) => &inner,
             _ => panic!("Assumed tree was tuple, got {:?}", self.kind),
         }
     }
 
-    pub fn assume_struct(&self) -> &HashMap<Identifier, Rc<RefCell<AffineTree>>> {
+    pub fn assume_struct(&self) -> &HashMap<Identifier, Rc<RefCell<LinearTree>>> {
         match &self.kind {
-            AffineTreeKind::Struct(inner) => &inner,
+            LinearTreeKind::Struct(inner) => &inner,
             _ => panic!("Assumed tree was tuple, got {:?}", self.kind),
         }
     }
 
     pub fn check_unused(&self) -> Result<(), MutWireWitness> {
         match &self.kind {
-            AffineTreeKind::Leaf(usage) => match usage {
+            LinearTreeKind::Leaf(usage) => match usage {
                 UsageInfo::Unlimited => Ok(()),
                 UsageInfo::Unused => Err(MutWireWitness::This),
                 UsageInfo::Consumed(_) => Ok(()),
             },
-            AffineTreeKind::Struct(fields) => {
+            LinearTreeKind::Struct(fields) => {
                 for (name, sub) in fields {
                     match sub.borrow().check_unused() {
                         Ok(_) => {}
@@ -261,7 +261,7 @@ impl AffineTree {
                 }
                 Ok(())
             }
-            AffineTreeKind::Tuple(members) => {
+            LinearTreeKind::Tuple(members) => {
                 for (i, member) in members.iter().enumerate() {
                     match member.borrow().check_unused() {
                         Ok(_) => {}
@@ -276,14 +276,14 @@ impl AffineTree {
     }
 }
 
-fn build_affine_tree(source_loc: Loc<()>, ty: &ConcreteType) -> AffineTree {
+fn build_linear_tree(source_loc: Loc<()>, ty: &ConcreteType) -> LinearTree {
     match ty {
         ConcreteType::Tuple(inner) => {
             let inner = inner
                 .iter()
-                .map(|ty| Rc::new(RefCell::new(build_affine_tree(source_loc, ty))))
+                .map(|ty| Rc::new(RefCell::new(build_linear_tree(source_loc, ty))))
                 .collect();
-            AffineTree::tuple(inner)
+            LinearTree::tuple(inner)
         }
         ConcreteType::Struct { name: _, members } => {
             let inner = members
@@ -291,33 +291,33 @@ fn build_affine_tree(source_loc: Loc<()>, ty: &ConcreteType) -> AffineTree {
                 .map(|(name, ty)| {
                     (
                         name.clone(),
-                        Rc::new(RefCell::new(build_affine_tree(source_loc, ty))),
+                        Rc::new(RefCell::new(build_linear_tree(source_loc, ty))),
                     )
                 })
                 .collect();
-            AffineTree::struct_(inner)
+            LinearTree::struct_(inner)
         }
         ConcreteType::Array { inner, size: _ } => {
-            if is_affine(inner) {
+            if is_linear(inner) {
                 // Since we can't keep track of dynamic indices, we won't allow
                 // indexing on arrays. We therefore have to resort to treating the whole
-                // thing as one giant affine type, and require destructuring
-                AffineTree::leaf(true)
+                // thing as one giant linear type, and require destructuring
+                LinearTree::leaf(true)
             } else {
-                AffineTree::leaf(false)
+                LinearTree::leaf(false)
             }
         }
-        ConcreteType::Enum { .. } => AffineTree::leaf(false),
+        ConcreteType::Enum { .. } => LinearTree::leaf(false),
         ConcreteType::Single { base, params: _ } => match base {
-            spade_types::PrimitiveType::Int => AffineTree::leaf(false),
-            spade_types::PrimitiveType::Uint => AffineTree::leaf(false),
-            spade_types::PrimitiveType::Clock => AffineTree::leaf(false),
-            spade_types::PrimitiveType::Bool => AffineTree::leaf(false),
-            spade_types::PrimitiveType::Memory => AffineTree::leaf(false),
+            spade_types::PrimitiveType::Int => LinearTree::leaf(false),
+            spade_types::PrimitiveType::Uint => LinearTree::leaf(false),
+            spade_types::PrimitiveType::Clock => LinearTree::leaf(false),
+            spade_types::PrimitiveType::Bool => LinearTree::leaf(false),
+            spade_types::PrimitiveType::Memory => LinearTree::leaf(false),
         },
-        ConcreteType::Integer(_) => AffineTree::leaf(false),
-        ConcreteType::Backward(_) => AffineTree::leaf(true),
-        ConcreteType::Wire(_) => AffineTree::leaf(false),
+        ConcreteType::Integer(_) => LinearTree::leaf(false),
+        ConcreteType::Backward(_) => LinearTree::leaf(true),
+        ConcreteType::Wire(_) => LinearTree::leaf(false),
     }
 }
 
@@ -346,20 +346,20 @@ impl std::fmt::Display for ItemReference {
     }
 }
 
-pub struct AffineState {
+pub struct LinearState {
     /// The trees visible via references, either names or expression IDs. Multiple
     /// references can refer to the same tree
-    trees: HashMap<ItemReference, Rc<RefCell<AffineTree>>>,
+    trees: HashMap<ItemReference, Rc<RefCell<LinearTree>>>,
 }
 
-impl AffineState {
+impl LinearState {
     pub fn new() -> Self {
         Self {
             trees: HashMap::new(),
         }
     }
 
-    /// If there is an affine tree which has a leaf node that is unused, reports it as an
+    /// If there is an linear tree which has a leaf node that is unused, reports it as an
     /// item reference and a witness for something that needs to be used.
     ///
     /// The item reference is chosen to be as useful to the user as possible. If there
@@ -391,16 +391,16 @@ impl AffineState {
     }
 
     pub fn push_type(&mut self, reference: Loc<ItemReference>, ty: &ConcreteType) {
-        let tree = Rc::new(RefCell::new(build_affine_tree(reference.loc(), ty)));
+        let tree = Rc::new(RefCell::new(build_linear_tree(reference.loc(), ty)));
 
         tree.borrow_mut().add_alias(reference.clone());
         self.trees.insert(reference.inner.clone(), tree);
     }
 
     #[tracing::instrument(level = "trace", skip_all, fields(%expr_id))]
-    // Inserts a new [AffineTree] for the specified expression.
-    pub fn push_new_expression(&mut self, expr_id: &Loc<u64>, ctx: &AffineCtx) {
-        // Generic arguments can not be affine types, so we can ignore non-fully known types
+    // Inserts a new [LinearTree] for the specified expression.
+    pub fn push_new_expression(&mut self, expr_id: &Loc<u64>, ctx: &LinearCtx) {
+        // Generic arguments can not be linear types, so we can ignore non-fully known types
         if let Some(ty) = &ctx
             .type_state
             .try_get_type_of_id(expr_id.inner, ctx.symtab, ctx.types)
@@ -411,8 +411,8 @@ impl AffineState {
     }
 
     #[tracing::instrument(level = "trace", skip_all, fields(%name))]
-    pub fn push_new_name(&mut self, name: &Loc<NameID>, ctx: &AffineCtx) {
-        // Generic arguments can not be affine types, so we can ignore non-fully known types
+    pub fn push_new_name(&mut self, name: &Loc<NameID>, ctx: &LinearCtx) {
+        // Generic arguments can not be linear types, so we can ignore non-fully known types
         if let Some(ty) = &ctx
             .type_state
             .try_get_type_of_name(name, ctx.symtab, ctx.types)
@@ -438,7 +438,7 @@ impl AffineState {
             (None, Some(r)) => (r, lhs),
             (Some(l), Some(r)) => {
                 if l.as_ptr() != r.as_ptr() {
-                    return Err(Diagnostic::bug(lhs, "unifying distinct affine trees")
+                    return Err(Diagnostic::bug(lhs, "unifying distinct linear trees")
                         .primary_label("first tree")
                         .secondary_label(rhs, "second tree"));
                 }
@@ -468,7 +468,7 @@ impl AffineState {
 
     fn alias_subtree<F>(&mut self, to: Loc<u64>, base_expr: u64, idx: F) -> Result<(), Diagnostic>
     where
-        F: Fn(&AffineTree) -> Rc<RefCell<AffineTree>>,
+        F: Fn(&LinearTree) -> Rc<RefCell<LinearTree>>,
     {
         let base_tree_rc = Rc::clone(
             self.trees
@@ -518,7 +518,7 @@ impl AffineState {
     }
 
     #[tracing::instrument(level = "trace", skip_all)]
-    pub fn push_pattern(&mut self, pat: &Pattern, ctx: &AffineCtx) -> Result<(), Diagnostic> {
+    pub fn push_pattern(&mut self, pat: &Pattern, ctx: &LinearCtx) -> Result<(), Diagnostic> {
         match &pat.kind {
             PatternKind::Integer(_) => {}
             PatternKind::Bool(_) => {}
@@ -562,7 +562,7 @@ impl AffineState {
 
         while let Some(reference) = references.pop() {
             let tree = self.trees.get(&reference).ok_or_else(|| {
-                Diagnostic::bug(id, format!("Failed to get affine tree for {reference}"))
+                Diagnostic::bug(id, format!("Failed to get linear tree for {reference}"))
             })?;
 
             if seen_pointers.contains(&tree.as_ptr()) {

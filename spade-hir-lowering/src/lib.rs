@@ -1,6 +1,6 @@
-mod affine_check;
 pub mod error;
 pub mod error_reporting;
+mod linear_check;
 pub mod monomorphisation;
 pub mod name_map;
 mod pattern;
@@ -1643,7 +1643,7 @@ pub fn generate_entity<'a>(
 
     let subs = Substitutions::new();
 
-    affine_check::check_affine_types(
+    linear_check::check_linear_types(
         &entity.inputs,
         &entity.body,
         types,
