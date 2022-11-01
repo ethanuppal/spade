@@ -84,6 +84,18 @@ snapshot_error! {
 }
 
 snapshot_error! {
+    unused_anonymous_expression_is_reported,
+    "
+    entity producer() -> (&mut bool, &mut bool) __builtin__
+    entity consumer(x: &mut bool) -> bool __builtin__
+
+    entity x() -> bool {
+        inst consumer(inst producer()#0)
+    }
+    "
+}
+
+snapshot_error! {
     double_tuple_consumption_causes_error,
     "
     entity x(resource: (&mut bool, &bool)) -> (&mut bool, &mut bool) {

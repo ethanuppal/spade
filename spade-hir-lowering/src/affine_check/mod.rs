@@ -52,7 +52,7 @@ pub fn check_affine_types(
         let self_description = match &alias.inner {
             affine_state::ItemReference::Name(n) => format!("{n}{}", witness.motivation()),
             affine_state::ItemReference::Anonymous(_) => {
-                format!("The subexpression{}", witness.motivation())
+                format!("This has a field {} that ", witness.motivation())
             }
         };
         Diagnostic::error(&alias, "Unused resource")
