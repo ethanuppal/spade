@@ -33,9 +33,9 @@ clippy:
     script:
         - rustup component add clippy
         - cargo install gitlab_clippy
-        - cargo clippy -- --allow clippy::useless_format
+        - cargo clippy --workspace --exclude spade-cxx -- --allow clippy::useless_format
     after_script:
-        - cargo clippy --message-format=json -- --allow clippy::useless_format | $CARGO_HOME/bin/gitlab-clippy > gl-code-quality-report.json
+        - cargo clippy --workspace --exclude spade-cxx --message-format=json -- --allow clippy::useless_format | $CARGO_HOME/bin/gitlab-clippy > gl-code-quality-report.json
     artifacts:
         reports:
             codequality: gl-code-quality-report.json
@@ -51,7 +51,7 @@ clippy:
 test:
     stage: test
     script:
-        - cargo test --color=always
+        - cargo test --workspace --exclude spade-cxx --color=always
     cache:
         key:
             files:
@@ -62,7 +62,7 @@ test:
 
 build:linux:
   script:
-    - cargo build --release
+    - cargo build --workspace --exclude spade-cxx --release
     - mv target/release/spade spadec
   artifacts:
     name: spade-linux
@@ -100,7 +100,7 @@ coverage:
         - apt-get install -y pkg-config
         # spade-python currently does not build with tarpaulin, but we also don't
         # have many tests there so we'll ignore it
-        - cargo tarpaulin --workspace -e spade-python -e spade-cxx --out Xml --target-dir target/tarpaulin
+        - cargo tarpaulin --workspace --exclude spade-python --exclude spade-cxx --out Xml --target-dir target/tarpaulin
     coverage: '/^\d+.\d+% coverage/'
     artifacts:
         reports:

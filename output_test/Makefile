@@ -1,5 +1,5 @@
 SHELL=/bin/bash -o pipefail
-$(shell cd .. && cargo build)
+$(shell cd .. && cargo build --workspace --exclude spade-cxx)
 BUILD_DIR=build
 
 IVERILOG_FLAGS=-g2012
