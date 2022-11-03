@@ -1,12 +1,10 @@
 use std::collections::HashMap;
 
-use spade_common::location_info::Loc;
+use spade_common::location_info::{Loc, WithLocation};
 use spade_common::name::{Identifier, NameID};
 
 use spade_diagnostics::Diagnostic;
 use spade_hir::ItemList;
-
-use crate::Result;
 
 /// Attempts to look up which functiono to call when calling `method` on a var
 /// of type `self_type`.
@@ -15,7 +13,7 @@ pub fn select_method(
     type_name: &NameID,
     method: &Loc<Identifier>,
     items: &ItemList,
-) -> Result<NameID> {
+) -> Result<Loc<NameID>, Diagnostic> {
     // Go to the item list to check if this name has any methods
     let impld_traits = items
         .impls
@@ -29,7 +27,7 @@ pub fn select_method(
         .flat_map(|(_, r#impl)| {
             r#impl.fns.iter().map(move |(fn_name, actual_fn)| {
                 if fn_name == &method.inner {
-                    Some(actual_fn)
+                    Some(actual_fn.0.clone().at_loc(&actual_fn.1))
                 } else {
                     None
                 }
@@ -39,7 +37,7 @@ pub fn select_method(
         .collect::<Vec<_>>();
 
     let final_method = match candidates.as_slice() {
-        [(name, _)] => name,
+        [name] => name,
         [] => {
             return Err(Diagnostic::error(expr, "{type_name} as no method {method}")
                 .primary_label("No such method")

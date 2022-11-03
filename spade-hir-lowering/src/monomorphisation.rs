@@ -1,7 +1,8 @@
 use std::collections::{HashMap, VecDeque};
 
 use spade_common::{id_tracker::ExprIdTracker, location_info::WithLocation, name::NameID};
-use spade_diagnostics::DiagHandler;
+use spade_diagnostics::Diagnostic;
+use spade_diagnostics::{diag_anyhow, DiagHandler};
 use spade_hir::{symbol_table::FrozenSymtab, ExecutableItem, ItemList, UnitName};
 use spade_mir as mir;
 use spade_typeinference::equation::TypeVar;
@@ -10,6 +11,8 @@ use spade_typeinference::{GenericListToken, TypeState};
 
 use crate::error::{Error, Result};
 use crate::generate_entity;
+use crate::pass::Passable;
+use crate::passes::lower_methods::LowerMethods;
 use crate::{generate_pipeline, name_map::NameSourceMap};
 
 /// An item to be monomorphised
@@ -152,8 +155,20 @@ pub fn compile_items(
                         }
                     }
                 }
+
+                // Apply passes to the type checked module
+                let mut e = e.clone();
+                let pass_result = e.apply(&mut LowerMethods {
+                    type_state: &type_state,
+                    items: item_list,
+                });
+                if let Err(e) = pass_result {
+                    result.push(Err(e));
+                    continue;
+                }
+
                 let out = generate_entity(
-                    e,
+                    &e.inner,
                     item.new_name,
                     symtab,
                     idtracker,
@@ -172,10 +187,21 @@ pub fn compile_items(
             }
             Some((ExecutableItem::Pipeline(p), type_state)) => {
                 if !p.head.type_params.is_empty() {
-                    todo!()
+                    todo!("Support generic pipelines")
                 }
+
+                // Apply passes to the type checked module
+                let mut p = p.clone();
+                let pass_result = p.apply(&mut LowerMethods {
+                    type_state: &type_state,
+                    items: item_list,
+                });
+                if let Err(e) = pass_result {
+                    result.push(Err(e));
+                }
+
                 let out = generate_pipeline(
-                    p,
+                    &p.inner,
                     type_state,
                     symtab,
                     idtracker,

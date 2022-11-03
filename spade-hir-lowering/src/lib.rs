@@ -3,6 +3,8 @@ pub mod error_reporting;
 mod linear_check;
 pub mod monomorphisation;
 pub mod name_map;
+pub mod pass;
+mod passes;
 mod pattern;
 pub mod pipelines;
 mod statement_list;

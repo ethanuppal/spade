@@ -219,4 +219,64 @@ mod trait_tests {
             }
         "
     }
+
+    #[test]
+    fn calling_method_does_not_error() {
+        let code = "
+            struct X {}
+            impl X {
+                fn test() -> bool {true}
+            }
+
+            fn main(x: X) -> bool {
+                x.test()
+            }
+        ";
+        build_items(code);
+    }
+
+    snapshot_error! {
+        multiple_same_named_methods_errors,
+        "
+            struct X {}
+            impl X {
+                fn test() -> bool {true}
+            }
+            impl X {
+                fn test() -> bool {false}
+            }
+
+            fn main(x: X) -> bool {
+                x.test()
+            }
+            "
+    }
+
+    snapshot_error! {
+        calling_methods_with_the_wrong_number_of_params_errors,
+        "
+            struct X {}
+            impl X {
+                fn test() -> bool {true}
+            }
+
+            fn main(x: X) -> bool {
+                x.test(1)
+            }
+        "
+    }
+
+    snapshot_error! {
+        calling_methods_with_the_wrong_named_args,
+        "
+            struct X {}
+            impl X {
+                fn test(x: bool) -> bool {true}
+            }
+
+            fn main(x: X) -> bool {
+                x.test$(y: 1)
+            }
+        "
+    }
 }

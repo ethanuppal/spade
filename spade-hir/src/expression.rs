@@ -59,6 +59,21 @@ pub enum ArgumentList {
     Positional(Vec<Loc<Expression>>),
 }
 
+impl ArgumentList {
+    pub fn expressions(&mut self) -> Vec<&mut Loc<Expression>> {
+        match self {
+            ArgumentList::Named(n) => n
+                .iter_mut()
+                .map(|arg| match arg {
+                    NamedArgument::Full(_, expr) => expr,
+                    NamedArgument::Short(_, expr) => expr,
+                })
+                .collect(),
+            ArgumentList::Positional(arg) => arg.iter_mut().collect(),
+        }
+    }
+}
+
 #[derive(PartialEq, Debug, Clone, Serialize, Deserialize)]
 pub struct Argument {
     pub target: Loc<Identifier>,
