@@ -475,11 +475,7 @@ fn try_lookup_enum_variant(path: &Loc<Path>, ctx: &mut Context) -> Result<hir::P
     }
 }
 
-pub fn visit_pattern(
-    p: &ast::Pattern,
-    ctx: &mut Context,
-    allow_declarations: bool,
-) -> Result<hir::Pattern> {
+pub fn visit_pattern(p: &ast::Pattern, ctx: &mut Context) -> Result<hir::Pattern> {
     let kind = match &p {
         ast::Pattern::Integer(val) => hir::PatternKind::Integer(*val),
         ast::Pattern::Bool(val) => hir::PatternKind::Bool(*val),
@@ -488,10 +484,8 @@ pub fn visit_pattern(
                 (Ok(kind), _) => kind,
                 (_, [ident]) => {
                     // Check if this is declaring a variable
-                    let (name_id, pre_declared) = if let Some(state) =
-                        ctx.symtab.get_declaration(ident)
-                    {
-                        if allow_declarations {
+                    let (name_id, pre_declared) =
+                        if let Some(state) = ctx.symtab.get_declaration(ident) {
                             match state.inner {
                                 DeclarationState::Undefined(id) => {
                                     ctx.symtab
@@ -511,20 +505,14 @@ pub fn visit_pattern(
                                 }
                             }
                         } else {
-                            return Err(Error::DeclarationOfNonReg {
-                                at: ident.clone(),
-                                declaration_location: state.loc(),
-                            });
-                        }
-                    } else {
-                        (
-                            ctx.symtab.add_thing(
-                                Path::ident(ident.clone()),
-                                Thing::Variable(ident.clone()),
-                            ),
-                            false,
-                        )
-                    };
+                            (
+                                ctx.symtab.add_thing(
+                                    Path::ident(ident.clone()),
+                                    Thing::Variable(ident.clone()),
+                                ),
+                                false,
+                            )
+                        };
 
                     hir::PatternKind::Name {
                         name: name_id.at_loc(&ident),
@@ -538,7 +526,7 @@ pub fn visit_pattern(
         ast::Pattern::Tuple(pattern) => {
             let inner = pattern
                 .iter()
-                .map(|p| p.try_map_ref(|p| visit_pattern(p, ctx, allow_declarations)))
+                .map(|p| p.try_map_ref(|p| visit_pattern(p, ctx)))
                 .collect::<Result<_>>()?;
             hir::PatternKind::Tuple(inner)
         }
@@ -566,8 +554,7 @@ pub fn visit_pattern(
                                             )
                                             .at_loc(&target)
                                         });
-                                    let new_pattern =
-                                        visit_pattern(&ast_pattern, ctx, allow_declarations)?;
+                                    let new_pattern = visit_pattern(&ast_pattern, ctx)?;
                                     // Check if this is a new binding
                                     if let Some(prev) = bound.get(target) {
                                         return Err(ArgumentError::DuplicateNamedBindings {
@@ -626,9 +613,7 @@ pub fn visit_pattern(
                                 .iter()
                                 .zip(p.params.0.iter())
                                 .map(|(p, arg)| {
-                                    let pat = p.try_map_ref(|p| {
-                                        visit_pattern(p, ctx, allow_declarations)
-                                    })?;
+                                    let pat = p.try_map_ref(|p| visit_pattern(p, ctx))?;
                                     Ok(hir::PatternArgument {
                                         target: arg.0.clone(),
                                         value: pat,
@@ -649,20 +634,6 @@ pub fn visit_pattern(
         }
     };
     Ok(kind.with_id(ctx.idtracker.next()))
-}
-
-/// Visit a pattern where definition of previously declared variables
-/// is an error
-pub fn visit_pattern_normal(p: &ast::Pattern, ctx: &mut Context) -> Result<hir::Pattern> {
-    visit_pattern(p, ctx, false)
-}
-
-/// Visit a pattern which can define previously declared variables
-pub fn visit_pattern_allow_declarations(
-    p: &ast::Pattern,
-    ctx: &mut Context,
-) -> Result<hir::Pattern> {
-    visit_pattern(p, ctx, true)
 }
 
 fn visit_statement(s: &Loc<ast::Statement>, ctx: &mut Context) -> Result<Vec<Loc<hir::Statement>>> {
@@ -689,7 +660,7 @@ fn visit_statement(s: &Loc<ast::Statement>, ctx: &mut Context) -> Result<Vec<Loc
 
             let expr = expr.try_visit(visit_expression, ctx)?;
 
-            let pat = pattern.try_visit(visit_pattern_allow_declarations, ctx)?;
+            let pat = pattern.try_visit(visit_pattern, ctx)?;
 
             Ok(vec![hir::Statement::Binding(pat, hir_type, expr).at_loc(s)])
         }
@@ -884,7 +855,7 @@ pub fn visit_expression(e: &ast::Expression, ctx: &mut Context) -> Result<hir::E
                 .iter()
                 .map(|(pattern, result)| {
                     ctx.symtab.new_scope();
-                    let p = pattern.try_visit(visit_pattern_normal, ctx)?;
+                    let p = pattern.try_visit(visit_pattern, ctx)?;
                     let r = result.try_visit(visit_expression, ctx)?;
                     ctx.symtab.close_scope();
                     Ok((p, r))
@@ -1015,9 +986,7 @@ fn visit_block(b: &ast::Block, ctx: &mut Context) -> Result<hir::Block> {
 fn visit_register(reg: &Loc<ast::Register>, ctx: &mut Context) -> Result<Loc<hir::Register>> {
     let (reg, loc) = reg.split_loc_ref();
 
-    let pattern = reg
-        .pattern
-        .try_visit(visit_pattern_allow_declarations, ctx)?;
+    let pattern = reg.pattern.try_visit(visit_pattern, ctx)?;
 
     let clock = reg.clock.try_visit(visit_expression, ctx)?;
 
@@ -1196,7 +1165,6 @@ mod statement_visiting {
     use super::*;
 
     use hir::symbol_table::DeclarationError;
-    use matches::assert_matches;
     use pretty_assertions::assert_eq;
     use spade_ast::testutil::{ast_ident, ast_path};
     use spade_common::location_info::WithLocation;
@@ -1385,34 +1353,6 @@ mod statement_visiting {
             },
             other => panic!("Expected register, found {:?}", other),
         }
-    }
-
-    #[ignore]
-    #[test]
-    fn let_binding_declared_variables_is_not_allowed() {
-        let input = ast::Statement::Binding(
-            ast::Pattern::name("regname"),
-            None,
-            ast::Expression::IntLiteral(0).nowhere(),
-        )
-        .nowhere();
-
-        let mut symtab = SymbolTable::new();
-        let idtracker = ExprIdTracker::new();
-
-        symtab.add_local_variable(ast_ident("clk"));
-        symtab.add_declaration(ast_ident("regname")).unwrap();
-
-        let result = visit_statement(
-            &input,
-            &mut Context {
-                symtab,
-                idtracker,
-                pipeline_ctx: None,
-            },
-        );
-
-        assert_matches!(result, Err(Error::DeclarationOfNonReg { .. }));
     }
 }
 
@@ -2200,7 +2140,7 @@ mod pattern_visiting {
         let symtab = SymbolTable::new();
         let idtracker = ExprIdTracker::new();
 
-        let result = visit_pattern_normal(
+        let result = visit_pattern(
             &input,
             &mut Context {
                 symtab,
@@ -2219,7 +2159,7 @@ mod pattern_visiting {
         let symtab = SymbolTable::new();
         let idtracker = ExprIdTracker::new();
 
-        let result = visit_pattern_normal(
+        let result = visit_pattern(
             &input,
             &mut Context {
                 symtab,
@@ -2266,7 +2206,7 @@ mod pattern_visiting {
             ),
         );
 
-        let result = visit_pattern_normal(
+        let result = visit_pattern(
             &input,
             &mut Context {
                 symtab,
