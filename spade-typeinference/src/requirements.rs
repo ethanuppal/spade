@@ -1,14 +1,13 @@
-use std::collections::HashMap;
-
 use spade_common::location_info::WithLocation;
 use spade_common::name::Path;
 use spade_common::{location_info::Loc, name::Identifier};
 use spade_diagnostics::{diag_anyhow, diag_assert, diag_bail, Diagnostic};
-use spade_hir::symbol_table::{SymbolTable, TypeDeclKind, TypeSymbol};
-use spade_hir::{ArgumentList, ItemList};
+use spade_hir::symbol_table::{TypeDeclKind, TypeSymbol};
+use spade_hir::ArgumentList;
 
 use crate::equation::TypeVar;
 use crate::error::{Error, Result, UnificationErrorExt};
+use crate::method_resolution::select_method;
 use crate::{Context, GenericListSource, TypeState};
 
 #[derive(Clone, Debug)]
@@ -22,13 +21,15 @@ pub enum Requirement {
         expr: Loc<TypeVar>,
     },
     HasMethod {
+        /// The ID of the expression which causes this requirement
+        expr_id: Loc<u64>,
         /// The type which should have the associated method
         target_type: Loc<TypeVar>,
         /// The method which should exist on the type
         method: Loc<Identifier>,
         /// The expression from which this requirement arrises
         expr: Loc<TypeVar>,
-        args: ArgumentList,
+        args: Loc<ArgumentList>,
     },
     /// The type should be an integer large enough to fit the specified value
     FitsIntLiteral {
@@ -49,6 +50,7 @@ impl Requirement {
                 TypeState::replace_type_var(expr, from, to);
             }
             Requirement::HasMethod {
+                expr_id: _,
                 target_type,
                 expr,
                 method: _,
@@ -73,12 +75,7 @@ impl Requirement {
     /// - Or the requirement is now satisfied, in which case new unification tasks which are
     /// applied due to the result are returned. After this, the constraint is no longer needed
     /// and can be dropped
-    pub fn check(
-        &self,
-        type_state: &mut TypeState,
-        symtab: &SymbolTable,
-        items: &ItemList,
-    ) -> Result<RequirementResult> {
+    pub fn check(&self, type_state: &mut TypeState, ctx: &Context) -> Result<RequirementResult> {
         match self {
             Requirement::HasField {
                 target_type,
@@ -88,7 +85,7 @@ impl Requirement {
                 target_type.expect_named(
                     |type_name, params| {
                         // Check if we're dealing with a struct
-                        match symtab.type_symbol_by_id(&type_name).inner {
+                        match ctx.symtab.type_symbol_by_id(&type_name).inner {
                             TypeSymbol::Declared(_, TypeDeclKind::Struct { is_port: _ }) => {}
                             TypeSymbol::Declared(_, TypeDeclKind::Enum) => {
                                 return Err(Error::FieldAccessOnEnum {
@@ -111,7 +108,7 @@ impl Requirement {
                         }
 
                         // Get the struct, find the type of the field and unify
-                        let s = symtab.struct_by_id(&type_name);
+                        let s = ctx.symtab.struct_by_id(&type_name);
 
                         let field_spec = if let Some(spec) = s.params.try_get_arg_type(field) {
                             spec
@@ -152,61 +149,26 @@ impl Requirement {
                 )
             }
             Requirement::HasMethod {
+                expr_id,
                 target_type,
                 method,
                 expr,
                 args,
             } => target_type.expect_named(
                 |type_name, params| {
-                    // Go to the item list to check if this name has any methods
-                    let impld_traits = items
-                        .impls
-                        .get(type_name)
-                        .cloned()
-                        .unwrap_or_else(|| HashMap::new());
+                    let implementor = select_method(expr.loc(), type_name, method, ctx.items)?;
 
-                    // Gather all the candidate methods which we may want to call.
-                    let candidates = impld_traits
-                        .iter()
-                        .flat_map(|(trait_name, r#impl)| {
-                            r#impl.fns.iter().map(move |(fn_name, actual_fn)| {
-                                if fn_name == &method.inner {
-                                    Some((trait_name, fn_name, actual_fn))
-                                } else {
-                                    None
-                                }
-                            })
-                        })
-                        .filter_map(|r| r)
-                        .collect::<Vec<_>>();
+                    let fn_head = ctx.symtab.function_by_id(&implementor);
 
-                    let final_method = match candidates.as_slice() {
-                        [m] => m,
-                        [] => {
-                            return Err(Diagnostic::error(
-                                expr,
-                                "{type_name} as no method {method}",
-                            )
-                            .primary_label("No such method")
-                            .into())
-                        }
-                        other => {
-                            let diag = Diagnostic::error(
-                                expr,
-                                "{type_name} has multiple methods named {method}",
-                            )
-                            .primary_label("Ambiguous method call");
-
-                            // TODO: List the options
-
-                            return Err(diag.into());
-                        }
-                    };
-
-                    // We now have a unique method. Take note that this is the actual target of the
-                    // compilation. Also typecheck the parameters to the method.
-
-                    todo!()
+                    type_state.handle_function_like(
+                        expr_id.clone(),
+                        &expr.inner,
+                        &implementor,
+                        &fn_head.inner,
+                        args,
+                        ctx,
+                    )?;
+                    Ok(RequirementResult::Satisfied(vec![]))
                 },
                 || Ok(RequirementResult::NoChange),
                 |other| {
@@ -217,7 +179,8 @@ impl Requirement {
                 },
             ),
             Requirement::FitsIntLiteral { value, target_type } => {
-                let int_type = symtab
+                let int_type = ctx
+                    .symtab
                     .lookup_type_symbol(&Path::from_strs(&["int"]).nowhere())
                     .map_err(|_| diag_anyhow!(target_type, "The type int was not in the symtab"))?
                     .0;
@@ -269,7 +232,7 @@ impl Requirement {
     /// type state, otherwise add the requirement to the type state requirement list
     #[tracing::instrument(level = "trace", skip_all)]
     pub fn check_or_add(self, type_state: &mut TypeState, ctx: &Context) -> Result<()> {
-        match self.check(type_state, &ctx.symtab, &ctx.items)? {
+        match self.check(type_state, ctx)? {
             RequirementResult::NoChange => Ok(type_state.add_requirement(self)),
             RequirementResult::Satisfied(replacements) => {
                 for Replacement { from, to } in replacements {

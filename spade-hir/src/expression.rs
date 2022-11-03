@@ -77,7 +77,7 @@ pub enum ExprKind {
     Index(Box<Loc<Expression>>, Box<Loc<Expression>>),
     TupleIndex(Box<Loc<Expression>>, Loc<u128>),
     FieldAccess(Box<Loc<Expression>>, Loc<Identifier>),
-    MethodCall(Box<Loc<Expression>>, Loc<Identifier>, ArgumentList),
+    MethodCall(Box<Loc<Expression>>, Loc<Identifier>, Loc<ArgumentList>),
     FnCall(Loc<NameID>, Loc<ArgumentList>),
     BinaryOperator(Box<Loc<Expression>>, BinaryOperator, Box<Loc<Expression>>),
     UnaryOperator(UnaryOperator, Box<Loc<Expression>>),

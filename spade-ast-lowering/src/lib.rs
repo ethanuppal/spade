@@ -948,7 +948,7 @@ pub fn visit_expression(e: &ast::Expression, ctx: &mut Context) -> Result<hir::E
         ast::Expression::MethodCall(target, name, args) => Ok(hir::ExprKind::MethodCall(
             Box::new(target.try_visit(visit_expression, ctx)?),
             name.clone(),
-            visit_argument_list(args, ctx)?,
+            args.try_map_ref(|args| visit_argument_list(args, ctx))?,
         )),
         ast::Expression::If(cond, ontrue, onfalse) => {
             let cond = cond.try_visit(visit_expression, ctx)?;

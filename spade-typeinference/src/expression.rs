@@ -204,6 +204,7 @@ impl TypeState {
             let self_type = self.type_of(&TypedExpression::Id(expression.id))?;
 
             let requirement = Requirement::HasMethod {
+                expr_id: expression.map_ref(|e| e.id),
                 target_type: target_type.at_loc(target),
                 method: method.clone(),
                 expr: self_type.at_loc(expression),

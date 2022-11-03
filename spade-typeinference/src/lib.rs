@@ -38,6 +38,7 @@ pub mod error;
 pub mod error_reporting;
 pub mod expression;
 pub mod fixed_types;
+pub mod method_resolution;
 pub mod mir_type_lowering;
 pub mod pipeline;
 mod requirements;
@@ -436,7 +437,14 @@ impl TypeState {
             }
             ExprKind::EntityInstance(name, args) => {
                 let head = ctx.symtab.entity_by_id(&name.inner);
-                self.handle_function_like(expression, &name.inner, &head.inner, args, ctx)?;
+                self.handle_function_like(
+                    expression.map_ref(|e| e.id),
+                    &expression.get_type(self)?,
+                    &name.inner,
+                    &head.inner,
+                    args,
+                    ctx,
+                )?;
             }
             ExprKind::PipelineInstance {
                 depth: _,
@@ -444,11 +452,25 @@ impl TypeState {
                 args,
             } => {
                 let head = ctx.symtab.pipeline_by_id(&name.inner);
-                self.handle_function_like(expression, &name.inner, &head.inner, args, ctx)?;
+                self.handle_function_like(
+                    expression.map_ref(|e| e.id),
+                    &expression.get_type(self)?,
+                    &name.inner,
+                    &head.inner,
+                    args,
+                    ctx,
+                )?;
             }
             ExprKind::FnCall(name, args) => {
                 let head = ctx.symtab.function_by_id(&name.inner);
-                self.handle_function_like(expression, &name.inner, &head.inner, args, ctx)?;
+                self.handle_function_like(
+                    expression.map_ref(|e| e.id),
+                    &expression.get_type(self)?,
+                    &name.inner,
+                    &head.inner,
+                    args,
+                    ctx,
+                )?;
             }
             ExprKind::PipelineRef { .. } => {
                 self.visit_pipeline_ref(expression, ctx)?;
@@ -462,7 +484,8 @@ impl TypeState {
     #[trace_typechecker]
     fn handle_function_like(
         &mut self,
-        expression: &Loc<Expression>,
+        expression_id: Loc<u64>,
+        expression_type: &TypeVar,
         name: &NameID,
         head: &impl FunctionLike,
         args: &Loc<ArgumentList>,
@@ -470,7 +493,7 @@ impl TypeState {
     ) -> Result<()> {
         // Add new symbols for all the type parameters
         let generic_list = self.create_generic_list(
-            GenericListSource::Expression(expression.id),
+            GenericListSource::Expression(expression_id.inner),
             head.type_params(),
         );
 
@@ -513,7 +536,7 @@ impl TypeState {
                 self.add_constraint(
                     result_size.clone(),
                     ce_var(&lhs_size) + ce_var(&rhs_size),
-                    expression.loc(),
+                    expression_id.loc(),
                     &result_size,
                     ConstraintSource::Concatenation
                 );
@@ -543,7 +566,12 @@ impl TypeState {
         // Unify the types of the arguments
         self.visit_argument_list(&args, ctx, &generic_list)?;
 
-        self.unify_expression_generic_error(expression, &return_type, &ctx.symtab)?;
+        self.unify(expression_type, &return_type, ctx.symtab)
+            .map_normal_err(|(expected, got)| Error::UnspecifiedTypeError {
+                expected,
+                got,
+                loc: expression_id.loc(),
+            })?;
 
         Ok(())
     }
@@ -983,11 +1011,13 @@ impl TypeState {
                     .at_loc(&expr),
             },
             Requirement::HasMethod {
+                expr_id,
                 target_type,
                 method,
                 expr,
                 args,
             } => Requirement::HasMethod {
+                expr_id,
                 target_type: self
                     .check_var_for_replacement(target_type.inner.clone())
                     .at_loc(&target_type),
@@ -1376,7 +1406,7 @@ impl TypeState {
                 .requirements
                 .clone()
                 .iter()
-                .map(|req| match req.check(self, &ctx.symtab, &ctx.items)? {
+                .map(|req| match req.check(self, ctx)? {
                     requirements::RequirementResult::NoChange => Ok((true, None)),
                     requirements::RequirementResult::Satisfied(replacement) => {
                         Ok((false, Some(replacement)))
