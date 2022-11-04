@@ -335,7 +335,7 @@ impl<'a> Parser<'a> {
         let reference = match next.as_ref().map(|tok| tok.kind.clone()) {
             Some(TokenKind::Identifier(_)) => PipelineReference::Absolute(self.identifier()?),
             Some(TokenKind::Plus) => {
-                self.eat(&TokenKind::Plus)?;
+                let plus = self.eat(&TokenKind::Plus)?;
                 let num = if let Some(d) = self.int_literal()? {
                     d
                 } else {
@@ -344,10 +344,11 @@ impl<'a> Parser<'a> {
                     });
                 };
 
-                PipelineReference::Relative(num.map(|inner| inner as i64))
+                let offset = (num.inner as i64).between(plus.file_id, &plus, &num);
+                PipelineReference::Relative(offset)
             }
             Some(TokenKind::Minus) => {
-                self.eat(&TokenKind::Minus)?;
+                let minus = self.eat(&TokenKind::Minus)?;
                 let num = if let Some(d) = self.int_literal()? {
                     d
                 } else {
@@ -355,7 +356,8 @@ impl<'a> Parser<'a> {
                         got: self.eat_unconditional()?,
                     });
                 };
-                PipelineReference::Relative(num.map(|inner| -(inner as i64)))
+                let offset = (-(num.inner as i64)).between(minus.file_id, &minus, &num);
+                PipelineReference::Relative(offset)
             }
             Some(_) => {
                 return Err(Error::UnexpectedToken {

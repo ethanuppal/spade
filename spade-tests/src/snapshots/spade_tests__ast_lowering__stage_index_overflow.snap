@@ -3,10 +3,10 @@ source: spade-tests/src/ast_lowering.rs
 expression: "std::str::from_utf8(buffer.as_slice()).expect(\"error contains invalid utf-8\")"
 ---
 error: Pipeline does not have stage 4
-  ┌─ testinput:5:16
+  ┌─ testinput:5:15
   │
 5 │         stage(+1).x
-  │                ^ Reference to stage 4
+  │               ^^ Reference to stage 4
   │
   = The pipeline only has 4 stages
 

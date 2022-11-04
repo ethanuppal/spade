@@ -3,10 +3,10 @@ source: spade-tests/src/ast_lowering.rs
 expression: "std::str::from_utf8(buffer.as_slice()).expect(\"error contains invalid utf-8\")"
 ---
 error: Reference to negative pipeline stage
-  ┌─ testinput:2:24
+  ┌─ testinput:2:23
   │
 2 │         let a = stage(-1).x;
-  │                        ^ This references a negative pipeline stage
+  │                       ^^ This references a negative pipeline stage
   │
   = note: Since this is at stage 0, -1 references stage -1
   = note: Pipeline stages start at 0
