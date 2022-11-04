@@ -187,6 +187,14 @@ impl Diagnostic {
         self
     }
 
+    pub fn help(mut self, message: impl Into<Message>) -> Self {
+        self.subdiagnostics.push(Subdiagnostic::Note {
+            level: SubdiagnosticLevel::Help,
+            message: message.into(),
+        });
+        self
+    }
+
     pub fn span_suggest(
         mut self,
         message: impl Into<Message>,

@@ -983,7 +983,14 @@ fn visit_block(b: &ast::Block, ctx: &mut Context) -> Result<hir::Block> {
     let result = b.result.try_visit(visit_expression, ctx)?;
 
     if let Some(undefined) = ctx.symtab.get_undefined_declarations().first() {
-        return Err(Error::UndefinedDeclaration(undefined.clone()));
+        return Err(
+            Diagnostic::error(undefined, "Declared variable is not defined")
+                .primary_label("This variable is declared but not defined")
+                .help(format!(
+                    "Consider defining {undefined} with a let or reg binding"
+                ))
+                .into(),
+        );
     }
 
     ctx.symtab.close_scope();

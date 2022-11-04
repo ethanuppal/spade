@@ -107,14 +107,6 @@ impl CompilationError for Error {
                         .secondary_label()
                         .with_message(format!("{} declared here", at)),
                 ]),
-            Error::UndefinedDeclaration(name) => Diagnostic::error()
-                .with_message(format!("{name} is declared but not defined"))
-                .with_labels(vec![name
-                    .primary_label()
-                    .with_message("declaration without definition")])
-                .with_notes(vec![format!(
-                    "Consider defining {name} with a let or reg binding"
-                )]),
             Error::SpadeDiagnostic(diag) => {
                 return diag_handler.emit(diag, buffer, code);
             }

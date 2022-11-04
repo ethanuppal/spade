@@ -80,9 +80,6 @@ pub enum Error {
         declaration_location: Loc<()>,
     },
 
-    #[error("Variable declared but not defined")]
-    UndefinedDeclaration(Loc<Identifier>),
-
     #[error("Spade diagnostic")]
     SpadeDiagnostic(#[from] spade_diagnostics::Diagnostic),
 }
