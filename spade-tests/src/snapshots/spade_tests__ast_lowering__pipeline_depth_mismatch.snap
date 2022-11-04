@@ -1,0 +1,14 @@
+---
+source: spade-tests/src/ast_lowering.rs
+expression: "std::str::from_utf8(buffer.as_slice()).expect(\"error contains invalid utf-8\")"
+---
+error: Pipeline depth mismatch
+  ┌─ testinput:9:10
+  │
+1 │ pipeline(3) p(clk: clk, b: bool) -> bool {
+  │          - p has depth 3
+  ·
+9 │     inst(2) p(clk, true)
+  │          ^ Expected depth 3 here
+
+

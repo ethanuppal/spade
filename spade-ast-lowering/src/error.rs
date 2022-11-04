@@ -61,8 +61,6 @@ pub enum Error {
     },
     #[error("Early pipeline return")]
     EarlyPipelineReturn { expression: Loc<hir::Expression> },
-    #[error("Pipeline depth mismatch")]
-    PipelineDepthMismatch { expected: usize, got: Loc<u128> },
     #[error("Pipeline missing clock")]
     MissingPipelineClock { at_loc: Loc<()> },
     #[error("Referencing negative pipeline stage")]

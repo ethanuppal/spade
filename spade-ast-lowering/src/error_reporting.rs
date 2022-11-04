@@ -72,14 +72,6 @@ impl CompilationError for Error {
                 .with_notes(vec![format!(
                     "Only the last stage of a pipeline can return values"
                 )]),
-            Error::PipelineDepthMismatch { expected, got } => Diagnostic::error()
-                .with_message(format!(
-                    "Pipeline depth mismatch. Expected {} got {}",
-                    expected, got
-                ))
-                .with_labels(vec![got
-                    .primary_label()
-                    .with_message(format!("Expected {}", expected))]),
             Error::MissingPipelineClock { at_loc } => Diagnostic::error()
                 .with_message(format!("Missing clock argument."))
                 .with_labels(vec![at_loc

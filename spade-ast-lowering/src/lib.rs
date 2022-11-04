@@ -885,10 +885,10 @@ pub fn visit_expression(e: &ast::Expression, ctx: &mut Context) -> Result<hir::E
             let head = head.clone();
 
             if head.depth.inner != depth.inner as usize {
-                return Err(Error::PipelineDepthMismatch {
-                    expected: head.depth.inner,
-                    got: depth.clone(),
-                });
+                return Err(Diagnostic::error(depth, "Pipeline depth mismatch")
+                    .primary_label(format!("Expected depth {} here", head.depth))
+                    .secondary_label(head.depth, format!("{} has depth {}", name, head.depth))
+                    .into());
             }
 
             let args = visit_argument_list(arg_list, ctx)?.at_loc(arg_list);
@@ -2008,54 +2008,6 @@ mod expression_visiting {
                 }
             ),
             Ok(expected)
-        );
-    }
-
-    #[test]
-    fn pipeline_instantiation_with_mismatched_depth_causes_error() {
-        let input = ast::Expression::PipelineInstance(
-            2.nowhere(),
-            ast_path("test"),
-            ast::ArgumentList::Positional(vec![
-                ast::Expression::IntLiteral(1).nowhere(),
-                ast::Expression::IntLiteral(2).nowhere(),
-            ])
-            .nowhere(),
-        )
-        .nowhere();
-
-        let mut symtab = SymbolTable::new();
-        let idtracker = ExprIdTracker::new();
-
-        symtab.add_thing(
-            ast_path("test").inner,
-            Thing::Pipeline(
-                PipelineHead {
-                    depth: 3.nowhere(),
-                    inputs: hir::ParameterList(vec![
-                        (ast_ident("a"), hir::TypeSpec::unit().nowhere()),
-                        (ast_ident("b"), hir::TypeSpec::unit().nowhere()),
-                    ]),
-                    output_type: None,
-                    type_params: vec![],
-                }
-                .nowhere(),
-            ),
-        );
-
-        assert_eq!(
-            visit_expression(
-                &input,
-                &mut Context {
-                    symtab,
-                    idtracker,
-                    pipeline_ctx: None
-                }
-            ),
-            Err(Error::PipelineDepthMismatch {
-                expected: 3,
-                got: 2.nowhere()
-            })
         );
     }
 

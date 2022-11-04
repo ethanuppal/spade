@@ -509,3 +509,19 @@ snapshot_error! {
     multiple_arguments_same_name,
     "fn multiple(foo: bool, bar: bool, foo: bool) __builtin__"
 }
+
+snapshot_error! {
+    pipeline_depth_mismatch,
+    "
+    pipeline(3) p(clk: clk, b: bool) -> bool {
+        reg;
+        reg;
+        reg;
+            b
+    }
+
+    entity top(clk: clk) -> bool {
+        inst(2) p(clk, true)
+    }
+    "
+}
