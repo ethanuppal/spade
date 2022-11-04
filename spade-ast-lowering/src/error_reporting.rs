@@ -78,11 +78,6 @@ impl CompilationError for Error {
                     .primary_label()
                     .with_message(format!("Expected clock argument"))])
                 .with_notes(vec![format!("All pipelines take a clock as an argument")]),
-            Error::UndefinedPipelineStage { stage } => Diagnostic::error()
-                .with_message(format!("Undefined pipeline stage '{stage}'"))
-                .with_labels(vec![stage
-                    .primary_label()
-                    .with_message(format!("Not a stage in this pipeline"))]),
             Error::DuplicatePipelineStage { stage, previous } => Diagnostic::error()
                 .with_message(format!("Stage {stage} was already defined"))
                 .with_labels(vec![

@@ -2,10 +2,10 @@
 source: spade-tests/src/ast_lowering.rs
 expression: "std::str::from_utf8(buffer.as_slice()).expect(\"error contains invalid utf-8\")"
 ---
-error: Undefined pipeline stage 'b'
+error: Undefined pipeline stage
   ┌─ testinput:7:15
   │
 7 │         stage(b).x
-  │               ^ Not a stage in this pipeline
+  │               ^ Can't find pipeline stage 'b
 
 

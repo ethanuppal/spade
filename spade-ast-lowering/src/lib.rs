@@ -945,9 +945,9 @@ pub fn visit_expression(e: &ast::Expression, ctx: &mut Context) -> Result<hir::E
                 ast::PipelineReference::Absolute(name) => (
                     pipeline_ctx
                         .get_stage(name)
-                        .ok_or_else(|| Error::UndefinedPipelineStage {
-                            stage: name.clone(),
-                        })?,
+                        .ok_or_else(|| Error::SpadeDiagnostic(Diagnostic::error(name, "Undefined pipeline stage")
+                            .primary_label(format!("Can't find pipeline stage '{name}"))
+                        ))?,
                     name.loc(),
                 ),
             };

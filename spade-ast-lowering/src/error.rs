@@ -63,8 +63,6 @@ pub enum Error {
     EarlyPipelineReturn { expression: Loc<hir::Expression> },
     #[error("Pipeline missing clock")]
     MissingPipelineClock { at_loc: Loc<()> },
-    #[error("Undefined pipeline stage")]
-    UndefinedPipelineStage { stage: Loc<Identifier> },
     #[error("Duplicate pipeline stage")]
     DuplicatePipelineStage {
         stage: Loc<Identifier>,
