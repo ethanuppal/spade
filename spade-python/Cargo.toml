@@ -8,6 +8,7 @@ rust-version.workspace = true
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [lib]
 name = "spade"
+doc = false # "spade" conflicts with the spade compiler doc target
 crate-type = ["cdylib"]
 
 [dependencies]
