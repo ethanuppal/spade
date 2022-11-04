@@ -846,9 +846,7 @@ pub fn visit_expression(e: &ast::Expression, ctx: &mut Context) -> Result<hir::E
             let e = expression.try_visit(visit_expression, ctx)?;
 
             if branches.is_empty() {
-                return Err(Error::NoMatchArms {
-                    body: branches.loc(),
-                });
+                return Err(Diagnostic::error(branches, "Match body has no arms").into());
             }
 
             let b = branches

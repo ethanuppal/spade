@@ -96,9 +96,6 @@ pub enum Error {
     #[error("Variable declared but not defined")]
     UndefinedDeclaration(Loc<Identifier>),
 
-    #[error("Match block has no arms")]
-    NoMatchArms { body: Loc<()> },
-
     #[error("Spade diagnostic")]
     SpadeDiagnostic(#[from] spade_diagnostics::Diagnostic),
 }

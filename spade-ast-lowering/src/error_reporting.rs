@@ -139,9 +139,6 @@ impl CompilationError for Error {
                 .with_notes(vec![format!(
                     "Consider defining {name} with a let or reg binding"
                 )]),
-            Error::NoMatchArms { body } => Diagnostic::error()
-                .with_message("Match body has no arms")
-                .with_labels(vec![body.primary_label().with_message("Empty match body")]),
             Error::SpadeDiagnostic(diag) => {
                 return diag_handler.emit(diag, buffer, code);
             }
