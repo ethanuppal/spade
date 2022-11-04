@@ -78,15 +78,6 @@ impl CompilationError for Error {
                     .primary_label()
                     .with_message(format!("Expected clock argument"))])
                 .with_notes(vec![format!("All pipelines take a clock as an argument")]),
-            Error::NegativePipelineReference {
-                at_loc,
-                absolute_stage,
-            } => Diagnostic::error()
-                .with_message("Reference to negative pipeline stage")
-                .with_labels(vec![at_loc.primary_label().with_message(format!(
-                    "Reference to absolute stage {absolute_stage}"
-                ))])
-                .with_notes(vec![format!("Pipeline stages start at 0")]),
             Error::PipelineStageOOB {
                 at_loc,
                 num_stages,

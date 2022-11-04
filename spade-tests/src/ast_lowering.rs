@@ -47,6 +47,19 @@ snapshot_error! {
 }
 
 snapshot_error! {
+    negative_stage_index_later,
+    "
+    pipeline(3) main(x: int<8>) -> int<8> {
+        reg;
+        reg;
+            let a = stage(-5).x;
+        reg;
+            0
+    }
+    "
+}
+
+snapshot_error! {
     stage_index_overflow,
     "
     pipeline(3) main(x: int<8>) -> int<8> {

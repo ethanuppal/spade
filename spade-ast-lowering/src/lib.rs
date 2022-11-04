@@ -913,13 +913,20 @@ pub fn visit_expression(e: &ast::Expression, ctx: &mut Context) -> Result<hir::E
 
             let (stage_index, loc) = match stage {
                 ast::PipelineReference::Relative(offset) => {
-                    let absolute = pipeline_ctx.current_stage as i64 + offset.inner;
+                    let current = pipeline_ctx.current_stage;
+                    let absolute = current as i64 + offset.inner;
 
                     if absolute < 0 {
-                        return Err(Error::NegativePipelineReference {
-                            at_loc: offset.loc(),
-                            absolute_stage: absolute,
-                        });
+                        return Err(Diagnostic::error(
+                            offset,
+                            "Reference to negative pipeline stage",
+                        )
+                        .primary_label("This references a negative pipeline stage")
+                        .note(format!(
+                            "Since this is at stage {current}, {offset} references stage {absolute}"
+                        ))
+                        .note("Pipeline stages start at 0")
+                        .into());
                     }
                     let absolute = absolute as usize;
                     if absolute >= pipeline_ctx.stages.len() {

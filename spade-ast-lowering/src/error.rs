@@ -63,11 +63,6 @@ pub enum Error {
     EarlyPipelineReturn { expression: Loc<hir::Expression> },
     #[error("Pipeline missing clock")]
     MissingPipelineClock { at_loc: Loc<()> },
-    #[error("Referencing negative pipeline stage")]
-    NegativePipelineReference {
-        at_loc: Loc<()>,
-        absolute_stage: i64,
-    },
     #[error("Referencing out of bounds pipeline stage")]
     PipelineStageOOB {
         at_loc: Loc<()>,
