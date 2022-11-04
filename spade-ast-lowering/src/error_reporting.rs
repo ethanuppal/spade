@@ -78,16 +78,6 @@ impl CompilationError for Error {
                     .primary_label()
                     .with_message(format!("Expected clock argument"))])
                 .with_notes(vec![format!("All pipelines take a clock as an argument")]),
-            Error::PipelineStageOOB {
-                at_loc,
-                num_stages,
-                absolute_stage,
-            } => Diagnostic::error()
-                .with_message(format!("Pipeline does not have stage {absolute_stage}"))
-                .with_labels(vec![at_loc
-                    .primary_label()
-                    .with_message(format!("Reference to stage {absolute_stage}"))])
-                .with_notes(vec![format!("The pipeline only has {num_stages} stages")]),
             Error::UndefinedPipelineStage { stage } => Diagnostic::error()
                 .with_message(format!("Undefined pipeline stage '{stage}'"))
                 .with_labels(vec![stage

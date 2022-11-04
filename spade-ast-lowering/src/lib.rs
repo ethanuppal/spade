@@ -929,12 +929,15 @@ pub fn visit_expression(e: &ast::Expression, ctx: &mut Context) -> Result<hir::E
                         .into());
                     }
                     let absolute = absolute as usize;
-                    if absolute >= pipeline_ctx.stages.len() {
-                        return Err(Error::PipelineStageOOB {
-                            at_loc: offset.loc(),
-                            absolute_stage: absolute,
-                            num_stages: pipeline_ctx.stages.len(),
-                        });
+                    let pipeline_depth = pipeline_ctx.stages.len();
+                    if absolute >= pipeline_depth {
+                        return Err(Diagnostic::error(offset, "Reference to pipeline stage beyond pipeline depth")
+                            .primary_label("This references a pipeline stage beyond the pipeline depth")
+                            .note(format!("Since this is at stage {current}, +{offset} references stage {absolute}"))
+                            .note(format!("The pipeline has depth {}", pipeline_depth - 1))
+                            .into()
+
+                        )
                     }
 
                     (absolute, offset.loc())
