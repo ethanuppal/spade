@@ -88,14 +88,6 @@ impl CompilationError for Error {
                         .secondary_label()
                         .with_message("Previous definition"),
                 ]),
-            Error::MultipleStageLabels { new, previous } => Diagnostic::error()
-                .with_message(format!("Stage already has label {previous}"))
-                .with_labels(vec![
-                    new.primary_label().with_message(format!("Duplicate label")),
-                    previous
-                        .secondary_label()
-                        .with_message(format!("Previously labeled here")),
-                ]),
             Error::DeclarationOfNonReg {
                 at,
                 declaration_location,

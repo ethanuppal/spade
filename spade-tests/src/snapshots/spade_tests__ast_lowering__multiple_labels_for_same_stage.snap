@@ -2,12 +2,12 @@
 source: spade-tests/src/ast_lowering.rs
 expression: "std::str::from_utf8(buffer.as_slice()).expect(\"error contains invalid utf-8\")"
 ---
-error: Stage already has label a
+error: Multiple labels for the same stage
   ┌─ testinput:4:10
   │
 3 │         'a
   │          - Previously labeled here
 4 │         'b
-  │          ^ Duplicate label
+  │          ^ This stage has already been labeled
 
 

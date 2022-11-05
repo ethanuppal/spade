@@ -68,11 +68,6 @@ pub enum Error {
         stage: Loc<Identifier>,
         previous: Loc<Identifier>,
     },
-    #[error("Multiple labels for same stage")]
-    MultipleStageLabels {
-        new: Loc<Identifier>,
-        previous: Loc<Identifier>,
-    },
 
     #[error("Declarations can only be defined by registers")]
     DeclarationOfNonReg {

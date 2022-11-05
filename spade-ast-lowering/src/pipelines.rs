@@ -3,6 +3,7 @@ use spade_common::{
     location_info::{Loc, WithLocation},
     name::{Identifier, Path},
 };
+use spade_diagnostics::Diagnostic;
 use spade_hir as hir;
 
 use crate::{
@@ -80,10 +81,12 @@ fn visit_pipeline_statement(
                 // FIXME: We might actually want to support multiple labels
                 // for the same stage... If so we need to rewrite
                 // some other parts
-                return Err(Error::MultipleStageLabels {
-                    new: name.clone(),
-                    previous: previous.clone(),
-                });
+                return Err(
+                    Diagnostic::error(name, "Multiple labels for the same stage")
+                        .primary_label("This stage has already been labeled")
+                        .secondary_label(previous, "Previously labeled here")
+                        .into(),
+                );
             }
 
             if let Some(prev) = pipeline_ctx.previous_def(name) {
