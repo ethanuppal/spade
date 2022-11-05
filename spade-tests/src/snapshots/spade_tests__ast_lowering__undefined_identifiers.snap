@@ -1,0 +1,11 @@
+---
+source: spade-tests/src/ast_lowering.rs
+expression: "std::str::from_utf8(buffer.as_slice()).expect(\"error contains invalid utf-8\")"
+---
+error: Use of undeclared name test
+  ┌─ testinput:2:13
+  │
+2 │     let a = test;
+  │             ^^^^ Undeclared name
+
+

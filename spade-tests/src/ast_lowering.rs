@@ -538,3 +538,46 @@ snapshot_error! {
     }
     "
 }
+
+snapshot_error! {
+    duplicate_declarations,
+    "
+    fn main() -> bool {
+        decl x, x;
+        true
+    }
+    "
+}
+
+snapshot_error! {
+    undefined_identifiers,
+    "
+    fn main() -> bool {
+        let a = test;
+        true
+    }
+    "
+}
+
+// NOTE: This test should be removed once/if we introduce higher order functions
+snapshot_error! {
+    functions_are_not_returnable_values,
+    "
+        fn f() -> bool { true }
+        fn main() -> bool {
+            let x = f;
+            true
+        }
+    "
+}
+
+snapshot_error! {
+    types_are_not_returnable_values,
+    "
+        struct test {}
+        fn main() -> bool {
+            let x = test;
+            true
+        }
+    "
+}

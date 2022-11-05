@@ -1,0 +1,17 @@
+---
+source: spade-tests/src/ast_lowering.rs
+expression: "std::str::from_utf8(buffer.as_slice()).expect(\"error contains invalid utf-8\")"
+---
+error: Expected f to be a value
+  ┌─ testinput:3:13
+  │
+1 │ fn f() -> bool { true }
+  │ ----------------------- f is a function
+2 │ fn main() -> bool {
+3 │     let x = f;
+  │             ^ Expected value
+  │
+  = Expected value
+  = Found function
+
+

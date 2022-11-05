@@ -1179,7 +1179,6 @@ mod entity_visiting {
 mod statement_visiting {
     use super::*;
 
-    use hir::symbol_table::DeclarationError;
     use pretty_assertions::assert_eq;
     use spade_ast::testutil::{ast_ident, ast_path};
     use spade_common::location_info::WithLocation;
@@ -1303,30 +1302,6 @@ mod statement_visiting {
         );
 
         assert_eq!(ctx.pipeline_ctx.as_ref().unwrap().current_stage, 3);
-    }
-
-    #[test]
-    fn duplicate_declarations_cauases_error() {
-        let input = ast::Statement::Declaration(vec![ast_ident("x"), ast_ident("x")]).nowhere();
-
-        let symtab = SymbolTable::new();
-        let idtracker = ExprIdTracker::new();
-        assert_eq!(
-            visit_statement(
-                &input,
-                &mut Context {
-                    symtab,
-                    idtracker,
-                    pipeline_ctx: None
-                }
-            ),
-            Err(Error::DeclarationError(
-                DeclarationError::DuplicateDeclaration {
-                    new: ast_ident("x"),
-                    old: ast_ident("x")
-                }
-            ))
-        );
     }
 
     #[test]
@@ -1472,27 +1447,6 @@ mod expression_visiting {
     binop_test!(bitwise_and, BitwiseAnd, BitwiseAnd);
     unop_test!(usub, Sub, Sub);
     unop_test!(not, Not, Not);
-
-    #[test]
-    fn identifiers_cause_error_if_undefined() {
-        let symtab = SymbolTable::new();
-        let idtracker = ExprIdTracker::new();
-        let input = ast::Expression::Identifier(ast_path("test"));
-
-        assert_eq!(
-            visit_expression(
-                &input,
-                &mut Context {
-                    symtab,
-                    idtracker,
-                    pipeline_ctx: None
-                }
-            ),
-            Err(Error::LookupError(
-                spade_hir::symbol_table::LookupError::NoSuchSymbol(ast_path("test"))
-            ))
-        );
-    }
 
     #[test]
     fn indexing_works() {
@@ -2023,65 +1977,6 @@ mod expression_visiting {
                 }
             ),
             Ok(expected)
-        );
-    }
-
-    // NOTE: This test should be removed once/if we introduce higher order functions
-    #[test]
-    fn functions_are_not_returnable_values() {
-        let input = ast::Expression::Identifier(ast_path("test")).nowhere();
-
-        let mut symtab = SymbolTable::new();
-        let idtracker = ExprIdTracker::new();
-
-        let head = Thing::Function(
-            EntityHead {
-                inputs: hir::ParameterList(vec![]),
-                output_type: None,
-                type_params: vec![],
-            }
-            .nowhere(),
-        );
-        symtab.add_thing(ast_path("test").inner, head.clone());
-
-        assert_eq!(
-            visit_expression(
-                &input,
-                &mut Context {
-                    symtab,
-                    idtracker,
-                    pipeline_ctx: None
-                }
-            ),
-            Err(Error::LookupError(
-                hir::symbol_table::LookupError::NotAValue(ast_path("test"), head)
-            ))
-        );
-    }
-
-    #[test]
-    fn types_are_not_returnable_values() {
-        let input = ast::Expression::Identifier(ast_path("test")).nowhere();
-
-        let mut symtab = SymbolTable::new();
-        let idtracker = ExprIdTracker::new();
-
-        let head = TypeSymbol::Declared(vec![], hir::symbol_table::TypeDeclKind::normal_struct())
-            .nowhere();
-        symtab.add_type(ast_path("test").inner, head.clone());
-
-        assert_eq!(
-            visit_expression(
-                &input,
-                &mut Context {
-                    symtab,
-                    idtracker,
-                    pipeline_ctx: None
-                }
-            ),
-            Err(Error::LookupError(hir::symbol_table::LookupError::IsAType(
-                ast_path("test")
-            )))
         );
     }
 }
