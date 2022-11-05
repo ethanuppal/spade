@@ -50,12 +50,6 @@ impl CompilationError for Error {
                 .with_notes(vec![format!(
                     "Only the last stage of a pipeline can return values"
                 )]),
-            Error::MissingPipelineClock { at_loc } => Diagnostic::error()
-                .with_message(format!("Missing clock argument."))
-                .with_labels(vec![at_loc
-                    .primary_label()
-                    .with_message(format!("Expected clock argument"))])
-                .with_notes(vec![format!("All pipelines take a clock as an argument")]),
             Error::DeclarationOfNonReg {
                 at,
                 declaration_location,

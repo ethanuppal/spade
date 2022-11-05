@@ -7,10 +7,8 @@ use spade_diagnostics::Diagnostic;
 use spade_hir as hir;
 
 use crate::{
-    attributes::report_unused_attributes,
-    comptime::ComptimeCondExt,
-    error::{Error, Result},
-    unit_name, visit_expression, Context, LocExt,
+    attributes::report_unused_attributes, comptime::ComptimeCondExt, error::Result, unit_name,
+    visit_expression, Context, LocExt,
 };
 use spade_hir::symbol_table::SymbolTable;
 
@@ -141,7 +139,11 @@ pub fn visit_pipeline(pipeline: &Loc<ast::Pipeline>, ctx: &mut Context) -> Resul
     let head = head.clone(); // An offering to the borrow checker. May ferris have mercy on us all
 
     if head.inputs.0.is_empty() {
-        return Err(Error::MissingPipelineClock { at_loc: head.loc() });
+        return Err(
+            Diagnostic::error(head, "Missing clock argument for pipeline")
+                .note("All pipelines need to take at least a clock as an argument")
+                .into(),
+        );
     }
 
     let unit_name = unit_name(&mut attributes, &id.at_loc(&name), &name, &type_params)?;
@@ -214,42 +216,6 @@ mod pipeline_visiting {
     };
 
     use pretty_assertions::assert_eq;
-
-    #[test]
-    fn pipeline_without_clock_is_an_error() {
-        let input = ast::Pipeline {
-            name: ast_ident("pipe"),
-            depth: 2.nowhere(),
-            inputs: ast::ParameterList(vec![]),
-            output_type: Some(ast::TypeSpec::Unit(().nowhere()).nowhere()),
-            body: None,
-            type_params: vec![],
-            attributes: ast::AttributeList(vec![]),
-        }
-        .nowhere();
-
-        let mut symtab = SymbolTable::new();
-        let idtracker = ExprIdTracker::new();
-
-        crate::global_symbols::visit_pipeline(&input, &mut symtab)
-            .expect("Failed to add pipeline to symtab");
-
-        let result = visit_pipeline(
-            &input,
-            &mut Context {
-                symtab,
-                idtracker,
-                pipeline_ctx: None,
-            },
-        );
-
-        assert_eq!(
-            result,
-            Err(Error::MissingPipelineClock {
-                at_loc: ().nowhere()
-            })
-        );
-    }
 
     #[test]
     fn relative_stage_references_work() {

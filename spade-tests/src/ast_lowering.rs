@@ -592,3 +592,13 @@ snapshot_error! {
         }
     "
 }
+
+snapshot_error! {
+    pipeline_without_arguments,
+    "
+        pipeline(1) pipe() -> bool {
+            reg;
+                true
+        }
+    "
+}
