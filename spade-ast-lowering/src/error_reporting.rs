@@ -42,25 +42,6 @@ impl CompilationError for Error {
                             .with_message(format!("Previous definition here")),
                     ])
             }
-            Error::EarlyPipelineReturn { expression } => Diagnostic::error()
-                .with_message(format!("Unexpected return expression"))
-                .with_labels(vec![expression
-                    .primary_label()
-                    .with_message(format!("Did not expect an value in this stage"))])
-                .with_notes(vec![format!(
-                    "Only the last stage of a pipeline can return values"
-                )]),
-            Error::DeclarationOfNonReg {
-                at,
-                declaration_location,
-            } => Diagnostic::error()
-                .with_message("Declared variables can only be defined by registers")
-                .with_labels(vec![
-                    at.primary_label().with_message(format!("Not a register")),
-                    declaration_location
-                        .secondary_label()
-                        .with_message(format!("{} declared here", at)),
-                ]),
             Error::SpadeDiagnostic(diag) => {
                 return diag_handler.emit(diag, buffer, code);
             }

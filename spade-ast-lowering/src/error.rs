@@ -1,6 +1,5 @@
-use spade_common::{location_info::Loc, name::Identifier};
+use spade_common::location_info::Loc;
 use spade_diagnostics::Diagnostic;
-use spade_hir as hir;
 use thiserror::Error;
 
 pub enum ItemKind {
@@ -47,14 +46,6 @@ pub enum Error {
     UniquenessError(#[from] spade_hir::symbol_table::UniqueNameError),
     #[error("Argument error")]
     ArgumentError(#[from] spade_hir::param_util::ArgumentError),
-    #[error("Early pipeline return")]
-    EarlyPipelineReturn { expression: Loc<hir::Expression> },
-
-    #[error("Declarations can only be defined by registers")]
-    DeclarationOfNonReg {
-        at: Loc<Identifier>,
-        declaration_location: Loc<()>,
-    },
 
     #[error("Spade diagnostic")]
     SpadeDiagnostic(#[from] spade_diagnostics::Diagnostic),
