@@ -176,11 +176,12 @@ pub fn visit_pipeline(pipeline: &Loc<ast::Pipeline>, ctx: &mut Context) -> Resul
     }
 
     if current_stage as u128 != depth.inner {
-        return Err(Error::IncorrectStageCount {
-            got: current_stage,
-            expected: depth,
-            pipeline: pipeline.clone(),
-        });
+        return Err(
+            Diagnostic::error(pipeline, "Wrong amount of pipeline stages")
+                .primary_label(format!("Found {} stages here", current_stage))
+                .secondary_label(depth, format!("{} stages specified here", depth))
+                .into(),
+        );
     }
 
     ctx.pipeline_ctx.replace(context);
@@ -213,56 +214,6 @@ mod pipeline_visiting {
     };
 
     use pretty_assertions::assert_eq;
-
-    #[test]
-    fn incorrect_stage_count_causes_error() {
-        let input = ast::Pipeline {
-            name: ast_ident("pipe"),
-            depth: 3.nowhere(),
-            inputs: ast::ParameterList(vec![(
-                ast_ident("clk"),
-                ast::TypeSpec::Unit(().nowhere()).nowhere(),
-            )]),
-            output_type: Some(ast::TypeSpec::Unit(().nowhere()).nowhere()),
-            body: Some(
-                ast::Expression::Block(Box::new(ast::Block {
-                    statements: vec![
-                        ast::Statement::PipelineRegMarker(1).nowhere(),
-                        ast::Statement::PipelineRegMarker(1).nowhere(),
-                    ],
-                    result: ast::Expression::IntLiteral(0).nowhere(),
-                }))
-                .nowhere(),
-            ),
-            type_params: vec![],
-            attributes: ast::AttributeList(vec![]),
-        }
-        .nowhere();
-
-        let mut symtab = SymbolTable::new();
-        let idtracker = ExprIdTracker::new();
-
-        crate::global_symbols::visit_pipeline(&input, &mut symtab)
-            .expect("Failed to add pipeline to symtab");
-
-        let result = visit_pipeline(
-            &input,
-            &mut Context {
-                symtab,
-                idtracker,
-                pipeline_ctx: None,
-            },
-        );
-
-        assert_eq!(
-            result,
-            Err(Error::IncorrectStageCount {
-                got: 2,
-                expected: 3.nowhere(),
-                pipeline: input
-            })
-        );
-    }
 
     #[test]
     fn pipeline_without_clock_is_an_error() {

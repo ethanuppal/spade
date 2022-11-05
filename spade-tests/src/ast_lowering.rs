@@ -581,3 +581,14 @@ snapshot_error! {
         }
     "
 }
+
+snapshot_error! {
+    incorrect_stage_count,
+    "
+        pipeline(3) pipe(clk: clk) -> bool {
+            reg;
+            reg;
+                true
+        }
+    "
+}

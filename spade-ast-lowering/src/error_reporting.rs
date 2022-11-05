@@ -22,14 +22,6 @@ impl CompilationError for Error {
         }
         let diag = match self {
             Error::ArgumentError(_) | Error::LookupError(_) => unreachable!("Already handled"),
-            Error::DuplicateTypeVariable { found, previously } => Diagnostic::error()
-                .with_message(format!("Duplicate typename: `{}`", found.inner))
-                .with_labels(vec![
-                    found.primary_label().with_message("Duplicate typename"),
-                    previously
-                        .secondary_label()
-                        .with_message("Previously used here"),
-                ]),
             Error::DeclarationError(DeclarationError::DuplicateDeclaration { old, new }) => {
                 Diagnostic::error()
                     .with_message(format!("A previous declaration of {} exists", new))
@@ -50,20 +42,6 @@ impl CompilationError for Error {
                             .with_message(format!("Previous definition here")),
                     ])
             }
-            Error::IncorrectStageCount {
-                got,
-                expected,
-                pipeline,
-            } => Diagnostic::error()
-                .with_message(format!("Expected {} pipeline stages", expected))
-                .with_labels(vec![
-                    pipeline
-                        .primary_label()
-                        .with_message(format!("Found {} stages", got)),
-                    expected
-                        .secondary_label()
-                        .with_message(format!("{} specified here", expected)),
-                ]),
             Error::EarlyPipelineReturn { expression } => Diagnostic::error()
                 .with_message(format!("Unexpected return expression"))
                 .with_labels(vec![expression

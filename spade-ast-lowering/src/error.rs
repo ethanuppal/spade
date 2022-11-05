@@ -1,4 +1,3 @@
-use spade_ast as ast;
 use spade_common::{location_info::Loc, name::Identifier};
 use spade_diagnostics::Diagnostic;
 use spade_hir as hir;
@@ -48,17 +47,6 @@ pub enum Error {
     UniquenessError(#[from] spade_hir::symbol_table::UniqueNameError),
     #[error("Argument error")]
     ArgumentError(#[from] spade_hir::param_util::ArgumentError),
-    #[error("Duplicate type variable")]
-    DuplicateTypeVariable {
-        found: Loc<Identifier>,
-        previously: Loc<Identifier>,
-    },
-    #[error("Incorrect stage count")]
-    IncorrectStageCount {
-        got: usize,
-        expected: Loc<u128>,
-        pipeline: Loc<ast::Pipeline>,
-    },
     #[error("Early pipeline return")]
     EarlyPipelineReturn { expression: Loc<hir::Expression> },
     #[error("Pipeline missing clock")]
