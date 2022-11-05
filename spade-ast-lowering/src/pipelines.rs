@@ -90,10 +90,10 @@ fn visit_pipeline_statement(
             }
 
             if let Some(prev) = pipeline_ctx.previous_def(name) {
-                return Err(Error::DuplicatePipelineStage {
-                    stage: name.clone(),
-                    previous: prev,
-                });
+                return Err(Diagnostic::error(name, "Stage was already defined")
+                    .primary_label(format!("'{} has already been defined", name))
+                    .secondary_label(prev, "Previously defined here")
+                    .into());
             }
             pipeline_ctx.stages[*current_stage] = Some(name.clone());
         }

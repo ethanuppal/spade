@@ -2,13 +2,13 @@
 source: spade-tests/src/ast_lowering.rs
 expression: "std::str::from_utf8(buffer.as_slice()).expect(\"error contains invalid utf-8\")"
 ---
-error: Stage a was already defined
+error: Stage was already defined
   ┌─ testinput:5:10
   │
 3 │         'a
-  │          - Previous definition
+  │          - Previously defined here
 4 │     reg;
 5 │         'a
-  │          ^ duplicate pipeline stage
+  │          ^ 'a has already been defined
 
 

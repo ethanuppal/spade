@@ -51,11 +51,6 @@ pub enum Error {
     EarlyPipelineReturn { expression: Loc<hir::Expression> },
     #[error("Pipeline missing clock")]
     MissingPipelineClock { at_loc: Loc<()> },
-    #[error("Duplicate pipeline stage")]
-    DuplicatePipelineStage {
-        stage: Loc<Identifier>,
-        previous: Loc<Identifier>,
-    },
 
     #[error("Declarations can only be defined by registers")]
     DeclarationOfNonReg {

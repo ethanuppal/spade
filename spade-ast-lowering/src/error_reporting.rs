@@ -56,16 +56,6 @@ impl CompilationError for Error {
                     .primary_label()
                     .with_message(format!("Expected clock argument"))])
                 .with_notes(vec![format!("All pipelines take a clock as an argument")]),
-            Error::DuplicatePipelineStage { stage, previous } => Diagnostic::error()
-                .with_message(format!("Stage {stage} was already defined"))
-                .with_labels(vec![
-                    stage
-                        .primary_label()
-                        .with_message(format!("duplicate pipeline stage")),
-                    previous
-                        .secondary_label()
-                        .with_message("Previous definition"),
-                ]),
             Error::DeclarationOfNonReg {
                 at,
                 declaration_location,
