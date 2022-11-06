@@ -376,6 +376,7 @@ impl ParameterList {
 
 #[derive(PartialEq, Debug, Clone)]
 pub struct FunctionHead {
+    pub name: Loc<Identifier>,
     pub inputs: ParameterList,
     pub output_type: Option<Loc<TypeSpec>>,
     pub type_params: Vec<Loc<TypeParam>>,
@@ -384,6 +385,7 @@ impl WithLocation for FunctionHead {}
 
 #[derive(PartialEq, Debug, Clone, Serialize, Deserialize)]
 pub struct EntityHead {
+    pub name: Loc<Identifier>,
     pub inputs: ParameterList,
     pub output_type: Option<Loc<TypeSpec>>,
     pub type_params: Vec<Loc<TypeParam>>,
@@ -392,6 +394,7 @@ impl WithLocation for EntityHead {}
 
 #[derive(PartialEq, Debug, Clone, Serialize, Deserialize)]
 pub struct PipelineHead {
+    pub name: Loc<Identifier>,
     pub depth: Loc<usize>,
     pub inputs: ParameterList,
     pub output_type: Option<Loc<TypeSpec>>,

@@ -256,6 +256,7 @@ pub fn re_visit_type_declaration(
                 }
 
                 let variant_thing = EnumVariant {
+                    name: option.0.clone(),
                     output_type: hir::TypeSpec::Declared(
                         declaration_id.clone(),
                         output_type_exprs.clone(),
@@ -341,6 +342,7 @@ pub fn re_visit_type_declaration(
                 declaration_id.inner.clone(),
                 Thing::Struct(
                     StructCallable {
+                        name: t.name.clone(),
                         self_type,
                         params: members.clone(),
                         type_params: type_params.clone(),

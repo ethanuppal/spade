@@ -84,6 +84,7 @@ mod tests {
     use spade_ast::testutil::ast_path;
     use spade_common::location_info::WithLocation;
     use spade_common::name::testutil::name_id;
+    use spade_common::name::Identifier;
     use spade_hir::symbol_table::SymbolTable;
 
     #[test]
@@ -96,6 +97,7 @@ mod tests {
         let pipeline = Pipeline {
             name: hir::UnitName::WithID(name_id(0, "pipe")),
             head: hir::PipelineHead {
+                name: Identifier("".to_string()).nowhere(),
                 depth: 3.nowhere(),
                 inputs: hir::ParameterList(vec![(ast_ident("clk"), dtype!(symtab => "bool"))]),
                 output_type: Some(dtype!(symtab => "int"; (t_num(5)))),

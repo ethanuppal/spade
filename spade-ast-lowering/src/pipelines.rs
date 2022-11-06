@@ -60,6 +60,7 @@ pub fn pipeline_head(input: &ast::Pipeline, symtab: &mut SymbolTable) -> Result<
     };
 
     Ok(hir::PipelineHead {
+        name: input.name.clone(),
         depth,
         inputs,
         output_type,

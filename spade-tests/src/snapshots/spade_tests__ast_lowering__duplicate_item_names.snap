@@ -4,12 +4,11 @@ expression: "std::str::from_utf8(buffer.as_slice()).expect(\"error contains inva
 ---
 error: Multiple items with the same name
   ┌─ testinput:4:4
-  │  
-1 │ ╭ fn a() -> bool {
-2 │ │     true
-3 │ │ }
-  │ ╰─' Previous definition here
-4 │   fn a() -> bool {
-  │      ^ a is defined multiple times
+  │
+1 │ fn a() -> bool {
+  │    - Previous definition here
+  ·
+4 │ fn a() -> bool {
+  │    ^ a is defined multiple times
 
 

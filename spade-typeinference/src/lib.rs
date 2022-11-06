@@ -2046,6 +2046,7 @@ mod tests {
 
         // Add the entity to the symtab
         let entity = hir::EntityHead {
+            name: Identifier("".to_string()).nowhere(),
             inputs: hir::ParameterList(vec![
                 (ast_ident("a"), dtype!(symtab => "bool")),
                 (ast_ident("b"), dtype!(symtab => "int"; (t_num(10)))),
@@ -2119,6 +2120,7 @@ mod tests {
 
         // Add the entity to the symtab
         let entity = hir::PipelineHead {
+            name: Identifier("".to_string()).nowhere(),
             depth: 2.nowhere(),
             inputs: hir::ParameterList(vec![
                 (ast_ident("a"), dtype!(symtab => "bool")),

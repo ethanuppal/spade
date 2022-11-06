@@ -274,6 +274,7 @@ pub fn entity_head(item: &ast::Entity, symtab: &mut SymbolTable) -> Result<Entit
     port_error?;
 
     Ok(EntityHead {
+        name: item.name.clone(),
         inputs,
         output_type,
         type_params,
@@ -1070,6 +1071,7 @@ mod entity_visiting {
         let expected = hir::Entity {
             name: UnitName::FullPath(name_id(0, "test")),
             head: hir::EntityHead {
+                name: Identifier("test".to_string()).nowhere(),
                 inputs: hir::ParameterList(vec![(ast_ident("a"), hir::TypeSpec::unit().nowhere())]),
                 output_type: None,
                 type_params: vec![],
@@ -1665,6 +1667,7 @@ mod expression_visiting {
         let mut symtab = SymbolTable::new();
 
         let enum_variant = EnumVariant {
+            name: Identifier("".to_string()).nowhere(),
             output_type: hir::TypeSpec::Unit(().nowhere()).nowhere(),
             option: 0,
             params: hir::ParameterList(vec![(
@@ -1731,6 +1734,7 @@ mod expression_visiting {
         let mut symtab = SymbolTable::new();
 
         let enum_variant = EnumVariant {
+            name: Identifier("".to_string()).nowhere(),
             output_type: hir::TypeSpec::Unit(().nowhere()).nowhere(),
             option: 0,
             params: hir::ParameterList(vec![(
@@ -1785,6 +1789,7 @@ mod expression_visiting {
             ast_path("test").inner,
             Thing::Entity(
                 EntityHead {
+                    name: Identifier("".to_string()).nowhere(),
                     inputs: hir::ParameterList(vec![
                         (ast_ident("a"), hir::TypeSpec::unit().nowhere()),
                         (ast_ident("b"), hir::TypeSpec::unit().nowhere()),
@@ -1844,6 +1849,7 @@ mod expression_visiting {
             ast_path("test").inner,
             Thing::Entity(
                 EntityHead {
+                    name: Identifier("".to_string()).nowhere(),
                     inputs: hir::ParameterList(vec![
                         (ast_ident("a"), hir::TypeSpec::unit().nowhere()),
                         (ast_ident("b"), hir::TypeSpec::unit().nowhere()),
@@ -1897,6 +1903,7 @@ mod expression_visiting {
             ast_path("test").inner,
             Thing::Function(
                 EntityHead {
+                    name: Identifier("".to_string()).nowhere(),
                     inputs: hir::ParameterList(vec![
                         (ast_ident("a"), hir::TypeSpec::unit().nowhere()),
                         (ast_ident("b"), hir::TypeSpec::unit().nowhere()),
@@ -1952,6 +1959,7 @@ mod expression_visiting {
             ast_path("test").inner,
             Thing::Pipeline(
                 PipelineHead {
+                    name: Identifier("".to_string()).nowhere(),
                     depth: 2.nowhere(),
                     inputs: hir::ParameterList(vec![
                         (ast_ident("a"), hir::TypeSpec::unit().nowhere()),
@@ -2053,6 +2061,7 @@ mod pattern_visiting {
             type_name.clone(),
             Thing::Struct(
                 StructCallable {
+                    name: Identifier("".to_string()).nowhere(),
                     self_type: hir::TypeSpec::Declared(type_name.clone().nowhere(), vec![])
                         .nowhere(),
                     params: hir::ParameterList(vec![
@@ -2191,6 +2200,7 @@ mod item_visiting {
             hir::Entity {
                 name: hir::UnitName::FullPath(name_id(0, "test")),
                 head: EntityHead {
+                    name: Identifier("test".to_string()).nowhere(),
                     output_type: None,
                     inputs: hir::ParameterList(vec![]),
                     type_params: vec![],
@@ -2264,6 +2274,7 @@ mod module_visiting {
                     hir::Entity {
                         name: hir::UnitName::FullPath(name_id(0, "test")),
                         head: EntityHead {
+                            name: Identifier("test".to_string()).nowhere(),
                             output_type: None,
                             inputs: hir::ParameterList(vec![]),
                             type_params: vec![],

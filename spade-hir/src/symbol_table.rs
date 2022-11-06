@@ -224,6 +224,7 @@ pub enum UniqueNameError {
 
 #[derive(PartialEq, Debug, Clone, Serialize, Deserialize)]
 pub struct EnumVariant {
+    pub name: Loc<Identifier>,
     pub output_type: Loc<TypeSpec>,
     pub option: usize,
     pub params: ParameterList,
@@ -234,6 +235,7 @@ impl WithLocation for EnumVariant {}
 impl EnumVariant {
     pub fn as_function_head(&self) -> FunctionHead {
         FunctionHead {
+            name: self.name.clone(),
             inputs: self.params.clone(),
             output_type: Some(self.output_type.clone()),
             type_params: self.type_params.clone(),
@@ -243,6 +245,7 @@ impl EnumVariant {
 
 #[derive(PartialEq, Debug, Clone, Serialize, Deserialize)]
 pub struct StructCallable {
+    pub name: Loc<Identifier>,
     pub self_type: Loc<TypeSpec>,
     pub params: ParameterList,
     pub type_params: Vec<Loc<TypeParam>>,
@@ -251,6 +254,7 @@ impl WithLocation for StructCallable {}
 impl StructCallable {
     pub fn as_function_head(&self) -> FunctionHead {
         FunctionHead {
+            name: self.name.clone(),
             inputs: self.params.clone(),
             output_type: Some(self.self_type.clone()),
             type_params: self.type_params.clone(),
@@ -261,11 +265,13 @@ impl StructCallable {
 impl EntityHead {
     pub fn as_function_head(&self) -> FunctionHead {
         let EntityHead {
+            name,
             inputs,
             type_params,
             output_type,
         } = self;
         FunctionHead {
+            name: name.clone(),
             inputs: inputs.clone(),
             type_params: type_params.clone(),
             output_type: output_type.clone(),
@@ -276,11 +282,13 @@ impl EntityHead {
 impl FunctionHead {
     pub fn as_entity_head(&self) -> EntityHead {
         let FunctionHead {
+            name,
             inputs,
             type_params,
             output_type,
         } = self;
         EntityHead {
+            name: name.clone(),
             inputs: inputs.clone(),
             type_params: type_params.clone(),
             output_type: output_type.clone(),
@@ -322,6 +330,7 @@ impl Thing {
         }
     }
 
+    /// The Loc of the entire Thing.
     pub fn loc(&self) -> Loc<()> {
         match self {
             Thing::Struct(i) => i.loc(),
@@ -336,6 +345,24 @@ impl Thing {
             } => path.loc(),
             Thing::PipelineStage(i) => i.loc(),
             Thing::ComptimeConfig(val) => val.loc(),
+        }
+    }
+
+    /// The Loc where the name of the thing is defined.
+    pub fn name_loc(&self) -> Loc<()> {
+        match self {
+            Thing::Struct(s) => s.name.loc(),
+            Thing::EnumVariant(v) => v.name.loc(),
+            Thing::Function(f) => f.name.loc(),
+            Thing::Entity(e) => e.name.loc(),
+            Thing::Pipeline(p) => p.name.loc(),
+            Thing::Variable(v) => v.loc(),
+            Thing::Alias {
+                path,
+                in_namespace: _,
+            } => path.loc(),
+            Thing::PipelineStage(_) => todo!(),
+            Thing::ComptimeConfig(_) => todo!(),
         }
     }
 }
@@ -801,7 +828,7 @@ impl SymbolTable {
             .and_then(|id| {
                 self.things
                     .get(id)
-                    .map(Thing::loc)
+                    .map(|thing| thing.name_loc())
                     .or_else(|| self.types.get(id).map(|t| t.loc()))
             });
 
