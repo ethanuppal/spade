@@ -212,15 +212,6 @@ impl CompilationError for LookupError {
 }
 
 #[derive(Error, Debug, Clone, PartialEq)]
-pub enum DeclarationError {
-    #[error("Duplicate declaration")]
-    DuplicateDeclaration {
-        new: Loc<Identifier>,
-        old: Loc<Identifier>,
-    },
-}
-
-#[derive(Error, Debug, Clone, PartialEq)]
 pub enum UniqueNameError {
     #[error("Multiple definitions of {new}")]
     MultipleDefinitions { new: Loc<Path>, prev: Loc<()> },
@@ -589,22 +580,24 @@ impl SymbolTable {
         self.add_thing_at_offset(offset, path, Thing::Variable(name))
     }
 
-    pub fn add_declaration(&mut self, ident: Loc<Identifier>) -> Result<NameID, DeclarationError> {
+    pub fn add_declaration(
+        &mut self,
+        ident: Loc<Identifier>,
+    ) -> Result<NameID, spade_diagnostics::Diagnostic> {
+        let declared_more_than_once = |new, old| {
+            spade_diagnostics::Diagnostic::error(new, "Variable declared more than once")
+                .primary_label("This variable has been declared more than once")
+                .secondary_label(old, "Previously declared here")
+        };
         // Check if a variable with this name already exists
         if let Some(id) = self.try_lookup_id(&Path(vec![ident.clone()]).at_loc(&ident)) {
             if let Some(Thing::Variable(prev)) = self.things.get(&id) {
-                return Err(DeclarationError::DuplicateDeclaration {
-                    new: ident.clone(),
-                    old: prev.clone(),
-                });
+                return Err(declared_more_than_once(ident, prev).into());
             }
         }
 
         if let Some((old, _)) = self.declarations.last().unwrap().get_key_value(&ident) {
-            Err(DeclarationError::DuplicateDeclaration {
-                new: ident.clone(),
-                old: old.clone(),
-            })
+            Err(declared_more_than_once(ident, old).into())
         } else {
             let name_id = self.add_local_variable(ident.clone());
             self.declarations

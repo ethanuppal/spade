@@ -40,8 +40,6 @@ impl From<PatternListLengthMismatch> for Diagnostic {
 pub enum Error {
     #[error("Lookup error")]
     LookupError(#[from] spade_hir::symbol_table::LookupError),
-    #[error("Declaration error")]
-    DeclarationError(#[from] spade_hir::symbol_table::DeclarationError),
     #[error("Uniqueness error")]
     UniquenessError(#[from] spade_hir::symbol_table::UniqueNameError),
     #[error("Argument error")]

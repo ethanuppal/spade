@@ -641,8 +641,8 @@ fn visit_statement(s: &Loc<ast::Statement>, ctx: &mut Context) -> Result<Vec<Loc
                 .map(|name| {
                     ctx.symtab
                         .add_declaration(name.clone())
-                        .map_err(Error::DeclarationError)
-                        .map(|id| id.at_loc(name))
+                        .map(|decl| decl.at_loc(name))
+                        .map_err(Error::SpadeDiagnostic)
                 })
                 .collect::<Result<Vec<_>>>()?;
 

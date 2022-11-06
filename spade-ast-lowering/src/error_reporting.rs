@@ -3,7 +3,7 @@ use codespan_reporting::term::{self, termcolor::Buffer};
 use spade_common::location_info::AsLabel;
 use spade_diagnostics::emitter::codespan_config;
 use spade_diagnostics::{CodeBundle, CompilationError, DiagHandler};
-use spade_hir::symbol_table::{DeclarationError, UniqueNameError};
+use spade_hir::symbol_table::UniqueNameError;
 
 use crate::Error;
 
@@ -22,16 +22,6 @@ impl CompilationError for Error {
         }
         let diag = match self {
             Error::ArgumentError(_) | Error::LookupError(_) => unreachable!("Already handled"),
-            Error::DeclarationError(DeclarationError::DuplicateDeclaration { old, new }) => {
-                Diagnostic::error()
-                    .with_message(format!("A previous declaration of {} exists", new))
-                    .with_labels(vec![
-                        new.primary_label()
-                            .with_message(format!("{} was declared more than once", new)),
-                        old.primary_label()
-                            .with_message(format!("Previously declared here")),
-                    ])
-            }
             Error::UniquenessError(UniqueNameError::MultipleDefinitions { new, prev }) => {
                 Diagnostic::error()
                     .with_message(format!("Multiple definitions of {new}"))
