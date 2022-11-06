@@ -14,6 +14,11 @@ use spade_diagnostics::{CodeBundle, CompilationError, DiagHandler};
 
 use crate::{EntityHead, FunctionHead, ParameterList, PipelineHead, TypeParam, TypeSpec};
 
+pub struct ThingCollision {
+    pub prev: Loc<()>,
+    pub new: Loc<Path>,
+}
+
 #[derive(Error, Debug, Clone, PartialEq)]
 pub enum LookupError {
     #[error("No such symbol")]
@@ -496,7 +501,7 @@ impl SymbolTable {
         &mut self,
         name: Loc<Path>,
         item: Thing,
-    ) -> Result<NameID, UniqueNameError> {
+    ) -> Result<NameID, ThingCollision> {
         self.ensure_is_unique(&name)?;
         Ok(self.add_thing(name.inner, item))
     }
@@ -529,7 +534,7 @@ impl SymbolTable {
         &mut self,
         name: Loc<Path>,
         t: Loc<TypeSymbol>,
-    ) -> Result<NameID, UniqueNameError> {
+    ) -> Result<NameID, ThingCollision> {
         self.ensure_is_unique(&name)?;
 
         Ok(self.add_type(name.inner, t))
@@ -540,7 +545,7 @@ impl SymbolTable {
         &mut self,
         name: Loc<Path>,
         target: Loc<Path>,
-    ) -> Result<NameID, UniqueNameError> {
+    ) -> Result<NameID, ThingCollision> {
         self.ensure_is_unique(&name)?;
         let absolute_path = if let Some(lib_relative) = target.inner.lib_relative() {
             self.base_namespace.join(lib_relative)
@@ -785,7 +790,7 @@ impl SymbolTable {
     /// Look up the previous definition of `name` returning None if no
     /// such definition exists. Only an absolute path in the root name space is checked
     /// as this is intended to be used for item definitions
-    pub fn ensure_is_unique(&self, name: &Loc<Path>) -> Result<(), UniqueNameError> {
+    pub fn ensure_is_unique(&self, name: &Loc<Path>) -> Result<(), ThingCollision> {
         let full_path = self.current_namespace().join(name.inner.clone());
 
         let prev = self
@@ -801,9 +806,9 @@ impl SymbolTable {
             });
 
         match prev {
-            Some(prev) => Err(UniqueNameError::MultipleDefinitions {
-                new: name.clone(),
+            Some(prev) => Err(ThingCollision {
                 prev,
+                new: name.clone(),
             }),
             None => Ok(()),
         }
