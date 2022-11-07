@@ -179,7 +179,7 @@ pub fn visit_pipeline(pipeline: &Loc<ast::Pipeline>, ctx: &mut Context) -> Resul
 
     if current_stage as u128 != depth.inner {
         return Err(
-            Diagnostic::error(pipeline, "Wrong amount of pipeline stages")
+            Diagnostic::error(pipeline, "Wrong number of pipeline stages")
                 .primary_label(format!("Found {} stages here", current_stage))
                 .secondary_label(depth, format!("{} stages specified here", depth))
                 .into(),
