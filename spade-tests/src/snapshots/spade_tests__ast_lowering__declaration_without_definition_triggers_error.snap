@@ -8,6 +8,7 @@ error: Declared variable is not defined
 2 │     decl x;
   │          ^ This variable is declared but not defined
   │
-  = help: Consider defining x with a let or reg binding
+  = help: Define x with a let or reg binding
+  = help: Or, remove the declaration if the variable is unused
 
 

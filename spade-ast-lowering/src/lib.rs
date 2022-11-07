@@ -983,9 +983,9 @@ fn visit_block(b: &ast::Block, ctx: &mut Context) -> Result<hir::Block> {
         return Err(
             Diagnostic::error(undefined, "Declared variable is not defined")
                 .primary_label("This variable is declared but not defined")
-                .help(format!(
-                    "Consider defining {undefined} with a let or reg binding"
-                ))
+                // FIXME: Suggest removing the declaration (with a diagnostic suggestion) only if the variable is unused.
+                .help(format!("Define {undefined} with a let or reg binding"))
+                .help("Or, remove the declaration if the variable is unused")
                 .into(),
         );
     }
