@@ -237,6 +237,7 @@ impl AttributeList {
 
 #[derive(PartialEq, Debug, Clone)]
 pub struct ParameterList(pub Vec<(Loc<Identifier>, Loc<TypeSpec>)>);
+impl WithLocation for ParameterList {}
 
 #[derive(PartialEq, Debug, Clone)]
 pub struct Entity {
@@ -259,7 +260,7 @@ pub struct Pipeline {
     pub attributes: AttributeList,
     pub depth: Loc<u128>,
     pub name: Loc<Identifier>,
-    pub inputs: ParameterList,
+    pub inputs: Loc<ParameterList>,
     pub output_type: Option<Loc<TypeSpec>>,
     /// The body is an expression for ID assignment purposes, but semantic analysis
     /// ensures that it is always a block. If body is `None`, the entity is __builtin__

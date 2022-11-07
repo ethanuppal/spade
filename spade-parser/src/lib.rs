@@ -1035,10 +1035,11 @@ impl<'a> Parser<'a> {
         let name = self.identifier()?;
 
         // Input types
-        self.eat(&TokenKind::OpenParen)?;
+        let open_paren = self.eat(&TokenKind::OpenParen)?;
         // FIXME: Can we use surrounded here?
         let inputs = self.parameter_list()?;
         let close_paren = self.eat(&TokenKind::CloseParen)?;
+        let inputs = inputs.between(self.file_id, &open_paren.span, &close_paren.span);
 
         // Return type
         let output_type = if self.peek_and_eat(&TokenKind::SlimArrow)?.is_some() {
@@ -2390,7 +2391,7 @@ mod tests {
             Pipeline {
                 attributes: AttributeList::empty(),
                 name: ast_ident("X"),
-                inputs: ParameterList(vec![]),
+                inputs: ParameterList(vec![]).nowhere(),
                 output_type: None,
                 depth: 1.nowhere(),
                 body: None,
@@ -2478,7 +2479,7 @@ mod tests {
                 attributes: AttributeList(vec![ast_ident("attr")]),
                 depth: Loc::new(2, lspan(0..0), 0),
                 name: ast_ident("test"),
-                inputs: aparams![("a", tspec!("bool"))],
+                inputs: aparams![("a", tspec!("bool"))].nowhere(),
                 output_type: None,
                 body: None,
                 type_params: vec![],
@@ -2598,7 +2599,7 @@ mod tests {
             attributes: AttributeList::empty(),
             depth: Loc::new(2, lspan(0..0), 0),
             name: ast_ident("test"),
-            inputs: aparams![("a", tspec!("bool"))],
+            inputs: aparams![("a", tspec!("bool"))].nowhere(),
             output_type: Some(TypeSpec::Named(ast_path("bool"), None).nowhere()),
             body: Some(
                 Expression::Block(Box::new(Block {
@@ -2644,7 +2645,7 @@ mod tests {
             attributes: AttributeList::empty(),
             depth: Loc::new(2, lspan(0..0), 0),
             name: ast_ident("test"),
-            inputs: aparams![("a", tspec!("bool"))],
+            inputs: aparams![("a", tspec!("bool"))].nowhere(),
             output_type: Some(TypeSpec::Named(ast_path("bool"), None).nowhere()),
             body: Some(
                 Expression::Block(Box::new(Block {
@@ -2674,7 +2675,7 @@ mod tests {
                     attributes: AttributeList::empty(),
                     depth: Loc::new(2, lspan(0..0), 0),
                     name: ast_ident("test"),
-                    inputs: aparams![("a", tspec!("bool"))],
+                    inputs: aparams![("a", tspec!("bool"))].nowhere(),
                     output_type: Some(TypeSpec::Named(ast_path("bool"), None).nowhere()),
                     body: Some(
                         Expression::Block(Box::new(Block {
