@@ -167,6 +167,8 @@ impl CompilationError for LookupError {
                         was.kind_string()
                     )),
                 ]),
+            // FIXME: We can do suggestions depending on `was`. For example, a struct/enum variant can be initialized,
+            // an entity can be instantiated, ...
             LookupError::NotAValue(path, was) => Diagnostic::error()
                 .with_message(format!("Expected {} to be a value", path))
                 .with_labels(vec![
