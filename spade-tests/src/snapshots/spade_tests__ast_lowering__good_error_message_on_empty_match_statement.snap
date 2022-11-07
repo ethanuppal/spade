@@ -9,6 +9,6 @@ error: Match body has no arms
   │ ╭─────────────^
 3 │ │ 
 4 │ │     }
-  │ ╰─────^
+  │ ╰─────^ This match body
 
 
