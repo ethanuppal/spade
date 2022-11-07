@@ -602,3 +602,34 @@ snapshot_error! {
         }
     "
 }
+
+snapshot_error! {
+    pattern_list_length_mismatch_struct,
+    "
+        struct X {
+            a: bool,
+            B: bool
+        }
+
+        fn main(x: X) -> X {
+            let X(a, b, c) = x;
+            x
+        }
+
+    "
+}
+
+snapshot_error! {
+    pattern_list_length_mismatch_enum_variant,
+    "
+    enum X {
+        A { one: bool, two: bool }
+    }
+
+    fn main(x: X) -> X {
+        match x {
+            X::A(one, two, three) => x
+        }
+    }
+    "
+}

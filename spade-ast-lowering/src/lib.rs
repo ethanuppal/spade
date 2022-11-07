@@ -461,7 +461,6 @@ fn try_lookup_enum_variant(path: &Loc<Path>, ctx: &mut Context) -> Result<hir::P
             if variant.inner.params.argument_num() == 0 {
                 Ok(hir::PatternKind::Type(name_id.at_loc(path), vec![]))
             } else {
-                // FIXME: When is this raised?
                 Err(Diagnostic::from(error::PatternListLengthMismatch {
                     expected: variant.inner.params.argument_num(),
                     got: 0,
@@ -599,7 +598,6 @@ pub fn visit_pattern(p: &ast::Pattern, ctx: &mut Context) -> Result<hir::Pattern
                         ast::ArgumentPattern::Positional(patterns) => {
                             // Ensure we have the correct amount of arguments
                             if p.params.argument_num() != patterns.len() {
-                                // FIXME: When is this raised?
                                 return Err(Diagnostic::from(error::PatternListLengthMismatch {
                                     expected: p.params.argument_num(),
                                     got: patterns.len(),
