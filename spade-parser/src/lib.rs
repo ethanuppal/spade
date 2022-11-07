@@ -13,7 +13,7 @@ use parse_tree_macros::trace_parser;
 use spade_ast::{
     ArgumentList, ArgumentPattern, AttributeList, Block, ComptimeConfig, Entity, Enum, Expression,
     FunctionDecl, Item, Module, ModuleBody, NamedArgument, ParameterList, Pattern, Pipeline,
-    PipelineReference, Register, Statement, Struct, TraitDef, TypeDeclKind, TypeDeclaration,
+    PipelineStageReference, Register, Statement, Struct, TraitDef, TypeDeclKind, TypeDeclaration,
     TypeExpression, TypeParam, TypeSpec, UseStatement,
 };
 use spade_common::location_info::{lspan, AsLabel, FullSpan, HasCodespan, Loc, WithLocation};
@@ -333,7 +333,7 @@ impl<'a> Parser<'a> {
 
         let next = self.peek()?;
         let reference = match next.as_ref().map(|tok| tok.kind.clone()) {
-            Some(TokenKind::Identifier(_)) => PipelineReference::Absolute(self.identifier()?),
+            Some(TokenKind::Identifier(_)) => PipelineStageReference::Absolute(self.identifier()?),
             Some(TokenKind::Plus) => {
                 let plus = self.eat(&TokenKind::Plus)?;
                 let num = if let Some(d) = self.int_literal()? {
@@ -345,7 +345,7 @@ impl<'a> Parser<'a> {
                 };
 
                 let offset = (num.inner as i64).between(plus.file_id, &plus, &num);
-                PipelineReference::Relative(offset)
+                PipelineStageReference::Relative(offset)
             }
             Some(TokenKind::Minus) => {
                 let minus = self.eat(&TokenKind::Minus)?;
@@ -357,7 +357,7 @@ impl<'a> Parser<'a> {
                     });
                 };
                 let offset = (-(num.inner as i64)).between(minus.file_id, &minus, &num);
-                PipelineReference::Relative(offset)
+                PipelineStageReference::Relative(offset)
             }
             Some(_) => {
                 return Err(Error::UnexpectedToken {
@@ -368,18 +368,23 @@ impl<'a> Parser<'a> {
             _ => return Err(Error::Eof),
         };
 
-        self.eat(&TokenKind::CloseParen)?;
+        let close_paren = self.eat(&TokenKind::CloseParen)?;
 
         self.eat(&TokenKind::Dot)?;
 
         let ident = self.identifier()?;
 
         Ok(Some(
-            Expression::PipelineReference(reference, ident.clone()).between(
-                self.file_id,
-                &start.span,
-                &ident,
-            ),
+            Expression::PipelineReference {
+                stage_kw_and_reference_loc: ().between(
+                    self.file_id,
+                    &start.span,
+                    &close_paren.span,
+                ),
+                stage: reference,
+                name: ident.clone(),
+            }
+            .between(self.file_id, &start.span, &ident),
         ))
     }
 

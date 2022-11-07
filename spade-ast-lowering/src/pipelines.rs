@@ -241,10 +241,11 @@ mod pipeline_visiting {
                         ast::Statement::Binding(
                             ast::Pattern::name("b"),
                             None,
-                            ast::Expression::PipelineReference(
-                                ast::PipelineReference::Relative((-1).nowhere()),
-                                ast_ident("a"),
-                            )
+                            ast::Expression::PipelineReference {
+                                stage_kw_and_reference_loc: ().nowhere(),
+                                stage: ast::PipelineStageReference::Relative((-1).nowhere()),
+                                name: ast_ident("a"),
+                            }
                             .nowhere(),
                         )
                         .nowhere(),
@@ -327,10 +328,11 @@ mod pipeline_visiting {
                         ast::Statement::Binding(
                             ast::Pattern::name("b"),
                             None,
-                            ast::Expression::PipelineReference(
-                                ast::PipelineReference::Absolute(ast_ident("s")),
-                                ast_ident("a"),
-                            )
+                            ast::Expression::PipelineReference {
+                                stage_kw_and_reference_loc: ().nowhere(),
+                                stage: ast::PipelineStageReference::Absolute(ast_ident("s")),
+                                name: ast_ident("a"),
+                            }
                             .nowhere(),
                         )
                         .nowhere(),

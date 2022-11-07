@@ -103,7 +103,7 @@ pub enum UnaryOperator {
 impl WithLocation for UnaryOperator {}
 
 #[derive(PartialEq, Debug, Clone)]
-pub enum PipelineReference {
+pub enum PipelineStageReference {
     Relative(Loc<i64>),
     Absolute(Loc<Identifier>),
 }
@@ -133,7 +133,24 @@ pub enum Expression {
     Block(Box<Block>),
     EntityInstance(Loc<Path>, Loc<ArgumentList>),
     PipelineInstance(Loc<u128>, Loc<Path>, Loc<ArgumentList>),
-    PipelineReference(PipelineReference, Loc<Identifier>),
+    /// E.g. `stage(-5).x`, `stage('b).y`
+    PipelineReference {
+        /// ```text
+        /// stage(-5).xyz
+        /// ^^^^^^^^^
+        /// ```
+        stage_kw_and_reference_loc: Loc<()>,
+        /// ```text
+        /// stage(-5).xyz
+        ///       ^^
+        /// ```
+        stage: PipelineStageReference,
+        /// ```text
+        /// stage(-5).xyz
+        ///           ^^^
+        /// ```
+        name: Loc<Identifier>,
+    },
 }
 impl WithLocation for Expression {}
 
@@ -164,7 +181,7 @@ impl Expression {
             Expression::Block(_) => "block",
             Expression::EntityInstance(_, _) => "entity instance",
             Expression::PipelineInstance(_, _, _) => "pipeline instance",
-            Expression::PipelineReference(_, _) => "pipeline reference",
+            Expression::PipelineReference { .. } => "pipeline reference",
         }
     }
 }

@@ -3,12 +3,12 @@ source: spade-tests/src/ast_lowering.rs
 expression: "std::str::from_utf8(buffer.as_slice()).expect(\"error contains invalid utf-8\")"
 ---
 error: Reference to pipeline stage beyond pipeline depth
-  ┌─ testinput:5:15
+  ┌─ testinput:5:9
   │
 5 │         stage(+1).x
-  │               ^^ This references a pipeline stage beyond the pipeline depth
+  │         ^^^^^^^^^ This references a pipeline stage beyond the pipeline depth
   │
-  = note: Since this is at stage 3, +1 references stage 4
+  = note: Since this is at stage 3, stage(+1) references stage 4
   = note: The pipeline has depth 3
 
 

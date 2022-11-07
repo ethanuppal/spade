@@ -819,10 +819,11 @@ mod test {
     fn absolute_pipeline_references_parse() {
         let code = r#"stage(s).var"#;
 
-        let expected = Expression::PipelineReference(
-            PipelineReference::Absolute(ast_ident("s")),
-            ast_ident("var"),
-        )
+        let expected = Expression::PipelineReference {
+            stage_kw_and_reference_loc: ().nowhere(),
+            stage: PipelineStageReference::Absolute(ast_ident("s")),
+            name: ast_ident("var"),
+        }
         .nowhere();
 
         check_parse!(code, expression, Ok(expected));
@@ -832,10 +833,11 @@ mod test {
     fn relative_forward_pipeline_references_parse() {
         let code = r#"stage(+5).var"#;
 
-        let expected = Expression::PipelineReference(
-            PipelineReference::Relative(5.nowhere()),
-            ast_ident("var"),
-        )
+        let expected = Expression::PipelineReference {
+            stage_kw_and_reference_loc: ().nowhere(),
+            stage: PipelineStageReference::Relative(5.nowhere()),
+            name: ast_ident("var"),
+        }
         .nowhere();
 
         check_parse!(code, expression, Ok(expected));
@@ -845,10 +847,11 @@ mod test {
     fn relative_backward_pipeline_references_parse() {
         let code = r#"stage(-5).var"#;
 
-        let expected = Expression::PipelineReference(
-            PipelineReference::Relative((-5).nowhere()),
-            ast_ident("var"),
-        )
+        let expected = Expression::PipelineReference {
+            stage_kw_and_reference_loc: ().nowhere(),
+            stage: PipelineStageReference::Relative((-5).nowhere()),
+            name: ast_ident("var"),
+        }
         .nowhere();
 
         check_parse!(code, expression, Ok(expected));

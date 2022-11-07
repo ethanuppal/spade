@@ -902,25 +902,25 @@ pub fn visit_expression(e: &ast::Expression, ctx: &mut Context) -> Result<hir::E
 
             Ok(hir::ExprKind::Identifier(id))
         }
-        ast::Expression::PipelineReference(stage, name) => {
+        ast::Expression::PipelineReference { stage_kw_and_reference_loc, stage, name } => {
             let pipeline_ctx = ctx
                 .pipeline_ctx
                 .as_ref()
                 .expect("Expected to have a pipeline context");
 
             let (stage_index, loc) = match stage {
-                ast::PipelineReference::Relative(offset) => {
+                ast::PipelineStageReference::Relative(offset) => {
                     let current = pipeline_ctx.current_stage;
                     let absolute = current as i64 + offset.inner;
 
                     if absolute < 0 {
                         return Err(Diagnostic::error(
-                            offset,
+                            stage_kw_and_reference_loc,
                             "Reference to negative pipeline stage",
                         )
                         .primary_label("This references a negative pipeline stage")
                         .note(format!(
-                            "Since this is at stage {current}, {offset} references stage {absolute}"
+                            "Since this is at stage {current}, stage({offset}) references stage {absolute}"
                         ))
                         .note("Pipeline stages start at 0")
                         .into());
@@ -928,9 +928,9 @@ pub fn visit_expression(e: &ast::Expression, ctx: &mut Context) -> Result<hir::E
                     let absolute = absolute as usize;
                     let pipeline_depth = pipeline_ctx.stages.len();
                     if absolute >= pipeline_depth {
-                        return Err(Diagnostic::error(offset, "Reference to pipeline stage beyond pipeline depth")
+                        return Err(Diagnostic::error(stage_kw_and_reference_loc, "Reference to pipeline stage beyond pipeline depth")
                             .primary_label("This references a pipeline stage beyond the pipeline depth")
-                            .note(format!("Since this is at stage {current}, +{offset} references stage {absolute}"))
+                            .note(format!("Since this is at stage {current}, stage(+{offset}) references stage {absolute}"))
                             .note(format!("The pipeline has depth {}", pipeline_depth - 1))
                             .into()
 
@@ -939,7 +939,7 @@ pub fn visit_expression(e: &ast::Expression, ctx: &mut Context) -> Result<hir::E
 
                     (absolute, offset.loc())
                 }
-                ast::PipelineReference::Absolute(name) => (
+                ast::PipelineStageReference::Absolute(name) => (
                     pipeline_ctx
                         .get_stage(name)
                         .ok_or_else(|| Error::SpadeDiagnostic(Diagnostic::error(name, "Undefined pipeline stage")
