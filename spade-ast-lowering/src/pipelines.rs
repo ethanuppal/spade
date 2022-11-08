@@ -139,12 +139,11 @@ pub fn visit_pipeline(pipeline: &Loc<ast::Pipeline>, ctx: &mut Context) -> Resul
         .expect("Attempting to lower a pipeline that has not been added to the symtab previously");
 
     if head.inputs.0.is_empty() {
-        return Err(Diagnostic::error(
-            ().between_locs(&name, &ast_inputs),
-            "Missing clock argument for pipeline",
-        )
-        .note("All pipelines need to take at least a clock as an argument")
-        .into());
+        return Err(
+            Diagnostic::error(ast_inputs.loc(), "Missing clock argument for pipeline")
+                .note("All pipelines need to take at least a clock as an argument")
+                .into(),
+        );
     }
 
     let unit_name = unit_name(&mut attributes, &id.at_loc(&name), &name, &type_params)?;
