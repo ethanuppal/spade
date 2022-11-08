@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 
 use hir::{
-    symbol_table::{EnumVariant, StructCallable, ThingCollision},
+    symbol_table::{EnumVariant, StructCallable},
     ItemList, TypeExpression,
 };
 use spade_ast as ast;
@@ -12,7 +12,7 @@ use spade_common::{
 use spade_diagnostics::Diagnostic;
 use spade_hir as hir;
 
-use crate::{error::Error, types::IsPort, visit_parameter_list, Result};
+use crate::{types::IsPort, visit_parameter_list, Result};
 use spade_hir::symbol_table::{GenericArg, SymbolTable, Thing, TypeSymbol};
 
 #[tracing::instrument(skip_all)]
@@ -34,12 +34,10 @@ pub fn gather_types(module: &ast::ModuleBody, symtab: &mut SymbolTable) -> Resul
             ast::Item::Pipeline(_) => {}
             ast::Item::TraitDef(_) => {}
             ast::Item::Config(cfg) => {
-                symtab
-                    .add_unique_thing(
-                        Path::ident(cfg.name.clone()).at_loc(&cfg.name),
-                        Thing::ComptimeConfig(cfg.val),
-                    )
-                    .map_err(diagnostic_not_unique)?;
+                symtab.add_unique_thing(
+                    Path::ident(cfg.name.clone()).at_loc(&cfg.name),
+                    Thing::ComptimeConfig(cfg.val),
+                )?;
             }
             ast::Item::Use(u) => {
                 let new_name = match &u.alias {
@@ -47,12 +45,10 @@ pub fn gather_types(module: &ast::ModuleBody, symtab: &mut SymbolTable) -> Resul
                     None => u.path.0.last().unwrap().clone(),
                 };
 
-                symtab
-                    .add_alias(
-                        Path::ident(new_name.clone()).at_loc(&new_name.loc()),
-                        u.path.clone(),
-                    )
-                    .map_err(diagnostic_not_unique)?;
+                symtab.add_alias(
+                    Path::ident(new_name.clone()).at_loc(&new_name.loc()),
+                    u.path.clone(),
+                )?;
             }
         }
     }
@@ -113,13 +109,9 @@ pub fn visit_entity(e: &Loc<ast::Entity>, symtab: &mut SymbolTable) -> Result<()
     let new_path = Path::ident(e.name.clone()).at_loc(&e.name);
 
     if e.is_function {
-        symtab
-            .add_unique_thing(new_path, Thing::Function(head.at_loc(e)))
-            .map_err(diagnostic_not_unique)?;
+        symtab.add_unique_thing(new_path, Thing::Function(head.at_loc(e)))?;
     } else {
-        symtab
-            .add_unique_thing(new_path, Thing::Entity(head.at_loc(e)))
-            .map_err(diagnostic_not_unique)?;
+        symtab.add_unique_thing(new_path, Thing::Entity(head.at_loc(e)))?;
     }
 
     Ok(())
@@ -130,18 +122,9 @@ pub fn visit_pipeline(p: &Loc<ast::Pipeline>, symtab: &mut SymbolTable) -> Resul
 
     let new_path = Path::ident(p.name.clone()).at_loc(&p.name);
 
-    symtab
-        .add_unique_thing(new_path, Thing::Pipeline(head.at_loc(p)))
-        .map_err(diagnostic_not_unique)?;
+    symtab.add_unique_thing(new_path, Thing::Pipeline(head.at_loc(p)))?;
 
     Ok(())
-}
-
-fn diagnostic_not_unique(collision: ThingCollision) -> Error {
-    Diagnostic::error(&collision.new, "Multiple items with the same name")
-        .primary_label(format!("{} is defined multiple times", collision.new))
-        .secondary_label(collision.prev, "Previous definition here")
-        .into()
 }
 
 pub fn visit_type_declaration(
@@ -168,9 +151,7 @@ pub fn visit_type_declaration(
     };
 
     let new_thing = Path::ident(t.name.clone()).at_loc(&t.name.loc());
-    symtab
-        .add_unique_type(new_thing, TypeSymbol::Declared(args, kind).at_loc(&t))
-        .map_err(diagnostic_not_unique)?;
+    symtab.add_unique_type(new_thing, TypeSymbol::Declared(args, kind).at_loc(&t))?;
 
     Ok(())
 }

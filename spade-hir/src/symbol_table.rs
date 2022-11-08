@@ -9,15 +9,11 @@ use thiserror::Error;
 use spade_common::id_tracker::NameIdTracker;
 use spade_common::location_info::{AsLabel, Loc, WithLocation};
 use spade_common::name::{Identifier, NameID, Path};
+use spade_diagnostics::diagnostic::Diagnostic as SpadeDiagnostic;
 use spade_diagnostics::emitter::codespan_config;
 use spade_diagnostics::{CodeBundle, CompilationError, DiagHandler};
 
 use crate::{EntityHead, FunctionHead, ParameterList, PipelineHead, TypeParam, TypeSpec};
-
-pub struct ThingCollision {
-    pub prev: Loc<()>,
-    pub new: Loc<Path>,
-}
 
 #[derive(Error, Debug, Clone, PartialEq)]
 pub enum LookupError {
@@ -528,7 +524,7 @@ impl SymbolTable {
         &mut self,
         name: Loc<Path>,
         item: Thing,
-    ) -> Result<NameID, ThingCollision> {
+    ) -> Result<NameID, SpadeDiagnostic> {
         self.ensure_is_unique(&name)?;
         Ok(self.add_thing(name.inner, item))
     }
@@ -561,7 +557,7 @@ impl SymbolTable {
         &mut self,
         name: Loc<Path>,
         t: Loc<TypeSymbol>,
-    ) -> Result<NameID, ThingCollision> {
+    ) -> Result<NameID, SpadeDiagnostic> {
         self.ensure_is_unique(&name)?;
 
         Ok(self.add_type(name.inner, t))
@@ -572,7 +568,7 @@ impl SymbolTable {
         &mut self,
         name: Loc<Path>,
         target: Loc<Path>,
-    ) -> Result<NameID, ThingCollision> {
+    ) -> Result<NameID, SpadeDiagnostic> {
         self.ensure_is_unique(&name)?;
         let absolute_path = if let Some(lib_relative) = target.inner.lib_relative() {
             self.base_namespace.join(lib_relative)
@@ -612,12 +608,9 @@ impl SymbolTable {
         self.add_thing_at_offset(offset, path, Thing::Variable(name))
     }
 
-    pub fn add_declaration(
-        &mut self,
-        ident: Loc<Identifier>,
-    ) -> Result<NameID, spade_diagnostics::Diagnostic> {
+    pub fn add_declaration(&mut self, ident: Loc<Identifier>) -> Result<NameID, SpadeDiagnostic> {
         let declared_more_than_once = |new, old| {
-            spade_diagnostics::Diagnostic::error(new, "Variable declared more than once")
+            SpadeDiagnostic::error(new, "Variable declared more than once")
                 .primary_label("This variable has been declared more than once")
                 .secondary_label(old, "Previously declared here")
         };
@@ -817,7 +810,7 @@ impl SymbolTable {
     /// Look up the previous definition of `name` returning None if no
     /// such definition exists. Only an absolute path in the root name space is checked
     /// as this is intended to be used for item definitions
-    pub fn ensure_is_unique(&self, name: &Loc<Path>) -> Result<(), ThingCollision> {
+    pub fn ensure_is_unique(&self, name: &Loc<Path>) -> Result<(), SpadeDiagnostic> {
         let full_path = self.current_namespace().join(name.inner.clone());
 
         let prev = self
@@ -833,10 +826,11 @@ impl SymbolTable {
             });
 
         match prev {
-            Some(prev) => Err(ThingCollision {
-                prev,
-                new: name.clone(),
-            }),
+            Some(prev) => Err(
+                SpadeDiagnostic::error(name, "Multiple items with the same name")
+                    .primary_label(format!("{} is defined multiple times", name))
+                    .secondary_label(prev, "Previous definition here"),
+            ),
             None => Ok(()),
         }
     }
