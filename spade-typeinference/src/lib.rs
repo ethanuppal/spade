@@ -352,7 +352,21 @@ impl TypeState {
     }
 
     #[trace_typechecker]
+    #[tracing::instrument(level = "trace", skip_all)]
     fn visit_argument_list(
+        &mut self,
+        args: &Loc<ArgumentList>,
+        ctx: &Context,
+        generic_list: &GenericListToken,
+    ) -> Result<()> {
+        for expr in args.expressions() {
+            self.visit_expression(expr, ctx, generic_list)?;
+        }
+        Ok(())
+    }
+
+    #[trace_typechecker]
+    fn type_check_argument_list(
         &mut self,
         args: &[Argument],
         ctx: &Context,
@@ -368,7 +382,6 @@ impl TypeState {
             },
         ) in args.into_iter().enumerate()
         {
-            self.visit_expression(&value, ctx, generic_list)?;
             let target_type = self.type_var_from_hir(&target_type, generic_list);
 
             self.unify(&target_type, &value.inner, &ctx.symtab)
@@ -444,6 +457,8 @@ impl TypeState {
                     &head.inner,
                     args,
                     ctx,
+                    true,
+                    false,
                 )?;
             }
             ExprKind::PipelineInstance {
@@ -459,6 +474,8 @@ impl TypeState {
                     &head.inner,
                     args,
                     ctx,
+                    true,
+                    false,
                 )?;
             }
             ExprKind::FnCall(name, args) => {
@@ -470,6 +487,8 @@ impl TypeState {
                     &head.inner,
                     args,
                     ctx,
+                    true,
+                    false,
                 )?;
             }
             ExprKind::PipelineRef { .. } => {
@@ -490,12 +509,23 @@ impl TypeState {
         head: &impl FunctionLike,
         args: &Loc<ArgumentList>,
         ctx: &Context,
+        // Wether or not to visit the arguemnt expressions passed to the function here. This
+        // should not be done if the expressoins have been visited before, for example, when
+        // handling methods
+        visit_args: bool,
+        // If we are calling a method, we have an implicit self argument which means
+        // that any error reporting number of arguments should be reduced by one
+        is_method: bool,
     ) -> Result<()> {
         // Add new symbols for all the type parameters
         let generic_list = self.create_generic_list(
             GenericListSource::Expression(expression_id.inner),
             head.type_params(),
         );
+
+        if visit_args {
+            self.visit_argument_list(args, ctx, &generic_list)?;
+        }
 
         let type_params = head.type_params();
 
@@ -523,7 +553,7 @@ impl TypeState {
             };
         }
 
-        let args = match_args_with_params(args, head.inputs())?;
+        let args = match_args_with_params(args, head.inputs(), is_method)?;
 
         handle_special_functions! {
             ["std", "conv", "concat"] => {
@@ -564,7 +594,7 @@ impl TypeState {
         );
 
         // Unify the types of the arguments
-        self.visit_argument_list(&args, ctx, &generic_list)?;
+        self.type_check_argument_list(&args, ctx, &generic_list)?;
 
         self.unify(expression_type, &return_type, ctx.symtab)
             .map_normal_err(|(expected, got)| Error::UnspecifiedTypeError {

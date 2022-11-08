@@ -1831,6 +1831,38 @@ mod tests {
 
         build_items(code);
     }
+
+    #[test]
+    fn struct_method_call_calls_the_right_function() {
+        let code = r#"
+            struct X {}
+            impl X {
+                fn a(self) -> bool {
+                    true
+                }
+            }
+
+            entity test(x: X) -> bool {
+                x.a()
+            }
+        "#;
+
+        let x_type = Type::Tuple(vec![]);
+        let expected = vec![
+            entity! {"test"; (
+                "x", n(0, "x"), x_type.clone(),
+            ) -> Type::Bool; {
+                (e(0); Type::Bool; Instance(("impl_0_a".to_string(), None)); n(0, "x"))
+            } => e(0)},
+            entity! {"impl_0_a"; (
+                "self", n(1, "self"), x_type,
+            ) -> Type::Bool; {
+                (const 0; Type::Bool; ConstantValue::Bool(true));
+            } => e(0)},
+        ];
+
+        build_and_compare_entities!(code, expected);
+    }
 }
 
 #[cfg(test)]

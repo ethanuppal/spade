@@ -1007,12 +1007,12 @@ impl ExprLocal for Loc<Expression> {
             }
             ExprKind::FnCall(name, args) => {
                 let head = ctx.symtab.symtab().function_by_id(name);
-                let args = match_args_with_params(args, head.inputs())?;
+                let args = match_args_with_params(args, head.inputs(), false)?;
                 result.append(self.handle_call(name, &args, ctx)?)
             }
             ExprKind::EntityInstance(name, args) => {
                 let head = ctx.symtab.symtab().entity_by_id(name);
-                let args = match_args_with_params(args, head.inputs())?;
+                let args = match_args_with_params(args, head.inputs(), false)?;
                 result.append(self.handle_call(name, &args, ctx)?)
             }
             ExprKind::PipelineInstance {
@@ -1021,7 +1021,7 @@ impl ExprLocal for Loc<Expression> {
                 args,
             } => {
                 let head = ctx.symtab.symtab().pipeline_by_id(name);
-                let args = match_args_with_params(args, head.inputs())?;
+                let args = match_args_with_params(args, head.inputs(), false)?;
                 result.append(self.handle_call(name, &args, ctx)?);
             }
             ExprKind::PipelineRef { .. } => {

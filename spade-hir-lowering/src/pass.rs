@@ -35,7 +35,7 @@ impl Passable for Loc<Expression> {
             ExprKind::FieldAccess(lhs, _) => subnodes!(lhs),
             ExprKind::MethodCall(self_, _, args) => {
                 subnodes!(self_);
-                for arg in args.expressions() {
+                for arg in args.expressions_mut() {
                     arg.apply(pass)?;
                 }
             }
@@ -46,7 +46,7 @@ impl Passable for Loc<Expression> {
                 name: _,
                 args,
             } => {
-                for arg in args.expressions() {
+                for arg in args.expressions_mut() {
                     arg.apply(pass)?;
                 }
             }

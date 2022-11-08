@@ -1,6 +1,6 @@
 use spade_common::location_info::Loc;
 use spade_diagnostics::Diagnostic;
-use spade_hir::{Expression, ItemList, Statement};
+use spade_hir::{ArgumentList, Expression, ItemList, Statement};
 use spade_typeinference::{method_resolution::select_method, HasType, TypeState};
 
 use crate::pass::Pass;
@@ -30,6 +30,19 @@ impl<'a> Pass for LowerMethods<'a> {
                 )?;
 
                 let method = select_method(self_.loc(), &type_name, method, self.items)?;
+
+                // Insert self as the first arg
+                let args = args.map_ref(|args| {
+                    let mut new = args.clone();
+                    match &mut new {
+                        ArgumentList::Named(_) => todo!(),
+                        ArgumentList::Positional(list) => {
+                            println!("Inserting self");
+                            list.insert(0, self_.as_ref().clone())
+                        }
+                    }
+                    new
+                });
 
                 Some(spade_hir::ExprKind::FnCall(method, args.clone()))
             }

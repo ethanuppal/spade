@@ -5,8 +5,8 @@ expression: "std::str::from_utf8(buffer.as_slice()).expect(\"error contains inva
 error: Entities are not allowed in impl blocks
   ┌─ testinput:4:5
   │
-4 │     entity a() -> bool {true}
-  │     ^^^^^^^^^^^^^^^^^^^^^^^^^ Not allowed here
+4 │     entity a(self) -> bool {true}
+  │     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ Not allowed here
   │
   = Did you intend to define a function
 

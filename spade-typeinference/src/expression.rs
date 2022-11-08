@@ -1,5 +1,6 @@
 use spade_common::location_info::{Loc, WithLocation};
-use spade_hir::expression::{BinaryOperator, UnaryOperator};
+use spade_common::name::Identifier;
+use spade_hir::expression::{BinaryOperator, NamedArgument, UnaryOperator};
 use spade_hir::{ExprKind, Expression};
 use spade_macros::trace_typechecker;
 use spade_types::KnownType;
@@ -198,7 +199,24 @@ impl TypeState {
         generic_list: &GenericListToken,
     ) -> Result<()> {
         assuming_kind!(ExprKind::MethodCall(target, method, args) = &expression => {
-            self.visit_expression(target, ctx, generic_list)?;
+            // NOTE: We don't visit_expression here as it is being added to the argument_list
+            // which we *do* visit
+            // self.visit_expression(target, ctx, generic_list)?;
+
+            let args_with_self = args.clone().map(|mut args| {
+                match &mut args {
+                    spade_hir::ArgumentList::Named(inner) => {
+                        inner.push(NamedArgument::Full(
+                            Identifier("self".to_string()).at_loc(target),
+                            target.as_ref().clone()
+                        ))
+                    },
+                    spade_hir::ArgumentList::Positional(list) => list.insert(0, target.as_ref().clone()),
+                };
+                args
+            });
+
+            self.visit_argument_list(&args_with_self, ctx, generic_list)?;
 
             let target_type = self.type_of(&TypedExpression::Id(target.id))?;
             let self_type = self.type_of(&TypedExpression::Id(expression.id))?;
@@ -208,7 +226,7 @@ impl TypeState {
                 target_type: target_type.at_loc(target),
                 method: method.clone(),
                 expr: self_type.at_loc(expression),
-                args: args.clone()
+                args: args_with_self
             };
 
             requirement.check_or_add(self, ctx)?

@@ -979,9 +979,12 @@ impl<'a> Parser<'a> {
         let type_params = self.generics_list()?;
 
         // Input types
-        self.eat(&TokenKind::OpenParen)?;
-        let inputs = self.parameter_list()?;
-        let close_paren = self.eat(&TokenKind::CloseParen)?;
+        let (inputs, inputs_loc) = self.surrounded(
+            &TokenKind::OpenParen,
+            Self::parameter_list,
+            &TokenKind::CloseParen,
+        )?;
+        let inputs = inputs.at_loc(&inputs_loc);
 
         // Return type
         let output_type = if self.peek_and_eat(&TokenKind::SlimArrow)?.is_some() {
@@ -1001,8 +1004,9 @@ impl<'a> Parser<'a> {
             // The end of the entity definition depends on whether or not
             // a type is present.
             let end_loc = output_type
-                .map(|t| t.span)
-                .unwrap_or_else(|| lspan(close_paren.span));
+                .map(|t| t.loc())
+                .unwrap_or_else(|| inputs_loc)
+                .span;
 
             return match self.peek()? {
                 Some(got) => Err(Error::ExpectedBlock {
@@ -1053,11 +1057,12 @@ impl<'a> Parser<'a> {
         let name = self.identifier()?;
 
         // Input types
-        let open_paren = self.eat(&TokenKind::OpenParen)?;
-        // FIXME: Can we use surrounded here?
-        let inputs = self.parameter_list()?;
-        let close_paren = self.eat(&TokenKind::CloseParen)?;
-        let inputs = inputs.between(self.file_id, &open_paren.span, &close_paren.span);
+        let (inputs, inputs_loc) = self.surrounded(
+            &TokenKind::OpenParen,
+            Self::parameter_list,
+            &TokenKind::CloseParen,
+        )?;
+        let inputs = inputs.at_loc(&inputs_loc);
 
         // Return type
         let output_type = if self.peek_and_eat(&TokenKind::SlimArrow)?.is_some() {
@@ -1078,8 +1083,9 @@ impl<'a> Parser<'a> {
             // The end of the entity definition depends on whether or not
             // a type is present.
             let end_loc = output_type
-                .map(|t| t.span)
-                .unwrap_or_else(|| lspan(close_paren.span));
+                .map(|t| t.loc())
+                .unwrap_or_else(|| inputs_loc)
+                .span;
 
             return match self.peek()? {
                 Some(got) => Err(Error::ExpectedBlock {
@@ -1121,7 +1127,7 @@ impl<'a> Parser<'a> {
 
         let type_params = self.generics_list()?;
 
-        let (inputs, _) = self.surrounded(
+        let (inputs, inputs_loc) = self.surrounded(
             &TokenKind::OpenParen,
             Self::parameter_list,
             &TokenKind::CloseParen,
@@ -1139,7 +1145,7 @@ impl<'a> Parser<'a> {
         Ok(Some(
             FunctionDecl {
                 name,
-                inputs,
+                inputs: inputs.at_loc(&inputs_loc),
                 return_type,
                 type_params,
             }
@@ -1231,13 +1237,13 @@ impl<'a> Parser<'a> {
 
     #[trace_parser]
     #[tracing::instrument(level = "debug", skip(self))]
-    pub fn enum_option(&mut self) -> Result<(Loc<Identifier>, Option<ParameterList>)> {
+    pub fn enum_option(&mut self) -> Result<(Loc<Identifier>, Option<Loc<ParameterList>>)> {
         let name = self.identifier()?;
 
-        let args = if self.peek_and_eat(&TokenKind::OpenBrace)?.is_some() {
-            let result = Some(self.type_parameter_list()?);
-            self.eat(&TokenKind::CloseBrace)?;
-            result
+        let args = if let Some(start) = self.peek_and_eat(&TokenKind::OpenBrace)? {
+            let result = self.type_parameter_list()?;
+            let end = self.eat(&TokenKind::CloseBrace)?;
+            Some(result.between(self.file_id, &start, &end))
         } else if self.peek_kind(&TokenKind::Comma)? || self.peek_kind(&TokenKind::CloseBrace)? {
             None
         } else {
@@ -1333,6 +1339,7 @@ impl<'a> Parser<'a> {
             Self::type_parameter_list,
             &TokenKind::CloseBrace,
         )?;
+        let members = members.at_loc(&members_loc);
 
         let result = TypeDeclaration {
             name: name.clone(),
@@ -2346,7 +2353,7 @@ mod tests {
                 attributes: AttributeList::empty(),
                 is_function: true,
                 name: ast_ident("some_fn"),
-                inputs: ParameterList::without_self(vec![]),
+                inputs: ParameterList::without_self(vec![]).nowhere(),
                 output_type: None,
                 body: None,
                 type_params: vec![],
@@ -2377,7 +2384,7 @@ mod tests {
                 attributes: AttributeList::empty(),
                 is_function: true,
                 name: ast_ident("some_fn"),
-                inputs: ParameterList::without_self(vec![]),
+                inputs: ParameterList::without_self(vec![]).nowhere(),
                 output_type: None,
                 body: None,
                 type_params: vec![],
@@ -2480,7 +2487,7 @@ mod tests {
                 attributes: AttributeList::empty(),
                 is_function: false,
                 name: ast_ident("X"),
-                inputs: ParameterList::without_self(vec![]),
+                inputs: ParameterList::without_self(vec![]).nowhere(),
                 output_type: None,
                 body: None,
                 type_params: vec![],
@@ -2520,7 +2527,7 @@ mod tests {
                 attributes: AttributeList::empty(),
                 is_function: true,
                 name: ast_ident("X"),
-                inputs: ParameterList::without_self(vec![]),
+                inputs: ParameterList::without_self(vec![]).nowhere(),
                 output_type: None,
                 body: None,
                 type_params: vec![],
@@ -2542,7 +2549,7 @@ mod tests {
                 attributes: AttributeList(vec![ast_ident("attr")]),
                 is_function: true,
                 name: ast_ident("X"),
-                inputs: ParameterList::without_self(vec![]),
+                inputs: ParameterList::without_self(vec![]).nowhere(),
                 output_type: None,
                 body: None,
                 type_params: vec![],
@@ -2564,7 +2571,7 @@ mod tests {
                 attributes: AttributeList(vec![ast_ident("attr")]),
                 is_function: false,
                 name: ast_ident("X"),
-                inputs: ParameterList::without_self(vec![]),
+                inputs: ParameterList::without_self(vec![]).nowhere(),
                 output_type: None,
                 body: None,
                 type_params: vec![],
@@ -2587,7 +2594,7 @@ mod tests {
                 attributes: AttributeList(vec![ast_ident("attr")]),
                 depth: Loc::new(2, lspan(0..0), 0),
                 name: ast_ident("test"),
-                inputs: aparams![("a", tspec!("bool"))].nowhere(),
+                inputs: aparams![("a", tspec!("bool"))],
                 output_type: None,
                 body: None,
                 type_params: vec![],
@@ -2707,7 +2714,7 @@ mod tests {
             attributes: AttributeList::empty(),
             depth: Loc::new(2, lspan(0..0), 0),
             name: ast_ident("test"),
-            inputs: aparams![("a", tspec!("bool"))].nowhere(),
+            inputs: aparams![("a", tspec!("bool"))],
             output_type: Some(TypeSpec::Named(ast_path("bool"), None).nowhere()),
             body: Some(
                 Expression::Block(Box::new(Block {
@@ -2753,7 +2760,7 @@ mod tests {
             attributes: AttributeList::empty(),
             depth: Loc::new(2, lspan(0..0), 0),
             name: ast_ident("test"),
-            inputs: aparams![("a", tspec!("bool"))].nowhere(),
+            inputs: aparams![("a", tspec!("bool"))],
             output_type: Some(TypeSpec::Named(ast_path("bool"), None).nowhere()),
             body: Some(
                 Expression::Block(Box::new(Block {
@@ -2783,7 +2790,7 @@ mod tests {
                     attributes: AttributeList::empty(),
                     depth: Loc::new(2, lspan(0..0), 0),
                     name: ast_ident("test"),
-                    inputs: aparams![("a", tspec!("bool"))].nowhere(),
+                    inputs: aparams![("a", tspec!("bool"))],
                     output_type: Some(TypeSpec::Named(ast_path("bool"), None).nowhere()),
                     body: Some(
                         Expression::Block(Box::new(Block {

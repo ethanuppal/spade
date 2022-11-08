@@ -33,12 +33,12 @@ macro_rules! aparams {
     ( $( ( $name:expr, $type:expr ) ),* $(,)? ) => {
         ast::ParameterList::without_self(
             vec![ $(( ast_ident($name), $type )),* ]
-        )
+        ).nowhere()
     };
     ( $(self $(,)?)? $( ( $name:expr, $type:expr ) ),* $(,)? ) => {
         ast::ParameterList::with_self(
             ().nowhere(),
             vec![ $(( ast_ident($name), $type )),* ]
-        )
+        ).nowhere()
     };
 }

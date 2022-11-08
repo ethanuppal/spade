@@ -106,13 +106,14 @@ pub struct Argument<'a> {
 pub fn match_args_with_params<'a>(
     arg_list: &'a Loc<ArgumentList>,
     params: &'a ParameterList,
+    is_method: bool,
 ) -> Result<Vec<Argument<'a>>, ArgumentError> {
     match &arg_list.inner {
         ArgumentList::Positional(inner) => {
             if inner.len() != params.0.len() {
                 return Err(ArgumentError::ArgumentListLengthMismatch {
-                    expected: params.0.len(),
-                    got: inner.len(),
+                    expected: params.0.len() - if is_method { 1 } else { 0 },
+                    got: inner.len() - if is_method { 1 } else { 0 },
                     at: arg_list.loc(),
                 });
             }

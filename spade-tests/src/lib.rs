@@ -164,10 +164,11 @@ fn build_items(code: &str) -> Vec<spade_mir::Entity> {
 /// Builds multiple entities and types from a source string, then compares the resulting
 /// entities. $expected should be a vector of mir entities. If any pipelines or other
 /// non-entities or types are included in $code, this panics
+/// Sorts the entities by name to make deterministic
 #[macro_export]
 macro_rules! build_and_compare_entities {
     ($code:expr, $expected:expr) => {
-        let result = build_items($code);
+        let mut result = build_items($code);
 
         assert_eq!(
             $expected.len(),
@@ -177,7 +178,11 @@ macro_rules! build_and_compare_entities {
             result.len()
         );
 
-        for (exp, res) in $expected.into_iter().zip(result.into_iter()) {
+        let mut expected = $expected.clone();
+        expected.sort_by_key(|e| e.name.clone());
+        result.sort_by_key(|e| e.name.clone());
+
+        for (exp, res) in expected.into_iter().zip(result.into_iter()) {
             assert_same_mir!(&res, &exp);
         }
     };

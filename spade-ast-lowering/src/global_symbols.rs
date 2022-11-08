@@ -248,7 +248,7 @@ pub fn re_visit_type_declaration(
                         if let Some(self_) = l.self_ {
                             Err(Diagnostic::bug(self_, "enum meber contains self"))
                         } else {
-                            Ok(l.args)
+                            Ok(l.args.clone())
                         }
                     })
                     .unwrap_or(Ok(vec![]))?;
@@ -421,24 +421,31 @@ mod tests {
                         // Builtin type with no args
                         (
                             ast_ident("B"),
-                            Some(ast::ParameterList::without_self(vec![(
-                                ast_ident("x"),
-                                ast::TypeSpec::Named(ast_path("bool"), None).nowhere(),
-                            )])),
+                            Some(
+                                ast::ParameterList::without_self(vec![(
+                                    ast_ident("x"),
+                                    ast::TypeSpec::Named(ast_path("bool"), None).nowhere(),
+                                )])
+                                .nowhere(),
+                            ),
                         ),
                         // Builtin type with no args
                         (
                             ast_ident("C"),
-                            Some(ast::ParameterList::without_self(vec![(
-                                ast_ident("x"),
-                                ast::TypeSpec::Named(
-                                    ast_path("int"),
-                                    Some(
-                                        vec![ast::TypeExpression::Integer(10).nowhere()].nowhere(),
-                                    ),
-                                )
+                            Some(
+                                ast::ParameterList::without_self(vec![(
+                                    ast_ident("x"),
+                                    ast::TypeSpec::Named(
+                                        ast_path("int"),
+                                        Some(
+                                            vec![ast::TypeExpression::Integer(10).nowhere()]
+                                                .nowhere(),
+                                        ),
+                                    )
+                                    .nowhere(),
+                                )])
                                 .nowhere(),
-                            )])),
+                            ),
                         ),
                     ],
                 }

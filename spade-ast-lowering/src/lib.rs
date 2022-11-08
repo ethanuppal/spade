@@ -227,12 +227,23 @@ pub enum SelfContext {
 }
 
 fn visit_parameter_list(
-    l: &ParameterList,
+    l: &Loc<ParameterList>,
     symtab: &mut SymbolTable,
     self_context: &SelfContext,
 ) -> Result<hir::ParameterList> {
     let mut arg_names: HashSet<Loc<Identifier>> = HashSet::new();
     let mut result = vec![];
+
+    if let SelfContext::ImplBlock(_) = self_context {
+        if l.self_.is_none() {
+            return Err(
+                Diagnostic::error(l, "Method must take 'self' as the first parameter")
+                    .primary_label("Missing self")
+                    .into(),
+            );
+            //FIXME Suggestion?
+        }
+    }
 
     if let Some(self_loc) = l.self_ {
         match self_context {
@@ -1216,7 +1227,8 @@ mod entity_visiting {
             inputs: ParameterList::without_self(vec![(
                 ast_ident("a"),
                 ast::TypeSpec::Unit(().nowhere()).nowhere(),
-            )]),
+            )])
+            .nowhere(),
             output_type: None,
             body: Some(
                 ast::Expression::Block(Box::new(ast::Block {
@@ -2598,7 +2610,7 @@ mod impl_blocks {
                 attributes: ast::AttributeList::empty(),
                 is_function: true,
                 name: ast_ident("x"),
-                inputs: ParameterList::with_self(().nowhere(), vec![]),
+                inputs: ParameterList::with_self(().nowhere(), vec![]).nowhere(),
                 output_type: None,
                 body: Some(
                     ast::Expression::Block(Box::new(ast::Block {
@@ -2720,7 +2732,7 @@ mod module_visiting {
                     is_function: true,
                     name: ast_ident("test"),
                     output_type: None,
-                    inputs: ParameterList::without_self(vec![]),
+                    inputs: ParameterList::without_self(vec![]).nowhere(),
                     body: Some(
                         ast::Expression::Block(Box::new(ast::Block {
                             statements: vec![],

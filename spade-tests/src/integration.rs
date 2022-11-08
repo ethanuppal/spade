@@ -189,11 +189,11 @@ mod trait_tests {
             struct X {}
 
             impl X {
-                fn a() -> bool {true}
+                fn a(self) -> bool {true}
             }
 
             impl X {
-                fn a() -> bool {false}
+                fn a(self) -> bool {false}
             }
         "
     }
@@ -204,7 +204,7 @@ mod trait_tests {
             struct X {}
 
             impl X {
-                entity a() -> bool {true}
+                entity a(self) -> bool {true}
             }
         "
     }
@@ -215,7 +215,7 @@ mod trait_tests {
             struct X {}
 
             impl X {
-                pipeline(0) a() -> bool {true}
+                pipeline(0) a(self) -> bool {true}
             }
         "
     }
@@ -225,7 +225,7 @@ mod trait_tests {
         let code = "
             struct X {}
             impl X {
-                fn test() -> bool {true}
+                fn test(self) -> bool {true}
             }
 
             fn main(x: X) -> bool {
@@ -240,10 +240,10 @@ mod trait_tests {
         "
             struct X {}
             impl X {
-                fn test() -> bool {true}
+                fn test(self) -> bool {true}
             }
             impl X {
-                fn test() -> bool {false}
+                fn test(self) -> bool {false}
             }
 
             fn main(x: X) -> bool {
@@ -257,7 +257,7 @@ mod trait_tests {
         "
             struct X {}
             impl X {
-                fn test() -> bool {true}
+                fn test(self) -> bool {true}
             }
 
             fn main(x: X) -> bool {
@@ -271,11 +271,39 @@ mod trait_tests {
         "
             struct X {}
             impl X {
+                fn test(self, x: bool) -> bool {true}
+            }
+
+            fn main(x: X) -> bool {
+                x.test$(y: 1)
+            }
+        "
+    }
+
+    snapshot_error! {
+        method_which_does_not_take_self_is_an_error,
+        "
+            struct X {}
+            impl X {
                 fn test(x: bool) -> bool {true}
             }
 
             fn main(x: X) -> bool {
                 x.test$(y: 1)
+            }
+        "
+    }
+
+    snapshot_error! {
+        binding_self_causes_reasonable_error,
+        "
+            struct X {}
+            impl X {
+                fn test(self, x: bool) -> bool {true}
+            }
+
+            fn main(x: X) -> bool {
+                x.test$(self: X())
             }
         "
     }

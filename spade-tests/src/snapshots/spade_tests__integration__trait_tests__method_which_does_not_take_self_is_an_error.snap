@@ -1,0 +1,11 @@
+---
+source: spade-tests/src/integration.rs
+expression: "std::str::from_utf8(buffer.as_slice()).expect(\"error contains invalid utf-8\")"
+---
+error: Method must take 'self' as the first parameter
+  ┌─ testinput:3:12
+  │
+3 │     fn test(x: bool) -> bool {true}
+  │            ^^^^^^^^^ Missing self
+
+

@@ -264,7 +264,7 @@ pub struct Entity {
     /// and just have a bool here to indicate the type.
     pub is_function: bool,
     pub name: Loc<Identifier>,
-    pub inputs: ParameterList,
+    pub inputs: Loc<ParameterList>,
     pub output_type: Option<Loc<TypeSpec>>,
     /// The body is an expression for ID assignment purposes, but semantic analysis
     /// ensures that it is always a block. If body is `None`, the entity is __builtin__
@@ -291,7 +291,7 @@ impl WithLocation for Pipeline {}
 #[derive(PartialEq, Debug, Clone)]
 pub struct FunctionDecl {
     pub name: Loc<Identifier>,
-    pub inputs: ParameterList,
+    pub inputs: Loc<ParameterList>,
     pub return_type: Option<Loc<TypeSpec>>,
     pub type_params: Vec<Loc<TypeParam>>,
 }
@@ -327,14 +327,14 @@ impl WithLocation for ImplBlock {}
 #[derive(PartialEq, Debug, Clone)]
 pub struct Enum {
     pub name: Loc<Identifier>,
-    pub options: Vec<(Loc<Identifier>, Option<ParameterList>)>,
+    pub options: Vec<(Loc<Identifier>, Option<Loc<ParameterList>>)>,
 }
 impl WithLocation for Enum {}
 
 #[derive(PartialEq, Debug, Clone)]
 pub struct Struct {
     pub name: Loc<Identifier>,
-    pub members: ParameterList,
+    pub members: Loc<ParameterList>,
     pub port_keyword: Option<Loc<()>>,
 }
 impl WithLocation for Struct {}

@@ -58,7 +58,7 @@ pub fn lower_type_declaration(
                         let params = crate::visit_parameter_list(
                             params
                                 .as_ref()
-                                .unwrap_or(&ast::ParameterList::without_self(vec![])),
+                                .unwrap_or(&ast::ParameterList::without_self(vec![]).nowhere()),
                             symtab,
                             &SelfContext::FreeStanding,
                         )?;

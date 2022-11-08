@@ -60,7 +60,19 @@ pub enum ArgumentList {
 }
 
 impl ArgumentList {
-    pub fn expressions(&mut self) -> Vec<&mut Loc<Expression>> {
+    pub fn expressions(&self) -> Vec<&Loc<Expression>> {
+        match self {
+            ArgumentList::Named(n) => n
+                .iter()
+                .map(|arg| match arg {
+                    NamedArgument::Full(_, expr) => expr,
+                    NamedArgument::Short(_, expr) => expr,
+                })
+                .collect(),
+            ArgumentList::Positional(arg) => arg.iter().collect(),
+        }
+    }
+    pub fn expressions_mut(&mut self) -> Vec<&mut Loc<Expression>> {
         match self {
             ArgumentList::Named(n) => n
                 .iter_mut()

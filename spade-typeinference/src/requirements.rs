@@ -29,6 +29,8 @@ pub enum Requirement {
         method: Loc<Identifier>,
         /// The expression from which this requirement arrises
         expr: Loc<TypeVar>,
+        /// The argument list passed to the method. This should include the `self` expression as
+        /// the appropriate argument (first positional or a non-shorthand self otherwise)
         args: Loc<ArgumentList>,
     },
     /// The type should be an integer large enough to fit the specified value
@@ -155,7 +157,7 @@ impl Requirement {
                 expr,
                 args,
             } => target_type.expect_named(
-                |type_name, params| {
+                |type_name, _params| {
                     let implementor = select_method(expr.loc(), type_name, method, ctx.items)?;
 
                     let fn_head = ctx.symtab.function_by_id(&implementor);
@@ -167,6 +169,8 @@ impl Requirement {
                         &fn_head.inner,
                         args,
                         ctx,
+                        false,
+                        true,
                     )?;
                     Ok(RequirementResult::Satisfied(vec![]))
                 },

@@ -5,10 +5,10 @@ expression: "std::str::from_utf8(buffer.as_slice()).expect(\"error contains inva
 error: X already has a method named a
   ┌─ testinput:8:5
   │
-4 │     fn a() -> bool {true}
-  │     --------------------- Previous definition here
+4 │     fn a(self) -> bool {true}
+  │     ------------------------- Previous definition here
   ·
-8 │     fn a() -> bool {false}
-  │     ^^^^^^^^^^^^^^^^^^^^^^ Duplicate method
+8 │     fn a(self) -> bool {false}
+  │     ^^^^^^^^^^^^^^^^^^^^^^^^^^ Duplicate method
 
 
