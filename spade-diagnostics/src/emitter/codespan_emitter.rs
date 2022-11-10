@@ -62,12 +62,18 @@ impl Emitter for CodespanEmitter {
                 Subdiagnostic::SpannedNote {
                     level,
                     message,
-                    primary_label: (primary_span, primary_message),
+                    span,
+                    primary_label,
                     secondary_labels,
                 } => {
-                    let mut labels = vec![primary_span
-                        .primary_label()
-                        .with_message(primary_message.as_str())];
+                    let primary_label = if let Some(primary_label_message) = primary_label.as_ref()
+                    {
+                        span.primary_label()
+                            .with_message(primary_label_message.as_str())
+                    } else {
+                        span.primary_label()
+                    };
+                    let mut labels = vec![primary_label];
                     labels.extend(
                         secondary_labels
                             .iter()

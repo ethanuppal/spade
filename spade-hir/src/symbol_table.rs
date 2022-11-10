@@ -9,7 +9,9 @@ use thiserror::Error;
 use spade_common::id_tracker::NameIdTracker;
 use spade_common::location_info::{AsLabel, Loc, WithLocation};
 use spade_common::name::{Identifier, NameID, Path};
-use spade_diagnostics::diagnostic::Diagnostic as SpadeDiagnostic;
+use spade_diagnostics::diagnostic::{
+    Diagnostic as SpadeDiagnostic, Subdiagnostic as SpadeSubdiagnostic,
+};
 use spade_diagnostics::emitter::codespan_config;
 use spade_diagnostics::{CodeBundle, CompilationError, DiagHandler};
 
@@ -612,7 +614,10 @@ impl SymbolTable {
         let declared_more_than_once = |new, old| {
             SpadeDiagnostic::error(new, "Variable declared more than once")
                 .primary_label("This variable has been declared more than once")
-                .secondary_label(old, "Previously declared here")
+                .sub(SpadeSubdiagnostic::span_note(
+                    old,
+                    "Previously declared here",
+                ))
         };
         // Check if a variable with this name already exists
         if let Some(id) = self.try_lookup_id(&Path(vec![ident.clone()]).at_loc(&ident)) {

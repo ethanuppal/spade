@@ -11,9 +11,14 @@ entity X() -> int<8> {
 error: Variable declared more than once
   ┌─ testinput:3:10
   │
-2 │     let x: int<8> = 0;
-  │         - Previously declared here
 3 │     decl x;
   │          ^ This variable has been declared more than once
+  │
+note: Previously declared here
+  ┌─ testinput:2:9
+  │
+2 │     let x: int<8> = 0;
+  │         ^
+  │
 
 

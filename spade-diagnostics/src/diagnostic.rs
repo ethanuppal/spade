@@ -105,10 +105,12 @@ pub enum Subdiagnostic {
         message: Message,
     },
     /// A longer note with additional spans and labels.
+    // FIXME: This is a Diagnostic but with SubdiagnosticLevel and no subdiagnostics.
     SpannedNote {
         level: SubdiagnosticLevel,
         message: Message,
-        primary_label: (FullSpan, Message),
+        span: FullSpan,
+        primary_label: Option<Message>,
         secondary_labels: Vec<(FullSpan, Message)>,
     },
     /// A change suggestion, made up of one or more suggestion parts.
@@ -131,6 +133,18 @@ pub enum Subdiagnostic {
         parts: Vec<(FullSpan, String)>,
         message: Message,
     },
+}
+
+impl Subdiagnostic {
+    pub fn span_note(span: impl Into<FullSpan>, message: impl Into<Message>) -> Self {
+        Subdiagnostic::SpannedNote {
+            level: SubdiagnosticLevel::Note,
+            message: message.into(),
+            span: span.into(),
+            primary_label: None,
+            secondary_labels: Vec::new(),
+        }
+    }
 }
 
 /// Builder for use with [Diagnostic::span_suggest_multipart].
@@ -185,7 +199,7 @@ impl Diagnostic {
         self
     }
 
-    /// Attach a simple note to this diagnostic.
+    /// Attach a simple (oneline) note to this diagnostic.
     pub fn note(mut self, message: impl Into<Message>) -> Self {
         self.subdiagnostics.push(Subdiagnostic::Note {
             level: SubdiagnosticLevel::Note,
@@ -194,11 +208,21 @@ impl Diagnostic {
         self
     }
 
+    /// Attach a simple (oneline) help to this diagnostic.
     pub fn help(mut self, message: impl Into<Message>) -> Self {
         self.subdiagnostics.push(Subdiagnostic::Note {
             level: SubdiagnosticLevel::Help,
             message: message.into(),
         });
+        self
+    }
+
+    /// Attach a general subdiagnostic to this diagnostic.
+    ///
+    /// Prefer a more specific convenicence method if you can. This is intended for
+    /// [Subdiagnostic::SpannedNote] since they need a builder in order to be constructed.
+    pub fn sub(mut self, subdiagnostic: Subdiagnostic) -> Self {
+        self.subdiagnostics.push(subdiagnostic);
         self
     }
 
