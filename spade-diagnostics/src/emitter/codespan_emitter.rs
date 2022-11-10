@@ -1,5 +1,5 @@
 use codespan_reporting::diagnostic::{
-    Diagnostic as CodespanDiagnostic, Suggestion, SuggestionPart,
+    Diagnostic as CodespanDiagnostic, Subdiagnostic as CodespanSubdiagnostic, SuggestionPart,
 };
 use codespan_reporting::term::termcolor::{Color, ColorChoice, ColorSpec};
 use codespan_reporting::term::{self, termcolor::Buffer};
@@ -53,30 +53,52 @@ impl Emitter for CodespanEmitter {
                 .map(|(sp, msg)| sp.secondary_label().with_message(msg.as_str())),
         );
         let mut simple_notes = vec![];
-        let mut suggestions = vec![];
+        let mut subdiagnostics = vec![];
         for subdiag in &diag.subdiagnostics {
             match subdiag {
                 Subdiagnostic::Note { level, message } => {
                     simple_notes.push(format!("{}: {}", level.as_str(), message.as_str()))
                 }
-                Subdiagnostic::Suggestion { parts, message } => suggestions.push(Suggestion {
-                    file_id: parts[0].0 .1,
-                    message: message.as_str().to_string(),
-                    parts: parts
-                        .iter()
-                        .map(|((sp, _), replacement)| SuggestionPart {
-                            range: (*sp).into(),
-                            replacement: replacement.to_string(),
-                        })
-                        .collect(),
-                }),
+                Subdiagnostic::SpannedNote {
+                    level,
+                    message,
+                    primary_label: (primary_span, primary_message),
+                    secondary_labels,
+                } => {
+                    let mut labels = vec![primary_span
+                        .primary_label()
+                        .with_message(primary_message.as_str())];
+                    labels.extend(
+                        secondary_labels
+                            .iter()
+                            .map(|(sp, msg)| sp.secondary_label().with_message(msg.as_str())),
+                    );
+                    subdiagnostics.push(CodespanSubdiagnostic::Note {
+                        severity: level.severity(),
+                        message: message.as_str().to_string(),
+                        labels,
+                    });
+                }
+                Subdiagnostic::Suggestion { parts, message } => {
+                    subdiagnostics.push(CodespanSubdiagnostic::Suggestion {
+                        file_id: parts[0].0 .1,
+                        message: message.as_str().to_string(),
+                        parts: parts
+                            .iter()
+                            .map(|((sp, _), replacement)| SuggestionPart {
+                                range: (*sp).into(),
+                                replacement: replacement.to_string(),
+                            })
+                            .collect(),
+                    })
+                }
             }
         }
         let diag = CodespanDiagnostic::new(severity)
             .with_message(message)
             .with_labels(labels)
             .with_notes(simple_notes)
-            .with_suggestions(suggestions);
+            .with_subdiagnostics(subdiagnostics);
 
         term::emit(buffer, &codespan_config(), &code.files, &diag).unwrap();
     }

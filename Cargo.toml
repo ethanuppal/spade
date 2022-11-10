@@ -16,8 +16,8 @@ rust-version = "1.64" # workspade-inheritance is only supported in 1.64
 [workspace.dependencies]
 clap = { version = "3.1.18", features = ["derive"] }
 color-eyre = "0.6.1"
-codespan = { git = "https://gitlab.com/spade-lang/codespan.git", features=["serialization"] }
-codespan-reporting = { git = "https://gitlab.com/spade-lang/codespan.git" }
+codespan = { git = "https://gitlab.com/spade-lang/codespan.git", branch = "subdiagnostics", features = ["serialization"] }
+codespan-reporting = { git = "https://gitlab.com/spade-lang/codespan.git", branch = "subdiagnostics" }
 colored = "2.0"
 indoc = "1.0"
 insta = "1.14.0"
@@ -34,6 +34,6 @@ tracing-subscriber = { version = "0.3.11", features = ["env-filter"] }
 tracing-tree = { git = "https://github.com/jonathanmorley/tracing-tree", rev = "8b97ec6e50e3f755644d1a0aaf4c45a2112607b2" }
 
 [patch.crates-io]
-codespan = { git = "https://gitlab.com/spade-lang/codespan.git" }
-codespan-reporting = { git = "https://gitlab.com/spade-lang/codespan.git" }
+codespan = { git = "https://gitlab.com/spade-lang/codespan.git", branch = "subdiagnostics" }
+codespan-reporting = { git = "https://gitlab.com/spade-lang/codespan.git", branch = "subdiagnostics" }
 local-impl = {git = "https://gitlab.com/sornas/local-impl"}

@@ -104,6 +104,13 @@ pub enum Subdiagnostic {
         level: SubdiagnosticLevel,
         message: Message,
     },
+    /// A longer note with additional spans and labels.
+    SpannedNote {
+        level: SubdiagnosticLevel,
+        message: Message,
+        primary_label: (FullSpan, Message),
+        secondary_labels: Vec<(FullSpan, Message)>,
+    },
     /// A change suggestion, made up of one or more suggestion parts.
     Suggestion {
         /// The individual replacements that make up this suggestion.
