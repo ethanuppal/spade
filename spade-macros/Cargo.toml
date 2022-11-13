@@ -1,5 +1,5 @@
 [package]
-name = "parse_tree_macros"
+name = "spade-macros"
 version.workspace = true
 authors = ["TheZoq2 <frans.skarman@protonmail.com>"]
 edition.workspace = true

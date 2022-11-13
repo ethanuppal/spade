@@ -660,15 +660,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "parse_tree_macros"
-version = "0.1.0"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn",
-]
-
-[[package]]
 name = "pin-project-lite"
 version = "0.2.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -911,7 +902,6 @@ dependencies = [
  "colored",
  "indoc",
  "logos",
- "parse_tree_macros",
  "pretty_assertions",
  "prettydiff",
  "ron",
@@ -922,6 +912,7 @@ dependencies = [
  "spade-diagnostics",
  "spade-hir",
  "spade-hir-lowering",
+ "spade-macros",
  "spade-mir",
  "spade-parser",
  "spade-typeinference",
@@ -989,9 +980,9 @@ dependencies = [
  "insta",
  "local-impl",
  "logos",
- "parse_tree_macros",
  "spade-ast",
  "spade-common",
+ "spade-macros",
  "thiserror",
  "tracing",
 ]
@@ -1036,6 +1027,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "spade-macros"
+version = "0.1.0"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
 name = "spade-mir"
 version = "0.1.0"
 dependencies = [
@@ -1048,12 +1048,12 @@ dependencies = [
  "logos",
  "nesty",
  "num",
- "parse_tree_macros",
  "pretty_assertions",
  "prettydiff",
  "serde",
  "spade-common",
  "spade-diagnostics",
+ "spade-macros",
  "thiserror",
 ]
 
@@ -1066,10 +1066,10 @@ dependencies = [
  "colored",
  "local-impl",
  "logos",
- "parse_tree_macros",
  "spade-ast",
  "spade-common",
  "spade-diagnostics",
+ "spade-macros",
  "thiserror",
  "tracing",
 ]
@@ -1135,13 +1135,13 @@ dependencies = [
  "codespan-reporting 0.12.0",
  "colored",
  "local-impl",
- "parse_tree_macros",
  "serde",
  "spade-ast",
  "spade-ast-lowering",
  "spade-common",
  "spade-diagnostics",
  "spade-hir",
+ "spade-macros",
  "spade-types",
  "thiserror",
  "tracing",

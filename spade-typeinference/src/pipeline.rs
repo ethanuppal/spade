@@ -1,7 +1,7 @@
-use parse_tree_macros::trace_typechecker;
 use spade_common::location_info::WithLocation;
 use spade_hir::symbol_table::SymbolTable;
 use spade_hir::Pipeline;
+use spade_macros::trace_typechecker;
 
 use crate::equation::TypedExpression;
 use crate::error::{Error, Result, UnificationErrorExt};

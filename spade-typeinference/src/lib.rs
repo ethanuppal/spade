@@ -9,7 +9,7 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use parse_tree_macros::trace_typechecker;
+use spade_macros::trace_typechecker;
 use trace_stack::TraceStack;
 use tracing::{info, trace};
 

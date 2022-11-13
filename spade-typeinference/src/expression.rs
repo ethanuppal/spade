@@ -1,8 +1,8 @@
-use parse_tree_macros::trace_typechecker;
 use spade_common::location_info::{Loc, WithLocation};
 use spade_hir::expression::{BinaryOperator, UnaryOperator};
 use spade_hir::symbol_table::SymbolTable;
 use spade_hir::{ExprKind, Expression};
+use spade_macros::trace_typechecker;
 use spade_types::KnownType;
 
 use crate::constraints::{bits_to_store, ce_int, ce_var, ConstraintSource};

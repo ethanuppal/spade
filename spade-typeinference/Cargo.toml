@@ -23,8 +23,8 @@ local-impl.workspace = true
 spade-common = {path = "../spade-common"}
 spade-diagnostics = {path = "../spade-diagnostics"}
 spade-hir = {path = "../spade-hir"}
+spade-macros = {path = "../spade-macros"}
 spade-types = {path = "../spade-types"}
-parse_tree_macros = {path = "../parse_tree_macros"}
 
 [dev-dependencies]
 spade-ast = {path = "../spade-ast"}

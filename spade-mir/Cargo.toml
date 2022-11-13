@@ -25,7 +25,7 @@ derivative = "2.2.0"
 
 spade-common = {path = "../spade-common"}
 spade-diagnostics = {path = "../spade-diagnostics"}
-parse_tree_macros = {path = "../parse_tree_macros"}
+spade-macros = {path = "../spade-macros"}
 
 [dev-dependencies]
 colored.workspace = true

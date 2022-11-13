@@ -19,7 +19,6 @@ serde.workspace = true
 color-eyre.workspace = true
 thiserror.workspace = true
 
-parse_tree_macros = {path = "../parse_tree_macros"}
 indoc.workspace = true
 ron.workspace = true
 
@@ -33,6 +32,7 @@ spade-common = {path = "../spade-common"}
 spade-diagnostics = { path = "../spade-diagnostics" }
 spade-hir = {path = "../spade-hir"}
 spade-hir-lowering = {path = "../spade-hir-lowering"}
+spade-macros = {path = "../spade-macros"}
 spade-mir = {path = "../spade-mir"}
 spade-parser = {path = "../spade-parser"}
 spade-typeinference = {path = "../spade-typeinference"}

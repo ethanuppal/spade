@@ -1,6 +1,6 @@
-use parse_tree_macros::trace_parser;
 use spade_ast::{ArgumentList, BinaryOperator, Expression, UnaryOperator};
 use spade_common::location_info::{lspan, Loc, WithLocation};
+use spade_macros::trace_parser;
 
 use crate::error::{Error, Result};
 use crate::{lexer::TokenKind, ParseStackEntry, Parser};

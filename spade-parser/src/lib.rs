@@ -9,7 +9,6 @@ use colored::*;
 use logos::Lexer;
 use tracing::{event, Level};
 
-use parse_tree_macros::trace_parser;
 use spade_ast::{
     ArgumentList, ArgumentPattern, AttributeList, Block, ComptimeConfig, Entity, Enum, Expression,
     FunctionDecl, Item, Module, ModuleBody, NamedArgument, ParameterList, Pattern, Pipeline,
@@ -19,6 +18,7 @@ use spade_ast::{
 use spade_common::location_info::{lspan, AsLabel, FullSpan, HasCodespan, Loc, WithLocation};
 use spade_common::name::{Identifier, Path};
 use spade_diagnostics::{diagnostic::SuggestionParts, Diagnostic};
+use spade_macros::trace_parser;
 
 use crate::error::{
     CSErrorTransformations, CommaSeparatedError, CommaSeparatedResult, Error, Result,

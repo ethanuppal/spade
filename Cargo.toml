@@ -3,7 +3,6 @@
 members = [
     "spade-*",
     "vcd-translate",
-    "parse_tree_macros"
 ]
 
 # Shared between internal crates. Can be overridden per-crate if needed.
