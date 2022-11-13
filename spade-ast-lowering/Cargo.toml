@@ -22,6 +22,7 @@ spade-ast = {path = "../spade-ast"}
 spade-common = {path = "../spade-common"}
 spade-diagnostics = {path = "../spade-diagnostics"}
 spade-hir = {path = "../spade-hir"}
+spade-macros = {path = "../spade-macros"}
 spade-types = {path = "../spade-types"}
 
 [dev-dependencies]

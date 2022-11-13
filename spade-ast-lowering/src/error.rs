@@ -1,5 +1,5 @@
 use spade_common::location_info::Loc;
-use spade_diagnostics::Diagnostic;
+use spade_macros::IntoDiagnostic;
 use thiserror::Error;
 
 pub enum ItemKind {
@@ -7,33 +7,22 @@ pub enum ItemKind {
     Entity,
 }
 
+#[derive(IntoDiagnostic)]
+#[diagnostic(error, "Can't create a wire of ports")]
 pub(crate) struct WireOfPort {
+    #[diagnostic(primary, "This can't be a wire")]
     pub(crate) full_type: Loc<()>,
+    #[diagnostic(secondary, "Because this is a port")]
     pub(crate) inner_type: Loc<()>,
 }
 
-impl From<WireOfPort> for Diagnostic {
-    fn from(err: WireOfPort) -> Self {
-        Diagnostic::error(err.full_type, "Can't create a wire of ports")
-            .primary_label("This can't be a wire")
-            .secondary_label(err.inner_type, "Because this is a port")
-    }
-}
-
+#[derive(IntoDiagnostic)]
+#[diagnostic(error, "Expected {} arguments, got {}", diag.expected, diag.got)]
 pub(crate) struct PatternListLengthMismatch {
     pub(crate) expected: usize,
     pub(crate) got: usize,
+    #[diagnostic(primary, "Expected {} arguments here", diag.expected)]
     pub(crate) at: Loc<()>,
-}
-
-impl From<PatternListLengthMismatch> for Diagnostic {
-    fn from(err: PatternListLengthMismatch) -> Self {
-        Diagnostic::error(
-            err.at,
-            format!("Expected {} arguments, got {}", err.expected, err.got),
-        )
-        .primary_label(format!("Expected {} arguments here", err.expected))
-    }
 }
 
 #[derive(Error, Debug, PartialEq, Clone)]
