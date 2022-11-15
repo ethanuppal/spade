@@ -1,0 +1,7 @@
+error: Can only derive IntoDiagnostic on structs with named fields
+ --> tests/ui/not_named_fields.rs:3:10
+  |
+3 | #[derive(spade_macros::IntoDiagnostic)]
+  |          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  |
+  = note: this error originates in the derive macro `spade_macros::IntoDiagnostic` (in Nightly builds, run with -Z macro-backtrace for more info)

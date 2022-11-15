@@ -1,7 +1,7 @@
 use proc_macro::TokenStream;
 use proc_macro2::Literal;
 use proc_macro2::TokenStream as TokenStream2;
-use proc_macro_error::{abort, abort_call_site, proc_macro_error};
+use proc_macro_error::{abort_call_site, proc_macro_error};
 use quote::{quote, ToTokens};
 use syn::{
     parse::{self, Parse, ParseStream},
@@ -52,7 +52,9 @@ pub fn trace_typechecker(attrs: TokenStream, input: TokenStream) -> TokenStream 
 }
 
 enum DiagnosticMessage {
+    /// `"message"`
     Literal(Literal),
+    /// `"literal containing {} or more expressions as format arguments", 1`
     Formatted(Literal, Punctuated<Expr, Token![,]>),
 }
 
@@ -77,6 +79,7 @@ impl DiagnosticMessage {
     }
 }
 
+/// E.g. `primary, "Expected {} arguments, got {}", diag.expected, diag.got`
 struct DiagnosticAttribute {
     ident: Ident,
     message: Option<DiagnosticMessage>,
@@ -97,8 +100,12 @@ pub fn derive_diagnostic(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as syn::ItemStruct);
     let fields = match &input.fields {
         Fields::Named(fields) => fields,
-        Fields::Unnamed(_) => abort!(input.fields, "only on structs with named fields"),
-        Fields::Unit => abort!(input.fields, "only on structs with named fields"),
+        Fields::Unnamed(_) => {
+            abort_call_site!("Can only derive IntoDiagnostic on structs with named fields")
+        }
+        Fields::Unit => {
+            abort_call_site!("Can only derive IntoDiagnostic on structs with named fields")
+        }
     };
     let ident = input.ident;
     let top_attribute = input
@@ -172,4 +179,13 @@ pub fn derive_diagnostic(input: TokenStream) -> TokenStream {
         }
     }
     .into()
+}
+
+#[cfg(test)]
+mod test {
+    #[test]
+    fn ui() {
+        let t = trybuild::TestCases::new();
+        t.compile_fail("tests/ui/*.rs");
+    }
 }

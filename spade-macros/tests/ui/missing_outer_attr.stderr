@@ -1,0 +1,7 @@
+error: missing outer #[diagnostic] attribute
+ --> tests/ui/missing_outer_attr.rs:3:10
+  |
+3 | #[derive(spade_macros::IntoDiagnostic)]
+  |          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  |
+  = note: this error originates in the derive macro `spade_macros::IntoDiagnostic` (in Nightly builds, run with -Z macro-backtrace for more info)
