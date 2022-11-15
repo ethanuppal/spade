@@ -1,0 +1,13 @@
+error: inner attribute is malformed
+       expected #[diagnostic(<primary/secondary>, <MESSAGE...>)]
+ --> tests/ui/wrong_inner_attribute_format.rs:6:5
+  |
+6 |     #[diagnostic(primary, <=>)]
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error: inner attribute is malformed
+       expected #[diagnostic(<primary/secondary>, <MESSAGE...>)]
+  --> tests/ui/wrong_inner_attribute_format.rs:15:5
+   |
+15 |     #[diagnostic(secondary, ::<>)]
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

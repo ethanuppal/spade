@@ -1,7 +1,6 @@
 error: top attribute is malformed
-
-         expected something like `#[diagnostic(error, "uh oh, stinky")]`
- --> tests/ui/wrong_attribute_format.rs:4:1
+       expected something like `#[diagnostic(error, "uh oh, stinky")]`
+ --> tests/ui/wrong_outer_attribute_format.rs:4:1
   |
 4 | #[diagnostic(arrow goes brrrrr ----------->>>>>>>)]
   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

@@ -88,8 +88,14 @@ struct DiagnosticAttribute {
 impl Parse for DiagnosticAttribute {
     fn parse(input: ParseStream) -> syn::Result<Self> {
         let ident = input.parse()?;
+        if input.is_empty() {
+            return Ok(DiagnosticAttribute {
+                ident,
+                message: None,
+            });
+        }
         let _: Token![,] = input.parse()?;
-        let message = (!input.is_empty()).then(|| input.parse()).transpose()?;
+        let message = Some(input.parse()?);
         Ok(DiagnosticAttribute { ident, message })
     }
 }
@@ -123,34 +129,41 @@ pub fn derive_diagnostic(input: TokenStream) -> TokenStream {
         message: primary_message,
     } = top_attribute
         .parse_args()
-        .unwrap_or_else(|_| abort!(top_attribute, "top attribute is malformed\n\n  expected something like `#[diagnostic(error, \"uh oh, stinky\")]`"));
+        .unwrap_or_else(|_| abort!(top_attribute, "top attribute is malformed\nexpected something like `#[diagnostic(error, \"uh oh, stinky\")]`"));
     let primary_message = primary_message.map(|msg| msg.quote());
-    let inner_attributes: Vec<(DiagnosticAttribute, &Ident)> = fields
+    let inner_attributes: Vec<(&Ident, DiagnosticAttribute)> = fields
         .named
         .iter()
         .filter_map(|field| {
-            field.ident.as_ref().map(|ident| {
+            field.ident.as_ref().map(|field_ident| {
+                // Zip the attributes together with the field they're on.
                 std::iter::zip(
+                    std::iter::repeat(field_ident),
+                    // Only the #[diagnostic]-attributes
                     field.attrs.iter().filter(|attr| {
                         attr.path
                             .get_ident()
                             .map(|ident| ident == "diagnostic")
                             .unwrap_or(false)
                     }),
-                    std::iter::repeat(ident),
                 )
             })
         })
         .flatten()
-        .filter_map(|(attr, field)| attr.parse_args().ok().map(|attr| (attr, field)))
+        .map(|(field, attr)| match attr.parse_args() {
+            Ok(attr) => (field, attr),
+            Err(_) => {
+                abort!(attr, "inner attribute is malformed\nexpected #[diagnostic(<primary/secondary>, <MESSAGE...>)]")
+            }
+        })
         .collect();
     let primary = inner_attributes
         .iter()
-        .find(|(attr, _)| attr.ident == "primary")
+        .find(|(_, attr)| attr.ident == "primary")
         .unwrap_or_else(|| abort_call_site!("primary span is required"));
-    let primary_span = primary.1;
+    let primary_span = primary.0;
     let primary_label = primary
-        .0
+        .1
         .message
         .as_ref()
         .map(DiagnosticMessage::quote)
@@ -158,8 +171,8 @@ pub fn derive_diagnostic(input: TokenStream) -> TokenStream {
         .unwrap_or_default();
     let secondary_labels = inner_attributes
         .iter()
-        .filter(|(attr, _)| attr.ident == "secondary")
-        .map(|(attr, field)| {
+        .filter(|(_, attr)| attr.ident == "secondary")
+        .map(|(field, attr)| {
             let message = attr
                 .message
                 .as_ref()
