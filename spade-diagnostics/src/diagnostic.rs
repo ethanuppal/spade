@@ -184,12 +184,13 @@ impl Diagnostic {
         Self::new(DiagnosticLevel::Error, span, message)
     }
 
-    /// Attach a message to the primary label of this error.
+    /// Attach a message to the primary label of this diagnostic.
     pub fn primary_label(mut self, primary_label: impl Into<Message>) -> Self {
         self.primary_label = Some(primary_label.into());
         self
     }
 
+    /// Attach a secondary label to this diagnostic.
     pub fn secondary_label(
         mut self,
         span: impl Into<FullSpan>,
@@ -199,7 +200,7 @@ impl Diagnostic {
         self
     }
 
-    /// Attach a simple (oneline) note to this diagnostic.
+    /// Attach a simple (one-line) note to this diagnostic.
     pub fn note(mut self, message: impl Into<Message>) -> Self {
         self.subdiagnostics.push(Subdiagnostic::Note {
             level: SubdiagnosticLevel::Note,
@@ -208,7 +209,7 @@ impl Diagnostic {
         self
     }
 
-    /// Attach a simple (oneline) help to this diagnostic.
+    /// Attach a simple (one-line) help to this diagnostic.
     pub fn help(mut self, message: impl Into<Message>) -> Self {
         self.subdiagnostics.push(Subdiagnostic::Note {
             level: SubdiagnosticLevel::Help,
@@ -219,30 +220,33 @@ impl Diagnostic {
 
     /// Attach a general subdiagnostic to this diagnostic.
     ///
-    /// Prefer a more specific convenicence method if you can. This is intended for
-    /// [Subdiagnostic::SpannedNote] since they need a builder in order to be constructed.
-    pub fn sub(mut self, subdiagnostic: Subdiagnostic) -> Self {
+    /// Prefer a more specific convenicence method (see the [crate documentation])
+    /// if you can. This is intended for [spanned notes] since they need a builder
+    /// in order to be constructed.
+    ///
+    /// [crate documentation]: crate
+    /// [spanned notes]: Subdiagnostic::SpannedNote
+    pub fn subdiagnostic(mut self, subdiagnostic: Subdiagnostic) -> Self {
         self.subdiagnostics.push(subdiagnostic);
         self
     }
 
     pub fn span_suggest(
-        mut self,
+        self,
         message: impl Into<Message>,
         span: impl Into<FullSpan>,
         code: impl Into<String>,
     ) -> Self {
-        self.subdiagnostics.push(Subdiagnostic::Suggestion {
+        self.subdiagnostic(Subdiagnostic::Suggestion {
             parts: vec![(span.into(), code.into())],
             message: message.into(),
-        });
-        self
+        })
     }
 
     /// Convenience method to suggest some code that can be inserted directly before some span.
     ///
     /// Note that this will be _after_ any preceding whitespace. Use
-    /// [Diagnostic::span_suggest_insert_after] if you want the suggestion to insert before
+    /// [`Diagnostic::span_suggest_insert_after`] if you want the suggestion to insert before
     /// preceding whitespace.
     pub fn span_suggest_insert_before(
         self,
@@ -261,7 +265,7 @@ impl Diagnostic {
     /// Convenience method to suggest some code that can be inserted directly after some span.
     ///
     /// Note that this will be _before_ any preceding whitespace. Use
-    /// [Diagnostic::span_suggest_insert_before] if you want the suggestion to insert after
+    /// [`Diagnostic::span_suggest_insert_before`] if you want the suggestion to insert after
     /// preceding whitespace.
     pub fn span_suggest_insert_after(
         self,
@@ -306,6 +310,7 @@ impl Diagnostic {
         self.span_suggest(message, (span, file), "")
     }
 
+    /// Suggest a change that consists of multiple parts.
     pub fn span_suggest_multipart(
         mut self,
         message: impl Into<Message>,
@@ -315,6 +320,7 @@ impl Diagnostic {
         self
     }
 
+    /// Suggest a change that consists of multiple parts, but usable outside of builders.
     pub fn push_span_suggest_multipart(
         &mut self,
         message: impl Into<Message>,
@@ -328,7 +334,7 @@ impl Diagnostic {
     }
 }
 
-// Assert that something holds, if it does not, return a Diagnostic::bug with the specified
+// Assert that something holds, if it does not, return a [`Diagnostic::bug`] with the specified
 // span
 #[macro_export]
 macro_rules! diag_assert {
@@ -343,7 +349,7 @@ macro_rules! diag_assert {
     };
 }
 
-// Like anyhow::anyhow but for diagnostics. Attaches the message to the specified expression
+/// Like `anyhow!` but for diagnostics. Attaches the message to the specified expression
 #[macro_export]
 macro_rules! diag_anyhow {
     ($span:expr, $($arg:tt)*) => {
@@ -351,7 +357,7 @@ macro_rules! diag_anyhow {
     }
 }
 
-// Like anyhow::bail but for diagnostics. Attaches the message to the specified expression
+/// Like `bail!` but for diagnostics. Attaches the message to the specified expression
 #[macro_export]
 macro_rules! diag_bail {
     ($span:expr, $($arg:tt)*) => {

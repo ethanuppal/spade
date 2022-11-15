@@ -1,5 +1,6 @@
 use codespan_reporting::diagnostic::{
-    Diagnostic as CodespanDiagnostic, Subdiagnostic as CodespanSubdiagnostic, SuggestionPart,
+    Diagnostic as CodespanDiagnostic, SpannedNote, Subdiagnostic as CodespanSubdiagnostic,
+    Suggestion, SuggestionPart,
 };
 use codespan_reporting::term::termcolor::{Color, ColorChoice, ColorSpec};
 use codespan_reporting::term::{self, termcolor::Buffer};
@@ -79,14 +80,14 @@ impl Emitter for CodespanEmitter {
                             .iter()
                             .map(|(sp, msg)| sp.secondary_label().with_message(msg.as_str())),
                     );
-                    subdiagnostics.push(CodespanSubdiagnostic::Note {
+                    subdiagnostics.push(CodespanSubdiagnostic::SpannedNote(SpannedNote {
                         severity: level.severity(),
                         message: message.as_str().to_string(),
                         labels,
-                    });
+                    }));
                 }
                 Subdiagnostic::Suggestion { parts, message } => {
-                    subdiagnostics.push(CodespanSubdiagnostic::Suggestion {
+                    subdiagnostics.push(CodespanSubdiagnostic::Suggestion(Suggestion {
                         file_id: parts[0].0 .1,
                         message: message.as_str().to_string(),
                         parts: parts
@@ -96,7 +97,7 @@ impl Emitter for CodespanEmitter {
                                 replacement: replacement.to_string(),
                             })
                             .collect(),
-                    })
+                    }))
                 }
             }
         }

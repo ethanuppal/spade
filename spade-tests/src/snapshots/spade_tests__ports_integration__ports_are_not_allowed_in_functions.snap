@@ -6,7 +6,7 @@ fn not_allowed(a: &bool) -> bool {
 }
 
 
-error: Port in function
+error: Port argument in function
   ┌─ testinput:1:19
   │
 1 │ fn not_allowed(a: &bool) -> bool {

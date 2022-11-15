@@ -1,6 +1,6 @@
 use crate::lexer::TokenKind;
 use crate::{Error, Token};
-use codespan_reporting::diagnostic::{Diagnostic, Label, Subdiagnostic, SuggestionPart};
+use codespan_reporting::diagnostic::{Diagnostic, Label, Suggestion, SuggestionPart};
 use codespan_reporting::term::{self, termcolor::Buffer};
 use spade_common::location_info::AsLabel;
 use spade_diagnostics::emitter::codespan_config;
@@ -217,7 +217,7 @@ impl CompilationError for Error {
                 .with_message("Expected array size")
                 .with_labels(vec![array.primary_label().with_message("This array type")])
                 .with_notes(vec![format!("Array types need a specified size")])
-                .with_subdiagnostics(vec![Subdiagnostic::Suggestion {
+                .with_suggestions(vec![Suggestion {
                     file_id: array.file_id,
                     message: format!("Insert a size here"),
                     parts: vec![

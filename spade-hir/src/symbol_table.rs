@@ -614,7 +614,7 @@ impl SymbolTable {
         let declared_more_than_once = |new, old| {
             SpadeDiagnostic::error(new, "Variable declared more than once")
                 .primary_label("This variable has been declared more than once")
-                .sub(SpadeSubdiagnostic::span_note(
+                .subdiagnostic(SpadeSubdiagnostic::span_note(
                     old,
                     "Previously declared here",
                 ))
