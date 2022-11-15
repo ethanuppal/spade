@@ -1,7 +1,7 @@
 use proc_macro::TokenStream;
 use proc_macro2::Literal;
 use proc_macro2::TokenStream as TokenStream2;
-use proc_macro_error::{abort_call_site, proc_macro_error};
+use proc_macro_error::{abort, abort_call_site, proc_macro_error};
 use quote::{quote, ToTokens};
 use syn::{
     parse::{self, Parse, ParseStream},
@@ -121,7 +121,9 @@ pub fn derive_diagnostic(input: TokenStream) -> TokenStream {
     let DiagnosticAttribute {
         ident: level,
         message: primary_message,
-    } = top_attribute.parse_args().unwrap();
+    } = top_attribute
+        .parse_args()
+        .unwrap_or_else(|_| abort!(top_attribute, "top attribute is malformed\n\n  expected something like `#[diagnostic(error, \"uh oh, stinky\")]`"));
     let primary_message = primary_message.map(|msg| msg.quote());
     let inner_attributes: Vec<(DiagnosticAttribute, &Ident)> = fields
         .named
