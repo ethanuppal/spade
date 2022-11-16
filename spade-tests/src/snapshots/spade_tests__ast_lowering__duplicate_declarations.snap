@@ -11,13 +11,8 @@ error: Variable declared more than once
   ┌─ testinput:2:13
   │
 2 │     decl x, x;
-  │             ^ This variable has been declared more than once
-  │
-note: Previously declared here
-  ┌─ testinput:2:10
-  │
-2 │     decl x, x;
-  │          ^
-  │
+  │          -  ^ This variable has been declared more than once
+  │          │   
+  │          Previously declared here
 
 
