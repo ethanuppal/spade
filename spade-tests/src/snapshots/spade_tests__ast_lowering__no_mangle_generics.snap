@@ -1,7 +1,10 @@
 ---
 source: spade-tests/src/ast_lowering.rs
-expression: "std::str::from_utf8(buffer.as_slice()).expect(\"error contains invalid utf-8\")"
 ---
+#[no_mangle]
+fn mangling_time<#N>() -> int<N> __builtin__
+
+
 error: no_mangle is not allowed on generic units
   ┌─ testinput:1:1
   │

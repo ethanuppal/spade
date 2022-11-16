@@ -1,7 +1,19 @@
 ---
 source: spade-tests/src/hir_lowering.rs
-expression: "std::str::from_utf8(buffer.as_slice()).expect(\"error contains invalid utf-8\")"
 ---
+pipeline(5) X(clk: clk) -> bool __builtin__
+pipeline(4) Y(clk: clk) -> bool __builtin__
+
+pipeline(5) main(clk: clk, x: bool) -> bool {
+        let _ = match x {
+            true => inst(5) X(clk),
+            false => inst(4) Y(clk)
+        };
+    reg*5;
+        x
+}
+
+
 error: All subexpressions need the same pipeline delay
   ┌─ testinput:7:22
   │

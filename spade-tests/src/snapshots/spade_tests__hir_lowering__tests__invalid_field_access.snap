@@ -1,7 +1,13 @@
 ---
 source: spade-tests/src/hir_lowering.rs
-expression: "std::str::from_utf8(buffer.as_slice()).expect(\"error contains invalid utf-8\")"
 ---
+struct X {}
+
+entity main(x: X) -> int<8> {
+    x.not_a_field
+}
+
+
 error: X has no field named not_a_field
   ┌─ testinput:4:7
   │

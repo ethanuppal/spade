@@ -1,7 +1,16 @@
 ---
 source: spade-tests/src/parser.rs
-expression: "std::str::from_utf8(buffer.as_slice()).expect(\"error contains invalid utf-8\")"
 ---
+pipeline(2) P() -> bool {
+    reg;
+        false
+}
+
+fn X() -> bool {
+    inst(2) Y()
+}
+
+
 error: Entities and pipelines can not be instantiated in functions
   ┌─ testinput:7:5
   │

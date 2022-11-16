@@ -1,7 +1,18 @@
 ---
 source: spade-tests/src/linear_check.rs
-expression: "std::str::from_utf8(buffer.as_slice()).expect(\"error contains invalid utf-8\")"
 ---
+struct port A {
+    x: &mut bool,
+    y: &bool
+}
+struct port B {
+    a: A
+}
+entity x(resource: B) -> bool {
+    true
+}
+
+
 error: Unused resource
   ┌─ testinput:8:10
   │

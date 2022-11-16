@@ -1,7 +1,14 @@
 ---
 source: spade-tests/src/ast_lowering.rs
-expression: "std::str::from_utf8(buffer.as_slice()).expect(\"error contains invalid utf-8\")"
 ---
+fn a() -> bool {
+    true
+}
+fn a() -> bool {
+    false
+}
+
+
 error: Multiple items with the same name
   ┌─ testinput:4:4
   │

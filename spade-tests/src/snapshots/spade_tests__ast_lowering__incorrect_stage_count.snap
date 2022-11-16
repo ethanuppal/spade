@@ -1,7 +1,13 @@
 ---
 source: spade-tests/src/ast_lowering.rs
-expression: "std::str::from_utf8(buffer.as_slice()).expect(\"error contains invalid utf-8\")"
 ---
+pipeline(3) pipe(clk: clk) -> bool {
+    reg;
+    reg;
+        true
+}
+
+
 error: Wrong number of pipeline stages
   ┌─ testinput:1:1
   │  

@@ -1,7 +1,13 @@
 ---
 source: spade-tests/src/ast_lowering.rs
-expression: "std::str::from_utf8(buffer.as_slice()).expect(\"error contains invalid utf-8\")"
 ---
+struct test {}
+fn main() -> bool {
+    let x = test;
+    true
+}
+
+
 error: Expected test to be a value
   ┌─ testinput:3:13
   │

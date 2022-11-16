@@ -1,7 +1,18 @@
 ---
 source: spade-tests/src/usefulness.rs
-expression: "std::str::from_utf8(buffer.as_slice()).expect(\"error contains invalid utf-8\")"
 ---
+enum X {
+    A,
+    B,
+}
+
+fn uwu(x: X) -> bool {
+    match x {
+        X::A => true,
+    }
+}
+
+
 error: Non-exhaustive match: pattern X::B not covered
   ┌─ testinput:7:5
   │  

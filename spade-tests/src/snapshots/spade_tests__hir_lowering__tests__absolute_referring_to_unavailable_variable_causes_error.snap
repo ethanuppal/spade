@@ -1,7 +1,19 @@
 ---
 source: spade-tests/src/hir_lowering.rs
-expression: "std::str::from_utf8(buffer.as_slice()).expect(\"error contains invalid utf-8\")"
 ---
+pipeline(5) X(clk: clk) -> bool {reg*5; false}
+
+pipeline(6) main(clk: clk, x: bool) -> bool {
+        let x = inst(5) X(clk);
+    reg*4;
+        'here
+    reg;
+        let res = stage(here).x;
+    reg;
+        res
+}
+
+
 error: Use of x before it is ready
   ┌─ testinput:8:31
   │

@@ -1,7 +1,10 @@
 ---
 source: spade-tests/src/ast_lowering.rs
-expression: "std::str::from_utf8(buffer.as_slice()).expect(\"error contains invalid utf-8\")"
 ---
+#[uwu]
+entity a() -> bool {true}
+
+
 error: Unrecognised attribute
   ┌─ testinput:1:1
   │

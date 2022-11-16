@@ -1,7 +1,12 @@
 ---
 source: spade-tests/src/hir_lowering.rs
-expression: "std::str::from_utf8(buffer.as_slice()).expect(\"error contains invalid utf-8\")"
 ---
+entity x(clk: clk) -> bool {
+    reg(clk) x = 0;
+    true
+}
+
+
 error: Type of expression is not fully known
   ┌─ testinput:2:18
   │

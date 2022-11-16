@@ -1,7 +1,19 @@
 ---
 source: spade-tests/src/usefulness.rs
-expression: "std::str::from_utf8(buffer.as_slice()).expect(\"error contains invalid utf-8\")"
 ---
+    struct A {
+        x: bool,
+        y: bool,
+    }
+fn test(in: A) -> bool {
+    match in {
+        A$(y:true, x: true) => true,
+        A$(y:true, x: false) => true,
+        A$(y:false, x: false) => true,
+    }
+}
+
+
 error: Non-exhaustive match: pattern A(x: true, y: false) not covered
    ┌─ testinput:6:5
    │  

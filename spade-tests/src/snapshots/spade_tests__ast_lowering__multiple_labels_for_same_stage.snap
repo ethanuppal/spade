@@ -1,7 +1,15 @@
 ---
 source: spade-tests/src/ast_lowering.rs
-expression: "std::str::from_utf8(buffer.as_slice()).expect(\"error contains invalid utf-8\")"
 ---
+pipeline(3) main(clk: clk) -> int<8> {
+    reg;
+        'a
+        'b
+    reg;
+    reg;
+        0
+}
+
 error: Multiple labels for the same stage
   ┌─ testinput:4:10
   │

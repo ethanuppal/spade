@@ -1,7 +1,12 @@
 ---
 source: spade-tests/src/hir_lowering.rs
-expression: "std::str::from_utf8(buffer.as_slice()).expect(\"error contains invalid utf-8\")"
 ---
+fn test(a: bool, b: bool) -> bool __builtin__
+fn main() -> bool {
+    test$(a: true, c: true, b: true)
+}
+
+
 error: No such argument: c
   ┌─ testinput:3:20
   │

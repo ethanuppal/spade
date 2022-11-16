@@ -1,7 +1,21 @@
 ---
 source: spade-tests/src/ports_integration.rs
-expression: "std::str::from_utf8(buffer.as_slice()).expect(\"error contains invalid utf-8\")"
 ---
+mod std {mod mem {
+    entity clocked_memory<#NumElements, #WritePorts, #AddrWidth, D>(
+        clk: clk,
+        writes: [(bool, int<AddrWidth>, D); WritePorts],
+    ) -> Memory<D, NumElements>
+        __builtin__
+    }
+}
+entity A(clk: clk, p: &bool) -> bool {
+    let idx: int<10> = 0;
+    let mem: Memory<&bool, 1024> = inst std::mem::clocked_memory(clk, [(true, idx, p)]);
+
+    true
+}
+
 error: Generic types can not be ports
    ┌─ testinput:11:36
    │

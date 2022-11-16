@@ -1,7 +1,13 @@
 ---
 source: spade-tests/src/usefulness.rs
-expression: "std::str::from_utf8(buffer.as_slice()).expect(\"error contains invalid utf-8\")"
 ---
+fn test(in: (int<8>, bool)) -> bool {
+    match in {
+        (val, true) => true,
+    }
+}
+
+
 error: Non-exhaustive match: pattern (-128..127, false) not covered
   ┌─ testinput:2:5
   │  

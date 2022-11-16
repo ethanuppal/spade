@@ -1,7 +1,12 @@
 ---
 source: spade-tests/src/ports_integration.rs
-expression: "std::str::from_utf8(buffer.as_slice()).expect(\"error contains invalid utf-8\")"
 ---
+entity x(clk: clk, a: &mut bool) -> bool {
+    reg(clk) _ = a;
+    true
+}
+
+
 error: Ports can not be put in a register
   ┌─ testinput:2:18
   │

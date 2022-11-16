@@ -1,7 +1,14 @@
 ---
 source: spade-tests/src/ast_lowering.rs
-expression: "std::str::from_utf8(buffer.as_slice()).expect(\"error contains invalid utf-8\")"
 ---
+entity X() -> int<8> {
+    decl x;
+    let x = 0;
+    let x = 1;
+    x
+}
+
+
 error: x was already defined
   ┌─ testinput:4:9
   │

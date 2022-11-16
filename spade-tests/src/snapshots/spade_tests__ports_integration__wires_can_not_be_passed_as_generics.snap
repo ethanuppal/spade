@@ -1,7 +1,13 @@
 ---
 source: spade-tests/src/ports_integration.rs
-expression: "std::str::from_utf8(buffer.as_slice()).expect(\"error contains invalid utf-8\")"
 ---
+entity identity<T>(x: T) -> T {x}
+
+entity x(p: &bool) -> &bool {
+    inst identity(p)
+}
+
+
 error: Generic types can not be ports
   ┌─ testinput:4:5
   │

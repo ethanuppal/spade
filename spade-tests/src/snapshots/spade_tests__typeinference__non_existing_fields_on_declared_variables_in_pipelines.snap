@@ -1,7 +1,16 @@
 ---
 source: spade-tests/src/typeinference.rs
-expression: "std::str::from_utf8(buffer.as_slice()).expect(\"error contains invalid utf-8\")"
 ---
+struct X {a: bool}
+
+pipeline(1) a(clk: clk) -> bool {
+        let y = stage(+1).x.b;
+    reg;
+        let x = X(false);
+        y
+}
+
+
 error: X has no field named b
   ┌─ testinput:4:29
   │

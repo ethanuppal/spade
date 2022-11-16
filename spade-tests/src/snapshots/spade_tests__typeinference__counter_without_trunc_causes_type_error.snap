@@ -1,7 +1,12 @@
 ---
 source: spade-tests/src/typeinference.rs
-expression: "std::str::from_utf8(buffer.as_slice()).expect(\"error contains invalid utf-8\")"
 ---
+entity counter(clk: clk, rst: bool) -> int<8> {
+    reg(clk) x reset (rst: 0) = x + 1;
+    x
+}
+
+
 error: Expected type int<8>, got int<9>
   ┌─ testinput:2:33
   │

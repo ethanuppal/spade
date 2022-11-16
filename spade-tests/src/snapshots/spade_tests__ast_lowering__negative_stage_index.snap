@@ -1,7 +1,15 @@
 ---
 source: spade-tests/src/ast_lowering.rs
-expression: "std::str::from_utf8(buffer.as_slice()).expect(\"error contains invalid utf-8\")"
 ---
+pipeline(3) main(x: int<8>) -> int<8> {
+        let a = stage(-1).x;
+    reg;
+    reg;
+    reg;
+        0
+}
+
+
 error: Reference to negative pipeline stage
   ┌─ testinput:2:17
   │

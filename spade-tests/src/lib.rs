@@ -101,9 +101,16 @@ macro_rules! snapshot_error {
                 )),
             );
 
-            insta::assert_snapshot!(
-                std::str::from_utf8(buffer.as_slice()).expect("error contains invalid utf-8")
-            );
+            insta::with_settings!({
+                // FIXME: Why can't we set 'description => source' here?
+                omit_expression => true,
+            }, {
+                insta::assert_snapshot!(format!(
+                    "{}\n\n{}",
+                    source,
+                    std::str::from_utf8(buffer.as_slice()).expect("error contains invalid utf-8")
+                ));
+            });
         }
     };
 }

@@ -1,7 +1,18 @@
 ---
 source: spade-tests/src/ast_lowering.rs
-expression: "std::str::from_utf8(buffer.as_slice()).expect(\"error contains invalid utf-8\")"
 ---
+struct X {
+    a: bool,
+    B: bool
+}
+
+fn main(x: X) -> X {
+    let X(a, b, c) = x;
+    x
+}
+
+
+
 error: Expected 2 arguments, got 3
   ┌─ testinput:7:10
   │

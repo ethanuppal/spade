@@ -1,7 +1,20 @@
 ---
 source: spade-tests/src/ast_lowering.rs
-expression: "std::str::from_utf8(buffer.as_slice()).expect(\"error contains invalid utf-8\")"
 ---
+enum Option<T> {
+    Some{ t: T },
+    None
+}
+use Option::Some;
+use Option::None;
+fn test() -> int<10> {
+    match Some(true) {
+        Some(count) => 0,
+        None => count
+    }
+}
+
+
 error: Use of undeclared name count
    ┌─ testinput:10:17
    │

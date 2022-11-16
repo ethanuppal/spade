@@ -1,7 +1,16 @@
 ---
 source: spade-tests/src/linear_check.rs
-expression: "std::str::from_utf8(buffer.as_slice()).expect(\"error contains invalid utf-8\")"
 ---
+entity make_port() -> &mut bool __builtin__
+
+entity consumer(x: &mut bool) -> bool __builtin__
+
+entity test() -> (bool, bool) {
+    let p = inst make_port();
+    (inst consumer(p), inst consumer(p))
+}
+
+
 error: Use of consumed resource
   ┌─ testinput:7:38
   │

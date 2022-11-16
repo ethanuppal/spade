@@ -1,7 +1,12 @@
 ---
 source: spade-tests/src/usefulness.rs
-expression: "std::str::from_utf8(buffer.as_slice()).expect(\"error contains invalid utf-8\")"
 ---
+entity A(clk: clk) -> bool {
+    reg(clk) true = false;
+    false
+}
+
+
 error: Refutable pattern in local binding: pattern false not covered
   ┌─ testinput:2:14
   │

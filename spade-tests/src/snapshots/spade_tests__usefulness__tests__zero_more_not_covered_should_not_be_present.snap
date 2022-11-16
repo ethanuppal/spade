@@ -1,7 +1,16 @@
 ---
 source: spade-tests/src/usefulness.rs
-expression: "std::str::from_utf8(buffer.as_slice()).expect(\"error contains invalid utf-8\")"
 ---
+fn test(in: (bool, bool, bool)) -> bool {
+    match in {
+        (true, true, true) => true,
+        (false, true, true) => true,
+        (false, false, true) => true,
+        (false, false, false) => true,
+    }
+}
+
+
 error: Non-exhaustive match: patterns (false, true, false), (true, false, false) and 2 more not covered
   ┌─ testinput:2:5
   │  

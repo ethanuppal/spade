@@ -1,7 +1,15 @@
 ---
 source: spade-tests/src/hir_lowering.rs
-expression: "std::str::from_utf8(buffer.as_slice()).expect(\"error contains invalid utf-8\")"
 ---
+fn test() -> bool {
+    let x = 0;
+    $if x < 1 {
+        let a_ = a;
+    }
+    false
+}
+
+
 error: Expected x to be a compile time value
   ┌─ testinput:3:9
   │

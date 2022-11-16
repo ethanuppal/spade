@@ -1,7 +1,16 @@
 ---
 source: spade-tests/src/typeinference.rs
-expression: "std::str::from_utf8(buffer.as_slice()).expect(\"error contains invalid utf-8\")"
 ---
+struct port X {
+    x: &mut bool
+}
+entity takes_generic<T>(x: T) -> bool {true}
+
+entity x(b: X) -> bool {
+    inst takes_generic(b)
+}
+
+
 error: Generic types can not be ports
   ┌─ testinput:7:5
   │

@@ -1,7 +1,14 @@
 ---
 source: spade-tests/src/typeinference.rs
-expression: "std::str::from_utf8(buffer.as_slice()).expect(\"error contains invalid utf-8\")"
 ---
+mod std{mod conv{ 
+    fn concat<#N, #M, #K>(x: int<N>, y: int<M>) -> int<K> __builtin__
+}}
+entity counter(x: int<4>, y:int<3>) -> int<8> {
+    x `std::conv::concat` y
+}
+
+
 error: Type error
   ┌─ testinput:4:47
   │  

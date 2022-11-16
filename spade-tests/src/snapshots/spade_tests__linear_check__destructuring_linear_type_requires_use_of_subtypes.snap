@@ -1,7 +1,12 @@
 ---
 source: spade-tests/src/linear_check.rs
-expression: "std::str::from_utf8(buffer.as_slice()).expect(\"error contains invalid utf-8\")"
 ---
+entity x(a: (&mut bool, &mut bool)) -> &mut bool {
+    let (x, y) = a;
+    x
+}
+
+
 error: Unused resource
   ┌─ testinput:2:13
   │

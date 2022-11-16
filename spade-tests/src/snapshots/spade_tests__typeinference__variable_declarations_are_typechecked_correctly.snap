@@ -1,7 +1,14 @@
 ---
 source: spade-tests/src/typeinference.rs
-expression: "std::str::from_utf8(buffer.as_slice()).expect(\"error contains invalid utf-8\")"
 ---
+entity counter() -> int<8> {
+    decl x;
+    let a = x;
+    let x: int<9> = 0;
+    x
+}
+
+
 error: Type error
   ┌─ testinput:1:28
   │  

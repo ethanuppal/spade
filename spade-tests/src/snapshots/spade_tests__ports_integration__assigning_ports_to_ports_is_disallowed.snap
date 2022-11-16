@@ -1,7 +1,12 @@
 ---
 source: spade-tests/src/ports_integration.rs
-expression: "std::str::from_utf8(buffer.as_slice()).expect(\"error contains invalid utf-8\")"
 ---
+entity not_allowed(a: &mut (&bool, &bool), b: (&bool, &bool)) -> bool {
+    set a = b;
+    true
+}
+
+
 error: Can't create a wire of ports
   ┌─ testinput:1:23
   │
