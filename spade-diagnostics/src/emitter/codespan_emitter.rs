@@ -39,17 +39,20 @@ pub struct CodespanEmitter;
 impl Emitter for CodespanEmitter {
     fn emit_diagnostic(&mut self, diag: &Diagnostic, buffer: &mut Buffer, code: &CodeBundle) {
         let severity = diag.level.severity();
-        let message = diag.message.as_str();
-        let primary_label = if let Some(primary_label_message) = diag.primary_label.as_ref() {
-            diag.span
+        let message = diag.labels.message.as_str();
+        let primary_label = if let Some(primary_label_message) = diag.labels.primary_label.as_ref()
+        {
+            diag.labels
+                .span
                 .primary_label()
                 .with_message(primary_label_message.as_str())
         } else {
-            diag.span.primary_label()
+            diag.labels.span.primary_label()
         };
         let mut labels = vec![primary_label];
         labels.extend(
-            diag.secondary
+            diag.labels
+                .secondary_labels
                 .iter()
                 .map(|(sp, msg)| sp.secondary_label().with_message(msg.as_str())),
         );
@@ -62,27 +65,27 @@ impl Emitter for CodespanEmitter {
                 }
                 Subdiagnostic::SpannedNote {
                     level,
-                    message,
-                    span,
-                    primary_label,
-                    secondary_labels,
+                    labels: note_labels,
                 } => {
-                    let primary_label = if let Some(primary_label_message) = primary_label.as_ref()
-                    {
-                        span.primary_label()
-                            .with_message(primary_label_message.as_str())
-                    } else {
-                        span.primary_label()
-                    };
+                    let primary_label =
+                        if let Some(primary_label_message) = note_labels.primary_label.as_ref() {
+                            note_labels
+                                .span
+                                .primary_label()
+                                .with_message(primary_label_message.as_str())
+                        } else {
+                            note_labels.span.primary_label()
+                        };
                     let mut labels = vec![primary_label];
                     labels.extend(
-                        secondary_labels
+                        note_labels
+                            .secondary_labels
                             .iter()
                             .map(|(sp, msg)| sp.secondary_label().with_message(msg.as_str())),
                     );
                     subdiagnostics.push(CodespanSubdiagnostic::SpannedNote(SpannedNote {
                         severity: level.severity(),
-                        message: message.as_str().to_string(),
+                        message: note_labels.message.as_str().to_string(),
                         labels,
                     }));
                 }

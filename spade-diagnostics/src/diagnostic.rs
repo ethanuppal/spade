@@ -81,17 +81,22 @@ impl SubdiagnosticLevel {
     }
 }
 
-/// Something that is wrong in the code.
 #[derive(Debug, Clone, PartialEq)]
-pub struct Diagnostic {
-    pub level: DiagnosticLevel,
+pub struct Labels {
     pub message: Message,
     /// The "primary location" of this diagnostic.
     pub span: FullSpan,
     /// Optionally, the primary location can be labeled. If None, it is only underlined.
     pub primary_label: Option<Message>,
     /// Secondary locations that further explain the reasoning behind the diagnostic.
-    pub secondary: Vec<(FullSpan, Message)>,
+    pub secondary_labels: Vec<(FullSpan, Message)>,
+}
+
+/// Something that is wrong in the code.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Diagnostic {
+    pub level: DiagnosticLevel,
+    pub labels: Labels,
     /// Extra diagnostics that are shown after the main diagnostic.
     pub subdiagnostics: Vec<Subdiagnostic>,
 }
@@ -105,13 +110,9 @@ pub enum Subdiagnostic {
         message: Message,
     },
     /// A longer note with additional spans and labels.
-    // FIXME: This is a Diagnostic but with SubdiagnosticLevel and no subdiagnostics.
     SpannedNote {
         level: SubdiagnosticLevel,
-        message: Message,
-        span: FullSpan,
-        primary_label: Option<Message>,
-        secondary_labels: Vec<(FullSpan, Message)>,
+        labels: Labels,
     },
     /// A change suggestion, made up of one or more suggestion parts.
     Suggestion {
@@ -139,10 +140,12 @@ impl Subdiagnostic {
     pub fn span_note(span: impl Into<FullSpan>, message: impl Into<Message>) -> Self {
         Subdiagnostic::SpannedNote {
             level: SubdiagnosticLevel::Note,
-            message: message.into(),
-            span: span.into(),
-            primary_label: None,
-            secondary_labels: Vec::new(),
+            labels: Labels {
+                message: message.into(),
+                span: span.into(),
+                primary_label: None,
+                secondary_labels: Vec::new(),
+            },
         }
     }
 }
@@ -164,10 +167,12 @@ impl Diagnostic {
     fn new(level: DiagnosticLevel, span: impl Into<FullSpan>, message: impl Into<Message>) -> Self {
         Self {
             level,
-            message: message.into(),
-            span: span.into(),
-            primary_label: None,
-            secondary: Vec::new(),
+            labels: Labels {
+                message: message.into(),
+                span: span.into(),
+                primary_label: None,
+                secondary_labels: Vec::new(),
+            },
             subdiagnostics: Vec::new(),
         }
     }
@@ -186,7 +191,7 @@ impl Diagnostic {
 
     /// Attach a message to the primary label of this diagnostic.
     pub fn primary_label(mut self, primary_label: impl Into<Message>) -> Self {
-        self.primary_label = Some(primary_label.into());
+        self.labels.primary_label = Some(primary_label.into());
         self
     }
 
@@ -196,7 +201,9 @@ impl Diagnostic {
         span: impl Into<FullSpan>,
         message: impl Into<Message>,
     ) -> Self {
-        self.secondary.push((span.into(), message.into()));
+        self.labels
+            .secondary_labels
+            .push((span.into(), message.into()));
         self
     }
 
