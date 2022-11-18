@@ -176,15 +176,6 @@ impl CompilationError for Error {
                     ])
                     .with_notes(vec![format!("Did you intend to define a function")])
             },
-            Error::PipelineInImpl{loc} => {
-                Diagnostic::error()
-                    .with_message(format!("Pipelines are not allowed in impl blocks"))
-                    .with_labels(vec![
-                        loc.primary_label()
-                            .with_message("Not allowed here")
-                    ])
-                    .with_notes(vec![format!("Did you intend to define a function")])
-            },
             Error::ExpectedType(found) => Diagnostic::error()
                 .with_message(format!(
                     "Unexpected token. Got `{}`, expected type",

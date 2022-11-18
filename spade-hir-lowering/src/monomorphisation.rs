@@ -10,8 +10,8 @@ use spade_typeinference::{GenericListToken, TypeState};
 
 use crate::error::{Error, Result};
 use crate::generate_entity;
-use crate::pass::Passable;
 use crate::passes::lower_methods::LowerMethods;
+use crate::passes::pass::Passable;
 use crate::{generate_pipeline, name_map::NameSourceMap};
 
 /// An item to be monomorphised

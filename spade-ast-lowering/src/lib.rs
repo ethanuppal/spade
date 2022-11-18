@@ -1162,7 +1162,7 @@ fn visit_register(reg: &Loc<ast::Register>, ctx: &mut Context) -> Result<Loc<hir
     .at_loc(&loc))
 }
 
-/// Ensures that there are functions in anonymous trait impls that have conflicting
+/// Ensures that there are no functions in anonymous trait impls that have conflicting
 /// names
 #[tracing::instrument(skip(item_list))]
 pub fn ensure_unique_anonymous_traits(item_list: &hir::ItemList) -> Vec<Error> {

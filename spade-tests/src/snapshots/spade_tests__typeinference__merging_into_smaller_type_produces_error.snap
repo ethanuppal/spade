@@ -1,0 +1,13 @@
+---
+source: spade-tests/src/typeinference.rs
+expression: "std::str::from_utf8(buffer.as_slice()).expect(\"error contains invalid utf-8\")"
+---
+error: Infered a negative type level integer
+  ┌─ testinput:8:27
+  │
+8 │     x `std::array::merge` generic_woodoo()
+  │                           ^^^^^^^^^^^^^^^^ Inferred type _
+  │
+  = note: -1 in _ is negative
+
+

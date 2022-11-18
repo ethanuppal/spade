@@ -1,0 +1,20 @@
+---
+source: spade-tests/src/typeinference.rs
+expression: "std::str::from_utf8(buffer.as_slice()).expect(\"error contains invalid utf-8\")"
+---
+error: Type error
+  ┌─ testinput:4:54
+  │  
+4 │   entity test(x: [bool; 3], y: [bool; 4]) -> [bool; 5] {
+  │                                              --------- [bool; 5] type specified here
+  │ ╭──────────────────────────────────────────────────────^
+5 │ │     x `std::array::merge` y
+6 │ │ }
+  │ ╰─^ Found type [bool; 7]
+  │  
+  = Expected: 5
+  =       in: [bool; 5]
+  =      Got: 7
+  =       in: [bool; 7]
+
+

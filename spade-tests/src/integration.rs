@@ -307,4 +307,29 @@ mod trait_tests {
             }
         "
     }
+
+    snapshot_error! {
+        duplicate_method_causes_error,
+        "
+            struct X {}
+
+            impl X {
+                fn a(self) -> bool {true}
+            }
+
+            impl X {
+                fn a(self) -> bool {true}
+            }
+
+            fn test(x: X) -> bool {
+                x.a()
+            }
+
+        "
+    }
+
+    snapshot_error! {
+        tuple_has_no_methods,
+        "fn a(x: (bool, bool)) -> bool {x.test()}"
+    }
 }

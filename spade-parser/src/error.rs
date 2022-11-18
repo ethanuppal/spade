@@ -95,8 +95,6 @@ pub enum Error {
     },
 
     #[error("Pipeline in impl")]
-    PipelineInImpl { loc: Loc<()> },
-    #[error("Pipeline in impl")]
     EntityInImpl { loc: Loc<()> },
 
     #[error("(Internal) Expected an item context to be set")]

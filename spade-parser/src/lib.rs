@@ -13,8 +13,8 @@ use tracing::{event, Level};
 use spade_ast::{
     ArgumentList, ArgumentPattern, AttributeList, Block, ComptimeConfig, Entity, Enum, Expression,
     FunctionDecl, ImplBlock, Item, Module, ModuleBody, NamedArgument, ParameterList, Pattern,
-    Pipeline, Register, Statement, Struct, TraitDef, TypeDeclKind,
-    TypeDeclaration, TypeExpression, TypeParam, TypeSpec, UseStatement, PipelineStageReference,
+    Pipeline, PipelineStageReference, Register, Statement, Struct, TraitDef, TypeDeclKind,
+    TypeDeclaration, TypeExpression, TypeParam, TypeSpec, UseStatement,
 };
 use spade_common::location_info::{lspan, AsLabel, FullSpan, HasCodespan, Loc, WithLocation};
 use spade_common::name::{Identifier, Path};
@@ -1225,12 +1225,14 @@ impl<'a> Parser<'a> {
         // the user tries to impl a pipeline. (Can be removed once we figure out
         // the semantics of pipelines like this)
         if let Some(pipeline) = self.pipeline(&AttributeList::empty())? {
-            return Err(Error::PipelineInImpl {
-                loc: pipeline.loc(),
-            });
+            return Err(Diagnostic::error(
+                pipeline.loc(),
+                "Pipelines are currently not allowed in impl blocks",
+            )
+            .primary_label("Not allowed here")
+            .help("Did you intend define a function?")
+            .into());
         }
-
-        // syntax error is here
 
         Ok(result)
     }

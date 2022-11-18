@@ -3,7 +3,7 @@ use spade_diagnostics::Diagnostic;
 use spade_hir::{ArgumentList, Expression, ItemList, Statement};
 use spade_typeinference::{method_resolution::select_method, HasType, TypeState};
 
-use crate::pass::Pass;
+use crate::passes::pass::Pass;
 
 pub struct LowerMethods<'a> {
     pub type_state: &'a TypeState,
@@ -36,10 +36,7 @@ impl<'a> Pass for LowerMethods<'a> {
                     let mut new = args.clone();
                     match &mut new {
                         ArgumentList::Named(_) => todo!(),
-                        ArgumentList::Positional(list) => {
-                            println!("Inserting self");
-                            list.insert(0, self_.as_ref().clone())
-                        }
+                        ArgumentList::Positional(list) => list.insert(0, self_.as_ref().clone()),
                     }
                     new
                 });
