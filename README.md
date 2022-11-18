@@ -35,7 +35,7 @@ The recommended way to use spade is with its build tool
 the language you can use the compiler directly.
 
 1. Install rust via your package manager or https://rustup.rs/
-2. Clone the repo `git clone --recursive https://gitlab.com:spade-lang/spade.git`
+2. Clone the repo `git clone --recursive https://gitlab.com/spade-lang/spade.git`
 3. Build your spade code using `cargo run --bin spade -- <input.spade> -o output.v`
 
 You can also install the compiler using `cargo install spade --git
