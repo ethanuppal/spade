@@ -72,7 +72,7 @@ for your favourite editor, feel free to add it to the list!
 ## Development and Community
 
 If you are interested in using or contributing to Spade, feel free to join our
-[discord group](https://discord.gg/KmmSGxNa).
+[discord group](https://discord.gg/YtXbeamxEX).
 
 Spade is currently being developed as an Open Source project at the Department
 of Electrical Engineering at Linköping university.
