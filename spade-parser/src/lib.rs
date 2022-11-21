@@ -1230,7 +1230,8 @@ impl<'a> Parser<'a> {
                 "Pipelines are currently not allowed in impl blocks",
             )
             .primary_label("Not allowed here")
-            .help("Did you intend define a function?")
+            .note("This limitation is likely to be lifted in the future")
+            .help("Consider defining a free-standing pipeline for now")
             .into());
         }
 

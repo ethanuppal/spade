@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
-use spade_ast_lowering::id_tracker::ExprIdTracker;
+use spade_ast_lowering::id_tracker::{ExprIdTracker, ImplIdTracker};
 use spade_hir::{symbol_table::FrozenSymtab, ItemList};
 use spade_hir_lowering::{
     name_map::{NameSource, NamedValue},
@@ -15,6 +15,7 @@ pub struct CompilerState {
     pub code: Vec<(String, String)>,
     pub symtab: FrozenSymtab,
     pub idtracker: ExprIdTracker,
+    pub impl_idtracker: ImplIdTracker,
     pub item_list: ItemList,
     pub name_source_map: NameSourceMap,
 }

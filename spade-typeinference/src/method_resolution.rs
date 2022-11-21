@@ -43,11 +43,14 @@ pub fn select_method(
                 .primary_label("No such method")
                 .into())
         }
-        _ => {
-            let diag = Diagnostic::error(expr, "{type_name} has multiple methods named {method}")
-                .primary_label("Ambiguous method call");
+        all_candidates => {
+            let mut diag =
+                Diagnostic::error(expr, "{type_name} has multiple methods named {method}")
+                    .primary_label("Ambiguous method call");
 
-            // TODO: List the options
+            for candidate in all_candidates {
+                diag = diag.secondary_label(candidate, "{type_name} is defined here")
+            }
 
             return Err(diag.into());
         }

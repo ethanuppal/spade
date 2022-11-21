@@ -436,8 +436,6 @@ pub fn visit_impl(
             global_symbols::visit_entity(entity, &mut ctx.symtab, &self_context)?;
             let item = visit_entity(entity, ctx)?;
 
-            // TODO: Test and handle duplicate names
-
             match &item {
                 hir::Item::Entity(e) => {
                     trait_members
@@ -448,10 +446,23 @@ pub fn visit_impl(
                         (e.name.name_id().inner.clone(), e.loc()),
                     );
                 }
-                // TODO: Gracefully handle pipelines and builtins
-                hir::Item::Pipeline(_) => todo!(),
-                hir::Item::BuiltinEntity(_, _) => todo!(),
-                hir::Item::BuiltinPipeline(_, _) => todo!(),
+                hir::Item::Pipeline(pipe) => {
+                    return Err(Diagnostic::bug(
+                        pipe,
+                        "Pipeline methods are currently unsupported",
+                    )
+                    .into());
+                }
+                hir::Item::BuiltinEntity(_, head) => {
+                    return Err(Diagnostic::error(head, "Methods can not be __builtin__")
+                        .help("Consider defining a free-standing function")
+                        .into())
+                }
+                hir::Item::BuiltinPipeline(_, head) => {
+                    return Err(Diagnostic::error(head, "Methods can not be __builtin__")
+                        .help("Consider defining a free-standing function")
+                        .into())
+                }
             }
 
             result.push(item);
@@ -2083,51 +2094,6 @@ mod expression_visiting {
             Ok(expected)
         );
     }
-
-    // TODO: Move tests into snapshot test
-    /*
-    test_named_argument_error!(missing_arg(
-        "a"; "a", "b"; Error::MissingArguments{..}
-    ));
-
-    test_named_argument_error!(too_many_args(
-        "a", "b", "c"; "a", "b"; Error::NoSuchArgument{..}
-    ));
-
-    test_named_argument_error!(duplicate_name_causes_error(
-        "a", "b", "b"; "a", "b"; Error::DuplicateNamedBindings{..}
-    ));
-    */
-
-    // TODO: Move tests into snapshot tests
-    /*
-    test_shorthand_named_arg!(shorthand_missing_arg(
-        "a"; "a", "b"; Error::MissingArguments{..}) {
-            let mut symtab = SymbolTable::new();
-            symtab.add_local_variable(ast_ident("a"));
-            symtab
-        }
-    );
-
-    test_shorthand_named_arg!(shorthand_too_many_args(
-        "a", "b", "c"; "a", "b"; Error::NoSuchArgument{..}) {
-            let mut symtab = SymbolTable::new();
-            symtab.add_local_variable(ast_ident("a"));
-            symtab.add_local_variable(ast_ident("b"));
-            symtab.add_local_variable(ast_ident("c"));
-            symtab
-        }
-    );
-
-    test_shorthand_named_arg!(shorthand_duplicate_name_causes_error(
-        "a", "b", "b"; "a", "b"; Error::DuplicateNamedBindings{..}) {
-            let mut symtab = SymbolTable::new();
-            symtab.add_local_variable(ast_ident("a"));
-            symtab.add_local_variable(ast_ident("b"));
-            symtab
-        }
-    );
-    */
 
     #[test]
     fn pipeline_instantiation_works() {

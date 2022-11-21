@@ -1,12 +1,12 @@
 ---
-source: spade-tests/src/integration.rs
+source: spade-tests/src/ast_lowering.rs
 expression: "std::str::from_utf8(buffer.as_slice()).expect(\"error contains invalid utf-8\")"
 ---
 error: Pipelines are currently not allowed in impl blocks
-  ┌─ testinput:4:5
+  ┌─ testinput:5:5
   │
-4 │     pipeline(0) a(self) -> bool {true}
-  │     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ Not allowed here
+5 │     pipeline(1) x(self, x: bool) -> bool __builtin__ 
+  │     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ Not allowed here
   │
   = note: This limitation is likely to be lifted in the future
   = help: Consider defining a free-standing pipeline for now

@@ -189,7 +189,7 @@ pub fn compile(
     let AstLoweringCtx {
         symtab,
         mut idtracker,
-        impl_idtracker: _,
+        impl_idtracker,
         pipeline_ctx: _,
     } = ctx;
 
@@ -322,6 +322,7 @@ pub fn compile(
             code: code.read().unwrap().dump_files(),
             symtab: frozen_symtab,
             idtracker,
+            impl_idtracker,
             item_list,
             name_source_map,
         };

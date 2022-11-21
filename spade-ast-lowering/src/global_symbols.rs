@@ -9,7 +9,7 @@ use spade_common::{
     location_info::{Loc, WithLocation},
     name::{Identifier, Path},
 };
-use spade_diagnostics::Diagnostic;
+use spade_diagnostics::{diag_bail, Diagnostic};
 use spade_hir as hir;
 
 use crate::{types::IsPort, visit_parameter_list, Result, SelfContext};
@@ -83,13 +83,14 @@ pub fn visit_item(
         ast::Item::Pipeline(p) => {
             visit_pipeline(&p, symtab, &SelfContext::FreeStanding)?;
         }
-        ast::Item::TraitDef(_) => {
-            todo!("Trait definitions are unsupported")
+        ast::Item::TraitDef(def) => {
+            // FIXME
+            diag_bail!(def, "Trait definition is currently unsupported");
         }
         ast::Item::ImplBlock(block) => {
-            if block.r#trait.is_some() {
-                // TODO
-                todo!("Support non-anonymous trait impl")
+            if let Some(r#trait) = &block.r#trait {
+                // FIXME
+                diag_bail!(r#trait, "Implementation of traits is currently unsupported");
             }
         }
         ast::Item::Type(t) => {

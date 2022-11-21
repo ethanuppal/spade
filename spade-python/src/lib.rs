@@ -87,6 +87,7 @@ struct SpadeType(pub ConcreteType);
 struct OwnedState {
     symtab: FrozenSymtab,
     idtracker: ExprIdTracker,
+    impl_idtracker: ImplIdTracker,
 }
 
 #[pyclass]
@@ -177,6 +178,7 @@ impl Spade {
             owned: Some(OwnedState {
                 symtab,
                 idtracker: state.idtracker,
+                impl_idtracker: state.impl_idtracker,
             }),
             uut_head,
         })
@@ -320,8 +322,7 @@ impl Spade {
             symtab,
             idtracker,
             pipeline_ctx: None,
-            // TODO: Verify that we can create a new tracker here
-            impl_idtracker: ImplIdTracker::new(),
+            impl_idtracker: owned.impl_idtracker,
         };
         let hir = spade_ast_lowering::visit_expression(&ast, &mut ast_ctx)
             .report_and_convert(&mut self.error_buffer, &self.code, &mut self.diag_handler)?
@@ -374,6 +375,7 @@ impl Spade {
         self.return_owned(OwnedState {
             symtab: ast_ctx.symtab.freeze(),
             idtracker: ast_ctx.idtracker,
+            impl_idtracker: ast_ctx.impl_idtracker,
         });
 
         Ok(FieldRef {
@@ -434,7 +436,11 @@ impl Spade {
             &mut self.diag_handler,
         )?;
 
-        let OwnedState { symtab, idtracker } = self
+        let OwnedState {
+            symtab,
+            idtracker,
+            impl_idtracker,
+        } = self
             .owned
             .take()
             .expect("attempting to re-take owned state");
@@ -445,7 +451,7 @@ impl Spade {
             symtab,
             idtracker,
             pipeline_ctx: None,
-            impl_idtracker: ImplIdTracker::new(),
+            impl_idtracker,
         };
         let hir = spade_ast_lowering::visit_expression(&ast, &mut ast_ctx)
             .report_and_convert(&mut self.error_buffer, &self.code, &mut self.diag_handler)?
@@ -490,6 +496,7 @@ impl Spade {
         self.return_owned(OwnedState {
             symtab,
             idtracker: ast_ctx.idtracker,
+            impl_idtracker: ast_ctx.impl_idtracker,
         });
 
         Ok(BitString(

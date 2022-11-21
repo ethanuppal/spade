@@ -638,3 +638,25 @@ snapshot_error! {
     self_in_free_standing_function,
     "fn a(self) -> bool {true}"
 }
+
+snapshot_error! {
+    builtin_fn_methods_produce_error,
+    "
+        struct X {}
+        impl X {
+            fn x(self, x: bool) -> bool __builtin__
+        }
+    "
+}
+
+snapshot_error! {
+    builtin_pipeline_methods_produce_error,
+    "
+        struct X {}
+        impl X {
+            // NOTE: This error should change once
+            // pipelines as methods are added
+            pipeline(1) x(self, x: bool) -> bool __builtin__ 
+        }
+    "
+}
