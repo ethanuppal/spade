@@ -145,7 +145,7 @@ dependencies = [
 [[package]]
 name = "codespan"
 version = "0.12.0"
-source = "git+https://gitlab.com/spade-lang/codespan.git?branch=subdiagnostics#e0ac25de3e4afdec72b04ceb1ae7268e2aa87eb6"
+source = "git+https://gitlab.com/spade-lang/codespan.git?branch=master#a5656af9ed33460258fd1921bc6bede1ba0fb00e"
 dependencies = [
  "codespan-reporting 0.12.0",
  "serde",
@@ -164,7 +164,7 @@ dependencies = [
 [[package]]
 name = "codespan-reporting"
 version = "0.12.0"
-source = "git+https://gitlab.com/spade-lang/codespan.git?branch=subdiagnostics#e0ac25de3e4afdec72b04ceb1ae7268e2aa87eb6"
+source = "git+https://gitlab.com/spade-lang/codespan.git?branch=master#a5656af9ed33460258fd1921bc6bede1ba0fb00e"
 dependencies = [
  "serde",
  "termcolor",
