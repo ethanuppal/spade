@@ -1820,11 +1820,11 @@ mod tests {
     fn assigning_ports_to_variables_works() {
         let code = r#"
             mod std {mod ports{
-                entity make_port<T>() -> &mut T __builtin__
+                entity new_mut_wire<T>() -> &mut T __builtin__
             }}
 
             entity test() -> &mut int<10> {
-                let x = inst std::ports::make_port();
+                let x = inst std::ports::new_mut_wire();
                 x
             }
         "#;

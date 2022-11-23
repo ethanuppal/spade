@@ -418,9 +418,9 @@ snapshot_error! {
 }
 
 #[test]
-fn destructuring_a_read_port_gives_real_values() {
+fn destructuring_a_read_mut_wire_gives_real_values() {
     let code = "
-    mod std {mod ports { entity read_port<T>(t: &mut T) -> T __builtin__ }}
+    mod std {mod ports { entity read_mut_wire<T>(t: &mut T) -> T __builtin__ }}
     struct A {
         x: bool,
         y: int<3>
@@ -435,7 +435,7 @@ fn destructuring_a_read_port_gives_real_values() {
     entity consumer(x: HasA) -> bool __builtin__
 
     entity uut(val: HasA) -> bool {
-        let A$(x, y) = inst std::ports::read_port(val.inner);
+        let A$(x, y) = inst std::ports::read_mut_wire(val.inner);
         let _ = inst consumer(val);
         takes_normal(x, y)
     }
@@ -447,9 +447,9 @@ fn destructuring_a_read_port_gives_real_values() {
 snapshot_error! {
     reading_from_port_members_is_a_type_error,
     "
-    mod std {mod ports { entity read_port<T>(t: &mut T) -> T __builtin__ }}
+    mod std {mod ports { entity read_mut_wire<T>(t: &mut T) -> T __builtin__ }}
 
-    use std::ports::read_port;
+    use std::ports::read_mut_wire;
 
     struct A {
         x: bool,
@@ -459,8 +459,8 @@ snapshot_error! {
     fn takes_normal(x: bool, y: int<3>) -> bool __builtin__
 
     entity uut(val: &mut A) -> bool {
-        let x = inst read_port(val.x);
-        let y = inst read_port(val.y);
+        let x = inst read_mut_wire(val.x);
+        let y = inst read_mut_wire(val.y);
         takes_normal(x, y)
     }
     "
@@ -469,15 +469,15 @@ snapshot_error! {
 snapshot_error! {
     reading_from_tuple_members_is_an_error,
     "
-    mod std {mod ports { entity read_port<T>(t: &mut T) -> T __builtin__ }}
+    mod std {mod ports { entity read_mut_wire<T>(t: &mut T) -> T __builtin__ }}
 
-    use std::ports::read_port;
+    use std::ports::read_mut_wire;
 
     fn takes_normal(x: bool, y: int<3>) -> bool __builtin__
 
     entity uut(val: &mut (bool, int<3>)) -> bool {
-        let x = inst read_port(val#0);
-        let y = inst read_port(val#1);
+        let x = inst read_mut_wire(val#0);
+        let y = inst read_mut_wire(val#1);
         takes_normal(x, y)
     }
     "

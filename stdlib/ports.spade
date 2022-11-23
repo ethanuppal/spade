@@ -1,4 +1,4 @@
-entity make_port<T>() -> &mut T __builtin__
+entity new_mut_wire<T>() -> &mut T __builtin__
 
-/// Reads the current value from a port
-entity read_port<T>(p: &mut T) -> T __builtin__
+/// Reads the current value of a `&mut T`
+entity read_mut_wire<T>(p: &mut T) -> T __builtin__

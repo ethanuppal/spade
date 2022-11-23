@@ -1071,14 +1071,14 @@ impl ExprLocal for Loc<Expression> {
 
         handle_special_functions! {
             ["std", "mem", "clocked_memory"] => handle_clocked_memory_decl,
-            ["std", "mem", "read_mem"] => handle_read_memory,
+            ["std", "mem", "read_memory"] => handle_read_memory,
             ["std", "conv", "trunc"] => handle_trunc,
             ["std", "conv", "sext"] => handle_sext,
             ["std", "conv", "zext"] => handle_zext,
             ["std", "conv", "concat"] => handle_concat,
             ["std", "ops", "div_pow2"] => handle_div_pow2,
-            ["std", "ports", "make_port"] => handle_make_port,
-            ["std", "ports", "read_port"] => handle_read_port
+            ["std", "ports", "new_mut_wire"] => handle_new_mut_wire,
+            ["std", "ports", "read_mut_wire"] => handle_read_mut_wire
         }
 
         // Look up the name in the executable list to see if this is a type instantiation
@@ -1531,7 +1531,7 @@ impl ExprLocal for Loc<Expression> {
         Ok(result)
     }
 
-    fn handle_make_port(
+    fn handle_new_mut_wire(
         &self,
         result: StatementList,
         args: &[Argument],
@@ -1560,7 +1560,7 @@ impl ExprLocal for Loc<Expression> {
         Ok(result)
     }
 
-    fn handle_read_port(
+    fn handle_read_mut_wire(
         &self,
         result: StatementList,
         args: &[Argument],

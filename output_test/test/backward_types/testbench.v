@@ -22,7 +22,7 @@ module counter_tb();
         `END_TEST
     end
 
-    e_assign_through_port counter
+    e_assign_through_mut_wire counter
         ( .val_i(val)
         , .output__(result)
         );

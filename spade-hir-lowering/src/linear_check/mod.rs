@@ -216,13 +216,15 @@ fn visit_expression(
             name,
             args: list,
         } => {
-            // The read_port function is special and should not consume the port
+            // The read_mut_wire function is special and should not consume the port
             // it is reading.
             // FIXME: When spade is more generic and can handle the * operator
             // doing more fancy things, we should consider getting rid of this function
             let consume = ctx
                 .symtab
-                .try_lookup_final_id(&Path::from_strs(&vec!["std", "ports", "read_port"]).nowhere())
+                .try_lookup_final_id(
+                    &Path::from_strs(&vec!["std", "ports", "read_mut_wire"]).nowhere(),
+                )
                 .map(|n| &n != &name.inner)
                 .unwrap_or(true);
 

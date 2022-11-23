@@ -169,13 +169,13 @@ fn linear_checking_on_registers_works() {
 snapshot_error! {
     checking_works_with_decld_value,
     "
-    entity make_port() -> &mut bool __builtin__
+    entity new_mut_wire() -> &mut bool __builtin__
     entity consume(p: &mut bool) -> bool __builtin__
 
     entity test() -> bool {
         decl x;
         let _ = inst consume(x);
-        let x = inst make_port();
+        let x = inst new_mut_wire();
         let _ = inst consume(x);
         true
     }
@@ -185,12 +185,12 @@ snapshot_error! {
 snapshot_error! {
     function_calls_consume_ports,
     "
-        entity make_port() -> &mut bool __builtin__
+        entity new_mut_wire() -> &mut bool __builtin__
 
         entity consumer(x: &mut bool) -> bool __builtin__
 
         entity test() -> (bool, bool) {
-            let p = inst make_port();
+            let p = inst new_mut_wire();
             (inst consumer(p), inst consumer(p))
         }
     "
@@ -200,18 +200,18 @@ snapshot_error! {
 fn reading_from_a_port_does_not_consume_it() {
     let code = "
         mod std { mod ports {
-            entity read_port<T>(p: &mut T) -> T __builtin__
+            entity read_mut_wire<T>(p: &mut T) -> T __builtin__
         }}
 
-        entity make_port() -> &mut bool __builtin__
+        entity new_mut_wire() -> &mut bool __builtin__
         entity consumer(x: &mut bool) -> bool __builtin__
 
-        use std::ports::read_port;
+        use std::ports::read_mut_wire;
 
         entity test() -> (bool, bool) {
-            let p = inst make_port();
+            let p = inst new_mut_wire();
             let _ = inst consumer(p);
-            (inst read_port(p), inst read_port(p))
+            (inst read_mut_wire(p), inst read_mut_wire(p))
         }
     ";
     build_items(code);

@@ -13,7 +13,7 @@ entity clocked_memory<#NumElements, #WritePorts, #AddrWidth, D>(
     __builtin__
 
 // Get the value out of a memory
-entity read_mem<#AddrWidth, D, #NumElements> (
+entity read_memory<#AddrWidth, D, #NumElements> (
     mem: Memory<D, NumElements>,
     addr: int<AddrWidth>
 ) -> D

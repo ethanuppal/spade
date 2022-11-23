@@ -2310,7 +2310,7 @@ mod expression_tests {
     }
 
     #[test]
-    fn read_port_codegen_works() {
+    fn read_mut_wire_codegen_works() {
         let stmt = statement!(e(0); Type::Int(8); ReadPort; e(1));
 
         let expected = indoc! {

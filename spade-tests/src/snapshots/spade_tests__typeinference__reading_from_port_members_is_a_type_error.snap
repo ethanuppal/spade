@@ -1,9 +1,9 @@
 ---
 source: spade-tests/src/typeinference.rs
 ---
-mod std {mod ports { entity read_port<T>(t: &mut T) -> T __builtin__ }}
+mod std {mod ports { entity read_mut_wire<T>(t: &mut T) -> T __builtin__ }}
 
-use std::ports::read_port;
+use std::ports::read_mut_wire;
 
 struct A {
     x: bool,
@@ -13,16 +13,16 @@ struct A {
 fn takes_normal(x: bool, y: int<3>) -> bool __builtin__
 
 entity uut(val: &mut A) -> bool {
-    let x = inst read_port(val.x);
-    let y = inst read_port(val.y);
+    let x = inst read_mut_wire(val.x);
+    let y = inst read_mut_wire(val.y);
     takes_normal(x, y)
 }
 
 
 error: Field access on &mut A which is not a struct
-   ┌─ testinput:13:28
+   ┌─ testinput:13:32
    │
-13 │     let x = inst read_port(val.x);
-   │                            ^^^^^ Expected struct, found &mut A
+13 │     let x = inst read_mut_wire(val.x);
+   │                                ^^^^^ Expected struct, found &mut A
 
 
