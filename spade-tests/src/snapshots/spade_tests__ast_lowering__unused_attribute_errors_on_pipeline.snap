@@ -2,7 +2,7 @@
 source: spade-tests/src/ast_lowering.rs
 ---
 #[uwu]
-pipeline(1) a(clk: clk) -> bool {reg; true}
+pipeline(1) a(clk: clock) -> bool {reg; true}
 
 
 error: Unrecognised attribute

@@ -1,4 +1,4 @@
-pipeline(3) delay_3(clk: clk, input: int<8>) -> int<8> {
+pipeline(3) delay_3(clk: clock, input: int<8>) -> int<8> {
     reg;
     reg;
     reg;

@@ -4,7 +4,7 @@ source: spade-tests/src/typeinference.rs
 fn trunc<#N, #M>(x: int<N>) -> int<M> __builtin__
 fn concat<#N, #M, #K>(x: int<N>, y: int<M>) -> int<K> __builtin__
 
-entity test(clk: clk, rst: bool) -> bool {
+entity test(clk: clock, rst: bool) -> bool {
     let shift_clock_initial: int<10> = 0b0000011111;
     reg(clk) shift_clock: int<10> reset(rst: shift_clock_initial) = {
         let upper: int<2> = trunc(shift_clock);

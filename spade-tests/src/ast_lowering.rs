@@ -74,7 +74,7 @@ snapshot_error! {
 snapshot_error! {
     duplicate_label_error,
     "
-    pipeline(3) main(clk: clk) -> int<8> {
+    pipeline(3) main(clk: clock) -> int<8> {
         reg;
             'a
         reg;
@@ -87,7 +87,7 @@ snapshot_error! {
 snapshot_error! {
     undefined_label_error,
     "
-    pipeline(3) main(clk: clk) -> int<8> {
+    pipeline(3) main(clk: clock) -> int<8> {
         reg;
             'a
             let x = 0;
@@ -100,7 +100,7 @@ snapshot_error! {
 snapshot_error! {
     multiple_labels_for_same_stage,
     "
-    pipeline(3) main(clk: clk) -> int<8> {
+    pipeline(3) main(clk: clock) -> int<8> {
         reg;
             'a
             'b
@@ -158,7 +158,7 @@ snapshot_error! {
     unused_attribute_errors_on_builtin_pipeline,
     "
         #[uwu]
-        pipeline(1) a(clk: clk) -> bool __builtin__
+        pipeline(1) a(clk: clock) -> bool __builtin__
     "
 }
 
@@ -174,7 +174,7 @@ snapshot_error! {
     unused_attribute_errors_on_pipeline,
     "
         #[uwu]
-        pipeline(1) a(clk: clk) -> bool {reg; true}
+        pipeline(1) a(clk: clock) -> bool {reg; true}
     "
 }
 
@@ -308,7 +308,7 @@ snapshot_error! {
         fn a() -> bool {
             true
         }
-        pipeline(0) a(clk: clk) -> bool {
+        pipeline(0) a(clk: clock) -> bool {
             false
         }
     "
@@ -526,14 +526,14 @@ snapshot_error! {
 snapshot_error! {
     pipeline_depth_mismatch,
     "
-    pipeline(3) p(clk: clk, b: bool) -> bool {
+    pipeline(3) p(clk: clock, b: bool) -> bool {
         reg;
         reg;
         reg;
             b
     }
 
-    entity top(clk: clk) -> bool {
+    entity top(clk: clock) -> bool {
         inst(2) p(clk, true)
     }
     "
@@ -585,7 +585,7 @@ snapshot_error! {
 snapshot_error! {
     incorrect_stage_count,
     "
-        pipeline(3) pipe(clk: clk) -> bool {
+        pipeline(3) pipe(clk: clock) -> bool {
             reg;
             reg;
                 true

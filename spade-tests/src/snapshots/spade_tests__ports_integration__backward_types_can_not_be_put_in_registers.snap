@@ -1,7 +1,7 @@
 ---
 source: spade-tests/src/ports_integration.rs
 ---
-entity x(clk: clk, a: &mut bool) -> bool {
+entity x(clk: clock, a: &mut bool) -> bool {
     reg(clk) _ = a;
     true
 }

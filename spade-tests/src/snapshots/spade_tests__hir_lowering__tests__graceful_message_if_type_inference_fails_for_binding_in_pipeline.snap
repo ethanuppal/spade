@@ -1,7 +1,7 @@
 ---
 source: spade-tests/src/hir_lowering.rs
 ---
-pipeline(1) x(clk: clk) -> bool {
+pipeline(1) x(clk: clock) -> bool {
         let x = 0;
     reg;
         true

@@ -1,7 +1,7 @@
 ---
 source: spade-tests/src/typeinference.rs
 ---
-entity test(clk: clk) -> bool {
+entity test(clk: clock) -> bool {
     let (x, y) = true;
 
     true

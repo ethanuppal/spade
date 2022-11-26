@@ -3,7 +3,7 @@ source: spade-tests/src/typeinference.rs
 ---
 struct X {a: bool}
 
-pipeline(1) a(clk: clk) -> bool {
+pipeline(1) a(clk: clock) -> bool {
         let y = stage(+1).x.b;
     reg;
         let x = X(false);

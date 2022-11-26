@@ -4,7 +4,7 @@ source: spade-tests/src/ast_lowering.rs
 fn a() -> bool {
     true
 }
-pipeline(0) a(clk: clk) -> bool {
+pipeline(0) a(clk: clock) -> bool {
     false
 }
 
@@ -15,7 +15,7 @@ error: Multiple items with the same name
 1 │ fn a() -> bool {
   │    - Previous definition here
   ·
-4 │ pipeline(0) a(clk: clk) -> bool {
+4 │ pipeline(0) a(clk: clock) -> bool {
   │             ^ a is defined multiple times
 
 

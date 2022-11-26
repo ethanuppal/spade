@@ -1,6 +1,6 @@
 use std::conv::trunc;
 
-entity actual_counter(clk: clk, rst: bool, max: int<8>) -> int<8> {
+entity actual_counter(clk: clock, rst: bool, max: int<8>) -> int<8> {
     reg(clk) value reset (rst: 0) =
         if value == max {
             0
@@ -12,7 +12,7 @@ entity actual_counter(clk: clk, rst: bool, max: int<8>) -> int<8> {
     value
 }
 
-entity counter(clk: clk, rst: bool, max: int<8>) -> int<8> {
+entity counter(clk: clock, rst: bool, max: int<8>) -> int<8> {
     inst actual_counter$(clk, rst, max)
 }
 

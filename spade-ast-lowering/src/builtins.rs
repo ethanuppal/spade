@@ -81,6 +81,6 @@ pub fn populate_symtab(symtab: &mut SymbolTable, item_list: &mut ItemList) {
         PrimitiveType::Memory,
         true,
     );
-    add_type(&["clk"], vec![], PrimitiveType::Clock, true);
+    add_type(&["clock"], vec![], PrimitiveType::Clock, true);
     add_type(&["bool"], vec![], PrimitiveType::Bool, false);
 }

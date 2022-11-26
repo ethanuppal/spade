@@ -1,7 +1,7 @@
 ---
 source: spade-tests/src/ast_lowering.rs
 ---
-pipeline(3) main(clk: clk) -> int<8> {
+pipeline(3) main(clk: clock) -> int<8> {
     reg;
         'a
     reg;

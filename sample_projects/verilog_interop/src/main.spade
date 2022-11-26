@@ -1,5 +1,0 @@
-entity external_mod(x: int<16>) -> int<16> __builtin__
-
-entity main() -> int<16> {
-    inst external_mod(10)
-}

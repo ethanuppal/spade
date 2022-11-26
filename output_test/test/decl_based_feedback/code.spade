@@ -1,5 +1,5 @@
 use std::conv::trunc;
-entity counter(clk: clk, rst: bool) -> (int<8>, int<8>) {
+entity counter(clk: clock, rst: bool) -> (int<8>, int<8>) {
     decl x, y;
 
     let x_at_max = x == 8;

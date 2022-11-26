@@ -126,7 +126,7 @@ fn using_names_of_types_in_namespaces_works() {
 snapshot_error! {
     pipeline_shadowing_does_not_fail_silently,
     "
-    pipeline(2) main(clk: clk, x: int<8>) -> int<8> {
+    pipeline(2) main(clk: clock, x: int<8>) -> int<8> {
             let x: int<8> = 0;
         reg;
             let x: int<8> = 1;

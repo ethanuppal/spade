@@ -29,5 +29,5 @@ pub fn t_bool(symtab: &SymbolTable) -> KnownType {
     lookup(symtab, &["bool"])
 }
 pub fn t_clock(symtab: &SymbolTable) -> KnownType {
-    lookup(symtab, &["clk"])
+    lookup(symtab, &["clock"])
 }

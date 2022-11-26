@@ -156,7 +156,7 @@ snapshot_error! {
 snapshot_error! {
     counter_without_trunc_causes_type_error,
     "
-        entity counter(clk: clk, rst: bool) -> int<8> {
+        entity counter(clk: clock, rst: bool) -> int<8> {
             reg(clk) x reset (rst: 0) = x + 1;
             x
         }
@@ -166,7 +166,7 @@ snapshot_error! {
 snapshot_error! {
     type_error_has_replacements_applied,
     "
-        entity counter(clk: clk, rst: bool) -> (int<8>, int<8>) {
+        entity counter(clk: clock, rst: bool) -> (int<8>, int<8>) {
             decl x, y;
 
             let x_at_max = x == 8;
@@ -236,7 +236,7 @@ snapshot_error! {
 snapshot_error! {
     good_error_message_for_reg_with_explicit_type,
     "
-        entity test(clk: clk) -> bool {
+        entity test(clk: clock) -> bool {
             reg(clk) (sample_i, audio_val): (int<9>, int<16>) = {
                 true
             };
@@ -249,7 +249,7 @@ snapshot_error! {
 snapshot_error! {
     good_error_message_for_reg_pattern_type_mismatch,
     "
-        entity test(clk: clk) -> bool {
+        entity test(clk: clock) -> bool {
             reg(clk) (sample_i, audio_val): bool = {
                 true
             };
@@ -262,7 +262,7 @@ snapshot_error! {
 snapshot_error! {
     good_error_message_for_reg_pattern_type_mismatch_with_implicit_type,
     "
-        entity test(clk: clk) -> bool {
+        entity test(clk: clock) -> bool {
             reg(clk) (sample_i, audio_val) = {
                 true
             };
@@ -275,7 +275,7 @@ snapshot_error! {
 snapshot_error! {
     good_error_message_for_let_pattern_type_mismatch_with_implicit_type,
     "
-        entity test(clk: clk) -> bool {
+        entity test(clk: clock) -> bool {
             let (x, y) = true;
 
             true
@@ -286,7 +286,7 @@ snapshot_error! {
 snapshot_error! {
     good_error_message_for_let_pattern_type_mismatch_with_explicit_type,
     "
-        entity test(clk: clk) -> bool {
+        entity test(clk: clock) -> bool {
             let (x, y): bool = true;
 
             true
@@ -314,7 +314,7 @@ fn fields_on_declared_variables_can_be_accessed_in_pipelines() {
         struct A {
             x: bool
         }
-        pipeline(1) a(clk: clk) -> int<32> {
+        pipeline(1) a(clk: clock) -> int<32> {
                 let _ = stage(+1).x.x;
             reg;
                 let x = A(false);
@@ -343,7 +343,7 @@ snapshot_error! {
     "
         struct X {a: bool}
 
-        pipeline(1) a(clk: clk) -> bool {
+        pipeline(1) a(clk: clock) -> bool {
                 let y = stage(+1).x.b;
             reg;
                 let x = X(false);
@@ -357,7 +357,7 @@ snapshot_error! {
     "
         struct X {a: bool}
 
-        pipeline(1) a(clk: clk) -> bool {
+        pipeline(1) a(clk: clock) -> bool {
             reg;
                 let x = X(false);
                 let y = x.b;
@@ -498,7 +498,7 @@ snapshot_error! {
     fn trunc<#N, #M>(x: int<N>) -> int<M> __builtin__
     fn concat<#N, #M, #K>(x: int<N>, y: int<M>) -> int<K> __builtin__
 
-    entity test(clk: clk, rst: bool) -> bool {
+    entity test(clk: clock, rst: bool) -> bool {
         let shift_clock_initial: int<10> = 0b0000011111;
         reg(clk) shift_clock: int<10> reset(rst: shift_clock_initial) = {
             let upper: int<2> = trunc(shift_clock);

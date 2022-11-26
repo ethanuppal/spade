@@ -1,14 +1,14 @@
 ---
 source: spade-tests/src/ast_lowering.rs
 ---
-pipeline(3) p(clk: clk, b: bool) -> bool {
+pipeline(3) p(clk: clock, b: bool) -> bool {
     reg;
     reg;
     reg;
         b
 }
 
-entity top(clk: clk) -> bool {
+entity top(clk: clock) -> bool {
     inst(2) p(clk, true)
 }
 
@@ -16,7 +16,7 @@ entity top(clk: clk) -> bool {
 error: Pipeline depth mismatch
   ┌─ testinput:9:10
   │
-1 │ pipeline(3) p(clk: clk, b: bool) -> bool {
+1 │ pipeline(3) p(clk: clock, b: bool) -> bool {
   │          - p has depth 3
   ·
 9 │     inst(2) p(clk, true)

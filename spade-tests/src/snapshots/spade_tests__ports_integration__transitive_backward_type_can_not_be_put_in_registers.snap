@@ -5,7 +5,7 @@ struct port X {
     a: &mut bool,
     b: &bool
 }
-entity x(clk: clk, a: X) -> bool {
+entity x(clk: clock, a: X) -> bool {
     reg(clk) _ = a;
     true
 }

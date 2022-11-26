@@ -1,9 +1,9 @@
 ---
 source: spade-tests/src/hir_lowering.rs
 ---
-pipeline(5) X(clk: clk) -> bool {reg*5; false}
+pipeline(5) X(clk: clock) -> bool {reg*5; false}
 
-pipeline(6) main(clk: clk, x: bool) -> bool {
+pipeline(6) main(clk: clock, x: bool) -> bool {
         let x = inst(5) X(clk);
     reg*4;
         'here

@@ -1,7 +1,7 @@
 ---
 source: spade-tests/src/hir_lowering.rs
 ---
-entity x(clk: clk) -> bool {
+entity x(clk: clock) -> bool {
     reg(clk) x = 0;
     true
 }

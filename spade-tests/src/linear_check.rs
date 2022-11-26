@@ -21,7 +21,7 @@ snapshot_error! {
 snapshot_error! {
     double_consumption_of_identifier_in_pipeline_produces_error,
     "
-    pipeline(0) x(clk: clk, resource: &mut bool) -> (&mut bool, &mut bool) {
+    pipeline(0) x(clk: clock, resource: &mut bool) -> (&mut bool, &mut bool) {
         (resource, resource)
     }
     "
@@ -158,7 +158,7 @@ snapshot_error! {
 #[test]
 fn linear_checking_on_registers_works() {
     let code = "
-    entity test(clk: clk) -> int<8> {
+    entity test(clk: clock) -> int<8> {
         reg(clk) x = x;
         x
     }

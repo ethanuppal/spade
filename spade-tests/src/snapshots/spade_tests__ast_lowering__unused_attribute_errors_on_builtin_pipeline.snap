@@ -2,7 +2,7 @@
 source: spade-tests/src/ast_lowering.rs
 ---
 #[uwu]
-pipeline(1) a(clk: clk) -> bool __builtin__
+pipeline(1) a(clk: clock) -> bool __builtin__
 
 
 error: Unrecognised attribute

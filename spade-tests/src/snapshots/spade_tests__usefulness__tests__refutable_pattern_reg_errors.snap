@@ -1,7 +1,7 @@
 ---
 source: spade-tests/src/usefulness.rs
 ---
-entity A(clk: clk) -> bool {
+entity A(clk: clock) -> bool {
     reg(clk) true = false;
     false
 }

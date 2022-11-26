@@ -3,7 +3,7 @@ use crate::{build_items, snapshot_error};
 snapshot_error! {
     backward_types_can_not_be_put_in_registers,
     "
-    entity x(clk: clk, a: &mut bool) -> bool {
+    entity x(clk: clock, a: &mut bool) -> bool {
         reg(clk) _ = a;
         true
     }
@@ -17,7 +17,7 @@ snapshot_error! {
         a: &mut bool,
         b: &bool
     }
-    entity x(clk: clk, a: X) -> bool {
+    entity x(clk: clock, a: X) -> bool {
         reg(clk) _ = a;
         true
     }
@@ -27,7 +27,7 @@ snapshot_error! {
 snapshot_error! {
     wire_types_can_not_be_stored_in_registers,
     "
-    entity x(clk: clk, a: &bool) -> bool {
+    entity x(clk: clock, a: &bool) -> bool {
         reg(clk) _ = a;
         true
     }
@@ -79,13 +79,13 @@ snapshot_error! {
     "
     mod std {mod mem {
         entity clocked_memory<#NumElements, #WritePorts, #AddrWidth, D>(
-            clk: clk,
+            clk: clock,
             writes: [(bool, int<AddrWidth>, D); WritePorts],
         ) -> Memory<D, NumElements>
             __builtin__
         }
     }
-    entity A(clk: clk, p: &bool) -> bool {
+    entity A(clk: clock, p: &bool) -> bool {
         let idx: int<10> = 0;
         let mem: Memory<&bool, 1024> = inst std::mem::clocked_memory(clk, [(true, idx, p)]);
 

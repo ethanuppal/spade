@@ -433,7 +433,7 @@ mod tests {
     #[test]
     fn registers_work() {
         let code = r#"
-        entity name(clk: clk, a: int<16>) -> int<16> {
+        entity name(clk: clock, a: int<16>) -> int<16> {
             reg(clk) res = a;
             res
         }
@@ -453,7 +453,7 @@ mod tests {
     #[test]
     fn registers_with_tuple_patterns_work() {
         let code = r#"
-        entity name(clk: clk, a: (int<16>, int<8>)) -> int<16> {
+        entity name(clk: clock, a: (int<16>, int<8>)) -> int<16> {
             reg(clk) (x, y) = a;
             x
         }
@@ -477,7 +477,7 @@ mod tests {
     #[test]
     fn registers_with_reset_work() {
         let code = r#"
-        entity name(clk: clk, rst: bool, a: int<16>) -> int<16> {
+        entity name(clk: clock, rst: bool, a: int<16>) -> int<16> {
             reg(clk) res reset (rst: 0) = a;
             res
         }
@@ -503,7 +503,7 @@ mod tests {
     #[test]
     fn untyped_let_bindings_work() {
         let code = r#"
-        entity name(clk: clk, a: int<16>) -> int<16> {
+        entity name(clk: clock, a: int<16>) -> int<16> {
             let res = a;
             res
         }
@@ -655,13 +655,13 @@ mod tests {
     #[test]
     fn pipeline_instantiation_works() {
         let code = r#"
-            pipeline(2) sub(clk: clk, a: int<16>) -> int<16> {
+            pipeline(2) sub(clk: clock, a: int<16>) -> int<16> {
                 reg;
                 reg;
                 a
             }
 
-            entity top(clk: clk) -> int<16> {
+            entity top(clk: clock) -> int<16> {
                 inst(2) sub(clk, 0)
             }
         "#;
@@ -694,7 +694,7 @@ mod tests {
     #[test]
     fn pipelines_work() {
         let code = r#"
-            pipeline(3) pl(clk: clk, a: int<16>) -> int<18> {
+            pipeline(3) pl(clk: clock, a: int<16>) -> int<18> {
                     let x = a << a;
                 reg;
                     let y = x + a;
@@ -741,7 +741,7 @@ mod tests {
     #[test]
     fn pipelines_with_ports_work() {
         let code = r#"
-            pipeline(3) pl(clk: clk, a: &mut int<16>) -> &mut int<16> {
+            pipeline(3) pl(clk: clock, a: &mut int<16>) -> &mut int<16> {
                 reg;
                 reg;
                 reg;
@@ -764,9 +764,9 @@ mod tests {
     #[test]
     fn subpipes_do_not_get_extra_delay() {
         let code = r#"
-            pipeline(3) sub(clk: clk) -> int<18> __builtin__
+            pipeline(3) sub(clk: clock) -> int<18> __builtin__
 
-            pipeline(3) pl(clk: clk) -> int<18> {
+            pipeline(3) pl(clk: clock) -> int<18> {
                     let res = inst(3) sub(clk);
                 reg*3;
                     res
@@ -790,7 +790,7 @@ mod tests {
     #[test]
     fn pipelines_returning_expressions_work() {
         let code = r#"
-            pipeline(3) pl(clk: clk, a: int<16>) -> int<17> {
+            pipeline(3) pl(clk: clock, a: int<16>) -> int<17> {
                 reg;
                 reg;
                 reg;
@@ -824,7 +824,7 @@ mod tests {
     #[test]
     fn backward_pipeline_references_work() {
         let code = r#"
-            pipeline(1) pl(clk: clk, a: int<16>) -> int<16> {
+            pipeline(1) pl(clk: clock, a: int<16>) -> int<16> {
                 reg;
                     stage(-1).a
             }
@@ -848,7 +848,7 @@ mod tests {
     #[test]
     fn forward_pipeline_references_work() {
         let code = r#"
-            pipeline(2) pl(clk: clk, a: bool) -> int<16> {
+            pipeline(2) pl(clk: clock, a: bool) -> int<16> {
                 reg;
                     let b = stage(+1).x;
                 reg;
@@ -883,7 +883,7 @@ mod tests {
     #[test]
     fn absolute_pipeline_references_work() {
         let code = r#"
-            pipeline(2) pl(clk: clk, a: bool) -> int<16> {
+            pipeline(2) pl(clk: clock, a: bool) -> int<16> {
                 reg;
                     let b = stage(a).x;
                 reg;
@@ -921,7 +921,7 @@ mod tests {
         let code = r#"
             entity A() -> int<16> __builtin__
 
-            pipeline(1) pl(clk: clk) -> int<16> {
+            pipeline(1) pl(clk: clock) -> int<16> {
                     let x_ = inst A();
                 reg;
                     let x = stage(-1).x_;
@@ -1297,7 +1297,7 @@ mod tests {
         let code = r#"
         struct X{a: int<16>, b: int<8>}
 
-        entity name(clk: clk, a: X) -> int<16> {
+        entity name(clk: clock, a: X) -> int<16> {
             reg(clk) X(x, y) = a;
             x
         }
@@ -1323,7 +1323,7 @@ mod tests {
         let code = r#"
         struct X{a: int<16>, b: int<8>}
 
-        entity name(clk: clk, a: X) -> int<16> {
+        entity name(clk: clock, a: X) -> int<16> {
             reg(clk) X$(b: y, a: x) = a;
             x
         }
@@ -1517,10 +1517,10 @@ mod tests {
     snapshot_error! {
         mismatched_pipeline_depth_match,
         "
-        pipeline(5) X(clk: clk) -> bool __builtin__
-        pipeline(4) Y(clk: clk) -> bool __builtin__
+        pipeline(5) X(clk: clock) -> bool __builtin__
+        pipeline(4) Y(clk: clock) -> bool __builtin__
 
-        pipeline(5) main(clk: clk, x: bool) -> bool {
+        pipeline(5) main(clk: clock, x: bool) -> bool {
                 let _ = match x {
                     true => inst(5) X(clk),
                     false => inst(4) Y(clk)
@@ -1534,10 +1534,10 @@ mod tests {
     snapshot_error! {
         mismatched_pipeline_depth_if,
         "
-        pipeline(5) X(clk: clk) -> bool __builtin__
-        pipeline(4) Y(clk: clk) -> bool __builtin__
+        pipeline(5) X(clk: clock) -> bool __builtin__
+        pipeline(4) Y(clk: clock) -> bool __builtin__
 
-        pipeline(5) main(clk: clk, x: bool) -> bool {
+        pipeline(5) main(clk: clock, x: bool) -> bool {
                 let _ = if x {
                     inst(5) X(clk)
                 }
@@ -1553,9 +1553,9 @@ mod tests {
     snapshot_error! {
         using_unavailable_variable_causes_error,
         "
-        pipeline(5) X(clk: clk) -> bool {reg*5; false}
+        pipeline(5) X(clk: clock) -> bool {reg*5; false}
 
-        pipeline(5) main(clk: clk, x: bool) -> bool {
+        pipeline(5) main(clk: clock, x: bool) -> bool {
                 let x = inst(5) X(clk);
             reg;
                 let res = x;
@@ -1568,9 +1568,9 @@ mod tests {
     snapshot_error! {
         referring_to_unavailable_variable_causes_error,
         "
-        pipeline(5) X(clk: clk) -> bool {reg*5; false}
+        pipeline(5) X(clk: clock) -> bool {reg*5; false}
 
-        pipeline(6) main(clk: clk, x: bool) -> bool {
+        pipeline(6) main(clk: clock, x: bool) -> bool {
                 let x = inst(5) X(clk);
             reg*5;
                 let res = stage(-1).x;
@@ -1583,9 +1583,9 @@ mod tests {
     snapshot_error! {
         absolute_referring_to_unavailable_variable_causes_error,
         "
-        pipeline(5) X(clk: clk) -> bool {reg*5; false}
+        pipeline(5) X(clk: clock) -> bool {reg*5; false}
 
-        pipeline(6) main(clk: clk, x: bool) -> bool {
+        pipeline(6) main(clk: clock, x: bool) -> bool {
                 let x = inst(5) X(clk);
             reg*4;
                 'here
@@ -1658,7 +1658,7 @@ mod tests {
     snapshot_error! {
         graceful_message_if_type_inference_fails_for_register,
         "
-            entity x(clk: clk) -> bool {
+            entity x(clk: clock) -> bool {
                 reg(clk) x = 0;
                 true
             }
@@ -1668,7 +1668,7 @@ mod tests {
     snapshot_error! {
         graceful_message_if_type_inference_fails_for_binding_in_pipeline,
         "
-            pipeline(1) x(clk: clk) -> bool {
+            pipeline(1) x(clk: clock) -> bool {
                     let x = 0;
                 reg;
                     true

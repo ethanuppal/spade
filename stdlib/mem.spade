@@ -7,7 +7,7 @@
 // to address. Otherwise no change takes effect
 // NOTE: We when possible, we should make compute AddrWidth from NumElements
 entity clocked_memory<#NumElements, #WritePorts, #AddrWidth, D>(
-    clk: clk,
+    clk: clock,
     writes: [(bool, int<AddrWidth>, D); WritePorts],
 ) -> Memory<D, NumElements>
     __builtin__

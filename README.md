@@ -10,7 +10,7 @@ level control of the hardware.
 ## Code examples
 
 ```
-entity counter(clk: clk, rst: bool, max: int<8>) -> int<8> {
+entity counter(clk: clock, rst: bool, max: int<8>) -> int<8> {
     reg(clk) value reset (rst: 0) =
         if value == max {
             0
