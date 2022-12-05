@@ -6,6 +6,7 @@ pub mod item_type;
 pub mod lexer;
 
 use colored::*;
+use error::SuggestBraceEnumVariant;
 use logos::Lexer;
 use tracing::{event, Level};
 
@@ -17,7 +18,7 @@ use spade_ast::{
 };
 use spade_common::location_info::{lspan, AsLabel, FullSpan, HasCodespan, Loc, WithLocation};
 use spade_common::name::{Identifier, Path};
-use spade_diagnostics::{diagnostic::SuggestionParts, Diagnostic};
+use spade_diagnostics::Diagnostic;
 use spade_macros::trace_parser;
 
 use crate::error::{
@@ -42,6 +43,10 @@ impl Token {
             span: lexer.span(),
             file_id,
         }
+    }
+
+    pub fn loc(&self) -> Loc<()> {
+        Loc::new((), self.span.codespan(), self.file_id)
     }
 }
 
@@ -983,7 +988,7 @@ impl<'a> Parser<'a> {
             // The end of the entity definition depends on whether or not
             // a type is present.
             let end_loc = output_type
-                .map(|t| t.loc().span)
+                .map(|t| t.into_loc().span)
                 .unwrap_or_else(|| lspan(close_paren.span));
 
             return match self.peek()? {
@@ -1060,7 +1065,7 @@ impl<'a> Parser<'a> {
             // The end of the entity definition depends on whether or not
             // a type is present.
             let end_loc = output_type
-                .map(|t| t.loc().span)
+                .map(|t| t.into_loc().span)
                 .unwrap_or_else(|| lspan(close_paren.span));
 
             return match self.peek()? {
@@ -1203,7 +1208,7 @@ impl<'a> Parser<'a> {
 
     fn maybe_suggest_brace_enum_variant(&mut self, err: &mut Diagnostic) -> Result<bool> {
         let open_paren = match self.peek_and_eat(&TokenKind::OpenParen)? {
-            Some(open_paren) => open_paren,
+            Some(open_paren) => open_paren.loc(),
             _ => return Ok(false),
         };
         let mut try_parameter_list = self.clone();
@@ -1211,14 +1216,15 @@ impl<'a> Parser<'a> {
             return Ok(false);
         }
         let close_paren = match try_parameter_list.peek_and_eat(&TokenKind::CloseParen)? {
-            Some(close_paren) => close_paren,
+            Some(close_paren) => close_paren.loc(),
             _ => return Ok(false),
         };
-        err.push_span_suggest_multipart(
-            "Use `{` if you want to add items to this enum variant",
-            SuggestionParts::new()
-                .part(open_paren, "{")
-                .part(close_paren, "}"),
+        err.push_subdiagnostic(
+            SuggestBraceEnumVariant {
+                open_paren,
+                close_paren,
+            }
+            .into(),
         );
         Ok(true)
     }

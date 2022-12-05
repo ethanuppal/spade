@@ -238,6 +238,12 @@ impl Diagnostic {
         self
     }
 
+    /// See [Self::subdiagnostic].
+    pub fn push_subdiagnostic(&mut self, subdiagnostic: Subdiagnostic) -> &mut Self {
+        self.subdiagnostics.push(subdiagnostic);
+        self
+    }
+
     pub fn span_suggest(
         self,
         message: impl Into<Message>,

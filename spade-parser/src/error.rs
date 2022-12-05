@@ -1,9 +1,19 @@
 use local_impl::local_impl;
 use spade_common::{location_info::Loc, name::Path};
 use spade_diagnostics::Diagnostic;
+use spade_macros::IntoSubdiagnostic;
 use thiserror::Error;
 
 use crate::{lexer::TokenKind, Token, TypeSpec};
+
+#[derive(IntoSubdiagnostic)]
+#[diagnostic(suggestion, "Use `{` if you want to add items to this enum variant")]
+pub(crate) struct SuggestBraceEnumVariant {
+    #[diagnostic(replace, "{")]
+    pub open_paren: Loc<()>,
+    #[diagnostic(replace, "}")]
+    pub close_paren: Loc<()>,
+}
 
 #[derive(Error, Debug, Clone, PartialEq)]
 pub enum Error {
