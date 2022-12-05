@@ -988,7 +988,7 @@ impl<'a> Parser<'a> {
             // The end of the entity definition depends on whether or not
             // a type is present.
             let end_loc = output_type
-                .map(|t| t.into_loc().span)
+                .map(|t| t.span)
                 .unwrap_or_else(|| lspan(close_paren.span));
 
             return match self.peek()? {
@@ -1065,7 +1065,7 @@ impl<'a> Parser<'a> {
             // The end of the entity definition depends on whether or not
             // a type is present.
             let end_loc = output_type
-                .map(|t| t.into_loc().span)
+                .map(|t| t.span)
                 .unwrap_or_else(|| lspan(close_paren.span));
 
             return match self.peek()? {

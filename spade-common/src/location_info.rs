@@ -13,15 +13,6 @@ pub trait AsLabel {
     fn secondary_label(&self) -> Label<usize> {
         Label::secondary(self.file_id(), self.span())
     }
-
-    fn into_loc(self) -> Loc<Self>
-    where
-        Self: Sized,
-    {
-        let span = self.span().codespan();
-        let file_id = self.file_id();
-        Loc::new(self, span, file_id)
-    }
 }
 
 pub type FullSpan = (Span, usize);
