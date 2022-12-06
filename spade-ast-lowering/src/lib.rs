@@ -8,6 +8,7 @@ pub mod pipelines;
 pub mod types;
 
 use attributes::{report_unused_attributes, unit_name};
+use codespan::Span;
 use pipelines::PipelineContext;
 use spade_diagnostics::Diagnostic;
 use tracing::{event, info, Level};
@@ -236,9 +237,16 @@ fn visit_parameter_list(
 
     if let SelfContext::ImplBlock(_) = self_context {
         if l.self_.is_none() {
+            let mut self_insert_loc = l.loc();
+            // Suggest insertion after the first paren
+            self_insert_loc.span = Span::new(
+                l.loc().span.start() + 1.into(),
+                l.loc().span.start() + 1.into(),
+            );
             return Err(
                 Diagnostic::error(l, "Method must take 'self' as the first parameter")
                     .primary_label("Missing self")
+                    .span_suggest_insert_before("Consider adding self", self_insert_loc, "self, ")
                     .into(),
             );
             //FIXME Suggestion?

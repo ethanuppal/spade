@@ -7,5 +7,10 @@ error: Method must take 'self' as the first parameter
   │
 3 │     fn test(x: bool) -> bool {true}
   │            ^^^^^^^^^ Missing self
+  │
+  = Consider adding self
+  │
+3 │     fn test(self, x: bool) -> bool {true}
+  │             ++++++
 
 
