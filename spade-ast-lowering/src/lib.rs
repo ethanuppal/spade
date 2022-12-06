@@ -337,6 +337,7 @@ pub fn visit_entity(item: &Loc<ast::Entity>, ctx: &mut Context) -> Result<hir::I
         inputs: _,
         output_type: _,
         type_params,
+        unit_keyword: _,
     } = &item.inner;
 
     ctx.symtab.new_scope();
@@ -433,6 +434,21 @@ pub fn visit_impl(
         let mut trait_impl = HashMap::new();
         let self_context = SelfContext::ImplBlock(target_type_spec);
         for entity in &block.entities {
+            if entity.is_function && ast_type_spec.is_port(&ctx.symtab)? {
+                return Err(Diagnostic::error(
+                    entity.unit_keyword,
+                    "Functions are not allowed on port types",
+                )
+                .primary_label("Function on port type")
+                .secondary_label(ast_type_spec, "This is a port type")
+                .span_suggest_replace(
+                    "Consider making this an entity",
+                    entity.unit_keyword,
+                    "entity",
+                )
+                .into());
+            }
+
             global_symbols::visit_entity(entity, &mut ctx.symtab, &self_context)?;
             let item = visit_entity(entity, ctx)?;
 
@@ -1255,6 +1271,7 @@ mod entity_visiting {
             ),
             type_params: vec![],
             attributes: ast::AttributeList(vec![]),
+            unit_keyword: ().nowhere(),
         }
         .nowhere();
 
@@ -2511,6 +2528,7 @@ mod item_visiting {
                 ),
                 type_params: vec![],
                 attributes: ast::AttributeList(vec![]),
+                unit_keyword: ().nowhere(),
             }
             .nowhere(),
         );
@@ -2586,6 +2604,7 @@ mod impl_blocks {
                     .nowhere(),
                 ),
                 type_params: vec![],
+                unit_keyword: ().nowhere(),
             }
             .nowhere()],
         }
@@ -2708,6 +2727,7 @@ mod module_visiting {
                     ),
                     type_params: vec![],
                     attributes: ast::AttributeList(vec![]),
+                    unit_keyword: ().nowhere(),
                 }
                 .nowhere(),
             )],

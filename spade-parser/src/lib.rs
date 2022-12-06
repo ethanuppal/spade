@@ -1029,6 +1029,7 @@ impl<'a> Parser<'a> {
                 output_type,
                 body: block.map(|inner| inner.map(|inner| Expression::Block(Box::new(inner)))),
                 type_params,
+                unit_keyword: ().at(self.file_id, &start_token.span),
             }
             .between(self.file_id, &start_token.span, &block_span),
         ))
@@ -1965,6 +1966,7 @@ mod tests {
                 .nowhere(),
             ),
             type_params: vec![],
+            unit_keyword: ().nowhere(),
         }
         .nowhere();
 
@@ -1988,6 +1990,7 @@ mod tests {
                 .nowhere(),
             ),
             type_params: vec![],
+            unit_keyword: ().nowhere(),
         }
         .nowhere();
 
@@ -2014,6 +2017,7 @@ mod tests {
                 TypeParam::TypeName(ast_ident("X")).nowhere(),
                 TypeParam::Integer(ast_ident("Y")).nowhere(),
             ],
+            unit_keyword: ().nowhere(),
         }
         .nowhere();
 
@@ -2181,6 +2185,7 @@ mod tests {
                 .nowhere(),
             ),
             type_params: vec![],
+            unit_keyword: ().nowhere(),
         }
         .nowhere();
 
@@ -2198,6 +2203,7 @@ mod tests {
                 .nowhere(),
             ),
             type_params: vec![],
+            unit_keyword: ().nowhere(),
         }
         .nowhere();
 
@@ -2360,6 +2366,7 @@ mod tests {
                 output_type: None,
                 body: None,
                 type_params: vec![],
+                unit_keyword: ().nowhere(),
             }
             .nowhere()],
         }
@@ -2391,6 +2398,7 @@ mod tests {
                 output_type: None,
                 body: None,
                 type_params: vec![],
+                unit_keyword: ().nowhere(),
             }
             .nowhere()],
         }
@@ -2494,6 +2502,7 @@ mod tests {
                 output_type: None,
                 body: None,
                 type_params: vec![],
+                unit_keyword: ().nowhere(),
             }
             .nowhere(),
         );
@@ -2534,6 +2543,7 @@ mod tests {
                 output_type: None,
                 body: None,
                 type_params: vec![],
+                unit_keyword: ().nowhere(),
             }
             .nowhere(),
         );
@@ -2556,6 +2566,7 @@ mod tests {
                 output_type: None,
                 body: None,
                 type_params: vec![],
+                unit_keyword: ().nowhere(),
             }
             .nowhere(),
         ));
@@ -2578,6 +2589,7 @@ mod tests {
                 output_type: None,
                 body: None,
                 type_params: vec![],
+                unit_keyword: ().nowhere(),
             }
             .nowhere(),
         ));

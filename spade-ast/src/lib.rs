@@ -270,6 +270,8 @@ pub struct Entity {
     /// ensures that it is always a block. If body is `None`, the entity is __builtin__
     pub body: Option<Loc<Expression>>,
     pub type_params: Vec<Loc<TypeParam>>,
+    /// The location of the entity or fn keyword
+    pub unit_keyword: Loc<()>,
 }
 impl WithLocation for Entity {}
 

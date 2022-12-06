@@ -491,6 +491,17 @@ snapshot_error! {
 }
 
 snapshot_error! {
+    ports_can_not_impl_functions,
+    "
+    struct port A {}
+
+    impl A {
+        fn test(self) -> bool {true}
+    }
+    "
+}
+
+snapshot_error! {
     no_mangle_generics,
     "
     #[no_mangle]

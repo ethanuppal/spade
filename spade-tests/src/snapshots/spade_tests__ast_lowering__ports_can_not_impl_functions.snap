@@ -1,0 +1,18 @@
+---
+source: spade-tests/src/ast_lowering.rs
+expression: "std::str::from_utf8(buffer.as_slice()).expect(\"error contains invalid utf-8\")"
+---
+error: Functions are not allowed on port types
+  ┌─ testinput:4:5
+  │
+3 │ impl A {
+  │      - This is a port type
+4 │     fn test(self) -> bool {true}
+  │     ^^ Function on port type
+  │
+  = Consider making this an entity
+  │
+4 │     entity test(self) -> bool {true}
+  │     ~~~~~~
+
+
