@@ -671,3 +671,39 @@ snapshot_error! {
         }
     "
 }
+
+snapshot_error! {
+    named_struct_patterns_errors_if_missing_bindings,
+    "
+    struct A {x: bool}
+
+    fn test(a: A) -> bool {
+        let A$() = a;
+        true
+    }
+    "
+}
+
+snapshot_error! {
+    named_struct_patterns_errors_if_binding_to_undefined_name,
+    "
+    struct A {x: bool}
+
+    fn test(a: A) -> bool {
+        let A$(y) = a;
+        true
+    }
+    "
+}
+
+snapshot_error! {
+    named_struct_patterns_errors_if_multiple_bindings_to_same_name,
+    "
+    struct A {x: bool}
+
+    fn test(a: A) -> bool {
+        let A$(x, x) = a;
+        true
+    }
+    "
+}

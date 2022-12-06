@@ -1,0 +1,13 @@
+---
+source: spade-tests/src/ast_lowering.rs
+expression: "std::str::from_utf8(buffer.as_slice()).expect(\"error contains invalid utf-8\")"
+---
+error: x specified multiple times
+  ┌─ testinput:4:15
+  │
+4 │     let A$(x, x) = a;
+  │            -  ^ Later specified here
+  │            │   
+  │            First specified here
+
+
