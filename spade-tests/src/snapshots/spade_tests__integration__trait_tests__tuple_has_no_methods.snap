@@ -1,7 +1,8 @@
 ---
 source: spade-tests/src/integration.rs
-expression: "std::str::from_utf8(buffer.as_slice()).expect(\"error contains invalid utf-8\")"
 ---
+fn a(x: (bool, bool)) -> bool {x.test()}
+
 error: (bool, bool) does not have any methods
   ┌─ testinput:1:32
   │

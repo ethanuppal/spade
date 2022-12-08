@@ -1,7 +1,12 @@
 ---
 source: spade-tests/src/ast_lowering.rs
-expression: "std::str::from_utf8(buffer.as_slice()).expect(\"error contains invalid utf-8\")"
 ---
+struct X {}
+impl X {
+    fn x(self, x: bool) -> bool __builtin__
+}
+
+
 error: Methods can not be __builtin__
   ┌─ testinput:3:5
   │

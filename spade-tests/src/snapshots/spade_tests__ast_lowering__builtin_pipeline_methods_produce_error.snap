@@ -1,7 +1,14 @@
 ---
 source: spade-tests/src/ast_lowering.rs
-expression: "std::str::from_utf8(buffer.as_slice()).expect(\"error contains invalid utf-8\")"
 ---
+struct X {}
+impl X {
+    // NOTE: This error should change once
+    // pipelines as methods are added
+    pipeline(1) x(self, x: bool) -> bool __builtin__ 
+}
+
+
 error: Pipelines are currently not allowed in impl blocks
   ┌─ testinput:5:5
   │

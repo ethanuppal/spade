@@ -1,7 +1,13 @@
 ---
 source: spade-tests/src/ast_lowering.rs
-expression: "std::str::from_utf8(buffer.as_slice()).expect(\"error contains invalid utf-8\")"
 ---
+struct port A {}
+
+impl A {
+    fn test(self) -> bool {true}
+}
+
+
 error: Functions are not allowed on port types
   ┌─ testinput:4:5
   │
