@@ -243,10 +243,15 @@ fn visit_parameter_list(
                 l.loc().span.start() + 1.into(),
                 l.loc().span.start() + 1.into(),
             );
+            let suggested_addition = if l.args.is_empty() { "self" } else { "self, " };
             return Err(
                 Diagnostic::error(l, "Method must take 'self' as the first parameter")
                     .primary_label("Missing self")
-                    .span_suggest_insert_before("Consider adding self", self_insert_loc, "self, ")
+                    .span_suggest_insert_before(
+                        "Consider adding self",
+                        self_insert_loc,
+                        suggested_addition,
+                    )
                     .into(),
             );
             //FIXME Suggestion?
@@ -429,84 +434,77 @@ pub fn visit_impl(
     let ast_type_spec = ast::TypeSpec::Named(block.target.clone(), None).at_loc(&block.target);
     let target_type_spec = visit_type_spec(&ast_type_spec, &mut ctx.symtab)?;
 
-    // We need the names defined in this impl block to be unique, so we'll generate
-    // a new namespace that will not be visible elsewhere
-    ctx.symtab
-        .push_namespace(Identifier(format!("impl_{}", impl_block_id)).nowhere());
+    let mut trait_members = vec![];
+    let mut trait_impl = HashMap::new();
+    let self_context = SelfContext::ImplBlock(target_type_spec);
+    for entity in &block.entities {
+        if entity.is_function && ast_type_spec.is_port(&ctx.symtab)? {
+            return Err(Diagnostic::error(
+                entity.unit_keyword,
+                "Functions are not allowed on port types",
+            )
+            .primary_label("Function on port type")
+            .secondary_label(ast_type_spec, "This is a port type")
+            .span_suggest_replace(
+                "Consider making this an entity",
+                entity.unit_keyword,
+                "entity",
+            )
+            .into());
+        }
 
-    // This closure is there to allow cleanup of the symtab even if there are errors
-    // inside the visitors
-    let inner_result = (|| -> Result<()> {
-        let mut trait_members = vec![];
-        let mut trait_impl = HashMap::new();
-        let self_context = SelfContext::ImplBlock(target_type_spec);
-        for entity in &block.entities {
-            if entity.is_function && ast_type_spec.is_port(&ctx.symtab)? {
-                return Err(Diagnostic::error(
-                    entity.unit_keyword,
-                    "Functions are not allowed on port types",
-                )
-                .primary_label("Function on port type")
-                .secondary_label(ast_type_spec, "This is a port type")
-                .span_suggest_replace(
-                    "Consider making this an entity",
-                    entity.unit_keyword,
-                    "entity",
-                )
-                .into());
-            }
-
+        // We need the names defined in this impl block to be unique, so we'll generate
+        // a new namespace that will not be visible elsewhere.
+        // This closure is there to allow cleanup of the symtab even if there are errors
+        // inside the visitors
+        let item = (|| -> Result<_> {
+            ctx.symtab
+                .push_namespace(Identifier(format!("impl_{}", impl_block_id)).nowhere());
             global_symbols::visit_entity(entity, &mut ctx.symtab, &self_context)?;
             let item = visit_entity(entity, ctx)?;
+            Ok(item)
+        })();
+        ctx.symtab.pop_namespace();
+        let item = item?;
 
-            match &item {
-                hir::Item::Entity(e) => {
-                    trait_members
-                        .push((entity.name.inner.clone(), e.head.clone().as_function_head()));
+        match &item {
+            hir::Item::Entity(e) => {
+                trait_members.push((entity.name.inner.clone(), e.head.clone().as_function_head()));
 
-                    trait_impl.insert(
-                        entity.name.inner.clone(),
-                        (e.name.name_id().inner.clone(), e.loc()),
-                    );
-                }
-                hir::Item::Pipeline(pipe) => {
-                    return Err(Diagnostic::bug(
-                        pipe,
-                        "Pipeline methods are currently unsupported",
-                    )
-                    .into());
-                }
-                hir::Item::BuiltinEntity(_, head) => {
-                    return Err(Diagnostic::error(head, "Methods can not be __builtin__")
-                        .help("Consider defining a free-standing function")
-                        .into())
-                }
-                hir::Item::BuiltinPipeline(_, head) => {
-                    return Err(Diagnostic::error(head, "Methods can not be __builtin__")
-                        .help("Consider defining a free-standing function")
-                        .into())
-                }
+                trait_impl.insert(
+                    entity.name.inner.clone(),
+                    (e.name.name_id().inner.clone(), e.loc()),
+                );
             }
-
-            result.push(item);
+            hir::Item::Pipeline(pipe) => {
+                return Err(
+                    Diagnostic::bug(pipe, "Pipeline methods are currently unsupported").into(),
+                );
+            }
+            hir::Item::BuiltinEntity(_, head) => {
+                return Err(Diagnostic::error(head, "Methods can not be __builtin__")
+                    .help("Consider defining a free-standing function")
+                    .into())
+            }
+            hir::Item::BuiltinPipeline(_, head) => {
+                return Err(Diagnostic::error(head, "Methods can not be __builtin__")
+                    .help("Consider defining a free-standing function")
+                    .into())
+            }
         }
 
-        if is_anonymous {
-            // Add the trait to the trait list
-            items.traits.insert(trait_name.clone(), trait_members);
-            items
-                .impls
-                .entry(target_name.0)
-                .or_insert(HashMap::new())
-                .insert(trait_name, hir::ImplBlock { fns: trait_impl });
-        }
+        result.push(item);
+    }
 
-        Ok(())
-    })();
-
-    ctx.symtab.pop_namespace();
-
-    inner_result?;
+    if is_anonymous {
+        // Add the trait to the trait list
+        items.traits.insert(trait_name.clone(), trait_members);
+        items
+            .impls
+            .entry(target_name.0)
+            .or_insert(HashMap::new())
+            .insert(trait_name, hir::ImplBlock { fns: trait_impl });
+    }
 
     Ok(result)
 }

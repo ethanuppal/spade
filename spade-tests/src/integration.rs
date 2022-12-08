@@ -332,4 +332,30 @@ mod trait_tests {
         tuple_has_no_methods,
         "fn a(x: (bool, bool)) -> bool {x.test()}"
     }
+
+    snapshot_error! {
+        good_suggestion_for_missing_self_in_zero_arg_fn,
+        "
+            struct X {}
+
+            impl X {
+                fn a() -> bool {true}
+            }
+        "
+    }
+
+    #[test]
+    fn trait_in_module_works() {
+        let code = "
+            mod m {
+                struct X {}
+
+                impl X {
+                    fn a(self) -> bool {true}
+                }
+            }
+        ";
+
+        build_items(code);
+    }
 }
