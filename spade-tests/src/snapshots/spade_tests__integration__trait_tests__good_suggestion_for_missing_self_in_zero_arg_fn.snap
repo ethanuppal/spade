@@ -17,6 +17,6 @@ error: Method must take 'self' as the first parameter
   = Consider adding self
   │
 4 │     fn a(self) -> bool {true}
-  │          ++++
+  │         ~~~~~~
 
 
