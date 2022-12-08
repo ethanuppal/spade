@@ -348,10 +348,20 @@ mod trait_tests {
     fn trait_in_module_works() {
         let code = "
             mod m {
-                struct X {}
+                enum ContainerSpot {
+                    Empty,
+                    Occupied{val: int<8>},
+                    NewRow,
+                    Done
+                }
 
-                impl X {
-                    fn a(self) -> bool {true}
+                impl ContainerSpot {
+                    fn is_valid(self, other: ContainerSpot) -> bool {
+                        match self {
+                            ContainerSpot::Occupied(_) => true,
+                            _ => false,
+                        }
+                    }
                 }
             }
         ";

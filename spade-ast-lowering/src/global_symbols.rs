@@ -78,7 +78,7 @@ pub fn visit_item(
 ) -> Result<()> {
     match item {
         ast::Item::Entity(e) => {
-            visit_entity(&e, symtab, &SelfContext::FreeStanding)?;
+            visit_entity(&None, &e, symtab, &SelfContext::FreeStanding)?;
         }
         ast::Item::Pipeline(p) => {
             visit_pipeline(&p, symtab, &SelfContext::FreeStanding)?;
@@ -112,13 +112,18 @@ pub fn visit_item(
 
 #[tracing::instrument(skip_all)]
 pub fn visit_entity(
+    extra_path: &Option<Path>,
     e: &Loc<ast::Entity>,
     symtab: &mut SymbolTable,
     self_context: &SelfContext,
 ) -> Result<()> {
     let head = crate::entity_head(&e, symtab, self_context)?;
 
-    let new_path = Path::ident(e.name.clone()).at_loc(&e.name);
+    let new_path = extra_path
+        .as_ref()
+        .unwrap_or(&Path(vec![]))
+        .join(Path::ident(e.name.clone()))
+        .at_loc(&e.name);
 
     if e.is_function {
         symtab.add_unique_thing(new_path, Thing::Function(head.at_loc(e)))?;

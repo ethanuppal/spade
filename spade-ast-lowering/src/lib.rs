@@ -254,7 +254,6 @@ fn visit_parameter_list(
                     )
                     .into(),
             );
-            //FIXME Suggestion?
         }
     }
 
@@ -339,8 +338,14 @@ pub fn entity_head(
     })
 }
 
+/// The `extra_path` parameter allows specifying an extra path prepended to
+/// the name of the entity. This is used by impl blocks to append a unique namespace
 #[tracing::instrument(skip_all, fields(%item.name, %item.is_function))]
-pub fn visit_entity(item: &Loc<ast::Entity>, ctx: &mut Context) -> Result<hir::Item> {
+pub fn visit_entity(
+    extra_path: Option<Path>,
+    item: &Loc<ast::Entity>,
+    ctx: &mut Context,
+) -> Result<hir::Item> {
     let ast::Entity {
         body,
         name,
@@ -354,7 +359,10 @@ pub fn visit_entity(item: &Loc<ast::Entity>, ctx: &mut Context) -> Result<hir::I
 
     ctx.symtab.new_scope();
 
-    let path = Path(vec![name.clone()]).at_loc(&name.loc());
+    let path = extra_path
+        .unwrap_or(Path(vec![]))
+        .join(Path(vec![name.clone()]))
+        .at_loc(&name.loc());
     let (id, head) = ctx
         .symtab
         .lookup_entity(&path)
@@ -453,19 +461,11 @@ pub fn visit_impl(
             .into());
         }
 
-        // We need the names defined in this impl block to be unique, so we'll generate
-        // a new namespace that will not be visible elsewhere.
-        // This closure is there to allow cleanup of the symtab even if there are errors
-        // inside the visitors
-        let item = (|| -> Result<_> {
-            ctx.symtab
-                .push_namespace(Identifier(format!("impl_{}", impl_block_id)).nowhere());
-            global_symbols::visit_entity(entity, &mut ctx.symtab, &self_context)?;
-            let item = visit_entity(entity, ctx)?;
-            Ok(item)
-        })();
-        ctx.symtab.pop_namespace();
-        let item = item?;
+        let path_suffix = Some(Path(vec![
+            Identifier(format!("impl_{}", impl_block_id)).nowhere()
+        ]));
+        global_symbols::visit_entity(&path_suffix, entity, &mut ctx.symtab, &self_context)?;
+        let item = visit_entity(path_suffix, entity, ctx)?;
 
         match &item {
             hir::Item::Entity(e) => {
@@ -516,7 +516,7 @@ pub fn visit_item(
     item_list: &mut hir::ItemList,
 ) -> Result<(Vec<hir::Item>, Option<hir::ItemList>)> {
     match item {
-        ast::Item::Entity(e) => Ok((vec![visit_entity(e, ctx)?], None)),
+        ast::Item::Entity(e) => Ok((vec![visit_entity(None, e, ctx)?], None)),
         ast::Item::Pipeline(p) => Ok((vec![pipelines::visit_pipeline(p, ctx)?], None)),
         ast::Item::TraitDef(_) => {
             todo!("Visit trait definitions")
@@ -1311,10 +1311,10 @@ mod entity_visiting {
             impl_idtracker: ImplIdTracker::new(),
             pipeline_ctx: None,
         };
-        global_symbols::visit_entity(&input, &mut ctx.symtab, &SelfContext::FreeStanding)
+        global_symbols::visit_entity(&None, &input, &mut ctx.symtab, &SelfContext::FreeStanding)
             .expect("Failed to collect global symbols");
 
-        let result = visit_entity(&input, &mut ctx);
+        let result = visit_entity(None, &input, &mut ctx);
 
         assert_eq!(result, Ok(hir::Item::Entity(expected)));
 
