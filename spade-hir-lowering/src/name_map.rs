@@ -92,9 +92,14 @@ impl NameSourceMap {
 
     pub fn merge(&mut self, other: NameSourceMap) {
         for (k, v) in other.inner {
-            if let Some(_) = self.inner.insert(k.clone(), v) {
-                panic!("Duplicate name map for {k}")
-            }
+            // NOTE: we previously had a check here for duplication, but that failed
+            // when monomorphising generic functions as we then had multiple
+            // copies of the same name in the output verilog.
+            //
+            // For the purpose of name mapping however, it does not matter what
+            // types were selected for the monomorphised item, so we can safely
+            // ignore duplicates.
+            self.inner.insert(k.clone(), v);
         }
     }
 }
