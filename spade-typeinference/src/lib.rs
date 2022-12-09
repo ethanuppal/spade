@@ -509,7 +509,7 @@ impl TypeState {
         head: &impl FunctionLike,
         args: &Loc<ArgumentList>,
         ctx: &Context,
-        // Wether or not to visit the arguemnt expressions passed to the function here. This
+        // Whether or not to visit the argument expressions passed to the function here. This
         // should not be done if the expressoins have been visited before, for example, when
         // handling methods
         visit_args: bool,

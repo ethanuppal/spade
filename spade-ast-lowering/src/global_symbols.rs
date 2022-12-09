@@ -252,7 +252,7 @@ pub fn re_visit_type_declaration(
                     .clone()
                     .map(|l| {
                         if let Some(self_) = l.self_ {
-                            Err(Diagnostic::bug(self_, "enum meber contains self"))
+                            Err(Diagnostic::bug(self_, "enum member contains self"))
                         } else {
                             Ok(l.args.clone())
                         }
