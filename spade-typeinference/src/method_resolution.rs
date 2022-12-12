@@ -39,17 +39,21 @@ pub fn select_method(
     let final_method = match candidates.as_slice() {
         [name] => name,
         [] => {
-            return Err(Diagnostic::error(expr, "{type_name} as no method {method}")
-                .primary_label("No such method")
-                .into())
+            return Err(
+                Diagnostic::error(expr, format!("{type_name} as no method {method}"))
+                    .primary_label("No such method")
+                    .into(),
+            )
         }
         all_candidates => {
-            let mut diag =
-                Diagnostic::error(expr, "{type_name} has multiple methods named {method}")
-                    .primary_label("Ambiguous method call");
+            let mut diag = Diagnostic::error(
+                expr,
+                format!("{type_name} has multiple methods named {method}"),
+            )
+            .primary_label("Ambiguous method call");
 
             for candidate in all_candidates {
-                diag = diag.secondary_label(candidate, "{type_name} is defined here")
+                diag = diag.secondary_label(candidate, format!("{type_name} is defined here"))
             }
 
             return Err(diag.into());

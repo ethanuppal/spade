@@ -368,4 +368,15 @@ mod trait_tests {
 
         build_items(code);
     }
+
+    snapshot_error! {
+        error_message_on_missing_method,
+        "
+        struct X {}
+
+        fn t(x: X) {
+            x.test()
+        }
+        "
+    }
 }

@@ -1,0 +1,17 @@
+---
+source: spade-tests/src/integration.rs
+---
+struct X {}
+
+fn t(x: X) {
+    x.test()
+}
+
+
+error: X as no method test
+  ┌─ testinput:4:5
+  │
+4 │     x.test()
+  │     ^^^^^^^^ No such method
+
+
