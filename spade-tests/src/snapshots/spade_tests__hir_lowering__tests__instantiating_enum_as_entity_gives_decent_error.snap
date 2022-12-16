@@ -1,0 +1,29 @@
+---
+source: spade-tests/src/hir_lowering.rs
+---
+enum X {
+    A
+}
+
+entity x() -> X {
+    inst X::A()
+}
+
+
+error: Expected X::A to be an entity
+  ┌─ testinput:6:10
+  │
+2 │     A
+  │     - X::A is a enum variant
+  ·
+6 │     inst X::A()
+  │     ---- ^^^^ Expected entity
+  │     │     
+  │     because of this inst
+  │
+  = Consider removing inst
+  │
+6 │     inst X::A()
+  │     ----
+
+

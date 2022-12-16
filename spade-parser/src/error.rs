@@ -1,5 +1,5 @@
 use local_impl::local_impl;
-use spade_common::{location_info::Loc, name::Path};
+use spade_common::location_info::Loc;
 use spade_diagnostics::Diagnostic;
 use spade_macros::IntoSubdiagnostic;
 use thiserror::Error;
@@ -58,13 +58,6 @@ pub enum Error {
 
     #[error("Expected type, got {0:?}")]
     ExpectedType(Token),
-
-    #[error("Expected argument list for instantiation of {name}")]
-    ExpectedArgumentList {
-        name: Path,
-        inst: Loc<()>,
-        expected_at: Loc<()>,
-    },
 
     #[error("Missing tuple index")]
     MissingTupleIndex { hash_loc: Loc<()> },

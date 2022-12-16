@@ -26,14 +26,15 @@ use spade_common::location_info::{Loc, WithLocation};
 use spade_common::name::{Identifier, Path};
 use spade_hir as hir;
 
+use crate::pipelines::maybe_perform_pipelining_tasks;
 use crate::types::IsPort;
-use ast::ParameterList;
+use ast::{ParameterList, UnitKind};
 use hir::expression::BinaryOperator;
 use hir::symbol_table::{LookupError, SymbolTable, Thing, TypeSymbol};
-use hir::EntityHead;
+use hir::UnitHead;
 pub use spade_common::id_tracker;
 
-use error::{Error, Result};
+use error::{expect_entity, expect_function, expect_pipeline, Error, Result};
 
 pub struct Context {
     pub symtab: SymbolTable,
@@ -287,10 +288,10 @@ fn visit_parameter_list(
 /// Visit the head of an entity to generate an entity head
 #[tracing::instrument(skip_all, fields(name=%item.name))]
 pub fn entity_head(
-    item: &ast::Entity,
+    item: &ast::Unit,
     symtab: &mut SymbolTable,
     self_context: &SelfContext,
-) -> Result<EntityHead> {
+) -> Result<UnitHead> {
     symtab.new_scope();
 
     let type_params = item
@@ -310,12 +311,17 @@ pub fn entity_head(
     // We need to have the scope open to check this, but we also need to close
     // the scope if we fail here, so we'll store port_error in a variable
     let mut port_error = Ok(());
-    if item.is_function {
+    if let ast::UnitKind::Function = item.unit_kind.inner {
         for (_, ty) in &item.inputs.args {
             if ty.is_port(symtab)? {
                 port_error = Err(Diagnostic::error(ty, "Port argument in function")
                     .primary_label("This is a port")
-                    .note("Only entities and pipelines can take ports as arguments"))
+                    .note("Only entities and pipelines can take ports as arguments")
+                    .span_suggest_replace(
+                        "Consider making this an entity",
+                        &item.unit_kind,
+                        "entity",
+                    ))
             }
         }
     }
@@ -323,32 +329,38 @@ pub fn entity_head(
     symtab.close_scope();
     port_error?;
 
-    Ok(EntityHead {
+    let unit_kind = item.unit_kind.map_ref(|k| match k {
+        ast::UnitKind::Function => hir::UnitKind::Function(hir::FunctionKind::Fn),
+        ast::UnitKind::Entity => hir::UnitKind::Entity,
+        ast::UnitKind::Pipeline(d) => hir::UnitKind::Pipeline(d.clone()),
+    });
+
+    Ok(UnitHead {
         name: item.name.clone(),
         inputs,
         output_type,
         type_params,
+        unit_kind,
     })
 }
 
 /// The `extra_path` parameter allows specifying an extra path prepended to
 /// the name of the entity. This is used by impl blocks to append a unique namespace
-#[tracing::instrument(skip_all, fields(%item.name, %item.is_function))]
-pub fn visit_entity(
+#[tracing::instrument(skip_all, fields(%unit.name, %unit.unit_kind))]
+pub fn visit_unit(
     extra_path: Option<Path>,
-    item: &Loc<ast::Entity>,
+    unit: &Loc<ast::Unit>,
     ctx: &mut Context,
 ) -> Result<hir::Item> {
-    let ast::Entity {
+    let ast::Unit {
         body,
         name,
         attributes,
-        is_function: _,
         inputs: _,
         output_type: _,
         type_params,
-        unit_keyword: _,
-    } = &item.inner;
+        unit_kind: _,
+    } = &unit.inner;
 
     ctx.symtab.new_scope();
 
@@ -358,12 +370,7 @@ pub fn visit_entity(
         .at_loc(&name.loc());
     let (id, head) = ctx
         .symtab
-        .lookup_entity(&path)
-        .or_else(|_| {
-            ctx.symtab
-                .lookup_function(&path)
-                .map(|(name, head)| (name, head.map(|i| i.as_entity_head())))
-        })
+        .lookup_unit(&path)
         .map_err(|_| {
             ctx.symtab.print_symbols();
             println!("Failed to find {path:?} in symtab")
@@ -377,7 +384,7 @@ pub fn visit_entity(
     // If this is a builtin entity
     if body.is_none() {
         report_unused_attributes(&attributes)?;
-        return Ok(hir::Item::BuiltinEntity(unit_name, head));
+        return Ok(hir::Item::Builtin(unit_name, head));
     }
 
     // Add the inputs to the symtab
@@ -393,6 +400,8 @@ pub fn visit_entity(
         })
         .collect();
 
+    ctx.pipeline_ctx = maybe_perform_pipelining_tasks(&unit, &head, ctx)?;
+
     let body = body.as_ref().unwrap().try_visit(visit_expression, ctx)?;
 
     ctx.symtab.close_scope();
@@ -402,14 +411,14 @@ pub fn visit_entity(
 
     info!("Checked all function arguments");
 
-    Ok(hir::Item::Entity(
-        hir::Entity {
+    Ok(hir::Item::Unit(
+        hir::Unit {
             name: unit_name,
             head: head.clone().inner,
             inputs,
             body,
         }
-        .at_loc(item),
+        .at_loc(unit),
     ))
 }
 
@@ -438,17 +447,19 @@ pub fn visit_impl(
     let mut trait_members = vec![];
     let mut trait_impl = HashMap::new();
     let self_context = SelfContext::ImplBlock(target_type_spec);
-    for entity in &block.entities {
-        if entity.is_function && ast_type_spec.is_port(&ctx.symtab)? {
+    for entity in &block.units {
+        if matches!(entity.unit_kind.inner, UnitKind::Function)
+            && ast_type_spec.is_port(&ctx.symtab)?
+        {
             return Err(Diagnostic::error(
-                entity.unit_keyword,
+                &entity.unit_kind,
                 "Functions are not allowed on port types",
             )
             .primary_label("Function on port type")
             .secondary_label(ast_type_spec, "This is a port type")
             .span_suggest_replace(
                 "Consider making this an entity",
-                entity.unit_keyword,
+                &entity.unit_kind,
                 "entity",
             )
             .into());
@@ -457,29 +468,19 @@ pub fn visit_impl(
         let path_suffix = Some(Path(vec![
             Identifier(format!("impl_{}", impl_block_id)).nowhere()
         ]));
-        global_symbols::visit_entity(&path_suffix, entity, &mut ctx.symtab, &self_context)?;
-        let item = visit_entity(path_suffix, entity, ctx)?;
+        global_symbols::visit_unit(&path_suffix, entity, &mut ctx.symtab, &self_context)?;
+        let item = visit_unit(path_suffix, entity, ctx)?;
 
         match &item {
-            hir::Item::Entity(e) => {
-                trait_members.push((entity.name.inner.clone(), e.head.clone().as_function_head()));
+            hir::Item::Unit(e) => {
+                trait_members.push((entity.name.inner.clone(), e.head.clone()));
 
                 trait_impl.insert(
                     entity.name.inner.clone(),
                     (e.name.name_id().inner.clone(), e.loc()),
                 );
             }
-            hir::Item::Pipeline(pipe) => {
-                return Err(
-                    Diagnostic::bug(pipe, "Pipeline methods are currently unsupported").into(),
-                );
-            }
-            hir::Item::BuiltinEntity(_, head) => {
-                return Err(Diagnostic::error(head, "Methods can not be __builtin__")
-                    .help("Consider defining a free-standing function")
-                    .into())
-            }
-            hir::Item::BuiltinPipeline(_, head) => {
+            hir::Item::Builtin(_, head) => {
                 return Err(Diagnostic::error(head, "Methods can not be __builtin__")
                     .help("Consider defining a free-standing function")
                     .into())
@@ -509,8 +510,7 @@ pub fn visit_item(
     item_list: &mut hir::ItemList,
 ) -> Result<(Vec<hir::Item>, Option<hir::ItemList>)> {
     match item {
-        ast::Item::Entity(e) => Ok((vec![visit_entity(None, e, ctx)?], None)),
-        ast::Item::Pipeline(p) => Ok((vec![pipelines::visit_pipeline(p, ctx)?], None)),
+        ast::Item::Unit(u) => Ok((vec![visit_unit(None, u, ctx)?], None)),
         ast::Item::TraitDef(_) => {
             todo!("Visit trait definitions")
         }
@@ -571,26 +571,16 @@ pub fn visit_module_body(
 
         use hir::Item::*;
         for item in items {
-            match item {
-                Entity(e) => add_item!(
+            match &item {
+                Unit(u) => add_item!(
                     item_list.executables,
-                    e.name.name_id().inner.clone(),
-                    ExecutableItem::Entity(e.clone())
+                    u.name.name_id().inner.clone(),
+                    ExecutableItem::Unit(u.clone())
                 ),
-                Pipeline(p) => add_item!(
+                Builtin(name, head) => add_item!(
                     item_list.executables,
-                    p.name.name_id().inner.clone(),
-                    ExecutableItem::Pipeline(p.clone())
-                ),
-                BuiltinEntity(name, head) => add_item!(
-                    item_list.executables,
-                    name.name_id().clone().inner,
-                    ExecutableItem::BuiltinEntity(name.clone(), head)
-                ),
-                BuiltinPipeline(name, head) => add_item!(
-                    item_list.executables,
-                    name.name_id().clone().inner,
-                    ExecutableItem::BuiltinPipeline(name.clone(), head)
+                    name.name_id().inner.clone(),
+                    ExecutableItem::BuiltinUnit(name.clone(), head.clone())
                 ),
             }
         }
@@ -1021,32 +1011,49 @@ pub fn visit_expression(e: &ast::Expression, ctx: &mut Context) -> Result<hir::E
             Ok(hir::ExprKind::Block(Box::new(visit_block(block, ctx)?)))
         }
         ast::Expression::FnCall(callee, args) => {
-            let (name_id, _) = ctx.symtab.lookup_function(callee)?;
+            let (name_id, head) = ctx.symtab.lookup_unit(callee)?;
+            match &head.unit_kind.inner {
+                hir::UnitKind::Function(_) => {},
+                other => {
+                    return Err(expect_function(&callee, head.loc(), other))
+                }
+            }
 
             let args = visit_argument_list(args, ctx)?.at_loc(args);
 
             Ok(hir::ExprKind::FnCall(name_id.at_loc(callee), args))
         }
-        ast::Expression::EntityInstance(name, arg_list) => {
-            let (name_id, _) = ctx.symtab.lookup_entity(name)?;
-
-            let args = visit_argument_list(arg_list, ctx)?.at_loc(arg_list);
-            Ok(hir::ExprKind::EntityInstance(name_id.at_loc(name), args))
-        }
-        ast::Expression::PipelineInstance(depth, name, arg_list) => {
-            let (name_id, head) = ctx.symtab.lookup_pipeline(name)?;
-            let head = head.clone();
-
-            if head.depth.inner != depth.inner as usize {
-                return Err(Diagnostic::error(depth, "Pipeline depth mismatch")
-                    .primary_label(format!("Expected depth {} here", head.depth))
-                    .secondary_label(head.depth, format!("{} has depth {}", name, head.depth))
-                    .into());
+        ast::Expression::EntityInstance{inst, name, args} => {
+            let (name_id, head) = ctx.symtab.lookup_unit(name)?;
+            match &head.unit_kind.inner {
+                hir::UnitKind::Entity => {},
+                other => {
+                    return Err(expect_entity(inst, &name, head.loc(), other))
+                }
             }
 
-            let args = visit_argument_list(arg_list, ctx)?.at_loc(arg_list);
+            let args = visit_argument_list(args, ctx)?.at_loc(args);
+            Ok(hir::ExprKind::EntityInstance(name_id.at_loc(name), args))
+        }
+        ast::Expression::PipelineInstance{inst, depth: target_depth, name, args} => {
+            let (name_id, head) = ctx.symtab.lookup_unit(name)?;
+            match &head.unit_kind.inner {
+                hir::UnitKind::Pipeline(head_depth) => {
+                    if head_depth.inner != target_depth.inner {
+                        return Err(Diagnostic::error(target_depth, "Pipeline depth mismatch")
+                            .primary_label(format!("Expected depth {} here", head_depth))
+                            .secondary_label(&head.unit_kind, format!("{} has depth {}", name, head_depth))
+                            .into());
+                    }
+                },
+                other => {
+                    return Err(expect_pipeline(inst, &name, head.loc(), other))
+                }
+            }
+
+            let args = visit_argument_list(args, ctx)?.at_loc(args);
             Ok(hir::ExprKind::PipelineInstance {
-                depth: depth.clone(),
+                depth: target_depth.clone(),
                 name: name_id.at_loc(name),
                 args,
             })
@@ -1246,8 +1253,7 @@ mod entity_visiting {
 
     #[test]
     fn entity_visits_work() {
-        let input = ast::Entity {
-            is_function: true,
+        let input = ast::Unit {
             name: Identifier("test".to_string()).nowhere(),
             inputs: ParameterList::without_self(vec![(
                 ast_ident("a"),
@@ -1269,17 +1275,18 @@ mod entity_visiting {
             ),
             type_params: vec![],
             attributes: ast::AttributeList(vec![]),
-            unit_keyword: ().nowhere(),
+            unit_kind: ast::UnitKind::Entity.nowhere(),
         }
         .nowhere();
 
-        let expected = hir::Entity {
+        let expected = hir::Unit {
             name: UnitName::FullPath(name_id(0, "test")),
-            head: hir::EntityHead {
+            head: hir::UnitHead {
                 name: Identifier("test".to_string()).nowhere(),
                 inputs: hir::ParameterList(vec![(ast_ident("a"), hir::TypeSpec::unit().nowhere())]),
                 output_type: None,
                 type_params: vec![],
+                unit_kind: hir::UnitKind::Entity.nowhere(),
             },
             inputs: vec![((name_id(1, "a"), hir::TypeSpec::unit().nowhere()))],
             body: hir::ExprKind::Block(Box::new(hir::Block {
@@ -1304,12 +1311,12 @@ mod entity_visiting {
             impl_idtracker: ImplIdTracker::new(),
             pipeline_ctx: None,
         };
-        global_symbols::visit_entity(&None, &input, &mut ctx.symtab, &SelfContext::FreeStanding)
+        global_symbols::visit_unit(&None, &input, &mut ctx.symtab, &SelfContext::FreeStanding)
             .expect("Failed to collect global symbols");
 
-        let result = visit_entity(None, &input, &mut ctx);
+        let result = visit_unit(None, &input, &mut ctx);
 
-        assert_eq!(result, Ok(hir::Item::Entity(expected)));
+        assert_eq!(result, Ok(hir::Item::Unit(expected)));
 
         // But the local variables should not
         assert!(!ctx.symtab.has_symbol(ast_path("a").inner));
@@ -1519,7 +1526,6 @@ mod expression_visiting {
     use super::*;
 
     use hir::symbol_table::EnumVariant;
-    use hir::PipelineHead;
     use spade_ast::testutil::{ast_ident, ast_path};
     use spade_common::location_info::WithLocation;
     use spade_common::name::testutil::name_id;
@@ -1941,14 +1947,15 @@ mod expression_visiting {
 
     #[test]
     fn entity_instantiation_works() {
-        let input = ast::Expression::EntityInstance(
-            ast_path("test"),
-            ast::ArgumentList::Positional(vec![
+        let input = ast::Expression::EntityInstance {
+            inst: ().nowhere(),
+            name: ast_path("test"),
+            args: ast::ArgumentList::Positional(vec![
                 ast::Expression::IntLiteral(1).nowhere(),
                 ast::Expression::IntLiteral(2).nowhere(),
             ])
             .nowhere(),
-        )
+        }
         .nowhere();
 
         let expected = hir::ExprKind::EntityInstance(
@@ -1966,8 +1973,8 @@ mod expression_visiting {
 
         symtab.add_thing(
             ast_path("test").inner,
-            Thing::Entity(
-                EntityHead {
+            Thing::Unit(
+                UnitHead {
                     name: Identifier("".to_string()).nowhere(),
                     inputs: hir::ParameterList(vec![
                         (ast_ident("a"), hir::TypeSpec::unit().nowhere()),
@@ -1975,6 +1982,7 @@ mod expression_visiting {
                     ]),
                     output_type: None,
                     type_params: vec![],
+                    unit_kind: hir::UnitKind::Entity.nowhere(),
                 }
                 .nowhere(),
             ),
@@ -1996,14 +2004,15 @@ mod expression_visiting {
 
     #[test]
     fn entity_instantiation_with_named_args_works() {
-        let input = ast::Expression::EntityInstance(
-            ast_path("test"),
-            ast::ArgumentList::Named(vec![
+        let input = ast::Expression::EntityInstance {
+            inst: ().nowhere(),
+            name: ast_path("test"),
+            args: ast::ArgumentList::Named(vec![
                 ast::NamedArgument::Full(ast_ident("b"), ast::Expression::IntLiteral(2).nowhere()),
                 ast::NamedArgument::Full(ast_ident("a"), ast::Expression::IntLiteral(1).nowhere()),
             ])
             .nowhere(),
-        )
+        }
         .nowhere();
 
         let expected = hir::ExprKind::EntityInstance(
@@ -2027,8 +2036,8 @@ mod expression_visiting {
 
         symtab.add_thing(
             ast_path("test").inner,
-            Thing::Entity(
-                EntityHead {
+            Thing::Unit(
+                UnitHead {
                     name: Identifier("".to_string()).nowhere(),
                     inputs: hir::ParameterList(vec![
                         (ast_ident("a"), hir::TypeSpec::unit().nowhere()),
@@ -2036,6 +2045,7 @@ mod expression_visiting {
                     ]),
                     output_type: None,
                     type_params: vec![],
+                    unit_kind: hir::UnitKind::Entity.nowhere(),
                 }
                 .nowhere(),
             ),
@@ -2082,8 +2092,8 @@ mod expression_visiting {
 
         symtab.add_thing(
             ast_path("test").inner,
-            Thing::Function(
-                EntityHead {
+            Thing::Unit(
+                UnitHead {
                     name: Identifier("".to_string()).nowhere(),
                     inputs: hir::ParameterList(vec![
                         (ast_ident("a"), hir::TypeSpec::unit().nowhere()),
@@ -2091,6 +2101,7 @@ mod expression_visiting {
                     ]),
                     output_type: None,
                     type_params: vec![],
+                    unit_kind: hir::UnitKind::Function(hir::FunctionKind::Fn).nowhere(),
                 }
                 .nowhere(),
             ),
@@ -2112,15 +2123,16 @@ mod expression_visiting {
 
     #[test]
     fn pipeline_instantiation_works() {
-        let input = ast::Expression::PipelineInstance(
-            2.nowhere(),
-            ast_path("test"),
-            ast::ArgumentList::Positional(vec![
+        let input = ast::Expression::PipelineInstance {
+            inst: ().nowhere(),
+            depth: 2.nowhere(),
+            name: ast_path("test"),
+            args: ast::ArgumentList::Positional(vec![
                 ast::Expression::IntLiteral(1).nowhere(),
                 ast::Expression::IntLiteral(2).nowhere(),
             ])
             .nowhere(),
-        )
+        }
         .nowhere();
 
         let expected = hir::ExprKind::PipelineInstance {
@@ -2139,10 +2151,10 @@ mod expression_visiting {
 
         symtab.add_thing(
             ast_path("test").inner,
-            Thing::Pipeline(
-                PipelineHead {
+            Thing::Unit(
+                UnitHead {
                     name: Identifier("".to_string()).nowhere(),
-                    depth: 2.nowhere(),
+                    unit_kind: hir::UnitKind::Pipeline(2.nowhere()).nowhere(),
                     inputs: hir::ParameterList(vec![
                         (ast_ident("a"), hir::TypeSpec::unit().nowhere()),
                         (ast_ident("b"), hir::TypeSpec::unit().nowhere()),
@@ -2365,9 +2377,8 @@ mod item_visiting {
 
     #[test]
     pub fn item_entity_visiting_works() {
-        let input = ast::Item::Entity(
-            ast::Entity {
-                is_function: true,
+        let input = ast::Item::Unit(
+            ast::Unit {
                 name: ast_ident("test"),
                 output_type: None,
                 inputs: aparams![],
@@ -2380,19 +2391,20 @@ mod item_visiting {
                 ),
                 type_params: vec![],
                 attributes: ast::AttributeList(vec![]),
-                unit_keyword: ().nowhere(),
+                unit_kind: ast::UnitKind::Entity.nowhere(),
             }
             .nowhere(),
         );
 
-        let expected = hir::Item::Entity(
-            hir::Entity {
+        let expected = hir::Item::Unit(
+            hir::Unit {
                 name: hir::UnitName::FullPath(name_id(0, "test")),
-                head: EntityHead {
+                head: UnitHead {
                     name: Identifier("test".to_string()).nowhere(),
                     output_type: None,
                     inputs: hir::ParameterList(vec![]),
                     type_params: vec![],
+                    unit_kind: hir::UnitKind::Entity.nowhere(),
                 },
                 inputs: vec![],
                 body: hir::ExprKind::Block(Box::new(hir::Block {
@@ -2442,9 +2454,8 @@ mod impl_blocks {
         let ast_block = ImplBlock {
             r#trait: None,
             target: ast_path("a"),
-            entities: vec![ast::Entity {
+            units: vec![ast::Unit {
                 attributes: ast::AttributeList::empty(),
-                is_function: true,
                 name: ast_ident("x"),
                 inputs: ParameterList::with_self(().nowhere(), vec![]).nowhere(),
                 output_type: None,
@@ -2456,7 +2467,7 @@ mod impl_blocks {
                     .nowhere(),
                 ),
                 type_params: vec![],
-                unit_keyword: ().nowhere(),
+                unit_kind: ast::UnitKind::Function.nowhere(),
             }
             .nowhere()],
         }
@@ -2483,21 +2494,22 @@ mod impl_blocks {
         // We'll have to cheat a bit here. Since we don't know what name will be given
         // to the entity in the impl block, we'll peek at that and use it in the expected item
         let entity_name = match new_items.first().unwrap() {
-            hir::Item::Entity(e) => e.name.clone(),
-            _ => panic!("Expected entity"),
+            hir::Item::Unit(e) => e.name.clone(),
+            _ => panic!("Expected unit"),
         };
 
         let param_type_spec =
             hir::TypeSpec::Declared(target_type_name.clone().nowhere(), vec![]).nowhere();
         let hir_param_list = hir::ParameterList(vec![(ast_ident("self"), param_type_spec.clone())]);
-        let expected_item = hir::Item::Entity(
-            hir::Entity {
+        let expected_item = hir::Item::Unit(
+            hir::Unit {
                 name: entity_name.clone(),
-                head: hir::EntityHead {
+                head: hir::UnitHead {
                     name: ast_ident("x"),
                     inputs: hir_param_list.clone(),
                     output_type: None,
                     type_params: vec![],
+                    unit_kind: hir::UnitKind::Function(hir::FunctionKind::Fn).nowhere(),
                 },
                 inputs: vec![(name_id(2, "self"), param_type_spec)],
                 body: hir::ExprKind::Block(Box::new(hir::Block {
@@ -2516,11 +2528,12 @@ mod impl_blocks {
         // Ensure that the trait is added to the item list
         assert_eq!(items.traits.len(), 1);
         let t = items.traits.iter().next().unwrap().clone();
-        let trait_head = hir::FunctionHead {
+        let trait_head = hir::UnitHead {
             name: ast_ident("x"),
             inputs: hir_param_list,
             output_type: None,
             type_params: vec![],
+            unit_kind: hir::UnitKind::Function(hir::FunctionKind::Fn).nowhere(),
         };
         assert_eq!(t.1, &vec![(ast_ident("x").inner, trait_head)]);
 
@@ -2564,9 +2577,8 @@ mod module_visiting {
     #[test]
     fn visiting_module_with_one_entity_works() {
         let input = ast::ModuleBody {
-            members: vec![ast::Item::Entity(
-                ast::Entity {
-                    is_function: true,
+            members: vec![ast::Item::Unit(
+                ast::Unit {
                     name: ast_ident("test"),
                     output_type: None,
                     inputs: ParameterList::without_self(vec![]).nowhere(),
@@ -2579,7 +2591,7 @@ mod module_visiting {
                     ),
                     type_params: vec![],
                     attributes: ast::AttributeList(vec![]),
-                    unit_keyword: ().nowhere(),
+                    unit_kind: ast::UnitKind::Entity.nowhere(),
                 }
                 .nowhere(),
             )],
@@ -2588,14 +2600,15 @@ mod module_visiting {
         let expected = hir::ItemList {
             executables: vec![(
                 name_id(0, "test").inner,
-                hir::ExecutableItem::Entity(
-                    hir::Entity {
+                hir::ExecutableItem::Unit(
+                    hir::Unit {
                         name: hir::UnitName::FullPath(name_id(0, "test")),
-                        head: EntityHead {
+                        head: UnitHead {
                             name: Identifier("test".to_string()).nowhere(),
                             output_type: None,
                             inputs: hir::ParameterList(vec![]),
                             type_params: vec![],
+                            unit_kind: hir::UnitKind::Entity.nowhere(),
                         },
                         inputs: vec![],
                         body: hir::ExprKind::Block(Box::new(hir::Block {

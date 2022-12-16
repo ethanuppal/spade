@@ -11,15 +11,12 @@ entity main(clk: clk) -> bool {
 }
 
 
-error: Expected arguments for instantiation of foo
+error: Expected argument list
   ┌─ testinput:7:13
   │
 7 │     inst foo{clk, true}
   │     --------^ Expected argument list here
   │     │        
-  │     For this entity instantiation
-  │
-  = help: Argument lists start with either `$(` for named arguments
-          or `(` for unnamed arguments
+  │     for this instantiation
 
 

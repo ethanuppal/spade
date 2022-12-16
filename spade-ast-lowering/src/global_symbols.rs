@@ -31,8 +31,7 @@ pub fn gather_types(module: &ast::ModuleBody, symtab: &mut SymbolTable) -> Resul
                 symtab.pop_namespace();
             }
             ast::Item::ImplBlock(_) => {}
-            ast::Item::Entity(_) => {}
-            ast::Item::Pipeline(_) => {}
+            ast::Item::Unit(_) => {}
             ast::Item::TraitDef(_) => {}
             ast::Item::Config(cfg) => {
                 symtab.add_unique_thing(
@@ -77,11 +76,8 @@ pub fn visit_item(
     item_list: &mut ItemList,
 ) -> Result<()> {
     match item {
-        ast::Item::Entity(e) => {
-            visit_entity(&None, &e, symtab, &SelfContext::FreeStanding)?;
-        }
-        ast::Item::Pipeline(p) => {
-            visit_pipeline(&p, symtab, &SelfContext::FreeStanding)?;
+        ast::Item::Unit(e) => {
+            visit_unit(&None, &e, symtab, &SelfContext::FreeStanding)?;
         }
         ast::Item::TraitDef(def) => {
             // FIXME
@@ -111,9 +107,9 @@ pub fn visit_item(
 }
 
 #[tracing::instrument(skip_all)]
-pub fn visit_entity(
+pub fn visit_unit(
     extra_path: &Option<Path>,
-    e: &Loc<ast::Entity>,
+    e: &Loc<ast::Unit>,
     symtab: &mut SymbolTable,
     self_context: &SelfContext,
 ) -> Result<()> {
@@ -125,25 +121,7 @@ pub fn visit_entity(
         .join(Path::ident(e.name.clone()))
         .at_loc(&e.name);
 
-    if e.is_function {
-        symtab.add_unique_thing(new_path, Thing::Function(head.at_loc(e)))?;
-    } else {
-        symtab.add_unique_thing(new_path, Thing::Entity(head.at_loc(e)))?;
-    }
-
-    Ok(())
-}
-
-pub fn visit_pipeline(
-    p: &Loc<ast::Pipeline>,
-    symtab: &mut SymbolTable,
-    self_context: &SelfContext,
-) -> Result<()> {
-    let head = crate::pipelines::pipeline_head(&p, symtab, self_context)?;
-
-    let new_path = Path::ident(p.name.clone()).at_loc(&p.name);
-
-    symtab.add_unique_thing(new_path, Thing::Pipeline(head.at_loc(p)))?;
+    symtab.add_unique_thing(new_path, Thing::Unit(head.at_loc(e)))?;
 
     Ok(())
 }

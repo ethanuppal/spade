@@ -1,5 +1,5 @@
 use spade_common::location_info::Loc;
-use spade_hir::{Entity, ExprKind, Expression, Pipeline, Register, Statement};
+use spade_hir::{ExprKind, Expression, Register, Statement, Unit};
 
 use crate::Result;
 
@@ -102,13 +102,7 @@ impl Passable for Loc<Expression> {
     }
 }
 
-impl Passable for Entity {
-    fn apply(&mut self, pass: &mut impl Pass) -> Result<()> {
-        self.body.apply(pass)
-    }
-}
-
-impl Passable for Pipeline {
+impl Passable for Unit {
     fn apply(&mut self, pass: &mut impl Pass) -> Result<()> {
         self.body.apply(pass)
     }

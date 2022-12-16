@@ -15,7 +15,7 @@ use spade_diagnostics::diagnostic::Diagnostic as SpadeDiagnostic;
 use spade_diagnostics::emitter::codespan_config;
 use spade_diagnostics::{CodeBundle, CompilationError, DiagHandler};
 
-use crate::{EntityHead, FunctionHead, ParameterList, PipelineHead, TypeParam, TypeSpec};
+use crate::{FunctionKind, ParameterList, TypeParam, TypeSpec, UnitHead, UnitKind};
 
 #[derive(Error, Debug, Clone, PartialEq)]
 pub enum LookupError {
@@ -26,11 +26,7 @@ pub enum LookupError {
     #[error("Not a variable")]
     NotAVariable(Loc<Path>, Thing),
     #[error("Not an entity")]
-    NotAnEntity(Loc<Path>, Thing),
-    #[error("Not a pipeline")]
-    NotAPipeline(Loc<Path>, Thing),
-    #[error("Not a function")]
-    NotAFunction(Loc<Path>, Thing),
+    NotAUnit(Loc<Path>, Thing),
     #[error("Not an enum variant")]
     NotAnEnumVariant(Loc<Path>, Thing),
     #[error("Not a patternable type")]
@@ -61,9 +57,7 @@ impl LookupError {
             NoSuchSymbol(_) => (path),
             NotATypeSymbol(_, thing) => (path, thing),
             NotAVariable(_, thing) => (path, thing),
-            NotAnEntity(_, thing) => (path, thing),
-            NotAPipeline(_, thing) => (path, thing),
-            NotAFunction(_, thing) => (path, thing),
+            NotAUnit(_, thing) => (path, thing),
             NotAnEnumVariant(_, thing) => (path, thing),
             NotAPatternableType(_, thing) => (path, thing),
             NotAStruct(_, thing) => (path, thing),
@@ -101,22 +95,10 @@ impl CompilationError for LookupError {
                         got.kind_string()
                     )),
                 ]),
-            LookupError::NotAnEntity(path, got) => Diagnostic::error()
-                .with_message(format!("Expected {} to be an entity", path))
+            LookupError::NotAUnit(path, got) => Diagnostic::error()
+                .with_message(format!("Expected {} to be a unit", path))
                 .with_labels(vec![
-                    path.primary_label()
-                        .with_message(format!("Expected entity")),
-                    got.loc().secondary_label().with_message(format!(
-                        "{} is a {}",
-                        path,
-                        got.kind_string()
-                    )),
-                ]),
-            LookupError::NotAPipeline(path, got) => Diagnostic::error()
-                .with_message(format!("Expected {} to be a pipeline", path))
-                .with_labels(vec![
-                    path.primary_label()
-                        .with_message(format!("Expected pipeline")),
+                    path.primary_label().with_message(format!("Expected unit")),
                     got.loc().secondary_label().with_message(format!(
                         "{} is a {}",
                         path,
@@ -131,17 +113,6 @@ impl CompilationError for LookupError {
                 .with_labels(vec![
                     path.primary_label()
                         .with_message(format!("Expected pattern")),
-                    got.loc().secondary_label().with_message(format!(
-                        "{} is a {}",
-                        path,
-                        got.kind_string()
-                    )),
-                ]),
-            LookupError::NotAFunction(path, got) => Diagnostic::error()
-                .with_message(format!("Expected {} to be a function", path))
-                .with_labels(vec![
-                    path.primary_label()
-                        .with_message(format!("Expected function")),
                     got.loc().secondary_label().with_message(format!(
                         "{} is a {}",
                         path,
@@ -231,12 +202,13 @@ pub struct EnumVariant {
 impl WithLocation for EnumVariant {}
 
 impl EnumVariant {
-    pub fn as_function_head(&self) -> FunctionHead {
-        FunctionHead {
+    pub fn as_unit_head(&self) -> UnitHead {
+        UnitHead {
             name: self.name.clone(),
             inputs: self.params.clone(),
             output_type: Some(self.output_type.clone()),
             type_params: self.type_params.clone(),
+            unit_kind: UnitKind::Function(FunctionKind::Enum).at_loc(&self.name),
         }
     }
 }
@@ -250,46 +222,13 @@ pub struct StructCallable {
 }
 impl WithLocation for StructCallable {}
 impl StructCallable {
-    pub fn as_function_head(&self) -> FunctionHead {
-        FunctionHead {
+    pub fn as_unit_head(&self) -> UnitHead {
+        UnitHead {
             name: self.name.clone(),
             inputs: self.params.clone(),
             output_type: Some(self.self_type.clone()),
             type_params: self.type_params.clone(),
-        }
-    }
-}
-
-impl EntityHead {
-    pub fn as_function_head(&self) -> FunctionHead {
-        let EntityHead {
-            name,
-            inputs,
-            type_params,
-            output_type,
-        } = self;
-        FunctionHead {
-            name: name.clone(),
-            inputs: inputs.clone(),
-            type_params: type_params.clone(),
-            output_type: output_type.clone(),
-        }
-    }
-}
-
-impl FunctionHead {
-    pub fn as_entity_head(&self) -> EntityHead {
-        let FunctionHead {
-            name,
-            inputs,
-            type_params,
-            output_type,
-        } = self;
-        EntityHead {
-            name: name.clone(),
-            inputs: inputs.clone(),
-            type_params: type_params.clone(),
-            output_type: output_type.clone(),
+            unit_kind: UnitKind::Function(FunctionKind::Struct).at_loc(&self.name),
         }
     }
 }
@@ -301,9 +240,7 @@ pub enum Thing {
     /// Definition of a named type
     Struct(Loc<StructCallable>),
     EnumVariant(Loc<EnumVariant>),
-    Function(Loc<EntityHead>),
-    Entity(Loc<EntityHead>),
-    Pipeline(Loc<PipelineHead>),
+    Unit(Loc<UnitHead>),
     Variable(Loc<Identifier>),
     Alias {
         path: Loc<Path>,
@@ -317,10 +254,8 @@ impl Thing {
     pub fn kind_string(&self) -> &'static str {
         match self {
             Thing::Struct(_) => "struct",
-            Thing::Entity(_) => "entity",
+            Thing::Unit(_) => "unit",
             Thing::Variable(_) => "variable",
-            Thing::Pipeline(_) => "pipeline",
-            Thing::Function(_) => "function",
             Thing::EnumVariant(_) => "enum variant",
             Thing::Alias { .. } => "alias",
             Thing::PipelineStage(_) => "pipeline stage",
@@ -332,10 +267,8 @@ impl Thing {
     pub fn loc(&self) -> Loc<()> {
         match self {
             Thing::Struct(i) => i.loc(),
-            Thing::Entity(i) => i.loc(),
-            Thing::Pipeline(i) => i.loc(),
             Thing::Variable(i) => i.loc(),
-            Thing::Function(i) => i.loc(),
+            Thing::Unit(i) => i.loc(),
             Thing::EnumVariant(i) => i.loc(),
             Thing::Alias {
                 path,
@@ -351,9 +284,7 @@ impl Thing {
         match self {
             Thing::Struct(s) => s.name.loc(),
             Thing::EnumVariant(v) => v.name.loc(),
-            Thing::Function(f) => f.name.loc(),
-            Thing::Entity(e) => e.name.loc(),
-            Thing::Pipeline(p) => p.name.loc(),
+            Thing::Unit(f) => f.name.loc(),
             Thing::Variable(v) => v.loc(),
             Thing::Alias {
                 path,
@@ -731,16 +662,10 @@ impl SymbolTable {
     // lookup_* looks up items by path, and returns the NameID and item if successful.
     // If the path is not in scope, or the item is not the right kind, returns an error.
     thing_accessors! {
-        entity_by_id, lookup_entity, EntityHead, NotAnEntity {
-            Thing::Entity(head) => head.clone()
-        },
-        pipeline_by_id, lookup_pipeline, PipelineHead, NotAPipeline {
-            Thing::Pipeline(head) => head.clone()
-        },
-        function_by_id, lookup_function, FunctionHead, NotAFunction {
-            Thing::Function(head) => head.as_function_head().at_loc(head),
-            Thing::EnumVariant(variant) => variant.as_function_head().at_loc(variant),
-            Thing::Struct(s) => s.as_function_head().at_loc(s),
+        unit_by_id, lookup_unit, UnitHead, NotAUnit {
+            Thing::Unit(head) => head.clone(),
+            Thing::EnumVariant(variant) => variant.as_unit_head().at_loc(variant),
+            Thing::Struct(s) => s.as_unit_head().at_loc(s),
         },
         enum_variant_by_id, lookup_enum_variant, EnumVariant, NotAnEnumVariant {
             Thing::EnumVariant(variant) => variant.clone()
@@ -797,9 +722,7 @@ impl SymbolTable {
             Err(LookupError::NoSuchSymbol(_)) => false,
             Err(LookupError::NotATypeSymbol(_, _)) => unreachable!(),
             Err(LookupError::NotAVariable(_, _)) => unreachable!(),
-            Err(LookupError::NotAnEntity(_, _)) => unreachable!(),
-            Err(LookupError::NotAPipeline(_, _)) => unreachable!(),
-            Err(LookupError::NotAFunction(_, _)) => unreachable!(),
+            Err(LookupError::NotAUnit(_, _)) => unreachable!(),
             Err(LookupError::NotAPatternableType(_, _)) => unreachable!(),
             Err(LookupError::NotAnEnumVariant(_, _)) => unreachable!(),
             Err(LookupError::NotAStruct(_, _)) => unreachable!(),
@@ -988,9 +911,7 @@ impl SymbolTable {
             match thing {
                 Thing::Struct(_) => println!("struct"),
                 Thing::EnumVariant(_) => println!("enum variant"),
-                Thing::Function(_) => println!("function"),
-                Thing::Entity(_) => println!("entity"),
-                Thing::Pipeline(_) => println!("pipeline"),
+                Thing::Unit(_) => println!("unit"),
                 Thing::Variable(_) => println!("variable"),
                 Thing::Alias { path, in_namespace } => {
                     println!("{}", format!("alias => {path} in {in_namespace}").green())

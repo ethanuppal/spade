@@ -13,7 +13,7 @@ error: Pipelines are currently not allowed in impl blocks
   ┌─ testinput:5:5
   │
 5 │     pipeline(1) x(self, x: bool) -> bool __builtin__ 
-  │     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ Not allowed here
+  │     ^^^^^^^^^^^ Not allowed here
   │
   = note: This limitation is likely to be lifted in the future
   = help: Consider defining a free-standing pipeline for now

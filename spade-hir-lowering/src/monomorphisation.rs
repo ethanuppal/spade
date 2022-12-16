@@ -9,10 +9,10 @@ use spade_typeinference::error::UnificationErrorExt;
 use spade_typeinference::{GenericListToken, TypeState};
 
 use crate::error::{Error, Result};
-use crate::generate_entity;
+use crate::generate_unit;
+use crate::name_map::NameSourceMap;
 use crate::passes::lower_methods::LowerMethods;
 use crate::passes::pass::Passable;
-use crate::{generate_pipeline, name_map::NameSourceMap};
 
 /// An item to be monomorphised
 struct MonoItem {
@@ -104,19 +104,14 @@ pub fn compile_items(
 
     for (_, (item, _)) in items {
         match item {
-            ExecutableItem::Entity(e) => {
-                if e.head.type_params.is_empty() {
-                    state.request_compilation(e.name.clone(), vec![], symtab);
-                }
-            }
-            ExecutableItem::Pipeline(p) => {
-                if p.head.type_params.is_empty() {
-                    state.request_compilation(p.name.clone(), vec![], symtab);
+            ExecutableItem::Unit(u) => {
+                if u.head.type_params.is_empty() {
+                    state.request_compilation(u.name.clone(), vec![], symtab);
                 }
             }
             ExecutableItem::StructInstance => {}
             ExecutableItem::EnumInstance { .. } => {}
-            ExecutableItem::BuiltinEntity(_, _) | ExecutableItem::BuiltinPipeline(_, _) => {}
+            ExecutableItem::BuiltinUnit(_, _) => {}
         }
     }
 
@@ -126,16 +121,16 @@ pub fn compile_items(
 
         let mut reg_name_map = HashMap::new();
         match original_item {
-            Some((ExecutableItem::Entity(e), old_type_state)) => {
+            Some((ExecutableItem::Unit(u), old_type_state)) => {
                 let mut type_state = old_type_state.clone();
-                if !e.head.type_params.is_empty() {
+                if !u.head.type_params.is_empty() {
                     let generic_list = type_state
                         .get_generic_list(&GenericListToken::Definition(
-                            e.name.name_id().inner.clone(),
+                            u.name.name_id().inner.clone(),
                         ))
                         .clone();
 
-                    for (source_param, new) in e.head.type_params.iter().zip(item.params.iter()) {
+                    for (source_param, new) in u.head.type_params.iter().zip(item.params.iter()) {
                         let source_var = &generic_list[&source_param.name_id()];
 
                         match type_state
@@ -144,7 +139,7 @@ pub fn compile_items(
                                 spade_typeinference::error::Error::UnspecifiedTypeError {
                                     expected,
                                     got,
-                                    loc: e.loc(),
+                                    loc: u.loc(),
                                 }
                             }) {
                             Ok(_) => {}
@@ -156,52 +151,21 @@ pub fn compile_items(
                 }
 
                 // Apply passes to the type checked module
-                let mut e = e.clone();
-                let pass_result = e.apply(&mut LowerMethods {
+                let mut u = u.clone();
+                let pass_result = u.apply(&mut LowerMethods {
                     type_state: &type_state,
                     items: item_list,
+                    symtab: symtab,
                 });
                 if let Err(e) = pass_result {
                     result.push(Err(e));
                     continue;
                 }
 
-                let out = generate_entity(
-                    &e.inner,
+                let out = generate_unit(
+                    &u.inner,
                     item.new_name,
-                    symtab,
-                    idtracker,
                     &type_state,
-                    item_list,
-                    &mut state,
-                    diag_handler,
-                    name_source_map,
-                )
-                .map(|mir| MirOutput {
-                    mir,
-                    type_state: type_state.clone(),
-                    reg_name_map,
-                });
-                result.push(out);
-            }
-            Some((ExecutableItem::Pipeline(p), type_state)) => {
-                if !p.head.type_params.is_empty() {
-                    todo!("Support generic pipelines")
-                }
-
-                // Apply passes to the type checked module
-                let mut p = p.clone();
-                let pass_result = p.apply(&mut LowerMethods {
-                    type_state: &type_state,
-                    items: item_list,
-                });
-                if let Err(e) = pass_result {
-                    result.push(Err(e));
-                }
-
-                let out = generate_pipeline(
-                    &p.inner,
-                    type_state,
                     symtab,
                     idtracker,
                     item_list,
@@ -223,10 +187,7 @@ pub fn compile_items(
             Some((ExecutableItem::EnumInstance { .. }, _)) => {
                 panic!("Requesting compilation of enum instance as module")
             }
-            Some(
-                (ExecutableItem::BuiltinEntity(_, _), _)
-                | (ExecutableItem::BuiltinPipeline(_, _), _),
-            ) => {
+            Some((ExecutableItem::BuiltinUnit(_, _), _)) => {
                 panic!("Requesting compilation of builtin unit")
             }
             None => {

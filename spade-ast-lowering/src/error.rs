@@ -1,4 +1,4 @@
-use spade_common::location_info::Loc;
+use spade_common::{location_info::Loc, name::Path};
 use spade_macros::IntoDiagnostic;
 use thiserror::Error;
 
@@ -38,3 +38,99 @@ pub enum Error {
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
+
+/// Error to emit when instantiating non-function without inst
+pub fn expect_function(
+    unit_name: &Loc<Path>,
+    unit_def: Loc<()>,
+    found_instead: &spade_hir::UnitKind,
+) -> Error {
+    let diag = spade_diagnostics::Diagnostic::error(
+        unit_name,
+        format!("Expected {unit_name} to be a function"),
+    )
+    .primary_label("Expected function")
+    .secondary_label(
+        unit_def,
+        format!("{unit_name} is a {}", found_instead.name()),
+    );
+
+    match found_instead {
+        spade_hir::UnitKind::Function(_) => {
+            spade_diagnostics::Diagnostic::bug(unit_name, "expected fn and got it")
+        }
+        spade_hir::UnitKind::Entity => {
+            diag.span_suggest_insert_before("consider adding inst", unit_name, "inst ")
+        }
+        spade_hir::UnitKind::Pipeline(depth) => diag.span_suggest_insert_before(
+            "consider adding inst",
+            unit_name,
+            format!("inst({depth}) "),
+        ),
+    }
+    .into()
+}
+
+/// Error to emit when using `inst` to instantiate pipeline or entity
+pub fn expect_entity(
+    inst: &Loc<()>,
+    unit_name: &Loc<Path>,
+    unit_def: Loc<()>,
+    found_instead: &spade_hir::UnitKind,
+) -> Error {
+    let diag = spade_diagnostics::Diagnostic::error(
+        unit_name,
+        format!("Expected {unit_name} to be an entity"),
+    )
+    .primary_label("Expected entity")
+    .secondary_label(
+        unit_def,
+        format!("{unit_name} is a {}", found_instead.name()),
+    )
+    .secondary_label(inst, "because of this inst");
+
+    match found_instead {
+        spade_hir::UnitKind::Function(_) => {
+            diag.span_suggest_remove("Consider removing inst", inst)
+        }
+        spade_hir::UnitKind::Entity => {
+            spade_diagnostics::Diagnostic::bug(unit_name, "expected entity and got it")
+        }
+        spade_hir::UnitKind::Pipeline(_) => {
+            diag.span_suggest_replace("Consider changing to inst", inst, "inst")
+        }
+    }
+    .into()
+}
+
+/// Error to emit when using `inst` to instantiate pipeline or entity
+pub fn expect_pipeline(
+    inst: &Loc<()>,
+    unit_name: &Loc<Path>,
+    unit_def: Loc<()>,
+    found_instead: &spade_hir::UnitKind,
+) -> Error {
+    let diag = spade_diagnostics::Diagnostic::error(
+        unit_name,
+        format!("Expected {unit_name} to be a pipeline"),
+    )
+    .primary_label("Expected pipeline")
+    .secondary_label(
+        unit_def,
+        format!("{unit_name} is a {}", found_instead.name()),
+    )
+    .secondary_label(inst, "because of this inst");
+
+    match found_instead {
+        spade_hir::UnitKind::Function(_) => {
+            diag.span_suggest_remove("Consider removing inst", inst)
+        }
+        spade_hir::UnitKind::Entity => {
+            diag.span_suggest_replace("Consider removing the depth", inst, "inst")
+        }
+        spade_hir::UnitKind::Pipeline(_) => {
+            spade_diagnostics::Diagnostic::bug(unit_name, "expected pipeline and got it")
+        }
+    }
+    .into()
+}

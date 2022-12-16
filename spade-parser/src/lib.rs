@@ -11,10 +11,10 @@ use logos::Lexer;
 use tracing::{event, Level};
 
 use spade_ast::{
-    ArgumentList, ArgumentPattern, AttributeList, Block, ComptimeConfig, Entity, Enum, Expression,
+    ArgumentList, ArgumentPattern, AttributeList, Block, ComptimeConfig, Enum, Expression,
     FunctionDecl, ImplBlock, Item, Module, ModuleBody, NamedArgument, ParameterList, Pattern,
-    Pipeline, PipelineStageReference, Register, Statement, Struct, TraitDef, TypeDeclKind,
-    TypeDeclaration, TypeExpression, TypeParam, TypeSpec, UseStatement,
+    PipelineStageReference, Register, Statement, Struct, TraitDef, TypeDeclKind, TypeDeclaration,
+    TypeExpression, TypeParam, TypeSpec, Unit, UnitKind, UseStatement,
 };
 use spade_common::location_info::{lspan, AsLabel, FullSpan, HasCodespan, Loc, WithLocation};
 use spade_common::name::{Identifier, Path};
@@ -25,7 +25,7 @@ use crate::error::{
     CSErrorTransformations, CommaSeparatedError, CommaSeparatedResult, Error, Result,
 };
 use crate::error_reporting::unexpected_token_message;
-use crate::item_type::{ItemType, ItemTypeLocal};
+use crate::item_type::UnitKindLocal;
 use crate::lexer::TokenKind;
 
 /// A token with location info
@@ -80,7 +80,7 @@ pub struct Parser<'a> {
     peeked: Option<Token>,
     pub parse_stack: Vec<ParseStackEntry>,
     file_id: usize,
-    item_context: Option<Loc<ItemType>>,
+    unit_context: Option<Loc<UnitKind>>,
 }
 
 impl<'a> Parser<'a> {
@@ -90,7 +90,7 @@ impl<'a> Parser<'a> {
             peeked: None,
             parse_stack: vec![],
             file_id,
-            item_context: None,
+            unit_context: None,
         }
     }
 }
@@ -189,8 +189,9 @@ impl<'a> Parser<'a> {
     #[tracing::instrument(skip(self))]
     fn entity_instance(&mut self) -> Result<Option<Loc<Expression>>> {
         let start = peek_for!(self, &TokenKind::Instance);
+        let start_loc = ().at(self.file_id, &start);
 
-        self.item_context
+        self.unit_context
             .allows_inst(().at(self.file_id, &start.span()))?;
         // FIXME: Clean this up a bit
         // Check if this is a pipeline or not
@@ -210,29 +211,33 @@ impl<'a> Parser<'a> {
         let name = self.path()?;
         let next_token = self.peek()?.ok_or(Error::Eof)?;
 
-        let args = self
-            .argument_list()?
-            .ok_or_else(|| Error::ExpectedArgumentList {
-                name: name.inner.clone(),
-                inst: ().between(self.file_id, &start, &name),
-                expected_at: ().at(self.file_id, &next_token),
-            })?;
+        let args = self.argument_list()?.ok_or_else(|| {
+            Diagnostic::error(().at(self.file_id, &next_token), "Expected argument list")
+                .primary_label("Expected argument list here")
+                .secondary_label(
+                    ().between(self.file_id, &start, &name),
+                    "for this instantiation",
+                )
+        })?;
 
         if let Some(depth) = pipeline_depth {
             Ok(Some(
-                Expression::PipelineInstance(depth, name, args.clone()).between(
-                    self.file_id,
-                    &start.span,
-                    &args,
-                ),
+                Expression::PipelineInstance {
+                    inst: start_loc,
+                    depth,
+                    name,
+                    args: args.clone(),
+                }
+                .between(self.file_id, &start.span, &args),
             ))
         } else {
             Ok(Some(
-                Expression::EntityInstance(name, args.clone()).between(
-                    self.file_id,
-                    &start.span,
-                    &args,
-                ),
+                Expression::EntityInstance {
+                    inst: start_loc,
+                    name,
+                    args: args.clone(),
+                }
+                .between(self.file_id, &start.span, &args),
             ))
         }
     }
@@ -702,7 +707,7 @@ impl<'a> Parser<'a> {
             ));
         }
 
-        self.item_context
+        self.unit_context
             .allows_reg(().at(self.file_id, &start_token.span()))?;
 
         // Clock selection
@@ -969,16 +974,42 @@ impl<'a> Parser<'a> {
     // Entities
     #[trace_parser]
     #[tracing::instrument(skip(self))]
-    pub fn entity(&mut self, attributes: &AttributeList) -> Result<Option<Loc<Entity>>> {
-        let (is_function, start_token) = if let Some(s) = self.peek_and_eat(&TokenKind::Entity)? {
-            self.set_item_context(ItemType::Entity.at(self.file_id, &s.span()))?;
-            (false, s)
-        } else if let Some(s) = self.peek_and_eat(&TokenKind::Function)? {
-            self.set_item_context(ItemType::Function.at(self.file_id, &s.span()))?;
-            (true, s)
-        } else {
-            return Ok(None);
+    pub fn unit(&mut self, attributes: &AttributeList) -> Result<Option<Loc<Unit>>> {
+        let (unit_kind, start_token) = match self.peek()? {
+            Some(tok) => match tok.kind {
+                TokenKind::Pipeline => {
+                    self.eat_unconditional()?;
+                    let (depth, depth_span) = self.surrounded(
+                        &TokenKind::OpenParen,
+                        Self::int_literal,
+                        &TokenKind::CloseParen,
+                    )?;
+
+                    if let Some(depth) = depth {
+                        (
+                            UnitKind::Pipeline(depth).between(self.file_id, &tok, &depth_span),
+                            tok,
+                        )
+                    } else {
+                        return Err(Error::ExpectedPipelineDepth {
+                            got: self.eat_unconditional()?,
+                        });
+                    }
+                }
+                TokenKind::Function => {
+                    self.eat_unconditional()?;
+                    (UnitKind::Function.at(self.file_id, &tok), tok)
+                }
+                TokenKind::Entity => {
+                    self.eat_unconditional()?;
+                    (UnitKind::Entity.at(self.file_id, &tok), tok)
+                }
+                _ => return Ok(None),
+            },
+            None => return Ok(None),
         };
+
+        self.set_item_context(unit_kind.clone())?;
 
         let name = self.identifier()?;
 
@@ -999,7 +1030,8 @@ impl<'a> Parser<'a> {
             None
         };
 
-        let (block, block_span) = if let Some(block) = self.block(false)? {
+        let allow_stages = unit_kind.is_pipeline();
+        let (block, block_span) = if let Some(block) = self.block(allow_stages)? {
             let (block, block_span) = block.separate();
             (Some(block), block_span)
         } else if self.peek_kind(&TokenKind::Builtin)? {
@@ -1027,90 +1059,10 @@ impl<'a> Parser<'a> {
         self.clear_item_context();
 
         Ok(Some(
-            Entity {
+            Unit {
                 attributes: attributes.clone(),
-                is_function,
+                unit_kind,
                 name,
-                inputs,
-                output_type,
-                body: block.map(|inner| inner.map(|inner| Expression::Block(Box::new(inner)))),
-                type_params,
-                unit_keyword: ().at(self.file_id, &start_token.span),
-            }
-            .between(self.file_id, &start_token.span, &block_span),
-        ))
-    }
-
-    #[trace_parser]
-    #[tracing::instrument(skip(self))]
-    pub fn pipeline(&mut self, attributes: &AttributeList) -> Result<Option<Loc<Pipeline>>> {
-        let start_token = peek_for!(self, &TokenKind::Pipeline);
-
-        self.set_item_context(ItemType::Pipeline.at(self.file_id, &start_token.span()))?;
-
-        let type_params = self.generics_list()?;
-
-        // Depth
-        self.eat(&TokenKind::OpenParen)?;
-        let depth = if let Some(d) = self.int_literal()? {
-            d
-        } else {
-            return Err(Error::ExpectedPipelineDepth {
-                got: self.eat_unconditional()?,
-            });
-        };
-        self.eat(&TokenKind::CloseParen)?;
-
-        let name = self.identifier()?;
-
-        // Input types
-        let (inputs, inputs_loc) = self.surrounded(
-            &TokenKind::OpenParen,
-            Self::parameter_list,
-            &TokenKind::CloseParen,
-        )?;
-        let inputs = inputs.at_loc(&inputs_loc);
-
-        // Return type
-        let output_type = if self.peek_and_eat(&TokenKind::SlimArrow)?.is_some() {
-            Some(self.type_spec()?)
-        } else {
-            None
-        };
-
-        // Body (FIXME: might want to make this a separate structure like a block)
-        let (block, block_span) = if let Some(block) = self.block(true)? {
-            let (block, block_span) = block.separate();
-            (Some(block), block_span)
-        } else if self.peek_kind(&TokenKind::Builtin)? {
-            let tok = self.eat_unconditional()?;
-
-            (None, ().at(self.file_id, &tok.span).span)
-        } else {
-            // The end of the entity definition depends on whether or not
-            // a type is present.
-            let end_loc = output_type
-                .map(|t| t.loc())
-                .unwrap_or_else(|| inputs_loc)
-                .span;
-
-            return match self.peek()? {
-                Some(got) => Err(Error::ExpectedBlock {
-                    for_what: "entity".to_string(),
-                    got,
-                    loc: Loc::new((), lspan(start_token.span).merge(end_loc), self.file_id),
-                }),
-                None => Err(Error::Eof),
-            };
-        };
-
-        self.clear_item_context();
-
-        Ok(Some(
-            Pipeline {
-                attributes: attributes.clone(),
-                name,
-                depth,
                 inputs,
                 output_type,
                 body: block.map(|inner| inner.map(|inner| Expression::Block(Box::new(inner)))),
@@ -1212,34 +1164,28 @@ impl<'a> Parser<'a> {
             ImplBlock {
                 r#trait,
                 target,
-                entities: body,
+                units: body,
             }
             .between(self.file_id, &start_token.span, &body_span.span),
         ))
     }
 
     #[trace_parser]
-    pub fn impl_body(&mut self) -> Result<Vec<Loc<Entity>>> {
+    pub fn impl_body(&mut self) -> Result<Vec<Loc<Unit>>> {
         let mut result = vec![];
-        while let Some(e) = self.entity(&AttributeList::empty())? {
-            if !e.is_function {
-                return Err(Error::EntityInImpl { loc: e.loc() });
+        while let Some(u) = self.unit(&AttributeList::empty())? {
+            if u.unit_kind.is_pipeline() {
+                return Err(Diagnostic::error(
+                    u.unit_kind.loc(),
+                    "Pipelines are currently not allowed in impl blocks",
+                )
+                .primary_label("Not allowed here")
+                .note("This limitation is likely to be lifted in the future")
+                .help("Consider defining a free-standing pipeline for now")
+                .into());
             }
-            result.push(e);
-        }
 
-        // Also try looking for pipelines to gracefully report an error in case
-        // the user tries to impl a pipeline. (Can be removed once we figure out
-        // the semantics of pipelines like this)
-        if let Some(pipeline) = self.pipeline(&AttributeList::empty())? {
-            return Err(Diagnostic::error(
-                pipeline.loc(),
-                "Pipelines are currently not allowed in impl blocks",
-            )
-            .primary_label("Not allowed here")
-            .note("This limitation is likely to be lifted in the future")
-            .help("Consider defining a free-standing pipeline for now")
-            .into());
+            result.push(u);
         }
 
         Ok(result)
@@ -1479,8 +1425,7 @@ impl<'a> Parser<'a> {
     pub fn item(&mut self) -> Result<Option<Item>> {
         let attrs = self.attributes()?;
         self.first_successful(vec![
-            &|s: &mut Self| s.entity(&attrs).map(|e| e.map(Item::Entity)),
-            &|s: &mut Self| s.pipeline(&attrs).map(|e| e.map(Item::Pipeline)),
+            &|s: &mut Self| s.unit(&attrs).map(|e| e.map(Item::Unit)),
             &|s: &mut Self| s.trait_def(&attrs).map(|e| e.map(Item::TraitDef)),
             &|s: &mut Self| s.impl_block(&attrs).map(|e| e.map(Item::ImplBlock)),
             &|s: &mut Self| s.type_declaration(&attrs).map(|e| e.map(Item::Type)),
@@ -1749,25 +1694,25 @@ impl<'a> Parser<'a> {
 }
 
 impl<'a> Parser<'a> {
-    fn set_item_context(&mut self, context: Loc<ItemType>) -> Result<()> {
-        if let Some(prev) = &self.item_context {
+    fn set_item_context(&mut self, context: Loc<UnitKind>) -> Result<()> {
+        if let Some(prev) = &self.unit_context {
             Err(Error::InternalOverwritingItemContext {
                 at: context.loc(),
                 prev: prev.loc(),
             })
         } else {
-            self.item_context = Some(context);
+            self.unit_context = Some(context);
             Ok(())
         }
     }
 
     fn clear_item_context(&mut self) {
-        self.item_context = None
+        self.unit_context = None
     }
 
     #[cfg(test)]
     fn set_parsing_entity(&mut self) {
-        self.set_item_context(ItemType::Entity.nowhere()).unwrap()
+        self.set_item_context(UnitKind::Entity.nowhere()).unwrap()
     }
 }
 
@@ -1858,7 +1803,7 @@ mod tests {
 
     use logos::Logos;
 
-    use spade_common::location_info::{Loc, WithLocation};
+    use spade_common::location_info::WithLocation;
 
     #[macro_export]
     macro_rules! check_parse {
@@ -1945,9 +1890,9 @@ mod tests {
     #[test]
     fn entity_without_inputs() {
         let code = include_str!("../parser_test_code/entity_without_inputs.sp");
-        let expected = Entity {
+        let expected = Unit {
             attributes: AttributeList::empty(),
-            is_function: false,
+            unit_kind: UnitKind::Entity.nowhere(),
             name: Identifier("no_inputs".to_string()).nowhere(),
             inputs: aparams![],
             output_type: None,
@@ -1972,19 +1917,18 @@ mod tests {
                 .nowhere(),
             ),
             type_params: vec![],
-            unit_keyword: ().nowhere(),
         }
         .nowhere();
 
-        check_parse!(code, entity(&AttributeList::empty()), Ok(Some(expected)));
+        check_parse!(code, unit(&AttributeList::empty()), Ok(Some(expected)));
     }
 
     #[test]
     fn entity_with_inputs() {
         let code = include_str!("../parser_test_code/entity_with_inputs.sp");
-        let expected = Entity {
+        let expected = Unit {
             attributes: AttributeList::empty(),
-            is_function: false,
+            unit_kind: UnitKind::Entity.nowhere(),
             name: ast_ident("with_inputs"),
             inputs: aparams![("clk", tspec!("bool")), ("rst", tspec!("bool"))],
             output_type: Some(TypeSpec::Named(ast_path("bool"), None).nowhere()),
@@ -1996,19 +1940,18 @@ mod tests {
                 .nowhere(),
             ),
             type_params: vec![],
-            unit_keyword: ().nowhere(),
         }
         .nowhere();
 
-        check_parse!(code, entity(&AttributeList::empty()), Ok(Some(expected)));
+        check_parse!(code, unit(&AttributeList::empty()), Ok(Some(expected)));
     }
 
     #[test]
     fn entity_with_generics() {
         let code = include_str!("../parser_test_code/entity_with_generics.sp");
-        let expected = Entity {
+        let expected = Unit {
             attributes: AttributeList::empty(),
-            is_function: false,
+            unit_kind: UnitKind::Entity.nowhere(),
             name: ast_ident("with_generics"),
             inputs: aparams![],
             output_type: None,
@@ -2023,11 +1966,10 @@ mod tests {
                 TypeParam::TypeName(ast_ident("X")).nowhere(),
                 TypeParam::Integer(ast_ident("Y")).nowhere(),
             ],
-            unit_keyword: ().nowhere(),
         }
         .nowhere();
 
-        check_parse!(code, entity(&AttributeList::empty()), Ok(Some(expected)));
+        check_parse!(code, unit(&AttributeList::empty()), Ok(Some(expected)));
     }
 
     #[test]
@@ -2177,9 +2119,9 @@ mod tests {
     fn module_body_parsing_works() {
         let code = include_str!("../parser_test_code/multiple_entities.sp");
 
-        let e1 = Entity {
+        let e1 = Unit {
             attributes: AttributeList::empty(),
-            is_function: false,
+            unit_kind: UnitKind::Entity.nowhere(),
             name: Identifier("e1".to_string()).nowhere(),
             inputs: aparams![],
             output_type: None,
@@ -2191,13 +2133,12 @@ mod tests {
                 .nowhere(),
             ),
             type_params: vec![],
-            unit_keyword: ().nowhere(),
         }
         .nowhere();
 
-        let e2 = Entity {
+        let e2 = Unit {
             attributes: AttributeList::empty(),
-            is_function: false,
+            unit_kind: UnitKind::Entity.nowhere(),
             name: Identifier("e2".to_string()).nowhere(),
             inputs: aparams![],
             output_type: None,
@@ -2209,12 +2150,11 @@ mod tests {
                 .nowhere(),
             ),
             type_params: vec![],
-            unit_keyword: ().nowhere(),
         }
         .nowhere();
 
         let expected = ModuleBody {
-            members: vec![Item::Entity(e1), Item::Entity(e2)],
+            members: vec![Item::Unit(e1), Item::Unit(e2)],
         };
 
         check_parse!(code, module_body, Ok(expected));
@@ -2364,15 +2304,14 @@ mod tests {
         let expected = ImplBlock {
             r#trait: None,
             target: ast_path("SomeType"),
-            entities: vec![Entity {
+            units: vec![Unit {
                 attributes: AttributeList::empty(),
-                is_function: true,
+                unit_kind: UnitKind::Function.nowhere(),
                 name: ast_ident("some_fn"),
                 inputs: ParameterList::without_self(vec![]).nowhere(),
                 output_type: None,
                 body: None,
                 type_params: vec![],
-                unit_keyword: ().nowhere(),
             }
             .nowhere()],
         }
@@ -2396,15 +2335,14 @@ mod tests {
         let expected = ImplBlock {
             r#trait: Some(ast_path("SomeTrait")),
             target: ast_path("SomeType"),
-            entities: vec![Entity {
+            units: vec![Unit {
                 attributes: AttributeList::empty(),
-                is_function: true,
+                unit_kind: UnitKind::Function.nowhere(),
                 name: ast_ident("some_fn"),
                 inputs: ParameterList::without_self(vec![]).nowhere(),
                 output_type: None,
                 body: None,
                 type_params: vec![],
-                unit_keyword: ().nowhere(),
             }
             .nowhere()],
         }
@@ -2500,20 +2438,19 @@ mod tests {
         let code = "entity X() __builtin__";
 
         let expected = Some(
-            Entity {
+            Unit {
                 attributes: AttributeList::empty(),
-                is_function: false,
+                unit_kind: UnitKind::Entity.nowhere(),
                 name: ast_ident("X"),
                 inputs: ParameterList::without_self(vec![]).nowhere(),
                 output_type: None,
                 body: None,
                 type_params: vec![],
-                unit_keyword: ().nowhere(),
             }
             .nowhere(),
         );
 
-        check_parse!(code, entity(&AttributeList::empty()), Ok(expected));
+        check_parse!(code, unit(&AttributeList::empty()), Ok(expected));
     }
 
     #[test]
@@ -2521,19 +2458,19 @@ mod tests {
         let code = "pipeline(1) X() __builtin__";
 
         let expected = Some(
-            Pipeline {
+            Unit {
                 attributes: AttributeList::empty(),
                 name: ast_ident("X"),
                 inputs: ParameterList::without_self(vec![]).nowhere(),
                 output_type: None,
-                depth: 1.nowhere(),
+                unit_kind: UnitKind::Pipeline(1.nowhere()).nowhere(),
                 body: None,
                 type_params: vec![],
             }
             .nowhere(),
         );
 
-        check_parse!(code, pipeline(&AttributeList::empty()), Ok(expected));
+        check_parse!(code, unit(&AttributeList::empty()), Ok(expected));
     }
 
     #[test]
@@ -2541,20 +2478,19 @@ mod tests {
         let code = "fn X() __builtin__";
 
         let expected = Some(
-            Entity {
+            Unit {
                 attributes: AttributeList::empty(),
-                is_function: true,
+                unit_kind: UnitKind::Function.nowhere(),
                 name: ast_ident("X"),
                 inputs: ParameterList::without_self(vec![]).nowhere(),
                 output_type: None,
                 body: None,
                 type_params: vec![],
-                unit_keyword: ().nowhere(),
             }
             .nowhere(),
         );
 
-        check_parse!(code, entity(&AttributeList::empty()), Ok(expected));
+        check_parse!(code, unit(&AttributeList::empty()), Ok(expected));
     }
 
     #[test]
@@ -2563,16 +2499,15 @@ mod tests {
             #[attr]
             fn X() __builtin__"#;
 
-        let expected = Some(Item::Entity(
-            Entity {
+        let expected = Some(Item::Unit(
+            Unit {
                 attributes: AttributeList(vec![ast_ident("attr")]),
-                is_function: true,
+                unit_kind: UnitKind::Function.nowhere(),
                 name: ast_ident("X"),
                 inputs: ParameterList::without_self(vec![]).nowhere(),
                 output_type: None,
                 body: None,
                 type_params: vec![],
-                unit_keyword: ().nowhere(),
             }
             .nowhere(),
         ));
@@ -2586,16 +2521,15 @@ mod tests {
             #[attr]
             entity X() __builtin__"#;
 
-        let expected = Some(Item::Entity(
-            Entity {
+        let expected = Some(Item::Unit(
+            Unit {
                 attributes: AttributeList(vec![ast_ident("attr")]),
-                is_function: false,
+                unit_kind: UnitKind::Entity.nowhere(),
                 name: ast_ident("X"),
                 inputs: ParameterList::without_self(vec![]).nowhere(),
                 output_type: None,
                 body: None,
                 type_params: vec![],
-                unit_keyword: ().nowhere(),
             }
             .nowhere(),
         ));
@@ -2610,10 +2544,10 @@ mod tests {
             pipeline(2) test(a: bool) __builtin__
         "#;
 
-        let expected = Item::Pipeline(
-            Pipeline {
+        let expected = Item::Unit(
+            Unit {
                 attributes: AttributeList(vec![ast_ident("attr")]),
-                depth: Loc::new(2, lspan(0..0), 0),
+                unit_kind: UnitKind::Pipeline(2.nowhere()).nowhere(),
                 name: ast_ident("test"),
                 inputs: aparams![("a", tspec!("bool"))],
                 output_type: None,
@@ -2635,7 +2569,7 @@ mod tests {
 
         check_parse!(
             code,
-            entity(&AttributeList::empty()),
+            unit(&AttributeList::empty()),
             Err(Error::RegInFunction {
                 at: ().nowhere(),
                 fn_keyword: ().nowhere()
@@ -2647,15 +2581,16 @@ mod tests {
     fn entity_instantiation() {
         let code = "inst some_entity(x, y, z)";
 
-        let expected = Expression::EntityInstance(
-            ast_path("some_entity"),
-            ArgumentList::Positional(vec![
+        let expected = Expression::EntityInstance {
+            inst: ().nowhere(),
+            name: ast_path("some_entity"),
+            args: ArgumentList::Positional(vec![
                 Expression::Identifier(ast_path("x")).nowhere(),
                 Expression::Identifier(ast_path("y")).nowhere(),
                 Expression::Identifier(ast_path("z")).nowhere(),
             ])
             .nowhere(),
-        )
+        }
         .nowhere();
 
         check_parse!(code, expression, Ok(expected), Parser::set_parsing_entity);
@@ -2665,14 +2600,15 @@ mod tests {
     fn entity_instantiation_with_a_named_arg() {
         let code = "inst some_entity$(z: a)";
 
-        let expected = Expression::EntityInstance(
-            ast_path("some_entity"),
-            ArgumentList::Named(vec![NamedArgument::Full(
+        let expected = Expression::EntityInstance {
+            inst: ().nowhere(),
+            name: ast_path("some_entity"),
+            args: ArgumentList::Named(vec![NamedArgument::Full(
                 ast_ident("z"),
                 Expression::Identifier(ast_path("a")).nowhere(),
             )])
             .nowhere(),
-        )
+        }
         .nowhere();
 
         check_parse!(code, expression, Ok(expected), Parser::set_parsing_entity);
@@ -2731,9 +2667,9 @@ mod tests {
             }
         "#;
 
-        let expected = Pipeline {
+        let expected = Unit {
             attributes: AttributeList::empty(),
-            depth: Loc::new(2, lspan(0..0), 0),
+            unit_kind: UnitKind::Pipeline(2.nowhere()).nowhere(),
             name: ast_ident("test"),
             inputs: aparams![("a", tspec!("bool"))],
             output_type: Some(TypeSpec::Named(ast_path("bool"), None).nowhere()),
@@ -2765,7 +2701,7 @@ mod tests {
         }
         .nowhere();
 
-        check_parse!(code, pipeline(&AttributeList::empty()), Ok(Some(expected)));
+        check_parse!(code, unit(&AttributeList::empty()), Ok(Some(expected)));
     }
 
     #[test]
@@ -2777,9 +2713,9 @@ mod tests {
             }
         "#;
 
-        let expected = Pipeline {
+        let expected = Unit {
             attributes: AttributeList::empty(),
-            depth: Loc::new(2, lspan(0..0), 0),
+            unit_kind: UnitKind::Pipeline(2.nowhere()).nowhere(),
             name: ast_ident("test"),
             inputs: aparams![("a", tspec!("bool"))],
             output_type: Some(TypeSpec::Named(ast_path("bool"), None).nowhere()),
@@ -2794,7 +2730,7 @@ mod tests {
         }
         .nowhere();
 
-        check_parse!(code, pipeline(&AttributeList::empty()), Ok(Some(expected)));
+        check_parse!(code, unit(&AttributeList::empty()), Ok(Some(expected)));
     }
 
     #[test]
@@ -2806,10 +2742,10 @@ mod tests {
         "#;
 
         let expected = ModuleBody {
-            members: vec![Item::Pipeline(
-                Pipeline {
+            members: vec![Item::Unit(
+                Unit {
                     attributes: AttributeList::empty(),
-                    depth: Loc::new(2, lspan(0..0), 0),
+                    unit_kind: UnitKind::Pipeline(2.nowhere()).nowhere(),
                     name: ast_ident("test"),
                     inputs: aparams![("a", tspec!("bool"))],
                     output_type: Some(TypeSpec::Named(ast_path("bool"), None).nowhere()),
@@ -2833,16 +2769,17 @@ mod tests {
     fn pipeline_instantiation_works() {
         let code = "inst(2) some_pipeline(x, y, z)";
 
-        let expected = Expression::PipelineInstance(
-            2.nowhere(),
-            ast_path("some_pipeline"),
-            ArgumentList::Positional(vec![
+        let expected = Expression::PipelineInstance {
+            inst: ().nowhere(),
+            depth: 2.nowhere(),
+            name: ast_path("some_pipeline"),
+            args: ArgumentList::Positional(vec![
                 Expression::Identifier(ast_path("x")).nowhere(),
                 Expression::Identifier(ast_path("y")).nowhere(),
                 Expression::Identifier(ast_path("z")).nowhere(),
             ])
             .nowhere(),
-        )
+        }
         .nowhere();
 
         check_parse!(code, expression, Ok(expected), Parser::set_parsing_entity);

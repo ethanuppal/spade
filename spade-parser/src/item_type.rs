@@ -1,34 +1,27 @@
 use local_impl::local_impl;
-use spade_common::location_info::{Loc, WithLocation};
+use spade_ast::UnitKind;
+use spade_common::location_info::Loc;
 use spade_diagnostics::Diagnostic;
 
 use crate::error::{Error, Result};
 
-#[derive(Clone, Copy, Debug)]
-pub enum ItemType {
-    Function,
-    Entity,
-    Pipeline,
-}
-impl WithLocation for ItemType {}
-
 #[local_impl]
-impl ItemTypeLocal for Option<Loc<ItemType>> {
+impl UnitKindLocal for Option<Loc<UnitKind>> {
     fn allows_reg(&self, at: Loc<()>) -> Result<()> {
         match self.as_ref().map(|s| &s.inner) {
-            Some(ItemType::Function) => Err(Error::RegInFunction {
+            Some(UnitKind::Function) => Err(Error::RegInFunction {
                 at,
                 fn_keyword: self.as_ref().unwrap().loc(),
             }),
-            Some(ItemType::Entity) => Ok(()),
-            Some(ItemType::Pipeline) => Ok(()),
+            Some(UnitKind::Entity) => Ok(()),
+            Some(UnitKind::Pipeline(_)) => Ok(()),
             None => Err(Error::InternalExpectedItemContext { at }),
         }
     }
 
     fn allows_inst(&self, at: Loc<()>) -> Result<()> {
         match self.as_ref().map(|s| &s.inner) {
-            Some(ItemType::Function) => Err(Diagnostic::error(
+            Some(UnitKind::Function) => Err(Diagnostic::error(
                 at,
                 "Entities and pipelines can not be instantiated in functions",
             ) // FIXME: Choose "entities" or "pipelines" depending on what we try to instantiate
@@ -41,23 +34,23 @@ impl ItemTypeLocal for Option<Loc<ItemType>> {
                 "entity",
             )
             .into()),
-            Some(ItemType::Entity) => Ok(()),
-            Some(ItemType::Pipeline) => Ok(()),
+            Some(UnitKind::Entity) => Ok(()),
+            Some(UnitKind::Pipeline(_)) => Ok(()),
             None => Err(Error::InternalExpectedItemContext { at }),
         }
     }
 
     fn allows_pipeline_ref(&self, at: Loc<()>) -> Result<()> {
         match self.as_ref().map(|s| &s.inner) {
-            Some(ItemType::Function) => Err(Error::PipelineRefInFunction {
+            Some(UnitKind::Function) => Err(Error::PipelineRefInFunction {
                 at,
                 fn_keyword: self.as_ref().unwrap().loc(),
             }),
-            Some(ItemType::Entity) => Err(Error::PipelineRefInEntity {
+            Some(UnitKind::Entity) => Err(Error::PipelineRefInEntity {
                 at,
                 entity_keyword: self.as_ref().unwrap().loc(),
             }),
-            Some(ItemType::Pipeline) => Ok(()),
+            Some(UnitKind::Pipeline(_)) => Ok(()),
             None => Err(Error::InternalExpectedItemContext { at }),
         }
     }

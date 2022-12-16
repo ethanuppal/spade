@@ -9,6 +9,7 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
+use hir::UnitHead;
 use spade_macros::trace_typechecker;
 use trace_stack::TraceStack;
 use tracing::{info, trace};
@@ -19,8 +20,8 @@ use spade_hir as hir;
 use spade_hir::param_util::{match_args_with_params, Argument};
 use spade_hir::symbol_table::{Patternable, PatternableKind, SymbolTable, TypeSymbol};
 use spade_hir::{
-    ArgumentList, Block, Entity, ExecutableItem, ExprKind, Expression, FunctionLike, ItemList,
-    Pattern, PatternArgument, Register, Statement, TypeParam,
+    ArgumentList, Block, ExecutableItem, ExprKind, Expression, ItemList, Pattern, PatternArgument,
+    Register, Statement, TypeParam, Unit,
 };
 use spade_types::KnownType;
 
@@ -40,7 +41,6 @@ pub mod expression;
 pub mod fixed_types;
 pub mod method_resolution;
 pub mod mir_type_lowering;
-pub mod pipeline;
 mod requirements;
 pub mod testutil;
 pub mod trace_stack;
@@ -58,23 +58,16 @@ macro_rules! add_trace {
     }
 }
 
-pub struct ProcessedEntity {
-    pub entity: Entity,
-    pub type_state: TypeState,
-}
-
-pub struct ProcessedPipeline {
-    pub pipeline: hir::Pipeline,
+pub struct ProcessedUnit {
+    pub unit: Unit,
     pub type_state: TypeState,
 }
 
 pub enum ProcessedItem {
     EnumInstance,
     StructInstance,
-    Entity(ProcessedEntity),
-    Pipeline(ProcessedPipeline),
-    BuiltinEntity(Loc<hir::EntityHead>),
-    BuiltinPipeline(Loc<hir::PipelineHead>),
+    Unit(ProcessedUnit),
+    Builtin(Loc<hir::UnitHead>),
 }
 
 pub struct ProcessedItemList {
@@ -107,30 +100,16 @@ impl ProcessedItemList {
                     match item {
                         ExecutableItem::EnumInstance { .. } => Ok(ProcessedItem::EnumInstance),
                         ExecutableItem::StructInstance { .. } => Ok(ProcessedItem::StructInstance),
-                        ExecutableItem::Entity(entity) => {
+                        ExecutableItem::Unit(unit) => {
                             type_state
-                                .visit_entity(&entity, ctx)
+                                .visit_entity(&unit, ctx)
                                 .map_err(err_processor!())?;
-                            Ok(ProcessedItem::Entity(ProcessedEntity {
-                                entity: entity.inner,
+                            Ok(ProcessedItem::Unit(ProcessedUnit {
+                                unit: unit.inner,
                                 type_state,
                             }))
                         }
-                        ExecutableItem::Pipeline(pipeline) => {
-                            type_state
-                                .visit_pipeline(&pipeline, ctx)
-                                .map_err(err_processor!())?;
-                            Ok(ProcessedItem::Pipeline(ProcessedPipeline {
-                                pipeline: pipeline.inner,
-                                type_state,
-                            }))
-                        }
-                        ExecutableItem::BuiltinEntity(_, head) => {
-                            Ok(ProcessedItem::BuiltinEntity(head))
-                        }
-                        ExecutableItem::BuiltinPipeline(_, head) => {
-                            Ok(ProcessedItem::BuiltinPipeline(head))
-                        }
+                        ExecutableItem::BuiltinUnit(_, head) => Ok(ProcessedItem::Builtin(head)),
                     }
                 })
                 .collect::<Result<Vec<_>>>()?,
@@ -305,7 +284,7 @@ impl TypeState {
 
     #[trace_typechecker]
     #[tracing::instrument(level = "trace", skip_all, fields(%entity.name))]
-    pub fn visit_entity(&mut self, entity: &Entity, ctx: &Context) -> Result<()> {
+    pub fn visit_entity(&mut self, entity: &Unit, ctx: &Context) -> Result<()> {
         let generic_list = self.create_generic_list(
             GenericListSource::Definition(&entity.name.name_id().inner),
             &entity.head.type_params,
@@ -449,7 +428,7 @@ impl TypeState {
                 self.visit_unary_operator(expression, ctx, generic_list)?
             }
             ExprKind::EntityInstance(name, args) => {
-                let head = ctx.symtab.entity_by_id(&name.inner);
+                let head = ctx.symtab.unit_by_id(&name.inner);
                 self.handle_function_like(
                     expression.map_ref(|e| e.id),
                     &expression.get_type(self)?,
@@ -466,7 +445,7 @@ impl TypeState {
                 name,
                 args,
             } => {
-                let head = ctx.symtab.pipeline_by_id(&name.inner);
+                let head = ctx.symtab.unit_by_id(&name.inner);
                 self.handle_function_like(
                     expression.map_ref(|e| e.id),
                     &expression.get_type(self)?,
@@ -479,7 +458,7 @@ impl TypeState {
                 )?;
             }
             ExprKind::FnCall(name, args) => {
-                let head = ctx.symtab.function_by_id(&name.inner);
+                let head = ctx.symtab.unit_by_id(&name.inner);
                 self.handle_function_like(
                     expression.map_ref(|e| e.id),
                     &expression.get_type(self)?,
@@ -506,7 +485,7 @@ impl TypeState {
         expression_id: Loc<u64>,
         expression_type: &TypeVar,
         name: &NameID,
-        head: &impl FunctionLike,
+        head: &UnitHead,
         args: &Loc<ArgumentList>,
         ctx: &Context,
         // Whether or not to visit the argument expressions passed to the function here. This
@@ -520,14 +499,14 @@ impl TypeState {
         // Add new symbols for all the type parameters
         let generic_list = self.create_generic_list(
             GenericListSource::Expression(expression_id.inner),
-            head.type_params(),
+            &head.type_params,
         );
 
         if visit_args {
             self.visit_argument_list(args, ctx, &generic_list)?;
         }
 
-        let type_params = head.type_params();
+        let type_params = &head.type_params;
 
         // Special handling of built in functions
         macro_rules! handle_special_functions {
@@ -553,7 +532,7 @@ impl TypeState {
             };
         }
 
-        let args = match_args_with_params(args, head.inputs(), is_method)?;
+        let args = match_args_with_params(args, &head.inputs, is_method)?;
 
         handle_special_functions! {
             ["std", "conv", "concat"] => {
@@ -587,7 +566,7 @@ impl TypeState {
         };
 
         let return_type = self.type_var_from_hir(
-            head.output_type()
+            head.output_type
                 .as_ref()
                 .expect("Unit return type from entity is unsupported"),
             &generic_list,
@@ -2237,8 +2216,9 @@ mod tests {
         spade_ast_lowering::builtins::populate_symtab(&mut symtab, &mut ItemList::new());
 
         // Add the entity to the symtab
-        let entity = hir::EntityHead {
+        let unit = hir::UnitHead {
             name: Identifier("".to_string()).nowhere(),
+            unit_kind: hir::UnitKind::Entity.nowhere(),
             inputs: hir::ParameterList(vec![
                 (ast_ident("a"), dtype!(symtab => "bool")),
                 (ast_ident("b"), dtype!(symtab => "int"; (t_num(10)))),
@@ -2247,7 +2227,7 @@ mod tests {
             type_params: vec![],
         };
 
-        let entity_name = symtab.add_thing(ast_path("test").inner, Thing::Entity(entity.nowhere()));
+        let entity_name = symtab.add_thing(ast_path("test").inner, Thing::Unit(unit.nowhere()));
 
         let input = ExprKind::EntityInstance(
             entity_name.nowhere(),
@@ -2318,9 +2298,9 @@ mod tests {
         spade_ast_lowering::builtins::populate_symtab(&mut symtab, &mut ItemList::new());
 
         // Add the entity to the symtab
-        let entity = hir::PipelineHead {
+        let unit = hir::UnitHead {
             name: Identifier("".to_string()).nowhere(),
-            depth: 2.nowhere(),
+            unit_kind: hir::UnitKind::Pipeline(2.nowhere()).nowhere(),
             inputs: hir::ParameterList(vec![
                 (ast_ident("a"), dtype!(symtab => "bool")),
                 (ast_ident("b"), dtype!(symtab => "int"; ( t_num(10) ))),
@@ -2329,8 +2309,7 @@ mod tests {
             type_params: vec![],
         };
 
-        let entity_name =
-            symtab.add_thing(ast_path("test").inner, Thing::Pipeline(entity.nowhere()));
+        let entity_name = symtab.add_thing(ast_path("test").inner, Thing::Unit(unit.nowhere()));
 
         let input = ExprKind::PipelineInstance {
             depth: 2.nowhere(),

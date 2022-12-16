@@ -236,11 +236,11 @@ pub fn compile(
         .executables
         .iter()
         .filter_map(|(name, item)| match item {
-            ExecutableItem::Entity(e) => {
+            ExecutableItem::Unit(u) => {
                 let mut type_state = typeinference::TypeState::new();
 
                 if let Ok(()) = type_state
-                    .visit_entity(e, &type_inference_ctx)
+                    .visit_entity(u, &type_inference_ctx)
                     .report(&mut errors)
                 {
                     all_types.extend(dump_types(
@@ -258,25 +258,9 @@ pub fn compile(
                     None
                 }
             }
-            ExecutableItem::Pipeline(p) => {
-                let mut type_state = typeinference::TypeState::new();
-
-                type_state
-                    .visit_pipeline(p, &type_inference_ctx)
-                    .or_report(&mut errors)
-                    .unwrap_or_else(|| {
-                        if opts.print_type_traceback {
-                            type_state.print_equations();
-                            println!("{}", format_trace_stack(&type_state.trace_stack))
-                        }
-                    });
-
-                Some((name, (item, type_state)))
-            }
             ExecutableItem::EnumInstance { .. } => None,
             ExecutableItem::StructInstance { .. } => None,
-            ExecutableItem::BuiltinEntity(_, _) => None,
-            ExecutableItem::BuiltinPipeline(_, _) => None,
+            ExecutableItem::BuiltinUnit(_, _) => None,
         })
         .collect::<HashMap<_, _>>();
 

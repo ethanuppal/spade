@@ -103,19 +103,6 @@ impl CompilationError for Error {
                         .primary_label()
                         .with_message("expected index")])
             }
-            Error::ExpectedArgumentList { name, inst, expected_at } => {
-                let message = format!("Expected arguments for instantiation of {name}");
-
-                Diagnostic::error()
-                    .with_message(message)
-                    .with_labels(vec![
-                        expected_at.primary_label().with_message("Expected argument list here"),
-                        inst.secondary_label().with_message("For this entity instantiation"),
-                    ])
-                    .with_notes(vec![
-                        format!("help: Argument lists start with either `$(` for named arguments\n      or `(` for unnamed arguments")
-                    ])
-            }
             Error::ExpectedPipelineDepth { got } => {
                 let message = format!("Expected pipeline depth");
 

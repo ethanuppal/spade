@@ -160,7 +160,7 @@ impl Requirement {
                 |type_name, _params| {
                     let implementor = select_method(expr.loc(), type_name, method, ctx.items)?;
 
-                    let fn_head = ctx.symtab.function_by_id(&implementor);
+                    let fn_head = ctx.symtab.unit_by_id(&implementor);
 
                     type_state.handle_function_like(
                         expr_id.clone(),

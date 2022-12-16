@@ -10,17 +10,19 @@ mod statement_list;
 pub mod substitution;
 mod usefulness;
 
+use std::collections::HashMap;
+
 use local_impl::local_impl;
 
 use hir::param_util::{match_args_with_params, Argument};
 use hir::symbol_table::{FrozenSymtab, PatternableKind};
-use hir::{FunctionLike, ItemList, Pattern, PatternArgument, UnitName};
+use hir::{ItemList, Pattern, PatternArgument, UnitKind, UnitName};
 use mir::types::Type as MirType;
 use mir::{ConstantValue, ValueName};
 use monomorphisation::MonoState;
 pub use name_map::NameSourceMap;
 use pattern::DeconstructedPattern;
-pub use pipelines::generate_pipeline;
+use pipelines::lower_pipeline;
 use spade_common::id_tracker::ExprIdTracker;
 use spade_common::location_info::WithLocation;
 use spade_common::name::{Identifier, Path};
@@ -34,7 +36,7 @@ use usefulness::{is_useful, PatStack, Usefulness};
 use crate::error::{Error, Result};
 use spade_common::{location_info::Loc, name::NameID};
 use spade_hir as hir;
-use spade_hir::{expression::BinaryOperator, Entity, ExprKind, Expression, Statement};
+use spade_hir::{expression::BinaryOperator, ExprKind, Expression, Statement, Unit};
 use spade_mir as mir;
 use spade_typeinference::TypeState;
 use spade_types::{ConcreteType, PrimitiveType};
@@ -1005,13 +1007,13 @@ impl ExprLocal for Loc<Expression> {
                 )
             }
             ExprKind::FnCall(name, args) => {
-                let head = ctx.symtab.symtab().function_by_id(name);
-                let args = match_args_with_params(args, head.inputs(), false)?;
+                let head = ctx.symtab.symtab().unit_by_id(name);
+                let args = match_args_with_params(args, &head.inputs, false)?;
                 result.append(self.handle_call(name, &args, ctx)?)
             }
             ExprKind::EntityInstance(name, args) => {
-                let head = ctx.symtab.symtab().entity_by_id(name);
-                let args = match_args_with_params(args, head.inputs(), false)?;
+                let head = ctx.symtab.symtab().unit_by_id(name);
+                let args = match_args_with_params(args, &head.inputs, false)?;
                 result.append(self.handle_call(name, &args, ctx)?)
             }
             ExprKind::PipelineInstance {
@@ -1019,8 +1021,8 @@ impl ExprLocal for Loc<Expression> {
                 name,
                 args,
             } => {
-                let head = ctx.symtab.symtab().pipeline_by_id(name);
-                let args = match_args_with_params(args, head.inputs(), false)?;
+                let head = ctx.symtab.symtab().unit_by_id(name);
+                let args = match_args_with_params(args, &head.inputs, false)?;
                 result.append(self.handle_call(name, &args, ctx)?);
             }
             ExprKind::PipelineRef { .. } => {
@@ -1139,13 +1141,8 @@ impl ExprLocal for Loc<Expression> {
                 }),
                 self,
             ),
-            Some(i @ hir::ExecutableItem::Pipeline(_))
-            | Some(i @ hir::ExecutableItem::Entity(_)) => {
-                let (type_params, unit_name) = match i {
-                    hir::ExecutableItem::Pipeline(p) => (&p.head.type_params, p.name.clone()),
-                    hir::ExecutableItem::Entity(e) => (&e.head.type_params, e.name.clone()),
-                    _ => unreachable!(),
-                };
+            Some(hir::ExecutableItem::Unit(u)) => {
+                let (type_params, unit_name) = (&u.head.type_params, u.name.clone());
 
                 let instance_name = if !type_params.is_empty() {
                     let t = type_params
@@ -1185,19 +1182,8 @@ impl ExprLocal for Loc<Expression> {
                     self,
                 );
             }
-            Some(
-                i @ hir::ExecutableItem::BuiltinPipeline(_, _)
-                | i @ hir::ExecutableItem::BuiltinEntity(_, _),
-            ) => {
-                let (unit_name, type_params, head_loc) = match i {
-                    hir::ExecutableItem::BuiltinPipeline(name, head) => {
-                        (name, &head.type_params, head.loc())
-                    }
-                    hir::ExecutableItem::BuiltinEntity(name, head) => {
-                        (name, &head.type_params, head.loc())
-                    }
-                    _ => unreachable!(),
-                };
+            Some(hir::ExecutableItem::BuiltinUnit(name, head)) => {
+                let (unit_name, type_params, head_loc) = (name, &head.type_params, head.loc());
 
                 // NOTE: Ideally this check would be done earlier, when defining the generic
                 // builtin. However, at the moment, the compiler does not know if the generic
@@ -1611,18 +1597,20 @@ pub struct Context<'a> {
     pub diag_handler: &'a mut DiagHandler,
 }
 
-pub fn generate_entity<'a>(
-    entity: &Entity,
+pub fn generate_unit<'a>(
+    unit: &Unit,
     name: UnitName,
+    types: &TypeState,
     symtab: &mut FrozenSymtab,
     idtracker: &mut ExprIdTracker,
-    types: &TypeState,
     item_list: &ItemList,
+    // Map of names generated by codegen to the original name in the source code.
+    name_map: &mut HashMap<NameID, NameID>,
     mono_state: &mut MonoState,
     diag_handler: &mut DiagHandler,
-    name_map: &mut NameSourceMap,
+    name_source_map: &mut NameSourceMap,
 ) -> Result<mir::Entity> {
-    let inputs = entity
+    let mir_inputs = unit
         .inputs
         .iter()
         .map(|(name_id, _)| {
@@ -1636,27 +1624,41 @@ pub fn generate_entity<'a>(
         })
         .collect::<Result<_>>()?;
 
+    let mut statements = StatementList::new();
+    let mut subs = &mut Substitutions::new();
+
+    if let UnitKind::Pipeline(_) = unit.head.unit_kind.inner {
+        lower_pipeline(
+            &unit.inputs,
+            &unit.body,
+            types,
+            &mut statements,
+            &mut subs,
+            symtab,
+            item_list,
+            name_map,
+        )?;
+    }
+
     let mut ctx = Context {
         symtab,
         idtracker,
         types,
-        subs: &mut Substitutions::new(),
+        subs,
         item_list,
         mono_state,
         diag_handler,
     };
 
-    let statements = entity.body.lower(&mut ctx)?;
+    statements.append(unit.body.lower(&mut ctx)?);
 
     let output_t = types
-        .expr_type(&entity.body, symtab.symtab(), &item_list.types)?
+        .expr_type(&unit.body, symtab.symtab(), &item_list.types)?
         .to_mir_type();
 
-    let subs = Substitutions::new();
-
     linear_check::check_linear_types(
-        &entity.inputs,
-        &entity.body,
+        &unit.inputs,
+        &unit.body,
         types,
         symtab.symtab(),
         &item_list.types,
@@ -1664,9 +1666,9 @@ pub fn generate_entity<'a>(
 
     Ok(mir::Entity {
         name: name.mangled(),
-        inputs,
-        output: entity.body.variable(&subs)?,
+        inputs: mir_inputs,
+        output: unit.body.variable(&subs)?,
         output_type: output_t,
-        statements: statements.to_vec(name_map),
+        statements: statements.to_vec(name_source_map),
     })
 }

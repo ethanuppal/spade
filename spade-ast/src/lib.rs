@@ -132,8 +132,17 @@ pub enum Expression {
     UnaryOperator(UnaryOperator, Box<Loc<Expression>>),
     BinaryOperator(Box<Loc<Expression>>, BinaryOperator, Box<Loc<Expression>>),
     Block(Box<Block>),
-    EntityInstance(Loc<Path>, Loc<ArgumentList>),
-    PipelineInstance(Loc<u128>, Loc<Path>, Loc<ArgumentList>),
+    EntityInstance {
+        inst: Loc<()>,
+        name: Loc<Path>,
+        args: Loc<ArgumentList>,
+    },
+    PipelineInstance {
+        inst: Loc<()>,
+        depth: Loc<u128>,
+        name: Loc<Path>,
+        args: Loc<ArgumentList>,
+    },
     /// E.g. `stage(-5).x`, `stage('b).y`
     PipelineReference {
         /// ```text
@@ -181,8 +190,8 @@ impl Expression {
             Expression::UnaryOperator(_, _) => "unary operator",
             Expression::BinaryOperator(_, _, _) => "binary operator",
             Expression::Block(_) => "block",
-            Expression::EntityInstance(_, _) => "entity instance",
-            Expression::PipelineInstance(_, _, _) => "pipeline instance",
+            Expression::EntityInstance { .. } => "entity instance",
+            Expression::PipelineInstance { .. } => "pipeline instance",
             Expression::PipelineReference { .. } => "pipeline reference",
         }
     }
@@ -258,27 +267,37 @@ impl ParameterList {
 }
 
 #[derive(PartialEq, Debug, Clone)]
-pub struct Entity {
-    pub attributes: AttributeList,
-    /// Since functions and entities are so similar, we'll make them share everything
-    /// and just have a bool here to indicate the type.
-    pub is_function: bool,
-    pub name: Loc<Identifier>,
-    pub inputs: Loc<ParameterList>,
-    pub output_type: Option<Loc<TypeSpec>>,
-    /// The body is an expression for ID assignment purposes, but semantic analysis
-    /// ensures that it is always a block. If body is `None`, the entity is __builtin__
-    pub body: Option<Loc<Expression>>,
-    pub type_params: Vec<Loc<TypeParam>>,
-    /// The location of the entity or fn keyword
-    pub unit_keyword: Loc<()>,
+pub enum UnitKind {
+    Function,
+    Entity,
+    Pipeline(Loc<u128>),
 }
-impl WithLocation for Entity {}
+impl WithLocation for UnitKind {}
+
+impl UnitKind {
+    pub fn is_pipeline(&self) -> bool {
+        match self {
+            UnitKind::Function => false,
+            UnitKind::Entity => false,
+            UnitKind::Pipeline(_) => true,
+        }
+    }
+}
+
+impl std::fmt::Display for UnitKind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            UnitKind::Function => write!(f, "fn"),
+            UnitKind::Entity => write!(f, "entity"),
+            UnitKind::Pipeline(d) => write!(f, "pipeline({d})"),
+        }
+    }
+}
 
 #[derive(PartialEq, Debug, Clone)]
-pub struct Pipeline {
+pub struct Unit {
     pub attributes: AttributeList,
-    pub depth: Loc<u128>,
+    pub unit_kind: Loc<UnitKind>,
     pub name: Loc<Identifier>,
     pub inputs: Loc<ParameterList>,
     pub output_type: Option<Loc<TypeSpec>>,
@@ -287,7 +306,7 @@ pub struct Pipeline {
     pub body: Option<Loc<Expression>>,
     pub type_params: Vec<Loc<TypeParam>>,
 }
-impl WithLocation for Pipeline {}
+impl WithLocation for Unit {}
 
 /// A definition of a function without a body.
 #[derive(PartialEq, Debug, Clone)]
@@ -321,7 +340,7 @@ impl WithLocation for TraitDef {}
 pub struct ImplBlock {
     pub r#trait: Option<Loc<Path>>,
     pub target: Loc<Path>,
-    pub entities: Vec<Loc<Entity>>,
+    pub units: Vec<Loc<Unit>>,
 }
 impl WithLocation for ImplBlock {}
 
@@ -380,8 +399,7 @@ impl WithLocation for ComptimeConfig {}
 /// entities, pipelines, submodules etc.
 #[derive(PartialEq, Debug, Clone)]
 pub enum Item {
-    Entity(Loc<Entity>),
-    Pipeline(Loc<Pipeline>),
+    Unit(Loc<Unit>),
     TraitDef(Loc<TraitDef>),
     Type(Loc<TypeDeclaration>),
     Module(Loc<Module>),
@@ -394,8 +412,7 @@ impl WithLocation for Item {}
 impl Item {
     pub fn name(&self) -> Option<&Identifier> {
         match self {
-            Item::Entity(e) => Some(&e.name.inner),
-            Item::Pipeline(p) => Some(&p.name.inner),
+            Item::Unit(u) => Some(&u.name.inner),
             Item::TraitDef(t) => Some(&t.name.inner),
             Item::Type(t) => Some(&t.name.inner),
             Item::Module(m) => Some(&m.name.inner),
@@ -407,8 +424,7 @@ impl Item {
 
     pub fn variant_str(&self) -> &'static str {
         match self {
-            Item::Entity(_) => "entity",
-            Item::Pipeline(_) => "pipeline",
+            Item::Unit(_) => "unit",
             Item::TraitDef(_) => "trait definition",
             Item::Type(_) => "type",
             Item::Module(_) => "module",

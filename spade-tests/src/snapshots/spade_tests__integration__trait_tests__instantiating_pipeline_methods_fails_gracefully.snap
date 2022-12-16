@@ -4,15 +4,19 @@ source: spade-tests/src/integration.rs
 struct X {}
 
 impl X {
-    pipeline(0) a(self) -> bool {true}
+    pipeline(10) a(self) -> bool {true}
+}
+
+fn t(x: X) -> bool {
+    x.a()
 }
 
 
 error: Pipelines are currently not allowed in impl blocks
   ┌─ testinput:4:5
   │
-4 │     pipeline(0) a(self) -> bool {true}
-  │     ^^^^^^^^^^^ Not allowed here
+4 │     pipeline(10) a(self) -> bool {true}
+  │     ^^^^^^^^^^^^ Not allowed here
   │
   = note: This limitation is likely to be lifted in the future
   = help: Consider defining a free-standing pipeline for now

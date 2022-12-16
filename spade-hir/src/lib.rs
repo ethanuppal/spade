@@ -310,14 +310,14 @@ impl std::fmt::Display for UnitName {
 }
 
 #[derive(PartialEq, Debug, Clone, Serialize, Deserialize)]
-pub struct Entity {
+pub struct Unit {
     pub name: UnitName,
-    pub head: EntityHead,
+    pub head: UnitHead,
     // This is needed here because the head does not have NameIDs
     pub inputs: Vec<(Loc<NameID>, Loc<TypeSpec>)>,
     pub body: Loc<Expression>,
 }
-impl WithLocation for Entity {}
+impl WithLocation for Unit {}
 
 #[derive(PartialEq, Debug, Clone, Serialize, Deserialize)]
 pub struct ParameterList(pub Vec<(Loc<Identifier>, Loc<TypeSpec>)>);
@@ -374,91 +374,61 @@ impl ParameterList {
     }
 }
 
-#[derive(Serialize, Deserialize, PartialEq, Debug, Clone)]
-pub struct FunctionHead {
-    pub name: Loc<Identifier>,
-    pub inputs: ParameterList,
-    pub output_type: Option<Loc<TypeSpec>>,
-    pub type_params: Vec<Loc<TypeParam>>,
+#[derive(PartialEq, Debug, Clone, Serialize, Deserialize)]
+pub enum FunctionKind {
+    Fn,
+    Struct,
+    Enum,
 }
-impl WithLocation for FunctionHead {}
 
 #[derive(PartialEq, Debug, Clone, Serialize, Deserialize)]
-pub struct EntityHead {
-    pub name: Loc<Identifier>,
-    pub inputs: ParameterList,
-    pub output_type: Option<Loc<TypeSpec>>,
-    pub type_params: Vec<Loc<TypeParam>>,
+pub enum UnitKind {
+    Function(FunctionKind),
+    Entity,
+    Pipeline(Loc<u128>),
 }
-impl WithLocation for EntityHead {}
+impl WithLocation for UnitKind {}
 
-#[derive(PartialEq, Debug, Clone, Serialize, Deserialize)]
-pub struct PipelineHead {
-    pub name: Loc<Identifier>,
-    pub depth: Loc<usize>,
-    pub inputs: ParameterList,
-    pub output_type: Option<Loc<TypeSpec>>,
-    pub type_params: Vec<Loc<TypeParam>>,
-}
-impl WithLocation for PipelineHead {}
-
-pub trait FunctionLike {
-    fn inputs<'a>(&'a self) -> &'a ParameterList;
-    fn output_type<'a>(&'a self) -> &'a Option<Loc<TypeSpec>>;
-    fn type_params<'a>(&'a self) -> &'a [Loc<TypeParam>];
-}
-
-macro_rules! impl_function_like {
-    ($($for:ident),*) => {
-        $(
-            impl FunctionLike for $for {
-                fn inputs<'a>(&'a self) -> &'a ParameterList {
-                    &self.inputs
-                }
-                fn output_type<'a>(&'a self) -> &'a Option<Loc<TypeSpec>> {
-                    &self.output_type
-                }
-                fn type_params<'a>(&'a self) -> &'a [Loc<TypeParam>] {
-                    &self.type_params
-                }
-            }
-        )*
+impl UnitKind {
+    pub fn name(&self) -> &'static str {
+        match self {
+            UnitKind::Function(FunctionKind::Fn) => "function",
+            UnitKind::Function(FunctionKind::Struct) => "struct",
+            UnitKind::Function(FunctionKind::Enum) => "enum variant",
+            UnitKind::Entity => "entity",
+            UnitKind::Pipeline(_) => "pipeline",
+        }
     }
 }
 
-impl_function_like!(EntityHead, FunctionHead, PipelineHead);
-
 #[derive(PartialEq, Debug, Clone, Serialize, Deserialize)]
-pub struct Pipeline {
-    pub head: PipelineHead,
-    pub name: UnitName,
-    // This is needed here because the head does not have NameIDs
-    pub inputs: Vec<(Loc<NameID>, Loc<TypeSpec>)>,
-    pub body: Loc<Expression>,
+pub struct UnitHead {
+    pub name: Loc<Identifier>,
+    pub inputs: ParameterList,
+    pub output_type: Option<Loc<TypeSpec>>,
+    pub type_params: Vec<Loc<TypeParam>>,
+    pub unit_kind: Loc<UnitKind>,
 }
-impl WithLocation for Pipeline {}
+impl WithLocation for UnitHead {}
 
 #[derive(PartialEq, Debug, Clone, Serialize, Deserialize)]
 pub enum Item {
-    Entity(Loc<Entity>),
-    Pipeline(Loc<Pipeline>),
-    BuiltinEntity(UnitName, Loc<EntityHead>),
-    BuiltinPipeline(UnitName, Loc<PipelineHead>),
+    Unit(Loc<Unit>),
+    Builtin(UnitName, Loc<UnitHead>),
 }
 
 impl Item {
-    pub fn assume_pipeline(&self) -> &Pipeline {
-        if let Item::Pipeline(p) = self {
-            p
-        } else {
-            panic!("Assumed item to be a pipeline but it was {self:?}")
+    pub fn assume_unit(&self) -> &Unit {
+        match self {
+            Item::Unit(u) => &u.inner,
+            Item::Builtin(_, _) => panic!("Expected unit, got builtin"),
         }
     }
 }
 
 #[derive(PartialEq, Debug, Clone)]
 struct Trait {
-    fns: HashMap<Identifier, EntityHead>,
+    fns: HashMap<Identifier, UnitHead>,
 }
 
 /// Items which have associated code that can be executed. This is different from
@@ -467,10 +437,8 @@ struct Trait {
 pub enum ExecutableItem {
     EnumInstance { base_enum: NameID, variant: usize },
     StructInstance,
-    Entity(Loc<Entity>),
-    Pipeline(Loc<Pipeline>),
-    BuiltinEntity(UnitName, Loc<EntityHead>),
-    BuiltinPipeline(UnitName, Loc<PipelineHead>),
+    Unit(Loc<Unit>),
+    BuiltinUnit(UnitName, Loc<UnitHead>),
 }
 impl WithLocation for ExecutableItem {}
 
@@ -508,7 +476,7 @@ pub struct ItemList {
     /// All traits in the compilation unit. Traits consist of a list of functions
     /// by name. Anonymous impl blocks are also members here, but their name is never
     /// visible to the user.
-    pub traits: HashMap<TraitName, Vec<(Identifier, FunctionHead)>>,
+    pub traits: HashMap<TraitName, Vec<(Identifier, UnitHead)>>,
     pub impls: HashMap<NameID, HashMap<TraitName, ImplBlock>>,
 }
 

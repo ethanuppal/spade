@@ -199,12 +199,31 @@ mod trait_tests {
     }
 
     snapshot_error! {
-        entities_in_impl_blocks_are_graceuflly_disallowed,
+        instantiating_entity_methods_fails_gracefully,
         "
             struct X {}
 
             impl X {
                 entity a(self) -> bool {true}
+            }
+
+            fn t(x: X) -> bool {
+                x.a()
+            }
+        "
+    }
+
+    snapshot_error! {
+        instantiating_pipeline_methods_fails_gracefully,
+        "
+            struct X {}
+
+            impl X {
+                pipeline(10) a(self) -> bool {true}
+            }
+
+            fn t(x: X) -> bool {
+                x.a()
             }
         "
     }

@@ -12,12 +12,12 @@ error: Expected f to be a value
   ┌─ testinput:3:13
   │
 1 │ fn f() -> bool { true }
-  │ ----------------------- f is a function
+  │ ----------------------- f is a unit
 2 │ fn main() -> bool {
 3 │     let x = f;
   │             ^ Expected value
   │
   = Expected value
-  = Found function
+  = Found unit
 
 

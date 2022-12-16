@@ -15,8 +15,8 @@ use spade_common::name::{Identifier, Path as SpadePath};
 use spade_diagnostics::emitter::CodespanEmitter;
 use spade_diagnostics::{CodeBundle, CompilationError, DiagHandler};
 use spade_hir::symbol_table::{LookupError, SymbolTable};
-use spade_hir::TypeSpec;
-use spade_hir::{symbol_table::FrozenSymtab, FunctionLike, ItemList};
+use spade_hir::{symbol_table::FrozenSymtab, ItemList};
+use spade_hir::{TypeSpec, UnitHead};
 use spade_hir_lowering::monomorphisation::MonoState;
 use spade_hir_lowering::substitution::Substitutions;
 use spade_hir_lowering::{expr_to_mir, MirLowerable};
@@ -120,7 +120,7 @@ struct Spade {
     item_list: ItemList,
     uut: Loc<SpadePath>,
     type_state: TypeState,
-    uut_head: Box<dyn FunctionLike + Send>,
+    uut_head: UnitHead,
 }
 
 #[pymethods]
@@ -153,7 +153,7 @@ impl Spade {
             &mut diag_handler,
         )?;
 
-        if !uut_head.type_params().is_empty() {
+        if !uut_head.type_params.is_empty() {
             return Err(anyhow!(
                 "Testing units with generics is currently unsupported"
             ))?;
@@ -390,15 +390,8 @@ impl Spade {
     fn lookup_function_like(
         name: &Loc<SpadePath>,
         symtab: &SymbolTable,
-    ) -> Result<Box<dyn FunctionLike + Send>, LookupError> {
-        if let Ok(e) = symtab.lookup_entity(name) {
-            Ok(Box::new(e.1.inner))
-        } else if let Ok(f) = symtab.lookup_function(name) {
-            Ok(Box::new(f.1.inner))
-        } else {
-            let p = symtab.lookup_pipeline(name)?;
-            Ok(Box::new(p.1.inner))
-        }
+    ) -> Result<UnitHead, LookupError> {
+        symtab.lookup_unit(name).map(|(_name, head)| head.inner)
     }
 
     /// Tries to get the type and the name of the port in the generated verilog of the specified
@@ -413,7 +406,7 @@ impl Spade {
             &mut self.diag_handler,
         )?;
 
-        for (name, ty) in &head.inputs().0 {
+        for (name, ty) in &head.inputs.0 {
             if port == name.0 {
                 return Ok((mangle_input(&port), ty.inner.clone()));
             }
@@ -509,7 +502,7 @@ impl Spade {
     fn output_type(&mut self) -> PyResult<TypeSpec> {
         let ty = self
             .uut_head
-            .output_type()
+            .output_type
             .clone()
             .ok_or_else(|| anyhow!("{} does not have an output type", self.uut))?;
 

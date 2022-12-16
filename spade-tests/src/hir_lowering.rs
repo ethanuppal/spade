@@ -1608,17 +1608,20 @@ mod tests {
         "
     }
 
-    // FIXME: Handle generic pipelines
-    // snapshot_error! {
-    //     instantiating_builtin_generic_pipeline_which_is_non_intrinsic_is_error,
-    //     "
-    //         pipeline(1) a<T>() -> T __builtin__
+    #[test]
+    fn instantiating_builtin_generic_pipeline_which_is_non_intrinsic_is_error() {
+        let code = "
+            pipeline(1) a<T>(t: T) -> T {
+                reg;
+                    t
+            }
 
-    //         fn main() -> int<32> {
-    //             inst(1) a()
-    //         }
-    //     "
-    // }
+            entity main() -> int<32> {
+                inst(1) a(0)
+            }
+        ";
+        build_items(code);
+    }
 
     snapshot_error! {
         late_type_inference_failures_are_reported_well,
@@ -1862,6 +1865,32 @@ mod tests {
         ];
 
         build_and_compare_entities!(code, expected);
+    }
+
+    snapshot_error! {
+        instantiating_enum_as_entity_gives_decent_error,
+        "
+        enum X {
+            A
+        }
+
+        entity x() -> X {
+            inst X::A()
+        }
+        "
+    }
+
+    snapshot_error! {
+        instantiating_struct_as_entity_gives_decent_error,
+        "
+        struct X {
+            a: bool
+        }
+
+        entity x() -> X {
+            inst X(true)
+        }
+        "
     }
 }
 

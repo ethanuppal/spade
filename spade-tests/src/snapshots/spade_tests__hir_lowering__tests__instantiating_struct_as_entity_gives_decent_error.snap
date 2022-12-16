@@ -1,0 +1,31 @@
+---
+source: spade-tests/src/hir_lowering.rs
+---
+struct X {
+    a: bool
+}
+
+entity x() -> X {
+    inst X(true)
+}
+
+
+error: Expected X to be an entity
+  ┌─ testinput:6:10
+  │  
+1 │ ╭ struct X {
+2 │ │     a: bool
+3 │ │ }
+  │ ╰─' X is a struct
+  ·  
+6 │       inst X(true)
+  │       ---- ^ Expected entity
+  │       │     
+  │       because of this inst
+  │  
+  = Consider removing inst
+  │
+6 │     inst X(true)
+  │     ----
+
+

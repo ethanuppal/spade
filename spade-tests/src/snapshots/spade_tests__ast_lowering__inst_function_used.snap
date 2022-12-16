@@ -20,6 +20,13 @@ error: Expected foo to be an entity
   │     ------------------------- foo is a function
   ·
 9 │     inst foo()
-  │          ^^^ Expected entity
+  │     ---- ^^^ Expected entity
+  │     │     
+  │     because of this inst
+  │
+  = Consider removing inst
+  │
+9 │     inst foo()
+  │     ----
 
 

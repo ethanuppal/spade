@@ -66,7 +66,7 @@ pub fn lower_type_declaration(
                         let option_path = this_path.clone().push_ident(name.clone());
 
                         let (id, _) = symtab
-                            .lookup_function(&option_path.nowhere())
+                            .lookup_unit(&option_path.nowhere())
                             .expect("Expected enum variant to be in symtab as a function");
 
                         Ok((id.at_loc(name), params.clone()))

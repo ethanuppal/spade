@@ -1,6 +1,6 @@
 use spade_common::location_info::Loc;
 use spade_diagnostics::Diagnostic;
-use spade_hir::{ArgumentList, Expression, ItemList, Statement};
+use spade_hir::{symbol_table::FrozenSymtab, ArgumentList, Expression, ItemList, Statement};
 use spade_typeinference::{method_resolution::select_method, HasType, TypeState};
 
 use crate::passes::pass::Pass;
@@ -8,6 +8,7 @@ use crate::passes::pass::Pass;
 pub struct LowerMethods<'a> {
     pub type_state: &'a TypeState,
     pub items: &'a ItemList,
+    pub symtab: &'a FrozenSymtab,
 }
 
 impl<'a> Pass for LowerMethods<'a> {
@@ -30,6 +31,30 @@ impl<'a> Pass for LowerMethods<'a> {
                 )?;
 
                 let method = select_method(self_.loc(), &type_name, method, self.items)?;
+
+                let unit = self.symtab.symtab().unit_by_id(&method.inner);
+
+                match unit.unit_kind.inner {
+                    spade_hir::UnitKind::Function(_) => {}
+                    spade_hir::UnitKind::Entity => {
+                        return Err(Diagnostic::error(
+                            expression.loc(),
+                            "Entity methods can not be instantiated",
+                        )
+                        .secondary_label(&unit.unit_kind, "This is an entity")
+                        .note("This restriction will be lifted in the future")
+                        .into())
+                    }
+                    spade_hir::UnitKind::Pipeline(_) => {
+                        return Err(Diagnostic::error(
+                            expression.loc(),
+                            "Pipeline methods can not be instantiated",
+                        )
+                        .secondary_label(&unit.unit_kind, "This is a pipeline")
+                        .note("This restriction will be lifted in the future")
+                        .into())
+                    }
+                }
 
                 // Insert self as the first arg
                 let args = args.map_ref(|args| {

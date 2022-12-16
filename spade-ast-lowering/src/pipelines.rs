@@ -1,16 +1,9 @@
 use spade_ast as ast;
-use spade_common::{
-    location_info::{Loc, WithLocation},
-    name::{Identifier, Path},
-};
+use spade_common::{location_info::Loc, name::Identifier};
 use spade_diagnostics::Diagnostic;
 use spade_hir as hir;
 
-use crate::{
-    attributes::report_unused_attributes, comptime::ComptimeCondExt, error::Result, unit_name,
-    visit_expression, Context, LocExt, SelfContext,
-};
-use spade_hir::symbol_table::SymbolTable;
+use crate::{comptime::ComptimeCondExt, error::Result, Context};
 
 pub struct PipelineContext {
     /// All stages within the pipeline, possibly labelled
@@ -39,37 +32,6 @@ impl PipelineContext {
         }
         None
     }
-}
-
-pub fn pipeline_head(
-    input: &ast::Pipeline,
-    symtab: &mut SymbolTable,
-    self_context: &SelfContext,
-) -> Result<hir::PipelineHead> {
-    let depth = input.depth.map(|u| u as usize);
-
-    // FIXME: Support type parameters in pipelines
-    // lifeguard https://gitlab.com/spade-lang/spade/-/issues/124
-    let type_params = vec![];
-    if !input.type_params.is_empty() {
-        panic!("Pipelines currently do not support type parameters")
-    }
-
-    let inputs = crate::visit_parameter_list(&input.inputs, symtab, self_context)?;
-
-    let output_type = if let Some(output_type) = &input.output_type {
-        Some(super::visit_type_spec(output_type, symtab)?)
-    } else {
-        None
-    };
-
-    Ok(hir::PipelineHead {
-        name: input.name.clone(),
-        depth,
-        inputs,
-        output_type,
-        type_params,
-    })
 }
 
 fn visit_pipeline_statement(
@@ -122,98 +84,62 @@ fn visit_pipeline_statement(
     Ok(())
 }
 
-#[tracing::instrument(skip(pipeline, ctx))]
-pub fn visit_pipeline(pipeline: &Loc<ast::Pipeline>, ctx: &mut Context) -> Result<hir::Item> {
-    let ast::Pipeline {
-        depth,
-        name,
-        inputs: ast_inputs,
-        output_type: _,
+pub fn maybe_perform_pipelining_tasks(
+    unit: &Loc<ast::Unit>,
+    head: &Loc<hir::UnitHead>,
+    ctx: &mut Context,
+) -> Result<Option<PipelineContext>> {
+    let ast::Unit {
+        unit_kind,
         body,
-        type_params,
-        mut attributes,
-    } = pipeline.inner.clone();
+        inputs: ast_inputs,
+        ..
+    } = &unit.inner;
 
-    ctx.symtab.new_scope();
-
-    // FIXME: Unify this code with the entity code
-    let (id, head) = ctx
-        .symtab
-        .lookup_pipeline(&Path(vec![pipeline.name.clone()]).at_loc(&pipeline.name.loc()))
-        .expect("Attempting to lower a pipeline that has not been added to the symtab previously");
-
-    if head.inputs.0.is_empty() {
-        return Err(
-            Diagnostic::error(ast_inputs.loc(), "Missing clock argument for pipeline")
+    match unit_kind.inner {
+        ast::UnitKind::Function => Ok(None),
+        ast::UnitKind::Entity => Ok(None),
+        ast::UnitKind::Pipeline(depth) => {
+            if head.inputs.0.is_empty() {
+                return Err(Diagnostic::error(
+                    ast_inputs.loc(),
+                    "Missing clock argument for pipeline",
+                )
                 .note("All pipelines need to take at least a clock as an argument")
-                .into(),
-        );
-    }
+                .into());
+            }
 
-    let unit_name = unit_name(&mut attributes, &id.at_loc(&name), &name, &type_params)?;
+            let mut context = PipelineContext {
+                stages: vec![None],
+                current_stage: 0,
+            };
 
-    // If this is a builtin pipeline
-    if pipeline.body.is_none() {
-        report_unused_attributes(&attributes)?;
-        return Ok(hir::Item::BuiltinPipeline(unit_name, head));
-    }
+            let body = body.as_ref().unwrap();
 
-    // Add the inputs to the symtab
-    let inputs = head
-        .inputs
-        .0
-        .iter()
-        .map(|(ident, ty)| {
-            (
-                ctx.symtab.add_local_variable(ident.clone()).at_loc(ident),
-                ty.clone(),
-            )
-        })
-        .collect();
+            let mut current_stage = 0;
+            for statement in &body.assume_block().statements {
+                visit_pipeline_statement(statement, &mut current_stage, ctx, &mut context)?;
+            }
 
-    let mut context = PipelineContext {
-        stages: vec![None],
-        current_stage: 0,
-    };
+            if current_stage as u128 != depth.inner {
+                return Err(Diagnostic::error(body, "Wrong number of pipeline stages")
+                    .primary_label(format!("Found {} stages here", current_stage))
+                    .secondary_label(depth, format!("{} stages specified here", depth))
+                    .into());
+            }
 
-    let mut current_stage = 0;
-    for statement in &body.as_ref().unwrap().assume_block().statements {
-        visit_pipeline_statement(statement, &mut current_stage, ctx, &mut context)?;
-    }
-
-    if current_stage as u128 != depth.inner {
-        return Err(
-            Diagnostic::error(pipeline, "Wrong number of pipeline stages")
-                .primary_label(format!("Found {} stages here", current_stage))
-                .secondary_label(depth, format!("{} stages specified here", depth))
-                .into(),
-        );
-    }
-
-    ctx.pipeline_ctx.replace(context);
-    let body = body.as_ref().unwrap().try_visit(visit_expression, ctx)?;
-    ctx.pipeline_ctx = None;
-
-    ctx.symtab.close_scope();
-
-    // Any remaining attributes are unused and will have an error reported
-    report_unused_attributes(&attributes)?;
-
-    Ok(hir::Item::Pipeline(
-        hir::Pipeline {
-            head: head.inner,
-            name: unit_name,
-            inputs,
-            body,
+            Ok(Some(context))
         }
-        .at_loc(pipeline),
-    ))
+    }
 }
 
 #[cfg(test)]
 mod pipeline_visiting {
+    use crate::{visit_unit, SelfContext};
+
     use super::*;
 
+    use hir::symbol_table::SymbolTable;
     use spade_ast::testutil::ast_ident;
     use spade_common::{
         id_tracker::{ExprIdTracker, ImplIdTracker},
@@ -225,9 +151,9 @@ mod pipeline_visiting {
 
     #[test]
     fn relative_stage_references_work() {
-        let input = ast::Pipeline {
+        let input = ast::Unit {
             name: ast_ident("pipe"),
-            depth: 2.nowhere(),
+            unit_kind: ast::UnitKind::Pipeline(2.nowhere()).nowhere(),
             inputs: ast::ParameterList::without_self(vec![(
                 ast_ident("clk"),
                 ast::TypeSpec::Unit(().nowhere()).nowhere(),
@@ -287,10 +213,11 @@ mod pipeline_visiting {
         let mut symtab = SymbolTable::new();
         let idtracker = ExprIdTracker::new();
 
-        crate::global_symbols::visit_pipeline(&input, &mut symtab, &SelfContext::FreeStanding)
+        crate::global_symbols::visit_unit(&None, &input, &mut symtab, &SelfContext::FreeStanding)
             .expect("Failed to add pipeline to symtab");
 
-        let result = visit_pipeline(
+        let result = visit_unit(
+            None,
             &input,
             &mut Context {
                 symtab,
@@ -301,21 +228,16 @@ mod pipeline_visiting {
         );
 
         assert_eq!(
-            result
-                .unwrap()
-                .assume_pipeline()
-                .body
-                .assume_block()
-                .statements,
+            result.unwrap().assume_unit().body.assume_block().statements,
             expected_statements
         );
     }
 
     #[test]
     fn absolute_stage_references_work() {
-        let input = ast::Pipeline {
+        let input = ast::Unit {
             name: ast_ident("pipe"),
-            depth: 2.nowhere(),
+            unit_kind: ast::UnitKind::Pipeline(2.nowhere()).nowhere(),
             inputs: ast::ParameterList::without_self(vec![(
                 ast_ident("clk"),
                 ast::TypeSpec::Unit(().nowhere()).nowhere(),
@@ -377,10 +299,11 @@ mod pipeline_visiting {
         let mut symtab = SymbolTable::new();
         let idtracker = ExprIdTracker::new();
 
-        crate::global_symbols::visit_pipeline(&input, &mut symtab, &SelfContext::FreeStanding)
+        crate::global_symbols::visit_unit(&None, &input, &mut symtab, &SelfContext::FreeStanding)
             .expect("Failed to add pipeline to symtab");
 
-        let result = visit_pipeline(
+        let result = visit_unit(
+            None,
             &input,
             &mut Context {
                 symtab,
@@ -391,12 +314,7 @@ mod pipeline_visiting {
         );
 
         assert_eq!(
-            result
-                .unwrap()
-                .assume_pipeline()
-                .body
-                .assume_block()
-                .statements,
+            result.unwrap().assume_unit().body.assume_block().statements,
             expected_statements
         );
     }
