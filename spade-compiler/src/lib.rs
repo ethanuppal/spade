@@ -115,6 +115,8 @@ pub struct Artefacts {
     pub bumpy_mir_entities: Vec<spade_mir::Entity>,
     // MIR entities after flattening
     pub flat_mir_entities: Vec<spade_mir::Entity>,
+    pub code: CodeBundle,
+    pub item_list: ItemList,
 }
 
 struct CodegenArtefacts {
@@ -323,7 +325,7 @@ pub fn compile(
             symtab: frozen_symtab,
             idtracker,
             impl_idtracker,
-            item_list,
+            item_list: item_list.clone(),
             name_source_map,
         };
         match ron::to_string(&state) {
@@ -342,6 +344,8 @@ pub fn compile(
         Ok(Artefacts {
             bumpy_mir_entities,
             flat_mir_entities,
+            code: (*code.read().unwrap()).clone(),
+            item_list,
         })
     }
 }

@@ -499,12 +499,12 @@ pub struct ImplBlock {
 /// hirearchies.
 ///
 /// That is, `mod a { mod b{ entity X {} } } will result in members containing `a::b::X`, but the
-/// modules will not be present
+/// modules will not be present.
 #[derive(PartialEq, Debug, Clone, Serialize, Deserialize)]
 pub struct ItemList {
     pub executables: HashMap<NameID, ExecutableItem>,
     pub types: TypeList,
-    // FIXME: Support entities and pipelines as trait members
+    // FIXME: Support entities and pipelines as trait members.
     /// All traits in the compilation unit. Traits consist of a list of functions
     /// by name. Anonymous impl blocks are also members here, but their name is never
     /// visible to the user.
