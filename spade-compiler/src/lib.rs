@@ -110,13 +110,22 @@ pub struct ModuleNamespace {
     pub base_namespace: SpadePath,
 }
 
+/// Compiler output.
 pub struct Artefacts {
+    pub code: CodeBundle,
+    pub item_list: ItemList,
     // MIR entities before aliases have been flattened
     pub bumpy_mir_entities: Vec<spade_mir::Entity>,
     // MIR entities after flattening
     pub flat_mir_entities: Vec<spade_mir::Entity>,
+}
+
+/// Like [Artefacts], but if the compiler doesn't finish due to errors.
+pub struct UnfinishedArtefacts {
     pub code: CodeBundle,
-    pub item_list: ItemList,
+    pub item_list: Option<ItemList>,
+    pub bumpy_mir_entities: Option<Vec<spade_mir::Entity>>,
+    pub flat_mir_entities: Option<Vec<spade_mir::Entity>>,
 }
 
 struct CodegenArtefacts {
@@ -131,7 +140,7 @@ pub fn compile(
     sources: Vec<(ModuleNamespace, String, String)>,
     opts: Opt,
     diag_handler: DiagHandler,
-) -> Result<Artefacts, ()> {
+) -> Result<Artefacts, UnfinishedArtefacts> {
     let mut symtab = SymbolTable::new();
     let mut item_list = ItemList::new();
 
@@ -152,8 +161,15 @@ pub fn compile(
         &mut errors,
     );
 
+    let mut unfinished_artefacts = UnfinishedArtefacts {
+        code: code.read().unwrap().clone(),
+        item_list: None,
+        bumpy_mir_entities: None,
+        flat_mir_entities: None,
+    };
+
     if errors.failed {
-        return Err(());
+        return Err(unfinished_artefacts);
     }
 
     for (namespace, module_ast) in &module_asts {
@@ -163,7 +179,7 @@ pub fn compile(
     }
 
     if errors.failed {
-        return Err(());
+        return Err(unfinished_artefacts);
     }
 
     for (namespace, module_ast) in &module_asts {
@@ -173,8 +189,10 @@ pub fn compile(
         })
     }
 
+    unfinished_artefacts.item_list = Some(item_list.clone());
+
     if errors.failed {
-        return Err(());
+        return Err(unfinished_artefacts);
     }
 
     let idtracker = id_tracker::ExprIdTracker::new();
@@ -187,6 +205,8 @@ pub fn compile(
     };
 
     lower_ast(&module_asts, &mut item_list, &mut ctx, &mut errors);
+
+    unfinished_artefacts.item_list = Some(item_list.clone());
 
     let AstLoweringCtx {
         symtab,
@@ -204,14 +224,14 @@ pub fn compile(
     // relies on all names in the symtab being in the item list, which will not be the
     // case if we failed to compile some
     if errors.failed {
-        return Err(());
+        return Err(unfinished_artefacts);
     }
 
     let mut frozen_symtab = symtab.freeze();
     let mut all_types = HashMap::new();
 
     let type_inference_ctx = typeinference::Context {
-        symtab: &frozen_symtab.symtab(),
+        symtab: frozen_symtab.symtab(),
         items: &item_list,
     };
 
@@ -264,7 +284,7 @@ pub fn compile(
         .collect::<HashMap<_, _>>();
 
     if errors.failed {
-        return Err(());
+        return Err(unfinished_artefacts);
     }
 
     let mut name_source_map = NameSourceMap::new();
@@ -290,6 +310,9 @@ pub fn compile(
         &mut all_types,
         &mut errors,
     );
+
+    unfinished_artefacts.bumpy_mir_entities = Some(bumpy_mir_entities.clone());
+    unfinished_artefacts.flat_mir_entities = Some(flat_mir_entities.clone());
 
     if let Some(outfile) = opts.outfile {
         std::fs::write(outfile, module_code.join("\n\n")).or_report(&mut errors);
@@ -339,12 +362,12 @@ pub fn compile(
     }
 
     if errors.failed {
-        Err(())
+        Err(unfinished_artefacts)
     } else {
         Ok(Artefacts {
             bumpy_mir_entities,
             flat_mir_entities,
-            code: (*code.read().unwrap()).clone(),
+            code: code.read().unwrap().clone(),
             item_list,
         })
     }

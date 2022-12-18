@@ -149,7 +149,7 @@ fn build_items(code: &str) -> Vec<spade_mir::Entity> {
         spade_diagnostics::DiagHandler::new(Box::new(spade_diagnostics::emitter::CodespanEmitter)),
     ) {
         Ok(artefacts) => artefacts.bumpy_mir_entities,
-        Err(()) => {
+        Err(_) => {
             // I'm not 100% sure why this is needed. The bufferwriter should output
             // to stdout and buffer.flush() should be enough. Unfortunately, that does
             // not seem to be the case
