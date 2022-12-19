@@ -125,8 +125,6 @@ pub struct Artefacts {
 pub struct UnfinishedArtefacts {
     pub code: CodeBundle,
     pub item_list: Option<ItemList>,
-    pub bumpy_mir_entities: Option<Vec<spade_mir::Entity>>,
-    pub flat_mir_entities: Option<Vec<spade_mir::Entity>>,
 }
 
 struct CodegenArtefacts {
@@ -165,8 +163,6 @@ pub fn compile(
     let mut unfinished_artefacts = UnfinishedArtefacts {
         code: code.read().unwrap().clone(),
         item_list: None,
-        bumpy_mir_entities: None,
-        flat_mir_entities: None,
     };
 
     if errors.failed {
@@ -311,9 +307,6 @@ pub fn compile(
         &mut all_types,
         &mut errors,
     );
-
-    unfinished_artefacts.bumpy_mir_entities = Some(bumpy_mir_entities.clone());
-    unfinished_artefacts.flat_mir_entities = Some(flat_mir_entities.clone());
 
     if let Some(outfile) = opts.outfile {
         std::fs::write(outfile, module_code.join("\n\n")).or_report(&mut errors);
