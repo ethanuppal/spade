@@ -120,7 +120,7 @@ pub struct Artefacts {
     pub flat_mir_entities: Vec<spade_mir::Entity>,
 }
 
-/// Like [Artefacts], but if the compiler doesn't finish due to errors.
+/// Like [Artefacts], but if the compiler didn't finish due to errors.
 pub struct UnfinishedArtefacts {
     pub code: CodeBundle,
     pub item_list: Option<ItemList>,
