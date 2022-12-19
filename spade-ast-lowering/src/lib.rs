@@ -502,7 +502,7 @@ pub fn visit_impl(
     Ok(result)
 }
 
-#[tracing::instrument(skip(item, ctx))]
+#[tracing::instrument(skip_all, fields(name=?item.name()))]
 pub fn visit_item(
     item: &ast::Item,
     ctx: &mut Context,
@@ -904,7 +904,7 @@ fn visit_argument_list(
     }
 }
 
-#[tracing::instrument(skip_all, fields(kind = e.variant_str()))]
+#[tracing::instrument(skip_all, fields(kind=e.variant_str()))]
 pub fn visit_expression(e: &ast::Expression, ctx: &mut Context) -> Result<hir::Expression> {
     let new_id = ctx.idtracker.next();
 

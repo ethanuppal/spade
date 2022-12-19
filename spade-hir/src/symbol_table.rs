@@ -4,7 +4,9 @@ use codespan_reporting::diagnostic::Diagnostic;
 use codespan_reporting::term::{self, termcolor::Buffer};
 use colored::Colorize;
 use serde::{Deserialize, Serialize};
+use tap::prelude::*;
 use thiserror::Error;
+use tracing::trace;
 
 use spade_common::id_tracker::NameIdTracker;
 use spade_common::location_info::{AsLabel, Loc, WithLocation};
@@ -689,9 +691,9 @@ macro_rules! thing_accessors {
             /// convertible to the return type.
             #[tracing::instrument(level = "trace", skip_all, fields(%name.inner, %name.span, %name.file_id))]
             pub fn $lookup_name(&self, name: &Loc<Path>) -> Result<(NameID, Loc<$result>), LookupError> {
-                let id = self.lookup_id(name)?;
+                let id = self.lookup_id(name).tap(|id| trace!(?id))?;
 
-                match self.things.get(&id) {
+                match self.things.get(&id).tap(|thing| trace!(?thing)) {
                     $(
                         Some($thing) => {Ok((id, $conversion))}
                     )*,
@@ -891,6 +893,7 @@ impl SymbolTable {
         }
     }
 
+    #[tracing::instrument(level = "trace", skip(self))]
     pub fn try_lookup_id(&self, name: &Loc<Path>) -> Option<NameID> {
         // The behaviour depends on whether or not the path is a library relative path (starting
         // with `lib`) or not. If it is, an absolute lookup of the path obtained by
@@ -906,7 +909,7 @@ impl SymbolTable {
         //      b::c();
         //      ```
         //      A lookup for `b` is performed which returns an alias (a::b). From that, another
-        //      lookup for a::b::c is prefrormed
+        //      lookup for a::b::c is performed.
 
         let absolute_path = if let Some(lib_relative) = name.lib_relative() {
             self.base_namespace.join(lib_relative).at_loc(name)

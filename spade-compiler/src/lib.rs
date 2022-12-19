@@ -105,6 +105,7 @@ impl<'a> ErrorHandler<'a> {
     }
 }
 
+#[derive(Debug)]
 pub struct ModuleNamespace {
     pub namespace: SpadePath,
     pub base_namespace: SpadePath,
