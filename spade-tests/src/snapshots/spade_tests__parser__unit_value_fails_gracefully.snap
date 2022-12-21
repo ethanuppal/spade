@@ -1,0 +1,14 @@
+---
+source: spade-tests/src/parser.rs
+---
+fn a() -> bool {
+    ()
+}
+
+error: Tuples of 0 elements are not supported
+  ┌─ testinput:2:5
+  │
+2 │     ()
+  │     ^^
+
+

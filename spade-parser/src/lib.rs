@@ -157,13 +157,19 @@ impl<'a> Parser<'a> {
 
     #[trace_parser]
     fn tuple_literal(&mut self) -> Result<Option<Loc<Expression>>> {
-        peek_for!(self, &TokenKind::OpenParen);
+        let start = peek_for!(self, &TokenKind::OpenParen);
 
         let mut inner = self
             .comma_separated(Self::expression, &TokenKind::CloseParen)
             .no_context()?;
         let result = if inner.is_empty() {
-            todo!("Implement unit literals")
+            let end = self.eat_unconditional()?;
+            // NOTE: Early return because we have now consumed the closing paren
+            return Err(Diagnostic::error(
+                ().between(self.file_id, &start, &end),
+                "Tuples of 0 elements are not supported",
+            )
+            .into());
         } else if inner.len() == 1 {
             // NOTE: safe unwrap, we know the size of the array
             Ok(inner.pop().unwrap())

@@ -74,3 +74,10 @@ snapshot_error! {
     }
     "
 }
+
+snapshot_error! {
+    unit_value_fails_gracefully,
+    "fn a() -> bool {
+        ()
+    }"
+}
