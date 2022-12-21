@@ -50,12 +50,23 @@ impl Manglable for NameID {
         format!("{}_n{}", str_name, self.0)
     }
 }
-impl Manglable for UnitName {
-    fn mangled(&self) -> String {
+
+pub trait UnitNameExt {
+    fn as_mir(&self) -> mir::UnitName;
+}
+
+impl UnitNameExt for UnitName {
+    fn as_mir(&self) -> mir::UnitName {
         match self {
-            UnitName::WithID(name) => name.mangled(),
-            UnitName::FullPath(name) => name.1.as_strs().join("_"),
-            UnitName::Unmangled(raw, _) => raw.clone(),
+            UnitName::WithID(name) => mir::UnitName::Escaped {
+                name: format!("{}[{}]", name.inner.1.as_strs().join("::"), name.inner.0),
+                path: name.inner.1.as_strings(),
+            },
+            UnitName::FullPath(name) => mir::UnitName::Escaped {
+                name: format!("{}", name.inner.1.as_strs().join("::")),
+                path: name.inner.1.as_strings(),
+            },
+            UnitName::Unmangled(name, _) => mir::UnitName::Unescaped(name.clone()),
         }
     }
 }
@@ -1163,12 +1174,10 @@ impl ExprLocal for Loc<Expression> {
                     unit_name
                 };
 
-                let name_string = instance_name.mangled();
-
                 result.push_primary(
                     mir::Statement::Binding(mir::Binding {
                         name: self.variable(ctx.subs)?,
-                        operator: mir::Operator::Instance(name_string, Some(self.loc())),
+                        operator: mir::Operator::Instance(instance_name.as_mir(), Some(self.loc())),
                         operands: args
                             .iter()
                             .map(|arg| arg.value.variable(ctx.subs))
@@ -1200,7 +1209,7 @@ impl ExprLocal for Loc<Expression> {
                 result.push_primary(
                     mir::Statement::Binding(mir::Binding {
                         name: self.variable(ctx.subs)?,
-                        operator: mir::Operator::Instance(unit_name.mangled(), Some(self.loc())),
+                        operator: mir::Operator::Instance(unit_name.as_mir(), Some(self.loc())),
                         operands: args
                             .iter()
                             .map(|arg| arg.value.variable(ctx.subs))
@@ -1665,7 +1674,7 @@ pub fn generate_unit<'a>(
     )?;
 
     Ok(mir::Entity {
-        name: name.mangled(),
+        name: name.as_mir(),
         inputs: mir_inputs,
         output: unit.body.variable(&subs)?,
         output_type: output_t,

@@ -10,4 +10,4 @@ classifiers = [
     "Programming Language :: Python :: Implementation :: CPython",
     "Programming Language :: Python :: Implementation :: PyPy",
 ]
-dependencies = ["cocotb~=1.6.2", "ansicolors~=1.0.2"]
+dependencies = ["cocotb~=1.6.2", "ansicolors>=1.1.8"]

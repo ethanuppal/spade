@@ -18,7 +18,7 @@ pub fn translate_names(
         .map(|(key, value)| {
             let name = match key {
                 TypedExpression::Id(id) => ValueName::Expr(id).var_name(),
-                TypedExpression::Name(name_id) => escape_path(name_id.value_name().var_name()),
+                TypedExpression::Name(name_id) => escape_path(&name_id.value_name().var_name()),
             };
             (name, value)
         })

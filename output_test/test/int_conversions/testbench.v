@@ -45,7 +45,7 @@ module pipeline_tb();
         `END_TEST
     end
 
-    e_uut uut
+    \uut uut
         ( .inval_i(inval)
         , .output__({extended, truncated})
         );

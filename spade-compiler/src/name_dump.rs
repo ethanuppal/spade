@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
 use spade_hir::{ExecutableItem, ItemList, UnitName};
-use spade_hir_lowering::Manglable;
+use spade_hir_lowering::UnitNameExt;
 
 #[derive(Serialize, Deserialize)]
 pub enum ItemKind {
@@ -28,7 +28,7 @@ pub fn list_names(item_list: &ItemList) -> HashMap<Vec<String>, ItemKind> {
 
         let item = match unit_name {
             Some(n @ UnitName::FullPath(_) | n @ UnitName::Unmangled(_, _)) => {
-                ItemKind::Normal(n.mangled())
+                ItemKind::Normal(n.as_mir().as_verilog())
             }
             Some(UnitName::WithID(_)) => ItemKind::Generic,
             None => ItemKind::Type,

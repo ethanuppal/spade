@@ -43,7 +43,7 @@ module pipeline_tb();
         `END_TEST
     end
 
-    e_uut uut
+    \uut uut
         ( .index_i(index)
         , .output__(result)
         );

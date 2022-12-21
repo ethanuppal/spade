@@ -100,7 +100,7 @@ macro_rules! entity {
         } => $output_name_kind:ident $output_name:tt
     ) => {
         spade_mir::Entity {
-            name: $name.to_string(),
+            name: spade_mir::unit_name::IntoUnitName::into_unit_name($name),
             inputs: vec![
                 $( (
                     $arg_name.to_string(),
@@ -119,7 +119,7 @@ macro_rules! entity {
 
 #[cfg(test)]
 mod tests {
-    use crate as spade_mir;
+    use crate::{self as spade_mir, UnitName};
     use crate::{types::Type, Binding, ConstantValue, Operator, Register, Statement, ValueName};
 
     #[test]
@@ -200,7 +200,10 @@ mod tests {
     #[test]
     fn entity_parsing_works() {
         let expected = crate::Entity {
-            name: "pong".to_string(),
+            name: UnitName::Escaped {
+                name: "pong".to_string(),
+                path: vec!["pong".to_string()],
+            },
             inputs: vec![(
                 "_i_clk".to_string(),
                 ValueName::Named(0, "clk".to_string()),
@@ -214,7 +217,7 @@ mod tests {
             ],
         };
 
-        let result = entity!("pong"; ("_i_clk", n(0, "clk"), Type::Bool) -> Type::Int(6); {
+        let result = entity!(&["pong"]; ("_i_clk", n(0, "clk"), Type::Bool) -> Type::Int(6); {
                 (e(0); Type::Int(6); Add; n(1, "value"));
                 (reg n(1, "value"); Type::Int(6); clock (n(0, "clk")); e(0))
             } => n(1, "value"));

@@ -41,7 +41,7 @@ module counter_tb();
         `END_TEST
     end
 
-    e_counter counter
+    \counter counter
         ( .clk_i(clk)
         , .rst_i(rst)
         , .max_i(max)

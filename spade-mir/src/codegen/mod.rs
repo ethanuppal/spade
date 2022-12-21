@@ -654,15 +654,13 @@ fn statement_code(
                         args += &back_name;
                     }
 
-                    let module_name = escape_path(module_name.to_string());
-
-                    let instance_name = format!("{}_i", name);
+                    let instance_name = module_name.instance_name(&name);
 
                     code!{
                         [0] source_attribute(loc, source_code);
                         [0] format!(
                             "{} {}({});",
-                            mangle_entity(&module_name),
+                            &module_name.as_verilog(),
                             instance_name,
                             args
                         )
@@ -812,7 +810,7 @@ pub fn entity_code(entity: &mut Entity, source_code: &Option<CodeBundle>) -> Cod
 
     let types = &TypeList::from_entity(&entity);
 
-    let entity_name = mangle_entity(&escape_path(entity.name.clone()));
+    let entity_name = entity.name.as_verilog();
 
     let inputs: Vec<_> = entity
         .inputs
@@ -916,7 +914,7 @@ pub fn entity_code(entity: &mut Entity, source_code: &Option<CodeBundle>) -> Cod
             [1] "string __top_module;";
             [1] "string __vcd_file;";
             [1] "initial begin";
-            [2]   format!(r#"if ($value$plusargs("TOP_MODULE=%s", __top_module) && __top_module == "{entity_name}" && $value$plusargs("VCD_FILENAME=%s", __vcd_file)) begin"#);
+            [2]   format!(r#"if ($value$plusargs("TOP_MODULE=%s", __top_module) && __top_module == "{top_name}" && $value$plusargs("VCD_FILENAME=%s", __vcd_file)) begin"#, top_name = entity.name.without_escapes());
             [3]     format!("$dumpfile (__vcd_file);");
             [3]     format!("$dumpvars (0, {entity_name});");
             [2]   "end";
@@ -1057,13 +1055,13 @@ mod tests {
 
     #[test]
     fn entity_codegen_works() {
-        let input = entity!("pong"; ("op", n(0, "op"), Type::Int(6)) -> Type::Int(6); {
+        let input = entity!(&["pong"]; ("op", n(0, "op"), Type::Int(6)) -> Type::Int(6); {
             (e(0); Type::Int(6); Add; n(0, "op"), e(1))
         } => e(0));
 
         let expected = indoc!(
             r#"
-            module e_pong (
+            module \pong  (
                     input[5:0] op_i,
                     output[5:0] output__
                 );
@@ -1071,9 +1069,9 @@ mod tests {
                 string __top_module;
                 string __vcd_file;
                 initial begin
-                    if ($value$plusargs("TOP_MODULE=%s", __top_module) && __top_module == "e_pong" && $value$plusargs("VCD_FILENAME=%s", __vcd_file)) begin
+                    if ($value$plusargs("TOP_MODULE=%s", __top_module) && __top_module == "pong" && $value$plusargs("VCD_FILENAME=%s", __vcd_file)) begin
                         $dumpfile (__vcd_file);
-                        $dumpvars (0, e_pong);
+                        $dumpvars (0, \pong );
                     end
                     #1;
                 end
@@ -1095,12 +1093,12 @@ mod tests {
     #[test]
     fn pure_backward_input_produces_output_port() {
         let ty = Type::Backward(Box::new(Type::Int(3)));
-        let input = entity!("test"; ("a", n(0, "a"), ty) -> Type::Int(6); {
+        let input = entity!(&["test"]; ("a", n(0, "a"), ty) -> Type::Int(6); {
             (const 0; Type::Int(6); crate::ConstantValue::Int(3))
         } => e(0));
 
         let expected = indoc!(
-            r#"module e_test (
+            r#"module \test  (
                     output[2:0] a_o,
                     output[5:0] output__
                 );
@@ -1108,9 +1106,9 @@ mod tests {
                 string __top_module;
                 string __vcd_file;
                 initial begin
-                    if ($value$plusargs("TOP_MODULE=%s", __top_module) && __top_module == "e_test" && $value$plusargs("VCD_FILENAME=%s", __vcd_file)) begin
+                    if ($value$plusargs("TOP_MODULE=%s", __top_module) && __top_module == "test" && $value$plusargs("VCD_FILENAME=%s", __vcd_file)) begin
                         $dumpfile (__vcd_file);
-                        $dumpvars (0, e_test);
+                        $dumpvars (0, \test );
                     end
                     #1;
                 end
@@ -1132,12 +1130,12 @@ mod tests {
     #[test]
     fn mixed_backward_input_works() {
         let ty = Type::Tuple(vec![Type::Int(4), Type::Backward(Box::new(Type::Int(3)))]);
-        let input = entity!("test"; ("a", n(0, "a"), ty) -> Type::Int(6); {
+        let input = entity!(&["test"]; ("a", n(0, "a"), ty) -> Type::Int(6); {
             (const 0; Type::Int(6); crate::ConstantValue::Int(3))
         } => e(0));
 
         let expected = indoc!(
-            r#"module e_test (
+            r#"module \test  (
                     input[3:0] a_i, output[2:0] a_o,
                     output[5:0] output__
                 );
@@ -1145,9 +1143,9 @@ mod tests {
                 string __top_module;
                 string __vcd_file;
                 initial begin
-                    if ($value$plusargs("TOP_MODULE=%s", __top_module) && __top_module == "e_test" && $value$plusargs("VCD_FILENAME=%s", __vcd_file)) begin
+                    if ($value$plusargs("TOP_MODULE=%s", __top_module) && __top_module == "test" && $value$plusargs("VCD_FILENAME=%s", __vcd_file)) begin
                         $dumpfile (__vcd_file);
-                        $dumpvars (0, e_test);
+                        $dumpvars (0, \test );
                     end
                     #1;
                 end
@@ -1175,7 +1173,7 @@ mod tests {
         } => e(0));
 
         let expected = indoc!(
-            r#"module e_test (
+            r#"module test (
                     output[3:0] output__,
                     input[2:0] input__
                 );
@@ -1183,9 +1181,9 @@ mod tests {
                 string __top_module;
                 string __vcd_file;
                 initial begin
-                    if ($value$plusargs("TOP_MODULE=%s", __top_module) && __top_module == "e_test" && $value$plusargs("VCD_FILENAME=%s", __vcd_file)) begin
+                    if ($value$plusargs("TOP_MODULE=%s", __top_module) && __top_module == "test" && $value$plusargs("VCD_FILENAME=%s", __vcd_file)) begin
                         $dumpfile (__vcd_file);
-                        $dumpvars (0, e_test);
+                        $dumpvars (0, test);
                     end
                     #1;
                 end
@@ -1224,12 +1222,13 @@ mod tests {
 
     #[test]
     fn pipeline_with_stage_references_codegens_correctly() {
-        let input = entity!("pl"; (
+        let inst_name = spade_mir::UnitName::from_strs(&["A"]);
+        let input = entity!(&["pl"]; (
                 "clk", n(3, "clk"), Type::Bool,
             ) -> Type::Int(16); {
                 (reg n(10, "x__s1"); Type::Int(16); clock(n(3, "clk")); n(0, "x_"));
                 // Stage 0
-                (e(0); Type::Int(16); Instance(("A".to_string(), None)););
+                (e(0); Type::Int(16); Instance((inst_name, None)););
                 (n(0, "x_"); Type::Int(16); Alias; e(0));
                 // Stage 1
                 (n(1, "x"); Type::Int(16); Alias; n(0, "x_"));
@@ -1239,7 +1238,7 @@ mod tests {
         // This test removes a lot of variables through alias resolution
         let expected = indoc!(
             r#"
-            module e_pl (
+            module \pl  (
                     input clk_i,
                     output[15:0] output__
                 );
@@ -1247,9 +1246,9 @@ mod tests {
                 string __top_module;
                 string __vcd_file;
                 initial begin
-                    if ($value$plusargs("TOP_MODULE=%s", __top_module) && __top_module == "e_pl" && $value$plusargs("VCD_FILENAME=%s", __vcd_file)) begin
+                    if ($value$plusargs("TOP_MODULE=%s", __top_module) && __top_module == "pl" && $value$plusargs("VCD_FILENAME=%s", __vcd_file)) begin
                         $dumpfile (__vcd_file);
-                        $dumpvars (0, e_pl);
+                        $dumpvars (0, \pl );
                     end
                     #1;
                 end
@@ -1261,7 +1260,7 @@ mod tests {
                 always @(posedge clk_n3) begin
                     x__s1_n10 <= x_n1;
                 end
-                e_A x_n1_i(x_n1);
+                \A  \A=>x_n1 (x_n1);
                 assign output__ = x_n1;
             endmodule"#
         );
@@ -1417,7 +1416,7 @@ mod expression_tests {
     use colored::Colorize;
     use spade_common::location_info::WithLocation;
 
-    use crate::{self as spade_mir, value_name};
+    use crate::{self as spade_mir, value_name, UnitName};
     use crate::{statement, types::Type};
 
     use indoc::{formatdoc, indoc};
@@ -1865,12 +1864,13 @@ mod expression_tests {
 
     #[test]
     fn entity_instantiation_works() {
-        let stmt = statement!(e(0); Type::Bool; Instance(("test".to_string(), None)); e(1), e(2));
+        let inst_name = UnitName::Unescaped("e_test".to_string());
+        let stmt = statement!(e(0); Type::Bool; Instance((inst_name, None)); e(1), e(2));
 
         let expected = indoc!(
             r#"
             logic _e_0;
-            e_test _e_0_i(_e_1, _e_2, _e_0);"#
+            e_test \e_test=>_e_0 (_e_1, _e_2, _e_0);"#
         );
 
         assert_same_code!(
@@ -1888,14 +1888,15 @@ mod expression_tests {
 
     #[test]
     fn entity_instantiation_with_back_and_forward_ports_works() {
+        let inst_name = UnitName::Unescaped("e_test".to_string());
         let ty = Type::Tuple(vec![Type::backward(Type::Bool), Type::Bool]);
-        let stmt = statement!(e(0); ty; Instance(("test".to_string(), None)); e(1), e(2));
+        let stmt = statement!(e(0); ty; Instance((inst_name, None)); e(1), e(2));
 
         let expected = indoc!(
             r#"
             logic _e_0;
             logic _e_0_o;
-            e_test _e_0_i(_e_1, _e_2, _e_0, _e_0_o);"#
+            e_test \e_test=>_e_0 (_e_1, _e_2, _e_0, _e_0_o);"#
         );
 
         assert_same_code!(
@@ -1914,12 +1915,12 @@ mod expression_tests {
     #[test]
     fn entity_instantiation_with_back_ports_works() {
         let ty = Type::backward(Type::Bool);
-        let stmt = statement!(e(0); ty; Instance(("test".to_string(), None)); e(1), e(2));
+        let stmt = statement!(e(0); ty; Instance((UnitName::Unescaped("e_test".to_string()), None)); e(1), e(2));
 
         let expected = indoc!(
             r#"
             logic _e_0_o;
-            e_test _e_0_i(_e_1, _e_2, _e_0_o);"#
+            e_test \e_test=>_e_0 (_e_1, _e_2, _e_0_o);"#
         );
 
         assert_same_code!(
@@ -1938,12 +1939,13 @@ mod expression_tests {
     #[test]
     fn entity_instantiation_with_back_inputs_works() {
         let ty = Type::Bool;
-        let stmt = statement!(e(0); ty; Instance(("test".to_string(), None)); e(1), e(2));
+        let stmt =
+            statement!(e(0); ty; Instance((UnitName::from_strs(&["test"]), None)); e(1), e(2));
 
         let expected = indoc!(
             r#"
             logic _e_0;
-            e_test _e_0_i(_e_1, _e_1_o, _e_2_o, _e_0);"#
+            \test  \test=>_e_0 (_e_1, _e_1_o, _e_2_o, _e_0);"#
         );
 
         let type_list = TypeList::empty()

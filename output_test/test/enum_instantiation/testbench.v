@@ -37,7 +37,7 @@ module pipeline_tb();
         `END_TEST
     end
 
-    e_uut uut
+    \uut uut
         ( .x_i(in_x)
         , .valid_i(valid)
         , .output__(result)

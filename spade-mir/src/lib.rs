@@ -8,6 +8,7 @@ pub mod eval;
 pub mod macros;
 mod type_list;
 pub mod types;
+pub mod unit_name;
 mod verilog;
 
 use derivative::Derivative;
@@ -15,6 +16,8 @@ use itertools::Itertools;
 
 use spade_common::location_info::{Loc, WithLocation};
 use types::Type;
+
+pub use unit_name::UnitName;
 
 #[derive(Clone, PartialEq, Debug)]
 pub enum ConstantValue {
@@ -146,7 +149,10 @@ pub enum Operator {
     /// must be the last argument.
     /// The location of the instantiation is optional but can be passed to improve
     /// critical path report readability
-    Instance(String, #[derivative(PartialEq = "ignore")] Option<Loc<()>>),
+    Instance(
+        UnitName,
+        #[derivative(PartialEq = "ignore")] Option<Loc<()>>,
+    ),
     /// Alias another named value
     Alias,
     /// Define a variable for the value but don't do anything with it. Useful for creating ports
@@ -213,7 +219,7 @@ impl std::fmt::Display for Operator {
             Operator::IndexArray => write!(f, "IndexArray"),
             Operator::IndexTuple(idx, _) => write!(f, "IndexTuple({})", idx),
             Operator::IndexMemory => write!(f, "IndexMemory"),
-            Operator::Instance(name, _) => write!(f, "Instance({})", name),
+            Operator::Instance(name, _) => write!(f, "Instance({})", name.as_verilog()),
             Operator::Alias => write!(f, "Alias"),
             Operator::Nop => write!(f, "Nop"),
             Operator::ReadPort => write!(f, "ReadPort"),
@@ -305,7 +311,7 @@ impl std::fmt::Display for Statement {
 #[derive(Clone, PartialEq, Debug)]
 pub struct Entity {
     /// The name of the module
-    pub name: String,
+    pub name: UnitName,
     /// A module input which is called `.1` externally and `.2` internally in the module
     pub inputs: Vec<(String, ValueName, Type)>,
     pub output: ValueName,
@@ -330,7 +336,11 @@ impl std::fmt::Display for Entity {
 
         let statements = statements.iter().map(|s| format!("\t{s}\n")).join("");
 
-        writeln!(f, "entity {name}({inputs}) -> {output_type} {{")?;
+        writeln!(
+            f,
+            "entity {name}({inputs}) -> {output_type} {{",
+            name = name.as_verilog()
+        )?;
         write!(f, "{statements}")?;
         write!(f, "}} => {output}")
     }

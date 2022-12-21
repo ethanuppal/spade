@@ -43,7 +43,7 @@ module counter_tb();
         `END_TEST
     end
 
-    e_counter counter
+    \counter counter
         ( .x_i(x)
         , .y_i(y)
         , .output__(result)

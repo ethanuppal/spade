@@ -24,12 +24,16 @@ impl ValueName {
     }
 }
 
-pub fn escape_path(path: String) -> String {
+pub fn escape_path(path: &str) -> String {
     path.replace("::", "_")
 }
 
 pub fn mangle_entity(module: &str) -> String {
-    format!("e_{}", module)
+    if module.starts_with("\\") {
+        module.to_string()
+    } else {
+        format!("e_{}", escape_path(module))
+    }
 }
 
 pub fn mangle_input(input: &str) -> String {
