@@ -1,0 +1,24 @@
+---
+source: spade-tests/src/ast_lowering.rs
+---
+pipeline(0) x(clk: clock) -> bool {true}
+
+entity test() -> bool {
+    x()
+}
+
+error: Expected x to be a function
+  ┌─ testinput:4:5
+  │
+1 │ pipeline(0) x(clk: clock) -> bool {true}
+  │ ---------------------------------------- x is a pipeline
+  ·
+4 │     x()
+  │     ^ Expected function
+  │
+  = consider adding inst
+  │
+4 │     inst(0) x()
+  │     ++++++++
+
+

@@ -212,12 +212,19 @@ impl<'a> Parser<'a> {
         let next_token = self.peek()?.ok_or(Error::Eof)?;
 
         let args = self.argument_list()?.ok_or_else(|| {
-            Diagnostic::error(().at(self.file_id, &next_token), "Expected argument list")
+            let err = Diagnostic::error(().at(self.file_id, &next_token), "Expected argument list")
                 .primary_label("Expected argument list here")
                 .secondary_label(
                     ().between(self.file_id, &start, &name),
                     "for this instantiation",
-                )
+                );
+
+            if let Ok(true) = self.peek_kind(&TokenKind::OpenBrace) {
+                err.help("Positional argument lists start with`(`.")
+                    .help("Named argument lists start with `$(`.")
+            } else {
+                err
+            }
         })?;
 
         if let Some(depth) = pipeline_depth {

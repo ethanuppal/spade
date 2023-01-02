@@ -18,5 +18,8 @@ error: Expected argument list
   │     --------^ Expected argument list here
   │     │        
   │     for this instantiation
+  │
+  = help: Positional argument lists start with`(`.
+  = help: Named argument lists start with `$(`.
 
 

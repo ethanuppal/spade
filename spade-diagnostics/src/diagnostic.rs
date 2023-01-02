@@ -291,7 +291,7 @@ impl Diagnostic {
 
         assert!(!code.is_empty());
 
-        self.span_suggest(message, (Span::new(span.start(), span.start()), file), code)
+        self.span_suggest(message, (Span::new(span.end(), span.end()), file), code)
     }
 
     /// Convenience method to suggest some code that can be replaced.

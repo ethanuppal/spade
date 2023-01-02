@@ -707,3 +707,57 @@ snapshot_error! {
     }
     "
 }
+
+snapshot_error! {
+    expect_function_got_entity_error_works,
+    "entity x() -> bool {true}
+
+    entity test() -> bool {
+        x()
+    }"
+}
+
+snapshot_error! {
+    expect_function_got_pipeline_error_works,
+    "pipeline(0) x(clk: clock) -> bool {true}
+
+    entity test() -> bool {
+        x()
+    }"
+}
+
+snapshot_error! {
+    expect_pipeline_got_function_error_works,
+    "fn x() -> bool {true}
+
+    entity test() -> bool {
+        inst(0) x()
+    }"
+}
+
+snapshot_error! {
+    expect_pipeline_got_entity_error_works,
+    "entity x(clk: clock) -> bool {true}
+
+    entity test() -> bool {
+        inst(0) x()
+    }"
+}
+
+snapshot_error! {
+    expect_entity_got_function_error_works,
+    "fn x() -> bool {true}
+
+    entity test() -> bool {
+        inst x()
+    }"
+}
+
+snapshot_error! {
+    expect_entity_got_pipeline_error_works,
+    "pipeline(0) x(clk: clock) -> bool {true}
+
+    entity test() -> bool {
+        inst x()
+    }"
+}

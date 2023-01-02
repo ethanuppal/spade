@@ -1,0 +1,26 @@
+---
+source: spade-tests/src/ast_lowering.rs
+---
+entity x(clk: clock) -> bool {true}
+
+entity test() -> bool {
+    inst(0) x()
+}
+
+error: Expected x to be a pipeline
+  ┌─ testinput:4:13
+  │
+1 │ entity x(clk: clock) -> bool {true}
+  │ ----------------------------------- x is an entity
+  ·
+4 │     inst(0) x()
+  │     ----    ^ Expected pipeline
+  │     │        
+  │     because of this inst
+  │
+  = Consider removing the depth
+  │
+4 │     inst(0) x()
+  │     ~~~~
+
+
