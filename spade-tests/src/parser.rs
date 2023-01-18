@@ -100,3 +100,10 @@ fn three_generic_end_chars_work() {
 
     build_items(code);
 }
+
+snapshot_error! {
+    missing_argument_list_for_inst_method_works,
+    "fn a() -> bool {
+        a.inst b
+    }"
+}

@@ -109,6 +109,15 @@ pub enum PipelineStageReference {
     Absolute(Loc<Identifier>),
 }
 
+// FIXME: Migrate entity, pipeline and fn instantiation to this
+#[derive(PartialEq, Debug, Clone)]
+pub enum CallKind {
+    Function,
+    Entity(Loc<()>),
+    Pipeline(Loc<()>, Loc<u128>),
+}
+impl WithLocation for CallKind {}
+
 #[derive(PartialEq, Debug, Clone)]
 pub enum Expression {
     Identifier(Loc<Path>),
@@ -119,7 +128,17 @@ pub enum Expression {
     TupleLiteral(Vec<Loc<Expression>>),
     TupleIndex(Box<Loc<Expression>>, Loc<u128>),
     FieldAccess(Box<Loc<Expression>>, Loc<Identifier>),
-    MethodCall(Box<Loc<Expression>>, Loc<Identifier>, Loc<ArgumentList>),
+    Call {
+        kind: CallKind,
+        callee: Loc<Path>,
+        args: Loc<ArgumentList>,
+    },
+    MethodCall {
+        target: Box<Loc<Expression>>,
+        name: Loc<Identifier>,
+        args: Loc<ArgumentList>,
+        kind: CallKind,
+    },
     If(
         Box<Loc<Expression>>,
         Box<Loc<Expression>>,
@@ -129,21 +148,9 @@ pub enum Expression {
         Box<Loc<Expression>>,
         Loc<Vec<(Loc<Pattern>, Loc<Expression>)>>,
     ),
-    FnCall(Loc<Path>, Loc<ArgumentList>),
     UnaryOperator(UnaryOperator, Box<Loc<Expression>>),
     BinaryOperator(Box<Loc<Expression>>, BinaryOperator, Box<Loc<Expression>>),
     Block(Box<Block>),
-    EntityInstance {
-        inst: Loc<()>,
-        name: Loc<Path>,
-        args: Loc<ArgumentList>,
-    },
-    PipelineInstance {
-        inst: Loc<()>,
-        depth: Loc<u128>,
-        name: Loc<Path>,
-        args: Loc<ArgumentList>,
-    },
     /// E.g. `stage(-5).x`, `stage('b).y`
     PipelineReference {
         /// ```text
@@ -186,13 +193,11 @@ impl Expression {
             Expression::FieldAccess(_, _) => "field access",
             Expression::If(_, _, _) => "if",
             Expression::Match(_, _) => "match",
-            Expression::FnCall(_, _) => "fn call",
-            Expression::MethodCall(_, _, _) => "method call",
+            Expression::Call { .. } => "call",
+            Expression::MethodCall { .. } => "method call",
             Expression::UnaryOperator(_, _) => "unary operator",
             Expression::BinaryOperator(_, _, _) => "binary operator",
             Expression::Block(_) => "block",
-            Expression::EntityInstance { .. } => "entity instance",
-            Expression::PipelineInstance { .. } => "pipeline instance",
             Expression::PipelineReference { .. } => "pipeline reference",
         }
     }

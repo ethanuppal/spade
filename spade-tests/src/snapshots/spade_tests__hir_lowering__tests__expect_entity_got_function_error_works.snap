@@ -1,0 +1,26 @@
+---
+source: spade-tests/src/hir_lowering.rs
+---
+fn x() -> bool {true}
+
+entity test() -> bool {
+    inst x()
+}
+
+error: Expected x to be an entity
+  ┌─ testinput:4:10
+  │
+1 │ fn x() -> bool {true}
+  │ --------------------- x is a function
+  ·
+4 │     inst x()
+  │     ---- ^ Expected entity
+  │     │     
+  │     because of this inst
+  │
+  = Consider removing inst
+  │
+4 │     inst x()
+  │     ----
+
+

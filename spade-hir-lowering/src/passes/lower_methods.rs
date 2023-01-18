@@ -1,4 +1,4 @@
-use spade_common::location_info::Loc;
+use spade_common::location_info::{Loc, WithLocation};
 use spade_diagnostics::Diagnostic;
 use spade_hir::{symbol_table::FrozenSymtab, ArgumentList, Expression, ItemList, Statement};
 use spade_typeinference::{method_resolution::select_method, HasType, TypeState};
@@ -14,7 +14,12 @@ pub struct LowerMethods<'a> {
 impl<'a> Pass for LowerMethods<'a> {
     fn visit_expression(&mut self, expression: &mut Loc<Expression>) -> crate::error::Result<()> {
         let replacement_kind = match &mut expression.kind {
-            spade_hir::ExprKind::MethodCall(self_, method, args) => {
+            spade_hir::ExprKind::MethodCall {
+                target: self_,
+                name,
+                args,
+                call_kind,
+            } => {
                 let self_type = self_.get_type(self.type_state).map_err(|e| {
                     Diagnostic::bug(self_.as_ref(), format!("did not find a type ({e})"))
                 })?;
@@ -30,31 +35,9 @@ impl<'a> Pass for LowerMethods<'a> {
                     },
                 )?;
 
-                let method = select_method(self_.loc(), &type_name, method, self.items)?;
+                let method = select_method(self_.loc(), &type_name, name, self.items)?;
 
                 let unit = self.symtab.symtab().unit_by_id(&method.inner);
-
-                match unit.unit_kind.inner {
-                    spade_hir::UnitKind::Function(_) => {}
-                    spade_hir::UnitKind::Entity => {
-                        return Err(Diagnostic::error(
-                            expression.loc(),
-                            "Entity methods can not be instantiated",
-                        )
-                        .secondary_label(&unit.unit_kind, "This is an entity")
-                        .note("This restriction will be lifted in the future")
-                        .into())
-                    }
-                    spade_hir::UnitKind::Pipeline(_) => {
-                        return Err(Diagnostic::error(
-                            expression.loc(),
-                            "Pipeline methods can not be instantiated",
-                        )
-                        .secondary_label(&unit.unit_kind, "This is a pipeline")
-                        .note("This restriction will be lifted in the future")
-                        .into())
-                    }
-                }
 
                 // Insert self as the first arg
                 let args = args.map_ref(|args| {
@@ -66,7 +49,24 @@ impl<'a> Pass for LowerMethods<'a> {
                     new
                 });
 
-                Some(spade_hir::ExprKind::FnCall(method, args.clone()))
+                match unit.unit_kind.inner {
+                    spade_hir::UnitKind::Function(_) => {}
+                    spade_hir::UnitKind::Entity => {}
+                    spade_hir::UnitKind::Pipeline(_) => {
+                        return Err(Diagnostic::error(
+                            expression.loc(),
+                            "Pipeline methods can not be instantiated",
+                        )
+                        .secondary_label(&unit.unit_kind, "This is a pipeline")
+                        .note("This restriction will be lifted in the future")
+                        .into())
+                    }
+                }
+                Some(spade_hir::ExprKind::Call {
+                    kind: call_kind.clone(),
+                    callee: method.inner.at_loc(name),
+                    args: args.clone(),
+                })
             }
             _ => None,
         };

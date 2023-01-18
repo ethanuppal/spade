@@ -1,7 +1,7 @@
 use local_impl::local_impl;
 use spade_common::location_info::Loc;
 use spade_diagnostics::Diagnostic;
-use spade_macros::IntoSubdiagnostic;
+use spade_macros::{IntoDiagnostic, IntoSubdiagnostic};
 use thiserror::Error;
 
 use crate::{lexer::TokenKind, Token, TypeSpec};
@@ -13,6 +13,51 @@ pub(crate) struct SuggestBraceEnumVariant {
     pub open_paren: Loc<()>,
     #[diagnostic(replace, "}")]
     pub close_paren: Loc<()>,
+}
+
+// let err = Diagnostic::error(().at(self.file_id, &next_token), "Expected argument list")
+//     .primary_label("Expected argument list here")
+//     .secondary_label(
+//         ().between(self.file_id, &start, &name),
+//         "for this instantiation",
+//     );
+
+// if let Ok(true) = self.peek_kind(&TokenKind::OpenBrace) {
+//     err.help("Positional argument lists start with`(`.")
+//         .help("Named argument lists start with `$(`.")
+// } else {
+//     err
+// }
+
+#[derive(IntoDiagnostic, Clone)]
+#[diagnostic(error, "Expected argument list")]
+pub(crate) struct ExpectedArgumentList {
+    #[diagnostic(primary, "Expected argument list for this instantiation")]
+    pub base_expr: Loc<()>,
+    pub next_token: Token,
+}
+
+impl ExpectedArgumentList {
+    pub fn with_suggestions(self) -> Diagnostic {
+        let diag: Diagnostic = self.clone().into();
+        // If the next token is any kind of opening paren, we'll try to suggest changing that
+        if &self.next_token.kind == &TokenKind::OpenBrace
+            || &self.next_token.kind == &TokenKind::OpenBracket
+        {
+            diag.help("Positional argument lists start with`(`.")
+                .help("Named argument lists start with `$(`.")
+        } else {
+            // If not, we'll suggest inserting the argument list after the base expression. We
+            // *could* suggest it at the next token, but if the next token is on a new line,
+            // that gets confusing
+            diag.span_suggest_insert_after(
+                "Consider specifying positional arguments",
+                self.base_expr,
+                "(...)",
+            )
+            .span_suggest_insert_after("or named arguments", self.base_expr, "$(...)")
+        }
+    }
 }
 
 #[derive(Error, Debug, Clone, PartialEq)]

@@ -6,16 +6,16 @@ pub mod item_type;
 pub mod lexer;
 
 use colored::*;
-use error::SuggestBraceEnumVariant;
 use local_impl::local_impl;
+use error::{ExpectedArgumentList, SuggestBraceEnumVariant};
 use logos::Lexer;
 use tracing::{event, Level};
 
 use spade_ast::{
-    ArgumentList, ArgumentPattern, AttributeList, Block, ComptimeConfig, Enum, Expression,
-    FunctionDecl, ImplBlock, Item, Module, ModuleBody, NamedArgument, ParameterList, Pattern,
-    PipelineStageReference, Register, Statement, Struct, TraitDef, TypeDeclKind, TypeDeclaration,
-    TypeExpression, TypeParam, TypeSpec, Unit, UnitKind, UseStatement,
+    ArgumentList, ArgumentPattern, AttributeList, Block, CallKind, ComptimeConfig, Enum,
+    Expression, FunctionDecl, ImplBlock, Item, Module, ModuleBody, NamedArgument, ParameterList,
+    Pattern, PipelineStageReference, Register, Statement, Struct, TraitDef, TypeDeclKind,
+    TypeDeclaration, TypeExpression, TypeParam, TypeSpec, Unit, UnitKind, UseStatement,
 };
 use spade_common::location_info::{lspan, AsLabel, FullSpan, HasCodespan, Loc, WithLocation};
 use spade_common::name::{Identifier, Path};
@@ -198,8 +198,8 @@ impl<'a> Parser<'a> {
         // Check if this is a pipeline or not
         let pipeline_depth = if self.peek_and_eat(&TokenKind::OpenParen)?.is_some() {
             if let Some(depth) = self.int_literal()? {
-                self.eat(&TokenKind::CloseParen)?;
-                Some(depth)
+                let end_paren = self.eat(&TokenKind::CloseParen)?;
+                Some((depth, end_paren))
             } else {
                 return Err(Error::ExpectedPipelineDepth {
                     got: self.eat_unconditional()?,
@@ -213,36 +213,30 @@ impl<'a> Parser<'a> {
         let next_token = self.peek()?.ok_or(Error::Eof)?;
 
         let args = self.argument_list()?.ok_or_else(|| {
-            let err = Diagnostic::error(().at(self.file_id, &next_token), "Expected argument list")
-                .primary_label("Expected argument list here")
-                .secondary_label(
-                    ().between(self.file_id, &start, &name),
-                    "for this instantiation",
-                );
-
-            if let Ok(true) = self.peek_kind(&TokenKind::OpenBrace) {
-                err.help("Positional argument lists start with`(`.")
-                    .help("Named argument lists start with `$(`.")
-            } else {
-                err
+            ExpectedArgumentList {
+                next_token,
+                base_expr: ().between(self.file_id, &start, &name),
             }
+            .with_suggestions()
         })?;
 
-        if let Some(depth) = pipeline_depth {
+        if let Some((depth, end_paren)) = pipeline_depth {
             Ok(Some(
-                Expression::PipelineInstance {
-                    inst: start_loc,
-                    depth,
-                    name,
+                Expression::Call {
+                    kind: CallKind::Pipeline(
+                        ().between(self.file_id, &start_loc, &end_paren),
+                        depth,
+                    ),
+                    callee: name,
                     args: args.clone(),
                 }
                 .between(self.file_id, &start.span, &args),
             ))
         } else {
             Ok(Some(
-                Expression::EntityInstance {
-                    inst: start_loc,
-                    name,
+                Expression::Call {
+                    kind: CallKind::Entity(start_loc),
+                    callee: name,
                     args: args.clone(),
                 }
                 .between(self.file_id, &start.span, &args),
@@ -2618,9 +2612,9 @@ mod tests {
     fn entity_instantiation() {
         let code = "inst some_entity(x, y, z)";
 
-        let expected = Expression::EntityInstance {
-            inst: ().nowhere(),
-            name: ast_path("some_entity"),
+        let expected = Expression::Call {
+            kind: CallKind::Entity(().nowhere()),
+            callee: ast_path("some_entity"),
             args: ArgumentList::Positional(vec![
                 Expression::Identifier(ast_path("x")).nowhere(),
                 Expression::Identifier(ast_path("y")).nowhere(),
@@ -2637,9 +2631,9 @@ mod tests {
     fn entity_instantiation_with_a_named_arg() {
         let code = "inst some_entity$(z: a)";
 
-        let expected = Expression::EntityInstance {
-            inst: ().nowhere(),
-            name: ast_path("some_entity"),
+        let expected = Expression::Call {
+            kind: CallKind::Entity(().nowhere()),
+            callee: ast_path("some_entity"),
             args: ArgumentList::Named(vec![NamedArgument::Full(
                 ast_ident("z"),
                 Expression::Identifier(ast_path("a")).nowhere(),
@@ -2807,10 +2801,9 @@ mod tests {
     fn pipeline_instantiation_works() {
         let code = "inst(2) some_pipeline(x, y, z)";
 
-        let expected = Expression::PipelineInstance {
-            inst: ().nowhere(),
-            depth: 2.nowhere(),
-            name: ast_path("some_pipeline"),
+        let expected = Expression::Call {
+            kind: CallKind::Pipeline(().nowhere(), 2.nowhere()),
+            callee: ast_path("some_pipeline"),
             args: ArgumentList::Positional(vec![
                 Expression::Identifier(ast_path("x")).nowhere(),
                 Expression::Identifier(ast_path("y")).nowhere(),

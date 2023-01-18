@@ -84,16 +84,14 @@ fn visit_expression(
         spade_hir::ExprKind::UnaryOperator(_, _) => true,
         spade_hir::ExprKind::Match(_, _) => true,
         spade_hir::ExprKind::Block(_) => true,
-        spade_hir::ExprKind::FnCall(_, _) => true,
-        spade_hir::ExprKind::EntityInstance(_, _) => true,
-        spade_hir::ExprKind::PipelineInstance { .. } => true,
+        spade_hir::ExprKind::Call { .. } => true,
         spade_hir::ExprKind::If(_, _, _) => true,
         spade_hir::ExprKind::PipelineRef {
             stage: _,
             name: _,
             declares_name: _,
         } => false,
-        spade_hir::ExprKind::MethodCall(_, _, _) => diag_bail!(
+        spade_hir::ExprKind::MethodCall { .. } => diag_bail!(
             expr,
             "method call should have been lowered to function by this point"
         ),
@@ -213,11 +211,9 @@ fn visit_expression(
             trace!("Consuming block {}", expr.id);
             linear_state.consume_expression(&b.result)?;
         }
-        spade_hir::ExprKind::FnCall(name, list)
-        | spade_hir::ExprKind::EntityInstance(name, list)
-        | spade_hir::ExprKind::PipelineInstance {
-            depth: _,
-            name,
+        spade_hir::ExprKind::Call {
+            kind: _,
+            callee,
             args: list,
         } => {
             // The read_mut_wire function is special and should not consume the port
@@ -229,7 +225,7 @@ fn visit_expression(
                 .try_lookup_final_id(
                     &Path::from_strs(&vec!["std", "ports", "read_mut_wire"]).nowhere(),
                 )
-                .map(|n| &n != &name.inner)
+                .map(|n| &n != &callee.inner)
                 .unwrap_or(true);
 
             match &list.inner {
@@ -270,7 +266,7 @@ fn visit_expression(
             }
             linear_state.add_alias_name(expr.id.at_loc(expr), &name.clone())?
         }
-        spade_hir::ExprKind::MethodCall(_, _, _) => diag_bail!(
+        spade_hir::ExprKind::MethodCall { .. } => diag_bail!(
             expr,
             "method call should have been lowered to function by this point"
         ),

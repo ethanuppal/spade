@@ -95,6 +95,15 @@ pub struct Argument {
 }
 impl WithLocation for ArgumentList {}
 
+// FIXME: Migrate entity, pipeline and fn instantiation to this
+#[derive(PartialEq, Debug, Clone, Serialize, Deserialize)]
+pub enum CallKind {
+    Function,
+    Entity(Loc<()>),
+    Pipeline(Loc<()>, Loc<u128>),
+}
+impl WithLocation for CallKind {}
+
 #[derive(PartialEq, Debug, Clone, Serialize, Deserialize)]
 pub enum ExprKind {
     Identifier(NameID),
@@ -105,18 +114,21 @@ pub enum ExprKind {
     Index(Box<Loc<Expression>>, Box<Loc<Expression>>),
     TupleIndex(Box<Loc<Expression>>, Loc<u128>),
     FieldAccess(Box<Loc<Expression>>, Loc<Identifier>),
-    MethodCall(Box<Loc<Expression>>, Loc<Identifier>, Loc<ArgumentList>),
-    FnCall(Loc<NameID>, Loc<ArgumentList>),
+    MethodCall {
+        target: Box<Loc<Expression>>,
+        name: Loc<Identifier>,
+        args: Loc<ArgumentList>,
+        call_kind: CallKind,
+    },
+    Call {
+        kind: CallKind,
+        callee: Loc<NameID>,
+        args: Loc<ArgumentList>,
+    },
     BinaryOperator(Box<Loc<Expression>>, BinaryOperator, Box<Loc<Expression>>),
     UnaryOperator(UnaryOperator, Box<Loc<Expression>>),
     Match(Box<Loc<Expression>>, Vec<(Loc<Pattern>, Loc<Expression>)>),
     Block(Box<Block>),
-    EntityInstance(Loc<NameID>, Loc<ArgumentList>),
-    PipelineInstance {
-        depth: Loc<u128>,
-        name: Loc<NameID>,
-        args: Loc<ArgumentList>,
-    },
     If(
         Box<Loc<Expression>>,
         Box<Loc<Expression>>,

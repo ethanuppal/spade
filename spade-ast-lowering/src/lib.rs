@@ -34,7 +34,7 @@ use hir::symbol_table::{LookupError, SymbolTable, Thing, TypeSymbol};
 use hir::UnitHead;
 pub use spade_common::id_tracker;
 
-use error::{expect_entity, expect_function, expect_pipeline, Error, Result};
+use error::{Error, Result};
 
 pub struct Context {
     pub symtab: SymbolTable,
@@ -980,11 +980,16 @@ pub fn visit_expression(e: &ast::Expression, ctx: &mut Context) -> Result<hir::E
             Box::new(target.try_visit(visit_expression, ctx)?),
             field.clone(),
         )),
-        ast::Expression::MethodCall(target, name, args) => Ok(hir::ExprKind::MethodCall(
-            Box::new(target.try_visit(visit_expression, ctx)?),
-            name.clone(),
-            args.try_map_ref(|args| visit_argument_list(args, ctx))?,
-        )),
+        ast::Expression::MethodCall{kind, target, name, args} => Ok(hir::ExprKind::MethodCall{
+            target: Box::new(target.try_visit(visit_expression, ctx)?),
+            name: name.clone(),
+            args: args.try_map_ref(|args| visit_argument_list(args, ctx))?,
+            call_kind: match kind {
+                ast::CallKind::Function => hir::expression::CallKind::Function,
+                ast::CallKind::Entity(loc) => hir::expression::CallKind::Entity(loc.clone()),
+                ast::CallKind::Pipeline(loc, depth) => hir::expression::CallKind::Pipeline(loc.clone(), depth.clone())
+            }
+        }),
         ast::Expression::If(cond, ontrue, onfalse) => {
             let cond = cond.try_visit(visit_expression, ctx)?;
             let ontrue = ontrue.try_visit(visit_expression, ctx)?;
@@ -1019,53 +1024,17 @@ pub fn visit_expression(e: &ast::Expression, ctx: &mut Context) -> Result<hir::E
         ast::Expression::Block(block) => {
             Ok(hir::ExprKind::Block(Box::new(visit_block(block, ctx)?)))
         }
-        ast::Expression::FnCall(callee, args) => {
-            let (name_id, head) = ctx.symtab.lookup_unit(callee)?;
-            match &head.unit_kind.inner {
-                hir::UnitKind::Function(_) => {},
-                other => {
-                    return Err(expect_function(&callee, head.loc(), other))
-                }
-            }
-
+        ast::Expression::Call{kind, callee, args} => {
+            let (name_id, _) = ctx.symtab.lookup_unit(callee)?;
             let args = visit_argument_list(args, ctx)?.at_loc(args);
 
-            Ok(hir::ExprKind::FnCall(name_id.at_loc(callee), args))
-        }
-        ast::Expression::EntityInstance{inst, name, args} => {
-            let (name_id, head) = ctx.symtab.lookup_unit(name)?;
-            match &head.unit_kind.inner {
-                hir::UnitKind::Entity => {},
-                other => {
-                    return Err(expect_entity(inst, &name, head.loc(), other))
-                }
-            }
+            let kind = match kind {
+                ast::CallKind::Function => hir::expression::CallKind::Function,
+                ast::CallKind::Entity(loc) => hir::expression::CallKind::Entity(loc.clone()),
+                ast::CallKind::Pipeline(loc, depth) => hir::expression::CallKind::Pipeline(loc.clone(), depth.clone()),
+            };
 
-            let args = visit_argument_list(args, ctx)?.at_loc(args);
-            Ok(hir::ExprKind::EntityInstance(name_id.at_loc(name), args))
-        }
-        ast::Expression::PipelineInstance{inst, depth: target_depth, name, args} => {
-            let (name_id, head) = ctx.symtab.lookup_unit(name)?;
-            match &head.unit_kind.inner {
-                hir::UnitKind::Pipeline(head_depth) => {
-                    if head_depth.inner != target_depth.inner {
-                        return Err(Diagnostic::error(target_depth, "Pipeline depth mismatch")
-                            .primary_label(format!("Expected depth {} here", head_depth))
-                            .secondary_label(&head.unit_kind, format!("{} has depth {}", name, head_depth))
-                            .into());
-                    }
-                },
-                other => {
-                    return Err(expect_pipeline(inst, &name, head.loc(), other))
-                }
-            }
-
-            let args = visit_argument_list(args, ctx)?.at_loc(args);
-            Ok(hir::ExprKind::PipelineInstance {
-                depth: target_depth.clone(),
-                name: name_id.at_loc(name),
-                args,
-            })
+            Ok(hir::ExprKind::Call{kind, callee: name_id.at_loc(callee), args})
         }
         ast::Expression::Identifier(path) => {
             // If the identifier isn't a valid variable, report as "expected value".
@@ -1956,9 +1925,9 @@ mod expression_visiting {
 
     #[test]
     fn entity_instantiation_works() {
-        let input = ast::Expression::EntityInstance {
-            inst: ().nowhere(),
-            name: ast_path("test"),
+        let input = ast::Expression::Call {
+            kind: ast::CallKind::Entity(().nowhere()),
+            callee: ast_path("test"),
             args: ast::ArgumentList::Positional(vec![
                 ast::Expression::IntLiteral(1).nowhere(),
                 ast::Expression::IntLiteral(2).nowhere(),
@@ -1967,14 +1936,15 @@ mod expression_visiting {
         }
         .nowhere();
 
-        let expected = hir::ExprKind::EntityInstance(
-            name_id(0, "test"),
-            hir::ArgumentList::Positional(vec![
+        let expected = hir::ExprKind::Call {
+            kind: hir::expression::CallKind::Entity(().nowhere()),
+            callee: name_id(0, "test"),
+            args: hir::ArgumentList::Positional(vec![
                 hir::ExprKind::IntLiteral(1).idless().nowhere(),
                 hir::ExprKind::IntLiteral(2).idless().nowhere(),
             ])
             .nowhere(),
-        )
+        }
         .idless();
 
         let mut symtab = SymbolTable::new();
@@ -2013,9 +1983,9 @@ mod expression_visiting {
 
     #[test]
     fn entity_instantiation_with_named_args_works() {
-        let input = ast::Expression::EntityInstance {
-            inst: ().nowhere(),
-            name: ast_path("test"),
+        let input = ast::Expression::Call {
+            kind: ast::CallKind::Entity(().nowhere()),
+            callee: ast_path("test"),
             args: ast::ArgumentList::Named(vec![
                 ast::NamedArgument::Full(ast_ident("b"), ast::Expression::IntLiteral(2).nowhere()),
                 ast::NamedArgument::Full(ast_ident("a"), ast::Expression::IntLiteral(1).nowhere()),
@@ -2024,9 +1994,10 @@ mod expression_visiting {
         }
         .nowhere();
 
-        let expected = hir::ExprKind::EntityInstance(
-            name_id(0, "test"),
-            hir::ArgumentList::Named(vec![
+        let expected = hir::ExprKind::Call {
+            kind: hir::expression::CallKind::Entity(().nowhere()),
+            callee: name_id(0, "test"),
+            args: hir::ArgumentList::Named(vec![
                 hir::expression::NamedArgument::Full(
                     ast_ident("b"),
                     hir::ExprKind::IntLiteral(2).idless().nowhere(),
@@ -2037,7 +2008,7 @@ mod expression_visiting {
                 ),
             ])
             .nowhere(),
-        )
+        }
         .idless();
 
         let mut symtab = SymbolTable::new();
@@ -2076,24 +2047,26 @@ mod expression_visiting {
 
     #[test]
     fn function_instantiation_works() {
-        let input = ast::Expression::FnCall(
-            ast_path("test"),
-            ast::ArgumentList::Positional(vec![
+        let input = ast::Expression::Call {
+            kind: ast::CallKind::Function,
+            callee: ast_path("test"),
+            args: ast::ArgumentList::Positional(vec![
                 ast::Expression::IntLiteral(1).nowhere(),
                 ast::Expression::IntLiteral(2).nowhere(),
             ])
             .nowhere(),
-        )
+        }
         .nowhere();
 
-        let expected = hir::ExprKind::FnCall(
-            name_id(0, "test"),
-            hir::ArgumentList::Positional(vec![
+        let expected = hir::ExprKind::Call {
+            kind: hir::expression::CallKind::Function,
+            callee: name_id(0, "test"),
+            args: hir::ArgumentList::Positional(vec![
                 hir::ExprKind::IntLiteral(1).idless().nowhere(),
                 hir::ExprKind::IntLiteral(2).idless().nowhere(),
             ])
             .nowhere(),
-        )
+        }
         .idless();
 
         let mut symtab = SymbolTable::new();
@@ -2132,10 +2105,9 @@ mod expression_visiting {
 
     #[test]
     fn pipeline_instantiation_works() {
-        let input = ast::Expression::PipelineInstance {
-            inst: ().nowhere(),
-            depth: 2.nowhere(),
-            name: ast_path("test"),
+        let input = ast::Expression::Call {
+            kind: ast::CallKind::Pipeline(().nowhere(), 2.nowhere()),
+            callee: ast_path("test"),
             args: ast::ArgumentList::Positional(vec![
                 ast::Expression::IntLiteral(1).nowhere(),
                 ast::Expression::IntLiteral(2).nowhere(),
@@ -2144,9 +2116,9 @@ mod expression_visiting {
         }
         .nowhere();
 
-        let expected = hir::ExprKind::PipelineInstance {
-            depth: 2.nowhere(),
-            name: name_id(0, "test"),
+        let expected = hir::ExprKind::Call {
+            kind: hir::expression::CallKind::Pipeline(().nowhere(), 2.nowhere()),
+            callee: name_id(0, "test"),
             args: hir::ArgumentList::Positional(vec![
                 hir::ExprKind::IntLiteral(1).idless().nowhere(),
                 hir::ExprKind::IntLiteral(2).idless().nowhere(),

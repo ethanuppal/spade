@@ -198,7 +198,7 @@ impl TypeState {
         ctx: &Context,
         generic_list: &GenericListToken,
     ) -> Result<()> {
-        assuming_kind!(ExprKind::MethodCall(target, method, args) = &expression => {
+        assuming_kind!(ExprKind::MethodCall{call_kind: _, target, name, args} = &expression => {
             // NOTE: We don't visit_expression here as it is being added to the argument_list
             // which we *do* visit
             // self.visit_expression(target, ctx, generic_list)?;
@@ -224,7 +224,7 @@ impl TypeState {
             let requirement = Requirement::HasMethod {
                 expr_id: expression.map_ref(|e| e.id),
                 target_type: target_type.at_loc(target),
-                method: method.clone(),
+                method: name.clone(),
                 expr: self_type.at_loc(expression),
                 args: args_with_self
             };

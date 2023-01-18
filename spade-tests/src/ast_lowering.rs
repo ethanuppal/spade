@@ -721,8 +721,8 @@ snapshot_error! {
     expect_function_got_pipeline_error_works,
     "pipeline(0) x(clk: clock) -> bool {true}
 
-    entity test() -> bool {
-        x()
+    entity test(clk: clock) -> bool {
+        x(clk)
     }"
 }
 
@@ -739,8 +739,8 @@ snapshot_error! {
     expect_pipeline_got_entity_error_works,
     "entity x(clk: clock) -> bool {true}
 
-    entity test() -> bool {
-        inst(0) x()
+    entity test(clk: clock) -> bool {
+        inst(0) x(clk)
     }"
 }
 
@@ -757,8 +757,8 @@ snapshot_error! {
     expect_entity_got_pipeline_error_works,
     "pipeline(0) x(clk: clock) -> bool {true}
 
-    entity test() -> bool {
-        inst x()
+    entity test(clk: clock) -> bool {
+        inst x(clk)
     }"
 }
 

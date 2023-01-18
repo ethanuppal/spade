@@ -12,6 +12,8 @@ mod usefulness;
 
 use std::collections::HashMap;
 
+use error::{expect_entity, expect_function, expect_pipeline};
+use hir::expression::CallKind;
 use local_impl::local_impl;
 
 use hir::param_util::{match_args_with_params, Argument};
@@ -663,7 +665,6 @@ impl ExprLocal for Loc<Expression> {
             },
             ExprKind::IntLiteral(_) => Ok(None),
             ExprKind::BoolLiteral(_) => Ok(None),
-            ExprKind::FnCall(_, _) => Ok(None),
             ExprKind::TupleLiteral(_) => Ok(None),
             ExprKind::TupleIndex(_, _) => Ok(None),
             ExprKind::FieldAccess(_, _) => Ok(None),
@@ -674,8 +675,6 @@ impl ExprLocal for Loc<Expression> {
             ExprKind::Match(_, _) => Ok(None),
             ExprKind::BinaryOperator(_, _, _) => Ok(None),
             ExprKind::UnaryOperator(_, _) => Ok(None),
-            ExprKind::EntityInstance(_, _) => Ok(None),
-            ExprKind::PipelineInstance { .. } => Ok(None),
             ExprKind::PipelineRef {
                 stage,
                 name,
@@ -699,7 +698,8 @@ impl ExprLocal for Loc<Expression> {
                     substitution::Substitution::Port => Ok(Some(name.value_name())),
                 }
             }
-            ExprKind::MethodCall(_, _, _) => diag_bail!(
+            ExprKind::Call { .. } => Ok(None),
+            ExprKind::MethodCall { .. } => diag_bail!(
                 self,
                 "method call should have been lowered to function by this point"
             ),
@@ -1018,29 +1018,43 @@ impl ExprLocal for Loc<Expression> {
                     self,
                 )
             }
-            ExprKind::FnCall(name, args) => {
-                let head = ctx.symtab.symtab().unit_by_id(name);
+            ExprKind::Call { kind, callee, args } => {
+                let head = ctx.symtab.symtab().unit_by_id(callee);
                 let args = match_args_with_params(args, &head.inputs, false)?;
-                result.append(self.handle_call(name, &args, ctx)?)
-            }
-            ExprKind::EntityInstance(name, args) => {
-                let head = ctx.symtab.symtab().unit_by_id(name);
-                let args = match_args_with_params(args, &head.inputs, false)?;
-                result.append(self.handle_call(name, &args, ctx)?)
-            }
-            ExprKind::PipelineInstance {
-                depth: _,
-                name,
-                args,
-            } => {
-                let head = ctx.symtab.symtab().unit_by_id(name);
-                let args = match_args_with_params(args, &head.inputs, false)?;
-                result.append(self.handle_call(name, &args, ctx)?);
+
+                match (kind, &head.unit_kind.inner) {
+                    (CallKind::Function, UnitKind::Function(_))
+                    | (CallKind::Entity(_), UnitKind::Entity) => {
+                        result.append(self.handle_call(callee, &args, ctx)?);
+                    }
+                    (CallKind::Pipeline(_, cdepth), UnitKind::Pipeline(udepth)) => {
+                        if cdepth != udepth {
+                            return Err(Diagnostic::error(
+                                cdepth,
+                                format!("Pipeline depth mismatch"),
+                            )
+                            .primary_label(format!("Expected depth {udepth}"))
+                            .secondary_label(udepth, format!("{} has depth {udepth}", head.name))
+                            .into());
+                        }
+
+                        result.append(self.handle_call(callee, &args, ctx)?);
+                    }
+                    (CallKind::Function, other) => {
+                        return Err(expect_function(callee, head.loc(), other))
+                    }
+                    (CallKind::Entity(inst), other) => {
+                        return Err(expect_entity(inst, callee, head.loc(), other))
+                    }
+                    (CallKind::Pipeline(inst, _), other) => {
+                        return Err(expect_pipeline(inst, callee, head.loc(), other))
+                    }
+                }
             }
             ExprKind::PipelineRef { .. } => {
                 // Empty: Pipeline refs are lowered in the alias checking
             }
-            ExprKind::MethodCall(_, _, _) => {
+            ExprKind::MethodCall { .. } => {
                 diag_bail!(
                     self,
                     "Method should already have been lowered at this point"

@@ -414,9 +414,7 @@ impl TypeState {
             ExprKind::FieldAccess(_, _) => {
                 self.visit_field_access(expression, ctx, generic_list)?
             }
-            ExprKind::MethodCall(_, _, _) => {
-                self.visit_method_call(expression, ctx, generic_list)?
-            }
+            ExprKind::MethodCall { .. } => self.visit_method_call(expression, ctx, generic_list)?,
             ExprKind::Index(_, _) => self.visit_index(expression, ctx, generic_list)?,
             ExprKind::Block(_) => self.visit_block_expr(expression, ctx, generic_list)?,
             ExprKind::If(_, _, _) => self.visit_if(expression, ctx, generic_list)?,
@@ -427,42 +425,16 @@ impl TypeState {
             ExprKind::UnaryOperator(_, _) => {
                 self.visit_unary_operator(expression, ctx, generic_list)?
             }
-            ExprKind::EntityInstance(name, args) => {
-                let head = ctx.symtab.unit_by_id(&name.inner);
-                self.handle_function_like(
-                    expression.map_ref(|e| e.id),
-                    &expression.get_type(self)?,
-                    &name.inner,
-                    &head.inner,
-                    args,
-                    ctx,
-                    true,
-                    false,
-                )?;
-            }
-            ExprKind::PipelineInstance {
-                depth: _,
-                name,
+            ExprKind::Call {
+                kind: _,
+                callee,
                 args,
             } => {
-                let head = ctx.symtab.unit_by_id(&name.inner);
+                let head = ctx.symtab.unit_by_id(&callee.inner);
                 self.handle_function_like(
                     expression.map_ref(|e| e.id),
                     &expression.get_type(self)?,
-                    &name.inner,
-                    &head.inner,
-                    args,
-                    ctx,
-                    true,
-                    false,
-                )?;
-            }
-            ExprKind::FnCall(name, args) => {
-                let head = ctx.symtab.unit_by_id(&name.inner);
-                self.handle_function_like(
-                    expression.map_ref(|e| e.id),
-                    &expression.get_type(self)?,
-                    &name.inner,
+                    &callee.inner,
                     &head.inner,
                     args,
                     ctx,
@@ -2229,14 +2201,15 @@ mod tests {
 
         let entity_name = symtab.add_thing(ast_path("test").inner, Thing::Unit(unit.nowhere()));
 
-        let input = ExprKind::EntityInstance(
-            entity_name.nowhere(),
-            ArgumentList::Positional(vec![
+        let input = ExprKind::Call {
+            kind: hir::expression::CallKind::Entity(().nowhere()),
+            callee: entity_name.nowhere(),
+            args: ArgumentList::Positional(vec![
                 Expression::ident(0, 0, "x").nowhere(),
                 Expression::ident(1, 1, "b").nowhere(),
             ])
             .nowhere(),
-        )
+        }
         .with_id(2)
         .nowhere();
 
@@ -2311,9 +2284,9 @@ mod tests {
 
         let entity_name = symtab.add_thing(ast_path("test").inner, Thing::Unit(unit.nowhere()));
 
-        let input = ExprKind::PipelineInstance {
-            depth: 2.nowhere(),
-            name: entity_name.nowhere(),
+        let input = ExprKind::Call {
+            kind: hir::expression::CallKind::Pipeline(().nowhere(), 2.nowhere()),
+            callee: entity_name.nowhere(),
             args: ArgumentList::Positional(vec![
                 Expression::ident(0, 0, "x").nowhere(),
                 Expression::ident(1, 1, "b").nowhere(),

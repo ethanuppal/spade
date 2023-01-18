@@ -12,12 +12,10 @@ entity main(clk: clk) -> bool {
 
 
 error: Expected argument list
-  ┌─ testinput:7:13
+  ┌─ testinput:7:5
   │
 7 │     inst foo{clk, true}
-  │     --------^ Expected argument list here
-  │     │        
-  │     for this instantiation
+  │     ^^^^^^^^ Expected argument list for this instantiation
   │
   = help: Positional argument lists start with`(`.
   = help: Named argument lists start with `$(`.

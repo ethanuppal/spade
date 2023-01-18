@@ -4,6 +4,7 @@ use local_impl::local_impl;
 use spade_common::{location_info::Loc, name::NameID};
 use spade_diagnostics::diag_bail;
 use spade_diagnostics::Diagnostic;
+use spade_hir::expression::CallKind;
 use spade_hir::TypeSpec;
 use spade_hir::{symbol_table::FrozenSymtab, ExprKind, Expression, ItemList, Pattern, Statement};
 use spade_mir as mir;
@@ -152,7 +153,6 @@ impl PipelineAvailability for ExprKind {
             ExprKind::Index(lhs, idx) => try_compute_availability(&[lhs.as_ref(), idx.as_ref()]),
             ExprKind::TupleIndex(lhs, _) => lhs.inner.kind.available_in(),
             ExprKind::FieldAccess(lhs, _) => lhs.inner.kind.available_in(),
-            ExprKind::EntityInstance(_, _) | ExprKind::FnCall(_, _) => Ok(0),
             ExprKind::BinaryOperator(lhs, _, rhs) => {
                 try_compute_availability(&[lhs.as_ref(), rhs.as_ref()])
             }
@@ -169,10 +169,9 @@ impl PipelineAvailability for ExprKind {
                 // }
                 inner.result.kind.available_in()
             }
-            ExprKind::PipelineInstance {
-                depth,
-                name: _,
-                args: _,
+            ExprKind::Call {
+                kind: CallKind::Pipeline(_, depth),
+                ..
             } => {
                 // FIXME: Re-add this check to allow nested pipelines
                 // let arg_availability = try_compute_availability(
@@ -180,10 +179,18 @@ impl PipelineAvailability for ExprKind {
                 // )?;
                 Ok(depth.inner as usize)
             }
+            ExprKind::Call {
+                kind: CallKind::Function,
+                ..
+            }
+            | ExprKind::Call {
+                kind: CallKind::Entity(_),
+                ..
+            } => Ok(0),
             ExprKind::If(_, t, f) => try_compute_availability(&[t.as_ref(), f.as_ref()]),
             ExprKind::PipelineRef { .. } => Ok(0),
-            ExprKind::MethodCall(_, ident, _) => diag_bail!(
-                ident,
+            ExprKind::MethodCall { name, .. } => diag_bail!(
+                name,
                 "Method call should already have been lowered by this point"
             ),
         }

@@ -41,17 +41,20 @@ impl Passable for Loc<Expression> {
             }
             ExprKind::TupleIndex(lhs, _) => subnodes!(lhs),
             ExprKind::FieldAccess(lhs, _) => subnodes!(lhs),
-            ExprKind::MethodCall(self_, _, args) => {
+            ExprKind::MethodCall {
+                target: self_,
+                name: _,
+                args,
+                call_kind: _,
+            } => {
                 subnodes!(self_);
                 for arg in args.expressions_mut() {
                     arg.apply(pass)?;
                 }
             }
-            ExprKind::FnCall(_, args)
-            | ExprKind::EntityInstance(_, args)
-            | ExprKind::PipelineInstance {
-                depth: _,
-                name: _,
+            ExprKind::Call {
+                kind: _,
+                callee: _,
                 args,
             } => {
                 for arg in args.expressions_mut() {

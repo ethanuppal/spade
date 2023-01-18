@@ -1,8 +1,8 @@
-use spade_ast::{ArgumentList, BinaryOperator, Expression, UnaryOperator};
+use spade_ast::{ArgumentList, BinaryOperator, CallKind, Expression, UnaryOperator};
 use spade_common::location_info::{lspan, Loc, WithLocation};
 use spade_macros::trace_parser;
 
-use crate::error::{Error, Result};
+use crate::error::{Error, ExpectedArgumentList, Result};
 use crate::{lexer::TokenKind, ParseStackEntry, Parser};
 
 #[derive(PartialEq, PartialOrd, Eq, Ord)]
@@ -101,7 +101,7 @@ impl<'a> Parser<'a> {
         let lhs_val = self.expr_bp(OpBindingPower::None)?;
 
         if self.peek_kind(&TokenKind::InfixOperatorSeparator)? {
-            let (name, _) = self.surrounded(
+            let (callee, _) = self.surrounded(
                 &TokenKind::InfixOperatorSeparator,
                 Self::path,
                 &TokenKind::InfixOperatorSeparator,
@@ -109,14 +109,15 @@ impl<'a> Parser<'a> {
 
             let rhs_val = self.custom_infix_operator()?;
 
-            Ok(Expression::FnCall(
-                name,
-                ArgumentList::Positional(vec![lhs_val.clone(), rhs_val.clone()]).between(
+            Ok(Expression::Call {
+                kind: CallKind::Function,
+                callee,
+                args: ArgumentList::Positional(vec![lhs_val.clone(), rhs_val.clone()]).between(
                     self.file_id,
                     &lhs_val,
                     &rhs_val,
                 ),
-            )
+            }
             .between(self.file_id, &lhs_val, &rhs_val))
         } else {
             Ok(lhs_val)
@@ -195,7 +196,12 @@ impl<'a> Parser<'a> {
                         // Doing this avoids cloning result and args
                         let span = ().between(self.file_id, &path, &args);
 
-                        Ok(Expression::FnCall(path, args).at_loc(&span))
+                        Ok(Expression::Call {
+                            kind: CallKind::Function,
+                            callee: path,
+                            args,
+                        }
+                        .at_loc(&span))
                     } else {
                         Ok(Expression::Identifier(path).at(self.file_id, &span))
                     }
@@ -245,13 +251,28 @@ impl<'a> Parser<'a> {
                 })
             }
         } else if self.peek_and_eat(&TokenKind::Dot)?.is_some() {
+            // TODO: Test this at the very end of a file
+            let inst = self.peek_and_eat(&TokenKind::Instance)?;
+
             let field = self.identifier()?;
 
             if let Some(args) = self.argument_list()? {
-                Ok(
-                    Expression::MethodCall(Box::new(expr.clone()), field.clone(), args.clone())
-                        .between(self.file_id, &expr, &args),
-                )
+                Ok(Expression::MethodCall {
+                    target: Box::new(expr.clone()),
+                    name: field.clone(),
+                    args: args.clone(),
+                    kind: inst
+                        .map(|i| CallKind::Entity(().at(self.file_id, &i)))
+                        .unwrap_or(CallKind::Function),
+                }
+                .between(self.file_id, &expr, &args))
+            } else if let Some(inst_keyword) = inst {
+                Err(ExpectedArgumentList {
+                    next_token: self.peek()?.ok_or(Error::Eof)?,
+                    base_expr: ().between(self.file_id, &inst_keyword, &field),
+                }
+                .with_suggestions()
+                .into())
             } else {
                 Ok(
                     Expression::FieldAccess(Box::new(expr.clone()), field.clone()).between(
@@ -485,14 +506,15 @@ mod test {
     fn functions_work() {
         let code = "test(1, 2)";
 
-        let expected = Expression::FnCall(
-            ast_path("test"),
-            ArgumentList::Positional(vec![
+        let expected = Expression::Call {
+            kind: CallKind::Function,
+            callee: ast_path("test"),
+            args: ArgumentList::Positional(vec![
                 Expression::IntLiteral(1).nowhere(),
                 Expression::IntLiteral(2).nowhere(),
             ])
             .nowhere(),
-        )
+        }
         .nowhere();
 
         check_parse!(code, expression, Ok(expected));
@@ -502,14 +524,15 @@ mod test {
     fn functions_with_named_arguments_work() {
         let code = "test$(a, b)";
 
-        let expected = Expression::FnCall(
-            ast_path("test"),
-            ArgumentList::Named(vec![
+        let expected = Expression::Call {
+            kind: CallKind::Function,
+            callee: ast_path("test"),
+            args: ArgumentList::Named(vec![
                 NamedArgument::Short(ast_ident("a")),
                 NamedArgument::Short(ast_ident("b")),
             ])
             .nowhere(),
-        )
+        }
         .nowhere();
 
         check_parse!(code, expression, Ok(expected));
@@ -584,12 +607,29 @@ mod test {
     fn method_call_parses() {
         let code = "a.b(x)";
 
-        let expected = Expression::MethodCall(
-            Box::new(Expression::Identifier(ast_path("a")).nowhere()),
-            ast_ident("b"),
-            ArgumentList::Positional(vec![Expression::Identifier(ast_path("x")).nowhere()])
+        let expected = Expression::MethodCall {
+            target: Box::new(Expression::Identifier(ast_path("a")).nowhere()),
+            name: ast_ident("b"),
+            args: ArgumentList::Positional(vec![Expression::Identifier(ast_path("x")).nowhere()])
                 .nowhere(),
-        )
+            kind: CallKind::Function,
+        }
+        .nowhere();
+
+        check_parse!(code, expression, Ok(expected));
+    }
+
+    #[test]
+    fn inst_method_call_parses() {
+        let code = "a.inst b(x)";
+
+        let expected = Expression::MethodCall {
+            target: Box::new(Expression::Identifier(ast_path("a")).nowhere()),
+            name: ast_ident("b"),
+            args: ArgumentList::Positional(vec![Expression::Identifier(ast_path("x")).nowhere()])
+                .nowhere(),
+            kind: CallKind::Entity(().nowhere()),
+        }
         .nowhere();
 
         check_parse!(code, expression, Ok(expected));
@@ -599,15 +639,16 @@ mod test {
     fn method_call_with_named_args_works() {
         let code = "a.b$(x: y)";
 
-        let expected = Expression::MethodCall(
-            Box::new(Expression::Identifier(ast_path("a")).nowhere()),
-            ast_ident("b"),
-            ArgumentList::Named(vec![NamedArgument::Full(
+        let expected = Expression::MethodCall {
+            target: Box::new(Expression::Identifier(ast_path("a")).nowhere()),
+            name: ast_ident("b"),
+            args: ArgumentList::Named(vec![NamedArgument::Full(
                 ast_ident("x"),
                 Expression::Identifier(ast_path("y")).nowhere(),
             )])
             .nowhere(),
-        )
+            kind: CallKind::Function,
+        }
         .nowhere();
 
         check_parse!(code, expression, Ok(expected));
@@ -751,14 +792,15 @@ mod test {
             1 `infix` 2
             "#;
 
-        let expected = Expression::FnCall(
-            ast_path("infix"),
-            ArgumentList::Positional(vec![
+        let expected = Expression::Call {
+            kind: CallKind::Function,
+            callee: ast_path("infix"),
+            args: ArgumentList::Positional(vec![
                 Expression::IntLiteral(1).nowhere(),
                 Expression::IntLiteral(2).nowhere(),
             ])
             .nowhere(),
-        )
+        }
         .nowhere();
 
         check_parse!(code, expression, Ok(expected));
@@ -773,27 +815,29 @@ mod test {
             0 || 1 `infix` 2 `infix` 3
             "#;
 
-        let expected = Expression::FnCall(
-            ast_path("infix"),
-            ArgumentList::Positional(vec![
+        let expected = Expression::Call {
+            kind: CallKind::Function,
+            callee: ast_path("infix"),
+            args: ArgumentList::Positional(vec![
                 Expression::BinaryOperator(
                     Box::new(Expression::IntLiteral(0).nowhere()),
                     BinaryOperator::LogicalOr,
                     Box::new(Expression::IntLiteral(1).nowhere()),
                 )
                 .nowhere(),
-                Expression::FnCall(
-                    ast_path("infix"),
-                    ArgumentList::Positional(vec![
+                Expression::Call {
+                    kind: CallKind::Function,
+                    callee: ast_path("infix"),
+                    args: ArgumentList::Positional(vec![
                         Expression::IntLiteral(2).nowhere(),
                         Expression::IntLiteral(3).nowhere(),
                     ])
                     .nowhere(),
-                )
+                }
                 .nowhere(),
             ])
             .nowhere(),
-        )
+        }
         .nowhere();
 
         check_parse!(code, expression, Ok(expected));
@@ -924,8 +968,12 @@ mod test {
         let expected_value = Expression::UnaryOperator(
             UnaryOperator::Not,
             Box::new(
-                Expression::FnCall(ast_path("a"), ArgumentList::Positional(vec![]).nowhere())
-                    .nowhere(),
+                Expression::Call {
+                    kind: CallKind::Function,
+                    callee: ast_path("a"),
+                    args: ArgumentList::Positional(vec![]).nowhere(),
+                }
+                .nowhere(),
             ),
         )
         .nowhere();

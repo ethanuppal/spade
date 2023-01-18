@@ -1,0 +1,29 @@
+---
+source: spade-tests/src/integration.rs
+---
+struct X {}
+
+impl X {
+    entity a(self) -> bool {true}
+}
+
+fn t(x: X) -> bool {
+    x.a()
+}
+
+
+error: Expected a to be a function
+  ┌─ testinput:8:7
+  │
+4 │     entity a(self) -> bool {true}
+  │     ----------------------------- a is an entity
+  ·
+8 │     x.a()
+  │       ^ Expected function
+  │
+  = consider adding inst
+  │
+8 │     x.inst a()
+  │       +++++
+
+

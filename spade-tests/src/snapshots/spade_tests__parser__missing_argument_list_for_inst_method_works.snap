@@ -1,0 +1,23 @@
+---
+source: spade-tests/src/parser.rs
+---
+fn a() -> bool {
+    a.inst b
+}
+
+error: Expected argument list
+  ┌─ testinput:2:7
+  │
+2 │     a.inst b
+  │       ^^^^^^ Expected argument list for this instantiation
+  │
+  = Consider specifying positional arguments
+  │
+2 │     a.inst b(...)
+  │             +++++
+  = or named arguments
+  │
+2 │     a.inst b$(...)
+  │             ++++++
+
+

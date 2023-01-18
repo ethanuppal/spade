@@ -10,11 +10,11 @@ entity x() -> X {
 }
 
 
-error: Expected X::A to be an entity
+error: Expected A to be an entity
   ┌─ testinput:6:10
   │
 2 │     A
-  │     - X::A is a enum variant
+  │     - A is a enum variant
   ·
 6 │     inst X::A()
   │     ---- ^^^^ Expected entity

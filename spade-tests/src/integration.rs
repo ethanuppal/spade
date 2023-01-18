@@ -199,21 +199,6 @@ mod trait_tests {
     }
 
     snapshot_error! {
-        instantiating_entity_methods_fails_gracefully,
-        "
-            struct X {}
-
-            impl X {
-                entity a(self) -> bool {true}
-            }
-
-            fn t(x: X) -> bool {
-                x.a()
-            }
-        "
-    }
-
-    snapshot_error! {
         instantiating_pipeline_methods_fails_gracefully,
         "
             struct X {}
@@ -396,6 +381,52 @@ mod trait_tests {
         fn t(x: X) {
             x.test()
         }
+        "
+    }
+
+    #[test]
+    fn method_inst_works() {
+        let code = "
+            struct X {}
+
+            impl X {
+                entity a(self) -> bool {true}
+            }
+
+            entity main(x: X) -> bool {
+                x.inst a()
+            }
+        ";
+        build_items(code);
+    }
+
+    snapshot_error! {
+        method_non_inst_of_entity_errors_nicely,
+        "
+            struct X {}
+
+            impl X {
+                entity a(self) -> bool {true}
+            }
+
+            fn t(x: X) -> bool {
+                x.a()
+            }
+        "
+    }
+
+    snapshot_error! {
+        method_inst_of_fn_errors_nicely,
+        "
+            struct X {}
+
+            impl X {
+                fn a(self) -> bool {true}
+            }
+
+            fn t(x: X) -> bool {
+                x.inst a()
+            }
         "
     }
 }

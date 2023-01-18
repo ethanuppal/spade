@@ -1,0 +1,31 @@
+---
+source: spade-tests/src/integration.rs
+---
+struct X {}
+
+impl X {
+    fn a(self) -> bool {true}
+}
+
+fn t(x: X) -> bool {
+    x.inst a()
+}
+
+
+error: Expected a to be an entity
+  ┌─ testinput:8:12
+  │
+4 │     fn a(self) -> bool {true}
+  │     ------------------------- a is a function
+  ·
+8 │     x.inst a()
+  │       ---- ^ Expected entity
+  │       │     
+  │       because of this inst
+  │
+  = Consider removing inst
+  │
+8 │     x.inst a()
+  │       ----
+
+
