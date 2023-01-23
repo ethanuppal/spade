@@ -46,7 +46,7 @@ fn add_new_vars(
                 let parsed = writer.add_var(
                     vcd::VarType::String,
                     1,
-                    &format!("p_{}", var.reference),
+                    &format!("#{}", var.reference),
                     None,
                 )?;
 

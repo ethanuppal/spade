@@ -81,3 +81,10 @@ snapshot_error! {
         ()
     }"
 }
+
+snapshot_error! {
+    missing_pipeline_depth_parens_is_an_error,
+    "pipeline a(clk: clock) -> bool {
+        true
+    }"
+}

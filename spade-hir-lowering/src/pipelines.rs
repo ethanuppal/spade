@@ -9,11 +9,9 @@ use spade_hir::{symbol_table::FrozenSymtab, ExprKind, Expression, ItemList, Patt
 use spade_mir as mir;
 use spade_typeinference::TypeState;
 
-use crate::UnitNameExt;
 use crate::{
-    error::Error, linear_check, monomorphisation::MonoState, name_map::NameSourceMap,
-    statement_list::StatementList, substitution::Substitutions, Context, ExprLocal, Manglable,
-    MirLowerable, NameIDExt, Result, StatementLocal,
+    error::Error, statement_list::StatementList, substitution::Substitutions, MirLowerable,
+    NameIDExt, Result,
 };
 
 pub fn handle_pattern(pat: &Pattern, live_vars: &mut Vec<NameID>) {

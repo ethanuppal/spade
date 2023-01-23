@@ -1,5 +1,6 @@
 use spade_ast::comptime::ComptimeCondOp;
 use spade_ast::comptime::ComptimeCondition;
+use spade_ast::comptime::MaybeComptime;
 use spade_common::location_info::{Loc, WithLocation};
 
 use crate::error::{Error, Result};
@@ -58,12 +59,28 @@ impl<'a> Parser<'a> {
                 ComptimeCondition {
                     condition: (name, op, val),
                     on_true: Box::new(on_true),
-                    on_false: on_false,
+                    on_false,
                 },
                 ().between(self.file_id, &start, &on_false_loc.unwrap_or(on_true_loc)),
             )))
         } else {
             Ok(None)
+        }
+    }
+
+    pub fn maybe_comptime<I>(
+        &mut self,
+        inner_parser: &impl Fn(&mut Self) -> Result<Loc<I>>,
+    ) -> Result<Loc<MaybeComptime<Loc<I>>>> {
+        if let Some(comptime) =
+            self.comptime_condition(inner_parser, &|inner, loc| inner.at_loc(&loc))?
+        {
+            let loc = comptime.loc();
+            Ok(MaybeComptime::Comptime(comptime.inner).at_loc(&loc))
+        } else {
+            let inner = inner_parser(self)?;
+            let loc = inner.loc();
+            Ok(MaybeComptime::Raw(inner).at_loc(&loc))
         }
     }
 }

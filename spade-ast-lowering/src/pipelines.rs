@@ -96,10 +96,18 @@ pub fn maybe_perform_pipelining_tasks(
         ..
     } = &unit.inner;
 
-    match unit_kind.inner {
+    match &unit_kind.inner {
         ast::UnitKind::Function => Ok(None),
         ast::UnitKind::Entity => Ok(None),
         ast::UnitKind::Pipeline(depth) => {
+            let depth = depth
+                .maybe_unpack(&ctx.symtab)?
+                .ok_or_else(|| {
+                    Diagnostic::error(depth, "Missing depth")
+                        .note("The current comptime branch does not specify a depth")
+                })?
+                .map(|u| u as usize);
+
             if head.inputs.0.is_empty() {
                 return Err(Diagnostic::error(
                     ast_inputs.loc(),
@@ -121,7 +129,7 @@ pub fn maybe_perform_pipelining_tasks(
                 visit_pipeline_statement(statement, &mut current_stage, ctx, &mut context)?;
             }
 
-            if current_stage as u128 != depth.inner {
+            if current_stage != depth.inner {
                 return Err(Diagnostic::error(body, "Wrong number of pipeline stages")
                     .primary_label(format!("Found {} stages here", current_stage))
                     .secondary_label(depth, format!("{} stages specified here", depth))
@@ -139,6 +147,7 @@ mod pipeline_visiting {
 
     use super::*;
 
+    use ast::comptime::MaybeComptime;
     use hir::symbol_table::SymbolTable;
     use spade_ast::testutil::ast_ident;
     use spade_common::{
@@ -153,7 +162,7 @@ mod pipeline_visiting {
     fn relative_stage_references_work() {
         let input = ast::Unit {
             name: ast_ident("pipe"),
-            unit_kind: ast::UnitKind::Pipeline(2.nowhere()).nowhere(),
+            unit_kind: ast::UnitKind::Pipeline(MaybeComptime::Raw(2.nowhere()).nowhere()).nowhere(),
             inputs: ast::ParameterList::without_self(vec![(
                 ast_ident("clk"),
                 ast::TypeSpec::Unit(().nowhere()).nowhere(),
@@ -237,7 +246,7 @@ mod pipeline_visiting {
     fn absolute_stage_references_work() {
         let input = ast::Unit {
             name: ast_ident("pipe"),
-            unit_kind: ast::UnitKind::Pipeline(2.nowhere()).nowhere(),
+            unit_kind: ast::UnitKind::Pipeline(MaybeComptime::Raw(2.nowhere()).nowhere()).nowhere(),
             inputs: ast::ParameterList::without_self(vec![(
                 ast_ident("clk"),
                 ast::TypeSpec::Unit(().nowhere()).nowhere(),

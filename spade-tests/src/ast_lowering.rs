@@ -761,3 +761,27 @@ snapshot_error! {
         inst x()
     }"
 }
+
+snapshot_error! {
+    comptime_pipeline_depth_works,
+    r#"
+        $config X = 1
+
+        pipeline($if X == 1 {3} $else {2}) test(clk: clock) -> bool {
+            reg*2;
+                true
+        }
+    "#
+}
+
+snapshot_error! {
+    comptime_pipeline_depth_missing_depth_gives_decent_error,
+    r#"
+        $config X = 0
+
+        pipeline($if X == 1 {3}) test(clk: clock) -> bool {
+            reg*2;
+                true
+        }
+    "#
+}

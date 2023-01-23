@@ -7,6 +7,7 @@ pub mod lexer;
 
 use colored::*;
 use error::SuggestBraceEnumVariant;
+use local_impl::local_impl;
 use logos::Lexer;
 use tracing::{event, Level};
 
@@ -986,22 +987,25 @@ impl<'a> Parser<'a> {
             Some(tok) => match tok.kind {
                 TokenKind::Pipeline => {
                     self.eat_unconditional()?;
+
                     let (depth, depth_span) = self.surrounded(
                         &TokenKind::OpenParen,
-                        Self::int_literal,
+                        |s| {
+                            s.maybe_comptime(&|s| {
+                                s.int_literal()?.or_error(s, |p| {
+                                    Ok(Error::ExpectedPipelineDepth {
+                                        got: p.eat_unconditional()?,
+                                    })
+                                })
+                            })
+                        },
                         &TokenKind::CloseParen,
                     )?;
 
-                    if let Some(depth) = depth {
-                        (
-                            UnitKind::Pipeline(depth).between(self.file_id, &tok, &depth_span),
-                            tok,
-                        )
-                    } else {
-                        return Err(Error::ExpectedPipelineDepth {
-                            got: self.eat_unconditional()?,
-                        });
-                    }
+                    (
+                        UnitKind::Pipeline(depth).between(self.file_id, &tok, &depth_span),
+                        tok,
+                    )
                 }
                 TokenKind::Function => {
                     self.eat_unconditional()?;
@@ -1723,6 +1727,20 @@ impl<'a> Parser<'a> {
     }
 }
 
+#[local_impl]
+impl<T> OptionExt for Option<T> {
+    fn or_error(
+        self,
+        parser: &mut Parser,
+        err: impl Fn(&mut Parser) -> Result<Error>,
+    ) -> Result<T> {
+        match self {
+            Some(val) => Ok(val),
+            None => Err(err(parser)?),
+        }
+    }
+}
+
 #[derive(Clone)]
 pub enum ParseStackEntry {
     Enter(String),
@@ -1800,7 +1818,7 @@ pub fn format_parse_stack(stack: &[ParseStackEntry]) -> String {
 
 #[cfg(test)]
 mod tests {
-    use ast::comptime::{ComptimeCondOp, ComptimeCondition};
+    use ast::comptime::{ComptimeCondOp, ComptimeCondition, MaybeComptime};
     use spade_ast as ast;
     use spade_ast::testutil::{ast_ident, ast_path};
     use spade_ast::*;
@@ -2470,7 +2488,7 @@ mod tests {
                 name: ast_ident("X"),
                 inputs: ParameterList::without_self(vec![]).nowhere(),
                 output_type: None,
-                unit_kind: UnitKind::Pipeline(1.nowhere()).nowhere(),
+                unit_kind: UnitKind::Pipeline(MaybeComptime::Raw(1.nowhere()).nowhere()).nowhere(),
                 body: None,
                 type_params: vec![],
             }
@@ -2554,7 +2572,7 @@ mod tests {
         let expected = Item::Unit(
             Unit {
                 attributes: AttributeList(vec![ast_ident("attr")]),
-                unit_kind: UnitKind::Pipeline(2.nowhere()).nowhere(),
+                unit_kind: UnitKind::Pipeline(MaybeComptime::Raw(2.nowhere()).nowhere()).nowhere(),
                 name: ast_ident("test"),
                 inputs: aparams![("a", tspec!("bool"))],
                 output_type: None,
@@ -2676,7 +2694,7 @@ mod tests {
 
         let expected = Unit {
             attributes: AttributeList::empty(),
-            unit_kind: UnitKind::Pipeline(2.nowhere()).nowhere(),
+            unit_kind: UnitKind::Pipeline(MaybeComptime::Raw(2.nowhere()).nowhere()).nowhere(),
             name: ast_ident("test"),
             inputs: aparams![("a", tspec!("bool"))],
             output_type: Some(TypeSpec::Named(ast_path("bool"), None).nowhere()),
@@ -2722,7 +2740,7 @@ mod tests {
 
         let expected = Unit {
             attributes: AttributeList::empty(),
-            unit_kind: UnitKind::Pipeline(2.nowhere()).nowhere(),
+            unit_kind: UnitKind::Pipeline(MaybeComptime::Raw(2.nowhere()).nowhere()).nowhere(),
             name: ast_ident("test"),
             inputs: aparams![("a", tspec!("bool"))],
             output_type: Some(TypeSpec::Named(ast_path("bool"), None).nowhere()),
@@ -2752,7 +2770,8 @@ mod tests {
             members: vec![Item::Unit(
                 Unit {
                     attributes: AttributeList::empty(),
-                    unit_kind: UnitKind::Pipeline(2.nowhere()).nowhere(),
+                    unit_kind: UnitKind::Pipeline(MaybeComptime::Raw(2.nowhere()).nowhere())
+                        .nowhere(),
                     name: ast_ident("test"),
                     inputs: aparams![("a", tspec!("bool"))],
                     output_type: Some(TypeSpec::Named(ast_path("bool"), None).nowhere()),

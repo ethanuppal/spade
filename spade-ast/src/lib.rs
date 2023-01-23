@@ -1,4 +1,4 @@
-use comptime::ComptimeCondition;
+use comptime::{ComptimeCondition, MaybeComptime};
 use spade_common::{
     location_info::{Loc, WithLocation},
     name::{Identifier, Path},
@@ -270,7 +270,7 @@ impl ParameterList {
 pub enum UnitKind {
     Function,
     Entity,
-    Pipeline(Loc<u128>),
+    Pipeline(Loc<MaybeComptime<Loc<u128>>>),
 }
 impl WithLocation for UnitKind {}
 
@@ -289,7 +289,7 @@ impl std::fmt::Display for UnitKind {
         match self {
             UnitKind::Function => write!(f, "fn"),
             UnitKind::Entity => write!(f, "entity"),
-            UnitKind::Pipeline(d) => write!(f, "pipeline({d})"),
+            UnitKind::Pipeline(_) => write!(f, "pipeline"),
         }
     }
 }

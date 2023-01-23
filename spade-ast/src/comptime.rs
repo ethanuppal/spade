@@ -19,3 +19,10 @@ pub struct ComptimeCondition<T> {
     pub on_false: Option<Box<T>>,
 }
 impl<T> WithLocation for ComptimeCondition<T> {}
+
+#[derive(PartialEq, Clone, Debug)]
+pub enum MaybeComptime<T> {
+    Raw(T),
+    Comptime(ComptimeCondition<T>),
+}
+impl<T> WithLocation for MaybeComptime<T> {}

@@ -329,11 +329,19 @@ pub fn entity_head(
     symtab.close_scope();
     port_error?;
 
-    let unit_kind = item.unit_kind.map_ref(|k| match k {
-        ast::UnitKind::Function => hir::UnitKind::Function(hir::FunctionKind::Fn),
-        ast::UnitKind::Entity => hir::UnitKind::Entity,
-        ast::UnitKind::Pipeline(d) => hir::UnitKind::Pipeline(d.clone()),
-    });
+    let unit_kind = item.unit_kind.try_map_ref(|k| -> Result<_> {
+        match k {
+            ast::UnitKind::Function => Ok(hir::UnitKind::Function(hir::FunctionKind::Fn)),
+            ast::UnitKind::Entity => Ok(hir::UnitKind::Entity),
+            ast::UnitKind::Pipeline(d) => {
+                let depth = d.inner.maybe_unpack(symtab)?.ok_or_else(|| {
+                    Diagnostic::error(d, "Missing pipeline depth")
+                        .note("The current comptime branch does not specify a depth")
+                })?;
+                Ok(hir::UnitKind::Pipeline(depth))
+            }
+        }
+    })?;
 
     Ok(UnitHead {
         name: item.name.clone(),

@@ -1,11 +1,15 @@
-use local_impl::local_impl;
-use spade_ast::comptime::{ComptimeCondOp, ComptimeCondition};
+use spade_ast::comptime::{ComptimeCondOp, ComptimeCondition, MaybeComptime};
 use spade_hir::symbol_table::SymbolTable;
 
 use crate::error::Result;
 
-#[local_impl]
-impl<T: Clone> ComptimeCondExt for ComptimeCondition<T> {
+pub trait ComptimeCondExt<T> {
+    /// Evaluates the comptime condition returning the resulting ast node. If the else
+    /// branch is not provided, None is returned
+    fn maybe_unpack(&self, symtab: &SymbolTable) -> Result<Option<T>>;
+}
+
+impl<T: Clone> ComptimeCondExt<T> for ComptimeCondition<T> {
     /// Evaluates the comptime condition returning the resulting ast node. If the else
     /// branch is not provided, None is returned
     fn maybe_unpack(&self, symtab: &SymbolTable) -> Result<Option<T>> {
@@ -25,6 +29,15 @@ impl<T: Clone> ComptimeCondExt for ComptimeCondition<T> {
             Ok(Some(self.on_true.as_ref().clone()))
         } else {
             Ok(self.on_false.clone().map(|b| b.as_ref().clone()))
+        }
+    }
+}
+
+impl<T: Clone> ComptimeCondExt<T> for MaybeComptime<T> {
+    fn maybe_unpack(&self, symtab: &SymbolTable) -> Result<Option<T>> {
+        match self {
+            MaybeComptime::Raw(v) => Ok(Some(v.clone())),
+            MaybeComptime::Comptime(c) => c.maybe_unpack(symtab),
         }
     }
 }

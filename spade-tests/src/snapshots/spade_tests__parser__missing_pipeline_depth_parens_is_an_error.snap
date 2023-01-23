@@ -1,0 +1,14 @@
+---
+source: spade-tests/src/parser.rs
+---
+pipeline a(clk: clock) -> bool {
+    true
+}
+
+error: Unexpected `identifier`, expected `(`
+  ┌─ testinput:1:10
+  │
+1 │ pipeline a(clk: clock) -> bool {
+  │          ^ expected `(`
+
+
