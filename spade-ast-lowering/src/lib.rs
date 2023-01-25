@@ -902,6 +902,23 @@ fn visit_argument_list(
     }
 }
 
+pub fn visit_call_kind(
+    kind: &ast::CallKind,
+    ctx: &mut Context,
+) -> Result<hir::expression::CallKind> {
+    Ok(match kind {
+        ast::CallKind::Function => hir::expression::CallKind::Function,
+        ast::CallKind::Entity(loc) => hir::expression::CallKind::Entity(loc.clone()),
+        ast::CallKind::Pipeline(loc, depth) => {
+            let depth = depth.clone().maybe_unpack(&ctx.symtab)?.ok_or_else(|| {
+                Diagnostic::error(depth, "Expected pipeline depth")
+                    .help("The current comptime branch did not specify a depth")
+            })?;
+            hir::expression::CallKind::Pipeline(loc.clone(), depth)
+        }
+    })
+}
+
 #[tracing::instrument(skip_all, fields(kind=e.variant_str()))]
 pub fn visit_expression(e: &ast::Expression, ctx: &mut Context) -> Result<hir::Expression> {
     let new_id = ctx.idtracker.next();
@@ -984,11 +1001,7 @@ pub fn visit_expression(e: &ast::Expression, ctx: &mut Context) -> Result<hir::E
             target: Box::new(target.try_visit(visit_expression, ctx)?),
             name: name.clone(),
             args: args.try_map_ref(|args| visit_argument_list(args, ctx))?,
-            call_kind: match kind {
-                ast::CallKind::Function => hir::expression::CallKind::Function,
-                ast::CallKind::Entity(loc) => hir::expression::CallKind::Entity(loc.clone()),
-                ast::CallKind::Pipeline(loc, depth) => hir::expression::CallKind::Pipeline(loc.clone(), depth.clone())
-            }
+            call_kind: visit_call_kind(kind, ctx)?,
         }),
         ast::Expression::If(cond, ontrue, onfalse) => {
             let cond = cond.try_visit(visit_expression, ctx)?;
@@ -1028,11 +1041,7 @@ pub fn visit_expression(e: &ast::Expression, ctx: &mut Context) -> Result<hir::E
             let (name_id, _) = ctx.symtab.lookup_unit(callee)?;
             let args = visit_argument_list(args, ctx)?.at_loc(args);
 
-            let kind = match kind {
-                ast::CallKind::Function => hir::expression::CallKind::Function,
-                ast::CallKind::Entity(loc) => hir::expression::CallKind::Entity(loc.clone()),
-                ast::CallKind::Pipeline(loc, depth) => hir::expression::CallKind::Pipeline(loc.clone(), depth.clone()),
-            };
+            let kind = visit_call_kind(kind, ctx)?;
 
             Ok(hir::ExprKind::Call{kind, callee: name_id.at_loc(callee), args})
         }
@@ -1503,6 +1512,7 @@ mod statement_visiting {
 mod expression_visiting {
     use super::*;
 
+    use ast::comptime::MaybeComptime;
     use hir::symbol_table::EnumVariant;
     use spade_ast::testutil::{ast_ident, ast_path};
     use spade_common::location_info::WithLocation;
@@ -2106,7 +2116,7 @@ mod expression_visiting {
     #[test]
     fn pipeline_instantiation_works() {
         let input = ast::Expression::Call {
-            kind: ast::CallKind::Pipeline(().nowhere(), 2.nowhere()),
+            kind: ast::CallKind::Pipeline(().nowhere(), MaybeComptime::Raw(2.nowhere()).nowhere()),
             callee: ast_path("test"),
             args: ast::ArgumentList::Positional(vec![
                 ast::Expression::IntLiteral(1).nowhere(),

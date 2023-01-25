@@ -6,8 +6,8 @@ pub mod item_type;
 pub mod lexer;
 
 use colored::*;
-use local_impl::local_impl;
 use error::{ExpectedArgumentList, SuggestBraceEnumVariant};
+use local_impl::local_impl;
 use logos::Lexer;
 use tracing::{event, Level};
 
@@ -194,17 +194,21 @@ impl<'a> Parser<'a> {
 
         self.unit_context
             .allows_inst(().at(self.file_id, &start.span()))?;
-        // FIXME: Clean this up a bit
         // Check if this is a pipeline or not
-        let pipeline_depth = if self.peek_and_eat(&TokenKind::OpenParen)?.is_some() {
-            if let Some(depth) = self.int_literal()? {
-                let end_paren = self.eat(&TokenKind::CloseParen)?;
-                Some((depth, end_paren))
-            } else {
-                return Err(Error::ExpectedPipelineDepth {
-                    got: self.eat_unconditional()?,
-                });
-            }
+        let pipeline_depth = if self.peek_kind(&TokenKind::OpenParen)? {
+            Some(self.surrounded(
+                &TokenKind::OpenParen,
+                |s| {
+                    s.maybe_comptime(&|s| {
+                        s.int_literal()?.or_error(s, |p| {
+                            Ok(Error::ExpectedPipelineDepth {
+                                got: p.eat_unconditional()?,
+                            })
+                        })
+                    })
+                },
+                &TokenKind::CloseParen,
+            )?)
         } else {
             None
         };
@@ -2802,7 +2806,7 @@ mod tests {
         let code = "inst(2) some_pipeline(x, y, z)";
 
         let expected = Expression::Call {
-            kind: CallKind::Pipeline(().nowhere(), 2.nowhere()),
+            kind: CallKind::Pipeline(().nowhere(), MaybeComptime::Raw(2.nowhere()).nowhere()),
             callee: ast_path("some_pipeline"),
             args: ArgumentList::Positional(vec![
                 Expression::Identifier(ast_path("x")).nowhere(),

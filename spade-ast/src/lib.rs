@@ -114,7 +114,7 @@ pub enum PipelineStageReference {
 pub enum CallKind {
     Function,
     Entity(Loc<()>),
-    Pipeline(Loc<()>, Loc<u128>),
+    Pipeline(Loc<()>, Loc<MaybeComptime<Loc<u128>>>),
 }
 impl WithLocation for CallKind {}
 
