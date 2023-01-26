@@ -23,6 +23,15 @@ impl<T> WithLocation for ComptimeCondition<T> {}
 #[derive(PartialEq, Clone, Debug)]
 pub enum MaybeComptime<T> {
     Raw(T),
-    Comptime(ComptimeCondition<T>),
+    Comptime(Loc<ComptimeCondition<T>>),
 }
 impl<T> WithLocation for MaybeComptime<T> {}
+
+impl<T> MaybeComptime<T> {
+    pub fn transpose(self, wrapper: impl Fn(Loc<ComptimeCondition<T>>) -> T) -> T {
+        match self {
+            MaybeComptime::Raw(inner) => inner,
+            MaybeComptime::Comptime(cond) => wrapper(cond),
+        }
+    }
+}

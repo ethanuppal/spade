@@ -76,7 +76,7 @@ impl<'a> Parser<'a> {
             self.comptime_condition(inner_parser, &|inner, loc| inner.at_loc(&loc))?
         {
             let loc = comptime.loc();
-            Ok(MaybeComptime::Comptime(comptime.inner).at_loc(&loc))
+            Ok(MaybeComptime::Comptime(comptime).at_loc(&loc))
         } else {
             let inner = inner_parser(self)?;
             let loc = inner.loc();

@@ -335,7 +335,7 @@ impl<'a> Parser<'a> {
         let start = peek_for!(self, &TokenKind::OpenBrace);
 
         let statements = self.statements(is_pipeline)?;
-        let output_value = self.expression()?;
+        let output_value = self.non_comptime_expression()?;
         let end = self.eat(&TokenKind::CloseBrace)?;
 
         Ok(Some(
@@ -823,7 +823,9 @@ impl<'a> Parser<'a> {
 
     #[trace_parser]
     pub fn comptime_statement(&mut self, allow_stages: bool) -> Result<Option<Loc<Statement>>> {
-        let result = self.comptime_condition(&|s| s.statements(allow_stages), &|condition, loc| {
+        let inner = |s: &mut Self| s.exhaustive_statements(allow_stages, &TokenKind::CloseBrace);
+
+        let result = self.comptime_condition(&inner, &|condition, loc| {
             Statement::Comptime(condition).at_loc(&loc)
         });
         result
@@ -885,6 +887,24 @@ impl<'a> Parser<'a> {
             result.push(statement)
         }
         Ok(result)
+    }
+
+    pub fn exhaustive_statements(
+        &mut self,
+        allow_stages: bool,
+        end_token: &TokenKind,
+    ) -> Result<Vec<Loc<Statement>>> {
+        let result = self.statements(allow_stages)?;
+
+        let next = self.peek()?;
+        match next {
+            Some(tok) if &tok.kind == end_token => Ok(result),
+            Some(tok) => Err(Error::UnexpectedToken {
+                got: tok,
+                expected: vec![end_token.as_str(), "statement"],
+            }),
+            None => Err(Error::Eof),
+        }
     }
 
     #[trace_parser]
@@ -3182,5 +3202,29 @@ mod tests {
         .nowhere();
 
         check_parse!(code, statement(false), Ok(Some(expected)));
+    }
+
+    #[test]
+    fn comptime_expression_works() {
+        let code = r#"
+            $if x == 0 {
+                1
+            }
+            $else {
+                0
+            }
+        "#;
+
+        let expected = Expression::Comptime(Box::new(
+            ComptimeCondition {
+                condition: (ast_path("x"), ComptimeCondOp::Eq, 0.nowhere()),
+                on_true: Box::new(Expression::IntLiteral(1).nowhere()),
+                on_false: Some(Box::new(Expression::IntLiteral(0).nowhere())),
+            }
+            .nowhere(),
+        ))
+        .nowhere();
+
+        check_parse!(code, expression, Ok(expected));
     }
 }

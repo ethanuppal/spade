@@ -1113,6 +1113,15 @@ pub fn visit_expression(e: &ast::Expression, ctx: &mut Context) -> Result<hir::E
                 declares_name,
             })
         }
+        ast::Expression::Comptime(inner) => {
+            let inner = inner
+                .maybe_unpack(&ctx.symtab)?
+                .ok_or_else(|| {
+                Diagnostic::error(inner.as_ref(), "Missing expression")
+                    .help("The current comptime branch has no expression")
+                })?;
+            Ok(visit_expression(&inner, ctx)?.kind)
+        }
     }
     .map(|kind| kind.with_id(new_id))
 }

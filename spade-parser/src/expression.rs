@@ -94,6 +94,17 @@ impl<'a> Parser<'a> {
 
     #[tracing::instrument(skip(self))]
     pub fn expression(&mut self) -> Result<Loc<Expression>> {
+        let comptime = self.maybe_comptime(&Self::non_comptime_expression)?;
+
+        Ok(comptime
+            .inner
+            .transpose(|i| Expression::Comptime(Box::new(i.clone())).at_loc(&i)))
+    }
+
+    /// We need a function like this in order to not run into parser conflicts when
+    /// parsing blocks, since both statements and expressions can start with $if.
+    #[tracing::instrument(skip(self))]
+    pub fn non_comptime_expression(&mut self) -> Result<Loc<Expression>> {
         self.custom_infix_operator()
     }
 

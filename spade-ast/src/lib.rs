@@ -169,6 +169,7 @@ pub enum Expression {
         /// ```
         name: Loc<Identifier>,
     },
+    Comptime(Box<Loc<ComptimeCondition<Loc<Expression>>>>),
 }
 impl WithLocation for Expression {}
 
@@ -199,6 +200,7 @@ impl Expression {
             Expression::BinaryOperator(_, _, _) => "binary operator",
             Expression::Block(_) => "block",
             Expression::PipelineReference { .. } => "pipeline reference",
+            Expression::Comptime { .. } => "comptime",
         }
     }
 }

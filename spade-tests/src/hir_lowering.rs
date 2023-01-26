@@ -12,6 +12,7 @@ mod tests {
         ConstantValue,
     };
 
+    #[macro_export]
     macro_rules! assert_same_mir {
         ($got:expr, $expected:expr) => {
             let mut var_map = VarMap::new();
@@ -1980,6 +1981,29 @@ mod tests {
         entity test(clk: clock) -> bool {
             inst x(clk)
         }"
+    }
+
+    #[test]
+    fn comptime_expression_works() {
+        let code = r#"
+            $config X = 0
+
+            fn main() -> int<3> {
+                let x = $if X == 0 {
+                    1
+                };
+                x
+            }
+        "#;
+        let result = build_entity!(code);
+
+        let expected = entity!(&["main"]; (
+        ) -> Type::Int(3); {
+            (const 0; Type::Int(3); ConstantValue::Int(1));
+            (n(0, "x"); Type::Int(3); Alias; e(0))
+        } => n(0, "x"));
+
+        assert_same_mir!(&result, &expected);
     }
 }
 

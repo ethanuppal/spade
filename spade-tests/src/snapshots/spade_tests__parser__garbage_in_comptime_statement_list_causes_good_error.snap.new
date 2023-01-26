@@ -1,0 +1,19 @@
+---
+source: spade-tests/src/parser.rs
+assertion_line: 99
+---
+fn a() {
+    $if X==1 {
+        <garbage>
+    }
+}
+
+error: Expected closing `}`, got `<`
+  ┌─ testinput:3:9
+  │
+2 │     $if X==1 {
+  │              - to close this
+3 │         <garbage>
+  │         ^ Expected `}`
+
+
