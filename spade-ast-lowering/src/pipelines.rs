@@ -110,10 +110,12 @@ pub fn maybe_perform_pipelining_tasks(
     ctx: &mut Context,
 ) -> Result<Option<PipelineContext>> {
     let ast::Unit {
-        unit_kind,
+        head: ast::UnitHead {
+            unit_kind,
+            inputs: ast_inputs,
+            ..
+        },
         body,
-        inputs: ast_inputs,
-        ..
     } = &unit.inner;
 
     match &unit_kind.inner {
@@ -192,17 +194,20 @@ mod pipeline_visiting {
     #[test]
     fn relative_stage_references_work() {
         let input = ast::Unit {
-            name: ast_ident("pipe"),
-            unit_kind: ast::UnitKind::Pipeline(
-                MaybeComptime::Raw(ast::IntLiteral::Signed(2.to_bigint()).nowhere()).nowhere(),
-            )
-            .nowhere(),
-            inputs: ast::ParameterList::without_self(vec![(
-                ast_ident("clk"),
-                ast::TypeSpec::Unit(().nowhere()).nowhere(),
-            )])
-            .nowhere(),
-            output_type: Some(ast::TypeSpec::Unit(().nowhere()).nowhere()),
+            head: ast::UnitHead {
+                name: ast_ident("pipe"),
+                unit_kind: ast::UnitKind::Pipeline(
+                    MaybeComptime::Raw(ast::IntLiteral::Signed(2.to_bigint()).nowhere()).nowhere(),
+                ).nowhere(),
+                inputs: ast::ParameterList::without_self(vec![(
+                    ast_ident("clk"),
+                    ast::TypeSpec::Unit(().nowhere()).nowhere(),
+                )])
+                .nowhere(),
+                output_type: Some(ast::TypeSpec::Unit(().nowhere()).nowhere()),
+                type_params: vec![],
+                attributes: ast::AttributeList(vec![]),
+            },
             body: Some(
                 ast::Expression::Block(Box::new(ast::Block {
                     statements: vec![
@@ -236,8 +241,6 @@ mod pipeline_visiting {
                 }))
                 .nowhere(),
             ),
-            type_params: vec![],
-            attributes: ast::AttributeList(vec![]),
         }
         .nowhere();
 
@@ -290,17 +293,20 @@ mod pipeline_visiting {
     #[test]
     fn absolute_stage_references_work() {
         let input = ast::Unit {
-            name: ast_ident("pipe"),
-            unit_kind: ast::UnitKind::Pipeline(
-                MaybeComptime::Raw(ast::IntLiteral::Signed(2.to_bigint()).nowhere()).nowhere(),
-            )
-            .nowhere(),
-            inputs: ast::ParameterList::without_self(vec![(
-                ast_ident("clk"),
-                ast::TypeSpec::Unit(().nowhere()).nowhere(),
-            )])
-            .nowhere(),
-            output_type: Some(ast::TypeSpec::Unit(().nowhere()).nowhere()),
+            head: ast::UnitHead {
+                name: ast_ident("pipe"),
+                unit_kind: ast::UnitKind::Pipeline(
+                    MaybeComptime::Raw(ast::IntLiteral::Signed(2.to_bigint()).nowhere()).nowhere(),
+                ).nowhere(),
+                inputs: ast::ParameterList::without_self(vec![(
+                    ast_ident("clk"),
+                    ast::TypeSpec::Unit(().nowhere()).nowhere(),
+                )])
+                .nowhere(),
+                output_type: Some(ast::TypeSpec::Unit(().nowhere()).nowhere()),
+                type_params: vec![],
+                attributes: ast::AttributeList(vec![]),
+            },
             body: Some(
                 ast::Expression::Block(Box::new(ast::Block {
                     statements: vec![
@@ -333,8 +339,6 @@ mod pipeline_visiting {
                 }))
                 .nowhere(),
             ),
-            type_params: vec![],
-            attributes: ast::AttributeList(vec![]),
         }
         .nowhere();
 

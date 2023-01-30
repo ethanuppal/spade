@@ -18,7 +18,7 @@ use spade_ast::{
     ComptimeConfig, Enum, Expression, FunctionDecl, ImplBlock, IntLiteral, Item, Module,
     ModuleBody, NamedArgument, ParameterList, Pattern, PipelineStageReference, Register, Statement,
     Struct, TraitDef, TypeDeclKind, TypeDeclaration, TypeExpression, TypeParam, TypeSpec, Unit,
-    UnitKind, UseStatement,
+    UnitKind, UseStatement, UnitHead,
 };
 use spade_common::location_info::{lspan, AsLabel, FullSpan, HasCodespan, Loc, WithLocation};
 use spade_common::name::{Identifier, Path};
@@ -1268,13 +1268,15 @@ impl<'a> Parser<'a> {
 
         Ok(Some(
             Unit {
-                attributes: attributes.clone(),
-                unit_kind,
-                name,
-                inputs,
-                output_type,
+                head: UnitHead {
+                    attributes: attributes.clone(),
+                    unit_kind,
+                    name,
+                    inputs,
+                    output_type,
+                    type_params,
+                },
                 body: block.map(|inner| inner.map(|inner| Expression::Block(Box::new(inner)))),
-                type_params,
             }
             .between(self.file_id, &start_token.span, &block_span),
         ))
@@ -1301,7 +1303,7 @@ impl<'a> Parser<'a> {
         )?;
 
         // Return type
-        let return_type = if self.peek_and_eat(&TokenKind::SlimArrow)?.is_some() {
+        let output_type = if self.peek_and_eat(&TokenKind::SlimArrow)?.is_some() {
             Some(self.type_spec()?)
         } else {
             None
@@ -1313,7 +1315,7 @@ impl<'a> Parser<'a> {
             FunctionDecl {
                 name,
                 inputs: inputs.at_loc(&inputs_loc),
-                return_type,
+                output_type,
                 type_params,
             }
             .between(self.file_id, &start_token.span, &end_token.span),
@@ -1382,9 +1384,9 @@ impl<'a> Parser<'a> {
     pub fn impl_body(&mut self) -> Result<Vec<Loc<Unit>>> {
         let mut result = vec![];
         while let Some(u) = self.unit(&AttributeList::empty())? {
-            if u.unit_kind.is_pipeline() {
+            if u.head.unit_kind.is_pipeline() {
                 return Err(Diagnostic::error(
-                    u.unit_kind.loc(),
+                    u.head.unit_kind.loc(),
                     "Pipelines are currently not allowed in impl blocks",
                 )
                 .primary_label("Not allowed here")
@@ -2336,11 +2338,14 @@ mod tests {
     fn entity_without_inputs() {
         let code = include_str!("../parser_test_code/entity_without_inputs.sp");
         let expected = Unit {
-            attributes: AttributeList::empty(),
-            unit_kind: UnitKind::Entity.nowhere(),
-            name: Identifier("no_inputs".to_string()).nowhere(),
-            inputs: aparams![],
-            output_type: None,
+            head: UnitHead {
+                attributes: AttributeList::empty(),
+                unit_kind: UnitKind::Entity.nowhere(),
+                name: Identifier("no_inputs".to_string()).nowhere(),
+                inputs: aparams![],
+                output_type: None,
+                type_params: vec![],
+            },
             body: Some(
                 Expression::Block(Box::new(Block {
                     statements: vec![
@@ -2361,7 +2366,6 @@ mod tests {
                 }))
                 .nowhere(),
             ),
-            type_params: vec![],
         }
         .nowhere();
 
@@ -2372,11 +2376,14 @@ mod tests {
     fn entity_with_inputs() {
         let code = include_str!("../parser_test_code/entity_with_inputs.sp");
         let expected = Unit {
-            attributes: AttributeList::empty(),
-            unit_kind: UnitKind::Entity.nowhere(),
-            name: ast_ident("with_inputs"),
-            inputs: aparams![("clk", tspec!("bool")), ("rst", tspec!("bool"))],
-            output_type: Some(TypeSpec::Named(ast_path("bool"), None).nowhere()),
+            head: UnitHead {
+                attributes: AttributeList::empty(),
+                unit_kind: UnitKind::Entity.nowhere(),
+                name: ast_ident("with_inputs"),
+                inputs: aparams![("clk", tspec!("bool")), ("rst", tspec!("bool"))],
+                output_type: Some(TypeSpec::Named(ast_path("bool"), None).nowhere()),
+                type_params: vec![],
+            },
             body: Some(
                 Expression::Block(Box::new(Block {
                     statements: vec![],
@@ -2384,7 +2391,6 @@ mod tests {
                 }))
                 .nowhere(),
             ),
-            type_params: vec![],
         }
         .nowhere();
 
@@ -2395,11 +2401,17 @@ mod tests {
     fn entity_with_generics() {
         let code = include_str!("../parser_test_code/entity_with_generics.sp");
         let expected = Unit {
-            attributes: AttributeList::empty(),
-            unit_kind: UnitKind::Entity.nowhere(),
-            name: ast_ident("with_generics"),
-            inputs: aparams![],
-            output_type: None,
+            head: UnitHead {
+                attributes: AttributeList::empty(),
+                unit_kind: UnitKind::Entity.nowhere(),
+                name: ast_ident("with_generics"),
+                inputs: aparams![],
+                output_type: None,
+                type_params: vec![
+                    TypeParam::TypeName(ast_ident("X")).nowhere(),
+                    TypeParam::Integer(ast_ident("Y")).nowhere(),
+                ],
+            },
             body: Some(
                 Expression::Block(Box::new(Block {
                     statements: vec![],
@@ -2407,10 +2419,6 @@ mod tests {
                 }))
                 .nowhere(),
             ),
-            type_params: vec![
-                TypeParam::TypeName(ast_ident("X")).nowhere(),
-                TypeParam::Integer(ast_ident("Y")).nowhere(),
-            ],
         }
         .nowhere();
 
@@ -2571,11 +2579,14 @@ mod tests {
         let code = include_str!("../parser_test_code/multiple_entities.sp");
 
         let e1 = Unit {
-            attributes: AttributeList::empty(),
-            unit_kind: UnitKind::Entity.nowhere(),
-            name: Identifier("e1".to_string()).nowhere(),
-            inputs: aparams![],
-            output_type: None,
+            head: UnitHead {
+                attributes: AttributeList::empty(),
+                unit_kind: UnitKind::Entity.nowhere(),
+                name: Identifier("e1".to_string()).nowhere(),
+                inputs: aparams![],
+                output_type: None,
+                type_params: vec![],
+            },
             body: Some(
                 Expression::Block(Box::new(Block {
                     statements: vec![],
@@ -2583,16 +2594,18 @@ mod tests {
                 }))
                 .nowhere(),
             ),
-            type_params: vec![],
         }
         .nowhere();
 
         let e2 = Unit {
-            attributes: AttributeList::empty(),
-            unit_kind: UnitKind::Entity.nowhere(),
-            name: Identifier("e2".to_string()).nowhere(),
-            inputs: aparams![],
-            output_type: None,
+            head: UnitHead {
+                attributes: AttributeList::empty(),
+                unit_kind: UnitKind::Entity.nowhere(),
+                name: Identifier("e2".to_string()).nowhere(),
+                inputs: aparams![],
+                output_type: None,
+                type_params: vec![],
+            },
             body: Some(
                 Expression::Block(Box::new(Block {
                     statements: vec![],
@@ -2600,7 +2613,6 @@ mod tests {
                 }))
                 .nowhere(),
             ),
-            type_params: vec![],
         }
         .nowhere();
 
@@ -2642,7 +2654,7 @@ mod tests {
         let expected = FunctionDecl {
             name: ast_ident("some_fn"),
             inputs: aparams![self, ("a", tspec!("bit"))],
-            return_type: Some(TypeSpec::Named(ast_path("bit"), None).nowhere()),
+            output_type: Some(TypeSpec::Named(ast_path("bit"), None).nowhere()),
             type_params: vec![],
         }
         .nowhere();
@@ -2661,7 +2673,7 @@ mod tests {
         let expected = FunctionDecl {
             name: ast_ident("some_fn"),
             inputs: aparams![self],
-            return_type: Some(TypeSpec::Named(ast_path("bit"), None).nowhere()),
+            output_type: Some(TypeSpec::Named(ast_path("bit"), None).nowhere()),
             type_params: vec![],
         }
         .nowhere();
@@ -2680,7 +2692,7 @@ mod tests {
         let expected = FunctionDecl {
             name: ast_ident("some_fn"),
             inputs: aparams![self],
-            return_type: None,
+            output_type: None,
             type_params: vec![],
         }
         .nowhere();
@@ -2699,7 +2711,7 @@ mod tests {
         let expected = FunctionDecl {
             name: ast_ident("some_fn"),
             inputs: aparams![self],
-            return_type: None,
+            output_type: None,
             type_params: vec![TypeParam::TypeName(ast_ident("X")).nowhere()],
         }
         .nowhere();
@@ -2723,14 +2735,14 @@ mod tests {
         let fn1 = FunctionDecl {
             name: ast_ident("some_fn"),
             inputs: aparams![self, ("a", tspec!("bit"))],
-            return_type: Some(TypeSpec::Named(ast_path("bit"), None).nowhere()),
+            output_type: Some(TypeSpec::Named(ast_path("bit"), None).nowhere()),
             type_params: vec![],
         }
         .nowhere();
         let fn2 = FunctionDecl {
             name: ast_ident("another_fn"),
             inputs: aparams![self],
-            return_type: Some(TypeSpec::Named(ast_path("bit"), None).nowhere()),
+            output_type: Some(TypeSpec::Named(ast_path("bit"), None).nowhere()),
             type_params: vec![],
         }
         .nowhere();
@@ -2756,13 +2768,15 @@ mod tests {
             r#trait: None,
             target: ast_path("SomeType"),
             units: vec![Unit {
-                attributes: AttributeList::empty(),
-                unit_kind: UnitKind::Function.nowhere(),
-                name: ast_ident("some_fn"),
-                inputs: ParameterList::without_self(vec![]).nowhere(),
-                output_type: None,
+                head: UnitHead {
+                    attributes: AttributeList::empty(),
+                    unit_kind: UnitKind::Function.nowhere(),
+                    name: ast_ident("some_fn"),
+                    inputs: ParameterList::without_self(vec![]).nowhere(),
+                    output_type: None,
+                    type_params: vec![],
+                },
                 body: None,
-                type_params: vec![],
             }
             .nowhere()],
         }
@@ -2787,13 +2801,15 @@ mod tests {
             r#trait: Some(ast_path("SomeTrait")),
             target: ast_path("SomeType"),
             units: vec![Unit {
-                attributes: AttributeList::empty(),
-                unit_kind: UnitKind::Function.nowhere(),
-                name: ast_ident("some_fn"),
-                inputs: ParameterList::without_self(vec![]).nowhere(),
-                output_type: None,
+                head: UnitHead {
+                    attributes: AttributeList::empty(),
+                    unit_kind: UnitKind::Function.nowhere(),
+                    name: ast_ident("some_fn"),
+                    inputs: ParameterList::without_self(vec![]).nowhere(),
+                    output_type: None,
+                    type_params: vec![],
+                },
                 body: None,
-                type_params: vec![],
             }
             .nowhere()],
         }
@@ -2919,13 +2935,15 @@ mod tests {
 
         let expected = Some(
             Unit {
-                attributes: AttributeList::empty(),
-                unit_kind: UnitKind::Entity.nowhere(),
-                name: ast_ident("X"),
-                inputs: ParameterList::without_self(vec![]).nowhere(),
-                output_type: None,
+                head: UnitHead {
+                    attributes: AttributeList::empty(),
+                    unit_kind: UnitKind::Entity.nowhere(),
+                    name: ast_ident("X"),
+                    inputs: ParameterList::without_self(vec![]).nowhere(),
+                    output_type: None,
+                    type_params: vec![],
+                },
                 body: None,
-                type_params: vec![],
             }
             .nowhere(),
         );
@@ -2939,16 +2957,18 @@ mod tests {
 
         let expected = Some(
             Unit {
-                attributes: AttributeList::empty(),
-                name: ast_ident("X"),
-                inputs: ParameterList::without_self(vec![]).nowhere(),
-                output_type: None,
-                unit_kind: UnitKind::Pipeline(
-                    MaybeComptime::Raw(IntLiteral::signed(1).nowhere()).nowhere(),
-                )
-                .nowhere(),
+                head: UnitHead {
+                    attributes: AttributeList::empty(),
+                    name: ast_ident("X"),
+                    inputs: ParameterList::without_self(vec![]).nowhere(),
+                    output_type: None,
+                    unit_kind: UnitKind::Pipeline(
+                        MaybeComptime::Raw(IntLiteral::signed(1).nowhere()).nowhere(),
+                    )
+                    .nowhere(),
+                    type_params: vec![],
+                },
                 body: None,
-                type_params: vec![],
             }
             .nowhere(),
         );
@@ -2962,13 +2982,15 @@ mod tests {
 
         let expected = Some(
             Unit {
-                attributes: AttributeList::empty(),
-                unit_kind: UnitKind::Function.nowhere(),
-                name: ast_ident("X"),
-                inputs: ParameterList::without_self(vec![]).nowhere(),
-                output_type: None,
+                head: UnitHead {
+                    attributes: AttributeList::empty(),
+                    unit_kind: UnitKind::Function.nowhere(),
+                    name: ast_ident("X"),
+                    inputs: ParameterList::without_self(vec![]).nowhere(),
+                    output_type: None,
+                    type_params: vec![],
+                },
                 body: None,
-                type_params: vec![],
             }
             .nowhere(),
         );
@@ -2984,13 +3006,15 @@ mod tests {
 
         let expected = Some(Item::Unit(
             Unit {
-                attributes: AttributeList(vec![Attribute::NoMangle.nowhere()]),
-                unit_kind: UnitKind::Function.nowhere(),
-                name: ast_ident("X"),
-                inputs: ParameterList::without_self(vec![]).nowhere(),
-                output_type: None,
+                head: UnitHead {
+                    attributes: AttributeList(vec![ast_ident("attr")]),
+                    unit_kind: UnitKind::Function.nowhere(),
+                    name: ast_ident("X"),
+                    inputs: ParameterList::without_self(vec![]).nowhere(),
+                    output_type: None,
+                    type_params: vec![],
+                },
                 body: None,
-                type_params: vec![],
             }
             .nowhere(),
         ));
@@ -3006,13 +3030,15 @@ mod tests {
 
         let expected = Some(Item::Unit(
             Unit {
-                attributes: AttributeList(vec![Attribute::NoMangle.nowhere()]),
-                unit_kind: UnitKind::Entity.nowhere(),
-                name: ast_ident("X"),
-                inputs: ParameterList::without_self(vec![]).nowhere(),
-                output_type: None,
+                head: UnitHead {
+                    attributes: AttributeList(vec![ast_ident("attr")]),
+                    unit_kind: UnitKind::Entity.nowhere(),
+                    name: ast_ident("X"),
+                    inputs: ParameterList::without_self(vec![]).nowhere(),
+                    output_type: None,
+                    type_params: vec![],
+                },
                 body: None,
-                type_params: vec![],
             }
             .nowhere(),
         ));
@@ -3029,16 +3055,18 @@ mod tests {
 
         let expected = Item::Unit(
             Unit {
-                attributes: AttributeList(vec![Attribute::NoMangle.nowhere()]),
-                unit_kind: UnitKind::Pipeline(
-                    MaybeComptime::Raw(IntLiteral::signed(2).nowhere()).nowhere(),
-                )
-                .nowhere(),
-                name: ast_ident("test"),
-                inputs: aparams![("a", tspec!("bool"))],
-                output_type: None,
+                head: UnitHead {
+                    attributes: AttributeList(vec![ast_ident("attr")]),
+                    unit_kind: UnitKind::Pipeline(
+                        MaybeComptime::Raw(IntLiteral::signed(2).nowhere()).nowhere(),
+                    )
+                    .nowhere(),
+                    name: ast_ident("test"),
+                    inputs: aparams![("a", tspec!("bool"))],
+                    output_type: None,
+                    type_params: vec![],
+                },
                 body: None,
-                type_params: vec![],
             }
             .nowhere(),
         );
@@ -3057,11 +3085,14 @@ mod tests {
 
         let expected = Some(Item::Unit(
             Unit {
-                attributes: AttributeList::empty(),
-                unit_kind: UnitKind::Entity.nowhere(),
-                name: ast_ident("X"),
-                inputs: ParameterList::without_self(vec![]).nowhere(),
-                output_type: None,
+                head: UnitHead {
+                    attributes: AttributeList::empty(),
+                    unit_kind: UnitKind::Entity.nowhere(),
+                    name: ast_ident("X"),
+                    inputs: ParameterList::without_self(vec![]).nowhere(),
+                    output_type: None,
+                    type_params: vec![],
+                },
                 body: Some(
                     Expression::Block(Box::new(Block {
                         statements: vec![Statement::Register(
@@ -3084,7 +3115,6 @@ mod tests {
                     }))
                     .nowhere(),
                 ),
-                type_params: vec![],
             }
             .nowhere(),
         ));
@@ -3200,14 +3230,17 @@ mod tests {
         "#;
 
         let expected = Unit {
-            attributes: AttributeList::empty(),
-            unit_kind: UnitKind::Pipeline(
-                MaybeComptime::Raw(IntLiteral::signed(2).nowhere()).nowhere(),
-            )
-            .nowhere(),
-            name: ast_ident("test"),
-            inputs: aparams![("a", tspec!("bool"))],
-            output_type: Some(TypeSpec::Named(ast_path("bool"), None).nowhere()),
+            head: UnitHead {
+                attributes: AttributeList::empty(),
+                unit_kind: UnitKind::Pipeline(
+                    MaybeComptime::Raw(IntLiteral::signed(2).nowhere()).nowhere(),
+                )
+                .nowhere(),
+                name: ast_ident("test"),
+                inputs: aparams![("a", tspec!("bool"))],
+                output_type: Some(TypeSpec::Named(ast_path("bool"), None).nowhere()),
+                type_params: vec![],
+            },
             body: Some(
                 Expression::Block(Box::new(Block {
                     statements: vec![
@@ -3232,7 +3265,6 @@ mod tests {
                 }))
                 .nowhere(),
             ),
-            type_params: vec![],
         }
         .nowhere();
 
@@ -3249,14 +3281,17 @@ mod tests {
         "#;
 
         let expected = Unit {
-            attributes: AttributeList::empty(),
-            unit_kind: UnitKind::Pipeline(
-                MaybeComptime::Raw(IntLiteral::signed(2).nowhere()).nowhere(),
-            )
-            .nowhere(),
-            name: ast_ident("test"),
-            inputs: aparams![("a", tspec!("bool"))],
-            output_type: Some(TypeSpec::Named(ast_path("bool"), None).nowhere()),
+            head: UnitHead {
+                attributes: AttributeList::empty(),
+                unit_kind: UnitKind::Pipeline(
+                    MaybeComptime::Raw(IntLiteral::signed(2).nowhere()).nowhere(),
+                )
+                .nowhere(),
+                name: ast_ident("test"),
+                inputs: aparams![("a", tspec!("bool"))],
+                output_type: Some(TypeSpec::Named(ast_path("bool"), None).nowhere()),
+                type_params: vec![],
+            },
             body: Some(
                 Expression::Block(Box::new(Block {
                     statements: vec![
@@ -3266,7 +3301,6 @@ mod tests {
                 }))
                 .nowhere(),
             ),
-            type_params: vec![],
         }
         .nowhere();
 
@@ -3284,14 +3318,17 @@ mod tests {
         let expected = ModuleBody {
             members: vec![Item::Unit(
                 Unit {
-                    attributes: AttributeList::empty(),
-                    unit_kind: UnitKind::Pipeline(
-                        MaybeComptime::Raw(IntLiteral::signed(2).nowhere()).nowhere(),
-                    )
-                    .nowhere(),
-                    name: ast_ident("test"),
-                    inputs: aparams![("a", tspec!("bool"))],
-                    output_type: Some(TypeSpec::Named(ast_path("bool"), None).nowhere()),
+                    head: UnitHead {
+                        attributes: AttributeList::empty(),
+                        unit_kind: UnitKind::Pipeline(
+                            MaybeComptime::Raw(IntLiteral::signed(2).nowhere()).nowhere(),
+                        )
+                        .nowhere(),
+                        name: ast_ident("test"),
+                        inputs: aparams![("a", tspec!("bool"))],
+                        output_type: Some(TypeSpec::Named(ast_path("bool"), None).nowhere()),
+                        type_params: vec![],
+                    },
                     body: Some(
                         Expression::Block(Box::new(Block {
                             statements: vec![],
@@ -3299,7 +3336,6 @@ mod tests {
                         }))
                         .nowhere(),
                     ),
-                    type_params: vec![],
                 }
                 .nowhere(),
             )],

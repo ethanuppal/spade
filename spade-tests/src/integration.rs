@@ -448,4 +448,23 @@ mod trait_tests {
             }
         "
     }
+
+    #[test]
+    fn impl_trait_compiles() {
+        let code = "
+            trait X {
+                fn a();
+            }
+
+            struct A {}
+
+            impl X for A {
+                fn a() -> bool {
+                    true
+                }
+            }
+        ";
+
+        build_items(code);
+    }
 }

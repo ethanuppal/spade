@@ -442,16 +442,21 @@ impl std::fmt::Display for UnitKind {
 }
 
 #[derive(PartialEq, Debug, Clone)]
-pub struct Unit {
+pub struct UnitHead {
     pub attributes: AttributeList,
     pub unit_kind: Loc<UnitKind>,
     pub name: Loc<Identifier>,
     pub inputs: Loc<ParameterList>,
     pub output_type: Option<Loc<TypeSpec>>,
+    pub type_params: Vec<Loc<TypeParam>>,
+}
+
+#[derive(PartialEq, Debug, Clone)]
+pub struct Unit {
+    pub head: UnitHead,
     /// The body is an expression for ID assignment purposes, but semantic analysis
     /// ensures that it is always a block. If body is `None`, the entity is __builtin__
     pub body: Option<Loc<Expression>>,
-    pub type_params: Vec<Loc<TypeParam>>,
 }
 impl WithLocation for Unit {}
 
@@ -460,7 +465,7 @@ impl WithLocation for Unit {}
 pub struct FunctionDecl {
     pub name: Loc<Identifier>,
     pub inputs: Loc<ParameterList>,
-    pub return_type: Option<Loc<TypeSpec>>,
+    pub output_type: Option<Loc<TypeSpec>>,
     pub type_params: Vec<Loc<TypeParam>>,
 }
 impl WithLocation for FunctionDecl {}
@@ -562,7 +567,7 @@ impl WithLocation for Item {}
 impl Item {
     pub fn name(&self) -> Option<&Identifier> {
         match self {
-            Item::Unit(u) => Some(&u.name.inner),
+            Item::Unit(u) => Some(&u.head.name.inner),
             Item::TraitDef(t) => Some(&t.name.inner),
             Item::Type(t) => Some(&t.name.inner),
             Item::Module(m) => Some(&m.name.inner),

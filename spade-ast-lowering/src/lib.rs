@@ -304,40 +304,41 @@ fn visit_parameter_list(
 }
 
 /// Visit the head of an entity to generate an entity head
-#[tracing::instrument(skip_all, fields(name=%item.name))]
-pub fn entity_head(
-    item: &ast::Unit,
+#[tracing::instrument(skip_all, fields(name=%head.name))]
+pub fn unit_head(
+    head: &ast::UnitHead,
     symtab: &mut SymbolTable,
     self_context: &SelfContext,
 ) -> Result<UnitHead> {
     symtab.new_scope();
 
-    let type_params = item
+    let type_params = head
         .type_params
         .iter()
         .map(|p| p.try_map_ref(|p| visit_type_param(p, symtab)))
         .collect::<Result<_>>()?;
 
-    let output_type = if let Some(output_type) = &item.output_type {
+    let output_type = if let Some(output_type) = &head.output_type {
         Some(visit_type_spec(output_type, symtab)?)
     } else {
         None
     };
-    let inputs = visit_parameter_list(&item.inputs, symtab, self_context)?;
+    let inputs = visit_parameter_list(&head.inputs, symtab, self_context)?;
 
     // Check for ports in functions
     // We need to have the scope open to check this, but we also need to close
     // the scope if we fail here, so we'll store port_error in a variable
     let mut port_error = Ok(());
-    if let ast::UnitKind::Function = item.unit_kind.inner {
-        for (_, _, ty) in &item.inputs.args {
+
+    if let ast::UnitKind::Function = head.unit_kind.inner {
+        for (_, _, ty) in &head.inputs.args {
             if ty.is_port(symtab)? {
                 port_error = Err(Diagnostic::error(ty, "Port argument in function")
                     .primary_label("This is a port")
                     .note("Only entities and pipelines can take ports as arguments")
                     .span_suggest_replace(
                         "Consider making this an entity",
-                        &item.unit_kind,
+                        &head.unit_kind,
                         "entity",
                     ))
             }
@@ -347,47 +348,51 @@ pub fn entity_head(
     symtab.close_scope();
     port_error?;
 
-    let unit_kind = item.unit_kind.try_map_ref(|k| -> Result<_> {
-        match k {
-            ast::UnitKind::Function => Ok(hir::UnitKind::Function(hir::FunctionKind::Fn)),
-            ast::UnitKind::Entity => Ok(hir::UnitKind::Entity),
-            ast::UnitKind::Pipeline(d) => {
-                let depth = int_literal_to_pipeline_stages(
-                    &d.inner.maybe_unpack(symtab)?.ok_or_else(|| {
-                        Diagnostic::error(d, "Missing pipeline depth")
+    let unit_kind: Result<_> = head.unit_kind.try_map_ref(|k| {
+        let inner = match k {
+            ast::UnitKind::Function => hir::UnitKind::Function(hir::FunctionKind::Fn),
+            ast::UnitKind::Entity => hir::UnitKind::Entity,
+            ast::UnitKind::Pipeline(depth) => {
+                hir::UnitKind::Pipeline(int_literal_to_pipeline_stages(
+                    &depth.inner.maybe_unpack(symtab)?.ok_or_else(|| {
+                        Diagnostic::error(depth, "Missing pipeline depth")
+                            .primary_label("Missing pipeline depth")
                             .note("The current comptime branch does not specify a depth")
                     })?,
-                )?;
-                Ok(hir::UnitKind::Pipeline(depth))
+                )?)
             }
-        }
-    })?;
+        };
+        Ok(inner)
+    });
 
     Ok(UnitHead {
-        name: item.name.clone(),
+        name: head.name.clone(),
         inputs,
         output_type,
         type_params,
-        unit_kind,
+        unit_kind: unit_kind?,
     })
 }
 
 /// The `extra_path` parameter allows specifying an extra path prepended to
 /// the name of the entity. This is used by impl blocks to append a unique namespace
-#[tracing::instrument(skip_all, fields(%unit.name, %unit.unit_kind))]
+#[tracing::instrument(skip_all, fields(%unit.head.name, %unit.head.unit_kind))]
 pub fn visit_unit(
     extra_path: Option<Path>,
     unit: &Loc<ast::Unit>,
     ctx: &mut Context,
 ) -> Result<hir::Item> {
     let ast::Unit {
+        head:
+            ast::UnitHead {
+                name,
+                attributes,
+                inputs: _,
+                output_type: _,
+                unit_kind: _,
+                type_params,
+            },
         body,
-        name,
-        attributes,
-        inputs: _,
-        output_type: _,
-        type_params,
-        unit_kind: _,
     } = &unit.inner;
 
     ctx.symtab.new_scope();
@@ -534,19 +539,19 @@ pub fn visit_impl(
     let mut trait_members = vec![];
     let mut trait_impl = HashMap::new();
     let self_context = SelfContext::ImplBlock(target_type_spec);
-    for entity in &block.units {
-        if matches!(entity.unit_kind.inner, UnitKind::Function)
+    for unit in &block.units {
+        if matches!(unit.head.unit_kind.inner, UnitKind::Function)
             && ast_type_spec.is_port(&ctx.symtab)?
         {
             return Err(Diagnostic::error(
-                &entity.unit_kind,
+                &unit.head.unit_kind,
                 "Functions are not allowed on port types",
             )
             .primary_label("Function on port type")
             .secondary_label(ast_type_spec, "This is a port type")
             .span_suggest_replace(
                 "Consider making this an entity",
-                &entity.unit_kind,
+                &unit.head.unit_kind,
                 "entity",
             )
             .into());
@@ -555,15 +560,15 @@ pub fn visit_impl(
         let path_suffix = Some(Path(vec![
             Identifier(format!("impl_{}", impl_block_id)).nowhere()
         ]));
-        global_symbols::visit_unit(&path_suffix, entity, &mut ctx.symtab, &self_context)?;
-        let item = visit_unit(path_suffix, entity, ctx)?;
+        global_symbols::visit_unit(&path_suffix, unit, &mut ctx.symtab, &self_context)?;
+        let item = visit_unit(path_suffix, unit, ctx)?;
 
         match &item {
             hir::Item::Unit(e) => {
-                trait_members.push((entity.name.inner.clone(), e.head.clone()));
+                trait_members.push((unit.head.name.inner.clone(), e.head.clone()));
 
                 trait_impl.insert(
-                    entity.name.inner.clone(),
+                    unit.head.name.inner.clone(),
                     (e.name.name_id().inner.clone(), e.loc()),
                 );
             }
@@ -1490,13 +1495,18 @@ mod entity_visiting {
     #[test]
     fn entity_visits_work() {
         let input = ast::Unit {
-            name: Identifier("test".to_string()).nowhere(),
-            inputs: ParameterList::without_self(vec![(
-                ast_ident("a"),
-                ast::TypeSpec::Unit(().nowhere()).nowhere(),
-            )])
-            .nowhere(),
-            output_type: None,
+            head: ast::UnitHead {
+                name: Identifier("test".to_string()).nowhere(),
+                inputs: ParameterList::without_self(vec![(
+                    ast_ident("a"),
+                    ast::TypeSpec::Unit(().nowhere()).nowhere(),
+                )])
+                .nowhere(),
+                output_type: None,
+                type_params: vec![],
+                attributes: ast::AttributeList(vec![]),
+                unit_kind: ast::UnitKind::Entity.nowhere(),
+            },
             body: Some(
                 ast::Expression::Block(Box::new(ast::Block {
                     statements: vec![ast::Statement::binding(
@@ -1509,9 +1519,6 @@ mod entity_visiting {
                 }))
                 .nowhere(),
             ),
-            type_params: vec![],
-            attributes: ast::AttributeList(vec![]),
-            unit_kind: ast::UnitKind::Entity.nowhere(),
         }
         .nowhere();
 
@@ -2627,9 +2634,14 @@ mod item_visiting {
     pub fn item_entity_visiting_works() {
         let input = ast::Item::Unit(
             ast::Unit {
-                name: ast_ident("test"),
-                output_type: None,
-                inputs: aparams![],
+                head: ast::UnitHead {
+                    name: ast_ident("test"),
+                    output_type: None,
+                    inputs: aparams![],
+                    type_params: vec![],
+                    attributes: ast::AttributeList(vec![]),
+                    unit_kind: ast::UnitKind::Entity.nowhere(),
+                },
                 body: Some(
                     ast::Expression::Block(Box::new(ast::Block {
                         statements: vec![],
@@ -2637,9 +2649,6 @@ mod item_visiting {
                     }))
                     .nowhere(),
                 ),
-                type_params: vec![],
-                attributes: ast::AttributeList(vec![]),
-                unit_kind: ast::UnitKind::Entity.nowhere(),
             }
             .nowhere(),
         );
@@ -2703,10 +2712,14 @@ mod impl_blocks {
             r#trait: None,
             target: ast_path("a"),
             units: vec![ast::Unit {
-                attributes: ast::AttributeList::empty(),
-                name: ast_ident("x"),
-                inputs: ParameterList::with_self(().nowhere(), vec![]).nowhere(),
-                output_type: None,
+                head: ast::UnitHead {
+                    attributes: ast::AttributeList::empty(),
+                    name: ast_ident("x"),
+                    inputs: ParameterList::with_self(().nowhere(), vec![]).nowhere(),
+                    output_type: None,
+                    type_params: vec![],
+                    unit_kind: ast::UnitKind::Function.nowhere(),
+                },
                 body: Some(
                     ast::Expression::Block(Box::new(ast::Block {
                         statements: vec![],
@@ -2714,8 +2727,6 @@ mod impl_blocks {
                     }))
                     .nowhere(),
                 ),
-                type_params: vec![],
-                unit_kind: ast::UnitKind::Function.nowhere(),
             }
             .nowhere()],
         }
@@ -2827,9 +2838,14 @@ mod module_visiting {
         let input = ast::ModuleBody {
             members: vec![ast::Item::Unit(
                 ast::Unit {
-                    name: ast_ident("test"),
-                    output_type: None,
-                    inputs: ParameterList::without_self(vec![]).nowhere(),
+                    head: ast::UnitHead {
+                        name: ast_ident("test"),
+                        output_type: None,
+                        inputs: ParameterList::without_self(vec![]).nowhere(),
+                        type_params: vec![],
+                        attributes: ast::AttributeList(vec![]),
+                        unit_kind: ast::UnitKind::Entity.nowhere(),
+                    },
                     body: Some(
                         ast::Expression::Block(Box::new(ast::Block {
                             statements: vec![],
@@ -2837,9 +2853,6 @@ mod module_visiting {
                         }))
                         .nowhere(),
                     ),
-                    type_params: vec![],
-                    attributes: ast::AttributeList(vec![]),
-                    unit_kind: ast::UnitKind::Entity.nowhere(),
                 }
                 .nowhere(),
             )],

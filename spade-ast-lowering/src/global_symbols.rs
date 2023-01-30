@@ -36,7 +36,10 @@ pub fn gather_types(module: &ast::ModuleBody, symtab: &mut SymbolTable) -> Resul
             }
             ast::Item::ImplBlock(_) => {}
             ast::Item::Unit(_) => {}
-            ast::Item::TraitDef(_) => {}
+            ast::Item::TraitDef(_) => {
+                // FIXME: When we end up needing to refer to traits, we should add them
+                // to the symtab here
+            }
             ast::Item::Config(cfg) => {
                 symtab.add_unique_thing(
                     Path::ident(cfg.name.clone()).at_loc(&cfg.name),
@@ -117,13 +120,13 @@ pub fn visit_unit(
     symtab: &mut SymbolTable,
     self_context: &SelfContext,
 ) -> Result<()> {
-    let head = crate::entity_head(&e, symtab, self_context)?;
+    let head = crate::unit_head(&e.head, symtab, self_context)?;
 
     let new_path = extra_path
         .as_ref()
         .unwrap_or(&Path(vec![]))
-        .join(Path::ident(e.name.clone()))
-        .at_loc(&e.name);
+        .join(Path::ident(e.head.name.clone()))
+        .at_loc(&e.head.name);
 
     symtab.add_unique_thing(new_path, Thing::Unit(head.at_loc(e)))?;
 
