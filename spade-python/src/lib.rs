@@ -7,8 +7,7 @@ use itertools::Itertools;
 use logos::Logos;
 use pyo3::prelude::*;
 
-use spade::compiler_state::CompilerState;
-use spade::lexer;
+use ::spade::compiler_state::CompilerState;
 use spade_ast_lowering::id_tracker::{ExprIdTracker, ImplIdTracker};
 use spade_common::location_info::{Loc, WithLocation};
 use spade_common::name::{Identifier, Path as SpadePath};
@@ -22,6 +21,7 @@ use spade_hir_lowering::substitution::Substitutions;
 use spade_hir_lowering::{expr_to_mir, MirLowerable};
 use spade_mir::codegen::mangle_input;
 use spade_mir::eval::eval_statements;
+use spade_parser::lexer;
 use spade_parser::Parser;
 use spade_typeinference::equation::{TypeVar, TypedExpression};
 use spade_typeinference::{GenericListSource, HasType, TypeState};

@@ -12,7 +12,7 @@ doc = false # "spade" conflicts with the spade compiler doc target
 crate-type = ["cdylib"]
 
 [dependencies]
-pyo3 = { version = "0.16.5", features = ["extension-module", "eyre"] }
+pyo3 = { version = "0.18.1", features = ["extension-module", "eyre"] }
 spade = {path = "../spade-compiler"}
 ron.workspace = true
 color-eyre.workspace = true
