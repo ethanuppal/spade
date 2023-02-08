@@ -2,5 +2,7 @@ fn main() {
     // This will consider the ffi part in lib.rs in order to
     // generate lib.rs.h and lib.rs.cc
     // minimal example: no C++ code to be called from Rust
-    cxx_build::bridge("src/lib.rs").compile("spade-cxx");
+    cxx_build::bridge("src/lib.rs")
+        .flag_if_supported("-std=c++11")
+        .compile("spade-cxx");
 }
