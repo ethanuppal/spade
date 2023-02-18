@@ -771,6 +771,7 @@ impl ExprLocal for Loc<Expression> {
                     BinaryOperator::LogicalXor => binop_builder(LogicalXor)?,
                     BinaryOperator::LeftShift => binop_builder(LeftShift)?,
                     BinaryOperator::RightShift => binop_builder(RightShift)?,
+                    BinaryOperator::ArithmeticRightShift => binop_builder(ArithmeticRightShift)?,
                     BinaryOperator::LogicalAnd => binop_builder(LogicalAnd)?,
                     BinaryOperator::LogicalOr => binop_builder(LogicalOr)?,
                     BinaryOperator::BitwiseAnd => binop_builder(BitwiseAnd)?,

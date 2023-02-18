@@ -87,6 +87,7 @@ pub enum BinaryOperator {
     LogicalXor,
     LeftShift,
     RightShift,
+    ArithmeticRightShift,
     BitwiseAnd,
     BitwiseOr,
     BitwiseXor,

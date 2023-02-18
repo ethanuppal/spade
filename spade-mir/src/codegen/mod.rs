@@ -180,6 +180,7 @@ fn forward_expression_code(binding: &Binding, types: &TypeList, ops: &[ValueName
         Operator::Le => signed_binop!("<="),
         Operator::LeftShift => binop!("<<"),
         Operator::RightShift => binop!(">>"),
+        Operator::ArithmeticRightShift => signed_binop!(">>>"),
         Operator::LogicalAnd => binop!("&&"),
         Operator::LogicalOr => binop!("||"),
         Operator::LogicalXor => binop!("^"),
@@ -498,6 +499,7 @@ fn backward_expression_code(binding: &Binding, types: &TypeList, ops: &[ValueNam
         | Operator::Le
         | Operator::LeftShift
         | Operator::RightShift
+        | Operator::ArithmeticRightShift
         | Operator::LogicalAnd
         | Operator::LogicalOr
         | Operator::LogicalXor
@@ -1488,6 +1490,13 @@ mod expression_tests {
         "[1:0]",
         RightShift,
         ">>"
+    );
+    signed_binop_test!(
+        binop_arithmetic_right_shift_works,
+        Type::Int(2),
+        "[1:0]",
+        ArithmeticRightShift,
+        ">>>"
     );
     binop_test!(binop_eq_works, Type::Bool, "", Eq, "==");
     signed_binop_test!(binop_gt_works, Type::Bool, "", Gt, ">");

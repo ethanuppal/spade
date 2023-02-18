@@ -926,6 +926,7 @@ pub fn visit_expression(e: &ast::Expression, ctx: &mut Context) -> Result<hir::E
                 ast::BinaryOperator::Le => Ok(operator(BinaryOperator::Le)),
                 ast::BinaryOperator::LeftShift => Ok(operator(BinaryOperator::LeftShift)),
                 ast::BinaryOperator::RightShift => Ok(operator(BinaryOperator::RightShift)),
+                ast::BinaryOperator::ArithmeticRightShift => Ok(operator(BinaryOperator::ArithmeticRightShift)),
                 ast::BinaryOperator::LogicalAnd => Ok(operator(BinaryOperator::LogicalAnd)),
                 ast::BinaryOperator::LogicalOr => Ok(operator(BinaryOperator::LogicalOr)),
                 ast::BinaryOperator::LogicalXor => Ok(operator(BinaryOperator::LogicalXor)),

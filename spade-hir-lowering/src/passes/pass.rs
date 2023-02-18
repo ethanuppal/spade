@@ -26,8 +26,16 @@ impl Passable for Loc<Expression> {
             ExprKind::Identifier(_) => {}
             ExprKind::IntLiteral(_) => {}
             ExprKind::BoolLiteral(_) => {}
-            ExprKind::TupleLiteral(_) => {}
-            ExprKind::ArrayLiteral(_) => {}
+            ExprKind::TupleLiteral(inner) => {
+                for i in inner {
+                    i.apply(pass)?
+                }
+            }
+            ExprKind::ArrayLiteral(inner) => {
+                for i in inner {
+                    i.apply(pass)?
+                }
+            }
             ExprKind::Index(lhs, rhs) => {
                 subnodes!(lhs, rhs)
             }

@@ -19,6 +19,7 @@ pub enum BinaryOperator {
     Le,
     LeftShift,
     RightShift,
+    ArithmeticRightShift,
     LogicalAnd,
     LogicalOr,
     LogicalXor,

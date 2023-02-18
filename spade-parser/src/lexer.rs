@@ -111,6 +111,8 @@ pub enum TokenKind {
     Le,
     #[token(">=")]
     Ge,
+    #[token(">>>")]
+    ArithmeticRightShift,
     #[token(">>")]
     RightShift,
     #[token("<<")]
@@ -239,6 +241,7 @@ impl TokenKind {
             TokenKind::Ge => ">=",
             TokenKind::LeftShift => "<<",
             TokenKind::RightShift => ">>",
+            TokenKind::ArithmeticRightShift => ">>>",
             TokenKind::LogicalOr => "||",
             TokenKind::LogicalAnd => "&&",
             TokenKind::LogicalXor => "^^",

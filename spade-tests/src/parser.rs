@@ -1,4 +1,4 @@
-use crate::snapshot_error;
+use crate::{build_items, snapshot_error};
 
 snapshot_error! {
     stage_outside_pipeline,
@@ -87,4 +87,16 @@ snapshot_error! {
     "pipeline a(clk: clock) -> bool {
         true
     }"
+}
+
+#[test]
+fn three_generic_end_chars_work() {
+    let code = r#"
+        struct A<T> {}
+        struct X {
+            a: A<A<A<bool>>>
+        }
+        "#;
+
+    build_items(code);
 }

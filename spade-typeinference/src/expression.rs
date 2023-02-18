@@ -507,6 +507,7 @@ impl TypeState {
                 | BinaryOperator::BitwiseAnd
                 | BinaryOperator::BitwiseXor
                 | BinaryOperator::BitwiseOr
+                | BinaryOperator::ArithmeticRightShift
                 | BinaryOperator::RightShift => {
                     let int_type = self.new_generic_int(&ctx.symtab);
 

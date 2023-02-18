@@ -1586,12 +1586,23 @@ impl<'a> Parser<'a> {
         } else if expected == &TokenKind::Gt && next.kind == TokenKind::RightShift {
             self.peeked = Some(Token {
                 kind: TokenKind::Gt,
-                span: next.span.start..next.span.start,
-                file_id: 0,
+                span: next.span.end..next.span.end,
+                file_id: next.file_id,
             });
             Ok(Token {
                 kind: TokenKind::Gt,
-                span: next.span.end..next.span.end,
+                span: next.span.start..next.span.start,
+                file_id: next.file_id,
+            })
+        } else if expected == &TokenKind::Gt && next.kind == TokenKind::ArithmeticRightShift {
+            self.peeked = Some(Token {
+                kind: TokenKind::RightShift,
+                span: next.span.start + 1..next.span.end,
+                file_id: next.file_id,
+            });
+            Ok(Token {
+                kind: TokenKind::Gt,
+                span: next.span.start..next.span.start,
                 file_id: next.file_id,
             })
         } else {
@@ -1665,6 +1676,7 @@ impl<'a> Parser<'a> {
         let mut result = self.peek_cond_no_tracing(|kind| kind == expected)?;
         if expected == &TokenKind::Gt {
             result |= self.peek_cond_no_tracing(|kind| kind == &TokenKind::RightShift)?
+                | self.peek_cond_no_tracing(|kind| kind == &TokenKind::ArithmeticRightShift)?
         }
         self.parse_stack
             .push(ParseStackEntry::PeekingFor(expected.clone(), result));

@@ -127,6 +127,12 @@ pub fn inner_translate_value(result: &mut String, in_value: &[Value], t: &Concre
     let type_size = t.to_mir_type().size();
     let missing_values = type_size as usize - value_len;
 
+    // FIXME: This is a temporary hack to work around
+    // lifeguard spade#214
+    if type_size < value_len as u64 {
+        return;
+    }
+
     if type_size == 0 {
         return;
     }
