@@ -77,14 +77,6 @@ snapshot_error! {
 snapshot_error! {
     memory_of_ports_is_disallowed,
     "
-    mod std {mod mem {
-        entity clocked_memory<#NumElements, #WritePorts, #AddrWidth, D>(
-            clk: clock,
-            writes: [(bool, int<AddrWidth>, D); WritePorts],
-        ) -> Memory<D, NumElements>
-            __builtin__
-        }
-    }
     entity A(clk: clock, p: &bool) -> bool {
         let idx: int<10> = 0;
         let mem: Memory<&bool, 1024> = inst std::mem::clocked_memory(clk, [(true, idx, p)]);

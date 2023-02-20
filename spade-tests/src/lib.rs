@@ -1,7 +1,11 @@
 use std::io::Write;
+#[cfg(test)]
+use std::path::PathBuf;
 
 use codespan_reporting::term::termcolor::Buffer;
 
+#[cfg(test)]
+use spade_common::name::Path;
 use spade_diagnostics::emitter::CodespanEmitter;
 use spade_diagnostics::{CodeBundle, CompilationError, DiagHandler};
 
@@ -86,15 +90,19 @@ macro_rules! snapshot_error {
                 print_parse_traceback: false,
             };
 
-            let _ = spade::compile(
-                vec![(
+            let mut files = vec![(
                     spade::ModuleNamespace {
                         namespace: spade_common::name::Path(vec![]),
                         base_namespace: spade_common::name::Path(vec![]),
                     },
                     "testinput".to_string(),
                     source.to_string(),
-                )],
+                )];
+
+            files.append(&mut crate::stdlib_files());
+
+            let _ = spade::compile(
+                files,
                 opts,
                 spade_diagnostics::DiagHandler::new(Box::new(
                     spade_diagnostics::emitter::CodespanEmitter,
@@ -115,11 +123,67 @@ macro_rules! snapshot_error {
     };
 }
 
+#[cfg(test)]
+fn stdlib_files() -> Vec<(spade::ModuleNamespace, String, String)> {
+    let paths = PathBuf::from("../stdlib")
+        .read_dir()
+        .expect(&format!("Failed to read files in ./stdlib"))
+        .map(|entry| entry.expect("Failed to read dir entry"))
+        .collect::<Vec<_>>();
+
+    let mut result = vec![];
+    for path_utf8 in paths.iter() {
+        let path = path_utf8.path();
+
+        // If the file doesn't have a stem, it also won't have a `.spade` extension,
+        // so we'll silently ignore it
+        let file_stem = if let Some(stem) = path.file_stem() {
+            stem
+        } else {
+            continue;
+        };
+
+        if path.is_dir() {
+            panic!("Stdlib contained subdirectory")
+        } else if path.extension().and_then(|s| s.to_str()) == Some("spade") {
+            let file_content = std::fs::read_to_string(&path)
+                .expect(&format!("Failed to read {}", path.to_string_lossy()));
+            result.push((
+                spade::ModuleNamespace {
+                    namespace: Path::from_strs(&vec![
+                        "std",
+                        &file_stem.to_str().expect(&format!(
+                            "{} did not have a utf-8 file stem",
+                            path.to_string_lossy()
+                        )),
+                    ]),
+                    base_namespace: Path::from_strs(&vec!["std"]),
+                },
+                path.to_string_lossy().to_string(),
+                file_content,
+            ))
+        }
+    }
+
+    result
+}
+
+#[cfg(test)]
+fn build_items(code: &str) -> Vec<spade_mir::Entity> {
+    build_items_inner(code, false)
+}
+
+#[allow(dead_code)]
+#[cfg(test)]
+fn build_items_with_stdlib(code: &str) -> Vec<spade_mir::Entity> {
+    build_items_inner(code, true)
+}
+
 /// Builds multiple items and types from a source string.
 /// Panics if the compilation fails
 /// Returns all MIR entities in unflattened format
 #[cfg(test)]
-fn build_items(code: &str) -> Vec<spade_mir::Entity> {
+fn build_items_inner(code: &str, with_stdlib: bool) -> Vec<spade_mir::Entity> {
     let source = unindent::unindent(code);
     let mut buffer = codespan_reporting::term::termcolor::BufferWriter::stdout(
         codespan_reporting::term::termcolor::ColorChoice::Never,
@@ -136,15 +200,20 @@ fn build_items(code: &str) -> Vec<spade_mir::Entity> {
         print_parse_traceback: false,
     };
 
+    let mut files = vec![(
+        spade::ModuleNamespace {
+            namespace: spade_common::name::Path(vec![]),
+            base_namespace: spade_common::name::Path(vec![]),
+        },
+        "testinput".to_string(),
+        source,
+    )];
+    if with_stdlib {
+        files.append(&mut stdlib_files());
+    }
+
     match spade::compile(
-        vec![(
-            spade::ModuleNamespace {
-                namespace: spade_common::name::Path(vec![]),
-                base_namespace: spade_common::name::Path(vec![]),
-            },
-            "testinput".to_string(),
-            source,
-        )],
+        files,
         opts,
         spade_diagnostics::DiagHandler::new(Box::new(spade_diagnostics::emitter::CodespanEmitter)),
     ) {

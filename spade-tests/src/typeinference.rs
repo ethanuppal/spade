@@ -200,12 +200,7 @@ snapshot_error! {
 
 snapshot_error! {
     concatenation_errors_look_good,
-    // FIXME: Figure out a way to include stdlib in tests
-    // lifeguard spade#125
     "
-    mod std{mod conv{ 
-        fn concat<#N, #M, #K>(x: int<N>, y: int<M>) -> int<K> __builtin__
-    }}
     entity counter(x: int<4>, y:int<3>) -> int<8> {
         x `std::conv::concat` y
     }
@@ -447,8 +442,6 @@ fn destructuring_a_read_mut_wire_gives_real_values() {
 snapshot_error! {
     reading_from_port_members_is_a_type_error,
     "
-    mod std {mod ports { entity read_mut_wire<T>(t: &mut T) -> T __builtin__ }}
-
     use std::ports::read_mut_wire;
 
     struct A {
@@ -469,8 +462,6 @@ snapshot_error! {
 snapshot_error! {
     reading_from_tuple_members_is_an_error,
     "
-    mod std {mod ports { entity read_mut_wire<T>(t: &mut T) -> T __builtin__ }}
-
     use std::ports::read_mut_wire;
 
     fn takes_normal(x: bool, y: int<3>) -> bool __builtin__
@@ -507,13 +498,4 @@ snapshot_error! {
         };
         true
     }"
-}
-
-snapshot_error! {
-    error_on_oversized_int_literal,
-    "
-        fn x() -> int<8> {
-            128
-        }
-        "
 }

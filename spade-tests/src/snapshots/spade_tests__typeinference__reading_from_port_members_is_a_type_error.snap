@@ -1,8 +1,6 @@
 ---
 source: spade-tests/src/typeinference.rs
 ---
-mod std {mod ports { entity read_mut_wire<T>(t: &mut T) -> T __builtin__ }}
-
 use std::ports::read_mut_wire;
 
 struct A {
@@ -20,9 +18,9 @@ entity uut(val: &mut A) -> bool {
 
 
 error: Field access on &mut A which is not a struct
-   ┌─ testinput:13:32
+   ┌─ testinput:11:32
    │
-13 │     let x = inst read_mut_wire(val.x);
+11 │     let x = inst read_mut_wire(val.x);
    │                                ^^^^^ Expected struct, found &mut A
 
 

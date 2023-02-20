@@ -1,22 +1,19 @@
 ---
 source: spade-tests/src/typeinference.rs
 ---
-mod std{mod conv{ 
-    fn concat<#N, #M, #K>(x: int<N>, y: int<M>) -> int<K> __builtin__
-}}
 entity counter(x: int<4>, y:int<3>) -> int<8> {
     x `std::conv::concat` y
 }
 
 
 error: Type error
-  ┌─ testinput:4:47
+  ┌─ testinput:1:47
   │  
-4 │   entity counter(x: int<4>, y:int<3>) -> int<8> {
+1 │   entity counter(x: int<4>, y:int<3>) -> int<8> {
   │                                          ------ int<8> type specified here
   │ ╭───────────────────────────────────────────────^
-5 │ │     x `std::conv::concat` y
-6 │ │ }
+2 │ │     x `std::conv::concat` y
+3 │ │ }
   │ ╰─^ Found type int<7>
   │  
   = Expected: 8

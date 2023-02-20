@@ -1,14 +1,6 @@
 ---
 source: spade-tests/src/ports_integration.rs
 ---
-mod std {mod mem {
-    entity clocked_memory<#NumElements, #WritePorts, #AddrWidth, D>(
-        clk: clock,
-        writes: [(bool, int<AddrWidth>, D); WritePorts],
-    ) -> Memory<D, NumElements>
-        __builtin__
-    }
-}
 entity A(clk: clock, p: &bool) -> bool {
     let idx: int<10> = 0;
     let mem: Memory<&bool, 1024> = inst std::mem::clocked_memory(clk, [(true, idx, p)]);
@@ -17,9 +9,9 @@ entity A(clk: clock, p: &bool) -> bool {
 }
 
 error: Generic types can not be ports
-   ┌─ testinput:11:36
-   │
-11 │     let mem: Memory<&bool, 1024> = inst std::mem::clocked_memory(clk, [(true, idx, p)]);
-   │                                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ Parameter std::mem::D is &bool which is a port type
+  ┌─ testinput:3:36
+  │
+3 │     let mem: Memory<&bool, 1024> = inst std::mem::clocked_memory(clk, [(true, idx, p)]);
+  │                                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ Parameter std::mem::D is &bool which is a port type
 
 

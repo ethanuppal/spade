@@ -1,10 +1,6 @@
 ---
 source: spade-tests/src/hir_lowering.rs
 ---
-// lifeguard spade#125
-mod std{mod conv{ 
-    fn trunc<#N, #M>(x: int<N>) -> int<M> __builtin__
-}}
 use std::conv::trunc;
 fn main() -> int<8> {
     let a: int<4> = 0;
@@ -14,9 +10,9 @@ fn main() -> int<8> {
 
 
 error: Truncating to a larger value
-  ┌─ testinput:8:38
+  ┌─ testinput:4:38
   │
-8 │     let b: int<8> = std::conv::trunc(a);
+4 │     let b: int<8> = std::conv::trunc(a);
   │                     -----------------^-
   │                     │                │
   │                     │                This value is 4 bytes
