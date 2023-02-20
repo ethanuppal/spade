@@ -25,7 +25,9 @@ use spade_hir::{
 };
 use spade_types::KnownType;
 
-use constraints::{ce_var, ConstraintExpr, ConstraintRhs, ConstraintSource, TypeConstraints};
+use constraints::{
+    bits_to_store, ce_int, ce_var, ConstraintExpr, ConstraintRhs, ConstraintSource, TypeConstraints,
+};
 use equation::{TypeEquations, TypeVar, TypedExpression};
 use error::{Error, Result, UnificationError, UnificationErrorExt, UnificationTrace};
 use fixed_types::{t_bool, t_clock, t_int};
@@ -504,7 +506,7 @@ impl TypeState {
             };
         }
 
-        let args = match_args_with_params(args, &head.inputs, is_method)?;
+        let matched_args = match_args_with_params(args, &head.inputs, is_method)?;
 
         handle_special_functions! {
             ["std", "conv", "concat"] => {
@@ -524,16 +526,28 @@ impl TypeState {
                 self.add_constraint(
                     lhs_size.clone(),
                     ce_var(&result_size) + -ce_var(&rhs_size),
-                    args[0].value.loc(),
+                    matched_args[0].value.loc(),
                     &lhs_size,
                     ConstraintSource::Concatenation
                 );
                 self.add_constraint(rhs_size.clone(),
                     ce_var(&result_size) + -ce_var(&lhs_size),
-                    args[1].value.loc(),
+                    matched_args[1].value.loc(),
                     &rhs_size,
                     ConstraintSource::Concatenation
                 );
+            },
+            ["std", "mem", "clocked_memory"]  => {
+                let num_elements = generic_arg!(0);
+                let addr_size = generic_arg!(2);
+
+                self.handle_clocked_memory(num_elements, addr_size, &matched_args, ctx)?
+            },
+            ["std", "mem", "read_memory"]  => {
+                let addr_size = generic_arg!(0);
+                let num_elements = generic_arg!(2);
+
+                self.handle_read_memory(num_elements, addr_size, &matched_args, ctx)?
             }
         };
 
@@ -545,7 +559,7 @@ impl TypeState {
         );
 
         // Unify the types of the arguments
-        self.type_check_argument_list(&args, ctx, &generic_list)?;
+        self.type_check_argument_list(&matched_args, ctx, &generic_list)?;
 
         self.unify(expression_type, &return_type, ctx.symtab)
             .map_normal_err(|(expected, got)| Error::UnspecifiedTypeError {
@@ -553,6 +567,61 @@ impl TypeState {
                 got,
                 loc: expression_id.loc(),
             })?;
+
+        Ok(())
+    }
+
+    pub fn handle_clocked_memory(
+        &mut self,
+        num_elements: TypeVar,
+        addr_size_arg: TypeVar,
+        args: &[Argument],
+        ctx: &Context,
+    ) -> Result<()> {
+        let (addr_type, addr_size) = self.new_split_generic_int(ctx.symtab);
+        let port_type = TypeVar::Array {
+            inner: Box::new(TypeVar::Tuple(vec![
+                self.new_generic(),
+                addr_type,
+                self.new_generic(),
+            ])),
+            size: Box::new(self.new_generic()),
+        };
+
+        self.add_constraint(
+            addr_size.clone(),
+            bits_to_store(ce_var(&num_elements) - ce_int(1)),
+            args[1].value.loc(),
+            &port_type,
+            ConstraintSource::MemoryIndexing,
+        );
+
+        // NOTE: Unwrap is safe, size is still generic at this point
+        self.unify(&addr_size, &addr_size_arg, ctx.symtab).unwrap();
+        self.unify_expression_generic_error(&args[1].value, &port_type, ctx.symtab)?;
+
+        Ok(())
+    }
+
+    pub fn handle_read_memory(
+        &mut self,
+        num_elements: TypeVar,
+        addr_size_arg: TypeVar,
+        args: &[Argument],
+        ctx: &Context,
+    ) -> Result<()> {
+        let (addr_type, addr_size) = self.new_split_generic_int(ctx.symtab);
+
+        self.add_constraint(
+            addr_size.clone(),
+            bits_to_store(ce_var(&num_elements) - ce_int(1)),
+            args[1].value.loc(),
+            &addr_type,
+            ConstraintSource::MemoryIndexing,
+        );
+
+        // NOTE: Unwrap is safe, size is still generic at this point
+        self.unify(&addr_size, &addr_size_arg, ctx.symtab).unwrap();
 
         Ok(())
     }

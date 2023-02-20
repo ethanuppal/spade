@@ -499,3 +499,40 @@ snapshot_error! {
         true
     }"
 }
+
+snapshot_error! {
+    wrong_index_size_on_memory_write_port_is_error,
+    "
+        use std::mem::clocked_memory;
+        entity test(clk: clock, idx: int<32>) -> int<8> {
+            let mem: Memory<int<8>, 16> = inst clocked_memory(clk, [(true, idx, 0)]);
+            0
+        }
+    "
+}
+
+snapshot_error! {
+    wrong_index_size_on_memory_read_port_is_error,
+    "
+        use std::mem::clocked_memory;
+        use std::mem::read_memory;
+
+        entity test(clk: clock, idx: int<32>) -> int<8> {
+            let mem: Memory<int<8>, 32> = inst clocked_memory(clk, []);
+            inst read_memory(mem, idx)
+        }
+    "
+}
+
+snapshot_error! {
+    too_small_index_size_on_memory_read_port_is_error,
+    "
+        use std::mem::clocked_memory;
+        use std::mem::read_memory;
+
+        entity test(clk: clock, idx: int<3>) -> int<8> {
+            let mem: Memory<int<8>, 16> = inst clocked_memory(clk, [(true, idx, 0)]);
+            0
+        }
+    "
+}

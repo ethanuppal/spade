@@ -88,6 +88,10 @@ impl CompilationError for Error {
                         // NOTE: This error message could probably be improved
                         format!("because the value is used as an index to an array")
                     }
+                    ConstraintSource::MemoryIndexing => {
+                        // NOTE: This error message could probably be improved
+                        format!("because the value is used as an index to a memory")
+                    }
                     ConstraintSource::Concatenation => {
                         format!("The size of a concatenation is the sum of the operand sizes")
                     }

@@ -1,0 +1,22 @@
+---
+source: spade-tests/src/typeinference.rs
+---
+use std::mem::clocked_memory;
+use std::mem::read_memory;
+
+entity test(clk: clock, idx: int<32>) -> int<8> {
+    let mem: Memory<int<8>, 32> = inst clocked_memory(clk, []);
+    inst read_memory(mem, idx)
+}
+
+
+error: Argument type mismatch
+  ┌─ testinput:6:27
+  │
+6 │     inst read_memory(mem, idx)
+  │                           ^^^ Expected int<5>
+  │
+  = Expected: int<5>
+  =      Got: int<32>
+
+
