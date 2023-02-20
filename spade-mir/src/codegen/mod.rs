@@ -717,11 +717,24 @@ fn statement_code(
                 }
             }
         }
-        Statement::Constant(id, _, value) => {
+        Statement::Constant(id, t, value) => {
             let name = ValueName::Expr(*id).var_name();
 
             let expression = match value {
-                ConstantValue::Int(val) => format!("{}", val),
+                ConstantValue::Int(val) => {
+                    let size = match t {
+                        crate::types::Type::Int(size) => size,
+                        _ => panic!("Const integer that is not const"),
+                    };
+
+                    // Verilog literals are 32 bits by default
+                    let size_spec = if *size >= 32 {
+                        format!("{size}'d")
+                    } else {
+                        String::new()
+                    };
+                    format!("{size_spec}{val}")
+                }
                 ConstantValue::Bool(val) => format!("{}", if *val { 1 } else { 0 }),
             };
 
@@ -2328,6 +2341,27 @@ mod expression_tests {
             r#"
             logic[7:0] _e_0;
             assign _e_0 = _e_1_o;"#
+        };
+
+        assert_same_code!(
+            &statement_code_and_declaration(
+                &stmt,
+                &TypeList::empty(),
+                &CodeBundle::new("".to_string())
+            )
+            .to_string(),
+            expected
+        );
+    }
+
+    #[test]
+    fn const_codegen_large_bit_width_works() {
+        let stmt = statement!(const 0; Type::Int(32); crate::ConstantValue::Int(3));
+
+        let expected = indoc! {
+            r#"
+            logic[31:0] _e_0;
+            assign _e_0 = 32'd3;"#
         };
 
         assert_same_code!(
