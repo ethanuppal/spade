@@ -262,7 +262,6 @@ impl<'a> Parser<'a> {
                 })
             }
         } else if self.peek_and_eat(&TokenKind::Dot)?.is_some() {
-            // TODO: Test this at the very end of a file
             let inst = self.peek_and_eat(&TokenKind::Instance)?;
 
             let field = self.identifier()?;

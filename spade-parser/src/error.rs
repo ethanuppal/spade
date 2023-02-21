@@ -15,20 +15,6 @@ pub(crate) struct SuggestBraceEnumVariant {
     pub close_paren: Loc<()>,
 }
 
-// let err = Diagnostic::error(().at(self.file_id, &next_token), "Expected argument list")
-//     .primary_label("Expected argument list here")
-//     .secondary_label(
-//         ().between(self.file_id, &start, &name),
-//         "for this instantiation",
-//     );
-
-// if let Ok(true) = self.peek_kind(&TokenKind::OpenBrace) {
-//     err.help("Positional argument lists start with`(`.")
-//         .help("Named argument lists start with `$(`.")
-// } else {
-//     err
-// }
-
 #[derive(IntoDiagnostic, Clone)]
 #[diagnostic(error, "Expected argument list")]
 pub(crate) struct ExpectedArgumentList {
