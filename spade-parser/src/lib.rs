@@ -79,6 +79,8 @@ impl From<Token> for FullSpan {
 pub struct Parser<'a> {
     lex: Lexer<'a, TokenKind>,
     peeked: Option<Token>,
+    // The last token that was eaten. Used in eof diagnostics
+    last_token: Option<Token>,
     pub parse_stack: Vec<ParseStackEntry>,
     file_id: usize,
     unit_context: Option<Loc<UnitKind>>,
@@ -89,6 +91,7 @@ impl<'a> Parser<'a> {
         Self {
             lex,
             peeked: None,
+            last_token: None,
             parse_stack: vec![],
             file_id,
             unit_context: None,
@@ -214,7 +217,7 @@ impl<'a> Parser<'a> {
         };
 
         let name = self.path()?;
-        let next_token = self.peek()?.ok_or(Error::Eof)?;
+        let next_token = self.peek()?;
 
         let args = self.argument_list()?.ok_or_else(|| {
             ExpectedArgumentList {
@@ -354,9 +357,9 @@ impl<'a> Parser<'a> {
         self.eat(&TokenKind::OpenParen)?;
 
         let next = self.peek()?;
-        let reference = match next.as_ref().map(|tok| tok.kind.clone()) {
-            Some(TokenKind::Identifier(_)) => PipelineStageReference::Absolute(self.identifier()?),
-            Some(TokenKind::Plus) => {
+        let reference = match next.kind {
+            TokenKind::Identifier(_) => PipelineStageReference::Absolute(self.identifier()?),
+            TokenKind::Plus => {
                 let plus = self.eat(&TokenKind::Plus)?;
                 let num = if let Some(d) = self.int_literal()? {
                     d
@@ -369,7 +372,7 @@ impl<'a> Parser<'a> {
                 let offset = (num.inner as i64).between(plus.file_id, &plus, &num);
                 PipelineStageReference::Relative(offset)
             }
-            Some(TokenKind::Minus) => {
+            TokenKind::Minus => {
                 let minus = self.eat(&TokenKind::Minus)?;
                 let num = if let Some(d) = self.int_literal()? {
                     d
@@ -381,13 +384,12 @@ impl<'a> Parser<'a> {
                 let offset = (-(num.inner as i64)).between(minus.file_id, &minus, &num);
                 PipelineStageReference::Relative(offset)
             }
-            Some(_) => {
+            _ => {
                 return Err(Error::UnexpectedToken {
-                    got: next.unwrap(),
+                    got: next,
                     expected: vec!["+", "-", "identifier"],
                 })
             }
-            _ => return Err(Error::Eof),
         };
 
         let close_paren = self.eat(&TokenKind::CloseParen)?;
@@ -897,13 +899,13 @@ impl<'a> Parser<'a> {
         let result = self.statements(allow_stages)?;
 
         let next = self.peek()?;
-        match next {
-            Some(tok) if &tok.kind == end_token => Ok(result),
-            Some(tok) => Err(Error::UnexpectedToken {
-                got: tok,
+        if &next.kind == end_token {
+            Ok(result)
+        } else {
+            Err(Error::UnexpectedToken {
+                got: next,
                 expected: vec![end_token.as_str(), "statement"],
-            }),
-            None => Err(Error::Eof),
+            })
         }
     }
 
@@ -1001,41 +1003,36 @@ impl<'a> Parser<'a> {
     #[trace_parser]
     #[tracing::instrument(skip(self))]
     pub fn unit(&mut self, attributes: &AttributeList) -> Result<Option<Loc<Unit>>> {
-        let (unit_kind, start_token) = match self.peek()? {
-            Some(tok) => match tok.kind {
-                TokenKind::Pipeline => {
-                    self.eat_unconditional()?;
+        let start_token = self.peek()?;
+        let unit_kind = match start_token.kind {
+            TokenKind::Pipeline => {
+                self.eat_unconditional()?;
 
-                    let (depth, depth_span) = self.surrounded(
-                        &TokenKind::OpenParen,
-                        |s| {
-                            s.maybe_comptime(&|s| {
-                                s.int_literal()?.or_error(s, |p| {
-                                    Ok(Error::ExpectedPipelineDepth {
-                                        got: p.eat_unconditional()?,
-                                    })
+                let (depth, depth_span) = self.surrounded(
+                    &TokenKind::OpenParen,
+                    |s| {
+                        s.maybe_comptime(&|s| {
+                            s.int_literal()?.or_error(s, |p| {
+                                Ok(Error::ExpectedPipelineDepth {
+                                    got: p.eat_unconditional()?,
                                 })
                             })
-                        },
-                        &TokenKind::CloseParen,
-                    )?;
+                        })
+                    },
+                    &TokenKind::CloseParen,
+                )?;
 
-                    (
-                        UnitKind::Pipeline(depth).between(self.file_id, &tok, &depth_span),
-                        tok,
-                    )
-                }
-                TokenKind::Function => {
-                    self.eat_unconditional()?;
-                    (UnitKind::Function.at(self.file_id, &tok), tok)
-                }
-                TokenKind::Entity => {
-                    self.eat_unconditional()?;
-                    (UnitKind::Entity.at(self.file_id, &tok), tok)
-                }
-                _ => return Ok(None),
-            },
-            None => return Ok(None),
+                UnitKind::Pipeline(depth).between(self.file_id, &start_token, &depth_span)
+            }
+            TokenKind::Function => {
+                self.eat_unconditional()?;
+                UnitKind::Function.at(self.file_id, &start_token)
+            }
+            TokenKind::Entity => {
+                self.eat_unconditional()?;
+                UnitKind::Entity.at(self.file_id, &start_token)
+            }
+            _ => return Ok(None),
         };
 
         self.set_item_context(unit_kind.clone())?;
@@ -1075,14 +1072,19 @@ impl<'a> Parser<'a> {
                 .unwrap_or_else(|| inputs_loc)
                 .span;
 
-            return match self.peek()? {
-                Some(got) => Err(Error::ExpectedBlock {
-                    for_what: "entity".to_string(),
-                    got,
-                    loc: Loc::new((), lspan(start_token.span).merge(end_loc), self.file_id),
-                }),
-                None => Err(Error::Eof),
-            };
+            let rest_loc = Loc::new((), lspan(start_token.span).merge(end_loc), self.file_id);
+            let next = self.peek()?;
+            return Err(Diagnostic::error(
+                next.clone(),
+                format!(
+                    "Unexpected `{}`, expected body or `{}`",
+                    next.kind.as_str(),
+                    TokenKind::Builtin.as_str()
+                ),
+            )
+            .primary_label(format!("Unexpected {}", &next.kind.as_str()))
+            .secondary_label(rest_loc, format!("Expected body for this {unit_kind}"))
+            .into());
         };
 
         self.clear_item_context();
@@ -1232,7 +1234,7 @@ impl<'a> Parser<'a> {
         } else if self.peek_kind(&TokenKind::Comma)? || self.peek_kind(&TokenKind::CloseBrace)? {
             None
         } else {
-            let token = self.peek()?.ok_or(Error::Eof)?;
+            let token = self.peek()?;
             let message = unexpected_token_message(&token.kind, "`{`, `,` or `}`");
             // FIXME: Error::Eof => Diagnostic
             let mut err = Diagnostic::error(token, message);
@@ -1374,7 +1376,7 @@ impl<'a> Parser<'a> {
         Ok(Some(
             Module {
                 name,
-                body: body.between(self.file_id, &open_brace.unwrap().span, &end.span),
+                body: body.between(self.file_id, &open_brace.span, &end.span),
             }
             .between(self.file_id, &start, &end),
         ))
@@ -1481,10 +1483,10 @@ impl<'a> Parser<'a> {
     pub fn top_level_module_body(&mut self) -> Result<ModuleBody> {
         let result = self.module_body()?;
 
-        if let Some(tok) = self.peek()? {
-            Err(Error::ExpectedItem { got: tok })
-        } else {
+        if self.peek_kind(&TokenKind::Eof)? {
             Ok(result)
+        } else {
+            Err(Error::ExpectedItem { got: self.peek()? })
         }
     }
 }
@@ -1658,6 +1660,7 @@ impl<'a> Parser<'a> {
             .unwrap_or_else(|| self.next_token())?;
 
         self.parse_stack.push(ParseStackEntry::Ate(food.clone()));
+        self.last_token = Some(food.clone());
         Ok(food)
     }
 
@@ -1676,16 +1679,15 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn peek(&mut self) -> Result<Option<Token>> {
+    fn peek(&mut self) -> Result<Token> {
         if let Some(peeked) = self.peeked.clone() {
-            Ok(Some(peeked))
+            Ok(peeked)
         } else {
             let result = match self.next_token() {
-                Ok(token) => Some(token),
-                Err(Error::Eof) => None,
+                Ok(token) => token,
                 Err(e) => return Err(e),
             };
-            self.peeked = result.clone();
+            self.peeked = Some(result.clone());
             Ok(result)
         }
     }
@@ -1714,23 +1716,34 @@ impl<'a> Parser<'a> {
     }
 
     fn peek_cond_no_tracing(&mut self, cond: impl Fn(&TokenKind) -> bool) -> Result<bool> {
-        self.peek().map(|token| {
-            if let Some(inner) = token {
-                cond(&inner.kind)
-            } else {
-                false
-            }
-        })
+        self.peek().map(|token| cond(&token.kind))
     }
 
     fn next_token(&mut self) -> Result<Token> {
-        let kind = self.lex.next().ok_or(Error::Eof)?;
+        let tok = self
+            .lex
+            .next()
+            .map(|k| Token::new(k, &self.lex, self.file_id))
+            .unwrap_or({
+                match &self.last_token {
+                    Some(last) => Token {
+                        kind: TokenKind::Eof,
+                        span: last.span.end..last.span.end,
+                        file_id: last.file_id,
+                    },
+                    None => Token {
+                        kind: TokenKind::Eof,
+                        span: logos::Span { start: 0, end: 0 },
+                        file_id: self.file_id,
+                    },
+                }
+            });
 
-        if let TokenKind::Error = kind {
-            Err(Error::LexerError(self.file_id, lspan(self.lex.span())))?
+        if let TokenKind::Error = tok.kind {
+            return Err(Error::LexerError(self.file_id, lspan(self.lex.span())));
         };
 
-        Ok(Token::new(kind, &self.lex, self.file_id))
+        Ok(tok)
     }
 }
 

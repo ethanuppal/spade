@@ -129,3 +129,28 @@ snapshot_error! {
         }
     "
 }
+
+snapshot_error! {
+    good_eof_error_on_missing_dot_continuation,
+    "fn a() -> bool { a."
+}
+
+snapshot_error! {
+    good_eof_error_on_missing_function_body,
+    "fn a() -> bool"
+}
+
+snapshot_error! {
+    good_eof_error_on_missing_function_body_without_type_signature,
+    "fn a() -> bool"
+}
+
+snapshot_error! {
+    good_error_on_unexpected_body,
+    "entity a() -> bool struct"
+}
+
+snapshot_error! {
+    empty_file_is_valid,
+    ""
+}

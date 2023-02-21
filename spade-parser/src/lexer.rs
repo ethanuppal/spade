@@ -186,6 +186,8 @@ pub enum TokenKind {
     #[regex("//[^\n]*\n", logos::skip)]
     Comment,
 
+    Eof,
+
     #[error]
     Error,
 }
@@ -272,6 +274,8 @@ impl TokenKind {
             TokenKind::Dollar => "$",
 
             TokenKind::Builtin => "__builtin__",
+
+            TokenKind::Eof => "end of file",
 
             TokenKind::Whitespace => "whitespace",
             TokenKind::Comment => "comment",

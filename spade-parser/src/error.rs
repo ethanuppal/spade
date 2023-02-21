@@ -48,8 +48,6 @@ impl ExpectedArgumentList {
 
 #[derive(Error, Debug, Clone, PartialEq)]
 pub enum Error {
-    #[error("End of file")]
-    Eof,
     #[error("Lexer error at {} in file {}", 1.0, 0)]
     LexerError(usize, codespan::Span),
     #[error("Unexpected token. Got {}, expected {expected:?}", got.kind.as_str())]

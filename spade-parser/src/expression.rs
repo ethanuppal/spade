@@ -138,9 +138,9 @@ impl<'a> Parser<'a> {
     // Based on matklads blog post on pratt parsing:
     // https://matklad.github.io/2020/04/13/simple-but-powerful-pratt-parsing.html
     fn expr_bp(&mut self, min_power: OpBindingPower) -> Result<Loc<Expression>> {
-        let mut lhs = if let Some((tok, op)) = self
-            .peek()?
-            .and_then(|tok| Self::unop_from_kind(&tok.kind).map(|op| (tok, op)))
+        let next_tok = self.peek()?;
+        let mut lhs = if let Some((tok, op)) =
+            Self::unop_from_kind(&next_tok.kind).map(|op| (next_tok, op))
         {
             self.eat_unconditional()?;
             let op_power = unop_binding_power(&op);
@@ -152,12 +152,7 @@ impl<'a> Parser<'a> {
             self.base_expression()?
         };
 
-        while let Some(op) = self
-            .peek()?
-            .map(|tok| tok.kind)
-            .as_ref()
-            .and_then(Self::binop_from_kind)
-        {
+        while let Some(op) = Self::binop_from_kind(&self.peek()?.kind) {
             let op_power = binop_binding_power(&op);
 
             if op_power <= min_power {
@@ -226,13 +221,14 @@ impl<'a> Parser<'a> {
     }
 
     fn unary_operator(&mut self) -> Result<Option<Loc<Expression>>> {
-        let operator = self.peek()?.and_then(|t| match t.kind {
+        let t = self.peek()?;
+        let operator = match t.kind {
             TokenKind::Minus => Some(UnaryOperator::Sub.at(self.file_id, &t.span)),
             TokenKind::Not => Some(UnaryOperator::Not.at(self.file_id, &t.span)),
             TokenKind::Tilde => Some(UnaryOperator::BitwiseNot.at(self.file_id, &t.span)),
             TokenKind::Asterisk => Some(UnaryOperator::Dereference.at(self.file_id, &t.span)),
             _ => None,
-        });
+        };
 
         Ok(match operator {
             Some(op) => {
@@ -278,7 +274,7 @@ impl<'a> Parser<'a> {
                 .between(self.file_id, &expr, &args))
             } else if let Some(inst_keyword) = inst {
                 Err(ExpectedArgumentList {
-                    next_token: self.peek()?.ok_or(Error::Eof)?,
+                    next_token: self.peek()?,
                     base_expr: ().between(self.file_id, &inst_keyword, &field),
                 }
                 .with_suggestions()

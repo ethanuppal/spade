@@ -44,7 +44,6 @@ fn unexpected_token<'a>(
 impl CompilationError for Error {
     fn report(&self, buffer: &mut Buffer, code: &CodeBundle, diag_handler: &mut DiagHandler) {
         let diag = match self {
-            Error::Eof => Diagnostic::error().with_message("Reached end of file when parsing"),
             Error::LexerError(file_id, location) => Diagnostic::error()
                 .with_message("Lexer error, unexpected symbol")
                 .with_labels(vec![Label::primary(*file_id, *location)]),
