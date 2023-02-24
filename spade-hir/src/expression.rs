@@ -1,10 +1,12 @@
 use crate::Pattern;
 
 use super::{Block, NameID};
+use num::{BigInt, BigUint};
 use serde::{Deserialize, Serialize};
 use spade_common::{
     location_info::{Loc, WithLocation},
     name::{Identifier, Path},
+    num_ext::InfallibleToBigInt,
 };
 
 #[derive(Clone, Copy, PartialEq, Debug, Serialize, Deserialize)]
@@ -95,19 +97,38 @@ pub struct Argument {
 }
 impl WithLocation for ArgumentList {}
 
+#[derive(PartialEq, Debug, Clone, Serialize, Deserialize)]
+pub enum IntLiteral {
+    Signed(BigInt),
+    Unsigned(BigUint),
+}
+impl WithLocation for IntLiteral {}
+
+impl IntLiteral {
+    /// Converts the number to a signed BigInt, throwing away the original sign/unsigned
+    /// information
+    pub fn as_signed(self) -> BigInt {
+        match self {
+            IntLiteral::Signed(v) => v,
+            IntLiteral::Unsigned(u) => u.to_bigint(),
+        }
+    }
+}
+
 // FIXME: Migrate entity, pipeline and fn instantiation to this
 #[derive(PartialEq, Debug, Clone, Serialize, Deserialize)]
 pub enum CallKind {
     Function,
     Entity(Loc<()>),
-    Pipeline(Loc<()>, Loc<u128>),
+    Pipeline(Loc<()>, Loc<usize>),
 }
 impl WithLocation for CallKind {}
+
 
 #[derive(PartialEq, Debug, Clone, Serialize, Deserialize)]
 pub enum ExprKind {
     Identifier(NameID),
-    IntLiteral(u128),
+    IntLiteral(IntLiteral),
     BoolLiteral(bool),
     TupleLiteral(Vec<Loc<Expression>>),
     ArrayLiteral(Vec<Loc<Expression>>),
@@ -149,6 +170,10 @@ impl ExprKind {
 
     pub fn idless(self) -> Expression {
         Expression { kind: self, id: 0 }
+    }
+
+    pub fn int_literal(val: i32) -> Self {
+        Self::IntLiteral(IntLiteral::Signed(val.to_bigint()))
     }
 }
 

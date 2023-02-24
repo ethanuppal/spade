@@ -5,6 +5,7 @@ use codespan_reporting::term::termcolor::Buffer;
 use color_eyre::eyre::{anyhow, Context};
 use itertools::Itertools;
 use logos::Logos;
+use num::{BigUint, ToPrimitive, Zero};
 use pyo3::prelude::*;
 
 use ::spade::compiler_state::CompilerState;
@@ -271,7 +272,11 @@ impl Spade {
         let size = concrete.to_mir_type().size();
 
         Ok(FieldRef {
-            range: (0, size),
+            range: (
+                0,
+                size.to_u64()
+                    .ok_or(anyhow!("Field index exceeds {} bits", usize::MAX))?,
+            ),
             ty,
         })
     }
@@ -355,15 +360,15 @@ impl Spade {
             .type_state
             .name_type(&o_name.nowhere(), &ast_ctx.symtab, &self.item_list.types)
             .unwrap();
-        let (mut start, mut end) = (0, concrete.to_mir_type().size());
+        let (mut start, mut end) = (BigUint::zero(), concrete.to_mir_type().size());
 
         for field in path {
-            let mut current_offset = 0;
+            let mut current_offset = BigUint::zero();
             for (f, ty) in concrete.assume_struct().1 {
                 let self_size = ty.to_mir_type().size();
                 if f.0 == field {
-                    start = start + current_offset;
-                    end = start + self_size;
+                    start = &start + current_offset;
+                    end = &start + self_size;
                     break;
                 }
                 current_offset += self_size;
@@ -377,7 +382,13 @@ impl Spade {
         });
 
         Ok(FieldRef {
-            range: (start, end),
+            range: (
+                start
+                    .to_u64()
+                    .ok_or(anyhow!("Field index exceeds {} bits", usize::MAX))?,
+                end.to_u64()
+                    .ok_or(anyhow!("Field index exceeds {} bits", usize::MAX))?,
+            ),
             ty: result_type,
         })
     }

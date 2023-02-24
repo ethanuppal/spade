@@ -3,6 +3,8 @@
 // See https://github.com/rust-lang/rust/blob/da895e7938e8d6f8d221fce2876d225bf58df865/COPYRIGHT for the rustc copyright
 
 use itertools::Itertools;
+use num::{BigInt, ToPrimitive};
+use spade_common::num_ext::InfallibleToBigInt;
 use spade_hir::Pattern;
 use spade_types::ConcreteType;
 
@@ -23,8 +25,8 @@ use crate::{Context, MirLowerable};
 ///    |---|--||-|---|---|---|--|
 /// ```
 fn split_int_range(
-    min: i128,
-    max: i128,
+    min: BigInt,
+    max: BigInt,
     other_ctors: impl Iterator<Item = Constructor> + Clone,
 ) -> Vec<Constructor> {
     let mut edges = other_ctors
@@ -37,12 +39,12 @@ fn split_int_range(
     edges.dedup();
 
     let mut result = vec![];
-    let mut current_low = min;
+    let mut current_low = min.clone();
 
-    for edge in edges.into_iter().filter(|e| *e > min && *e < max) {
+    for edge in edges.into_iter().filter(|e| e > &min && e < &max) {
         result.push(Constructor::IntRange {
             min: current_low,
-            max: edge - 1,
+            max: &edge - 1u32.to_bigint(),
         });
         current_low = edge;
     }
@@ -70,13 +72,18 @@ pub(crate) fn split_wildcard(
             .collect(),
         ConcreteType::Single { base, params } => match base {
             spade_types::PrimitiveType::Int => {
-                let bits = match params[0] {
-                    ConcreteType::Integer(s) => s,
+                let bits = match &params[0] {
+                    ConcreteType::Integer(s) => s
+                        .to_bigint()
+                        .to_u128()
+                        // NOTE: Throwing error handling in here right now would be annoying,
+                        // so an expect should be fine. This is a very uncommon case anyway
+                        .expect("Integer bit sizes above 2^128 bits is unsupported"),
                     _ => unreachable!(),
                 };
 
-                let min = -(1i128 << (bits - 1));
-                let max = (1i128 << (bits - 1)) - 1;
+                let min = -(1.to_bigint() << (bits - 1));
+                let max = (1.to_bigint() << (bits - 1)) - 1;
                 split_int_range(
                     min,
                     max,
@@ -110,8 +117,8 @@ pub enum Constructor {
     /// Enum variant constructor
     Variant(usize),
     IntRange {
-        min: i128,
-        max: i128,
+        min: BigInt,
+        max: BigInt,
     },
     Wildcard,
 }
@@ -128,7 +135,7 @@ impl Constructor {
     ) -> Vec<Self> {
         match self {
             Self::Wildcard => split_wildcard(ty, other_ctors),
-            Self::IntRange { min, max } => split_int_range(*min, *max, other_ctors),
+            Self::IntRange { min, max } => split_int_range(min.clone(), max.clone(), other_ctors),
             _ => vec![self.clone()],
         }
     }
@@ -165,9 +172,11 @@ impl Constructor {
                 ConcreteType::Struct { name: _, members } => {
                     members.iter().map(|m| m.1.clone()).collect()
                 }
-                ConcreteType::Array { inner, size } => {
-                    (0..*size as usize).map(|_| *inner.clone()).collect()
-                }
+                ConcreteType::Array { inner, size } => (0..size
+                    .to_u128()
+                    .expect("Arrays with more than 2^128 elements are unsupported"))
+                    .map(|_| *inner.clone())
+                    .collect(),
                 ConcreteType::Enum { .. } => {
                     unreachable!("enum should have Variant constructor")
                 }
@@ -194,9 +203,9 @@ impl Constructor {
         self.fields(ty).len()
     }
 
-    fn as_range(&self) -> (i128, i128) {
+    fn as_range(&self) -> (BigInt, BigInt) {
         match self {
-            Constructor::IntRange { min, max } => (*min, *max),
+            Constructor::IntRange { min, max } => (min.clone(), max.clone()),
             other => panic!("Interprerting {other:?} constructor as range"),
         }
     }
@@ -231,8 +240,8 @@ impl DeconstructedPattern {
         let (ctor, fields) = match &pat.kind {
             spade_hir::PatternKind::Integer(val) => (
                 Constructor::IntRange {
-                    min: *val as i128,
-                    max: (val + 1) as i128,
+                    min: val.clone(),
+                    max: (val + 1),
                 },
                 vec![],
             ),
@@ -292,7 +301,7 @@ impl DeconstructedPattern {
 
 impl std::fmt::Display for DeconstructedPattern {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self.ctor {
+        match &self.ctor {
             Constructor::Single => match &self.ty {
                 ConcreteType::Tuple(_) => write!(
                     f,
@@ -325,7 +334,7 @@ impl std::fmt::Display for DeconstructedPattern {
             },
             Constructor::Variant(idx) => match &self.ty {
                 ConcreteType::Enum { options } => {
-                    let option = &options[idx];
+                    let option = &options[*idx];
 
                     let fields_str = if !self.fields.is_empty() {
                         format!(

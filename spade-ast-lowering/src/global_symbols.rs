@@ -36,7 +36,7 @@ pub fn gather_types(module: &ast::ModuleBody, symtab: &mut SymbolTable) -> Resul
             ast::Item::Config(cfg) => {
                 symtab.add_unique_thing(
                     Path::ident(cfg.name.clone()).at_loc(&cfg.name),
-                    Thing::ComptimeConfig(cfg.val),
+                    Thing::ComptimeConfig(cfg.val.clone()),
                 )?;
             }
             ast::Item::Use(u) => {
@@ -388,7 +388,10 @@ mod tests {
         TypeParam,
     };
     use hir::{dtype, hparams, testutil::t_num, ItemList};
-    use spade_common::name::testutil::{name_id, name_id_p};
+    use spade_common::{
+        name::testutil::{name_id, name_id_p},
+        num_ext::InfallibleToBigUint,
+    };
 
     use super::*;
 
@@ -422,8 +425,9 @@ mod tests {
                                     ast::TypeSpec::Named(
                                         ast_path("int"),
                                         Some(
-                                            vec![ast::TypeExpression::Integer(10).nowhere()]
-                                                .nowhere(),
+                                            vec![ast::TypeExpression::Integer(10u32.to_biguint())
+                                                .nowhere()]
+                                            .nowhere(),
                                         ),
                                     )
                                     .nowhere(),

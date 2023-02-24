@@ -1,10 +1,11 @@
+use num::{bigint::ToBigInt, BigInt, ToPrimitive};
 use spade_common::location_info::{Loc, WithLocation};
 
 use crate::equation::TypeVar;
 
 #[derive(Debug, Clone)]
 pub enum ConstraintExpr {
-    Integer(i128),
+    Integer(BigInt),
     Var(TypeVar),
     Sum(Box<ConstraintExpr>, Box<ConstraintExpr>),
     Sub(Box<ConstraintExpr>),
@@ -32,9 +33,20 @@ impl ConstraintExpr {
                 _ => self.clone(),
             },
             ConstraintExpr::BitsToRepresent(inner) => match inner.evaluate() {
-                ConstraintExpr::Integer(val) => {
-                    ConstraintExpr::Integer((val as f64).log2().floor() as i128 + 1)
-                }
+                ConstraintExpr::Integer(val) => ConstraintExpr::Integer(
+                    // NOTE: This might fail, but it will only do so for massive
+                    // constraints. If this turns out to be an issue, we need to
+                    // look into doing log2 on BigInt, which as of right now, is
+                    // unsupported
+                    ((val
+                        .to_f64()
+                        .expect("Failed to convert constrained integer to f64"))
+                    .log2()
+                    .floor() as i128
+                        + 1)
+                    .to_bigint()
+                    .unwrap(),
+                ),
                 _ => self.clone(),
             },
         }
@@ -101,7 +113,7 @@ pub fn bits_to_store(inner: ConstraintExpr) -> ConstraintExpr {
 pub fn ce_var(v: &TypeVar) -> ConstraintExpr {
     ConstraintExpr::Var(v.clone())
 }
-pub fn ce_int(v: i128) -> ConstraintExpr {
+pub fn ce_int(v: BigInt) -> ConstraintExpr {
     ConstraintExpr::Integer(v)
 }
 
@@ -160,13 +172,13 @@ impl TypeConstraints {
                 let mut rhs = rhs.clone();
                 rhs.constraint = rhs.constraint.evaluate();
 
-                match rhs.constraint {
+                match &rhs.constraint {
                     ConstraintExpr::Integer(val) => {
                         // ().at_loc(..).map is a somewhat ugly way to wrap an arbitrary type
                         // in a known Loc. This is done to avoid having to impl WithLocation for
                         // the the unusual tuple used here
                         let replacement = ConstraintReplacement {
-                            val,
+                            val: val.clone(),
                             context: rhs.context.clone(),
                         };
                         new_known
@@ -188,7 +200,7 @@ impl TypeConstraints {
 #[derive(Clone)]
 pub struct ConstraintReplacement {
     /// The actual constraint
-    pub val: i128,
+    pub val: BigInt,
     pub context: ConstraintContext,
 }
 

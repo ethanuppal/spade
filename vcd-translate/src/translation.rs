@@ -2,13 +2,26 @@ use std::collections::HashMap;
 
 use num::{
     bigint::{Sign, ToBigUint},
-    BigInt, BigUint,
+    BigInt, BigUint, ToPrimitive, Zero,
 };
+use spade_common::num_ext::InfallibleToBigUint;
 use spade_hir_lowering::{MirLowerable, NameIDExt};
 use spade_mir::{codegen::escape_path, ValueName};
 use spade_typeinference::equation::TypedExpression;
 use spade_types::{ConcreteType, PrimitiveType};
 use vcd::Value;
+
+trait BigUintExt {
+    /// Converts a uint to a usize, panicking if it does not fit, with a message
+    /// about not supporting more than usize::MAX bytes
+    fn to_bit_count(&self) -> usize;
+}
+impl BigUintExt for BigUint {
+    fn to_bit_count(&self) -> usize {
+        self.to_usize()
+            .expect(&format!("Bit counts > {} are unsupported", usize::MAX))
+    }
+}
 
 pub fn translate_names(
     input: HashMap<TypedExpression, Option<ConcreteType>>,
@@ -125,15 +138,18 @@ fn translate_signed_int(value: &[Value]) -> MaybeValue<BigInt> {
 pub fn inner_translate_value(result: &mut String, in_value: &[Value], t: &ConcreteType) {
     let value_len = in_value.len();
     let type_size = t.to_mir_type().size();
-    let missing_values = type_size as usize - value_len;
+    let missing_values = type_size
+        .to_usize()
+        .expect(&format!("Value is wider than {} bits", usize::MAX))
+        - value_len;
 
     // FIXME: This is a temporary hack to work around
     // lifeguard spade#214
-    if type_size < value_len as u64 {
+    if type_size < value_len.to_biguint() {
         return;
     }
 
-    if type_size == 0 {
+    if type_size == BigUint::zero() {
         return;
     }
 
@@ -153,7 +169,11 @@ pub fn inner_translate_value(result: &mut String, in_value: &[Value], t: &Concre
 
             let mut offset = 0;
             for (i, t) in inner.iter().enumerate() {
-                let end = offset + t.to_mir_type().size() as usize;
+                let end = offset
+                    + t.to_mir_type()
+                        .size()
+                        .to_usize()
+                        .expect(&format!("Value is wider than {} bits", usize::MAX));
                 inner_translate_value(result, &value[offset..end], t);
                 offset = end;
                 if i != inner.len() - 1 {
@@ -167,7 +187,7 @@ pub fn inner_translate_value(result: &mut String, in_value: &[Value], t: &Concre
 
             result.push('{');
             for (i, (name, t)) in members.iter().enumerate() {
-                let end = offset + t.to_mir_type().size() as usize;
+                let end = offset + t.to_mir_type().size().to_bit_count();
                 *result += &format!("{name}:");
                 inner_translate_value(result, &value[offset..end], t);
                 offset = end;
@@ -180,11 +200,11 @@ pub fn inner_translate_value(result: &mut String, in_value: &[Value], t: &Concre
         ConcreteType::Array { inner, size } => {
             let mut offset = 0;
             result.push('[');
-            for i in 0..*size {
-                let end = offset + inner.to_mir_type().size() as usize;
+            for i in 0..size.to_bit_count() {
+                let end = offset + inner.to_mir_type().size().to_bit_count();
                 inner_translate_value(result, &value[offset..end], inner);
                 offset = end;
-                if i != *size - 1 {
+                if i != size.to_bit_count() - 1 {
                     result.push(',')
                 }
             }
@@ -210,7 +230,7 @@ pub fn inner_translate_value(result: &mut String, in_value: &[Value], t: &Concre
                             result.push('(');
                             let mut offset = tag_size;
                             for (i, t) in inner_types.iter().enumerate() {
-                                let end = offset + t.1.to_mir_type().size() as usize;
+                                let end = offset + t.1.to_mir_type().size().to_bit_count();
                                 inner_translate_value(result, &value[offset..end], &t.1);
                                 offset = end;
 
@@ -404,14 +424,14 @@ mod tests {
                     ast_ident("a").inner,
                     ConcreteType::Single {
                         base: PrimitiveType::Int,
-                        params: vec![ConcreteType::Integer(5)],
+                        params: vec![ConcreteType::Integer(5u32.to_biguint())],
                     },
                 ),
                 (
                     ast_ident("b").inner,
                     ConcreteType::Single {
                         base: PrimitiveType::Int,
-                        params: vec![ConcreteType::Integer(3)],
+                        params: vec![ConcreteType::Integer(3u32.to_biguint())],
                     },
                 ),
             ],
@@ -429,11 +449,11 @@ mod tests {
         let ty = ConcreteType::Tuple(vec![
             ConcreteType::Single {
                 base: PrimitiveType::Int,
-                params: vec![ConcreteType::Integer(5)],
+                params: vec![ConcreteType::Integer(5u32.to_biguint())],
             },
             ConcreteType::Single {
                 base: PrimitiveType::Int,
-                params: vec![ConcreteType::Integer(3)],
+                params: vec![ConcreteType::Integer(3u32.to_biguint())],
             },
         ]);
 
@@ -449,11 +469,11 @@ mod tests {
         let ty = ConcreteType::Tuple(vec![
             ConcreteType::Single {
                 base: PrimitiveType::Int,
-                params: vec![ConcreteType::Integer(5)],
+                params: vec![ConcreteType::Integer(5u32.to_biguint())],
             },
             ConcreteType::Single {
                 base: PrimitiveType::Int,
-                params: vec![ConcreteType::Integer(3)],
+                params: vec![ConcreteType::Integer(3u32.to_biguint())],
             },
         ]);
 
@@ -470,14 +490,14 @@ mod tests {
                 ast_ident("a").inner,
                 ConcreteType::Single {
                     base: PrimitiveType::Int,
-                    params: vec![ConcreteType::Integer(5)],
+                    params: vec![ConcreteType::Integer(5u32.to_biguint())],
                 },
             ),
             (
                 ast_ident("b").inner,
                 ConcreteType::Single {
                     base: PrimitiveType::Int,
-                    params: vec![ConcreteType::Integer(3)],
+                    params: vec![ConcreteType::Integer(3u32.to_biguint())],
                 },
             ),
         ];
@@ -485,7 +505,7 @@ mod tests {
             ast_ident("a").inner,
             ConcreteType::Single {
                 base: PrimitiveType::Int,
-                params: vec![ConcreteType::Integer(3)],
+                params: vec![ConcreteType::Integer(3u32.to_biguint())],
             },
         )];
 
@@ -564,9 +584,9 @@ mod tests {
         let ty = ConcreteType::Array {
             inner: Box::new(ConcreteType::Single {
                 base: PrimitiveType::Int,
-                params: vec![ConcreteType::Integer(3)],
+                params: vec![ConcreteType::Integer(3u32.to_biguint())],
             }),
-            size: 2,
+            size: 2u32.to_biguint(),
         };
 
         let value = vec![V0, V0, V1, V0, V1, V0];
@@ -581,11 +601,11 @@ mod tests {
         let ty = ConcreteType::Tuple(vec![
             ConcreteType::Single {
                 base: PrimitiveType::Int,
-                params: vec![ConcreteType::Integer(5)],
+                params: vec![ConcreteType::Integer(5u32.to_biguint())],
             },
             ConcreteType::Single {
                 base: PrimitiveType::Int,
-                params: vec![ConcreteType::Integer(3)],
+                params: vec![ConcreteType::Integer(3u32.to_biguint())],
             },
         ]);
 
@@ -601,11 +621,11 @@ mod tests {
         let ty = ConcreteType::Tuple(vec![
             ConcreteType::Single {
                 base: PrimitiveType::Int,
-                params: vec![ConcreteType::Integer(5)],
+                params: vec![ConcreteType::Integer(5u32.to_biguint())],
             },
             ConcreteType::Single {
                 base: PrimitiveType::Int,
-                params: vec![ConcreteType::Integer(3)],
+                params: vec![ConcreteType::Integer(3u32.to_biguint())],
             },
         ]);
 

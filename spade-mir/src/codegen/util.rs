@@ -1,3 +1,5 @@
+use num::BigUint;
+
 use crate::ValueName;
 
 impl ValueName {
@@ -46,9 +48,9 @@ pub fn mangle_output(input: &str) -> String {
 
 pub enum TupleIndex {
     /// The index is a single bit, i.e. codegens as [val]
-    Single(u64),
+    Single(BigUint),
     /// The index is a range of bits, codegens as [left:right]
-    Range { left: u64, right: u64 },
+    Range { left: BigUint, right: BigUint },
 }
 
 impl TupleIndex {

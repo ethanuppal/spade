@@ -1,7 +1,11 @@
+use num::traits::Pow;
+use num::{BigInt, ToPrimitive, Zero};
 use spade_common::location_info::WithLocation;
 use spade_common::name::Path;
+use spade_common::num_ext::InfallibleToBigInt;
 use spade_common::{location_info::Loc, name::Identifier};
 use spade_diagnostics::{diag_anyhow, diag_assert, diag_bail, Diagnostic};
+use spade_hir::expression::IntLiteral;
 use spade_hir::symbol_table::{TypeDeclKind, TypeSymbol};
 use spade_hir::ArgumentList;
 
@@ -35,7 +39,7 @@ pub enum Requirement {
     },
     /// The type should be an integer large enough to fit the specified value
     FitsIntLiteral {
-        value: u128,
+        value: IntLiteral,
         target_type: Loc<TypeVar>,
     },
 }
@@ -195,28 +199,57 @@ impl Requirement {
                         diag_assert!(target_type, params.len() == 1);
                         params[0].expect_integer(
                             |size| {
+                                let two = 2.to_bigint();
+
+                                let size_u32 = size.to_u32().ok_or_else(|| {
+                                    Diagnostic::bug(
+                                        target_type,
+                                        "Integer size does not fit in 32 bit unsigned number",
+                                    )
+                                    .note("How did you manage to trigger this 🤔")
+                                })?;
+                                let (contained_range, unsigned) = match value {
+                                    IntLiteral::Signed(_) => (
+                                        (
+                                            -(&two).pow(size_u32 - 1),
+                                            &two.pow(size_u32 - 1) - 1.to_bigint(),
+                                        ),
+                                        false,
+                                    ),
+                                    IntLiteral::Unsigned(_) => {
+                                        ((BigInt::zero(), two.pow(size_u32)-1), true)
+                                    }
+                                };
+
+                                let value = value.clone().as_signed();
                                 // If the value is 0, we can fit it into any integer and
                                 // can get rid of the requirement
-                                if *value == 0 {
+                                if value == 0u32.to_bigint() {
                                     return Ok(RequirementResult::Satisfied(vec![]));
                                 }
 
-                                // +1 for signed
-                                let minimum_size = ((*value) as f64).log2() + 1.;
-                                if *value > 0 && size <= minimum_size as u128 {
-                                    Err(Diagnostic::error(
+                                if value < contained_range.0 || value > contained_range.1 {
+                                    let diagnostic = Diagnostic::error(
                                         target_type,
                                         format!("Integer value does not fit in int<{size}>"),
                                     )
                                     .primary_label(format!(
                                         "{value} does not fit in an int<{size}>"
-                                    ))
-                                    .note(format!(
-                                        "int<{size}> fits integers in the range (-{}, {})",
-                                        (2u128).pow((size - 1) as u32),
-                                        (2u128).pow((size - 1) as u32) - 1,
-                                    ))
-                                    .into())
+                                    ));
+
+                                    let diagnostic = if unsigned {
+                                        diagnostic.note(format!(
+                                            "int<{size}> fits unsigned integers in the range (0, {})",
+                                            contained_range.1,
+                                        ))
+                                    } else {
+                                        diagnostic.note(format!(
+                                            "int<{size}> fits integers in the range ({}, {})",
+                                            contained_range.0, contained_range.1
+                                        ))
+                                    };
+
+                                    Err(diagnostic.into())
                                 } else {
                                     Ok(RequirementResult::Satisfied(vec![]))
                                 }

@@ -1,7 +1,9 @@
 use comptime::{ComptimeCondition, MaybeComptime};
+use num::{BigInt, BigUint, Zero};
 use spade_common::{
     location_info::{Loc, WithLocation},
     name::{Identifier, Path},
+    num_ext::InfallibleToBigInt,
 };
 
 pub mod comptime;
@@ -10,7 +12,7 @@ pub mod testutil;
 #[derive(PartialEq, Debug, Clone)]
 pub enum TypeExpression {
     TypeSpec(Box<Loc<TypeSpec>>),
-    Integer(u128),
+    Integer(BigUint),
 }
 impl WithLocation for TypeExpression {}
 
@@ -42,7 +44,7 @@ impl WithLocation for ArgumentPattern {}
 
 #[derive(PartialEq, Debug, Clone)]
 pub enum Pattern {
-    Integer(u128),
+    Integer(IntLiteral),
     Bool(bool),
     Path(Loc<Path>),
     Tuple(Vec<Loc<Pattern>>),
@@ -52,6 +54,9 @@ impl WithLocation for Pattern {}
 
 // Helper constructors for writing neater tests
 impl Pattern {
+    pub fn integer(val: i32) -> Self {
+        Pattern::Integer(IntLiteral::Signed(val.to_bigint()))
+    }
     pub fn name(name: &str) -> Loc<Self> {
         Pattern::Path(Path(vec![Identifier(name.to_string()).nowhere()]).nowhere()).nowhere()
     }
@@ -105,7 +110,7 @@ impl WithLocation for UnaryOperator {}
 
 #[derive(PartialEq, Debug, Clone)]
 pub enum PipelineStageReference {
-    Relative(Loc<i64>),
+    Relative(Loc<BigInt>),
     Absolute(Loc<Identifier>),
 }
 
@@ -113,14 +118,14 @@ pub enum PipelineStageReference {
 pub enum CallKind {
     Function,
     Entity(Loc<()>),
-    Pipeline(Loc<()>, Loc<MaybeComptime<Loc<u128>>>),
+    Pipeline(Loc<()>, Loc<MaybeComptime<Loc<IntLiteral>>>),
 }
 impl WithLocation for CallKind {}
 
 #[derive(PartialEq, Debug, Clone)]
 pub enum Expression {
     Identifier(Loc<Path>),
-    IntLiteral(u128),
+    IntLiteral(IntLiteral),
     BoolLiteral(bool),
     ArrayLiteral(Vec<Loc<Expression>>),
     Index(Box<Loc<Expression>>, Box<Loc<Expression>>),
@@ -173,6 +178,10 @@ pub enum Expression {
 impl WithLocation for Expression {}
 
 impl Expression {
+    pub fn int_literal(val: i32) -> Self {
+        Self::IntLiteral(IntLiteral::Signed(val.to_bigint()))
+    }
+
     pub fn assume_block(&self) -> &Block {
         if let Expression::Block(inner) = self {
             inner
@@ -200,6 +209,46 @@ impl Expression {
             Expression::Block(_) => "block",
             Expression::PipelineReference { .. } => "pipeline reference",
             Expression::Comptime { .. } => "comptime",
+        }
+    }
+}
+
+/// An integer literal, which may or may not have been suffixed with `U` to indicate
+/// it being an unsigned literal.
+#[derive(PartialEq, Debug, Clone)]
+pub enum IntLiteral {
+    Signed(BigInt),
+    Unsigned(BigUint),
+}
+impl WithLocation for IntLiteral {}
+
+impl IntLiteral {
+    pub fn signed(val: i32) -> IntLiteral {
+        IntLiteral::Signed(val.to_bigint())
+    }
+
+    /// Returns this number as a signed number. Unsigned numbers are losslessly converted to
+    /// signed
+    pub fn as_signed(self) -> BigInt {
+        match self {
+            IntLiteral::Signed(val) => val,
+            // NOTE: Safe unwrap. This can't fail
+            IntLiteral::Unsigned(val) => val.to_bigint(),
+        }
+    }
+
+    // Returns the signed, or unsigned number as a BigUint if it is positive, otherwise,
+    // None
+    pub fn as_unsigned(self) -> Option<BigUint> {
+        match self {
+            IntLiteral::Signed(val) => {
+                if val >= BigInt::zero() {
+                    Some(val.to_biguint().unwrap())
+                } else {
+                    None
+                }
+            }
+            IntLiteral::Unsigned(val) => Some(val),
         }
     }
 }
@@ -277,7 +326,7 @@ impl ParameterList {
 pub enum UnitKind {
     Function,
     Entity,
-    Pipeline(Loc<MaybeComptime<Loc<u128>>>),
+    Pipeline(Loc<MaybeComptime<Loc<IntLiteral>>>),
 }
 impl WithLocation for UnitKind {}
 
@@ -398,7 +447,7 @@ impl WithLocation for UseStatement {}
 #[derive(PartialEq, Debug, Clone)]
 pub struct ComptimeConfig {
     pub name: Loc<Identifier>,
-    pub val: Loc<u128>,
+    pub val: Loc<BigInt>,
 }
 impl WithLocation for ComptimeConfig {}
 

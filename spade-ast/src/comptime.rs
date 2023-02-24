@@ -1,3 +1,4 @@
+use num::BigInt;
 use spade_common::{
     location_info::{Loc, WithLocation},
     name::Path,
@@ -14,7 +15,7 @@ pub enum ComptimeCondOp {
 
 #[derive(PartialEq, Clone, Debug)]
 pub struct ComptimeCondition<T> {
-    pub condition: (Loc<Path>, ComptimeCondOp, Loc<u128>),
+    pub condition: (Loc<Path>, ComptimeCondOp, Loc<BigInt>),
     pub on_true: Box<T>,
     pub on_false: Option<Box<T>>,
 }

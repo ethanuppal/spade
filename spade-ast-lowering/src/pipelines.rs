@@ -1,9 +1,29 @@
+use num::ToPrimitive;
 use spade_ast as ast;
 use spade_common::{location_info::Loc, name::Identifier};
 use spade_diagnostics::Diagnostic;
 use spade_hir as hir;
 
 use crate::{comptime::ComptimeCondExt, error::Result, Context};
+
+pub fn int_literal_to_pipeline_stages(depth: &Loc<ast::IntLiteral>) -> Result<Loc<usize>> {
+    depth
+        .try_map_ref(|u| {
+            u.clone().as_unsigned().ok_or_else(|| {
+                Diagnostic::error(depth, "Negative depth").primary_label("Expected positive depth")
+            })
+        })?
+        .try_map_ref(|u| {
+            u.clone().to_usize().ok_or_else(|| {
+                Diagnostic::bug(depth, "Too many pipeline stages")
+                    .primary_label(format!(
+                        "At most {} pipeline stages are supported",
+                        usize::MAX
+                    ))
+                    .into()
+            })
+        })
+}
 
 pub struct PipelineContext {
     /// All stages within the pipeline, possibly labelled
@@ -100,13 +120,10 @@ pub fn maybe_perform_pipelining_tasks(
         ast::UnitKind::Function => Ok(None),
         ast::UnitKind::Entity => Ok(None),
         ast::UnitKind::Pipeline(depth) => {
-            let depth = depth
-                .maybe_unpack(&ctx.symtab)?
-                .ok_or_else(|| {
-                    Diagnostic::error(depth, "Missing depth")
-                        .note("The current comptime branch does not specify a depth")
-                })?
-                .map(|u| u as usize);
+            let depth = depth.maybe_unpack(&ctx.symtab)?.ok_or_else(|| {
+                Diagnostic::error(depth, "Missing depth")
+                    .note("The current comptime branch does not specify a depth")
+            })?;
 
             if head.inputs.0.is_empty() {
                 return Err(Diagnostic::error(
@@ -129,6 +146,7 @@ pub fn maybe_perform_pipelining_tasks(
                 visit_pipeline_statement(statement, &mut current_stage, ctx, &mut context)?;
             }
 
+            let depth = int_literal_to_pipeline_stages(&depth)?;
             if current_stage != depth.inner {
                 return Err(Diagnostic::error(body, "Wrong number of pipeline stages")
                     .primary_label(format!("Found {} stages here", current_stage))
@@ -154,6 +172,7 @@ mod pipeline_visiting {
         id_tracker::{ExprIdTracker, ImplIdTracker},
         location_info::WithLocation,
         name::testutil::name_id,
+        num_ext::InfallibleToBigInt,
     };
 
     use pretty_assertions::assert_eq;
@@ -162,7 +181,10 @@ mod pipeline_visiting {
     fn relative_stage_references_work() {
         let input = ast::Unit {
             name: ast_ident("pipe"),
-            unit_kind: ast::UnitKind::Pipeline(MaybeComptime::Raw(2.nowhere()).nowhere()).nowhere(),
+            unit_kind: ast::UnitKind::Pipeline(
+                MaybeComptime::Raw(ast::IntLiteral::Signed(2.to_bigint()).nowhere()).nowhere(),
+            )
+            .nowhere(),
             inputs: ast::ParameterList::without_self(vec![(
                 ast_ident("clk"),
                 ast::TypeSpec::Unit(().nowhere()).nowhere(),
@@ -176,7 +198,8 @@ mod pipeline_visiting {
                         ast::Statement::Binding(
                             ast::Pattern::name("a"),
                             None,
-                            ast::Expression::IntLiteral(0).nowhere(),
+                            ast::Expression::IntLiteral(ast::IntLiteral::Signed(0.to_bigint()))
+                                .nowhere(),
                         )
                         .nowhere(),
                         ast::Statement::PipelineRegMarker(1).nowhere(),
@@ -185,14 +208,17 @@ mod pipeline_visiting {
                             None,
                             ast::Expression::PipelineReference {
                                 stage_kw_and_reference_loc: ().nowhere(),
-                                stage: ast::PipelineStageReference::Relative((-1).nowhere()),
+                                stage: ast::PipelineStageReference::Relative(
+                                    (-1).to_bigint().nowhere(),
+                                ),
                                 name: ast_ident("a"),
                             }
                             .nowhere(),
                         )
                         .nowhere(),
                     ],
-                    result: ast::Expression::IntLiteral(0).nowhere(),
+                    result: ast::Expression::IntLiteral(ast::IntLiteral::Signed(0.to_bigint()))
+                        .nowhere(),
                 }))
                 .nowhere(),
             ),
@@ -203,8 +229,13 @@ mod pipeline_visiting {
 
         let expected_statements = vec![
             hir::Statement::PipelineRegMarker.nowhere(),
-            hir::Statement::named_let(2, name_id(2, "a"), hir::ExprKind::IntLiteral(0).with_id(3))
-                .nowhere(),
+            hir::Statement::named_let(
+                2,
+                name_id(2, "a"),
+                hir::ExprKind::IntLiteral(hir::expression::IntLiteral::Signed(0.to_bigint()))
+                    .with_id(3),
+            )
+            .nowhere(),
             hir::Statement::PipelineRegMarker.nowhere(),
             hir::Statement::named_let(
                 4,
@@ -246,7 +277,10 @@ mod pipeline_visiting {
     fn absolute_stage_references_work() {
         let input = ast::Unit {
             name: ast_ident("pipe"),
-            unit_kind: ast::UnitKind::Pipeline(MaybeComptime::Raw(2.nowhere()).nowhere()).nowhere(),
+            unit_kind: ast::UnitKind::Pipeline(
+                MaybeComptime::Raw(ast::IntLiteral::Signed(2.to_bigint()).nowhere()).nowhere(),
+            )
+            .nowhere(),
             inputs: ast::ParameterList::without_self(vec![(
                 ast_ident("clk"),
                 ast::TypeSpec::Unit(().nowhere()).nowhere(),
@@ -261,7 +295,8 @@ mod pipeline_visiting {
                         ast::Statement::Binding(
                             ast::Pattern::name("a"),
                             None,
-                            ast::Expression::IntLiteral(0).nowhere(),
+                            ast::Expression::IntLiteral(ast::IntLiteral::Signed(0.to_bigint()))
+                                .nowhere(),
                         )
                         .nowhere(),
                         ast::Statement::PipelineRegMarker(1).nowhere(),
@@ -277,7 +312,8 @@ mod pipeline_visiting {
                         )
                         .nowhere(),
                     ],
-                    result: ast::Expression::IntLiteral(0).nowhere(),
+                    result: ast::Expression::IntLiteral(ast::IntLiteral::Signed(0.to_bigint()))
+                        .nowhere(),
                 }))
                 .nowhere(),
             ),
@@ -289,8 +325,13 @@ mod pipeline_visiting {
         let expected_statements = vec![
             hir::Statement::PipelineRegMarker.nowhere(),
             hir::Statement::Label(ast_ident("s")).nowhere(),
-            hir::Statement::named_let(2, name_id(2, "a"), hir::ExprKind::IntLiteral(0).with_id(3))
-                .nowhere(),
+            hir::Statement::named_let(
+                2,
+                name_id(2, "a"),
+                hir::ExprKind::IntLiteral(hir::expression::IntLiteral::Signed(0.to_bigint()))
+                    .with_id(3),
+            )
+            .nowhere(),
             hir::Statement::PipelineRegMarker.nowhere(),
             hir::Statement::named_let(
                 4,

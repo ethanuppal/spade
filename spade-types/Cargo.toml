@@ -13,5 +13,6 @@ doctest = false
 
 [dependencies]
 serde.workspace = true
+num.workspace = true
 
 spade-common = {path = "../spade-common"}

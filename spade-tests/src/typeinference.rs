@@ -550,3 +550,22 @@ fn rom_is_describable() {
     ";
     build_items_with_stdlib(code);
 }
+
+snapshot_error! {
+    // NOTE: This test should be removed once we support unsigned ints properly
+    unsigned_literals_error_on_overflow,
+    "
+        fn test() -> int<8> {
+            256u
+        }
+    "
+}
+
+#[test]
+fn unsigned_literals_fit_in_negative_region() {
+    let code = "fn test() -> int<8> {
+        255u
+    }";
+
+    build_items(code);
+}

@@ -9,13 +9,14 @@ use colored::*;
 use error::{ExpectedArgumentList, SuggestBraceEnumVariant};
 use local_impl::local_impl;
 use logos::Lexer;
+use num::{BigInt, ToPrimitive, Zero};
 use tracing::{event, Level};
 
 use spade_ast::{
-    ArgumentList, ArgumentPattern, AttributeList, Block, CallKind, ComptimeConfig, Enum,
-    Expression, FunctionDecl, ImplBlock, Item, Module, ModuleBody, NamedArgument, ParameterList,
-    Pattern, PipelineStageReference, Register, Statement, Struct, TraitDef, TypeDeclKind,
-    TypeDeclaration, TypeExpression, TypeParam, TypeSpec, Unit, UnitKind, UseStatement,
+    ArgumentList, ArgumentPattern, AttributeList, Block, ComptimeConfig, Enum, Expression,
+    FunctionDecl, ImplBlock, Item, Module, ModuleBody, NamedArgument, ParameterList, Pattern,
+    PipelineStageReference, Register, Statement, Struct, TraitDef, TypeDeclKind, TypeDeclaration,
+    TypeExpression, TypeParam, TypeSpec, Unit, UnitKind, UseStatement, IntLiteral, CallKind,
 };
 use spade_common::location_info::{lspan, AsLabel, FullSpan, HasCodespan, Loc, WithLocation};
 use spade_common::name::{Identifier, Path};
@@ -305,14 +306,30 @@ impl<'a> Parser<'a> {
     }
 
     #[trace_parser]
-    pub fn int_literal(&mut self) -> Result<Option<Loc<u128>>> {
+    pub fn int_literal(&mut self) -> Result<Option<Loc<IntLiteral>>> {
         if self.peek_cond(TokenKind::is_integer, "integer")? {
             let token = self.eat_unconditional()?;
-            match token.kind {
+            match &token.kind {
                 TokenKind::Integer(val)
                 | TokenKind::HexInteger(val)
                 | TokenKind::BinInteger(val) => {
-                    Ok(Some(Loc::new(val, lspan(token.span), self.file_id)))
+                    let (val_int, sign) = val;
+
+                    let inner = match sign {
+                        crate::lexer::LiteralKind::Signed => IntLiteral::Signed(val_int.clone()),
+                        crate::lexer::LiteralKind::Unsigned => {
+                            if val_int < &BigInt::zero() {
+                                return Err(Diagnostic::error(
+                                    token,
+                                    "An unsigned int literal can not be negative",
+                                )
+                                .into());
+                            } else {
+                                IntLiteral::Unsigned(val_int.to_biguint().unwrap())
+                            }
+                        }
+                    };
+                    Ok(Some(Loc::new(inner, lspan(token.span), self.file_id)))
                 }
                 _ => unreachable!(),
             }
@@ -369,26 +386,20 @@ impl<'a> Parser<'a> {
                     });
                 };
 
-                let offset = (num.inner as i64).between(plus.file_id, &plus, &num);
-                PipelineStageReference::Relative(offset)
-            }
-            TokenKind::Minus => {
-                let minus = self.eat(&TokenKind::Minus)?;
-                let num = if let Some(d) = self.int_literal()? {
-                    d
-                } else {
-                    return Err(Error::ExpectedOffset {
-                        got: self.eat_unconditional()?,
-                    });
-                };
-                let offset = (-(num.inner as i64)).between(minus.file_id, &minus, &num);
+                let offset = (num.inner.clone().as_signed()).between(plus.file_id, &plus, &num);
                 PipelineStageReference::Relative(offset)
             }
             _ => {
-                return Err(Error::UnexpectedToken {
-                    got: next,
-                    expected: vec!["+", "-", "identifier"],
-                })
+                let num = if let Some(d) = self.int_literal()? {
+                    d
+                } else {
+                    return Err(Error::UnexpectedToken {
+                        got: next,
+                        expected: vec!["integer", "'"],
+                    });
+                };
+                let offset = num.map(IntLiteral::as_signed);
+                PipelineStageReference::Relative(offset)
             }
         };
 
@@ -454,7 +465,12 @@ impl<'a> Parser<'a> {
     #[trace_parser]
     pub fn type_expression(&mut self) -> Result<Loc<TypeExpression>> {
         if let Some(val) = self.int_literal()? {
-            Ok(val.map(TypeExpression::Integer))
+            match val.inner.clone().as_unsigned() {
+                Some(u) => Ok(TypeExpression::Integer(u).at_loc(&val)),
+                None => Err(Diagnostic::error(val, "Negative type level integer")
+                    .primary_label("Type level integers must be positive")
+                    .into()),
+            }
         } else {
             let inner = self.type_spec()?;
 
@@ -700,7 +716,19 @@ impl<'a> Parser<'a> {
         if self.peek_kind(&TokenKind::Semi)? || self.peek_kind(&TokenKind::Asterisk)? {
             let count = if self.peek_and_eat(&TokenKind::Asterisk)?.is_some() {
                 if let Some(val) = self.int_literal()? {
-                    (val.inner) as usize
+                    val.inner
+                        .clone()
+                        .as_unsigned()
+                        .ok_or_else(|| {
+                            Diagnostic::error(&val, "Negative number of registers")
+                                .primary_label("Expected positive number of stages")
+                        })?
+                        .to_usize()
+                        .ok_or_else(|| {
+                            Diagnostic::error(&val, "Excessive number of registers").primary_label(
+                                format!("At most {} registers are supported", usize::MAX),
+                            )
+                        })?
                 } else {
                     return Err(Error::ExpectedRegisterCount {
                         got: self.eat_unconditional()?,
@@ -1418,7 +1446,7 @@ impl<'a> Parser<'a> {
         self.eat(&TokenKind::Assignment)?;
 
         let val = if let Some(v) = self.int_literal()? {
-            v
+            v.map(IntLiteral::as_signed)
         } else {
             return Err(Error::UnexpectedToken {
                 got: self.eat_unconditional()?,
@@ -1426,11 +1454,13 @@ impl<'a> Parser<'a> {
             });
         };
 
-        Ok(Some(ComptimeConfig { name, val }.between(
-            self.file_id,
-            &start.span(),
-            &val.span(),
-        )))
+        Ok(Some(
+            ComptimeConfig {
+                name,
+                val: val.clone(),
+            }
+            .between(self.file_id, &start.span(), &val.span()),
+        ))
     }
 
     #[trace_parser]
@@ -1865,6 +1895,7 @@ mod tests {
     use spade_ast as ast;
     use spade_ast::testutil::{ast_ident, ast_path};
     use spade_ast::*;
+    use spade_common::num_ext::{InfallibleToBigInt, InfallibleToBigUint};
 
     use crate::lexer::TokenKind;
     use crate::*;
@@ -1910,7 +1941,11 @@ mod tests {
 
     #[test]
     fn literals_are_expressions() {
-        check_parse!("123", expression, Ok(Expression::IntLiteral(123).nowhere()));
+        check_parse!(
+            "123",
+            expression,
+            Ok(Expression::int_literal(123).nowhere())
+        );
     }
 
     #[test]
@@ -1918,7 +1953,7 @@ mod tests {
         let expected = Statement::Binding(
             Pattern::name("test"),
             None,
-            Expression::IntLiteral(123).nowhere(),
+            Expression::int_literal(123).nowhere(),
         )
         .nowhere();
         check_parse!("let test = 123;", binding, Ok(Some(expected)));
@@ -1945,7 +1980,7 @@ mod tests {
         let expected = Statement::Binding(
             Pattern::name("test"),
             Some(TypeSpec::Named(ast_path("bool"), None).nowhere()),
-            Expression::IntLiteral(123).nowhere(),
+            Expression::int_literal(123).nowhere(),
         )
         .nowhere();
         check_parse!(
@@ -1970,13 +2005,13 @@ mod tests {
                         Statement::Binding(
                             Pattern::name("test"),
                             None,
-                            Expression::IntLiteral(123).nowhere(),
+                            Expression::int_literal(123).nowhere(),
                         )
                         .nowhere(),
                         Statement::Binding(
                             Pattern::name("test2"),
                             None,
-                            Expression::IntLiteral(123).nowhere(),
+                            Expression::int_literal(123).nowhere(),
                         )
                         .nowhere(),
                     ],
@@ -2049,7 +2084,7 @@ mod tests {
                 pattern: Pattern::name("name"),
                 clock: Expression::Identifier(ast_path("clk")).nowhere(),
                 reset: None,
-                value: Expression::IntLiteral(1).nowhere(),
+                value: Expression::int_literal(1).nowhere(),
                 value_type: None,
             }
             .nowhere(),
@@ -2074,9 +2109,9 @@ mod tests {
                 clock: Expression::Identifier(ast_path("clk")).nowhere(),
                 reset: Some((
                     Expression::Identifier(ast_path("rst")).nowhere(),
-                    Expression::IntLiteral(0).nowhere(),
+                    Expression::int_literal(0).nowhere(),
                 )),
-                value: Expression::IntLiteral(1).nowhere(),
+                value: Expression::int_literal(1).nowhere(),
                 value_type: None,
             }
             .nowhere(),
@@ -2101,9 +2136,9 @@ mod tests {
                 clock: Expression::Identifier(ast_path("clk")).nowhere(),
                 reset: Some((
                     Expression::Identifier(ast_path("rst")).nowhere(),
-                    Expression::IntLiteral(0).nowhere(),
+                    Expression::int_literal(0).nowhere(),
                 )),
-                value: Expression::IntLiteral(1).nowhere(),
+                value: Expression::int_literal(1).nowhere(),
                 value_type: Some(TypeSpec::Named(ast_path("Type"), None).nowhere()),
             }
             .nowhere(),
@@ -2122,7 +2157,7 @@ mod tests {
     fn size_types_work() {
         let expected = TypeSpec::Named(
             ast_path("uint"),
-            Some(vec![TypeExpression::Integer(10).nowhere()].nowhere()),
+            Some(vec![TypeExpression::Integer(10u32.to_biguint()).nowhere()].nowhere()),
         )
         .nowhere();
         check_parse!("uint<10>", type_spec, Ok(expected));
@@ -2138,7 +2173,7 @@ mod tests {
                 vec![TypeExpression::TypeSpec(Box::new(
                     TypeSpec::Named(
                         ast_path("int"),
-                        Some(vec![TypeExpression::Integer(5).nowhere()].nowhere()),
+                        Some(vec![TypeExpression::Integer(5u32.to_biguint()).nowhere()].nowhere()),
                     )
                     .nowhere(),
                 ))
@@ -2158,7 +2193,7 @@ mod tests {
         let expected = TypeSpec::Wire(Box::new(
             TypeSpec::Named(
                 ast_path("int"),
-                Some(vec![TypeExpression::Integer(5).nowhere()].nowhere()),
+                Some(vec![TypeExpression::Integer(5u32.to_biguint()).nowhere()].nowhere()),
             )
             .nowhere(),
         ))
@@ -2174,7 +2209,7 @@ mod tests {
         let expected = TypeSpec::Backward(Box::new(
             TypeSpec::Named(
                 ast_path("int"),
-                Some(vec![TypeExpression::Integer(5).nowhere()].nowhere()),
+                Some(vec![TypeExpression::Integer(5u32.to_biguint()).nowhere()].nowhere()),
             )
             .nowhere(),
         ))
@@ -2196,7 +2231,7 @@ mod tests {
             body: Some(
                 Expression::Block(Box::new(Block {
                     statements: vec![],
-                    result: Expression::IntLiteral(0).nowhere(),
+                    result: Expression::int_literal(0).nowhere(),
                 }))
                 .nowhere(),
             ),
@@ -2213,7 +2248,7 @@ mod tests {
             body: Some(
                 Expression::Block(Box::new(Block {
                     statements: vec![],
-                    result: Expression::IntLiteral(1).nowhere(),
+                    result: Expression::int_literal(1).nowhere(),
                 }))
                 .nowhere(),
             ),
@@ -2444,21 +2479,50 @@ mod tests {
     #[test]
     fn dec_int_literals_work() {
         let code = "1";
-        let expected = 1.nowhere();
+        let expected = IntLiteral::signed(1).nowhere();
+
+        check_parse!(code, int_literal, Ok(Some(expected)));
+    }
+    #[test]
+    fn dec_uint_literals_work() {
+        let code = "1u";
+        let expected = IntLiteral::Unsigned(1u32.to_biguint()).nowhere();
+
+        check_parse!(code, int_literal, Ok(Some(expected)));
+    }
+    #[test]
+    fn dec_negative_int_literals_work() {
+        let code = "-1";
+        let expected = IntLiteral::signed(-1).nowhere();
 
         check_parse!(code, int_literal, Ok(Some(expected)));
     }
     #[test]
     fn hex_int_literals_work() {
         let code = "0xff";
-        let expected = 255.nowhere();
+        let expected = IntLiteral::signed(255).nowhere();
+
+        check_parse!(code, int_literal, Ok(Some(expected)));
+    }
+    #[test]
+    fn hex_uint_literals_work() {
+        let code = "0xffu";
+        let expected = IntLiteral::Unsigned(255u32.to_biguint()).nowhere();
 
         check_parse!(code, int_literal, Ok(Some(expected)));
     }
     #[test]
     fn bin_int_literals_work() {
         let code = "0b101";
-        let expected = 5.nowhere();
+        let expected = IntLiteral::signed(5).nowhere();
+
+        check_parse!(code, int_literal, Ok(Some(expected)));
+    }
+
+    #[test]
+    fn bin_uint_literals_work() {
+        let code = "0b101u";
+        let expected = IntLiteral::Unsigned(5u32.to_biguint()).nowhere();
 
         check_parse!(code, int_literal, Ok(Some(expected)));
     }
@@ -2469,7 +2533,7 @@ mod tests {
 
         let expected = TypeSpec::Array {
             inner: Box::new(TypeSpec::Named(ast_path("int"), None).nowhere()),
-            size: Box::new(TypeExpression::Integer(5).nowhere()),
+            size: Box::new(TypeExpression::Integer(5u32.to_biguint()).nowhere()),
         }
         .nowhere();
 
@@ -2531,7 +2595,10 @@ mod tests {
                 name: ast_ident("X"),
                 inputs: ParameterList::without_self(vec![]).nowhere(),
                 output_type: None,
-                unit_kind: UnitKind::Pipeline(MaybeComptime::Raw(1.nowhere()).nowhere()).nowhere(),
+                unit_kind: UnitKind::Pipeline(
+                    MaybeComptime::Raw(IntLiteral::signed(1).nowhere()).nowhere(),
+                )
+                .nowhere(),
                 body: None,
                 type_params: vec![],
             }
@@ -2615,7 +2682,10 @@ mod tests {
         let expected = Item::Unit(
             Unit {
                 attributes: AttributeList(vec![ast_ident("attr")]),
-                unit_kind: UnitKind::Pipeline(MaybeComptime::Raw(2.nowhere()).nowhere()).nowhere(),
+                unit_kind: UnitKind::Pipeline(
+                    MaybeComptime::Raw(IntLiteral::signed(2).nowhere()).nowhere(),
+                )
+                .nowhere(),
                 name: ast_ident("test"),
                 inputs: aparams![("a", tspec!("bool"))],
                 output_type: None,
@@ -2737,7 +2807,10 @@ mod tests {
 
         let expected = Unit {
             attributes: AttributeList::empty(),
-            unit_kind: UnitKind::Pipeline(MaybeComptime::Raw(2.nowhere()).nowhere()).nowhere(),
+            unit_kind: UnitKind::Pipeline(
+                MaybeComptime::Raw(IntLiteral::signed(2).nowhere()).nowhere(),
+            )
+            .nowhere(),
             name: ast_ident("test"),
             inputs: aparams![("a", tspec!("bool"))],
             output_type: Some(TypeSpec::Named(ast_path("bool"), None).nowhere()),
@@ -2749,7 +2822,7 @@ mod tests {
                         Statement::Binding(
                             Pattern::name("b"),
                             None,
-                            Expression::IntLiteral(0).nowhere(),
+                            Expression::int_literal(0).nowhere(),
                         )
                         .nowhere(),
                         Statement::PipelineRegMarker(1).nowhere(),
@@ -2757,11 +2830,11 @@ mod tests {
                         Statement::Binding(
                             Pattern::name("c"),
                             None,
-                            Expression::IntLiteral(0).nowhere(),
+                            Expression::int_literal(0).nowhere(),
                         )
                         .nowhere(),
                     ],
-                    result: Expression::IntLiteral(0).nowhere(),
+                    result: Expression::int_literal(0).nowhere(),
                 }))
                 .nowhere(),
             ),
@@ -2783,14 +2856,17 @@ mod tests {
 
         let expected = Unit {
             attributes: AttributeList::empty(),
-            unit_kind: UnitKind::Pipeline(MaybeComptime::Raw(2.nowhere()).nowhere()).nowhere(),
+            unit_kind: UnitKind::Pipeline(
+                MaybeComptime::Raw(IntLiteral::signed(2).nowhere()).nowhere(),
+            )
+            .nowhere(),
             name: ast_ident("test"),
             inputs: aparams![("a", tspec!("bool"))],
             output_type: Some(TypeSpec::Named(ast_path("bool"), None).nowhere()),
             body: Some(
                 Expression::Block(Box::new(Block {
                     statements: vec![Statement::PipelineRegMarker(3).nowhere()],
-                    result: Expression::IntLiteral(0).nowhere(),
+                    result: Expression::int_literal(0).nowhere(),
                 }))
                 .nowhere(),
             ),
@@ -2813,15 +2889,17 @@ mod tests {
             members: vec![Item::Unit(
                 Unit {
                     attributes: AttributeList::empty(),
-                    unit_kind: UnitKind::Pipeline(MaybeComptime::Raw(2.nowhere()).nowhere())
-                        .nowhere(),
+                    unit_kind: UnitKind::Pipeline(
+                        MaybeComptime::Raw(IntLiteral::signed(2).nowhere()).nowhere(),
+                    )
+                    .nowhere(),
                     name: ast_ident("test"),
                     inputs: aparams![("a", tspec!("bool"))],
                     output_type: Some(TypeSpec::Named(ast_path("bool"), None).nowhere()),
                     body: Some(
                         Expression::Block(Box::new(Block {
                             statements: vec![],
-                            result: Expression::IntLiteral(0).nowhere(),
+                            result: Expression::int_literal(0).nowhere(),
                         }))
                         .nowhere(),
                     ),
@@ -2839,7 +2917,7 @@ mod tests {
         let code = "inst(2) some_pipeline(x, y, z)";
 
         let expected = Expression::Call {
-            kind: CallKind::Pipeline(().nowhere(), MaybeComptime::Raw(2.nowhere()).nowhere()),
+            kind: CallKind::Pipeline(().nowhere(), MaybeComptime::Raw(IntLiteral::signed(2).nowhere()).nowhere()),
             callee: ast_path("some_pipeline"),
             args: ArgumentList::Positional(vec![
                 Expression::Identifier(ast_path("x")).nowhere(),
@@ -2981,7 +3059,7 @@ mod tests {
     fn integer_patterns_work() {
         let code = "1";
 
-        let expected = Pattern::Integer(1).nowhere();
+        let expected = Pattern::integer(1).nowhere();
 
         check_parse!(code, pattern, Ok(expected));
     }
@@ -2990,7 +3068,7 @@ mod tests {
     fn hex_integer_patterns_work() {
         let code = "0xff";
 
-        let expected = Pattern::Integer(255).nowhere();
+        let expected = Pattern::integer(255).nowhere();
 
         check_parse!(code, pattern, Ok(expected));
     }
@@ -2999,7 +3077,7 @@ mod tests {
     fn bin_integer_patterns_work() {
         let code = "0b101";
 
-        let expected = Pattern::Integer(5).nowhere();
+        let expected = Pattern::integer(5).nowhere();
 
         check_parse!(code, pattern, Ok(expected));
     }
@@ -3148,7 +3226,7 @@ mod tests {
         let expected = Item::Config(
             ComptimeConfig {
                 name: ast_ident("A"),
-                val: 5u128.nowhere(),
+                val: 5.to_bigint().nowhere(),
             }
             .nowhere(),
         );
@@ -3162,11 +3240,11 @@ mod tests {
         }"#;
 
         let expected = Statement::Comptime(ComptimeCondition {
-            condition: (ast_path("A"), ComptimeCondOp::Eq, 1u128.nowhere()),
+            condition: (ast_path("A"), ComptimeCondOp::Eq, 1.to_bigint().nowhere()),
             on_true: Box::new(vec![Statement::Binding(
                 Pattern::name("a"),
                 None,
-                Expression::IntLiteral(0).nowhere(),
+                Expression::int_literal(0).nowhere(),
             )
             .nowhere()]),
             on_false: None,
@@ -3186,17 +3264,17 @@ mod tests {
         }"#;
 
         let expected = Statement::Comptime(ComptimeCondition {
-            condition: (ast_path("A"), ComptimeCondOp::Eq, 1u128.nowhere()),
+            condition: (ast_path("A"), ComptimeCondOp::Eq, 1.to_bigint().nowhere()),
             on_true: Box::new(vec![Statement::Binding(
                 Pattern::name("a"),
                 None,
-                Expression::IntLiteral(0).nowhere(),
+                Expression::int_literal(0).nowhere(),
             )
             .nowhere()]),
             on_false: Some(Box::new(vec![Statement::Binding(
                 Pattern::name("b"),
                 None,
-                Expression::IntLiteral(0).nowhere(),
+                Expression::int_literal(0).nowhere(),
             )
             .nowhere()])),
         })
@@ -3230,9 +3308,9 @@ mod tests {
 
         let expected = Expression::Comptime(Box::new(
             ComptimeCondition {
-                condition: (ast_path("x"), ComptimeCondOp::Eq, 0.nowhere()),
-                on_true: Box::new(Expression::IntLiteral(1).nowhere()),
-                on_false: Some(Box::new(Expression::IntLiteral(0).nowhere())),
+                condition: (ast_path("x"), ComptimeCondOp::Eq, 0.to_bigint().nowhere()),
+                on_true: Box::new(Expression::IntLiteral(IntLiteral::Signed(1.to_bigint())).nowhere()),
+                on_false: Some(Box::new(Expression::IntLiteral(IntLiteral::Signed(0.to_bigint())).nowhere())),
             }
             .nowhere(),
         ))

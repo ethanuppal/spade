@@ -19,6 +19,7 @@ local-impl.workspace = true
 logos.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
+num.workspace = true
 
 spade-ast = {path = "../spade-ast"}
 spade-common = {path = "../spade-common"}

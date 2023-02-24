@@ -1,6 +1,7 @@
 use std::sync::RwLock;
 
 use colored::*;
+use num::BigInt;
 
 use crate::equation::{TypeVar, TypedExpression};
 
@@ -29,7 +30,7 @@ pub enum TraceStackEntry {
     Unified(TypeVar, TypeVar, TypeVar),
     AddingEquation(TypedExpression, TypeVar),
     /// Inferring more from constraints
-    InferringFromConstraints(TypeVar, i128),
+    InferringFromConstraints(TypeVar, BigInt),
     /// Arbitrary message
     Message(String),
 }

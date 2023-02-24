@@ -2,7 +2,9 @@ use codespan_reporting::term::termcolor;
 use itertools::Itertools;
 use nesty::{code, Code};
 
+use num::{BigInt, BigUint, Signed, ToPrimitive, Zero};
 use spade_common::location_info::Loc;
+use spade_common::num_ext::InfallibleToBigUint;
 use spade_diagnostics::emitter::CodespanEmitter;
 use spade_diagnostics::{CodeBundle, CompilationError, DiagHandler};
 
@@ -30,26 +32,26 @@ fn statement_declaration(statement: &Statement, code: &Option<CodeBundle>) -> Co
         Statement::Binding(binding) => {
             let name = binding.name.var_name();
 
-            let forward_declaration = if binding.ty.size() != 0 {
+            let forward_declaration = if binding.ty.size() != BigUint::zero() {
                 vec![match &binding.ty {
                     crate::types::Type::Memory { inner, length } => {
                         let inner_w = inner.size();
-                        if inner_w > 1 {
+                        if inner_w > 1u32.to_biguint() {
                             format!("logic[{inner_w}-1:0] {name}[{length}-1:0];")
                         } else {
-                            logic(&name, binding.ty.size())
+                            logic(&name, &binding.ty.size())
                         }
                     }
-                    _ => logic(&name, binding.ty.size()),
+                    _ => logic(&name, &binding.ty.size()),
                 }]
             } else {
                 vec![]
             };
 
-            let backward_declaration = if binding.ty.backward_size() != 0 {
+            let backward_declaration = if binding.ty.backward_size() != BigUint::zero() {
                 vec![logic(
                     &binding.name.backward_var_name(),
-                    binding.ty.backward_size(),
+                    &binding.ty.backward_size(),
                 )]
             } else {
                 vec![]
@@ -81,11 +83,11 @@ fn statement_declaration(statement: &Statement, code: &Option<CodeBundle>) -> Co
             }
         }
         Statement::Register(reg) => {
-            if reg.ty.backward_size() != 0 {
+            if reg.ty.backward_size() != BigUint::zero() {
                 panic!("Attempting to put value with a backward_size != 0 in a register")
             }
             let name = reg.name.var_name();
-            let declaration = verilog::reg(&name, reg.ty.size());
+            let declaration = verilog::reg(&name, &reg.ty.size());
             code! {
                 [0] source_attribute(&reg.loc, code);
                 [0] &declaration;
@@ -93,7 +95,7 @@ fn statement_declaration(statement: &Statement, code: &Option<CodeBundle>) -> Co
         }
         Statement::Constant(id, ty, _) => {
             let name = ValueName::Expr(*id).var_name();
-            let declaration = logic(&name, ty.size());
+            let declaration = logic(&name, &ty.size());
 
             code! {
                 [0] &declaration;
@@ -108,25 +110,25 @@ fn statement_declaration(statement: &Statement, code: &Option<CodeBundle>) -> Co
     }
 }
 
-fn compute_tuple_index(idx: u64, sizes: &[u64]) -> TupleIndex {
+fn compute_tuple_index(idx: u64, sizes: &[BigUint]) -> TupleIndex {
     // Compute the start index of the element we're looking for
-    let mut start_bit = 0;
+    let mut start_bit = BigUint::zero();
     for i in 0..idx {
-        start_bit += sizes[i as usize];
+        start_bit += &sizes[i as usize];
     }
 
-    let target_width = sizes[idx as usize];
-    let end_bit = start_bit + target_width;
+    let target_width = &sizes[idx as usize];
+    let end_bit = &start_bit + target_width;
 
-    let total_width: u64 = sizes.iter().sum();
+    let total_width: BigUint = sizes.iter().sum();
 
     // Check if this is a single bit, if so, index using just it
-    if target_width == 1 {
-        TupleIndex::Single(total_width - start_bit - 1)
+    if target_width == &1u32.to_biguint() {
+        TupleIndex::Single(total_width - start_bit - 1u32.to_biguint())
     } else {
         TupleIndex::Range {
-            left: total_width - start_bit - 1,
-            right: total_width - end_bit,
+            left: &total_width - start_bit - 1u32.to_biguint(),
+            right: &total_width - end_bit,
         }
     }
 }
@@ -226,7 +228,11 @@ fn forward_expression_code(binding: &Binding, types: &TypeList, ops: &[ValueName
             }.to_string()
         }
         Operator::Truncate => {
-            format!("{}[{}:0]", op_names[0], binding.ty.size() - 1)
+            format!(
+                "{}[{}:0]",
+                op_names[0],
+                binding.ty.size() - 1u32.to_biguint()
+            )
         }
         Operator::Concat => {
             format!(
@@ -237,13 +243,18 @@ fn forward_expression_code(binding: &Binding, types: &TypeList, ops: &[ValueName
         Operator::SignExtend {
             extra_bits,
             operand_size,
-        } => match extra_bits {
-            0 => format!("{}", op_names[0]),
-            1 => format!("{{{}[{}], {}}}", op_names[0], operand_size - 1, op_names[0]),
-            2.. => format!(
+        } => match extra_bits.to_u32() {
+            Some(0) => format!("{}", op_names[0]),
+            Some(1) => format!(
+                "{{{}[{}], {}}}",
+                op_names[0],
+                operand_size - 1u32.to_biguint(),
+                op_names[0]
+            ),
+            _ => format!(
                 "#[#[ {extra_bits} #[ {op}[{last_index}] #]#], {op}#]",
                 op = op_names[0],
-                last_index = operand_size - 1,
+                last_index = operand_size - 1u32.to_biguint(),
             )
             // For readability with the huge amount of braces that both
             // rust and verilog want here, we'll insert them at the end
@@ -251,9 +262,9 @@ fn forward_expression_code(binding: &Binding, types: &TypeList, ops: &[ValueName
             .replace("#[", "{")
             .replace("#]", "}"),
         },
-        Operator::ZeroExtend { extra_bits } => match extra_bits {
-            0 => format!("{}", op_names[0]),
-            1.. => format!("{{{}'b0, {}}}", extra_bits, op_names[0]),
+        Operator::ZeroExtend { extra_bits } => match extra_bits.to_u32() {
+            Some(0) => format!("{}", op_names[0]),
+            _ => format!("{{{}'b0, {}}}", extra_bits, op_names[0]),
         },
         Operator::Match => {
             assert!(
@@ -316,7 +327,7 @@ fn forward_expression_code(binding: &Binding, types: &TypeList, ops: &[ValueName
         }
         Operator::IndexArray => {
             let member_size = self_type.size();
-            if member_size == 1 {
+            if member_size == 1u32.to_biguint() {
                 format!("{}[{}]", op_names[0], op_names[1])
             } else {
                 let end_index = format!("{} * {}", op_names[1], member_size);
@@ -336,7 +347,7 @@ fn forward_expression_code(binding: &Binding, types: &TypeList, ops: &[ValueName
             elems: _,
             initial,
         } => {
-            let full_port_width = 1 + addr_w + inner_w;
+            let full_port_width = 1u32.to_biguint() + addr_w + inner_w;
 
             let initial_block = if let Some(vals) = initial {
                 let assignments = vals
@@ -357,27 +368,28 @@ fn forward_expression_code(binding: &Binding, types: &TypeList, ops: &[ValueName
                 code! {}
             };
 
-            let update_blocks = (0..*write_ports)
+            let update_blocks = (0..write_ports.to_usize().expect("Too many write ports"))
                 .map(|port| {
-                    let we_index = full_port_width * (port + 1) - 1;
+                    let we_index =
+                        &full_port_width * (port + 1u32.to_biguint()) - 1u32.to_biguint();
 
-                    let addr_start = full_port_width * port + inner_w;
-                    let addr = if *addr_w == 1 {
+                    let addr_start = &full_port_width * port + inner_w;
+                    let addr = if *addr_w == 1u32.to_biguint() {
                         format!("{}[{}]", op_names[1], addr_start)
                     } else {
                         format!(
                             "{}[{}:{}]",
                             op_names[1],
-                            addr_start + addr_w - 1,
+                            &addr_start + addr_w - 1u32.to_biguint(),
                             addr_start
                         )
                     };
 
-                    let write_value_start = port * full_port_width;
-                    let (write_index, write_value) = if *inner_w == 1 {
+                    let write_value_start = port * &full_port_width;
+                    let (write_index, write_value) = if *inner_w == 1u32.to_biguint() {
                         (
                             format!("{}[{addr}]", name),
-                            format!("{}[{write_value_start}]", op_names[1]),
+                            format!("{}[{}]", op_names[1], &write_value_start),
                         )
                     } else {
                         (
@@ -385,7 +397,7 @@ fn forward_expression_code(binding: &Binding, types: &TypeList, ops: &[ValueName
                             format!(
                                 "{}[{end}:{write_value_start}]",
                                 op_names[1],
-                                end = write_value_start + inner_w - 1
+                                end = &write_value_start + inner_w - 1u32.to_biguint()
                             ),
                         )
                     };
@@ -418,14 +430,14 @@ fn forward_expression_code(binding: &Binding, types: &TypeList, ops: &[ValueName
             // First compute the size of this variant
             let variant_member_size = match &binding.ty {
                 crate::types::Type::Enum(options) => {
-                    options[*variant].iter().map(|t| t.size()).sum::<u64>()
+                    options[*variant].iter().map(|t| t.size()).sum::<BigUint>()
                 }
                 _ => panic!("Attempted enum construction of non-enum"),
             };
 
-            let padding_size = binding.ty.size() as usize - tag_size - variant_member_size as usize;
+            let padding_size = binding.ty.size() - tag_size - variant_member_size;
 
-            let padding_text = if padding_size != 0 {
+            let padding_text = if padding_size != BigUint::zero() {
                 format!(", {}'bX", padding_size)
             } else {
                 String::new()
@@ -443,7 +455,7 @@ fn forward_expression_code(binding: &Binding, types: &TypeList, ops: &[ValueName
             let tag_size = enum_util::tag_size(enum_type.assume_enum().len());
             let total_size = enum_type.size();
 
-            let tag_end = total_size - 1;
+            let tag_end = &total_size - 1u32.to_biguint();
             let tag_start = total_size - tag_size as u64;
 
             if tag_end == tag_start {
@@ -467,15 +479,15 @@ fn forward_expression_code(binding: &Binding, types: &TypeList, ops: &[ValueName
             let member_start = (tag_size as u64)
                 + variant_list[*variant][0..*member_index]
                     .iter()
-                    .map(|t| t.size() as u64)
-                    .sum::<u64>();
+                    .map(|t| t.size())
+                    .sum::<BigUint>();
 
-            let member_end = member_start + variant_list[*variant][*member_index].size();
+            let member_end = &member_start + variant_list[*variant][*member_index].size();
 
             format!(
                 "{}[{}:{}]",
                 op_names[0],
-                full_size - member_start - 1,
+                &full_size - member_start - 1u32.to_biguint(),
                 full_size - member_end
             )
         }
@@ -485,7 +497,7 @@ fn forward_expression_code(binding: &Binding, types: &TypeList, ops: &[ValueName
         Operator::ConstructTuple => {
             let mut members = ops
                 .iter()
-                .filter(|op| types[op].size() != 0)
+                .filter(|op| types[op].size() != BigUint::zero())
                 .map(|op| op.var_name());
             // To make index calculations easier, we will store tuples in "inverse order".
             // i.e. the left-most element is stored to the right in the bit vector.
@@ -564,7 +576,7 @@ fn backward_expression_code(binding: &Binding, types: &TypeList, ops: &[ValueNam
         }
         Operator::IndexArray => {
             let member_size = self_type.backward_size();
-            if member_size == 1 {
+            if member_size == 1u32.to_biguint() {
                 format!("{}[{}]", op_names[0], op_names[1])
             } else {
                 let end_index = format!("{} * {}", op_names[1], member_size);
@@ -577,7 +589,7 @@ fn backward_expression_code(binding: &Binding, types: &TypeList, ops: &[ValueNam
         Operator::ConstructTuple => {
             let mut members = ops
                 .iter()
-                .filter(|op| types[op].backward_size() != 0)
+                .filter(|op| types[op].backward_size() != BigUint::zero())
                 .map(|op| op.backward_var_name());
             format!("{{{}}}", members.join(", "))
         }
@@ -625,12 +637,12 @@ fn statement_code(
                 .map(ValueName::backward_var_name)
                 .collect::<Vec<_>>();
 
-            let forward_expression = if binding.ty.size() != 0 {
+            let forward_expression = if binding.ty.size() != BigUint::zero() {
                 Some(forward_expression_code(binding, types, &binding.operands))
             } else {
                 None
             };
-            let backward_expression = if binding.ty.backward_size() != 0 {
+            let backward_expression = if binding.ty.backward_size() != BigUint::zero() {
                 Some(backward_expression_code(binding, types, &binding.operands))
             } else {
                 None
@@ -649,10 +661,10 @@ fn statement_code(
                             // Push the input and output into the result if they
                             // should be bound
                             let mut result = vec![];
-                            if ty.size() != 0 {
+                            if ty.size() != BigUint::zero()  {
                                 result.push(port.var_name())
                             }
-                            if ty.backward_size() != 0 {
+                            if ty.backward_size() != BigUint::zero()  {
                                 result.push(port.backward_var_name())
                             }
                             result
@@ -665,17 +677,17 @@ fn statement_code(
 
                     let out_size = binding.ty.size();
                     let back_size = binding.ty.backward_size();
-                    let io_comma = if out_size != 0 && back_size != 0 {
+                    let io_comma = if out_size != BigUint::zero()  && back_size != BigUint::zero()  {
                         ", "
                     }
                     else {
                         ""
                     };
-                    if out_size != 0 {
+                    if out_size != BigUint::zero()  {
                         args += &name;
                     }
                     args += io_comma;
-                    if back_size != 0 {
+                    if back_size != BigUint::zero()  {
                         args += &back_name;
                     }
 
@@ -750,13 +762,16 @@ fn statement_code(
                         _ => panic!("Const integer that is not const"),
                     };
 
+                    let val_abs = val.abs();
+                    let sign = if val < &BigInt::zero() { "-" } else { "" };
+
                     // Verilog literals are 32 bits by default
-                    let size_spec = if *size >= 32 {
+                    let size_spec = if *size >= 32u32.to_biguint() {
                         format!("{size}'d")
                     } else {
                         String::new()
                     };
-                    format!("{size_spec}{val}")
+                    format!("{sign}{size_spec}{val_abs}")
                 }
                 ConstantValue::Bool(val) => format!("{}", if *val { 1 } else { 0 }),
             };
@@ -858,12 +873,12 @@ pub fn entity_code(entity: &mut Entity, source_code: &Option<CodeBundle>) -> Cod
 
     let inputs = inputs.iter().map(|(name, value_name, ty)| {
         let size = ty.size();
-        let (input_head, input_code) = if size != 0 {
+        let (input_head, input_code) = if size != BigUint::zero() {
             let name = mangle_input(name);
             (
-                format!("input{} {},", size_spec(size), name),
+                format!("input{} {},", size_spec(&size), name),
                 code! {
-                    [0] &logic(&value_name.var_name(), size);
+                    [0] &logic(&value_name.var_name(), &size);
                     [0] &assign(&value_name.var_name(), &name)
                 },
             )
@@ -872,12 +887,12 @@ pub fn entity_code(entity: &mut Entity, source_code: &Option<CodeBundle>) -> Cod
         };
 
         let backward_size = ty.backward_size();
-        let (output_head, output_code) = if backward_size != 0 {
+        let (output_head, output_code) = if backward_size != BigUint::zero() {
             let name = mangle_output(name);
             (
-                format!("output{} {},", size_spec(backward_size), name),
+                format!("output{} {},", size_spec(&backward_size), name),
                 code! {
-                    [0] &logic(&value_name.backward_var_name(), backward_size);
+                    [0] &logic(&value_name.backward_var_name(), &backward_size);
                     [0] &assign(&name, &value_name.backward_var_name())
                 },
             )
@@ -902,11 +917,11 @@ pub fn entity_code(entity: &mut Entity, source_code: &Option<CodeBundle>) -> Cod
     let (inputs, input_assignments): (Vec<_>, Vec<_>) = inputs.unzip();
 
     let back_port_size = entity.output_type.backward_size();
-    let (back_port_definition, back_port_assignment) = if back_port_size != 0 {
+    let (back_port_definition, back_port_assignment) = if back_port_size != BigUint::zero() {
         let def = code! {
             [0] format!(
                 "input{} input__",
-                size_spec(entity.output_type.backward_size())
+                size_spec(&entity.output_type.backward_size())
             );
         };
         let assignment = code! {
@@ -918,14 +933,14 @@ pub fn entity_code(entity: &mut Entity, source_code: &Option<CodeBundle>) -> Cod
     };
 
     let output_size = entity.output_type.size();
-    let (output_definition, output_assignment) = if output_size != 0 {
+    let (output_definition, output_assignment) = if output_size != BigUint::zero() {
         let comma = if back_port_definition.is_some() {
             ","
         } else {
             ""
         };
         let def = code! {
-            [0] format!("output{} output__{comma}", size_spec(output_size))
+            [0] format!("output{} output__{comma}", size_spec(&output_size))
         };
         let assignment = code! {[0] assign("output__", &entity.output.var_name())};
         (Some(def), Some(assignment))
@@ -1021,7 +1036,7 @@ mod tests {
 
     #[test]
     fn binding_code_works() {
-        let binding = statement!(e(0); Type::Int(5); Add; e(1), e(2));
+        let binding = statement!(e(0); Type::int(5); Add; e(1), e(2));
 
         let expected = indoc!(
             r#"
@@ -1042,7 +1057,7 @@ mod tests {
 
     #[test]
     fn registers_without_reset_work() {
-        let reg = statement!(reg n(0, "r"); Type::Int(7); clock (e(0)); e(1));
+        let reg = statement!(reg n(0, "r"); Type::int(7); clock (e(0)); e(1));
 
         let expected = indoc!(
             r#"
@@ -1065,7 +1080,7 @@ mod tests {
 
     #[test]
     fn registers_with_reset_work() {
-        let reg = statement!(reg n(0, "r"); Type::Int(7); clock (e(0)); reset (e(2), e(3)); e(1));
+        let reg = statement!(reg n(0, "r"); Type::int(7); clock (e(0)); reset (e(2), e(3)); e(1));
 
         let expected = indoc!(
             r#"
@@ -1093,8 +1108,8 @@ mod tests {
 
     #[test]
     fn entity_codegen_works() {
-        let input = entity!(&["pong"]; ("op", n(0, "op"), Type::Int(6)) -> Type::Int(6); {
-            (e(0); Type::Int(6); Add; n(0, "op"), e(1))
+        let input = entity!(&["pong"]; ("op", n(0, "op"), Type::int(6)) -> Type::int(6); {
+            (e(0); Type::int(6); Add; n(0, "op"), e(1))
         } => e(0));
 
         let expected = indoc!(
@@ -1130,9 +1145,9 @@ mod tests {
 
     #[test]
     fn pure_backward_input_produces_output_port() {
-        let ty = Type::Backward(Box::new(Type::Int(3)));
-        let input = entity!(&["test"]; ("a", n(0, "a"), ty) -> Type::Int(6); {
-            (const 0; Type::Int(6); crate::ConstantValue::Int(3))
+        let ty = Type::Backward(Box::new(Type::int(3)));
+        let input = entity!(&["test"]; ("a", n(0, "a"), ty) -> Type::int(6); {
+            (const 0; Type::int(6); crate::ConstantValue::int(3))
         } => e(0));
 
         let expected = indoc!(
@@ -1167,9 +1182,9 @@ mod tests {
 
     #[test]
     fn mixed_backward_input_works() {
-        let ty = Type::Tuple(vec![Type::Int(4), Type::Backward(Box::new(Type::Int(3)))]);
-        let input = entity!(&["test"]; ("a", n(0, "a"), ty) -> Type::Int(6); {
-            (const 0; Type::Int(6); crate::ConstantValue::Int(3))
+        let ty = Type::Tuple(vec![Type::int(4), Type::Backward(Box::new(Type::int(3)))]);
+        let input = entity!(&["test"]; ("a", n(0, "a"), ty) -> Type::int(6); {
+            (const 0; Type::int(6); crate::ConstantValue::int(3))
         } => e(0));
 
         let expected = indoc!(
@@ -1206,7 +1221,7 @@ mod tests {
 
     #[test]
     fn mixed_backward_output_works() {
-        let ty = Type::Tuple(vec![Type::Int(4), Type::Backward(Box::new(Type::Int(3)))]);
+        let ty = Type::Tuple(vec![Type::int(4), Type::Backward(Box::new(Type::int(3)))]);
         let input = entity!("test"; () -> ty; {
         } => e(0));
 
@@ -1239,7 +1254,7 @@ mod tests {
 
     #[test]
     fn constant_codegen_works() {
-        let input = statement!(const 0; Type::Int(10); crate::ConstantValue::Int(6));
+        let input = statement!(const 0; Type::int(10); crate::ConstantValue::int(6));
 
         let expected = indoc!(
             r#"
@@ -1263,13 +1278,13 @@ mod tests {
         let inst_name = spade_mir::UnitName::from_strs(&["A"]);
         let input = entity!(&["pl"]; (
                 "clk", n(3, "clk"), Type::Bool,
-            ) -> Type::Int(16); {
-                (reg n(10, "x__s1"); Type::Int(16); clock(n(3, "clk")); n(0, "x_"));
+            ) -> Type::int(16); {
+                (reg n(10, "x__s1"); Type::int(16); clock(n(3, "clk")); n(0, "x_"));
                 // Stage 0
-                (e(0); Type::Int(16); Instance((inst_name, None)););
-                (n(0, "x_"); Type::Int(16); Alias; e(0));
+                (e(0); Type::int(16); Instance((inst_name, None)););
+                (n(0, "x_"); Type::int(16); Alias; e(0));
                 // Stage 1
-                (n(1, "x"); Type::Int(16); Alias; n(0, "x_"));
+                (n(1, "x"); Type::int(16); Alias; n(0, "x_"));
             } => n(1, "x")
         );
 
@@ -1322,7 +1337,7 @@ mod backward_expression_tests {
 
     #[test]
     fn backward_alias_works() {
-        let ty = Type::Backward(Box::new(Type::Int(8)));
+        let ty = Type::Backward(Box::new(Type::int(8)));
         let stmt = statement!(e(0); ty; Alias; e(1));
 
         let expected = indoc! {
@@ -1344,8 +1359,8 @@ mod backward_expression_tests {
 
     #[test]
     fn backward_index_tuple_works() {
-        let tuple_members = vec![Type::backward(Type::Int(8)), Type::backward(Type::Int(4))];
-        let ty = Type::backward(Type::Int(4));
+        let tuple_members = vec![Type::backward(Type::int(8)), Type::backward(Type::int(4))];
+        let ty = Type::backward(Type::int(4));
         let stmt = statement!(e(0); ty; IndexTuple((1, tuple_members)); e(1));
 
         let expected = indoc! {
@@ -1367,13 +1382,13 @@ mod backward_expression_tests {
 
     #[test]
     fn construct_tuple_works() {
-        let tuple_members = vec![Type::backward(Type::Int(8)), Type::backward(Type::Int(4))];
+        let tuple_members = vec![Type::backward(Type::int(8)), Type::backward(Type::int(4))];
         let ty = Type::Tuple(tuple_members);
         let stmt = statement!(e(0); ty; ConstructTuple; e(1), e(2));
 
         let type_list = TypeList::empty()
-            .with(ValueName::Expr(1), Type::backward(Type::Int(8)))
-            .with(ValueName::Expr(2), Type::backward(Type::Int(4)));
+            .with(ValueName::Expr(1), Type::backward(Type::int(8)))
+            .with(ValueName::Expr(2), Type::backward(Type::int(4)));
 
         let expected = indoc! {
             r#"
@@ -1391,9 +1406,9 @@ mod backward_expression_tests {
     #[test]
     fn construct_tuple_works_on_mixed_direction_types() {
         let tuple_members = vec![
-            Type::backward(Type::Int(8)),
-            Type::Tuple(vec![Type::backward(Type::Int(4)), Type::Int(4)]),
-            Type::Int(3),
+            Type::backward(Type::int(8)),
+            Type::Tuple(vec![Type::backward(Type::int(4)), Type::int(4)]),
+            Type::int(3),
         ];
         let ty = Type::Tuple(tuple_members);
         let stmt = statement!(e(0); ty; ConstructTuple; e(1), e(2), e(3));
@@ -1407,12 +1422,12 @@ mod backward_expression_tests {
         };
 
         let type_list = TypeList::empty()
-            .with(ValueName::Expr(1), Type::backward(Type::Int(8)))
+            .with(ValueName::Expr(1), Type::backward(Type::int(8)))
             .with(
                 ValueName::Expr(2),
-                Type::Tuple(vec![Type::backward(Type::Int(4)), Type::Int(4)]),
+                Type::Tuple(vec![Type::backward(Type::int(4)), Type::int(4)]),
             )
-            .with(ValueName::Expr(3), Type::Int(3));
+            .with(ValueName::Expr(3), Type::int(3));
 
         assert_same_code!(
             &statement_code_and_declaration(&stmt, &type_list, &CodeBundle::new("".to_string()))
@@ -1424,8 +1439,8 @@ mod backward_expression_tests {
     #[test]
     fn construct_array_works() {
         let ty = Type::Array {
-            inner: Box::new(Type::backward(Type::Int(5))),
-            length: 3,
+            inner: Box::new(Type::backward(Type::int(5))),
+            length: 3u32.to_biguint(),
         };
         let stmt = statement!(e(0); ty; ConstructArray; e(1), e(2), e(3));
 
@@ -1453,6 +1468,7 @@ mod expression_tests {
     use codespan::Span;
     use colored::Colorize;
     use spade_common::location_info::WithLocation;
+    use spade_common::num_ext::InfallibleToBigInt;
 
     use crate::{self as spade_mir, value_name, UnitName};
     use crate::{statement, types::Type};
@@ -1510,26 +1526,26 @@ mod expression_tests {
         }
     }
 
-    signed_binop_test!(binop_add_works, Type::Int(2), "[1:0]", Add, "+");
-    signed_binop_test!(binop_sub_works, Type::Int(2), "[1:0]", Sub, "-");
-    signed_binop_test!(binop_mul_works, Type::Int(2), "[1:0]", Mul, "*");
+    signed_binop_test!(binop_add_works, Type::int(2), "[1:0]", Add, "+");
+    signed_binop_test!(binop_sub_works, Type::int(2), "[1:0]", Sub, "-");
+    signed_binop_test!(binop_mul_works, Type::int(2), "[1:0]", Mul, "*");
     binop_test!(
         binop_left_shift_works,
-        Type::Int(2),
+        Type::int(2),
         "[1:0]",
         LeftShift,
         "<<"
     );
     binop_test!(
         binop_right_shift_works,
-        Type::Int(2),
+        Type::int(2),
         "[1:0]",
         RightShift,
         ">>"
     );
     signed_binop_test!(
         binop_arithmetic_right_shift_works,
-        Type::Int(2),
+        Type::int(2),
         "[1:0]",
         ArithmeticRightShift,
         ">>>"
@@ -1541,15 +1557,15 @@ mod expression_tests {
     signed_binop_test!(binop_le_works, Type::Bool, "", Le, "<=");
     binop_test!(binop_logical_and_works, Type::Bool, "", LogicalAnd, "&&");
     binop_test!(binop_logical_or_works, Type::Bool, "", LogicalOr, "||");
-    binop_test!(bitwise_xor_works, Type::Int(32), "[31:0]", BitwiseXor, "^");
+    binop_test!(bitwise_xor_works, Type::int(32), "[31:0]", BitwiseXor, "^");
     // NOTE: The resulting verilog uses `^` on a 1 bit value
     binop_test!(logical_xor_works, Type::Bool, "", LogicalXor, "^");
     unop_test!(not_works, Type::Bool, "", Not, "!");
-    unop_test!(usub_works, Type::Int(2), "[1:0]", USub, "-");
+    unop_test!(usub_works, Type::int(2), "[1:0]", USub, "-");
 
     #[test]
     fn select_operator_works() {
-        let stmt = statement!(e(0); Type::Int(2); Select; e(1), e(2), e(3));
+        let stmt = statement!(e(0); Type::int(2); Select; e(1), e(2), e(3));
 
         let expected = indoc!(
             r#"
@@ -1591,7 +1607,7 @@ mod expression_tests {
 
     #[test]
     fn match_operator_works() {
-        let stmt = statement!(e(0); Type::Int(2); Match; e(1), e(2), e(3), e(4));
+        let stmt = statement!(e(0); Type::int(2); Match; e(1), e(2), e(3), e(4));
 
         let expected = indoc!(
             r#"
@@ -1639,7 +1655,7 @@ mod expression_tests {
 
     #[test]
     fn tuple_assembly_operator_works() {
-        let ty = Type::Tuple(vec![Type::Int(6), Type::Int(3)]);
+        let ty = Type::Tuple(vec![Type::int(6), Type::int(3)]);
         let stmt = statement!(e(0); ty; ConstructTuple; e(1), e(2));
 
         let expected = indoc!(
@@ -1652,8 +1668,8 @@ mod expression_tests {
             &statement_code_and_declaration(
                 &stmt,
                 &TypeList::empty()
-                    .with(ValueName::Expr(1), Type::Int(6))
-                    .with(ValueName::Expr(2), Type::Int(3)),
+                    .with(ValueName::Expr(1), Type::int(6))
+                    .with(ValueName::Expr(2), Type::int(3)),
                 &CodeBundle::new("".to_string())
             )
             .to_string(),
@@ -1663,7 +1679,7 @@ mod expression_tests {
 
     #[test]
     fn enum_construction_operator_works() {
-        let ty = Type::Enum(vec![vec![], vec![], vec![Type::Int(10), Type::Int(5)]]);
+        let ty = Type::Enum(vec![vec![], vec![], vec![Type::int(10), Type::int(5)]]);
         let stmt = statement!(e(0); ty; ConstructEnum({variant: 2, variant_count: 3}); e(1), e(2));
 
         let expected = indoc!(
@@ -1685,7 +1701,7 @@ mod expression_tests {
 
     #[test]
     fn is_enum_variant_operator_works() {
-        let ty = Type::Enum(vec![vec![], vec![], vec![Type::Int(10), Type::Int(5)]]);
+        let ty = Type::Enum(vec![vec![], vec![], vec![Type::int(10), Type::int(5)]]);
         let stmt = statement!(e(0); Type::Bool; IsEnumVariant({variant: 2, enum_type: ty}); e(1));
 
         let expected = indoc!(
@@ -1707,7 +1723,7 @@ mod expression_tests {
 
     #[test]
     fn is_enum_variant_operator_works_for_1_wide_tags() {
-        let ty = Type::Enum(vec![vec![], vec![Type::Int(10), Type::Int(5)]]);
+        let ty = Type::Enum(vec![vec![], vec![Type::int(10), Type::int(5)]]);
         let stmt = statement!(e(0); Type::Bool; IsEnumVariant({variant: 1, enum_type: ty}); e(1));
 
         let expected = indoc!(
@@ -1729,8 +1745,8 @@ mod expression_tests {
 
     #[test]
     fn enum_member_access_operator_works() {
-        let ty = Type::Enum(vec![vec![], vec![], vec![Type::Int(10), Type::Int(5)]]);
-        let stmt = statement!(e(0); Type::Int(5); EnumMember({variant: 2, member_index: 1, enum_type: ty}); e(1));
+        let ty = Type::Enum(vec![vec![], vec![], vec![Type::int(10), Type::int(5)]]);
+        let stmt = statement!(e(0); Type::int(5); EnumMember({variant: 2, member_index: 1, enum_type: ty}); e(1));
 
         let expected = indoc!(
             r#"
@@ -1753,8 +1769,8 @@ mod expression_tests {
     fn enum_construction_inserts_padding_undef_where_needed() {
         let ty = Type::Enum(vec![
             vec![],
-            vec![Type::Int(5)],
-            vec![Type::Int(10), Type::Int(5)],
+            vec![Type::int(5)],
+            vec![Type::int(10), Type::int(5)],
         ]);
         let stmt = statement!(e(0); ty; ConstructEnum({variant: 1, variant_count: 3}); e(1));
 
@@ -1777,8 +1793,8 @@ mod expression_tests {
 
     #[test]
     fn tuple_indexing_works_for_first_value() {
-        let ty = vec![Type::Int(6), Type::Int(3)];
-        let stmt = statement!(e(0); Type::Int(6); IndexTuple((0, ty)); e(1));
+        let ty = vec![Type::int(6), Type::int(3)];
+        let stmt = statement!(e(0); Type::int(6); IndexTuple((0, ty)); e(1));
 
         let expected = indoc!(
             r#"
@@ -1798,8 +1814,8 @@ mod expression_tests {
     }
     #[test]
     fn tuple_indexing_works() {
-        let ty = vec![Type::Int(6), Type::Int(3)];
-        let stmt = statement!(e(0); Type::Int(6); IndexTuple((1, ty)); e(1));
+        let ty = vec![Type::int(6), Type::int(3)];
+        let stmt = statement!(e(0); Type::int(6); IndexTuple((1, ty)); e(1));
 
         let expected = indoc!(
             r#"
@@ -1820,7 +1836,7 @@ mod expression_tests {
 
     #[test]
     fn tuple_indexing_works_for_bools() {
-        let ty = vec![Type::Bool, Type::Int(3)];
+        let ty = vec![Type::Bool, Type::int(3)];
         let stmt = statement!(e(0); Type::Bool; IndexTuple((0, ty)); e(1));
 
         let expected = indoc!(
@@ -1841,10 +1857,31 @@ mod expression_tests {
     }
 
     #[test]
+    fn large_negative_literals_codegen_correctly() {
+        let statement = statement!(const 0; Type::int(64); ConstantValue::int(-1));
+
+        let expected = indoc!(
+            r#"
+            logic[63:0] _e_0;
+            assign _e_0 = -64'd1;"#
+        );
+
+        assert_same_code!(
+            &statement_code_and_declaration(
+                &statement,
+                &TypeList::empty(),
+                &CodeBundle::new("".to_string())
+            )
+            .to_string(),
+            expected
+        );
+    }
+
+    #[test]
     fn array_literals_work() {
         let ty = Type::Array {
-            inner: Box::new(Type::Int(3)),
-            length: 3,
+            inner: Box::new(Type::int(3)),
+            length: 3u32.to_biguint(),
         };
         let statement = statement!(e(0); ty; ConstructArray; e(1), e(2), e(3));
 
@@ -1867,7 +1904,7 @@ mod expression_tests {
 
     #[test]
     fn array_indexing_works() {
-        let statement = statement!(e(0); Type::Int(3); IndexArray; e(1), e(2));
+        let statement = statement!(e(0); Type::int(3); IndexArray; e(1), e(2));
 
         let expected = indoc!(
             r#"
@@ -2010,14 +2047,14 @@ mod expression_tests {
     #[test]
     fn decl_clocked_array_works() {
         let t = Type::Array {
-            inner: Box::new(Type::Int(6)),
-            length: 4,
+            inner: Box::new(Type::int(6)),
+            length: 4u32.to_biguint(),
         };
         let stmt = statement!(e(0); t; DeclClockedMemory({
-            write_ports: 2,
-            addr_w: 4,
-            inner_w: 6,
-            elems: 16,
+            write_ports: 2u32.to_biguint(),
+            addr_w: 4u32.to_biguint(),
+            inner_w: 6u32.to_biguint(),
+            elems: 16u32.to_biguint(),
             initial: None
         }); e(1), e(2));
 
@@ -2050,14 +2087,14 @@ mod expression_tests {
     #[test]
     fn decl_clocked_array_with_1_bit_address_works() {
         let t = Type::Array {
-            inner: Box::new(Type::Int(6)),
-            length: 4,
+            inner: Box::new(Type::int(6)),
+            length: 4u32.to_biguint(),
         };
         let stmt = statement!(e(0); t; DeclClockedMemory({
-            write_ports: 1,
-            addr_w: 1,
-            inner_w: 6,
-            elems: 16,
+            write_ports: 1u32.to_biguint(),
+            addr_w: 1u32.to_biguint(),
+            inner_w: 6u32.to_biguint(),
+            elems: 16u32.to_biguint(),
             initial: None
         }); e(1), e(2));
 
@@ -2086,13 +2123,13 @@ mod expression_tests {
     fn decl_clocked_array_with_1_bit_data_works() {
         let t = Type::Array {
             inner: Box::new(Type::Bool),
-            length: 4,
+            length: 4u32.to_biguint(),
         };
         let stmt = statement!(e(0); t; DeclClockedMemory({
-            write_ports: 1,
-            addr_w: 4,
-            inner_w: 1,
-            elems: 16,
+            write_ports: 1u32.to_biguint(),
+            addr_w: 4u32.to_biguint(),
+            inner_w: 1u32.to_biguint(),
+            elems: 16u32.to_biguint(),
             initial: None
         }); e(1), e(2));
 
@@ -2122,17 +2159,17 @@ mod expression_tests {
     #[test]
     fn decl_clocked_memory_with_initial_works() {
         let t = Type::Array {
-            inner: Box::new(Type::Int(6)),
-            length: 4,
+            inner: Box::new(Type::Int(6u32.to_biguint())),
+            length: 4u32.to_biguint(),
         };
         let stmt = statement!(e(0); t; DeclClockedMemory({
-            write_ports: 2,
-            addr_w: 4,
-            inner_w: 6,
-            elems: 16,
+            write_ports: 2u32.to_biguint(),
+            addr_w: 4u32.to_biguint(),
+            inner_w: 6u32.to_biguint(),
+            elems: 16u32.to_biguint(),
             initial: Some(vec![
-                vec![statement!(const 10; Type::Int(6); ConstantValue::Int(10))],
-                vec![statement!(const 10; Type::Int(6); ConstantValue::Int(5))],
+                vec![statement!(const 10; Type::Int(6u32.to_biguint()); ConstantValue::Int(10.to_bigint()))],
+                vec![statement!(const 10; Type::Int(6u32.to_biguint()); ConstantValue::Int(5.to_bigint()))],
             ])
         }); e(1), e(2));
 
@@ -2168,7 +2205,7 @@ mod expression_tests {
 
     #[test]
     fn truncate_works() {
-        let stmt = statement!(e(0); Type::Int(5); Truncate; e(1));
+        let stmt = statement!(e(0); Type::int(5); Truncate; e(1));
 
         let expected = indoc! {
             r#"
@@ -2189,8 +2226,7 @@ mod expression_tests {
 
     #[test]
     fn sext_works_for_many_bits() {
-        let stmt =
-            statement!(e(0); Type::Int(5); SignExtend({extra_bits: 2, operand_size: 3}); e(1));
+        let stmt = statement!(e(0); Type::int(5); SignExtend({extra_bits: 2u32.to_biguint(), operand_size: 3u32.to_biguint()}); e(1));
 
         let expected = indoc! {
             r#"
@@ -2210,8 +2246,7 @@ mod expression_tests {
     }
     #[test]
     fn sext_works_for_one_bits() {
-        let stmt =
-            statement!(e(0); Type::Int(4); SignExtend({extra_bits: 1, operand_size: 3}); e(1));
+        let stmt = statement!(e(0); Type::int(4); SignExtend({extra_bits: 1u32.to_biguint(), operand_size: 3u32.to_biguint()}); e(1));
 
         let expected = indoc! {
             r#"
@@ -2231,8 +2266,7 @@ mod expression_tests {
     }
     #[test]
     fn sext_works_for_zero_bits() {
-        let stmt =
-            statement!(e(0); Type::Int(3); SignExtend({extra_bits: 0, operand_size: 3}); e(1));
+        let stmt = statement!(e(0); Type::int(3); SignExtend({extra_bits: 0u32.to_biguint(), operand_size: 3u32.to_biguint()}); e(1));
 
         let expected = indoc! {
             r#"
@@ -2253,7 +2287,8 @@ mod expression_tests {
 
     #[test]
     fn zext_works_for_many_bits() {
-        let stmt = statement!(e(0); Type::Int(5); ZeroExtend({extra_bits: 2}); e(1));
+        let stmt =
+            statement!(e(0); Type::int(5); ZeroExtend({extra_bits: 2u32.to_biguint()}); e(1));
 
         let expected = indoc! {
             r#"
@@ -2273,7 +2308,8 @@ mod expression_tests {
     }
     #[test]
     fn zext_works_for_one_bits() {
-        let stmt = statement!(e(0); Type::Int(4); ZeroExtend({extra_bits: 1}); e(1));
+        let stmt =
+            statement!(e(0); Type::int(4); ZeroExtend({extra_bits: 1u32.to_biguint()}); e(1));
 
         let expected = indoc! {
             r#"
@@ -2294,7 +2330,8 @@ mod expression_tests {
 
     #[test]
     fn zext_works_for_zero_bits() {
-        let stmt = statement!(e(0); Type::Int(3); ZeroExtend({extra_bits: 0}); e(1));
+        let stmt =
+            statement!(e(0); Type::int(3); ZeroExtend({extra_bits: 0u32.to_biguint()}); e(1));
 
         let expected = indoc! {
             r#"
@@ -2315,7 +2352,7 @@ mod expression_tests {
 
     #[test]
     fn div_pow2_works() {
-        let stmt = statement!(e(0); Type::Int(3); DivPow2; e(1), e(2));
+        let stmt = statement!(e(0); Type::int(3); DivPow2; e(1), e(2));
 
         let expected = indoc! {
             r#"
@@ -2343,7 +2380,7 @@ mod expression_tests {
 
     #[test]
     fn concat_works() {
-        let stmt = statement!(e(0); Type::Int(8); Concat; e(1), e(2));
+        let stmt = statement!(e(0); Type::int(8); Concat; e(1), e(2));
 
         let expected = indoc! {
             r#"
@@ -2423,7 +2460,7 @@ mod expression_tests {
 
     #[test]
     fn read_mut_wire_codegen_works() {
-        let stmt = statement!(e(0); Type::Int(8); ReadPort; e(1));
+        let stmt = statement!(e(0); Type::int(8); ReadPort; e(1));
 
         let expected = indoc! {
             r#"
@@ -2444,7 +2481,7 @@ mod expression_tests {
 
     #[test]
     fn const_codegen_large_bit_width_works() {
-        let stmt = statement!(const 0; Type::Int(32); crate::ConstantValue::Int(3));
+        let stmt = statement!(const 0; Type::int(32); crate::ConstantValue::int(3));
 
         let expected = indoc! {
             r#"

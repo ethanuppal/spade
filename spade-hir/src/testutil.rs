@@ -1,4 +1,7 @@
-use spade_common::location_info::{Loc, WithLocation};
+use spade_common::{
+    location_info::{Loc, WithLocation},
+    num_ext::InfallibleToBigUint,
+};
 
 /// A declared type.
 /// The type name is the name as declared in the symtab which must be in scope with
@@ -15,7 +18,7 @@ macro_rules! dtype {
 
 /// A type level integer
 pub fn t_num(size: u128) -> Loc<crate::TypeExpression> {
-    crate::TypeExpression::Integer(size).nowhere()
+    crate::TypeExpression::Integer(size.to_biguint()).nowhere()
 }
 
 #[macro_export]

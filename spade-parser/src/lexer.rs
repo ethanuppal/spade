@@ -1,5 +1,29 @@
 use logos::Logos;
 
+use num::BigInt;
+
+#[derive(Debug, PartialEq, Clone)]
+pub enum LiteralKind {
+    Signed,
+    Unsigned,
+}
+
+fn parse_int(slice: &str, radix: u32) -> (BigInt, LiteralKind) {
+    let lower = slice.to_ascii_lowercase();
+    let cleaned = lower.replace('_', "").replace("u", "").replace("U", "");
+
+    let signed = if lower.ends_with('u') {
+        LiteralKind::Unsigned
+    } else {
+        LiteralKind::Signed
+    };
+
+    (
+        BigInt::parse_bytes(&cleaned.as_bytes(), radix).unwrap(),
+        signed,
+    )
+}
+
 #[derive(Logos, Debug, PartialEq, Clone)]
 pub enum TokenKind {
     // Unholy regex for unicode identifiers. Stolen from Repnop who stole it from Evrey
@@ -10,24 +34,18 @@ pub enum TokenKind {
     )"#, |lex| lex.slice().to_string())]
     Identifier(String),
 
-    #[regex(r"[0-9][0-9_]*", |lex| {
-        let without_under = lex.slice().replace('_', "");
-
-        u128::from_str_radix(&without_under, 10)
+    #[regex(r"-?[0-9][0-9_]*[uU]?", |lex| {
+        parse_int(lex.slice(), 10)
     })]
-    Integer(u128),
-    #[regex(r"0x[0-9A-Fa-f][0-9_A-Fa-f]*", |lex| {
-        let without_under = lex.slice().replace('_', "");
-
-        u128::from_str_radix(&without_under[2..], 16)
+    Integer((BigInt, LiteralKind)),
+    #[regex(r"-?0x[0-9A-Fa-f][0-9_A-Fa-f]*[uU]?", |lex| {
+        parse_int(&lex.slice()[2..], 16)
     })]
-    HexInteger(u128),
-    #[regex(r"0b[0-1][0-1_]*", |lex| {
-        let without_under = lex.slice().replace('_', "");
-
-        u128::from_str_radix(&without_under[2..], 2)
+    HexInteger((BigInt, LiteralKind)),
+    #[regex(r"-?0b[0-1][0-1_]*[uU]?", |lex| {
+        parse_int(&lex.slice()[2..], 2)
     })]
-    BinInteger(u128),
+    BinInteger((BigInt, LiteralKind)),
 
     #[token("true")]
     True,
@@ -296,6 +314,8 @@ impl TokenKind {
 
 #[cfg(test)]
 mod tests {
+    use spade_common::num_ext::InfallibleToBigInt;
+
     use super::*;
 
     #[test]
@@ -312,7 +332,10 @@ mod tests {
     fn integer_literals_work() {
         let mut lex = TokenKind::lexer("123");
 
-        assert_eq!(lex.next(), Some(TokenKind::Integer(123)));
+        assert_eq!(
+            lex.next(),
+            Some(TokenKind::Integer((123.to_bigint(), LiteralKind::Signed)))
+        );
         assert_eq!(lex.next(), None);
     }
 
@@ -320,7 +343,13 @@ mod tests {
     fn hex_array() {
         let mut lex = TokenKind::lexer("[0x45]");
         assert_eq!(lex.next(), Some(TokenKind::OpenBracket));
-        assert_eq!(lex.next(), Some(TokenKind::HexInteger(0x45)));
+        assert_eq!(
+            lex.next(),
+            Some(TokenKind::HexInteger((
+                0x45.to_bigint(),
+                LiteralKind::Signed
+            )))
+        );
         assert_eq!(lex.next(), Some(TokenKind::CloseBracket));
         assert_eq!(lex.next(), None);
     }
@@ -328,7 +357,10 @@ mod tests {
     #[test]
     fn invalid_hex_is_not_hex() {
         let mut lex = TokenKind::lexer("0xg");
-        assert_eq!(lex.next(), Some(TokenKind::Integer(0)));
+        assert_eq!(
+            lex.next(),
+            Some(TokenKind::Integer((0.to_bigint(), LiteralKind::Signed)))
+        );
         assert_eq!(lex.next(), Some(TokenKind::Identifier("xg".to_string())));
         assert_eq!(lex.next(), None);
     }

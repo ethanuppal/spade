@@ -201,7 +201,7 @@ pub fn eval_statements(statements: &[Statement]) -> Value {
                                 .collect(),
                         );
                         let variant_member_size =
-                            BigUint::from(ops.iter().map(|op| name_types[op].size()).sum::<u64>());
+                            ops.iter().map(|op| name_types[op].size()).sum::<BigUint>();
                         let padding_size =
                             BigUint::from(ty.size()) - tag_size - variant_member_size;
                         if padding_size != BigUint::zero() {
@@ -226,7 +226,7 @@ pub fn eval_statements(statements: &[Statement]) -> Value {
                 let val = match val {
                     crate::ConstantValue::Int(i) => Value::Int {
                         size: ty.size().into(),
-                        val: (*i).into(),
+                        val: i.clone(),
                     },
                     crate::ConstantValue::Bool(v) => Value::Bit(*v),
                 };
@@ -314,9 +314,9 @@ mod test {
     #[test]
     fn addition_works() {
         let mir = vec![
-            statement!(const 0; Type::Int(16); ConstantValue::Int(5)),
-            statement!(const 1; Type::Int(16); ConstantValue::Int(10)),
-            statement!(e(2); Type::Int(16); Add; e(0), e(1)),
+            statement!(const 0; Type::int(16); ConstantValue::int(5)),
+            statement!(const 1; Type::int(16); ConstantValue::int(10)),
+            statement!(e(2); Type::int(16); Add; e(0), e(1)),
         ];
 
         let result = eval_statements(&mir);
@@ -326,10 +326,10 @@ mod test {
 
     #[test]
     fn enum_construction_works() {
-        let enum_t = Type::Enum(vec![vec![], vec![Type::Int(16)], vec![]]);
+        let enum_t = Type::Enum(vec![vec![], vec![Type::int(16)], vec![]]);
 
         let mir = vec![
-            statement!(const 0; Type::Int(16); ConstantValue::Int(5)),
+            statement!(const 0; Type::int(16); ConstantValue::int(5)),
             statement!(e(1); enum_t; ConstructEnum({variant: 1, variant_count: 3}); e(0)),
         ];
 
@@ -343,10 +343,10 @@ mod test {
 
     #[test]
     fn enum_construction_with_padding_works() {
-        let enum_t = Type::Enum(vec![vec![Type::Int(2)], vec![Type::Int(16)], vec![]]);
+        let enum_t = Type::Enum(vec![vec![Type::int(2)], vec![Type::int(16)], vec![]]);
 
         let mir = vec![
-            statement!(const 0; Type::Int(3); ConstantValue::Int(5)),
+            statement!(const 0; Type::int(3); ConstantValue::int(5)),
             statement!(e(1); enum_t; ConstructEnum({variant: 1, variant_count: 3}); e(0)),
         ];
 

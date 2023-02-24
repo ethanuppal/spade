@@ -562,6 +562,7 @@ dependencies = [
  "autocfg",
  "num-integer",
  "num-traits",
+ "serde",
 ]
 
 [[package]]
@@ -571,6 +572,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7ae39348c8bc5fbd7f40c727a9925f03517afd2ab27d46702108b6a7e5414c19"
 dependencies = [
  "num-traits",
+ "serde",
 ]
 
 [[package]]
@@ -604,6 +606,7 @@ dependencies = [
  "num-bigint",
  "num-integer",
  "num-traits",
+ "serde",
 ]
 
 [[package]]
@@ -967,6 +970,7 @@ dependencies = [
 name = "spade-ast"
 version = "0.1.0"
 dependencies = [
+ "num",
  "spade-common",
 ]
 
@@ -976,6 +980,7 @@ version = "0.1.0"
 dependencies = [
  "local-impl",
  "matches",
+ "num",
  "pretty_assertions",
  "spade-ast",
  "spade-common",
@@ -993,6 +998,7 @@ dependencies = [
  "codespan",
  "codespan-reporting 0.12.0",
  "logos",
+ "num",
  "serde",
  "tracing",
 ]
@@ -1033,6 +1039,7 @@ dependencies = [
  "colored",
  "itertools",
  "local-impl",
+ "num",
  "serde",
  "spade-common",
  "spade-diagnostics",
@@ -1052,6 +1059,7 @@ dependencies = [
  "indoc",
  "itertools",
  "local-impl",
+ "num",
  "pretty_assertions",
  "prettydiff",
  "serde",
@@ -1107,6 +1115,7 @@ dependencies = [
  "colored",
  "local-impl",
  "logos",
+ "num",
  "spade-ast",
  "spade-common",
  "spade-diagnostics",
@@ -1123,6 +1132,7 @@ dependencies = [
  "color-eyre",
  "itertools",
  "logos",
+ "num",
  "pyo3",
  "ron",
  "spade",
@@ -1176,6 +1186,7 @@ dependencies = [
  "codespan-reporting 0.12.0",
  "colored",
  "local-impl",
+ "num",
  "serde",
  "spade-ast",
  "spade-ast-lowering",
@@ -1192,6 +1203,7 @@ dependencies = [
 name = "spade-types"
 version = "0.1.0"
 dependencies = [
+ "num",
  "serde",
  "spade-common",
 ]

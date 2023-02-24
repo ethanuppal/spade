@@ -14,15 +14,25 @@ mod verilog;
 use derivative::Derivative;
 use itertools::Itertools;
 
-use spade_common::location_info::{Loc, WithLocation};
+use num::{BigInt, BigUint};
+use spade_common::{
+    location_info::{Loc, WithLocation},
+    num_ext::InfallibleToBigInt,
+};
 use types::Type;
 
 pub use unit_name::UnitName;
 
 #[derive(Clone, PartialEq, Debug)]
 pub enum ConstantValue {
-    Int(u64),
+    Int(BigInt),
     Bool(bool),
+}
+
+impl ConstantValue {
+    pub fn int(val: i32) -> Self {
+        Self::Int(val.to_bigint())
+    }
 }
 
 impl std::fmt::Display for ConstantValue {
@@ -88,11 +98,11 @@ pub enum Operator {
     DivPow2,
     /// Sign extend the first operand with the provided amount of extra bits
     SignExtend {
-        extra_bits: u64,
-        operand_size: u64,
+        extra_bits: BigUint,
+        operand_size: BigUint,
     },
     ZeroExtend {
-        extra_bits: u64,
+        extra_bits: BigUint,
     },
     /// Truncate the first operand to fit the size of the target operand.
     /// Should not be used on operands which are smaller than the target
@@ -113,13 +123,13 @@ pub enum Operator {
     /// the second argument is an array of (write enable, write address, write data) tuples
     /// which update the array.
     DeclClockedMemory {
-        write_ports: u64,
+        write_ports: BigUint,
         /// Width of the write address
-        addr_w: u64,
+        addr_w: BigUint,
         /// Number of elements in the array
-        inner_w: u64,
+        inner_w: BigUint,
         /// Number of elements in the array
-        elems: u64,
+        elems: BigUint,
         /// Initial values for the memory. Must be const evaluatable
         initial: Option<Vec<Vec<Statement>>>,
     },

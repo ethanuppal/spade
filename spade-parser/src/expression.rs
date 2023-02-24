@@ -1,5 +1,7 @@
 use spade_ast::{ArgumentList, BinaryOperator, CallKind, Expression, UnaryOperator};
+use num::ToPrimitive;
 use spade_common::location_info::{lspan, Loc, WithLocation};
+use spade_diagnostics::Diagnostic;
 use spade_macros::trace_parser;
 
 use crate::error::{Error, ExpectedArgumentList, Result};
@@ -250,6 +252,23 @@ impl<'a> Parser<'a> {
     fn expression_suffix(&mut self, expr: Loc<Expression>) -> Result<Loc<Expression>> {
         let base = if let Some(hash) = self.peek_and_eat(&TokenKind::Hash)? {
             if let Some(index) = self.int_literal()? {
+                let index = index.try_map_ref(|idx| -> Result<u128> {
+                    let as_u128 = idx
+                        .clone()
+                        .as_unsigned()
+                        .ok_or_else(|| {
+                            Diagnostic::error(&index, "Tuple indices must be positive")
+                                .primary_label("Negative tuple index")
+                        })?
+                        .to_u128()
+                        .ok_or_else(|| {
+                            Diagnostic::bug(&index, "Tuple index too large")
+                                .primary_label("Tuple index too large")
+                                .note(format!("Tuple index can be at most {}", u128::MAX))
+                        })?;
+
+                    Ok(as_u128)
+                })?;
                 let span = expr.span.merge(lspan(hash.span));
                 Ok(Expression::TupleIndex(Box::new(expr), index).at(self.file_id, &span))
             } else {
@@ -314,6 +333,7 @@ impl<'a> Parser<'a> {
 mod test {
     use spade_ast::testutil::{ast_ident, ast_path};
     use spade_ast::*;
+    use spade_common::num_ext::InfallibleToBigInt;
 
     use super::*;
     use crate::lexer::TokenKind;
@@ -516,8 +536,8 @@ mod test {
             kind: CallKind::Function,
             callee: ast_path("test"),
             args: ArgumentList::Positional(vec![
-                Expression::IntLiteral(1).nowhere(),
-                Expression::IntLiteral(2).nowhere(),
+                Expression::int_literal(1).nowhere(),
+                Expression::int_literal(2).nowhere(),
             ])
             .nowhere(),
         }
@@ -549,7 +569,7 @@ mod test {
         let code = "(1, true)";
 
         let expected = Expression::TupleLiteral(vec![
-            Expression::IntLiteral(1).nowhere(),
+            Expression::int_literal(1).nowhere(),
             Expression::BoolLiteral(true).nowhere(),
         ])
         .nowhere();
@@ -562,9 +582,9 @@ mod test {
         let code = "[1, 2, 3]";
 
         let expected = Expression::ArrayLiteral(vec![
-            Expression::IntLiteral(1).nowhere(),
-            Expression::IntLiteral(2).nowhere(),
-            Expression::IntLiteral(3).nowhere(),
+            Expression::int_literal(1).nowhere(),
+            Expression::int_literal(2).nowhere(),
+            Expression::int_literal(3).nowhere(),
         ])
         .nowhere();
 
@@ -577,7 +597,7 @@ mod test {
 
         let expected = Expression::Index(
             Box::new(Expression::Identifier(ast_path("a")).nowhere()),
-            Box::new(Expression::IntLiteral(0).nowhere()),
+            Box::new(Expression::int_literal(0).nowhere()),
         )
         .nowhere();
 
@@ -730,7 +750,7 @@ mod test {
             Box::new(Expression::Identifier(ast_path("x")).nowhere()),
             vec![
                 (
-                    Pattern::Tuple(vec![Pattern::Integer(0).nowhere(), Pattern::name("y")])
+                    Pattern::Tuple(vec![Pattern::integer(0).nowhere(), Pattern::name("y")])
                         .nowhere(),
                     Expression::Identifier(ast_path("y")).nowhere(),
                 ),
@@ -759,10 +779,10 @@ mod test {
             statements: vec![Statement::Binding(
                 Pattern::name("a"),
                 None,
-                Expression::IntLiteral(0).nowhere(),
+                Expression::int_literal(0).nowhere(),
             )
             .nowhere()],
-            result: Expression::IntLiteral(1).nowhere(),
+            result: Expression::int_literal(1).nowhere(),
         }
         .nowhere();
 
@@ -782,10 +802,10 @@ mod test {
             statements: vec![Statement::Binding(
                 Pattern::name("a"),
                 None,
-                Expression::IntLiteral(0).nowhere(),
+                Expression::int_literal(0).nowhere(),
             )
             .nowhere()],
-            result: Expression::IntLiteral(1).nowhere(),
+            result: Expression::int_literal(1).nowhere(),
         }))
         .nowhere();
 
@@ -802,8 +822,8 @@ mod test {
             kind: CallKind::Function,
             callee: ast_path("infix"),
             args: ArgumentList::Positional(vec![
-                Expression::IntLiteral(1).nowhere(),
-                Expression::IntLiteral(2).nowhere(),
+                Expression::int_literal(1).nowhere(),
+                Expression::int_literal(2).nowhere(),
             ])
             .nowhere(),
         }
@@ -826,17 +846,17 @@ mod test {
             callee: ast_path("infix"),
             args: ArgumentList::Positional(vec![
                 Expression::BinaryOperator(
-                    Box::new(Expression::IntLiteral(0).nowhere()),
+                    Box::new(Expression::int_literal(0).nowhere()),
                     BinaryOperator::LogicalOr,
-                    Box::new(Expression::IntLiteral(1).nowhere()),
+                    Box::new(Expression::int_literal(1).nowhere()),
                 )
                 .nowhere(),
                 Expression::Call {
                     kind: CallKind::Function,
                     callee: ast_path("infix"),
                     args: ArgumentList::Positional(vec![
-                        Expression::IntLiteral(2).nowhere(),
-                        Expression::IntLiteral(3).nowhere(),
+                        Expression::int_literal(2).nowhere(),
+                        Expression::int_literal(3).nowhere(),
                     ])
                     .nowhere(),
                 }
@@ -927,7 +947,7 @@ mod test {
 
         let expected = Expression::PipelineReference {
             stage_kw_and_reference_loc: ().nowhere(),
-            stage: PipelineStageReference::Relative(5.nowhere()),
+            stage: PipelineStageReference::Relative(5.to_bigint().nowhere()),
             name: ast_ident("var"),
         }
         .nowhere();
@@ -941,7 +961,7 @@ mod test {
 
         let expected = Expression::PipelineReference {
             stage_kw_and_reference_loc: ().nowhere(),
-            stage: PipelineStageReference::Relative((-5).nowhere()),
+            stage: PipelineStageReference::Relative((-5).to_bigint().nowhere()),
             name: ast_ident("var"),
         }
         .nowhere();

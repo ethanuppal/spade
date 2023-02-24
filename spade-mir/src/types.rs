@@ -1,15 +1,18 @@
+use num::{BigUint, Zero};
+use spade_common::num_ext::InfallibleToBigUint;
+
 #[derive(Clone, PartialEq, Debug)]
 pub enum Type {
-    Int(u64),
+    Int(BigUint),
     Bool,
     Tuple(Vec<Type>),
     Array {
         inner: Box<Type>,
-        length: u64,
+        length: BigUint,
     },
     Memory {
         inner: Box<Type>,
-        length: u64,
+        length: BigUint,
     },
     Enum(Vec<Vec<Type>>),
     /// A type in which values flow the opposite way compared to normal types. When a type
@@ -19,15 +22,18 @@ pub enum Type {
 }
 
 impl Type {
+    pub fn int(val: u32) -> Self {
+        Self::Int(val.to_biguint())
+    }
     pub fn backward(inner: Type) -> Self {
         Self::Backward(Box::new(inner))
     }
 
-    pub fn size(&self) -> u64 {
+    pub fn size(&self) -> BigUint {
         match self {
-            Type::Int(len) => *len,
-            Type::Bool => 1,
-            Type::Tuple(inner) => inner.iter().map(Type::size).sum::<u64>(),
+            Type::Int(len) => len.clone(),
+            Type::Bool => 1u32.to_biguint(),
+            Type::Tuple(inner) => inner.iter().map(Type::size).sum::<BigUint>(),
             Type::Enum(inner) => {
                 let discriminant_size = (inner.len() as f32).log2().ceil() as u64;
 
@@ -35,38 +41,38 @@ impl Type {
                     .iter()
                     .map(|m| m.iter().map(|t| t.size()).sum())
                     .max()
-                    .unwrap_or(0);
+                    .unwrap_or(BigUint::zero());
 
                 discriminant_size + members_size
             }
             Type::Array { inner, length } => inner.size() * length,
             Type::Memory { inner, length } => inner.size() * length,
-            Type::Backward(_) => 0,
+            Type::Backward(_) => BigUint::zero(),
         }
     }
 
-    pub fn backward_size(&self) -> u64 {
+    pub fn backward_size(&self) -> BigUint {
         match self {
             Type::Backward(inner) => inner.size(),
-            Type::Int(_) | Type::Bool => 0,
+            Type::Int(_) | Type::Bool => BigUint::zero(),
             Type::Array { inner, length } => inner.backward_size() * length,
             Type::Enum(inner) => {
                 for v in inner {
                     for i in v {
-                        if i.backward_size() != 0 {
+                        if i.backward_size() != BigUint::zero() {
                             unreachable!("Enums can not have output wires as payload")
                         }
                     }
                 }
-                0
+                BigUint::zero()
             }
             Type::Memory { inner, .. } => {
-                if inner.backward_size() != 0 {
+                if inner.backward_size() != BigUint::zero() {
                     unreachable!("Memory can not contain output wires")
                 };
-                0
+                BigUint::zero()
             }
-            Type::Tuple(inner) => inner.iter().map(Type::backward_size).sum::<u64>(),
+            Type::Tuple(inner) => inner.iter().map(Type::backward_size).sum::<BigUint>(),
         }
     }
 
@@ -128,20 +134,20 @@ mod tests {
     #[test]
     fn pure_enum_size_is_correct() {
         // 2 variant enum
-        assert_eq!(Type::Enum(vec![vec![], vec![]]).size(), 1);
+        assert_eq!(Type::Enum(vec![vec![], vec![]]).size(), 1u32.to_biguint());
     }
 
     #[test]
     fn enum_with_payload_size_is_correct() {
         // 2 variant enum
         assert_eq!(
-            Type::Enum(vec![vec![Type::Int(5)], vec![Type::Bool]]).size(),
-            6
+            Type::Enum(vec![vec![Type::Int(5u32.to_biguint())], vec![Type::Bool]]).size(),
+            6u32.to_biguint()
         );
     }
 
     #[test]
     fn single_variant_enum_is_0_bits() {
-        assert_eq!(Type::Enum(vec![vec![]]).size(), 0);
+        assert_eq!(Type::Enum(vec![vec![]]).size(), BigUint::zero());
     }
 }

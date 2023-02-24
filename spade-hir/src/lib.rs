@@ -7,10 +7,12 @@ use std::collections::HashMap;
 
 pub use expression::{Argument, ArgumentKind, ArgumentList, ExprKind, Expression};
 use itertools::Itertools;
+use num::{BigInt, BigUint};
 use serde::{Deserialize, Serialize};
 use spade_common::{
     location_info::{Loc, WithLocation},
     name::{Identifier, NameID},
+    num_ext::InfallibleToBigInt,
 };
 use spade_types::PrimitiveType;
 
@@ -36,7 +38,7 @@ impl WithLocation for PatternArgument {}
 
 #[derive(PartialEq, Debug, Clone, Serialize, Deserialize)]
 pub enum PatternKind {
-    Integer(u128),
+    Integer(BigInt),
     Bool(bool),
     Name {
         name: Loc<NameID>,
@@ -54,6 +56,10 @@ impl PatternKind {
             name,
             pre_declared: false,
         }
+    }
+
+    pub fn integer(val: i32) -> Self {
+        Self::Integer(val.to_bigint())
     }
 }
 impl PatternKind {
@@ -172,7 +178,7 @@ impl TypeParam {
 #[derive(PartialEq, Debug, Clone, Serialize, Deserialize)]
 pub enum TypeExpression {
     /// An integer value
-    Integer(u128),
+    Integer(BigUint),
     /// Another type
     TypeSpec(TypeSpec),
 }
@@ -385,7 +391,7 @@ pub enum FunctionKind {
 pub enum UnitKind {
     Function(FunctionKind),
     Entity,
-    Pipeline(Loc<u128>),
+    Pipeline(Loc<usize>),
 }
 impl WithLocation for UnitKind {}
 

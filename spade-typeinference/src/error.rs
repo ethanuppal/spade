@@ -1,3 +1,4 @@
+use num::BigInt;
 use spade_diagnostics::Diagnostic;
 use spade_hir::param_util::ArgumentError;
 use thiserror::Error;
@@ -103,7 +104,7 @@ pub enum UnificationError {
     },
     #[error("Negative integer from constraints")]
     NegativeInteger {
-        got: i128,
+        got: BigInt,
         inside: TypeVar,
         loc: Loc<()>,
     },

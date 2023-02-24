@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 
+use num::BigUint;
 use serde::{Deserialize, Serialize};
 use spade_common::{location_info::WithLocation, name::NameID};
 use spade_types::KnownType;
@@ -80,13 +81,13 @@ impl TypeVar {
     pub fn expect_integer<T, U, K, O>(&self, on_integer: K, on_unknown: U, on_other: O) -> T
     where
         U: FnOnce() -> T,
-        K: FnOnce(u128) -> T,
+        K: FnOnce(BigUint) -> T,
         O: FnOnce(&TypeVar) -> T,
     {
         match self {
             TypeVar::Known(KnownType::Integer(size), params) => {
                 assert!(params.is_empty());
-                on_integer(*size)
+                on_integer(size.clone())
             }
             TypeVar::Unknown(_) => on_unknown(),
             other => on_other(other),

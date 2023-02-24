@@ -22,6 +22,7 @@ codespan-reporting.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
 tracing-tree.workspace = true
+num.workspace = true
 
 spade-ast = {path = "../spade-ast"}
 spade-ast-lowering = {path = "../spade-ast-lowering"}

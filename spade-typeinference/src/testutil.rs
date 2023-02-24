@@ -1,3 +1,4 @@
+use spade_common::num_ext::InfallibleToBigUint;
 use spade_hir::symbol_table::SymbolTable;
 use spade_types::KnownType;
 
@@ -7,7 +8,7 @@ use crate::TypeVar as TVar;
 pub fn sized_int(size: u128, symtab: &SymbolTable) -> TVar {
     TVar::Known(
         t_int(symtab),
-        vec![TVar::Known(KnownType::Integer(size), vec![])],
+        vec![TVar::Known(KnownType::Integer(size.to_biguint()), vec![])],
     )
 }
 

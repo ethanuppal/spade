@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 
 use colored::Colorize;
+use num::BigInt;
 use serde::{Deserialize, Serialize};
 use tap::prelude::*;
 use thiserror::Error;
@@ -167,7 +168,7 @@ pub enum Thing {
         in_namespace: Path,
     },
     PipelineStage(Loc<Identifier>),
-    ComptimeConfig(Loc<u128>),
+    ComptimeConfig(Loc<BigInt>),
 }
 
 impl Thing {
@@ -595,7 +596,7 @@ impl SymbolTable {
         struct_by_id, lookup_struct, StructCallable, NotAStruct {
             Thing::Struct(s) => s.clone()
         },
-        comptime_config_by_id, lookup_comptime_config, u128, NotAComptimeValue {
+        comptime_config_by_id, lookup_comptime_config, BigInt, NotAComptimeValue {
             Thing::ComptimeConfig(val) => val.clone()
         }
     }

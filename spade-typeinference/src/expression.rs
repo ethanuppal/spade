@@ -1,5 +1,7 @@
+use num::{BigInt, One};
 use spade_common::location_info::{Loc, WithLocation};
 use spade_common::name::Identifier;
+use spade_common::num_ext::InfallibleToBigUint;
 use spade_hir::expression::{BinaryOperator, NamedArgument, UnaryOperator};
 use spade_hir::{ExprKind, Expression};
 use spade_macros::trace_typechecker;
@@ -71,7 +73,7 @@ impl TypeState {
                     loc: expression.loc(),
                 })?;
             self.add_requirement(Requirement::FitsIntLiteral {
-                value: *value,
+                value: value.clone(),
                 target_type: t.at_loc(&expression)
             });
         });
@@ -264,7 +266,7 @@ impl TypeState {
                 members[0].get_type(self)?
             };
 
-            let size_type = kvar!(KnownType::Integer(members.len() as u128));
+            let size_type = kvar!(KnownType::Integer(members.len().to_biguint()));
             let result_type = TypeVar::Array {
                 inner: Box::new(inner_type),
                 size: Box::new(size_type),
@@ -303,7 +305,7 @@ impl TypeState {
 
             self.add_constraint(
                 int_size,
-                bits_to_store(ce_var(&array_size) - ce_int(1)),
+                bits_to_store(ce_var(&array_size) - ce_int(BigInt::one())),
                 index.loc(),
                 &int_type,
                 ConstraintSource::ArrayIndexing
@@ -452,14 +454,14 @@ impl TypeState {
 
                     self.add_constraint(
                         result_size.clone(),
-                        ce_var(&lhs_size) + ce_int(1),
+                        ce_var(&lhs_size) + ce_int(BigInt::one()),
                         expression.loc(),
                         &result_t,
                         ConstraintSource::AdditionOutput
                     );
                     self.add_constraint(
                         lhs_size.clone(),
-                        ce_var(&result_size) + -ce_int(1),
+                        ce_var(&result_size) + -ce_int(BigInt::one()),
                         lhs.loc(),
                         &lhs_t,
                         ConstraintSource::AdditionOutput

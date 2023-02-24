@@ -7,7 +7,8 @@ pub mod pipelines;
 pub mod types;
 
 use attributes::{report_unused_attributes, unit_name};
-use pipelines::PipelineContext;
+use num::{BigInt, ToPrimitive, Zero};
+use pipelines::{int_literal_to_pipeline_stages, PipelineContext};
 use spade_diagnostics::Diagnostic;
 use tracing::{event, info, Level};
 
@@ -94,7 +95,7 @@ pub fn visit_type_expression(
             // Look up the type. For now, we'll panic if we don't find a concrete type
             Ok(hir::TypeExpression::TypeSpec(inner.inner))
         }
-        ast::TypeExpression::Integer(val) => Ok(hir::TypeExpression::Integer(*val)),
+        ast::TypeExpression::Integer(val) => Ok(hir::TypeExpression::Integer(val.clone())),
     }
 }
 
@@ -331,10 +332,12 @@ pub fn entity_head(
             ast::UnitKind::Function => Ok(hir::UnitKind::Function(hir::FunctionKind::Fn)),
             ast::UnitKind::Entity => Ok(hir::UnitKind::Entity),
             ast::UnitKind::Pipeline(d) => {
-                let depth = d.inner.maybe_unpack(symtab)?.ok_or_else(|| {
-                    Diagnostic::error(d, "Missing pipeline depth")
-                        .note("The current comptime branch does not specify a depth")
-                })?;
+                let depth = int_literal_to_pipeline_stages(
+                    &d.inner.maybe_unpack(symtab)?.ok_or_else(|| {
+                        Diagnostic::error(d, "Missing pipeline depth")
+                            .note("The current comptime branch does not specify a depth")
+                    })?,
+                )?;
                 Ok(hir::UnitKind::Pipeline(depth))
             }
         }
@@ -632,7 +635,7 @@ fn try_lookup_enum_variant(path: &Loc<Path>, ctx: &mut Context) -> Result<hir::P
 
 pub fn visit_pattern(p: &ast::Pattern, ctx: &mut Context) -> Result<hir::Pattern> {
     let kind = match &p {
-        ast::Pattern::Integer(val) => hir::PatternKind::Integer(*val),
+        ast::Pattern::Integer(val) => hir::PatternKind::Integer(val.clone().as_signed()),
         ast::Pattern::Bool(val) => hir::PatternKind::Bool(*val),
         ast::Pattern::Path(path) => {
             match (try_lookup_enum_variant(path, ctx), path.inner.0.as_slice()) {
@@ -908,7 +911,7 @@ pub fn visit_call_kind(
                 Diagnostic::error(depth, "Expected pipeline depth")
                     .help("The current comptime branch did not specify a depth")
             })?;
-            hir::expression::CallKind::Pipeline(loc.clone(), depth)
+            hir::expression::CallKind::Pipeline(loc.clone(), int_literal_to_pipeline_stages(&depth)?)
         }
     })
 }
@@ -918,7 +921,13 @@ pub fn visit_expression(e: &ast::Expression, ctx: &mut Context) -> Result<hir::E
     let new_id = ctx.idtracker.next();
 
     match e {
-        ast::Expression::IntLiteral(val) => Ok(hir::ExprKind::IntLiteral(val.clone())),
+        ast::Expression::IntLiteral(val) => {
+            let result = match val {
+                ast::IntLiteral::Signed(val) => hir::expression::IntLiteral::Signed(val.clone()),
+                ast::IntLiteral::Unsigned(val) => hir::expression::IntLiteral::Unsigned(val.clone()),
+            };
+            Ok(hir::ExprKind::IntLiteral(result.clone()))
+        },
         ast::Expression::BoolLiteral(val) => Ok(hir::ExprKind::BoolLiteral(*val)),
         ast::Expression::BinaryOperator(lhs, tok, rhs) => {
             let lhs = lhs.try_visit(visit_expression, ctx)?;
@@ -1057,9 +1066,9 @@ pub fn visit_expression(e: &ast::Expression, ctx: &mut Context) -> Result<hir::E
             let (stage_index, loc) = match stage {
                 ast::PipelineStageReference::Relative(offset) => {
                     let current = pipeline_ctx.current_stage;
-                    let absolute = current as i64 + offset.inner;
+                    let absolute = current as i64 + &offset.inner;
 
-                    if absolute < 0 {
+                    if absolute < BigInt::zero() {
                         return Err(Diagnostic::error(
                             stage_kw_and_reference_loc,
                             "Reference to negative pipeline stage",
@@ -1071,7 +1080,10 @@ pub fn visit_expression(e: &ast::Expression, ctx: &mut Context) -> Result<hir::E
                         .note("Pipeline stages start at 0")
                         .into());
                     }
-                    let absolute = absolute as usize;
+                    let absolute = absolute.to_usize().ok_or_else(|| {
+                        Diagnostic::error(offset, "Pipeline offset overflow")
+                            .primary_label(format!("Pipeline stages must fit in 0..{}", usize::MAX))
+                    })?;
                     let pipeline_depth = pipeline_ctx.stages.len();
                     if absolute >= pipeline_depth {
                         return Err(Diagnostic::error(stage_kw_and_reference_loc, "Reference to pipeline stage beyond pipeline depth")
@@ -1256,10 +1268,10 @@ mod entity_visiting {
                     statements: vec![ast::Statement::Binding(
                         ast::Pattern::name("var"),
                         Some(ast::TypeSpec::Unit(().nowhere()).nowhere()),
-                        ast::Expression::IntLiteral(0).nowhere(),
+                        ast::Expression::int_literal(0).nowhere(),
                     )
                     .nowhere()],
-                    result: ast::Expression::IntLiteral(0).nowhere(),
+                    result: ast::Expression::int_literal(0).nowhere(),
                 }))
                 .nowhere(),
             ),
@@ -1283,10 +1295,10 @@ mod entity_visiting {
                 statements: vec![hir::Statement::Binding(
                     hir::PatternKind::name(name_id(2, "var")).idless().nowhere(),
                     Some(hir::TypeSpec::unit().nowhere()),
-                    hir::ExprKind::IntLiteral(0).idless().nowhere(),
+                    hir::ExprKind::int_literal(0).idless().nowhere(),
                 )
                 .nowhere()],
-                result: hir::ExprKind::IntLiteral(0).idless().nowhere(),
+                result: hir::ExprKind::int_literal(0).idless().nowhere(),
             }))
             .idless()
             .nowhere(),
@@ -1400,14 +1412,14 @@ mod statement_visiting {
         let input = ast::Statement::Binding(
             ast::Pattern::name("a"),
             Some(ast::TypeSpec::Unit(().nowhere()).nowhere()),
-            ast::Expression::IntLiteral(0).nowhere(),
+            ast::Expression::int_literal(0).nowhere(),
         )
         .nowhere();
 
         let expected = hir::Statement::Binding(
             hir::PatternKind::name(name_id(0, "a")).idless().nowhere(),
             Some(hir::TypeSpec::unit().nowhere()),
-            hir::ExprKind::IntLiteral(0).idless().nowhere(),
+            hir::ExprKind::int_literal(0).idless().nowhere(),
         )
         .nowhere();
 
@@ -1422,7 +1434,7 @@ mod statement_visiting {
                 pattern: ast::Pattern::name("regname"),
                 clock: ast::Expression::Identifier(ast_path("clk")).nowhere(),
                 reset: None,
-                value: ast::Expression::IntLiteral(0).nowhere(),
+                value: ast::Expression::int_literal(0).nowhere(),
                 value_type: None,
             }
             .nowhere(),
@@ -1438,7 +1450,7 @@ mod statement_visiting {
                     .with_id(0)
                     .nowhere(),
                 reset: None,
-                value: hir::ExprKind::IntLiteral(0).idless().nowhere(),
+                value: hir::ExprKind::int_literal(0).idless().nowhere(),
                 value_type: None,
             }
             .nowhere(),
@@ -1520,13 +1532,14 @@ mod expression_visiting {
     use spade_ast::testutil::{ast_ident, ast_path};
     use spade_common::location_info::WithLocation;
     use spade_common::name::testutil::name_id;
+    use spade_common::num_ext::InfallibleToBigInt;
 
     #[test]
     fn int_literals_work() {
         let symtab = SymbolTable::new();
         let idtracker = ExprIdTracker::new();
-        let input = ast::Expression::IntLiteral(123);
-        let expected = hir::ExprKind::IntLiteral(123).idless();
+        let input = ast::Expression::int_literal(123);
+        let expected = hir::ExprKind::int_literal(123).idless();
 
         assert_eq!(
             visit_expression(
@@ -1549,14 +1562,14 @@ mod expression_visiting {
                 let symtab = SymbolTable::new();
                 let idtracker = ExprIdTracker::new();
                 let input = ast::Expression::BinaryOperator(
-                    Box::new(ast::Expression::IntLiteral(123).nowhere()),
+                    Box::new(ast::Expression::int_literal(123).nowhere()),
                     spade_ast::BinaryOperator::$token,
-                    Box::new(ast::Expression::IntLiteral(456).nowhere()),
+                    Box::new(ast::Expression::int_literal(456).nowhere()),
                 );
                 let expected = hir::ExprKind::BinaryOperator(
-                    Box::new(hir::ExprKind::IntLiteral(123).idless().nowhere()),
+                    Box::new(hir::ExprKind::int_literal(123).idless().nowhere()),
                     BinaryOperator::$op,
-                    Box::new(hir::ExprKind::IntLiteral(456).idless().nowhere()),
+                    Box::new(hir::ExprKind::int_literal(456).idless().nowhere()),
                 )
                 .idless();
 
@@ -1584,11 +1597,11 @@ mod expression_visiting {
                 let idtracker = ExprIdTracker::new();
                 let input = ast::Expression::UnaryOperator(
                     spade_ast::UnaryOperator::$token,
-                    Box::new(ast::Expression::IntLiteral(456).nowhere()),
+                    Box::new(ast::Expression::int_literal(456).nowhere()),
                 );
                 let expected = hir::ExprKind::UnaryOperator(
                     hir::expression::UnaryOperator::$op,
-                    Box::new(hir::ExprKind::IntLiteral(456).idless().nowhere()),
+                    Box::new(hir::ExprKind::int_literal(456).idless().nowhere()),
                 )
                 .idless();
 
@@ -1621,13 +1634,13 @@ mod expression_visiting {
         let symtab = SymbolTable::new();
         let idtracker = ExprIdTracker::new();
         let input = ast::Expression::Index(
-            Box::new(ast::Expression::IntLiteral(0).nowhere()),
-            Box::new(ast::Expression::IntLiteral(1).nowhere()),
+            Box::new(ast::Expression::int_literal(0).nowhere()),
+            Box::new(ast::Expression::int_literal(1).nowhere()),
         );
 
         let expected = hir::ExprKind::Index(
-            Box::new(hir::ExprKind::IntLiteral(0).idless().nowhere()),
-            Box::new(hir::ExprKind::IntLiteral(1).idless().nowhere()),
+            Box::new(hir::ExprKind::int_literal(0).idless().nowhere()),
+            Box::new(hir::ExprKind::int_literal(1).idless().nowhere()),
         )
         .idless();
 
@@ -1650,12 +1663,12 @@ mod expression_visiting {
         let symtab = SymbolTable::new();
         let idtracker = ExprIdTracker::new();
         let input = ast::Expression::FieldAccess(
-            Box::new(ast::Expression::IntLiteral(0).nowhere()),
+            Box::new(ast::Expression::int_literal(0).nowhere()),
             ast_ident("a"),
         );
 
         let expected = hir::ExprKind::FieldAccess(
-            Box::new(hir::ExprKind::IntLiteral(0).idless().nowhere()),
+            Box::new(hir::ExprKind::int_literal(0).idless().nowhere()),
             ast_ident("a"),
         )
         .idless();
@@ -1680,19 +1693,19 @@ mod expression_visiting {
             statements: vec![ast::Statement::Binding(
                 ast::Pattern::name("a"),
                 None,
-                ast::Expression::IntLiteral(0).nowhere(),
+                ast::Expression::int_literal(0).nowhere(),
             )
             .nowhere()],
-            result: ast::Expression::IntLiteral(0).nowhere(),
+            result: ast::Expression::int_literal(0).nowhere(),
         }));
         let expected = hir::ExprKind::Block(Box::new(hir::Block {
             statements: vec![hir::Statement::Binding(
                 hir::PatternKind::name(name_id(0, "a")).idless().nowhere(),
                 None,
-                hir::ExprKind::IntLiteral(0).idless().nowhere(),
+                hir::ExprKind::int_literal(0).idless().nowhere(),
             )
             .nowhere()],
-            result: hir::ExprKind::IntLiteral(0).idless().nowhere(),
+            result: hir::ExprKind::int_literal(0).idless().nowhere(),
         }))
         .idless();
 
@@ -1711,28 +1724,28 @@ mod expression_visiting {
     #[test]
     fn if_expressions_work() {
         let input = ast::Expression::If(
-            Box::new(ast::Expression::IntLiteral(0).nowhere()),
+            Box::new(ast::Expression::int_literal(0).nowhere()),
             Box::new(
                 ast::Expression::Block(Box::new(ast::Block {
                     statements: vec![],
-                    result: ast::Expression::IntLiteral(1).nowhere(),
+                    result: ast::Expression::int_literal(1).nowhere(),
                 }))
                 .nowhere(),
             ),
             Box::new(
                 ast::Expression::Block(Box::new(ast::Block {
                     statements: vec![],
-                    result: ast::Expression::IntLiteral(2).nowhere(),
+                    result: ast::Expression::int_literal(2).nowhere(),
                 }))
                 .nowhere(),
             ),
         );
         let expected = hir::ExprKind::If(
-            Box::new(hir::ExprKind::IntLiteral(0).idless().nowhere()),
+            Box::new(hir::ExprKind::int_literal(0).idless().nowhere()),
             Box::new(
                 hir::ExprKind::Block(Box::new(hir::Block {
                     statements: vec![],
-                    result: hir::ExprKind::IntLiteral(1).idless().nowhere(),
+                    result: hir::ExprKind::int_literal(1).idless().nowhere(),
                 }))
                 .idless()
                 .nowhere(),
@@ -1740,7 +1753,7 @@ mod expression_visiting {
             Box::new(
                 hir::ExprKind::Block(Box::new(hir::Block {
                     statements: vec![],
-                    result: hir::ExprKind::IntLiteral(2).idless().nowhere(),
+                    result: hir::ExprKind::int_literal(2).idless().nowhere(),
                 }))
                 .idless()
                 .nowhere(),
@@ -1767,19 +1780,19 @@ mod expression_visiting {
     #[test]
     fn match_expressions_work() {
         let input = ast::Expression::Match(
-            Box::new(ast::Expression::IntLiteral(1).nowhere()),
+            Box::new(ast::Expression::int_literal(1).nowhere()),
             vec![(
                 ast::Pattern::name("x"),
-                ast::Expression::IntLiteral(2).nowhere(),
+                ast::Expression::int_literal(2).nowhere(),
             )]
             .nowhere(),
         );
 
         let expected = hir::ExprKind::Match(
-            Box::new(hir::ExprKind::IntLiteral(1).idless().nowhere()),
+            Box::new(hir::ExprKind::int_literal(1).idless().nowhere()),
             vec![(
                 hir::PatternKind::name(name_id(0, "x")).idless().nowhere(),
-                hir::ExprKind::IntLiteral(2).idless().nowhere(),
+                hir::ExprKind::int_literal(2).idless().nowhere(),
             )],
         )
         .idless();
@@ -1803,7 +1816,7 @@ mod expression_visiting {
     #[test]
     fn match_expressions_with_enum_members_works() {
         let input = ast::Expression::Match(
-            Box::new(ast::Expression::IntLiteral(1).nowhere()),
+            Box::new(ast::Expression::int_literal(1).nowhere()),
             vec![(
                 ast::Pattern::Type(
                     ast_path("x"),
@@ -1819,7 +1832,7 @@ mod expression_visiting {
         );
 
         let expected = hir::ExprKind::Match(
-            Box::new(hir::ExprKind::IntLiteral(1).idless().nowhere()),
+            Box::new(hir::ExprKind::int_literal(1).idless().nowhere()),
             vec![(
                 hir::PatternKind::Type(
                     name_id(100, "x"),
@@ -1871,7 +1884,7 @@ mod expression_visiting {
     #[test]
     fn match_expressions_with_0_argument_enum_works() {
         let input = ast::Expression::Match(
-            Box::new(ast::Expression::IntLiteral(1).nowhere()),
+            Box::new(ast::Expression::int_literal(1).nowhere()),
             vec![(
                 ast::Pattern::Type(
                     ast_path("x"),
@@ -1887,7 +1900,7 @@ mod expression_visiting {
         );
 
         let expected = hir::ExprKind::Match(
-            Box::new(hir::ExprKind::IntLiteral(1).idless().nowhere()),
+            Box::new(hir::ExprKind::int_literal(1).idless().nowhere()),
             vec![(
                 hir::PatternKind::Type(
                     name_id(100, "x"),
@@ -1942,8 +1955,8 @@ mod expression_visiting {
             kind: ast::CallKind::Entity(().nowhere()),
             callee: ast_path("test"),
             args: ast::ArgumentList::Positional(vec![
-                ast::Expression::IntLiteral(1).nowhere(),
-                ast::Expression::IntLiteral(2).nowhere(),
+                ast::Expression::int_literal(1).nowhere(),
+                ast::Expression::int_literal(2).nowhere(),
             ])
             .nowhere(),
         }
@@ -1953,8 +1966,8 @@ mod expression_visiting {
             kind: hir::expression::CallKind::Entity(().nowhere()),
             callee: name_id(0, "test"),
             args: hir::ArgumentList::Positional(vec![
-                hir::ExprKind::IntLiteral(1).idless().nowhere(),
-                hir::ExprKind::IntLiteral(2).idless().nowhere(),
+                hir::ExprKind::int_literal(1).idless().nowhere(),
+                hir::ExprKind::int_literal(2).idless().nowhere(),
             ])
             .nowhere(),
         }
@@ -2000,8 +2013,8 @@ mod expression_visiting {
             kind: ast::CallKind::Entity(().nowhere()),
             callee: ast_path("test"),
             args: ast::ArgumentList::Named(vec![
-                ast::NamedArgument::Full(ast_ident("b"), ast::Expression::IntLiteral(2).nowhere()),
-                ast::NamedArgument::Full(ast_ident("a"), ast::Expression::IntLiteral(1).nowhere()),
+                ast::NamedArgument::Full(ast_ident("b"), ast::Expression::int_literal(2).nowhere()),
+                ast::NamedArgument::Full(ast_ident("a"), ast::Expression::int_literal(1).nowhere()),
             ])
             .nowhere(),
         }
@@ -2013,11 +2026,11 @@ mod expression_visiting {
             args: hir::ArgumentList::Named(vec![
                 hir::expression::NamedArgument::Full(
                     ast_ident("b"),
-                    hir::ExprKind::IntLiteral(2).idless().nowhere(),
+                    hir::ExprKind::int_literal(2).idless().nowhere(),
                 ),
                 hir::expression::NamedArgument::Full(
                     ast_ident("a"),
-                    hir::ExprKind::IntLiteral(1).idless().nowhere(),
+                    hir::ExprKind::int_literal(1).idless().nowhere(),
                 ),
             ])
             .nowhere(),
@@ -2064,8 +2077,8 @@ mod expression_visiting {
             kind: ast::CallKind::Function,
             callee: ast_path("test"),
             args: ast::ArgumentList::Positional(vec![
-                ast::Expression::IntLiteral(1).nowhere(),
-                ast::Expression::IntLiteral(2).nowhere(),
+                ast::Expression::int_literal(1).nowhere(),
+                ast::Expression::int_literal(2).nowhere(),
             ])
             .nowhere(),
         }
@@ -2075,8 +2088,8 @@ mod expression_visiting {
             kind: hir::expression::CallKind::Function,
             callee: name_id(0, "test"),
             args: hir::ArgumentList::Positional(vec![
-                hir::ExprKind::IntLiteral(1).idless().nowhere(),
-                hir::ExprKind::IntLiteral(2).idless().nowhere(),
+                hir::ExprKind::int_literal(1).idless().nowhere(),
+                hir::ExprKind::int_literal(2).idless().nowhere(),
             ])
             .nowhere(),
         }
@@ -2119,11 +2132,11 @@ mod expression_visiting {
     #[test]
     fn pipeline_instantiation_works() {
         let input = ast::Expression::Call {
-            kind: ast::CallKind::Pipeline(().nowhere(), MaybeComptime::Raw(2.nowhere()).nowhere()),
+            kind: ast::CallKind::Pipeline(().nowhere(), MaybeComptime::Raw(ast::IntLiteral::Signed(2.to_bigint()).nowhere()).nowhere()),
             callee: ast_path("test"),
             args: ast::ArgumentList::Positional(vec![
-                ast::Expression::IntLiteral(1).nowhere(),
-                ast::Expression::IntLiteral(2).nowhere(),
+                ast::Expression::int_literal(1).nowhere(),
+                ast::Expression::int_literal(2).nowhere(),
             ])
             .nowhere(),
         }
@@ -2133,8 +2146,8 @@ mod expression_visiting {
             kind: hir::expression::CallKind::Pipeline(().nowhere(), 2.nowhere()),
             callee: name_id(0, "test"),
             args: hir::ArgumentList::Positional(vec![
-                hir::ExprKind::IntLiteral(1).idless().nowhere(),
-                hir::ExprKind::IntLiteral(2).idless().nowhere(),
+                hir::ExprKind::int_literal(1).idless().nowhere(),
+                hir::ExprKind::int_literal(2).idless().nowhere(),
             ])
             .nowhere(),
         }
@@ -2211,7 +2224,7 @@ mod pattern_visiting {
 
     #[test]
     fn int_patterns_work() {
-        let input = ast::Pattern::Integer(5);
+        let input = ast::Pattern::integer(5);
 
         let symtab = SymbolTable::new();
         let idtracker = ExprIdTracker::new();
@@ -2226,7 +2239,7 @@ mod pattern_visiting {
             },
         );
 
-        assert_eq!(result, Ok(PatternKind::Integer(5).idless()));
+        assert_eq!(result, Ok(PatternKind::integer(5).idless()));
     }
 
     #[test]
@@ -2235,7 +2248,7 @@ mod pattern_visiting {
             ast_path("a"),
             ArgumentPattern::Named(vec![
                 (ast_ident("x"), None),
-                (ast_ident("y"), Some(ast::Pattern::Integer(0).nowhere())),
+                (ast_ident("y"), Some(ast::Pattern::integer(0).nowhere())),
             ])
             .nowhere(),
         );
@@ -2285,7 +2298,7 @@ mod pattern_visiting {
                 },
                 hir::PatternArgument {
                     target: ast_ident("y"),
-                    value: hir::PatternKind::Integer(0).idless().nowhere(),
+                    value: hir::PatternKind::integer(0).idless().nowhere(),
                     kind: hir::ArgumentKind::Named,
                 },
             ],
@@ -2311,9 +2324,9 @@ mod register_visiting {
             clock: ast::Expression::Identifier(ast_path("clk")).nowhere(),
             reset: Some((
                 ast::Expression::Identifier(ast_path("rst")).nowhere(),
-                ast::Expression::IntLiteral(0).nowhere(),
+                ast::Expression::int_literal(0).nowhere(),
             )),
-            value: ast::Expression::IntLiteral(1).nowhere(),
+            value: ast::Expression::int_literal(1).nowhere(),
             value_type: Some(ast::TypeSpec::Unit(().nowhere()).nowhere()),
         }
         .nowhere();
@@ -2329,9 +2342,9 @@ mod register_visiting {
                 hir::ExprKind::Identifier(name_id(1, "rst").inner)
                     .idless()
                     .nowhere(),
-                hir::ExprKind::IntLiteral(0).idless().nowhere(),
+                hir::ExprKind::int_literal(0).idless().nowhere(),
             )),
-            value: hir::ExprKind::IntLiteral(1).idless().nowhere(),
+            value: hir::ExprKind::int_literal(1).idless().nowhere(),
             value_type: Some(hir::TypeSpec::unit().nowhere()),
         }
         .nowhere();
@@ -2379,7 +2392,7 @@ mod item_visiting {
                 body: Some(
                     ast::Expression::Block(Box::new(ast::Block {
                         statements: vec![],
-                        result: ast::Expression::IntLiteral(0).nowhere(),
+                        result: ast::Expression::int_literal(0).nowhere(),
                     }))
                     .nowhere(),
                 ),
@@ -2403,7 +2416,7 @@ mod item_visiting {
                 inputs: vec![],
                 body: hir::ExprKind::Block(Box::new(hir::Block {
                     statements: vec![],
-                    result: hir::ExprKind::IntLiteral(0).idless().nowhere(),
+                    result: hir::ExprKind::int_literal(0).idless().nowhere(),
                 }))
                 .idless()
                 .nowhere(),
@@ -2456,7 +2469,7 @@ mod impl_blocks {
                 body: Some(
                     ast::Expression::Block(Box::new(ast::Block {
                         statements: vec![],
-                        result: ast::Expression::IntLiteral(0).nowhere(),
+                        result: ast::Expression::int_literal(0).nowhere(),
                     }))
                     .nowhere(),
                 ),
@@ -2508,7 +2521,7 @@ mod impl_blocks {
                 inputs: vec![(name_id(2, "self"), param_type_spec)],
                 body: hir::ExprKind::Block(Box::new(hir::Block {
                     statements: vec![],
-                    result: hir::ExprKind::IntLiteral(0).with_id(1).nowhere(),
+                    result: hir::ExprKind::int_literal(0).with_id(1).nowhere(),
                 }))
                 .with_id(0)
                 .nowhere(),
@@ -2579,7 +2592,7 @@ mod module_visiting {
                     body: Some(
                         ast::Expression::Block(Box::new(ast::Block {
                             statements: vec![],
-                            result: ast::Expression::IntLiteral(0).nowhere(),
+                            result: ast::Expression::int_literal(0).nowhere(),
                         }))
                         .nowhere(),
                     ),
@@ -2607,7 +2620,7 @@ mod module_visiting {
                         inputs: vec![],
                         body: hir::ExprKind::Block(Box::new(hir::Block {
                             statements: vec![],
-                            result: hir::ExprKind::IntLiteral(0).idless().nowhere(),
+                            result: hir::ExprKind::int_literal(0).idless().nowhere(),
                         }))
                         .idless()
                         .nowhere(),

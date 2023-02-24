@@ -19,6 +19,7 @@ codespan.workspace = true
 serde.workspace = true
 tracing.workspace = true
 local-impl.workspace = true
+num.workspace = true
 
 spade-common = {path = "../spade-common"}
 spade-diagnostics = {path = "../spade-diagnostics"}

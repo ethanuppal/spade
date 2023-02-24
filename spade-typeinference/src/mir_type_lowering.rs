@@ -89,7 +89,7 @@ impl TypeState {
         generic_substitutions: &HashMap<NameID, &ConcreteType>,
     ) -> ConcreteType {
         match expr {
-            hir::TypeExpression::Integer(val) => ConcreteType::Integer(*val),
+            hir::TypeExpression::Integer(val) => ConcreteType::Integer(val.clone()),
             hir::TypeExpression::TypeSpec(inner) => {
                 Self::type_spec_to_concrete(&inner, type_list, generic_substitutions)
             }
@@ -138,7 +138,7 @@ impl TypeState {
                 ));
 
                 let size = if let ConcreteType::Integer(size) = size_type.as_ref() {
-                    *size
+                    size.clone()
                 } else {
                     panic!("Array size must be an integer")
                 };
@@ -186,7 +186,7 @@ impl TypeState {
             TypeVar::Known(KnownType::Integer(size), params) => {
                 assert!(params.len() == 0, "integers can not have type parameters");
 
-                Some(ConcreteType::Integer(*size))
+                Some(ConcreteType::Integer(size.clone()))
             }
             TypeVar::Array { inner, size } => {
                 let inner = Self::ungenerify_type(inner, symtab, type_list);

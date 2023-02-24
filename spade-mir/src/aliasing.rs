@@ -109,13 +109,13 @@ mod tests {
 
     #[test]
     fn aliasing_replaces_definitions() {
-        let mut input = entity!("pong"; ("_i_op", n(0, "op"), Type::Int(6)) -> Type::Int(6); {
-            (e(0); Type::Int(6); Add; n(0, "op"), e(1));
-            (n(0, "a"); Type::Int(6); Alias; e(0))
+        let mut input = entity!("pong"; ("_i_op", n(0, "op"), Type::int(6)) -> Type::int(6); {
+            (e(0); Type::int(6); Add; n(0, "op"), e(1));
+            (n(0, "a"); Type::int(6); Alias; e(0))
         } => e(10));
 
-        let expected = entity!("pong"; ("_i_op", n(0, "op"), Type::Int(6)) -> Type::Int(6); {
-            (n(0, "a"); Type::Int(6); Add; n(0, "op"), e(1))
+        let expected = entity!("pong"; ("_i_op", n(0, "op"), Type::int(6)) -> Type::int(6); {
+            (n(0, "a"); Type::int(6); Add; n(0, "op"), e(1))
         } => e(10));
 
         flatten_aliases(&mut input);
@@ -125,15 +125,15 @@ mod tests {
 
     #[test]
     fn three_level_aliasing_replaces_definitions() {
-        let mut input = entity!("pong"; ("_i_op", n(0, "op"), Type::Int(6)) -> Type::Int(6); {
-            (e(0); Type::Int(6); Add; n(0, "op"), e(1));
-            (n(0, "a"); Type::Int(6); Alias; e(0));
-            (n(2, "b"); Type::Int(6); Alias; n(0, "a"));
-            (n(1, "c"); Type::Int(6); Alias; n(2, "b"));
+        let mut input = entity!("pong"; ("_i_op", n(0, "op"), Type::int(6)) -> Type::int(6); {
+            (e(0); Type::int(6); Add; n(0, "op"), e(1));
+            (n(0, "a"); Type::int(6); Alias; e(0));
+            (n(2, "b"); Type::int(6); Alias; n(0, "a"));
+            (n(1, "c"); Type::int(6); Alias; n(2, "b"));
         } => e(10));
 
-        let expected = entity!("pong"; ("_i_op", n(0, "op"), Type::Int(6)) -> Type::Int(6); {
-            (n(1, "c"); Type::Int(6); Add; n(0, "op"), e(1))
+        let expected = entity!("pong"; ("_i_op", n(0, "op"), Type::int(6)) -> Type::int(6); {
+            (n(1, "c"); Type::int(6); Add; n(0, "op"), e(1))
         } => e(10));
 
         flatten_aliases(&mut input);
@@ -143,13 +143,13 @@ mod tests {
 
     #[test]
     fn aliasing_replaces_uses() {
-        let mut input = entity!("pong"; ("_i_op", n(0, "op"), Type::Int(6)) -> Type::Int(6); {
-            (e(0); Type::Int(6); Add; n(0, "op"), e(1));
-            (n(0, "a"); Type::Int(6); Alias; e(1))
+        let mut input = entity!("pong"; ("_i_op", n(0, "op"), Type::int(6)) -> Type::int(6); {
+            (e(0); Type::int(6); Add; n(0, "op"), e(1));
+            (n(0, "a"); Type::int(6); Alias; e(1))
         } => e(10));
 
-        let expected = entity!("pong"; ("_i_op", n(0, "op"), Type::Int(6)) -> Type::Int(6); {
-            (e(0); Type::Int(6); Add; n(0, "op"), n(0, "a"));
+        let expected = entity!("pong"; ("_i_op", n(0, "op"), Type::int(6)) -> Type::int(6); {
+            (e(0); Type::int(6); Add; n(0, "op"), n(0, "a"));
         } => e(10));
 
         flatten_aliases(&mut input);
@@ -159,14 +159,14 @@ mod tests {
 
     #[test]
     fn aliasing_replaces_in_registers() {
-        let mut input = entity!("pong"; ("_i_op", n(0, "op"), Type::Int(6)) -> Type::Int(6); {
-            (reg e(1); Type::Int(6); clock (n(0, "clk")); e(0));
-            (n(1, "a"); Type::Int(6); Alias; e(1));
-            (n(2, "b"); Type::Int(6); Alias; e(0));
+        let mut input = entity!("pong"; ("_i_op", n(0, "op"), Type::int(6)) -> Type::int(6); {
+            (reg e(1); Type::int(6); clock (n(0, "clk")); e(0));
+            (n(1, "a"); Type::int(6); Alias; e(1));
+            (n(2, "b"); Type::int(6); Alias; e(0));
         } => e(10));
 
-        let expected = entity!("pong"; ("_i_op", n(0, "op"), Type::Int(6)) -> Type::Int(6); {
-            (reg n(1, "a"); Type::Int(6); clock (n(0, "clk")); n(2, "b"))
+        let expected = entity!("pong"; ("_i_op", n(0, "op"), Type::int(6)) -> Type::int(6); {
+            (reg n(1, "a"); Type::int(6); clock (n(0, "clk")); n(2, "b"))
         } => e(10));
 
         flatten_aliases(&mut input);
@@ -178,14 +178,14 @@ mod tests {
     // only IDs. If this is lifted we should probably alias them too
     #[test]
     fn aliasing_does_not_replace_constants() {
-        let mut input = entity!("pong"; ("_i_op", n(0, "op"), Type::Int(6)) -> Type::Int(6); {
-            (const 0; Type::Int(10); ConstantValue::Int(6));
-            (n(1, "a"); Type::Int(6); Alias; e(0));
+        let mut input = entity!("pong"; ("_i_op", n(0, "op"), Type::int(6)) -> Type::int(6); {
+            (const 0; Type::int(10); ConstantValue::int(6));
+            (n(1, "a"); Type::int(6); Alias; e(0));
         } => e(10));
 
-        let expected = entity!("pong"; ("_i_op", n(0, "op"), Type::Int(6)) -> Type::Int(6); {
-            (const 0; Type::Int(10); ConstantValue::Int(6));
-            (n(1, "a"); Type::Int(6); Alias; e(0));
+        let expected = entity!("pong"; ("_i_op", n(0, "op"), Type::int(6)) -> Type::int(6); {
+            (const 0; Type::int(10); ConstantValue::int(6));
+            (n(1, "a"); Type::int(6); Alias; e(0));
         } => e(10));
 
         flatten_aliases(&mut input);
@@ -195,16 +195,16 @@ mod tests {
 
     #[test]
     fn aliasing_does_not_happen_when_multiple_aliases_are_present() {
-        let mut input = entity!("pong"; ("_i_op", n(0, "op"), Type::Int(6)) -> Type::Int(6); {
-            (e(0); Type::Int(6); Add; n(0, "op"), e(1));
-            (n(0, "a"); Type::Int(6); Alias; e(1));
-            (n(0, "b"); Type::Int(6); Alias; e(1));
+        let mut input = entity!("pong"; ("_i_op", n(0, "op"), Type::int(6)) -> Type::int(6); {
+            (e(0); Type::int(6); Add; n(0, "op"), e(1));
+            (n(0, "a"); Type::int(6); Alias; e(1));
+            (n(0, "b"); Type::int(6); Alias; e(1));
         } => e(10));
 
-        let expected = entity!("pong"; ("_i_op", n(0, "op"), Type::Int(6)) -> Type::Int(6); {
-            (e(0); Type::Int(6); Add; n(0, "op"), e(1));
-            (n(0, "a"); Type::Int(6); Alias; e(1));
-            (n(0, "b"); Type::Int(6); Alias; e(1));
+        let expected = entity!("pong"; ("_i_op", n(0, "op"), Type::int(6)) -> Type::int(6); {
+            (e(0); Type::int(6); Add; n(0, "op"), e(1));
+            (n(0, "a"); Type::int(6); Alias; e(1));
+            (n(0, "b"); Type::int(6); Alias; e(1));
         } => e(10));
 
         flatten_aliases(&mut input);
@@ -214,12 +214,12 @@ mod tests {
 
     #[test]
     fn inputs_are_not_aliased() {
-        let mut input = entity!("pong"; ("_i_op", n(0, "op"), Type::Int(6)) -> Type::Int(6); {
-            (n(0, "a"); Type::Int(6); Alias; n(0, "op"));
+        let mut input = entity!("pong"; ("_i_op", n(0, "op"), Type::int(6)) -> Type::int(6); {
+            (n(0, "a"); Type::int(6); Alias; n(0, "op"));
         } => e(10));
 
-        let expected = entity!("pong"; ("_i_op", n(0, "op"), Type::Int(6)) -> Type::Int(6); {
-            (n(0, "a"); Type::Int(6); Alias; n(0, "op"));
+        let expected = entity!("pong"; ("_i_op", n(0, "op"), Type::int(6)) -> Type::int(6); {
+            (n(0, "a"); Type::int(6); Alias; n(0, "op"));
         } => e(10));
 
         flatten_aliases(&mut input);
@@ -229,11 +229,11 @@ mod tests {
 
     #[test]
     fn outputs_are_aliased() {
-        let mut input = entity!("pong"; ("_i_op", n(0, "op"), Type::Int(6)) -> Type::Int(6); {
-            (n(0, "a"); Type::Int(6); Alias; e(0));
+        let mut input = entity!("pong"; ("_i_op", n(0, "op"), Type::int(6)) -> Type::int(6); {
+            (n(0, "a"); Type::int(6); Alias; e(0));
         } => e(0));
 
-        let expected = entity!("pong"; ("_i_op", n(0, "op"), Type::Int(6)) -> Type::Int(6); {
+        let expected = entity!("pong"; ("_i_op", n(0, "op"), Type::int(6)) -> Type::int(6); {
         } => n(0, "a"));
 
         flatten_aliases(&mut input);
@@ -247,22 +247,22 @@ mod tests {
 
         let mut input = entity!("pl"; (
                 "clk", n(3, "clk"), Type::Bool,
-            ) -> Type::Int(16); {
-                (reg n(10, "x__s1"); Type::Int(16); clock(n(3, "clk")); n(0, "x_"));
+            ) -> Type::int(16); {
+                (reg n(10, "x__s1"); Type::int(16); clock(n(3, "clk")); n(0, "x_"));
                 // Stage 0
-                (e(0); Type::Int(16); Instance((inst_name.clone(), None)););
-                (n(0, "x_"); Type::Int(16); Alias; e(0));
+                (e(0); Type::int(16); Instance((inst_name.clone(), None)););
+                (n(0, "x_"); Type::int(16); Alias; e(0));
                 // Stage 1
-                (n(1, "x"); Type::Int(16); Alias; n(0, "x_"));
+                (n(1, "x"); Type::int(16); Alias; n(0, "x_"));
             } => n(1, "x")
         );
 
         let expected = entity!("pl"; (
                 "clk", n(3, "clk"), Type::Bool,
-            ) -> Type::Int(16); {
-                (reg n(10, "x__s1"); Type::Int(16); clock(n(3, "clk")); n(1, "x"));
+            ) -> Type::int(16); {
+                (reg n(10, "x__s1"); Type::int(16); clock(n(3, "clk")); n(1, "x"));
                 // Stage 0
-                (n(1, "x"); Type::Int(16); Instance((inst_name, None)););
+                (n(1, "x"); Type::int(16); Instance((inst_name, None)););
                 // Stage 1
             } => n(1, "x")
         );

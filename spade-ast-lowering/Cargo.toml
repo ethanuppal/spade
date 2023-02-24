@@ -15,6 +15,7 @@ doctest = false
 tracing.workspace = true
 local-impl.workspace = true
 pretty_assertions.workspace = true
+num.workspace = true
 
 spade-ast = {path = "../spade-ast"}
 spade-common = {path = "../spade-common"}

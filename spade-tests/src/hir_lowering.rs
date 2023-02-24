@@ -5,7 +5,9 @@ mod tests {
         snapshot_error,
     };
     use colored::Colorize;
-    use spade_common::location_info::WithLocation;
+    use spade_common::{
+        location_info::WithLocation, num_ext::InfallibleToBigInt, num_ext::InfallibleToBigUint,
+    };
     use spade_mir::{
         self,
         diff::{compare_entity, VarMap},
@@ -49,9 +51,9 @@ mod tests {
         "#;
 
         let expected = entity!(&["name"]; (
-                "a", n(0, "a"), Type::Int(16),
-                "b", n(1, "b"), Type::Int(16)
-        ) -> Type::Int(16); {
+                "a", n(0, "a"), Type::int(16),
+                "b", n(1, "b"), Type::int(16)
+        ) -> Type::int(16); {
         } => n(0, "a"));
 
         assert_same_mir!(&build_entity!(code), &expected);
@@ -70,10 +72,10 @@ mod tests {
 
         let expected = entity! {&["name"]; (
                 "c", n(0, "c"), Type::Bool,
-                "a", n(1, "a"), Type::Int(16),
-                "b", n(2, "b"), Type::Int(16)
-            ) -> Type::Int(16); {
-                (e(0); Type::Int(16); Select; n(0, "c"), n(1, "a"), n(2, "b"))
+                "a", n(1, "a"), Type::int(16),
+                "b", n(2, "b"), Type::int(16)
+            ) -> Type::int(16); {
+                (e(0); Type::int(16); Select; n(0, "c"), n(1, "a"), n(2, "b"))
             } => e(0)
         };
 
@@ -96,6 +98,19 @@ mod tests {
     }
 
     #[test]
+    fn negative_literals_give_correct_mir() {
+        let code = "fn a() -> int<32> {
+            -1
+        }";
+
+        let expected = entity! {&["a"]; () -> Type::int(32); {
+            (const 0; Type::int(32); ConstantValue::int(-1))
+        } => e(0)};
+
+        assert_same_mir!(&build_entity!(code), &expected);
+    }
+
+    #[test]
     fn an_adder_is_buildable() {
         let code = r#"
         entity name(a: int<16>, b: int<16>) -> int<17> {
@@ -104,10 +119,10 @@ mod tests {
         "#;
 
         let expected = entity!(&["name"]; (
-                "a", n(0, "a"), Type::Int(16),
-                "b", n(1, "b"), Type::Int(16)
-            ) -> Type::Int(17); {
-                (e(0); Type::Int(17); Add; n(0, "a"), n(1, "b"))
+                "a", n(0, "a"), Type::int(16),
+                "b", n(1, "b"), Type::int(16)
+            ) -> Type::int(17); {
+                (e(0); Type::int(17); Add; n(0, "a"), n(1, "b"))
             } => e(0)
         );
 
@@ -123,10 +138,10 @@ mod tests {
         "#;
 
         let expected = entity!(&["name"]; (
-                "a", n(0, "a"), Type::Int(16),
-                "b", n(1, "b"), Type::Int(16)
-            ) -> Type::Int(17); {
-                (e(0); Type::Int(17); Sub; n(0, "a"), n(1, "b"))
+                "a", n(0, "a"), Type::int(16),
+                "b", n(1, "b"), Type::int(16)
+            ) -> Type::int(17); {
+                (e(0); Type::int(17); Sub; n(0, "a"), n(1, "b"))
             } => e(0)
         );
 
@@ -142,10 +157,10 @@ mod tests {
         "#;
 
         let expected = entity!(&["name"]; (
-                "a", n(0, "a"), Type::Int(16),
-                "b", n(1, "b"), Type::Int(16)
-            ) -> Type::Int(16); {
-                (e(0); Type::Int(16); LeftShift; n(0, "a"), n(1, "b"))
+                "a", n(0, "a"), Type::int(16),
+                "b", n(1, "b"), Type::int(16)
+            ) -> Type::int(16); {
+                (e(0); Type::int(16); LeftShift; n(0, "a"), n(1, "b"))
             } => e(0)
         );
 
@@ -161,10 +176,10 @@ mod tests {
         "#;
 
         let expected = entity!(&["name"]; (
-                "a", n(0, "a"), Type::Int(16),
-                "b", n(1, "b"), Type::Int(16)
-            ) -> Type::Int(16); {
-                (e(0); Type::Int(16); RightShift; n(0, "a"), n(1, "b"))
+                "a", n(0, "a"), Type::int(16),
+                "b", n(1, "b"), Type::int(16)
+            ) -> Type::int(16); {
+                (e(0); Type::int(16); RightShift; n(0, "a"), n(1, "b"))
             } => e(0)
         );
 
@@ -180,10 +195,10 @@ mod tests {
         "#;
 
         let expected = entity!(&["name"]; (
-                "a", n(0, "a"), Type::Int(16),
-                "b", n(1, "b"), Type::Int(16)
-            ) -> Type::Int(16); {
-                (e(0); Type::Int(16); ArithmeticRightShift; n(0, "a"), n(1, "b"))
+                "a", n(0, "a"), Type::int(16),
+                "b", n(1, "b"), Type::int(16)
+            ) -> Type::int(16); {
+                (e(0); Type::int(16); ArithmeticRightShift; n(0, "a"), n(1, "b"))
             } => e(0)
         );
 
@@ -199,8 +214,8 @@ mod tests {
         "#;
 
         let expected = entity!(&["name"]; (
-                "a", n(0, "a"), Type::Int(16),
-                "b", n(1, "b"), Type::Int(16)
+                "a", n(0, "a"), Type::int(16),
+                "b", n(1, "b"), Type::int(16)
             ) -> Type::Bool; {
                 (e(0); Type::Bool; Eq; n(0, "a"), n(1, "b"))
             } => e(0)
@@ -256,10 +271,10 @@ mod tests {
         "#;
 
         let expected = entity!(&["name"]; (
-                "a", n(0, "a"), Type::Int(16),
-                "b", n(1, "b"), Type::Int(16)
-            ) -> Type::Int(16); {
-                (e(0); Type::Int(16); BitwiseAnd; n(0, "a"), n(1, "b"))
+                "a", n(0, "a"), Type::int(16),
+                "b", n(1, "b"), Type::int(16)
+            ) -> Type::int(16); {
+                (e(0); Type::int(16); BitwiseAnd; n(0, "a"), n(1, "b"))
             } => e(0)
         );
 
@@ -294,10 +309,10 @@ mod tests {
         "#;
 
         let expected = entity!(&["name"]; (
-                "a", n(0, "a"), Type::Int(3),
-                "b", n(1, "b"), Type::Int(3)
-            ) -> Type::Int(3); {
-                (e(0); Type::Int(3); BitwiseXor; n(0, "a"), n(1, "b"))
+                "a", n(0, "a"), Type::int(3),
+                "b", n(1, "b"), Type::int(3)
+            ) -> Type::int(3); {
+                (e(0); Type::int(3); BitwiseXor; n(0, "a"), n(1, "b"))
             } => e(0)
         );
 
@@ -313,10 +328,10 @@ mod tests {
         "#;
 
         let expected = entity!(&["name"]; (
-                "a", n(0, "a"), Type::Int(16),
-                "b", n(1, "b"), Type::Int(16)
-            ) -> Type::Int(16); {
-                (e(0); Type::Int(16); BitwiseOr; n(0, "a"), n(1, "b"))
+                "a", n(0, "a"), Type::int(16),
+                "b", n(1, "b"), Type::int(16)
+            ) -> Type::int(16); {
+                (e(0); Type::int(16); BitwiseOr; n(0, "a"), n(1, "b"))
             } => e(0)
         );
 
@@ -332,8 +347,8 @@ mod tests {
         "#;
 
         let expected = entity!(&["name"]; (
-                "a", n(0, "a"), Type::Int(16),
-                "b", n(1, "b"), Type::Int(16)
+                "a", n(0, "a"), Type::int(16),
+                "b", n(1, "b"), Type::int(16)
             ) -> Type::Bool; {
                 (e(0); Type::Bool; Gt; n(0, "a"), n(1, "b"))
             } => e(0)
@@ -351,8 +366,8 @@ mod tests {
         "#;
 
         let expected = entity!(&["name"]; (
-                "a", n(0, "a"), Type::Int(16),
-                "b", n(1, "b"), Type::Int(16)
+                "a", n(0, "a"), Type::int(16),
+                "b", n(1, "b"), Type::int(16)
             ) -> Type::Bool; {
                 (e(0); Type::Bool; Lt; n(0, "a"), n(1, "b"))
             } => e(0)
@@ -370,8 +385,8 @@ mod tests {
         "#;
 
         let expected = entity!(&["name"]; (
-                "a", n(0, "a"), Type::Int(16),
-                "b", n(1, "b"), Type::Int(16)
+                "a", n(0, "a"), Type::int(16),
+                "b", n(1, "b"), Type::int(16)
             ) -> Type::Bool; {
                 (e(0); Type::Bool; Ge; n(0, "a"), n(1, "b"))
             } => e(0)
@@ -389,8 +404,8 @@ mod tests {
         "#;
 
         let expected = entity!(&["name"]; (
-                "a", n(0, "a"), Type::Int(16),
-                "b", n(1, "b"), Type::Int(16)
+                "a", n(0, "a"), Type::int(16),
+                "b", n(1, "b"), Type::int(16)
             ) -> Type::Bool; {
                 (e(0); Type::Bool; Le; n(0, "a"), n(1, "b"))
             } => e(0)
@@ -408,9 +423,9 @@ mod tests {
         "#;
 
         let expected = entity!(&["name"]; (
-                "a", n(0, "a"), Type::Int(16),
-            ) -> Type::Int(16); {
-                (e(0); Type::Int(16); USub; n(0, "a"))
+                "a", n(0, "a"), Type::int(16),
+            ) -> Type::int(16); {
+                (e(0); Type::int(16); USub; n(0, "a"))
             } => e(0)
         );
 
@@ -444,9 +459,9 @@ mod tests {
         "#;
 
         let expected = entity!(&["name"]; (
-                "a", n(0, "a"), Type::Int(8),
-            ) -> Type::Int(8); {
-                (e(0); (Type::Int(8)); BitwiseNot; n(0, "a"))
+                "a", n(0, "a"), Type::int(8),
+            ) -> Type::int(8); {
+                (e(0); (Type::int(8)); BitwiseNot; n(0, "a"))
             } => e(0)
         );
 
@@ -464,9 +479,9 @@ mod tests {
 
         let expected = entity! {&["name"]; (
                 "clk", n(0, "clk"), Type::Bool,
-                "a", n(1, "a"), Type::Int(16),
-            ) -> Type::Int(16); {
-                (reg n(0, "res"); Type::Int(16); clock(n(0, "clk")); n(1, "a"))
+                "a", n(1, "a"), Type::int(16),
+            ) -> Type::int(16); {
+                (reg n(0, "res"); Type::int(16); clock(n(0, "clk")); n(1, "a"))
             } => n(0, "res")
         };
 
@@ -482,15 +497,15 @@ mod tests {
         }
         "#;
 
-        let tup_inner = vec![Type::Int(16), Type::Int(8)];
+        let tup_inner = vec![Type::int(16), Type::int(8)];
         let tup_type = Type::Tuple(tup_inner.clone());
         let expected = entity! {&["name"]; (
                 "clk", n(0, "clk"), Type::Bool,
                 "a", n(1, "a"), tup_type.clone(),
-            ) -> Type::Int(16); {
+            ) -> Type::int(16); {
                 (reg e(0); tup_type; clock(n(0, "clk")); n(1, "a"));
-                (n(2, "x"); Type::Int(16); IndexTuple((0, tup_inner.clone())); e(0));
-                (n(3, "y"); Type::Int(8); IndexTuple((1, tup_inner)); e(0));
+                (n(2, "x"); Type::int(16); IndexTuple((0, tup_inner.clone())); e(0));
+                (n(3, "y"); Type::int(8); IndexTuple((1, tup_inner)); e(0));
             } => n(2, "x")
         };
 
@@ -509,11 +524,11 @@ mod tests {
         let expected = entity! {&["name"]; (
                 "clk", n(0, "clk"), Type::Bool,
                 "rst", n(2, "rst"), Type::Bool,
-                "a", n(1, "a"), Type::Int(16),
-            ) -> Type::Int(16); {
-                (const 0; Type::Int(16); ConstantValue::Int(0));
+                "a", n(1, "a"), Type::int(16),
+            ) -> Type::int(16); {
+                (const 0; Type::int(16); ConstantValue::int(0));
                 (reg n(0, "res");
-                    Type::Int(16);
+                    Type::int(16);
                     clock(n(0, "clk"));
                     reset (n(2, "rst"), e(0));
                     n(1, "a"))
@@ -534,9 +549,9 @@ mod tests {
 
         let expected = entity! {&["name"]; (
                 "clk", n(0, "clk"), Type::Bool,
-                "a", n(1, "a"), Type::Int(16),
-            ) -> Type::Int(16); {
-                (n(2, "res"); Type::Int(16); Alias; n(1, "a"));
+                "a", n(1, "a"), Type::int(16),
+            ) -> Type::int(16); {
+                (n(2, "res"); Type::int(16); Alias; n(1, "a"));
             } => n(2, "res")
         };
 
@@ -552,14 +567,14 @@ mod tests {
         "#;
 
         let array_type = Type::Array {
-            inner: Box::new(Type::Int(3)),
-            length: 3,
+            inner: Box::new(Type::int(3)),
+            length: 3u32.to_biguint(),
         };
 
         let expected = entity!(&["x"]; () -> array_type.clone(); {
-            (const 0; Type::Int(3); ConstantValue::Int(0));
-            (const 1; Type::Int(3); ConstantValue::Int(1));
-            (const 2; Type::Int(3); ConstantValue::Int(2));
+            (const 0; Type::int(3); ConstantValue::int(0));
+            (const 1; Type::int(3); ConstantValue::int(1));
+            (const 2; Type::int(3); ConstantValue::int(2));
             (e(4); array_type; ConstructArray; e(0), e(1), e(2));
         } => e(4));
 
@@ -576,16 +591,16 @@ mod tests {
         "#;
 
         let array_type = Type::Array {
-            inner: Box::new(Type::Int(2)),
-            length: 5,
+            inner: Box::new(Type::int(2)),
+            length: 5u32.to_biguint(),
         };
 
         let expected = entity!(&["x"]; (
                 "a", n(0, "a"), array_type,
-        ) -> Type::Int(2); {
-            (const 0; Type::Int(3); ConstantValue::Int(2));
-            (n(1, "idx"); Type::Int(3); Alias; e(0));
-            (e(4); Type::Int(2); IndexArray; n(0, "a"), n(1, "idx"));
+        ) -> Type::int(2); {
+            (const 0; Type::int(3); ConstantValue::int(2));
+            (n(1, "idx"); Type::int(3); Alias; e(0));
+            (e(4); Type::int(2); IndexArray; n(0, "a"), n(1, "idx"));
         } => e(4));
 
         assert_same_mir!(&build_entity!(code), &expected);
@@ -600,15 +615,15 @@ mod tests {
         }
         "#;
 
-        let tup_inner = vec![Type::Int(16), Type::Int(8)];
+        let tup_inner = vec![Type::int(16), Type::int(8)];
         let tup_type = Type::Tuple(tup_inner.clone());
         let expected = entity!(&["name"]; (
-                "a", n(0, "a"), Type::Int(16),
-                "b", n(1, "b"), Type::Int(8),
-            ) -> Type::Int(8); {
+                "a", n(0, "a"), Type::int(16),
+                "b", n(1, "b"), Type::int(8),
+            ) -> Type::int(8); {
                 (e(1); tup_type.clone(); ConstructTuple; n(0, "a"), n(1, "b"));
                 (n(2, "compound"); tup_type; Alias; e(1));
-                (e(0); Type::Int(8); IndexTuple((1, tup_inner)); n(2, "compound"));
+                (e(0); Type::int(8); IndexTuple((1, tup_inner)); n(2, "compound"));
             } => e(0)
         );
 
@@ -624,17 +639,17 @@ mod tests {
         }
         "#;
 
-        let tup_inner = vec![Type::Int(16), Type::Int(8)];
+        let tup_inner = vec![Type::int(16), Type::int(8)];
         let tup_type = Type::Tuple(tup_inner.clone());
         let expected = entity!(&["name"]; (
                 "x", n(0, "x"), tup_type.clone(),
-            ) -> Type::Int(16); {
+            ) -> Type::int(16); {
                 // NOTE: This line technically isn't required in this case as it is just an alias,
                 // but removing it seems a bit pointless as it would introduce a special case in
                 // the code
                 (e(0); tup_type; Alias; n(0, "x"));
-                (n(1, "a"); Type::Int(16); IndexTuple((0, tup_inner.clone())); n(0, "x"));
-                (n(2, "b"); Type::Int(8); IndexTuple((1, tup_inner)); n(0, "x"))
+                (n(1, "a"); Type::int(16); IndexTuple((0, tup_inner.clone())); n(0, "x"));
+                (n(2, "b"); Type::int(8); IndexTuple((1, tup_inner)); n(0, "x"))
             } => n(1, "a")
         );
 
@@ -657,13 +672,13 @@ mod tests {
 
         let mut expected = vec![
             entity!(&["sub"]; (
-                    "a", n(0, "a"), Type::Int(16)
-                ) -> Type::Int(16); {
+                    "a", n(0, "a"), Type::int(16)
+                ) -> Type::int(16); {
                 } => n(0, "a")
             ),
-            entity!(&["top"]; () -> Type::Int(16); {
-                (const 1; Type::Int(16); ConstantValue::Int(0));
-                (e(0); Type::Int(16); Instance((inst_name, None)); e(1))
+            entity!(&["top"]; () -> Type::int(16); {
+                (const 1; Type::int(16); ConstantValue::int(0));
+                (e(0); Type::int(16); Instance((inst_name, None)); e(1))
             } => e(0)),
         ];
 
@@ -696,15 +711,15 @@ mod tests {
         let mut expected = vec![
             entity!(&["sub"]; (
                     "clk", n(100, "clk"), Type::Bool,
-                    "a", n(0, "a"), Type::Int(16)
-                ) -> Type::Int(16); {
-                    (reg n(1, "s1_a"); Type::Int(16); clock (n(100, "clk")); n(0, "a"));
-                    (reg n(2, "s2_a"); Type::Int(16); clock (n(100, "clk")); n(1, "s1_a"));
+                    "a", n(0, "a"), Type::int(16)
+                ) -> Type::int(16); {
+                    (reg n(1, "s1_a"); Type::int(16); clock (n(100, "clk")); n(0, "a"));
+                    (reg n(2, "s2_a"); Type::int(16); clock (n(100, "clk")); n(1, "s1_a"));
                 } => n(2, "s2_a")
             ),
-            entity!(&["top"]; ("clk", n(100, "clk"), Type::Bool) -> Type::Int(16); {
-                (const 1; Type::Int(16); ConstantValue::Int(0));
-                (e(0); Type::Int(16); Instance((inst_name, None)); n(100, "clk"), e(1))
+            entity!(&["top"]; ("clk", n(100, "clk"), Type::Bool) -> Type::int(16); {
+                (const 1; Type::int(16); ConstantValue::int(0));
+                (e(0); Type::int(16); Instance((inst_name, None)); n(100, "clk"), e(1))
             } => e(0)),
         ];
 
@@ -734,29 +749,29 @@ mod tests {
 
         let expected = entity!(&["pl"]; (
                 "clk", n(3, "clk"), Type::Bool,
-                "a", n(0, "a"), Type::Int(16),
-            ) -> Type::Int(18); {
+                "a", n(0, "a"), Type::int(16),
+            ) -> Type::int(18); {
                 // Pipeline registers
-                (reg n(2, "s1_a"); Type::Int(16); clock(n(3, "clk")); n(0, "a"));
-                (reg n(4, "s1_x"); Type::Int(16); clock(n(3, "clk")); n(10, "x"));
-                (reg n(21, "s2_a"); Type::Int(16); clock(n(3, "clk")); n(2, "s1_a"));
-                (reg n(22, "s2_x"); Type::Int(16); clock(n(3, "clk")); n(4, "s1_x"));
-                (reg n(23, "s2_y"); Type::Int(17); clock(n(3, "clk")); n(11, "y"));
-                (reg n(31, "s3_a"); Type::Int(16); clock(n(3, "clk")); n(21, "s2_a"));
-                (reg n(32, "s3_x"); Type::Int(16); clock(n(3, "clk")); n(22, "s2_x"));
-                (reg n(33, "s3_y"); Type::Int(17); clock(n(3, "clk")); n(23, "s2_y"));
-                (reg n(34, "s3_res"); Type::Int(18); clock(n(3, "clk")); n(6, "res"));
+                (reg n(2, "s1_a"); Type::int(16); clock(n(3, "clk")); n(0, "a"));
+                (reg n(4, "s1_x"); Type::int(16); clock(n(3, "clk")); n(10, "x"));
+                (reg n(21, "s2_a"); Type::int(16); clock(n(3, "clk")); n(2, "s1_a"));
+                (reg n(22, "s2_x"); Type::int(16); clock(n(3, "clk")); n(4, "s1_x"));
+                (reg n(23, "s2_y"); Type::int(17); clock(n(3, "clk")); n(11, "y"));
+                (reg n(31, "s3_a"); Type::int(16); clock(n(3, "clk")); n(21, "s2_a"));
+                (reg n(32, "s3_x"); Type::int(16); clock(n(3, "clk")); n(22, "s2_x"));
+                (reg n(33, "s3_y"); Type::int(17); clock(n(3, "clk")); n(23, "s2_y"));
+                (reg n(34, "s3_res"); Type::int(18); clock(n(3, "clk")); n(6, "res"));
                 // Stage 0
-                (e(0); Type::Int(16); LeftShift; n(0, "a"), n(0, "a"));
-                (n(10, "x"); Type::Int(16); Alias; e(0));
+                (e(0); Type::int(16); LeftShift; n(0, "a"), n(0, "a"));
+                (n(10, "x"); Type::int(16); Alias; e(0));
 
                 // Stage 1
-                (e(1); Type::Int(17); Add; n(4, "s1_x"), n(2, "s1_a"));
-                (n(11, "y"); Type::Int(17); Alias; e(1));
+                (e(1); Type::int(17); Add; n(4, "s1_x"), n(2, "s1_a"));
+                (n(11, "y"); Type::int(17); Alias; e(1));
 
                 // Stage 3
-                (e(2); Type::Int(18); Add; n(23, "s2_y"), n(23, "s2_y"));
-                (n(6, "res"); Type::Int(18); Alias; e(2));
+                (e(2); Type::int(18); Add; n(23, "s2_y"), n(23, "s2_y"));
+                (n(6, "res"); Type::int(18); Alias; e(2));
             } => n(34, "s3_res")
         );
 
@@ -778,8 +793,8 @@ mod tests {
 
         let expected = entity!(&["pl"]; (
                 "clk", n(3, "clk"), Type::Bool,
-                "a", n(0, "a"), Type::backward(Type::Int(16)),
-            ) -> Type::backward(Type::Int(16)); {
+                "a", n(0, "a"), Type::backward(Type::int(16)),
+            ) -> Type::backward(Type::int(16)); {
             } => n(0, "a")
         );
 
@@ -803,10 +818,10 @@ mod tests {
         let inst_name = spade_mir::UnitName::from_strs(&["sub"]);
         let expected = entity!(&["pl"]; (
                 "clk", n(3, "clk"), Type::Bool,
-            ) -> Type::Int(18); {
+            ) -> Type::int(18); {
                 // Stage 0
-                (e(0); Type::Int(18); Instance((inst_name, None)); n(3, "clk"));
-                (n(1, "res"); Type::Int(18); Alias; e(0));
+                (e(0); Type::int(18); Instance((inst_name, None)); n(3, "clk"));
+                (n(1, "res"); Type::int(18); Alias; e(0));
             } => n(1, "res")
         );
 
@@ -828,19 +843,19 @@ mod tests {
 
         let expected = entity!(&["pl"]; (
                 "clk", n(3, "clk"), Type::Bool,
-                "a", n(0, "a"), Type::Int(16),
-            ) -> Type::Int(17); {
+                "a", n(0, "a"), Type::int(16),
+            ) -> Type::int(17); {
                 // Stage 0
-                (reg n(2, "s1_a"); Type::Int(16); clock(n(3, "clk")); n(0, "a"));
+                (reg n(2, "s1_a"); Type::int(16); clock(n(3, "clk")); n(0, "a"));
 
                 // Stage 1
-                (reg n(21, "s2_a"); Type::Int(16); clock(n(3, "clk")); n(2, "s1_a"));
+                (reg n(21, "s2_a"); Type::int(16); clock(n(3, "clk")); n(2, "s1_a"));
 
                 // Stage 3
-                (reg n(31, "s3_a"); Type::Int(16); clock(n(3, "clk")); n(21, "s2_a"));
+                (reg n(31, "s3_a"); Type::int(16); clock(n(3, "clk")); n(21, "s2_a"));
 
                 // Output
-                (e(3); Type::Int(17); Add; n(31, "s3_a"), n(31, "s3_a"));
+                (e(3); Type::int(17); Add; n(31, "s3_a"), n(31, "s3_a"));
             } => e(3)
         );
 
@@ -860,9 +875,9 @@ mod tests {
 
         let expected = entity!(&["pl"]; (
                 "clk", n(3, "clk"), Type::Bool,
-                "a", n(0, "a"), Type::Int(16),
-            ) -> Type::Int(16); {
-                (reg n(31, "s1_a"); Type::Int(16); clock(n(3, "clk")); n(0, "a"));
+                "a", n(0, "a"), Type::int(16),
+            ) -> Type::int(16); {
+                (reg n(31, "s1_a"); Type::int(16); clock(n(3, "clk")); n(0, "a"));
 
                 // Output
             } => n(0, "a")
@@ -888,16 +903,16 @@ mod tests {
         let expected = entity!(&["pl"]; (
                 "clk", n(3, "clk"), Type::Bool,
                 "a", n(4, "a"), Type::Bool,
-            ) -> Type::Int(16); {
+            ) -> Type::int(16); {
                 (reg n(14, "s1_a"); Type::Bool; clock(n(3, "clk")); n(4, "a"));
                 (reg n(24, "s2_a"); Type::Bool; clock(n(3, "clk")); n(14, "s1_a"));
-                (reg n(20, "s2_b"); Type::Int(16); clock(n(3, "clk")); n(0, "b"));
+                (reg n(20, "s2_b"); Type::int(16); clock(n(3, "clk")); n(0, "b"));
                 // Stage 0
                 // Stage 1
-                (n(0, "b"); Type::Int(16); Alias; n(1, "x"));
+                (n(0, "b"); Type::int(16); Alias; n(1, "x"));
                 // Stage 2
-                (const 1; Type::Int(16); ConstantValue::Int(0));
-                (n(1, "x"); Type::Int(16); Alias; e(1));
+                (const 1; Type::int(16); ConstantValue::int(0));
+                (n(1, "x"); Type::int(16); Alias; e(1));
 
                 // Output
             } => n(20, "s2_b")
@@ -924,16 +939,16 @@ mod tests {
         let expected = entity!(&["pl"]; (
                 "clk", n(3, "clk"), Type::Bool,
                 "a", n(4, "a"), Type::Bool,
-            ) -> Type::Int(16); {
+            ) -> Type::int(16); {
                 (reg n(14, "s1_a"); Type::Bool; clock(n(3, "clk")); n(4, "a"));
                 (reg n(24, "s2_a"); Type::Bool; clock(n(3, "clk")); n(14, "s1_a"));
-                (reg n(20, "s2_b"); Type::Int(16); clock(n(3, "clk")); n(0, "b"));
+                (reg n(20, "s2_b"); Type::int(16); clock(n(3, "clk")); n(0, "b"));
                 // Stage 0
                 // Stage 1
-                (n(0, "b"); Type::Int(16); Alias; n(1, "x"));
+                (n(0, "b"); Type::int(16); Alias; n(1, "x"));
                 // Stage 2
-                (const 1; Type::Int(16); ConstantValue::Int(0));
-                (n(1, "x"); Type::Int(16); Alias; e(1));
+                (const 1; Type::int(16); ConstantValue::int(0));
+                (n(1, "x"); Type::int(16); Alias; e(1));
 
                 // Output
             } => n(20, "s2_b")
@@ -961,13 +976,13 @@ mod tests {
 
         let expected = entity!(&["pl"]; (
                 "clk", n(3, "clk"), Type::Bool,
-            ) -> Type::Int(16); {
-                (reg n(10, "s1_x_"); Type::Int(16); clock(n(3, "clk")); n(0, "x_"));
+            ) -> Type::int(16); {
+                (reg n(10, "s1_x_"); Type::int(16); clock(n(3, "clk")); n(0, "x_"));
                 // Stage 0
-                (e(0); Type::Int(16); Instance((inst_name, None)););
-                (n(0, "x_"); Type::Int(16); Alias; e(0));
+                (e(0); Type::int(16); Instance((inst_name, None)););
+                (n(0, "x_"); Type::int(16); Alias; e(0));
                 // Stage 1
-                (n(1, "x"); Type::Int(16); Alias; n(0, "x_"));
+                (n(1, "x"); Type::int(16); Alias; n(0, "x_"));
             } => n(1, "x")
         );
 
@@ -1009,15 +1024,15 @@ mod tests {
         }
         "#;
 
-        let tup_inner = vec![Type::Int(16), Type::Int(8)];
+        let tup_inner = vec![Type::int(16), Type::int(8)];
         let tup_type = Type::Tuple(tup_inner.clone());
         let expected = vec![entity!(&["name"]; (
-                "a", n(0, "a"), Type::Int(16),
-                "b", n(1, "b"), Type::Int(8),
-            ) -> Type::Int(8); {
+                "a", n(0, "a"), Type::int(16),
+                "b", n(1, "b"), Type::int(8),
+            ) -> Type::int(8); {
                 (e(1); tup_type.clone(); ConstructTuple; n(0, "a"), n(1, "b"));
                 (n(2, "compound"); tup_type; Alias; e(1));
-                (e(0); Type::Int(8); IndexTuple((1, tup_inner)); n(2, "compound"));
+                (e(0); Type::int(8); IndexTuple((1, tup_inner)); n(2, "compound"));
             } => e(0)
         )];
 
@@ -1062,13 +1077,13 @@ mod tests {
             }
         "#;
 
-        let mir_enum = Type::Enum(vec![vec![Type::Int(16)], vec![]]);
+        let mir_enum = Type::Enum(vec![vec![Type::int(16)], vec![]]);
 
         let expected = vec![entity!(&["test"]; (
-                "payload", n(0, "payload"), Type::Int(15),
+                "payload", n(0, "payload"), Type::int(15),
             ) -> mir_enum.clone(); {
-                (const 3; Type::Int(15); ConstantValue::Int(1));
-                (e(2); Type::Int(16); Add; n(0, "payload"), e(3));
+                (const 3; Type::int(15); ConstantValue::int(1));
+                (e(2); Type::int(16); Add; n(0, "payload"), e(3));
                 (e(1); mir_enum; ConstructEnum({variant: 0, variant_count: 2}); e(2));
             } => e(1)
         )];
@@ -1089,10 +1104,10 @@ mod tests {
             }
         "#;
 
-        let mir_enum = Type::Enum(vec![vec![Type::Int(5)], vec![]]);
+        let mir_enum = Type::Enum(vec![vec![Type::int(5)], vec![]]);
 
         let expected = vec![entity!(&["test"]; (
-                "payload", n(0, "payload"), Type::Int(5),
+                "payload", n(0, "payload"), Type::int(5),
             ) -> mir_enum.clone(); {
                 (e(1); mir_enum; ConstructEnum({variant: 0, variant_count: 2}); n(0, "payload"));
             } => e(1)
@@ -1114,10 +1129,10 @@ mod tests {
             }
         "#;
 
-        let mir_enum = Type::Enum(vec![vec![Type::Int(5)], vec![]]);
+        let mir_enum = Type::Enum(vec![vec![Type::int(5)], vec![]]);
 
         let expected = vec![entity!(&["test"]; (
-                "payload", n(0, "payload"), Type::Int(5),
+                "payload", n(0, "payload"), Type::int(5),
             ) -> mir_enum.clone(); {
                 (e(1); mir_enum; ConstructEnum({variant: 0, variant_count: 2}); n(0, "payload"));
             } => e(1)
@@ -1142,18 +1157,18 @@ mod tests {
             }
         "#;
 
-        let mir_type = Type::Enum(vec![vec![Type::Int(16)], vec![]]);
+        let mir_type = Type::Enum(vec![vec![Type::int(16)], vec![]]);
 
         let expected = vec![
-            entity! {&["unwrap_or_0"]; ("e", n(0, "e"), mir_type.clone()) -> Type::Int(16); {
+            entity! {&["unwrap_or_0"]; ("e", n(0, "e"), mir_type.clone()) -> Type::int(16); {
                 // Conditions for branches
-                (n(1, "x"); Type::Int(16); EnumMember({variant: 0, member_index: 0, enum_type: mir_type.clone()}); n(0, "e"));
+                (n(1, "x"); Type::int(16); EnumMember({variant: 0, member_index: 0, enum_type: mir_type.clone()}); n(0, "e"));
                 (e(2); Type::Bool; IsEnumVariant({variant: 0, enum_type: mir_type}); n(0, "e"));
                 (const 10; Type::Bool; ConstantValue::Bool(true));
                 (e(11); Type::Bool; LogicalAnd; e(2), e(10));
                 (const 3; Type::Bool; ConstantValue::Bool(true));
-                (const 5; Type::Int(16); ConstantValue::Int(0));
-                (e(6); Type::Int(16); Match; e(11), n(1, "x"), e(3), e(5));
+                (const 5; Type::int(16); ConstantValue::int(0));
+                (e(6); Type::int(16); Match; e(11), n(1, "x"), e(3), e(5));
             } => e(6)},
         ];
 
@@ -1196,9 +1211,9 @@ mod tests {
         "#;
 
         let expected = vec![
-            entity! {&["uwu"]; ("e", n(0, "e"), Type::Int(16)) -> Type::Bool; {
+            entity! {&["uwu"]; ("e", n(0, "e"), Type::int(16)) -> Type::Bool; {
                 // Conditions for branches
-                (const 1; Type::Int(16); ConstantValue::Int(0));
+                (const 1; Type::int(16); ConstantValue::int(0));
                 (e(2); Type::Bool; Eq; n(0, "e"), e(1));
                 (const 4; Type::Bool; ConstantValue::Bool(true));
                 (const 5; Type::Bool; ConstantValue::Bool(true));
@@ -1226,20 +1241,20 @@ mod tests {
         let tup_type = Type::Tuple(tup_inner.clone());
         let expected = entity! {&["name"]; (
                 "a", n(0, "a"), tup_type
-            ) -> Type::Int(16); {
+            ) -> Type::int(16); {
                 (e(0); Type::Bool; IndexTuple((0, tup_inner.clone())); n(0, "a"));
                 (e(1); Type::Bool; IndexTuple((1, tup_inner.clone())); n(0, "a"));
                 (e(3); Type::Bool; LogicalAnd; e(0), e(1));
-                (const 10; Type::Int(16); ConstantValue::Int(0));
+                (const 10; Type::int(16); ConstantValue::int(0));
                 (e(20); Type::Bool; IndexTuple((0, tup_inner.clone())); n(0, "a"));
                 (e(21); Type::Bool; IndexTuple((1, tup_inner)); n(0, "a"));
                 (e(4); Type::Bool; LogicalNot; e(20));
                 (e(5); Type::Bool; LogicalAnd; e(4), e(21));
-                (const 11; Type::Int(16); ConstantValue::Int(1));
+                (const 11; Type::int(16); ConstantValue::int(1));
                 (const 12; Type::Bool; ConstantValue::Bool(true));
-                (const 13; Type::Int(16); ConstantValue::Int(2));
+                (const 13; Type::int(16); ConstantValue::int(2));
                 // Condition for branch 1
-                (e(6); Type::Int(16); Match; e(3), e(10), e(5), e(11), e(12), e(13))
+                (e(6); Type::int(16); Match; e(3), e(10), e(5), e(11), e(12), e(13))
             } => e(6)
         };
 
@@ -1263,27 +1278,27 @@ mod tests {
             }
         "#;
 
-        let mir_type = Type::Enum(vec![vec![Type::Int(16)], vec![]]);
+        let mir_type = Type::Enum(vec![vec![Type::int(16)], vec![]]);
 
         let expected = vec![
-            entity! {&["unwrap_or_0"]; ("e", n(0, "e"), mir_type.clone()) -> Type::Int(16); {
+            entity! {&["unwrap_or_0"]; ("e", n(0, "e"), mir_type.clone()) -> Type::int(16); {
                 // Conditions for branch 1
-                (e(11); Type::Int(16); EnumMember({variant: 0, member_index: 0, enum_type: mir_type.clone()}); n(0, "e"));
+                (e(11); Type::int(16); EnumMember({variant: 0, member_index: 0, enum_type: mir_type.clone()}); n(0, "e"));
                 (e(15); Type::Bool; IsEnumVariant({variant: 0, enum_type: mir_type.clone()}); n(0, "e"));
-                (const 10; Type::Int(16); ConstantValue::Int(10));
+                (const 10; Type::int(16); ConstantValue::int(10));
                 (e(12); Type::Bool; Eq; e(11), e(10));
                 (e(14); Type::Bool; LogicalAnd; e(15), e(12));
-                (const 13; Type::Int(16); ConstantValue::Int(5));
+                (const 13; Type::int(16); ConstantValue::int(5));
 
                 // Condition for branch 2
-                (n(1, "x"); Type::Int(16); EnumMember({variant: 0, member_index: 0, enum_type: mir_type.clone()}); n(0, "e"));
+                (n(1, "x"); Type::int(16); EnumMember({variant: 0, member_index: 0, enum_type: mir_type.clone()}); n(0, "e"));
                 (e(2); Type::Bool; IsEnumVariant({variant: 0, enum_type: mir_type}); n(0, "e"));
                 (const 3; Type::Bool; ConstantValue::Bool(true));
                 (e(20); Type::Bool; LogicalAnd; e(2), e(3));
 
                 (const 21; Type::Bool; ConstantValue::Bool(true));
-                (const 5; Type::Int(16); ConstantValue::Int(0));
-                (e(6); Type::Int(16); Match; e(14), e(13), e(20), n(1, "x"), e(21), e(5));
+                (const 5; Type::int(16); ConstantValue::int(0));
+                (e(6); Type::int(16); Match; e(14), e(13), e(20), n(1, "x"), e(21), e(5));
             } => e(6)},
         ];
 
@@ -1308,14 +1323,14 @@ mod tests {
         let ty = Type::Tuple(vec![Type::Bool]);
 
         let expected = vec![
-            entity! {&["test"]; ("x", n(0, "x"), ty.clone()) -> Type::Int(10); {
+            entity! {&["test"]; ("x", n(0, "x"), ty.clone()) -> Type::int(10); {
                 (e(1); Type::Bool; IndexTuple((0, vec![Type::Bool])); n(0, "x"));
                 (const 10; Type::Bool; ConstantValue::Bool(true));
                 (e(11); Type::Bool; LogicalAnd; e(10), e(1));
-                (const 0; Type::Int(10); ConstantValue::Int(10));
+                (const 0; Type::int(10); ConstantValue::int(10));
                 (const 4; Type::Bool; ConstantValue::Bool(true));
-                (const 2; Type::Int(10); ConstantValue::Int(0));
-                (e(3); Type::Int(10); Match; e(11), e(0), e(4), e(2));
+                (const 2; Type::int(10); ConstantValue::int(0));
+                (e(3); Type::int(10); Match; e(11), e(0), e(4), e(2));
             } => e(3)},
         ];
 
@@ -1333,15 +1348,15 @@ mod tests {
         }
         "#;
 
-        let tup_inner = vec![Type::Int(16), Type::Int(8)];
+        let tup_inner = vec![Type::int(16), Type::int(8)];
         let tup_type = Type::Tuple(tup_inner.clone());
         let expected = vec![entity! {&["name"]; (
                 "clk", n(0, "clk"), Type::Bool,
                 "a", n(1, "a"), tup_type.clone(),
-            ) -> Type::Int(16); {
+            ) -> Type::int(16); {
                 (reg e(0); tup_type; clock(n(0, "clk")); n(1, "a"));
-                (n(2, "x"); Type::Int(16); IndexTuple((0, tup_inner.clone())); e(0));
-                (n(3, "y"); Type::Int(8); IndexTuple((1, tup_inner)); e(0));
+                (n(2, "x"); Type::int(16); IndexTuple((0, tup_inner.clone())); e(0));
+                (n(3, "y"); Type::int(8); IndexTuple((1, tup_inner)); e(0));
             } => n(2, "x")
         }];
 
@@ -1359,15 +1374,15 @@ mod tests {
         }
         "#;
 
-        let tup_inner = vec![Type::Int(16), Type::Int(8)];
+        let tup_inner = vec![Type::int(16), Type::int(8)];
         let tup_type = Type::Tuple(tup_inner.clone());
         let expected = vec![entity! {&["name"]; (
                 "clk", n(0, "clk"), Type::Bool,
                 "a", n(1, "a"), tup_type.clone(),
-            ) -> Type::Int(16); {
+            ) -> Type::int(16); {
                 (reg e(0); tup_type; clock(n(0, "clk")); n(1, "a"));
-                (n(2, "x"); Type::Int(16); IndexTuple((0, tup_inner.clone())); e(0));
-                (n(3, "y"); Type::Int(8); IndexTuple((1, tup_inner)); e(0));
+                (n(2, "x"); Type::int(16); IndexTuple((0, tup_inner.clone())); e(0));
+                (n(3, "y"); Type::int(8); IndexTuple((1, tup_inner)); e(0));
             } => n(2, "x")
         }];
 
@@ -1384,10 +1399,10 @@ mod tests {
         "#;
 
         let expected = vec![entity! {&["name"]; (
-                "a", n(0, "a"), Type::Int(16),
-                "b", n(1, "b"), Type::Int(8),
-            ) -> Type::Int(24); {
-                (e(0); Type::Int(24); Concat; n(0, "a"), n(1, "b"))
+                "a", n(0, "a"), Type::int(16),
+                "b", n(1, "b"), Type::int(8),
+            ) -> Type::int(24); {
+                (e(0); Type::int(24); Concat; n(0, "a"), n(1, "b"))
             } => e(0)
         }];
 
@@ -1405,12 +1420,12 @@ mod tests {
         "#;
 
         let expected = vec![entity! {&["name"]; (
-                "a", n(0, "a"), Type::Int(16),
-                "b", n(1, "b"), Type::Int(8),
-            ) -> Type::Int(24); {
-                (e(0); Type::Int(24); Concat; n(0, "a"), n(1, "b"));
-                (n(2, "x"); Type::Int(24); Alias; e(0));
-                (const 1; Type::Int(24); ConstantValue::Int(0));
+                "a", n(0, "a"), Type::int(16),
+                "b", n(1, "b"), Type::int(8),
+            ) -> Type::int(24); {
+                (e(0); Type::int(24); Concat; n(0, "a"), n(1, "b"));
+                (n(2, "x"); Type::int(24); Alias; e(0));
+                (const 1; Type::int(24); ConstantValue::int(0));
             } => e(1)
         }];
 
@@ -1427,9 +1442,9 @@ mod tests {
         "#;
 
         let expected = vec![entity! {&["name"]; (
-                "a", n(0, "a"), Type::Int(16),
-            ) -> Type::Int(24); {
-                (e(0); Type::Int(24); ZeroExtend({extra_bits: 8}); n(0, "a"))
+                "a", n(0, "a"), Type::int(16),
+            ) -> Type::int(24); {
+                (e(0); Type::int(24); ZeroExtend({extra_bits: 8u32.to_biguint()}); n(0, "a"))
             } => e(0)
         }];
 
@@ -1444,9 +1459,9 @@ mod tests {
         }"#;
 
         let expected = vec![entity! {&["name"]; (
-            "x", n(0, "x"), Type::Int(16),
-            "y", n(1, "y"), Type::Int(16),
-        ) -> Type::Int(16); {
+            "x", n(0, "x"), Type::int(16),
+            "y", n(1, "y"), Type::int(16),
+        ) -> Type::int(16); {
                 (e(0); Type::Bool; Eq; n(0, "x"), n(1, "y"));
                 (assert; e(0));
             } => n(0, "x")
@@ -1465,10 +1480,10 @@ mod tests {
         "#;
 
         let expected = vec![entity! {&["name"]; (
-                "a", n(0, "a"), Type::Int(16),
-            ) -> Type::Int(16); {
-                (const 0; Type::Int(16); ConstantValue::Int(2));
-                (e(1); Type::Int(16); DivPow2; n(0, "a"), e(0))
+                "a", n(0, "a"), Type::int(16),
+            ) -> Type::int(16); {
+                (const 0; Type::int(16); ConstantValue::int(2));
+                (e(1); Type::int(16); DivPow2; n(0, "a"), e(0))
             } => e(1)
         }];
 
@@ -2072,9 +2087,9 @@ mod tests {
         let result = build_entity!(code);
 
         let expected = entity!(&["main"]; (
-        ) -> Type::Int(3); {
-            (const 0; Type::Int(3); ConstantValue::Int(1));
-            (n(0, "x"); Type::Int(3); Alias; e(0))
+        ) -> Type::Int(3u32.to_biguint()); {
+            (const 0; Type::Int(3u32.to_biguint()); ConstantValue::Int(1.to_bigint()));
+            (n(0, "x"); Type::Int(3u32.to_biguint()); Alias; e(0))
         } => n(0, "x"));
 
         assert_same_mir!(&result, &expected);
@@ -2110,43 +2125,43 @@ mod tests {
         "#;
 
         let ports_type = Type::Array {
-            inner: Box::new(Type::Tuple(vec![Type::Bool, Type::Int(1), Type::Int(8)])),
-            length: 0,
+            inner: Box::new(Type::Tuple(vec![Type::Bool, Type::Int(1u32.to_biguint()), Type::Int(8u32.to_biguint())])),
+            length: 0u32.to_biguint(),
         };
 
         let init_type = Type::Array {
-            inner: Box::new(Type::Int(8)),
-            length: 2,
+            inner: Box::new(Type::Int(8u32.to_biguint())),
+            length: 2u32.to_biguint(),
         };
 
         let mem_type = Type::Memory {
-            inner: Box::new(Type::Int(8)),
-            length: 2,
+            inner: Box::new(Type::Int(8u32.to_biguint())),
+            length: 2u32.to_biguint(),
         };
 
         let expected = vec![entity! {&["test"]; (
             "clk", n(0, "clk"), Type::Bool,
-        ) -> Type::Int(8); {
+        ) -> Type::Int(8u32.to_biguint()); {
             (e(10); ports_type.clone(); ConstructArray;);
             (n(11, "ports"); ports_type; Alias; e(10));
-            (const(12); Type::Int(8); ConstantValue::Int(0));
-            (const(13); Type::Int(8); ConstantValue::Int(1));
+            (const(12); Type::Int(8u32.to_biguint()); ConstantValue::Int(0.to_bigint()));
+            (const(13); Type::Int(8u32.to_biguint()); ConstantValue::Int(1.to_bigint()));
 
             (e(14); init_type; ConstructArray; e(12), e(13));
 
             (e(1); mem_type.clone(); DeclClockedMemory({
-                write_ports: 0,
-                addr_w: 1,
-                inner_w: 8,
-                elems: 2,
+                write_ports: 0u32.to_biguint(),
+                addr_w: 1u32.to_biguint(),
+                inner_w: 8u32.to_biguint(),
+                elems: 2u32.to_biguint(),
                 initial: Some(vec![
-                    vec![statement!(const 7; Type::Int(8); ConstantValue::Int(0))],
-                    vec![statement!(const 8; Type::Int(8); ConstantValue::Int(1))],
+                    vec![statement!(const 7; Type::Int(8u32.to_biguint()); ConstantValue::Int(0.to_bigint()))],
+                    vec![statement!(const 8; Type::Int(8u32.to_biguint()); ConstantValue::Int(1.to_bigint()))],
                 ])
             }); n(0, "clk"), n(11, "ports"));
             (n(2, "mem"); mem_type; Alias; e(1));
 
-            (const 0; Type::Int(8); ConstantValue::Int(0));
+            (const 0; Type::Int(8u32.to_biguint()); ConstantValue::Int(0.to_bigint()));
         } => e(0)}];
 
         build_and_compare_entities!(code, expected);

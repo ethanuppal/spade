@@ -84,10 +84,10 @@ macro_rules! statement {
 /// use spade_mir as mir;
 /// use spade_mir::entity;
 /// use spade_mir::types::Type;
-/// entity!("pong"; ("_i_clk", n(0, "clk"), Type::Bool) -> Type::Int(6); {
-///     (e(0); Type::Int(6); Add; n(1, "value"));
-///     (const 0; Type::Int(10); ConstantValue::Int(6));
-///     (reg n(1, "value"); Type::Int(6); clock (n(0, "clk")); e(0))
+/// entity!("pong"; ("_i_clk", n(0, "clk"), Type::Bool) -> Type::int(6); {
+///     (e(0); Type::int(6); Add; n(1, "value"));
+///     (const 0; Type::int(10); ConstantValue::Int(6));
+///     (reg n(1, "value"); Type::int(6); clock (n(0, "clk")); e(0))
 /// } => n(1, "value"));
 /// ```
 #[macro_export]
@@ -167,7 +167,7 @@ mod tests {
     fn register_parsing_works() {
         let expected = Statement::Register(Register {
             name: ValueName::Named(0, "test".into()),
-            ty: Type::Int(5),
+            ty: Type::int(5),
             clock: ValueName::Named(1, "clk".into()),
             reset: None,
             value: ValueName::Expr(0),
@@ -175,7 +175,7 @@ mod tests {
         });
 
         assert_eq!(
-            statement!(reg n(0, "test"); Type::Int(5); clock (n(1, "clk")); e(0)),
+            statement!(reg n(0, "test"); Type::int(5); clock (n(1, "clk")); e(0)),
             expected
         );
     }
@@ -184,7 +184,7 @@ mod tests {
     fn register_with_reset_parsing_works() {
         let expected = Statement::Register(Register {
             name: ValueName::Named(0, "test".into()),
-            ty: Type::Int(5),
+            ty: Type::int(5),
             clock: ValueName::Named(1, "clk".into()),
             reset: Some((ValueName::Expr(1), ValueName::Expr(2))),
             value: ValueName::Expr(0),
@@ -192,7 +192,7 @@ mod tests {
         });
 
         assert_eq!(
-            statement!(reg n(0, "test"); Type::Int(5); clock (n(1, "clk")); reset (e(1), e(2)); e(0)),
+            statement!(reg n(0, "test"); Type::int(5); clock (n(1, "clk")); reset (e(1), e(2)); e(0)),
             expected
         );
     }
@@ -210,16 +210,16 @@ mod tests {
                 Type::Bool,
             )],
             output: ValueName::Named(1, "value".to_string()),
-            output_type: Type::Int(6),
+            output_type: Type::int(6),
             statements: vec![
-                statement!(e(0); Type::Int(6); Add; n(1, "value")),
-                statement!(reg n(1, "value"); Type::Int(6); clock (n(0, "clk")); e(0)),
+                statement!(e(0); Type::int(6); Add; n(1, "value")),
+                statement!(reg n(1, "value"); Type::int(6); clock (n(0, "clk")); e(0)),
             ],
         };
 
-        let result = entity!(&["pong"]; ("_i_clk", n(0, "clk"), Type::Bool) -> Type::Int(6); {
-                (e(0); Type::Int(6); Add; n(1, "value"));
-                (reg n(1, "value"); Type::Int(6); clock (n(0, "clk")); e(0))
+        let result = entity!(&["pong"]; ("_i_clk", n(0, "clk"), Type::Bool) -> Type::int(6); {
+                (e(0); Type::int(6); Add; n(1, "value"));
+                (reg n(1, "value"); Type::int(6); clock (n(0, "clk")); e(0))
             } => n(1, "value"));
 
         assert_eq!(result, expected);
@@ -227,9 +227,9 @@ mod tests {
 
     #[test]
     fn constant_parsing_works() {
-        let expected = Statement::Constant(0, Type::Int(10), ConstantValue::Int(6));
+        let expected = Statement::Constant(0, Type::int(10), ConstantValue::int(6));
 
-        let result = statement!(const 0; Type::Int(10); ConstantValue::Int(6));
+        let result = statement!(const 0; Type::int(10); ConstantValue::int(6));
 
         assert_eq!(result, expected);
     }

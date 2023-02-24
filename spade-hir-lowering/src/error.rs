@@ -1,3 +1,4 @@
+use num::BigUint;
 use spade_common::{location_info::Loc, name::NameID};
 use spade_diagnostics::Diagnostic;
 use spade_types::ConcreteType;
@@ -9,10 +10,10 @@ use crate::usefulness::Witness;
 pub enum Error {
     #[error("concat size mismatch")]
     ConcatSizeMismatch {
-        lhs: Loc<u64>,
-        rhs: Loc<u64>,
-        result: Loc<u64>,
-        expected: u64,
+        lhs: Loc<BigUint>,
+        rhs: Loc<BigUint>,
+        result: Loc<BigUint>,
+        expected: BigUint,
     },
     #[error("Use of undefined identifier")]
     UndefinedVariable { name: Loc<NameID> },

@@ -24,6 +24,7 @@ use mir::types::Type as MirType;
 use mir::{ConstantValue, ValueName};
 use monomorphisation::MonoState;
 pub use name_map::NameSourceMap;
+use num::{BigUint, Zero};
 use pattern::DeconstructedPattern;
 use pipelines::lower_pipeline;
 use spade_common::id_tracker::ExprIdTracker;
@@ -89,7 +90,7 @@ impl MirLowerable for ConcreteType {
             }
             CType::Array { inner, size } => Type::Array {
                 inner: Box::new(inner.to_mir_type()),
-                length: *size as u64,
+                length: size.clone(),
             },
             CType::Single {
                 base: PrimitiveType::Bool,
@@ -103,14 +104,14 @@ impl MirLowerable for ConcreteType {
                 base: PrimitiveType::Int,
                 params,
             } => match params.as_slice() {
-                [CType::Integer(val)] => Type::Int(*val as u64),
+                [CType::Integer(val)] => Type::Int(val.clone()),
                 t => unreachable!("{:?} is an invalid generic parameter for an integer", t),
             },
             CType::Single {
                 base: PrimitiveType::Uint,
                 params,
             } => match params.as_slice() {
-                [CType::Integer(val)] => Type::Int(*val as u64),
+                [CType::Integer(val)] => Type::Int(val.clone()),
                 t => unreachable!("{:?} is an invalid generic parameter for an integer", t),
             },
             CType::Single {
@@ -119,7 +120,7 @@ impl MirLowerable for ConcreteType {
             } => match params.as_slice() {
                 [inner, CType::Integer(length)] => Type::Memory {
                     inner: Box::new(inner.to_mir_type()),
-                    length: *length as u64,
+                    length: length.clone(),
                 },
                 t => unreachable!("{:?} is an invalid generic parameter for a memory", t),
             },
@@ -341,7 +342,7 @@ impl PatternLocal for Loc<Pattern> {
                     mir::Statement::Constant(
                         const_id,
                         self_type.to_mir_type(),
-                        ConstantValue::Int(*val as u64),
+                        ConstantValue::Int(val.clone()),
                     ),
                     mir::Statement::Binding(mir::Binding {
                         name: result_name.clone(),
@@ -731,7 +732,11 @@ impl ExprLocal for Loc<Expression> {
             ExprKind::IntLiteral(value) => {
                 let ty = self_type;
                 result.push_primary(
-                    mir::Statement::Constant(self.id, ty, mir::ConstantValue::Int(*value as u64)),
+                    mir::Statement::Constant(
+                        self.id,
+                        ty,
+                        mir::ConstantValue::Int(value.clone().as_signed()),
+                    ),
                     self,
                 );
             }
@@ -1284,7 +1289,7 @@ impl ExprLocal for Loc<Expression> {
             ctx.types
                 .expr_type(self, ctx.symtab.symtab(), &ctx.item_list.types)?
         {
-            if let ConcreteType::Integer(size) = params[1] {
+            if let ConcreteType::Integer(size) = params[1].clone() {
                 size
             } else {
                 panic!("Second param of memory declaration type was not integer")
@@ -1333,7 +1338,7 @@ impl ExprLocal for Loc<Expression> {
                     tup_inner.len() == 3,
                     "Expected exactly 3 types in write port tuple"
                 );
-                let write_ports = size as u64;
+                let write_ports = size;
                 let addr_w = tup_inner[1].to_mir_type().size();
                 let inner_w = tup_inner[2].to_mir_type().size();
 
@@ -1344,7 +1349,7 @@ impl ExprLocal for Loc<Expression> {
                             addr_w,
                             inner_w,
                             write_ports,
-                            elems: elem_count as u64,
+                            elems: elem_count.clone(),
                             initial,
                         },
                         operands: args
@@ -1472,7 +1477,7 @@ impl ExprLocal for Loc<Expression> {
         let extra_bits = if self_type.size() > input_type.size() {
             self_type.size() - input_type.size()
         } else {
-            0
+            BigUint::zero()
         };
 
         result.push_primary(
@@ -1513,7 +1518,7 @@ impl ExprLocal for Loc<Expression> {
         let extra_bits = if self_type.size() > input_type.size() {
             self_type.size() - input_type.size()
         } else {
-            0
+            BigUint::zero()
         };
 
         result.push_primary(

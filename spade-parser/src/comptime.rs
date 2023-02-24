@@ -1,6 +1,7 @@
 use spade_ast::comptime::ComptimeCondOp;
 use spade_ast::comptime::ComptimeCondition;
 use spade_ast::comptime::MaybeComptime;
+use spade_ast::IntLiteral;
 use spade_common::location_info::{Loc, WithLocation};
 
 use crate::error::{Error, Result};
@@ -57,7 +58,7 @@ impl<'a> Parser<'a> {
 
             Ok(Some(wrapper(
                 ComptimeCondition {
-                    condition: (name, op, val),
+                    condition: (name, op, val.map(IntLiteral::as_signed)),
                     on_true: Box::new(on_true),
                     on_false,
                 },

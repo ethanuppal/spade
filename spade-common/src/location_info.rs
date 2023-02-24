@@ -1,5 +1,6 @@
 use codespan::Span;
 use codespan_reporting::diagnostic::Label;
+use num::{BigInt, BigUint};
 use serde::{Deserialize, Serialize};
 
 pub trait AsLabel {
@@ -97,6 +98,8 @@ pub trait WithLocation: Sized {
 }
 
 impl WithLocation for () {}
+impl WithLocation for BigInt {}
+impl WithLocation for BigUint {}
 impl WithLocation for u128 {}
 impl WithLocation for u64 {}
 impl WithLocation for i64 {}

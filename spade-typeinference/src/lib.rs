@@ -10,6 +10,8 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use hir::UnitHead;
+use num::{BigInt, Zero};
+use spade_common::num_ext::InfallibleToBigInt;
 use spade_macros::trace_typechecker;
 use trace_stack::TraceStack;
 use tracing::{info, trace};
@@ -195,7 +197,9 @@ impl TypeState {
         generic_list_token: &GenericListToken,
     ) -> TypeVar {
         match &e.inner {
-            hir::TypeExpression::Integer(i) => TypeVar::Known(KnownType::Integer(*i), vec![]),
+            hir::TypeExpression::Integer(i) => {
+                TypeVar::Known(KnownType::Integer(i.clone()), vec![])
+            }
             hir::TypeExpression::TypeSpec(spec) => {
                 self.type_var_from_hir(&spec.clone().at_loc(&e.loc()), generic_list_token)
             }
@@ -598,7 +602,7 @@ impl TypeState {
 
         self.add_constraint(
             addr_size.clone(),
-            bits_to_store(ce_var(&num_elements) - ce_int(1)),
+            bits_to_store(ce_var(&num_elements) - ce_int(1.to_bigint())),
             args[1].value.loc(),
             &port_type,
             ConstraintSource::MemoryIndexing,
@@ -622,7 +626,7 @@ impl TypeState {
 
         self.add_constraint(
             addr_size.clone(),
-            bits_to_store(ce_var(&num_elements) - ce_int(1)),
+            bits_to_store(ce_var(&num_elements) - ce_int(1.to_bigint())),
             args[1].value.loc(),
             &addr_type,
             ConstraintSource::MemoryIndexing,
@@ -1331,12 +1335,12 @@ impl TypeState {
                 self.trace_stack
                     .push(TraceStackEntry::InferringFromConstraints(
                         var.clone(),
-                        replacement.val,
+                        replacement.val.clone(),
                     ));
 
                 let var = self.check_var_for_replacement(var);
 
-                if replacement.val < 0 {
+                if replacement.val < BigInt::zero() {
                     // lifeguard spade#126
                     return Err(UnificationError::NegativeInteger {
                         got: replacement.val,
@@ -1345,7 +1349,8 @@ impl TypeState {
                     });
                 }
 
-                let expected_type = &KnownType::Integer(replacement.val as u128);
+                // NOTE: safe unwrap. We already checked the constraint above
+                let expected_type = &KnownType::Integer(replacement.val.to_biguint().unwrap());
                 match self.unify_inner(&var, expected_type, symtab) {
                     Ok(_) => {}
                     Err(UnificationError::Normal((mut lhs, mut rhs))) => {
@@ -1420,7 +1425,7 @@ impl TypeState {
 
                 match v {
                     TypeVar::Known(KnownType::Integer(val), _) => {
-                        *in_constraint = ConstraintExpr::Integer(*val as i128)
+                        *in_constraint = ConstraintExpr::Integer(val.clone().to_bigint())
                     }
                     _ => {}
                 }
@@ -1583,12 +1588,14 @@ mod tests {
         fixed_types::t_clock,
         hir::{self, Block},
     };
+    use hir::expression::IntLiteral;
     use hir::symbol_table::TypeDeclKind;
     use hir::PatternKind;
     use hir::{dtype, testutil::t_num, ArgumentList};
     use spade_ast::testutil::{ast_ident, ast_path};
     use spade_common::location_info::WithLocation;
     use spade_common::name::testutil::name_id;
+    use spade_common::num_ext::InfallibleToBigInt;
     use spade_hir::symbol_table::{SymbolTable, Thing};
 
     #[test]
@@ -1598,7 +1605,7 @@ mod tests {
         let generic_list = state.create_generic_list(GenericListSource::Anonymous, &vec![]);
         spade_ast_lowering::builtins::populate_symtab(&mut symtab, &mut ItemList::new());
 
-        let input = ExprKind::IntLiteral(0).with_id(0).nowhere();
+        let input = ExprKind::int_literal(0).with_id(0).nowhere();
 
         state
             .visit_expression(
@@ -1895,7 +1902,7 @@ mod tests {
 
         let input = ExprKind::Block(Box::new(Block {
             statements: vec![],
-            result: ExprKind::IntLiteral(5).with_id(0).nowhere(),
+            result: ExprKind::int_literal(5).with_id(0).nowhere(),
         }))
         .with_id(1)
         .nowhere();
@@ -2031,7 +2038,7 @@ mod tests {
                 .with_id(3)
                 .nowhere(),
             reset: None,
-            value: ExprKind::IntLiteral(0).with_id(0).nowhere(),
+            value: ExprKind::int_literal(0).with_id(0).nowhere(),
             value_type: None,
         };
 
@@ -2115,7 +2122,7 @@ mod tests {
                 ExprKind::Identifier(rst_cond.clone()).with_id(1).nowhere(),
                 ExprKind::Identifier(rst_value.clone()).with_id(2).nowhere(),
             )),
-            value: ExprKind::IntLiteral(0).with_id(0).nowhere(),
+            value: ExprKind::int_literal(0).with_id(0).nowhere(),
             value_type: None,
         };
 
@@ -2160,7 +2167,9 @@ mod tests {
         let input = hir::Statement::Binding(
             PatternKind::name(name_id(0, "a")).with_id(10).nowhere(),
             None,
-            ExprKind::IntLiteral(0).with_id(0).nowhere(),
+            ExprKind::IntLiteral(IntLiteral::Signed(0.to_bigint()))
+                .with_id(0)
+                .nowhere(),
         )
         .nowhere();
 
@@ -2190,7 +2199,9 @@ mod tests {
         let input = hir::Statement::Binding(
             PatternKind::name(name_id(0, "a")).with_id(10).nowhere(),
             Some(dtype!(symtab => "int"; (t_num(5)))),
-            ExprKind::IntLiteral(0).with_id(0).nowhere(),
+            ExprKind::IntLiteral(IntLiteral::Signed(0.to_bigint()))
+                .with_id(0)
+                .nowhere(),
         )
         .nowhere();
 
@@ -2224,7 +2235,9 @@ mod tests {
                 .nowhere(),
             reset: None,
             value: ExprKind::TupleLiteral(vec![
-                ExprKind::IntLiteral(5).with_id(1).nowhere(),
+                ExprKind::IntLiteral(IntLiteral::Signed(5.to_bigint()))
+                    .with_id(1)
+                    .nowhere(),
                 ExprKind::BoolLiteral(true).with_id(2).nowhere(),
             ])
             .with_id(3)
@@ -2331,7 +2344,7 @@ mod tests {
             t1.clone(),
             TVar::Known(
                 t_int(&symtab),
-                vec![TypeVar::Known(KnownType::Integer(10), vec![])],
+                vec![TypeVar::Known(KnownType::integer(10), vec![])],
             )
         );
         ensure_same_type!(
@@ -2339,7 +2352,7 @@ mod tests {
             t2,
             TVar::Known(
                 t_int(&symtab),
-                vec![TypeVar::Known(KnownType::Integer(5), vec![])],
+                vec![TypeVar::Known(KnownType::integer(5), vec![])],
             )
         );
 
@@ -2407,7 +2420,7 @@ mod tests {
             TExpr::Id(1),
             TVar::Known(
                 t_int(&symtab),
-                vec![TypeVar::Known(KnownType::Integer(10), vec![])],
+                vec![TypeVar::Known(KnownType::integer(10), vec![])],
             )
         );
         ensure_same_type!(
@@ -2415,7 +2428,7 @@ mod tests {
             TExpr::Id(2),
             TVar::Known(
                 t_int(&symtab),
-                vec![TypeVar::Known(KnownType::Integer(5), vec![])],
+                vec![TypeVar::Known(KnownType::integer(5), vec![])],
             )
         );
 
