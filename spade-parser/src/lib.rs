@@ -15,10 +15,10 @@ use tracing::{event, Level};
 
 use spade_ast::{
     ArgumentList, ArgumentPattern, Attribute, AttributeList, Binding, BitLiteral, Block, CallKind,
-    ComptimeConfig, Enum, Expression, FunctionDecl, ImplBlock, IntLiteral, Item, Module,
-    ModuleBody, NamedArgument, ParameterList, Pattern, PipelineStageReference, Register, Statement,
-    Struct, TraitDef, TypeDeclKind, TypeDeclaration, TypeExpression, TypeParam, TypeSpec, Unit,
-    UnitKind, UseStatement, UnitHead,
+    ComptimeConfig, Enum, Expression, ImplBlock, IntLiteral, Item, Module, ModuleBody,
+    NamedArgument, ParameterList, Pattern, PipelineStageReference, Register, Statement, Struct,
+    TraitDef, TypeDeclKind, TypeDeclaration, TypeExpression, TypeParam, TypeSpec, Unit, UnitHead,
+    UnitKind, UseStatement,
 };
 use spade_common::location_info::{lspan, AsLabel, FullSpan, HasCodespan, Loc, WithLocation};
 use spade_common::name::{Identifier, Path};
@@ -1176,15 +1176,13 @@ impl<'a> Parser<'a> {
         }
     }
 
-    // Entities
     #[trace_parser]
     #[tracing::instrument(skip(self))]
-    pub fn unit(&mut self, attributes: &AttributeList) -> Result<Option<Loc<Unit>>> {
+    pub fn unit_head(&mut self, attributes: &AttributeList) -> Result<Option<Loc<UnitHead>>> {
         let start_token = self.peek()?;
         let unit_kind = match start_token.kind {
             TokenKind::Pipeline => {
                 self.eat_unconditional()?;
-
                 let (depth, depth_span) = self.surrounded(
                     &TokenKind::OpenParen,
                     |s| {
@@ -1212,8 +1210,6 @@ impl<'a> Parser<'a> {
             _ => return Ok(None),
         };
 
-        self.set_item_context(unit_kind.clone())?;
-
         let name = self.identifier()?;
 
         let type_params = self.generics_list()?;
@@ -1233,7 +1229,37 @@ impl<'a> Parser<'a> {
             None
         };
 
-        let allow_stages = unit_kind.is_pipeline();
+        let end = output_type
+            .as_ref()
+            .map(|o| o.loc())
+            .unwrap_or(inputs.loc());
+
+        Ok(Some(
+            UnitHead {
+                attributes: attributes.clone(),
+                unit_kind,
+                name,
+                inputs,
+                output_type,
+                type_params,
+            }
+            .between(self.file_id, &start_token, &end),
+        ))
+    }
+
+    // Entities
+    #[trace_parser]
+    #[tracing::instrument(skip(self))]
+    pub fn unit(&mut self, attributes: &AttributeList) -> Result<Option<Loc<Unit>>> {
+        let head = if let Some(head) = self.unit_head(attributes)? {
+            head
+        } else {
+            return Ok(None);
+        };
+
+        self.set_item_context(head.unit_kind.clone())?;
+
+        let allow_stages = head.unit_kind.is_pipeline();
         let (block, block_span) = if let Some(block) = self.block(allow_stages)? {
             let (block, block_span) = block.separate();
             (Some(block), block_span)
@@ -1242,14 +1268,6 @@ impl<'a> Parser<'a> {
 
             (None, ().at(self.file_id, &tok.span).span)
         } else {
-            // The end of the entity definition depends on whether or not
-            // a type is present.
-            let end_loc = output_type
-                .map(|t| t.loc())
-                .unwrap_or_else(|| inputs_loc)
-                .span;
-
-            let rest_loc = Loc::new((), lspan(start_token.span).merge(end_loc), self.file_id);
             let next = self.peek()?;
             return Err(Diagnostic::error(
                 next.clone(),
@@ -1260,7 +1278,7 @@ impl<'a> Parser<'a> {
                 ),
             )
             .primary_label(format!("Unexpected {}", &next.kind.as_str()))
-            .secondary_label(rest_loc, format!("Expected body for this {unit_kind}"))
+            .secondary_label(&head, format!("Expected body for this {}", head.unit_kind))
             .into());
         };
 
@@ -1268,60 +1286,14 @@ impl<'a> Parser<'a> {
 
         Ok(Some(
             Unit {
-                head: UnitHead {
-                    attributes: attributes.clone(),
-                    unit_kind,
-                    name,
-                    inputs,
-                    output_type,
-                    type_params,
-                },
+                head: head.inner.clone(),
                 body: block.map(|inner| inner.map(|inner| Expression::Block(Box::new(inner)))),
             }
-            .between(self.file_id, &start_token.span, &block_span),
+            .between(self.file_id, &head, &block_span),
         ))
     }
 
     // Traits
-    #[trace_parser]
-    pub fn function_decl(
-        &mut self,
-        attributes: &AttributeList,
-    ) -> Result<Option<Loc<FunctionDecl>>> {
-        let start_token = peek_for!(self, &TokenKind::Function);
-
-        self.disallow_attributes(attributes, &start_token)?;
-
-        let name = self.identifier()?;
-
-        let type_params = self.generics_list()?;
-
-        let (inputs, inputs_loc) = self.surrounded(
-            &TokenKind::OpenParen,
-            Self::parameter_list,
-            &TokenKind::CloseParen,
-        )?;
-
-        // Return type
-        let output_type = if self.peek_and_eat(&TokenKind::SlimArrow)?.is_some() {
-            Some(self.type_spec()?)
-        } else {
-            None
-        };
-
-        let end_token = self.eat(&TokenKind::Semi)?;
-
-        Ok(Some(
-            FunctionDecl {
-                name,
-                inputs: inputs.at_loc(&inputs_loc),
-                output_type,
-                type_params,
-            }
-            .between(self.file_id, &start_token.span, &end_token.span),
-        ))
-    }
-
     #[trace_parser]
     #[tracing::instrument(skip(self))]
     pub fn trait_def(&mut self, attributes: &AttributeList) -> Result<Option<Loc<TraitDef>>> {
@@ -1332,13 +1304,14 @@ impl<'a> Parser<'a> {
 
         let mut result = TraitDef {
             name,
-            functions: vec![],
+            methods: vec![],
         };
 
         self.eat(&TokenKind::OpenBrace)?;
 
-        while let Some(decl) = self.function_decl(&AttributeList::empty())? {
-            result.functions.push(decl);
+        while let Some(decl) = self.unit_head(&AttributeList::empty())? {
+            result.methods.push(decl);
+            self.eat(&TokenKind::Semi)?;
         }
         let end_token = self.eat(&TokenKind::CloseBrace)?;
 
@@ -2648,98 +2621,26 @@ mod tests {
     }
 
     #[test]
-    fn function_declarations_work() {
-        let code = "fn some_fn(self, a: bit) -> bit;";
-
-        let expected = FunctionDecl {
-            name: ast_ident("some_fn"),
-            inputs: aparams![self, ("a", tspec!("bit"))],
-            output_type: Some(TypeSpec::Named(ast_path("bit"), None).nowhere()),
-            type_params: vec![],
-        }
-        .nowhere();
-
-        check_parse!(
-            code,
-            function_decl(&AttributeList::empty()),
-            Ok(Some(expected))
-        );
-    }
-
-    #[test]
-    fn function_declarations_with_only_self_arg_work() {
-        let code = "fn some_fn(self) -> bit;";
-
-        let expected = FunctionDecl {
-            name: ast_ident("some_fn"),
-            inputs: aparams![self],
-            output_type: Some(TypeSpec::Named(ast_path("bit"), None).nowhere()),
-            type_params: vec![],
-        }
-        .nowhere();
-
-        check_parse!(
-            code,
-            function_decl(&AttributeList::empty()),
-            Ok(Some(expected))
-        );
-    }
-
-    #[test]
-    fn function_declarations_with_no_type_have_unit_type() {
-        let code = "fn some_fn(self);";
-
-        let expected = FunctionDecl {
-            name: ast_ident("some_fn"),
-            inputs: aparams![self],
-            output_type: None,
-            type_params: vec![],
-        }
-        .nowhere();
-
-        check_parse!(
-            code,
-            function_decl(&AttributeList::empty()),
-            Ok(Some(expected))
-        );
-    }
-
-    #[test]
-    fn function_decls_with_generic_type_works() {
-        let code = "fn some_fn<X>(self);";
-
-        let expected = FunctionDecl {
-            name: ast_ident("some_fn"),
-            inputs: aparams![self],
-            output_type: None,
-            type_params: vec![TypeParam::TypeName(ast_ident("X")).nowhere()],
-        }
-        .nowhere();
-
-        check_parse!(
-            code,
-            function_decl(&AttributeList::empty()),
-            Ok(Some(expected))
-        );
-    }
-
-    #[test]
     fn trait_definitions_work() {
         let code = r#"
         trait SomeTrait {
             fn some_fn(self, a: bit) -> bit;
-            fn another_fn(self) -> bit;
+            entity another_fn(self) -> bit;
         }
         "#;
 
-        let fn1 = FunctionDecl {
+        let fn1 = UnitHead {
+            unit_kind: UnitKind::Function.nowhere(),
+            attributes: AttributeList::empty(),
             name: ast_ident("some_fn"),
             inputs: aparams![self, ("a", tspec!("bit"))],
             output_type: Some(TypeSpec::Named(ast_path("bit"), None).nowhere()),
             type_params: vec![],
         }
         .nowhere();
-        let fn2 = FunctionDecl {
+        let fn2 = UnitHead {
+            unit_kind: UnitKind::Entity.nowhere(),
+            attributes: AttributeList::empty(),
             name: ast_ident("another_fn"),
             inputs: aparams![self],
             output_type: Some(TypeSpec::Named(ast_path("bit"), None).nowhere()),
@@ -2749,7 +2650,7 @@ mod tests {
 
         let expected = TraitDef {
             name: ast_ident("SomeTrait"),
-            functions: vec![fn1, fn2],
+            methods: vec![fn1, fn2],
         }
         .nowhere();
 
@@ -3007,7 +2908,7 @@ mod tests {
         let expected = Some(Item::Unit(
             Unit {
                 head: UnitHead {
-                    attributes: AttributeList(vec![ast_ident("attr")]),
+                    attributes: AttributeList(vec![Attribute::NoMangle.nowhere()]),
                     unit_kind: UnitKind::Function.nowhere(),
                     name: ast_ident("X"),
                     inputs: ParameterList::without_self(vec![]).nowhere(),
@@ -3031,7 +2932,7 @@ mod tests {
         let expected = Some(Item::Unit(
             Unit {
                 head: UnitHead {
-                    attributes: AttributeList(vec![ast_ident("attr")]),
+                    attributes: AttributeList(vec![Attribute::NoMangle.nowhere()]),
                     unit_kind: UnitKind::Entity.nowhere(),
                     name: ast_ident("X"),
                     inputs: ParameterList::without_self(vec![]).nowhere(),
@@ -3056,7 +2957,7 @@ mod tests {
         let expected = Item::Unit(
             Unit {
                 head: UnitHead {
-                    attributes: AttributeList(vec![ast_ident("attr")]),
+                    attributes: AttributeList(vec![Attribute::NoMangle.nowhere()]),
                     unit_kind: UnitKind::Pipeline(
                         MaybeComptime::Raw(IntLiteral::signed(2).nowhere()).nowhere(),
                     )

@@ -1,0 +1,21 @@
+---
+source: spade-tests/src/integration.rs
+---
+trait X {
+    fn a(self);
+}
+
+struct A {}
+
+impl X for A {
+}
+
+
+error: Missing methods a
+  ┌─ testinput:7:1
+  │  
+7 │ ╭ impl X for A {
+8 │ │ }
+  │ ╰─^ Missing definition of a in this impl block
+
+

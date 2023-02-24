@@ -110,11 +110,12 @@ pub fn maybe_perform_pipelining_tasks(
     ctx: &mut Context,
 ) -> Result<Option<PipelineContext>> {
     let ast::Unit {
-        head: ast::UnitHead {
-            unit_kind,
-            inputs: ast_inputs,
-            ..
-        },
+        head:
+            ast::UnitHead {
+                unit_kind,
+                inputs: ast_inputs,
+                ..
+            },
         body,
     } = &unit.inner;
 
@@ -198,7 +199,8 @@ mod pipeline_visiting {
                 name: ast_ident("pipe"),
                 unit_kind: ast::UnitKind::Pipeline(
                     MaybeComptime::Raw(ast::IntLiteral::Signed(2.to_bigint()).nowhere()).nowhere(),
-                ).nowhere(),
+                )
+                .nowhere(),
                 inputs: ast::ParameterList::without_self(vec![(
                     ast_ident("clk"),
                     ast::TypeSpec::Unit(().nowhere()).nowhere(),
@@ -297,7 +299,8 @@ mod pipeline_visiting {
                 name: ast_ident("pipe"),
                 unit_kind: ast::UnitKind::Pipeline(
                     MaybeComptime::Raw(ast::IntLiteral::Signed(2.to_bigint()).nowhere()).nowhere(),
-                ).nowhere(),
+                )
+                .nowhere(),
                 inputs: ast::ParameterList::without_self(vec![(
                     ast_ident("clk"),
                     ast::TypeSpec::Unit(().nowhere()).nowhere(),

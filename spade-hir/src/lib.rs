@@ -14,6 +14,7 @@ use spade_common::{
     name::{Identifier, NameID, Path},
     num_ext::InfallibleToBigInt,
 };
+use spade_diagnostics::Diagnostic;
 use spade_types::PrimitiveType;
 
 /**
@@ -248,6 +249,10 @@ pub enum TypeSpec {
     Backward(Box<Loc<TypeSpec>>),
     Inverted(Box<Loc<TypeSpec>>),
     Wire(Box<Loc<TypeSpec>>),
+    /// The type of the `self` parameter in a trait method spec. Should not
+    /// occur in non-traits. The Loc is only used for diag_bails, so an approximte
+    /// reference is fine.
+    TraitSelf(Loc<()>),
 }
 impl WithLocation for TypeSpec {}
 
@@ -261,15 +266,21 @@ impl TypeSpec {
 impl std::fmt::Display for TypeSpec {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            TypeSpec::Declared(name, params) => write!(
-                f,
-                "{name}<{}>",
-                params
-                    .iter()
-                    .map(|g| format!("{g}"))
-                    .collect::<Vec<_>>()
-                    .join(",")
-            ),
+            TypeSpec::Declared(name, params) => {
+                let type_params = if params.is_empty() {
+                    String::from("")
+                } else {
+                    format!(
+                        "<{}>",
+                        params
+                            .iter()
+                            .map(|g| format!("{g}"))
+                            .collect::<Vec<_>>()
+                            .join(",")
+                    )
+                };
+                write!(f, "{name}{type_params}",)
+            }
             TypeSpec::Generic(name) => write!(f, "{name}"),
             TypeSpec::Tuple(members) => {
                 write!(
@@ -287,6 +298,7 @@ impl std::fmt::Display for TypeSpec {
             TypeSpec::Backward(inner) => write!(f, "&mut {inner}"),
             TypeSpec::Inverted(inner) => write!(f, "~{inner}"),
             TypeSpec::Wire(inner) => write!(f, "&{inner}"),
+            TypeSpec::TraitSelf(_) => write!(f, "Self"),
         }
     }
 }
@@ -294,7 +306,7 @@ impl std::fmt::Display for TypeSpec {
 /// Declaration of an enum
 #[derive(PartialEq, Debug, Clone, Serialize, Deserialize)]
 pub struct Enum {
-    pub options: Vec<(Loc<NameID>, ParameterList)>,
+    pub options: Vec<(Loc<NameID>, Loc<ParameterList>)>,
 }
 impl WithLocation for Enum {}
 
@@ -308,7 +320,7 @@ impl WithLocation for WalTraceable {}
 
 #[derive(PartialEq, Debug, Clone, Serialize, Deserialize)]
 pub struct Struct {
-    pub members: ParameterList,
+    pub members: Loc<ParameterList>,
     pub is_port: bool,
     pub attributes: AttributeList,
     pub wal_traceable: Option<Loc<WalTraceable>>,
@@ -493,12 +505,24 @@ impl UnitKind {
 #[derive(PartialEq, Debug, Clone, Serialize, Deserialize)]
 pub struct UnitHead {
     pub name: Loc<Identifier>,
-    pub inputs: ParameterList,
+    pub inputs: Loc<ParameterList>,
     pub output_type: Option<Loc<TypeSpec>>,
     pub type_params: Vec<Loc<TypeParam>>,
     pub unit_kind: Loc<UnitKind>,
 }
 impl WithLocation for UnitHead {}
+
+impl UnitHead {
+    pub fn output_type(&self) -> Loc<TypeSpec> {
+        match &self.output_type {
+            Some(t) => t.clone(),
+            None => {
+                // TODO: We should point to the end of the argument list here
+                TypeSpec::Unit(self.name.loc()).at_loc(&self.name.loc())
+            }
+        }
+    }
+}
 
 #[derive(PartialEq, Debug, Clone, Serialize, Deserialize)]
 pub enum Item {
@@ -535,13 +559,30 @@ pub type TypeList = HashMap<NameID, Loc<TypeDeclaration>>;
 
 #[derive(Serialize, Deserialize, PartialEq, Eq, Hash, Debug, Clone)]
 pub enum TraitName {
-    Named(NameID),
+    Named(Loc<NameID>),
     Anonymous(u64),
 }
 
 impl TraitName {
     pub fn is_anonymous(&self) -> bool {
         matches!(self, Self::Anonymous(_))
+    }
+
+    /// Returns the loc of the name of this trait, if it exists. None otherwise
+    pub fn name_loc(&self) -> Option<Loc<NameID>> {
+        match self {
+            TraitName::Named(n) => Some(n.clone()),
+            TraitName::Anonymous(_) => None,
+        }
+    }
+}
+
+impl std::fmt::Display for TraitName {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            TraitName::Named(n) => write!(f, "{n}"),
+            TraitName::Anonymous(id) => write!(f, "Anonymous({id})"),
+        }
     }
 }
 
@@ -592,7 +633,7 @@ pub struct ItemList {
     /// All traits in the compilation unit. Traits consist of a list of functions
     /// by name. Anonymous impl blocks are also members here, but their name is never
     /// visible to the user.
-    pub traits: HashMap<TraitName, Vec<(Identifier, UnitHead)>>,
+    traits: HashMap<TraitName, HashMap<Identifier, UnitHead>>,
     pub impls: HashMap<NameID, HashMap<TraitName, ImplBlock>>,
 }
 
@@ -604,5 +645,35 @@ impl ItemList {
             traits: HashMap::new(),
             impls: HashMap::new(),
         }
+    }
+
+    pub fn add_trait(
+        &mut self,
+        name: TraitName,
+        members: Vec<(Identifier, UnitHead)>,
+    ) -> Result<(), Diagnostic> {
+        if let Some((prev, _)) = self.traits.get_key_value(&name) {
+            Err(
+                // NOTE: unwrap here is safe *unless* we have got duplicate trait IDs which
+                // means we have bigger problems
+                Diagnostic::error(
+                    &name.name_loc().unwrap(),
+                    format!("Multiple definitions of trait {name}"),
+                )
+                .primary_label("New definition")
+                .secondary_label(&prev.name_loc().unwrap(), "Previous definition"),
+            )
+        } else {
+            self.traits.insert(name, members.into_iter().collect());
+            Ok(())
+        }
+    }
+
+    pub fn get_trait(&mut self, name: &TraitName) -> Option<&HashMap<Identifier, UnitHead>> {
+        self.traits.get(&name)
+    }
+
+    pub fn traits(&self) -> &HashMap<TraitName, HashMap<Identifier, UnitHead>> {
+        &self.traits
     }
 }

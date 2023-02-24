@@ -218,6 +218,9 @@ impl TypeState {
             hir::TypeSpec::Inverted(inner) => {
                 TypeVar::Inverted(Box::new(self.type_var_from_hir(inner, generic_list_token)))
             }
+            hir::TypeSpec::TraitSelf(_) => {
+                panic!("Trying to convert TraitSelf to type inference type var")
+            }
         }
     }
 
@@ -2390,7 +2393,8 @@ mod tests {
             inputs: hparams![
                 ("a", dtype!(symtab => "bool")),
                 ("b", dtype!(symtab => "int"; (t_num(10)))),
-            ],
+            ]
+            .nowhere(),
             output_type: Some(dtype!(symtab => "int"; (t_num(5)))),
             type_params: vec![],
         };
@@ -2473,7 +2477,8 @@ mod tests {
             inputs: hparams![
                 ("a", dtype!(symtab => "bool")),
                 ("b", dtype!(symtab => "int"; ( t_num(10) ))),
-            ],
+            ]
+            .nowhere(),
             output_type: Some(dtype!(symtab => "int"; ( t_num(5) ))),
             type_params: vec![],
         };

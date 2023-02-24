@@ -1,0 +1,23 @@
+---
+source: spade-tests/src/integration.rs
+---
+trait X {
+    fn a(self);
+    fn b(self);
+    fn c(self);
+}
+
+struct A {}
+
+impl X for A {
+}
+
+
+error: Missing methods a, b and c
+   ┌─ testinput:9:1
+   │  
+ 9 │ ╭ impl X for A {
+10 │ │ }
+   │ ╰─^ Missing definition of a, b and c in this impl block
+
+

@@ -9,7 +9,7 @@ use spade_common::{
     location_info::{Loc, WithLocation},
     name::{Identifier, Path},
 };
-use spade_diagnostics::{diag_bail, Diagnostic};
+use spade_diagnostics::Diagnostic;
 use spade_hir as hir;
 
 use crate::{
@@ -87,15 +87,19 @@ pub fn visit_item(
             visit_unit(&None, &e, symtab, &SelfContext::FreeStanding)?;
         }
         ast::Item::TraitDef(def) => {
-            // FIXME
-            diag_bail!(def, "Trait definition is currently unsupported");
+            let name = symtab.add_unique_thing(
+                Path(vec![def.name.clone()]).at_loc(&def.name),
+                Thing::Trait(def.name.clone()),
+            )?;
+
+            crate::create_trait_from_unit_heads(
+                hir::TraitName::Named(name.at_loc(&def.name)),
+                &def.methods,
+                item_list,
+                symtab,
+            )?;
         }
-        ast::Item::ImplBlock(block) => {
-            if let Some(r#trait) = &block.r#trait {
-                // FIXME
-                diag_bail!(r#trait, "Implementation of traits is currently unsupported");
-            }
-        }
+        ast::Item::ImplBlock(_) => {}
         ast::Item::Type(t) => {
             re_visit_type_declaration(t, symtab, item_list)?;
         }
@@ -230,7 +234,7 @@ pub fn re_visit_type_declaration(
                     .1
                     .clone()
                     .map(|l| visit_parameter_list(&l, symtab, &SelfContext::FreeStanding))
-                    .unwrap_or_else(|| Ok(hir::ParameterList(vec![])))?;
+                    .unwrap_or_else(|| Ok(hir::ParameterList(vec![]).nowhere()))?;
 
                 let args = option
                     .1
@@ -498,14 +502,17 @@ mod tests {
             kind: hir::TypeDeclKind::Enum(
                 hir::Enum {
                     options: vec![
-                        (name_id_p(1, &["test", "A"]), hir::ParameterList(vec![])),
+                        (
+                            name_id_p(1, &["test", "A"]),
+                            hir::ParameterList(vec![]).nowhere(),
+                        ),
                         (
                             name_id_p(2, &["test", "B"]),
-                            hparams![("x", dtype!(symtab => "bool"))],
+                            hparams![("x", dtype!(symtab => "bool"))].nowhere(),
                         ),
                         (
                             name_id_p(3, &["test", "C"]),
-                            hparams![("x", dtype!(symtab => "int"; (t_num(10))))],
+                            hparams![("x", dtype!(symtab => "int"; (t_num(10))))].nowhere(),
                         ),
                     ],
                 }
@@ -554,7 +561,8 @@ mod tests {
                 hir::Enum {
                     options: vec![(
                         name_id_p(2, &["test", "B"]),
-                        hparams![("a", hir::TypeSpec::Generic(name_id(1, "T")).nowhere())],
+                        hparams![("a", hir::TypeSpec::Generic(name_id(1, "T")).nowhere())]
+                            .nowhere(),
                     )],
                 }
                 .nowhere(),

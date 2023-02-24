@@ -450,6 +450,7 @@ pub struct UnitHead {
     pub output_type: Option<Loc<TypeSpec>>,
     pub type_params: Vec<Loc<TypeParam>>,
 }
+impl WithLocation for UnitHead {}
 
 #[derive(PartialEq, Debug, Clone)]
 pub struct Unit {
@@ -459,16 +460,6 @@ pub struct Unit {
     pub body: Option<Loc<Expression>>,
 }
 impl WithLocation for Unit {}
-
-/// A definition of a function without a body.
-#[derive(PartialEq, Debug, Clone)]
-pub struct FunctionDecl {
-    pub name: Loc<Identifier>,
-    pub inputs: Loc<ParameterList>,
-    pub output_type: Option<Loc<TypeSpec>>,
-    pub type_params: Vec<Loc<TypeParam>>,
-}
-impl WithLocation for FunctionDecl {}
 
 #[derive(PartialEq, Debug, Clone)]
 pub struct Register {
@@ -486,7 +477,7 @@ impl WithLocation for Register {}
 #[derive(PartialEq, Debug, Clone)]
 pub struct TraitDef {
     pub name: Loc<Identifier>,
-    pub functions: Vec<Loc<FunctionDecl>>,
+    pub methods: Vec<Loc<UnitHead>>,
 }
 impl WithLocation for TraitDef {}
 

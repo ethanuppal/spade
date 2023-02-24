@@ -1,0 +1,28 @@
+---
+source: spade-tests/src/integration.rs
+---
+struct A {}
+
+impl A {
+    fn a(self) -> bool {
+        true
+    }
+
+    fn a(self) -> bool {
+        false
+    }
+}
+
+
+error: Multiple definitions of a
+  ┌─ testinput:8:8
+  │  
+4 │ ╭     fn a(self) -> bool {
+5 │ │         true
+6 │ │     }
+  │ ╰─────' Previous definition here
+7 │   
+8 │       fn a(self) -> bool {
+  │          ^ a is defined multiple times
+
+

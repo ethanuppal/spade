@@ -25,6 +25,7 @@ pub enum LookupError {
     NotAStruct(Loc<Path>, Thing),
     NotAValue(Loc<Path>, Thing),
     NotAComptimeValue(Loc<Path>, Thing),
+    NotATrait(Loc<Path>, Thing),
     IsAType(Loc<Path>),
 }
 
@@ -46,6 +47,7 @@ impl From<LookupError> for Diagnostic {
             | LookupError::NotAPatternableType(path, got)
             | LookupError::NotAStruct(path, got)
             | LookupError::NotAValue(path, got)
+            | LookupError::NotATrait(path, got)
             | LookupError::NotAComptimeValue(path, got) => {
                 let expected = match lookup_error {
                     LookupError::NotATypeSymbol(_, _) => "a type symbol",
@@ -56,6 +58,7 @@ impl From<LookupError> for Diagnostic {
                     LookupError::NotAStruct(_, _) => "a struct",
                     LookupError::NotAValue(_, _) => "a value",
                     LookupError::NotAComptimeValue(_, _) => "a compile time value",
+                    LookupError::NotATrait(_, _) => "a trait",
                     LookupError::NoSuchSymbol(_) | LookupError::IsAType(_) => unreachable!(),
                 };
                 // FIXME: We can sometimes do suggestions depending on `got`. For example, a struct/enum variant can be initialized,
@@ -101,6 +104,7 @@ impl LookupError {
             NotAStruct(_, thing) => (path, thing),
             NotAValue(_, thing) => (path, thing),
             NotAComptimeValue(_, thing) => (path, thing),
+            NotATrait(_, thing) => (path, thing),
             IsAType(_) => (path),
         }
     }
@@ -117,7 +121,7 @@ pub struct EnumVariant {
     pub name: Loc<Identifier>,
     pub output_type: Loc<TypeSpec>,
     pub option: usize,
-    pub params: ParameterList,
+    pub params: Loc<ParameterList>,
     pub type_params: Vec<Loc<TypeParam>>,
 }
 impl WithLocation for EnumVariant {}
@@ -138,7 +142,7 @@ impl EnumVariant {
 pub struct StructCallable {
     pub name: Loc<Identifier>,
     pub self_type: Loc<TypeSpec>,
-    pub params: ParameterList,
+    pub params: Loc<ParameterList>,
     pub type_params: Vec<Loc<TypeParam>>,
 }
 impl WithLocation for StructCallable {}
@@ -169,6 +173,9 @@ pub enum Thing {
     },
     PipelineStage(Loc<Identifier>),
     ComptimeConfig(Loc<BigInt>),
+    /// Actual trait definition is present in the item list. This is only a marker
+    /// for there being a trait with the item name.
+    Trait(Loc<Identifier>),
 }
 
 impl Thing {
@@ -181,6 +188,7 @@ impl Thing {
             Thing::Alias { .. } => "alias",
             Thing::PipelineStage(_) => "pipeline stage",
             Thing::ComptimeConfig(_) => "$config",
+            Thing::Trait(_) => "trait",
         }
     }
 
@@ -197,6 +205,7 @@ impl Thing {
             } => path.loc(),
             Thing::PipelineStage(i) => i.loc(),
             Thing::ComptimeConfig(val) => val.loc(),
+            Thing::Trait(loc) => loc.loc(),
         }
     }
 
@@ -213,6 +222,7 @@ impl Thing {
             } => path.loc(),
             Thing::PipelineStage(_) => todo!(),
             Thing::ComptimeConfig(_) => todo!(),
+            Thing::Trait(loc) => loc.loc(),
         }
     }
 }
@@ -225,7 +235,7 @@ pub enum PatternableKind {
 #[derive(PartialEq, Debug, Clone)]
 pub struct Patternable {
     pub kind: PatternableKind,
-    pub params: ParameterList,
+    pub params: Loc<ParameterList>,
 }
 impl WithLocation for Patternable {}
 
@@ -608,6 +618,9 @@ impl SymbolTable {
         },
         comptime_config_by_id, lookup_comptime_config, BigInt, NotAComptimeValue {
             Thing::ComptimeConfig(val) => val.clone()
+        },
+        trait_by_id, lookup_trait, Identifier, NotATrait {
+            Thing::Trait(t) => t.clone()
         }
     }
 
@@ -651,6 +664,7 @@ impl SymbolTable {
             Err(LookupError::NotAStruct(_, _)) => unreachable!(),
             Err(LookupError::NotAValue(_, _)) => unreachable!(),
             Err(LookupError::NotAComptimeValue(_, _)) => unreachable!(),
+            Err(LookupError::NotATrait(_, _)) => unreachable!(),
             Err(LookupError::IsAType(_)) => unreachable!(),
         }
     }
@@ -851,6 +865,7 @@ impl SymbolTable {
                 }
                 Thing::PipelineStage(stage) => println!("'{stage}"),
                 Thing::ComptimeConfig(val) => println!("$config {}", val),
+                Thing::Trait(name) => println!("trait {}", name),
             }
         }
 

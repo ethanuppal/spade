@@ -1,0 +1,26 @@
+---
+source: spade-tests/src/integration.rs
+---
+trait X {
+    fn a(self, a: bool) -> bool;
+}
+
+struct A {}
+
+impl X for A {
+    fn a(self, b: bool) -> bool {
+        true
+    }
+}
+
+
+error: Argument name mismatch
+  ┌─ testinput:8:16
+  │
+2 │     fn a(self, a: bool) -> bool;
+  │                - Because argument `1` is named `a` in the trait
+  ·
+8 │     fn a(self, b: bool) -> bool {
+  │                ^ Expected `a`
+
+

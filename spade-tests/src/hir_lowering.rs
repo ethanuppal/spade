@@ -11,10 +11,8 @@ mod tests {
         num_ext::InfallibleToBigInt,
         num_ext::InfallibleToBigUint,
     };
-    use spade_mir::assert_same_mir;
-    use spade_mir::{
-        self, entity, statement, types::Type, unit_name::UnitNameKind, ConstantValue, UnitName,
-    };
+    use spade_mir::{self, entity, statement, types::Type, ConstantValue};
+    use spade_mir::{assert_same_mir, unit_name::UnitNameKind};
 
     #[test]
     fn entity_definitions_are_correct() {
@@ -1528,7 +1526,7 @@ mod tests {
             }
         "#;
 
-        let inst_name = UnitName {
+        let inst_name = spade_mir::UnitName {
             kind: UnitNameKind::Escaped {
                 // NOTE: The number here is sequential and depends on the number
                 // of generic modules we have. If new modules are added to the stdlib,
@@ -2740,10 +2738,49 @@ mod tests {
         assert_same_mir!(
             &build_items_with_stdlib(code)
                 .into_iter()
-                .find(|e| e.name == UnitName::_test_from_strs(&["main"]))
+                .find(|e| e.name == spade_mir::UnitName::_test_from_strs(&["main"]))
                 .unwrap(),
             &expected
         );
+    }
+
+    #[test]
+    fn struct_method_call_from_traitcalls_the_right_function() {
+        let code = r#"
+            struct X {}
+
+            trait A {
+                fn a(self) -> bool;
+            }
+
+            impl A for X {
+                fn a(self) -> bool {
+                    true
+                }
+            }
+
+            entity test(x: X) -> bool {
+                x.a()
+            }
+        "#;
+
+        let name = spade_mir::UnitName::_test_from_strs(&["impl_0", "a"]);
+
+        let x_type = Type::Struct(vec![]);
+        let expected = vec![
+            entity! {&["test"]; (
+                "x", n(0, "x"), x_type.clone(),
+            ) -> Type::Bool; {
+                (e(0); Type::Bool; Instance((name, None)); n(0, "x"))
+            } => e(0)},
+            entity! {&["impl_0", "a"]; (
+                "self", n(1, "self"), x_type,
+            ) -> Type::Bool; {
+                (const 0; Type::Bool; ConstantValue::Bool(true));
+            } => e(0)},
+        ];
+
+        build_and_compare_entities!(code, expected);
     }
 }
 

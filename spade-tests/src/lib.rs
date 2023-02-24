@@ -293,6 +293,11 @@ macro_rules! build_and_compare_entities {
         expected.sort_by_key(|e| e.name.clone());
         result.sort_by_key(|e| e.name.clone());
 
+        println!(
+            "comparing {:?} with {:?}",
+            expected.iter().map(|e| &e.name).collect::<Vec<_>>(),
+            result.iter().map(|e| &e.name).collect::<Vec<_>>()
+        );
         for (exp, res) in expected.into_iter().zip(result.into_iter()) {
             assert_same_mir!(&res, &exp);
         }

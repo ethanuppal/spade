@@ -1,0 +1,30 @@
+---
+source: spade-tests/src/integration.rs
+---
+trait X {
+    fn a(self) -> bool;
+}
+
+struct A {}
+
+impl X for A {
+    fn a(self) -> bool{
+        true
+    }
+
+    fn b(self) -> bool {
+        true
+    }
+}
+
+
+error: `b` is not a member of the trait `X`
+   ┌─ testinput:12:8
+   │
+ 7 │ impl X for A {
+   │      - This is an impl for the trait `X`
+   ·
+12 │     fn b(self) -> bool {
+   │        ^ Not a member of `X`
+
+

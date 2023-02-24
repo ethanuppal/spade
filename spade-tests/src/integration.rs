@@ -453,18 +453,220 @@ mod trait_tests {
     fn impl_trait_compiles() {
         let code = "
             trait X {
-                fn a();
+                fn a(self) -> bool;
             }
 
             struct A {}
 
             impl X for A {
-                fn a() -> bool {
+                fn a(self) -> bool {
                     true
                 }
             }
         ";
 
         build_items(code);
+    }
+
+    snapshot_error! {
+        missing_method_in_trait_def_errors,
+        "
+            trait X {
+                fn a(self);
+            }
+
+            struct A {}
+
+            impl X for A {
+            }
+        "
+    }
+
+    snapshot_error! {
+        missing_2_method_in_trait_def_errors,
+        "
+            trait X {
+                fn a(self);
+                fn b(self);
+            }
+
+            struct A {}
+
+            impl X for A {
+            }
+        "
+    }
+
+    snapshot_error! {
+        missing_3_method_in_trait_def_errors,
+        "
+            trait X {
+                fn a(self);
+                fn b(self);
+                fn c(self);
+            }
+
+            struct A {}
+
+            impl X for A {
+            }
+        "
+    }
+
+    snapshot_error! {
+        missing_4_method_in_trait_def_errors,
+        "
+            trait X {
+                fn a(self);
+                fn b(self);
+                fn c(self);
+                fn d(self);
+            }
+
+            struct A {}
+
+            impl X for A {
+            }
+        "
+    }
+
+    snapshot_error! {
+        unrelated_method_in_impl_block_errors,
+        "
+            trait X {
+                fn a(self) -> bool;
+            }
+
+            struct A {}
+
+            impl X for A {
+                fn a(self) -> bool{
+                    true
+                }
+
+                fn b(self) -> bool {
+                    true
+                }
+            }
+        "
+    }
+
+    snapshot_error! {
+        multiple_impls_of_same_method_is_error,
+        "
+            struct A {}
+
+            impl A {
+                fn a(self) -> bool {
+                    true
+                }
+
+                fn a(self) -> bool {
+                    false
+                }
+            }
+        "
+    }
+
+    snapshot_error! {
+        impls_require_correct_signature_missing_args,
+        "
+            trait X {
+                fn a(self, x: bool) -> bool;
+            }
+
+            struct A {}
+
+            impl X for A {
+                fn a(self) -> bool{
+                    true
+                }
+            }
+        "
+    }
+
+    snapshot_error! {
+        impls_require_correct_signature_unknown_arg,
+        "
+            trait X {
+                fn a(self) -> bool;
+            }
+
+            struct A {}
+
+            impl X for A {
+                fn a(self, x: bool) -> bool{
+                    true
+                }
+            }
+        "
+    }
+
+    snapshot_error! {
+        impls_require_correct_signature_wrong_arg_type,
+        "
+            trait X {
+                fn a(self, x: bool) -> bool;
+            }
+
+            struct A {}
+
+            impl X for A {
+                fn a(self, x: int<10>) -> bool{
+                    true
+                }
+            }
+        "
+    }
+
+    snapshot_error! {
+        impls_require_correct_signature_wrong_return_type,
+        "
+            trait X {
+                fn a(self) -> int<10> ;
+            }
+
+            struct A {}
+
+            impl X for A {
+                fn a(self) -> bool {
+                    true
+                }
+            }
+        "
+    }
+
+    snapshot_error! {
+        impls_require_argument_name_correctness,
+        "
+            trait X {
+                fn a(self, a: bool) -> bool;
+            }
+
+            struct A {}
+
+            impl X for A {
+                fn a(self, b: bool) -> bool {
+                    true
+                }
+            }
+        "
+    }
+
+    snapshot_error! {
+        impls_require_argument_position_correctness,
+        "
+            trait X {
+                fn a(self, a: bool, b: bool) -> bool;
+            }
+
+            struct A {}
+
+            impl X for A {
+                fn a(self, b: bool, a: bool) -> bool {
+                    true
+                }
+            }
+        "
     }
 }

@@ -1,0 +1,26 @@
+---
+source: spade-tests/src/integration.rs
+---
+trait X {
+    fn a(self, x: bool) -> bool;
+}
+
+struct A {}
+
+impl X for A {
+    fn a(self) -> bool{
+        true
+    }
+}
+
+
+error: Missing argument x
+  ┌─ testinput:8:9
+  │
+2 │     fn a(self, x: bool) -> bool;
+  │                - The trait method has this argument
+  ·
+8 │     fn a(self) -> bool{
+  │         ^^^^^^ Missing argument x
+
+
