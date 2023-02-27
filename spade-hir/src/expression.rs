@@ -1,6 +1,7 @@
 use crate::Pattern;
 
 use super::{Block, NameID};
+use local_impl::local_impl;
 use serde::{Deserialize, Serialize};
 use spade_common::{
     location_info::{Loc, WithLocation},
@@ -180,5 +181,85 @@ impl Expression {
 impl PartialEq for Expression {
     fn eq(&self, other: &Self) -> bool {
         self.kind == other.kind
+    }
+}
+
+#[local_impl]
+impl LocExprExt for Loc<Expression> {
+    /// Checks if the expression is evaluatable at compile time, returning a Loc of
+    /// a (sub)-expression which requires runtime, and None if it is comptime valuatable.
+    ///
+    /// If this method returns None, `.eval()` on the resulting list of mir statements is
+    /// guaranteed to work
+    fn runtime_requirement_witness(&self) -> Option<Loc<Expression>> {
+        match &self.kind {
+            ExprKind::Identifier(_) => Some(self.clone()),
+            ExprKind::IntLiteral(_) => None,
+            ExprKind::BoolLiteral(_) => None,
+            ExprKind::TupleLiteral(inner) => inner
+                .iter()
+                .filter_map(Self::runtime_requirement_witness)
+                .next(),
+            ExprKind::ArrayLiteral(inner) => inner
+                .iter()
+                .filter_map(Self::runtime_requirement_witness)
+                .next(),
+            ExprKind::Index(l, r) => l
+                .runtime_requirement_witness()
+                .or_else(|| r.runtime_requirement_witness()),
+            ExprKind::TupleIndex(l, _) => l.runtime_requirement_witness(),
+            ExprKind::FieldAccess(l, _) => l.runtime_requirement_witness(),
+            // NOTE: We probably shouldn't see this here since we'll have lowered
+            // methods at this point, but this function doesn't throw
+            ExprKind::MethodCall(_, _, _)
+            | ExprKind::PipelineInstance { .. }
+            | ExprKind::EntityInstance(_, _)
+            | ExprKind::FnCall(_, _) => Some(self.clone()),
+            ExprKind::BinaryOperator(l, operator, r) => {
+                if let Some(witness) = l
+                    .runtime_requirement_witness()
+                    .or_else(|| r.runtime_requirement_witness())
+                {
+                    Some(witness)
+                } else {
+                    match &operator {
+                        BinaryOperator::Add => None,
+                        BinaryOperator::Sub => None,
+                        BinaryOperator::Mul
+                        | BinaryOperator::Eq
+                        | BinaryOperator::Gt
+                        | BinaryOperator::Lt
+                        | BinaryOperator::Ge
+                        | BinaryOperator::Le
+                        | BinaryOperator::LeftShift
+                        | BinaryOperator::RightShift
+                        | BinaryOperator::ArithmeticRightShift
+                        | BinaryOperator::LogicalAnd
+                        | BinaryOperator::LogicalOr
+                        | BinaryOperator::LogicalXor
+                        | BinaryOperator::BitwiseOr
+                        | BinaryOperator::BitwiseAnd
+                        | BinaryOperator::BitwiseXor => Some(self.clone()),
+                    }
+                }
+            }
+            ExprKind::UnaryOperator(op, operand) => {
+                if let Some(witness) = operand.runtime_requirement_witness() {
+                    Some(witness)
+                } else {
+                    match op {
+                        UnaryOperator::Sub => None,
+                        UnaryOperator::Not
+                        | UnaryOperator::BitwiseNot
+                        | UnaryOperator::Dereference
+                        | UnaryOperator::Reference => Some(self.clone()),
+                    }
+                }
+            }
+            ExprKind::Match(_, _) => Some(self.clone()),
+            ExprKind::Block(_) => Some(self.clone()),
+            ExprKind::If(_, _, _) => Some(self.clone()),
+            ExprKind::PipelineRef { .. } => Some(self.clone()),
+        }
     }
 }
