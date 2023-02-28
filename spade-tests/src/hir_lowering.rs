@@ -1,13 +1,16 @@
 #[cfg(test)]
 mod tests {
-    use crate::{build_and_compare_entities, build_entity, build_items, snapshot_error};
+    use crate::{
+        build_and_compare_entities, build_entity, build_items, build_items_with_stdlib,
+        snapshot_error,
+    };
     use colored::Colorize;
     use spade_common::location_info::WithLocation;
     use spade_mir::{
         self,
         diff::{compare_entity, VarMap},
         diff_printing::translated_strings,
-        entity,
+        entity, statement,
         types::Type,
         ConstantValue,
     };
@@ -1373,11 +1376,7 @@ mod tests {
 
     #[test]
     fn concatenation_works() {
-        // https://gitlab.com/spade-lang/spade/-/issues/125
         let code = r#"
-            mod std{mod conv{ 
-                fn concat<#N, #M, #K>(x: int<N>, y: int<M>) -> int<K> __builtin__
-            }}
             use std::conv::concat;
             entity name(a: int<16>, b: int<8>) -> int<24> {
                 a `concat` b
@@ -1397,12 +1396,7 @@ mod tests {
 
     #[test]
     fn concatenation_infers_size() {
-        // FIXME: Figure out a way to include stdlib in tests
-        // lifeguard spade#125
         let code = r#"
-            mod std{mod conv{ 
-                fn concat<#N, #M, #K>(x: int<N>, y: int<M>) -> int<K> __builtin__
-            }}
             use std::conv::concat;
             entity name(a: int<16>, b: int<8>) -> int<24> {
                 let x = a `concat` b;
@@ -1425,12 +1419,7 @@ mod tests {
 
     #[test]
     fn zero_extend_works() {
-        // FIXME: Figure out a way to include stdlib in tests
-        // lifeguard https://gitlab.com/spade-lang/spade/-/issues/125
         let code = r#"
-            mod std{mod conv{ 
-                fn zext<#N, #M>(x: int<N>) -> int<M> __builtin__
-            }}
             use std::conv::zext;
             entity name(a: int<16>) -> int<24> {
                 zext(a)
@@ -1468,12 +1457,7 @@ mod tests {
 
     #[test]
     fn div_pow2_works() {
-        // FIXME: Figure out a way to include stdlib in tests
-        // lifeguard https://gitlab.com/spade-lang/spade/-/issues/125
         let code = r#"
-            mod std{mod ops{ 
-                fn div_pow2<#N>(x: int<N>, pow: int<N>) -> int<N> __builtin__
-            }}
             use std::ops::div_pow2;
             entity name(a: int<16>) -> int<16> {
                 a `div_pow2` 2
@@ -1515,7 +1499,7 @@ mod tests {
         "#;
 
         let inst_name = spade_mir::UnitName::Escaped {
-            name: "identity[6]".to_string(),
+            name: "identity[56]".to_string(),
             path: vec!["identity".to_string()],
         };
 
@@ -2094,6 +2078,78 @@ mod tests {
         } => n(0, "x"));
 
         assert_same_mir!(&result, &expected);
+    }
+
+    snapshot_error! {
+        non_const_memory_elements_is_error,
+        "
+            use std::mem::clocked_memory_init;
+            use std::mem::read_memory;
+
+            entity test(clk: clock, a: int<8>) -> int<8> {
+                // lifeguard spade#151
+                let idx: int<1> = 0;
+                let mem = inst clocked_memory_init(clk, [(false, idx, 0)], [a]);
+                inst read_memory(mem, 0)
+            }
+        "
+    }
+
+    #[test]
+    fn memory_initial_values_work() {
+        let code = r#"
+            use std::mem::clocked_memory_init;
+            use std::mem::read_memory;
+
+            entity test(clk: clock) -> int<8> {
+                // lifeguard spade#151
+                let ports: [(bool, int<1>, int<8>); 0] = [];
+                let mem: Memory<int<8>, 2> = inst clocked_memory_init(clk, ports, [0, 1]);
+                0
+            }
+        "#;
+
+        let ports_type = Type::Array {
+            inner: Box::new(Type::Tuple(vec![Type::Bool, Type::Int(1), Type::Int(8)])),
+            length: 0,
+        };
+
+        let init_type = Type::Array {
+            inner: Box::new(Type::Int(8)),
+            length: 2,
+        };
+
+        let mem_type = Type::Memory {
+            inner: Box::new(Type::Int(8)),
+            length: 2,
+        };
+
+        let expected = vec![entity! {&["test"]; (
+            "clk", n(0, "clk"), Type::Bool,
+        ) -> Type::Int(8); {
+            (e(10); ports_type.clone(); ConstructArray;);
+            (n(11, "ports"); ports_type; Alias; e(10));
+            (const(12); Type::Int(8); ConstantValue::Int(0));
+            (const(13); Type::Int(8); ConstantValue::Int(1));
+
+            (e(14); init_type; ConstructArray; e(12), e(13));
+
+            (e(1); mem_type.clone(); DeclClockedMemory({
+                write_ports: 0,
+                addr_w: 1,
+                inner_w: 8,
+                elems: 2,
+                initial: Some(vec![
+                    vec![statement!(const 7; Type::Int(8); ConstantValue::Int(0))],
+                    vec![statement!(const 8; Type::Int(8); ConstantValue::Int(1))],
+                ])
+            }); n(0, "clk"), n(11, "ports"));
+            (n(2, "mem"); mem_type; Alias; e(1));
+
+            (const 0; Type::Int(8); ConstantValue::Int(0));
+        } => e(0)}];
+
+        build_and_compare_entities!(code, expected);
     }
 }
 

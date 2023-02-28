@@ -1,7 +1,6 @@
 use crate::Pattern;
 
 use super::{Block, NameID};
-use local_impl::local_impl;
 use serde::{Deserialize, Serialize};
 use spade_common::{
     location_info::{Loc, WithLocation},
@@ -184,7 +183,10 @@ impl PartialEq for Expression {
     }
 }
 
-#[local_impl]
+pub trait LocExprExt {
+    fn runtime_requirement_witness(&self) -> Option<Loc<Expression>>;
+}
+
 impl LocExprExt for Loc<Expression> {
     /// Checks if the expression is evaluatable at compile time, returning a Loc of
     /// a (sub)-expression which requires runtime, and None if it is comptime valuatable.
@@ -196,14 +198,12 @@ impl LocExprExt for Loc<Expression> {
             ExprKind::Identifier(_) => Some(self.clone()),
             ExprKind::IntLiteral(_) => None,
             ExprKind::BoolLiteral(_) => None,
-            ExprKind::TupleLiteral(inner) => inner
-                .iter()
-                .filter_map(Self::runtime_requirement_witness)
-                .next(),
-            ExprKind::ArrayLiteral(inner) => inner
-                .iter()
-                .filter_map(Self::runtime_requirement_witness)
-                .next(),
+            ExprKind::TupleLiteral(inner) => {
+                inner.iter().find_map(Self::runtime_requirement_witness)
+            }
+            ExprKind::ArrayLiteral(inner) => {
+                inner.iter().find_map(Self::runtime_requirement_witness)
+            }
             ExprKind::Index(l, r) => l
                 .runtime_requirement_witness()
                 .or_else(|| r.runtime_requirement_witness()),
@@ -211,10 +211,7 @@ impl LocExprExt for Loc<Expression> {
             ExprKind::FieldAccess(l, _) => l.runtime_requirement_witness(),
             // NOTE: We probably shouldn't see this here since we'll have lowered
             // methods at this point, but this function doesn't throw
-            ExprKind::MethodCall(_, _, _)
-            | ExprKind::PipelineInstance { .. }
-            | ExprKind::EntityInstance(_, _)
-            | ExprKind::FnCall(_, _) => Some(self.clone()),
+            ExprKind::MethodCall { .. } | ExprKind::Call { .. } => Some(self.clone()),
             ExprKind::BinaryOperator(l, operator, r) => {
                 if let Some(witness) = l
                     .runtime_requirement_witness()

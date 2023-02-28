@@ -1,18 +1,28 @@
-// Define a memory where values are written on the rising edge of the clock.
-// Reads can occur asynchronously with the `read_mem` function. If Clocked reads
-// should be used, the read result should be placed in a register
-//
-// The write array defines all the write ports to the memory. It consists of a
-// `write enable`, `address` and `data` field. When WE is enabled, data is written
-// to address. Otherwise no change takes effect
-// NOTE: We when possible, we should make compute AddrWidth from NumElements
+/// Define a memory where values are written on the rising edge of the clock.
+/// Reads can occur asynchronously with the `read_mem` function. If Clocked reads
+/// should be used, the read result should be placed in a register
+///
+/// The write array defines all the write ports to the memory. It consists of a
+/// `write enable`, `address` and `data` field. When WE is enabled, data is written
+/// to address. Otherwise no change takes effect
+/// NOTE: We when possible, we should make compute AddrWidth from NumElements
 entity clocked_memory<#NumElements, #WritePorts, #AddrWidth, D>(
     clk: clock,
     writes: [(bool, int<AddrWidth>, D); WritePorts],
 ) -> Memory<D, NumElements>
     __builtin__
 
-// Get the value out of a memory
+
+/// Same as `clocked_memory` but initializes the memory with the values specified in `initial`.
+/// The initial values must be evaluatable at compile time, otherwise an error is thrown
+entity clocked_memory_init<#NumElements, #WritePorts, #AddrWidth, D>(
+    clk: clock,
+    writes: [(bool, int<AddrWidth>, D); WritePorts],
+    initial: [D; NumElements]
+) -> Memory<D, NumElements>
+    __builtin__
+
+/// Get the value out of a memory
 entity read_memory<#AddrWidth, D, #NumElements> (
     mem: Memory<D, NumElements>,
     addr: int<AddrWidth>

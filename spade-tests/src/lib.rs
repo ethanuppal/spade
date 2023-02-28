@@ -173,10 +173,17 @@ fn build_items(code: &str) -> Vec<spade_mir::Entity> {
     build_items_inner(code, false)
 }
 
-#[allow(dead_code)]
 #[cfg(test)]
 fn build_items_with_stdlib(code: &str) -> Vec<spade_mir::Entity> {
     build_items_inner(code, true)
+        .into_iter()
+        .filter(|f| match &f.name {
+            spade_mir::UnitName::Unescaped(_) => true,
+            spade_mir::UnitName::Escaped { name: _, path } => {
+                !path.starts_with(&["std".to_string()])
+            }
+        })
+        .collect()
 }
 
 /// Builds multiple items and types from a source string.
@@ -237,7 +244,7 @@ fn build_items_inner(code: &str, with_stdlib: bool) -> Vec<spade_mir::Entity> {
 #[macro_export]
 macro_rules! build_and_compare_entities {
     ($code:expr, $expected:expr) => {
-        let mut result = build_items($code);
+        let mut result = build_items_with_stdlib($code);
 
         assert_eq!(
             $expected.len(),

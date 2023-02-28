@@ -8,6 +8,7 @@ use spade_diagnostics::{CodeBundle, CompilationError, DiagHandler};
 
 use crate::aliasing::flatten_aliases;
 use crate::assertion_codegen::AssertedExpression;
+use crate::eval::eval_statements;
 use crate::type_list::TypeList;
 use crate::verilog::{self, assign, logic, size_spec};
 use crate::{enum_util, Binding, ConstantValue, Entity, Operator, Statement, ValueName};
@@ -333,8 +334,29 @@ fn forward_expression_code(binding: &Binding, types: &TypeList, ops: &[ValueName
             addr_w,
             inner_w,
             elems: _,
+            initial,
         } => {
             let full_port_width = 1 + addr_w + inner_w;
+
+            let initial_block = if let Some(vals) = initial {
+                let assignments = vals
+                    .iter()
+                    .enumerate()
+                    .map(|(i, v)| {
+                        let val = eval_statements(v).as_string();
+
+                        format!("{}[{i}] = 'b{val};", name)
+                    })
+                    .collect::<Vec<_>>();
+                code! {
+                    [0] "initial begin";
+                    [1]     assignments;
+                    [0] "end";
+                }
+            } else {
+                code! {}
+            };
+
             let update_blocks = (0..*write_ports)
                 .map(|port| {
                     let we_index = full_port_width * (port + 1) - 1;
@@ -379,6 +401,7 @@ fn forward_expression_code(binding: &Binding, types: &TypeList, ops: &[ValueName
                 .join("\n");
 
             code! {
+                [0] initial_block;
                 [0] format!("always @(posedge {clk}) begin", clk = op_names[0]);
                 [1]     update_blocks;
                 [0] "end";
@@ -1990,7 +2013,13 @@ mod expression_tests {
             inner: Box::new(Type::Int(6)),
             length: 4,
         };
-        let stmt = statement!(e(0); t; DeclClockedMemory({write_ports: 2, addr_w: 4, inner_w: 6, elems: 16}); e(1), e(2));
+        let stmt = statement!(e(0); t; DeclClockedMemory({
+            write_ports: 2,
+            addr_w: 4,
+            inner_w: 6,
+            elems: 16,
+            initial: None
+        }); e(1), e(2));
 
         // Total write array length: 2 * (1 + 4 + 6)
 
@@ -2024,7 +2053,13 @@ mod expression_tests {
             inner: Box::new(Type::Int(6)),
             length: 4,
         };
-        let stmt = statement!(e(0); t; DeclClockedMemory({write_ports: 1, addr_w: 1, inner_w: 6, elems: 16}); e(1), e(2));
+        let stmt = statement!(e(0); t; DeclClockedMemory({
+            write_ports: 1,
+            addr_w: 1,
+            inner_w: 6,
+            elems: 16,
+            initial: None
+        }); e(1), e(2));
 
         let expected = indoc!(
             r#"
@@ -2053,7 +2088,13 @@ mod expression_tests {
             inner: Box::new(Type::Bool),
             length: 4,
         };
-        let stmt = statement!(e(0); t; DeclClockedMemory({write_ports: 1, addr_w: 4, inner_w: 1, elems: 16}); e(1), e(2));
+        let stmt = statement!(e(0); t; DeclClockedMemory({
+            write_ports: 1,
+            addr_w: 4,
+            inner_w: 1,
+            elems: 16,
+            initial: None
+        }); e(1), e(2));
 
         // Total write array length: 2 * (1 + 4 + 6)
 
@@ -2063,6 +2104,53 @@ mod expression_tests {
             always @(posedge _e_1) begin
                 if (_e_2[5]) begin
                     _e_0[_e_2[4:1]] <= _e_2[0];
+                end
+            end"#
+        );
+
+        assert_same_code!(
+            &statement_code_and_declaration(
+                &stmt,
+                &TypeList::empty(),
+                &CodeBundle::new("".to_string())
+            )
+            .to_string(),
+            expected
+        );
+    }
+
+    #[test]
+    fn decl_clocked_memory_with_initial_works() {
+        let t = Type::Array {
+            inner: Box::new(Type::Int(6)),
+            length: 4,
+        };
+        let stmt = statement!(e(0); t; DeclClockedMemory({
+            write_ports: 2,
+            addr_w: 4,
+            inner_w: 6,
+            elems: 16,
+            initial: Some(vec![
+                vec![statement!(const 10; Type::Int(6); ConstantValue::Int(10))],
+                vec![statement!(const 10; Type::Int(6); ConstantValue::Int(5))],
+            ])
+        }); e(1), e(2));
+
+        // Total write array length: 2 * (1 + 4 + 6)
+
+        let expected = indoc!(
+            r#"
+            logic[23:0] _e_0;
+            initial begin
+                _e_0[0] = 'b001010;
+                _e_0[1] = 'b000101;
+            end
+            always @(posedge _e_1) begin
+                if (_e_2[10]) begin
+                    _e_0[_e_2[9:6]] <= _e_2[5:0];
+                end
+                if (_e_2[21]) begin
+                    _e_0[_e_2[20:17]] <= _e_2[16:11];
                 end
             end"#
         );

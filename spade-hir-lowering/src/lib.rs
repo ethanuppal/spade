@@ -14,6 +14,7 @@ use std::collections::HashMap;
 
 use error::{expect_entity, expect_function, expect_pipeline};
 use hir::expression::CallKind;
+use hir::expression::LocExprExt;
 use local_impl::local_impl;
 
 use hir::param_util::{match_args_with_params, Argument};
@@ -1111,6 +1112,7 @@ impl ExprLocal for Loc<Expression> {
 
         handle_special_functions! {
             ["std", "mem", "clocked_memory"] => handle_clocked_memory_decl,
+            ["std", "mem", "clocked_memory_init"] => handle_clocked_memory_initial_decl,
             ["std", "mem", "read_memory"] => handle_read_memory,
             ["std", "conv", "trunc"] => handle_trunc,
             ["std", "conv", "sext"] => handle_sext,
@@ -1253,6 +1255,25 @@ impl ExprLocal for Loc<Expression> {
         args: &[Argument],
         ctx: &mut Context,
     ) -> Result<StatementList> {
+        self.handle_clocked_memory(result, args, ctx, false)
+    }
+
+    fn handle_clocked_memory_initial_decl(
+        &self,
+        result: StatementList,
+        args: &[Argument],
+        ctx: &mut Context,
+    ) -> Result<StatementList> {
+        self.handle_clocked_memory(result, args, ctx, true)
+    }
+
+    fn handle_clocked_memory(
+        &self,
+        result: StatementList,
+        args: &[Argument],
+        ctx: &mut Context,
+        has_initial: bool,
+    ) -> Result<StatementList> {
         // The localimpl macro is a bit stupid
         let mut result = result;
 
@@ -1270,6 +1291,36 @@ impl ExprLocal for Loc<Expression> {
             }
         } else {
             panic!("Decl memory declares a non-memory")
+        };
+
+        let initial = if has_initial {
+            let initial_arg = &args[2];
+
+            if let Some(witness) = initial_arg.value.runtime_requirement_witness() {
+                return Err(Diagnostic::error(
+                    initial_arg.value,
+                    "Memory initial values must be known at compile time",
+                )
+                .primary_label("Value not known at compile time")
+                .secondary_label(
+                    witness,
+                    "This subexpression can not be computed at compile time",
+                )
+                .into());
+            }
+
+            if let ExprKind::ArrayLiteral(elems) = &initial_arg.value.kind {
+                let values = elems
+                    .iter()
+                    .map(|e| Ok(e.lower(ctx)?.to_vec_no_source_map()))
+                    .collect::<Result<Vec<_>>>()?;
+
+                Some(values)
+            } else {
+                diag_bail!(initial_arg.value, "Memory initial value was not array")
+            }
+        } else {
+            None
         };
 
         // Figure out the sizes of the operands
@@ -1294,9 +1345,13 @@ impl ExprLocal for Loc<Expression> {
                             inner_w,
                             write_ports,
                             elems: elem_count as u64,
+                            initial,
                         },
                         operands: args
                             .iter()
+                            // The third argument (if present) is the initial values which
+                            // are passed in the operand
+                            .take(2)
                             .map(|arg| arg.value.variable(ctx.subs))
                             .collect::<Result<Vec<_>>>()?,
                         ty: ctx

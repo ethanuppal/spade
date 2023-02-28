@@ -120,6 +120,8 @@ pub enum Operator {
         inner_w: u64,
         /// Number of elements in the array
         elems: u64,
+        /// Initial values for the memory. Must be const evaluatable
+        initial: Option<Vec<Vec<Statement>>>,
     },
     /// Index an array with elements of the specified size
     IndexArray,
@@ -214,9 +216,21 @@ impl std::fmt::Display for Operator {
                 addr_w,
                 inner_w,
                 elems,
+                initial,
             } => write!(
                 f,
-                "DeclClockedMemory({write_ports}, {addr_w}, {inner_w}, {elems})"
+                "DeclClockedMemory({write_ports}, {addr_w}, {inner_w}, {elems}{})",
+                if let Some(values) = initial {
+                    format!(
+                        ", [{}]",
+                        values
+                            .iter()
+                            .map(|v| format!("[{}]", v.iter().map(|v| format!("{v}")).join(", ")))
+                            .join(", ")
+                    )
+                } else {
+                    format!("")
+                }
             ),
             Operator::IndexArray => write!(f, "IndexArray"),
             Operator::IndexTuple(idx, _) => write!(f, "IndexTuple({})", idx),
