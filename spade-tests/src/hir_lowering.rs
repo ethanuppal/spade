@@ -1903,6 +1903,41 @@ mod tests {
         build_and_compare_entities!(code, expected);
     }
 
+    #[test]
+    fn struct_method_call_calls_the_right_function_with_named_args() {
+        let code = r#"
+            struct X {}
+            impl X {
+                fn a(self, arg: bool) -> bool {
+                    arg
+                }
+            }
+
+            entity test(x: X) -> bool {
+                x.a$(arg: true)
+            }
+        "#;
+
+        let inst_name = spade_mir::UnitName::from_strs(&["impl_0", "a"]);
+
+        let x_type = Type::Tuple(vec![]);
+        let expected = vec![
+            entity! {&["test"]; (
+                "x", n(0, "x"), x_type.clone(),
+            ) -> Type::Bool; {
+                (const 1; Type::Bool; ConstantValue::Bool(true));
+                (e(0); Type::Bool; Instance((inst_name, None)); n(0, "x"), e(1))
+            } => e(0)},
+            entity! {&["impl_0", "a"]; (
+                "self", n(1, "self"), x_type,
+                "arg", n(2, "arg"), Type::Bool,
+            ) -> Type::Bool; {
+            } => n(2, "arg")},
+        ];
+
+        build_and_compare_entities!(code, expected);
+    }
+
     snapshot_error! {
         instantiating_enum_as_entity_gives_decent_error,
         "

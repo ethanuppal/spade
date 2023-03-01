@@ -1,0 +1,19 @@
+---
+source: spade-tests/src/parser.rs
+---
+fn a() {
+    $if a == 0{
+        let _ = 0;
+        false
+    }
+    true
+}
+
+
+error: Unexpected `false`, expected `}`, or `statement`
+  ┌─ testinput:4:9
+  │
+4 │         false
+  │         ^^^^^ expected `}`, or `statement`
+
+

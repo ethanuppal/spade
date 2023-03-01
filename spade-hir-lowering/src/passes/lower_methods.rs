@@ -1,6 +1,12 @@
-use spade_common::location_info::{Loc, WithLocation};
+use spade_common::{
+    location_info::{Loc, WithLocation},
+    name::Identifier,
+};
 use spade_diagnostics::Diagnostic;
-use spade_hir::{symbol_table::FrozenSymtab, ArgumentList, Expression, ItemList, Statement};
+use spade_hir::{
+    expression::NamedArgument, symbol_table::FrozenSymtab, ArgumentList, Expression, ItemList,
+    Statement,
+};
 use spade_typeinference::{method_resolution::select_method, HasType, TypeState};
 
 use crate::passes::pass::Pass;
@@ -43,7 +49,10 @@ impl<'a> Pass for LowerMethods<'a> {
                 let args = args.map_ref(|args| {
                     let mut new = args.clone();
                     match &mut new {
-                        ArgumentList::Named(_) => todo!(),
+                        ArgumentList::Named(list) => list.push(NamedArgument::Full(
+                            Identifier(String::from("self")).nowhere(),
+                            self_.as_ref().clone(),
+                        )),
                         ArgumentList::Positional(list) => list.insert(0, self_.as_ref().clone()),
                     }
                     new

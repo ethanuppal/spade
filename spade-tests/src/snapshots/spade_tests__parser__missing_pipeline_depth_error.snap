@@ -1,0 +1,18 @@
+---
+source: spade-tests/src/parser.rs
+---
+entity a() -> bool {
+    inst() x()
+}
+
+
+error: Expected pipeline depth
+  ┌─ testinput:2:10
+  │
+2 │     inst() x()
+  │          ^ Expected pipeline depth
+  │
+  = Found )
+  = Pipeline depth can only be fixed integers
+
+

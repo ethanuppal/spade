@@ -817,3 +817,14 @@ snapshot_error! {
         }
     "#
 }
+
+snapshot_error! {
+    good_error_message_on_empty_comptime_expression,
+    "
+        $config X = 0
+        fn a() -> bool {
+            let _ = $if X == 1 {true};
+            true
+        }
+    "
+}

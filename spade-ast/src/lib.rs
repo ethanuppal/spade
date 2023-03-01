@@ -109,7 +109,6 @@ pub enum PipelineStageReference {
     Absolute(Loc<Identifier>),
 }
 
-// FIXME: Migrate entity, pipeline and fn instantiation to this
 #[derive(PartialEq, Debug, Clone)]
 pub enum CallKind {
     Function,

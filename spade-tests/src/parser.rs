@@ -107,3 +107,25 @@ snapshot_error! {
         a.inst b
     }"
 }
+
+snapshot_error! {
+    missing_pipeline_depth_error,
+    "
+        entity a() -> bool {
+            inst() x()
+        }
+    "
+}
+
+snapshot_error! {
+    non_statements_in_statement_comptime_is_error,
+    "
+        fn a() {
+            $if a == 0{
+                let _ = 0;
+                false
+            }
+            true
+        }
+    "
+}

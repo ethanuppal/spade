@@ -28,6 +28,11 @@ pub enum MaybeComptime<T> {
 impl<T> WithLocation for MaybeComptime<T> {}
 
 impl<T> MaybeComptime<T> {
+    /// Transforms a `MaybeComptime<T>` into `T`, transforming the `Comptime` branch
+    /// via the `wrapper function`
+    ///
+    /// For example, this goes from `MaybeComptime<Expression>` to `Expression` where
+    /// comptime branches are mapped to `Expression::Comptime`
     pub fn transpose(self, wrapper: impl Fn(Loc<ComptimeCondition<T>>) -> T) -> T {
         match self {
             MaybeComptime::Raw(inner) => inner,
