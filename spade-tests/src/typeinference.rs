@@ -1,4 +1,4 @@
-use crate::{build_items, snapshot_error};
+use crate::{build_items, build_items_with_stdlib, snapshot_error};
 
 #[test]
 fn type_inference_works_for_arrays() {
@@ -535,4 +535,18 @@ snapshot_error! {
             0
         }
     "
+}
+
+#[test]
+fn rom_is_describable() {
+    let code = "
+        use std::mem::clocked_memory_init;
+        use std::mem::read_memory;
+
+        entity test(clk: clock, idx: int<1>) -> int<8> {
+            let mem: Memory<int<8>, 2> = inst clocked_memory_init(clk, [(true, 0, 0)], [1, 2]);
+            inst read_memory(mem, idx)
+        }
+    ";
+    build_items_with_stdlib(code);
 }

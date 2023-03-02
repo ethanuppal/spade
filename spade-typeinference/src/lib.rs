@@ -543,6 +543,14 @@ impl TypeState {
 
                 self.handle_clocked_memory(num_elements, addr_size, &matched_args, ctx)?
             },
+            // NOTE: the last argument of _init does not need special treatment, so
+            // we can use the same code path for both for now
+            ["std", "mem", "clocked_memory_init"]  => {
+                let num_elements = generic_arg!(0);
+                let addr_size = generic_arg!(2);
+
+                self.handle_clocked_memory(num_elements, addr_size, &matched_args, ctx)?
+            },
             ["std", "mem", "read_memory"]  => {
                 let addr_size = generic_arg!(0);
                 let num_elements = generic_arg!(2);
