@@ -309,7 +309,6 @@ impl TypeState {
                 ConstraintSource::ArrayIndexing
             );
 
-            // self.add_equation(TypedExpression::Id(index.id), int_type.clone());
             self.unify(&index.inner, &int_type, &ctx.symtab)
                 .map_normal_err(|(got, _)| {
                     Error::IndexMustBeInteger{got, loc: index.loc()}

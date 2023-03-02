@@ -2089,7 +2089,7 @@ mod tests {
             entity test(clk: clock, a: int<8>) -> int<8> {
                 // lifeguard spade#151
                 let idx: int<1> = 0;
-                let mem = inst clocked_memory_init(clk, [(false, idx, 0)], [a]);
+                let mem = inst clocked_memory_init(clk, [(false, idx, 0)], [a, a]);
                 inst read_memory(mem, 0)
             }
         "

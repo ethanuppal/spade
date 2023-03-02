@@ -1330,7 +1330,11 @@ impl TypeState {
 
                 if replacement.val < 0 {
                     // lifeguard spade#126
-                    panic!("Inferred a negative integer from constraints");
+                    return Err(UnificationError::NegativeInteger {
+                        got: replacement.val,
+                        inside: replacement.context.inside,
+                        loc,
+                    });
                 }
 
                 let expected_type = &KnownType::Integer(replacement.val as u128);
@@ -1358,7 +1362,10 @@ impl TypeState {
                             loc,
                         });
                     }
-                    Err(e @ UnificationError::FromConstraints { .. }) => return Err(e),
+                    Err(
+                        e @ UnificationError::FromConstraints { .. }
+                        | e @ UnificationError::NegativeInteger { .. },
+                    ) => return Err(e),
                 };
             }
         }

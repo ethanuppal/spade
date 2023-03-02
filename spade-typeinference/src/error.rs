@@ -1,3 +1,4 @@
+use spade_diagnostics::Diagnostic;
 use spade_hir::param_util::ArgumentError;
 use thiserror::Error;
 
@@ -54,7 +55,9 @@ impl<T> UnificationErrorExt<T> for std::result::Result<T, UnificationError> {
                 old_rhs.inside.replace(rhs);
                 Err(UnificationError::Normal((old_lhs, old_rhs)))
             }
-            Err(UnificationError::FromConstraints { .. }) => {
+            Err(
+                UnificationError::FromConstraints { .. } | UnificationError::NegativeInteger { .. },
+            ) => {
                 panic!("Called add_context on a constraint based unfication error")
             }
         }
@@ -78,6 +81,11 @@ impl<T> UnificationErrorExt<T> for std::result::Result<T, UnificationError> {
                 loc,
                 source,
             }),
+            Err(UnificationError::NegativeInteger { got, inside, loc }) => {
+                Err(Diagnostic::bug(loc, "Inferred integer <= 0")
+                    .primary_label(format!("{got} is not > 0 in {inside}"))
+                    .into())
+            }
         }
     }
 }
@@ -91,6 +99,12 @@ pub enum UnificationError {
         expected: UnificationTrace,
         got: UnificationTrace,
         source: ConstraintSource,
+        loc: Loc<()>,
+    },
+    #[error("Negative integer from constraints")]
+    NegativeInteger {
+        got: i128,
+        inside: TypeVar,
         loc: Loc<()>,
     },
 }
