@@ -6,6 +6,7 @@ use crate::CodeBundle;
 pub use codespan_emitter::{codespan_config, CodespanEmitter};
 
 pub mod codespan_emitter;
+mod panik;
 
 /// Something that can format and emit diagnostics.
 pub trait Emitter {

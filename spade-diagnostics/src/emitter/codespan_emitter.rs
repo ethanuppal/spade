@@ -110,6 +110,8 @@ impl Emitter for CodespanEmitter {
             .with_notes(simple_notes)
             .with_subdiagnostics(subdiagnostics);
 
+        eprintln!("{}", super::panik::PANIK);
+
         term::emit(buffer, &codespan_config(), &code.files, &diag).unwrap();
     }
 }
