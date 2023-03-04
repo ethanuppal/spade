@@ -40,7 +40,7 @@ pub fn select_method(
         [name] => name,
         [] => {
             return Err(
-                Diagnostic::error(expr, format!("{type_name} as no method {method}"))
+                Diagnostic::error(expr, format!("{type_name} has no method {method}"))
                     .primary_label("No such method")
                     .into(),
             )
