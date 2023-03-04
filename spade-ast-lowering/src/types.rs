@@ -4,7 +4,7 @@ use spade_ast as ast;
 use spade_common::{location_info::WithLocation, name::Path};
 use spade_hir as hir;
 
-use crate::{visit_type_param, Result, SelfContext};
+use crate::{error::Error, visit_type_param, Result, SelfContext};
 
 pub fn lower_type_declaration(
     decl: &ast::TypeDeclaration,
@@ -119,7 +119,9 @@ impl IsPort for ast::TypeSpec {
             }
             ast::TypeSpec::Array { inner, size: _ } => inner.is_port(symtab),
             ast::TypeSpec::Named(name, _) => {
-                let (_, symbol) = symtab.lookup_type_symbol(name)?;
+                let (_, symbol) = symtab
+                    .lookup_type_symbol(name)
+                    .map_err(|e| Error::SpadeDiagnostic(e.into()))?;
 
                 match &symbol.inner {
                     TypeSymbol::Declared(_, kind) => match kind {

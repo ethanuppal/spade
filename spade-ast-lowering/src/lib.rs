@@ -108,7 +108,9 @@ pub fn visit_type_spec(
     let result = match &t.inner {
         ast::TypeSpec::Named(path, params) => {
             // Lookup the referenced type
-            let (base_id, base_t) = symtab.lookup_type_symbol(path)?;
+            let (base_id, base_t) = symtab
+                .lookup_type_symbol(path)
+                .map_err(|e| Error::SpadeDiagnostic(e.into()))?;
 
             // Check if the type is a declared type or a generic argument.
             match &base_t.inner {
@@ -448,7 +450,10 @@ pub fn visit_impl(
     };
 
     // FIXME: Support impls for generic items
-    let target_name = ctx.symtab.lookup_type_symbol(&block.target)?;
+    let target_name = ctx
+        .symtab
+        .lookup_type_symbol(&block.target)
+        .map_err(|e| Error::SpadeDiagnostic(e.into()))?;
     let ast_type_spec = ast::TypeSpec::Named(block.target.clone(), None).at_loc(&block.target);
     let target_type_spec = visit_type_spec(&ast_type_spec, &mut ctx.symtab)?;
 
@@ -620,7 +625,7 @@ fn try_lookup_enum_variant(path: &Loc<Path>, ctx: &mut Context) -> Result<hir::P
                 .into())
             }
         }
-        Err(e) => Err(e.into()),
+        Err(e) => Err(Error::SpadeDiagnostic(e.into())),
     }
 }
 
@@ -777,7 +782,7 @@ pub fn visit_pattern(p: &ast::Pattern, ctx: &mut Context) -> Result<hir::Pattern
                 // Err(spade_hir::symbol_table::LookupError::NoSuchSymbol(_)) => {
                 //     todo!("Handle new symbols")
                 // }
-                Err(e) => return Err(e.into()),
+                Err(e) => return Err(Error::SpadeDiagnostic(e.into())),
             }
         }
     };
@@ -1038,7 +1043,8 @@ pub fn visit_expression(e: &ast::Expression, ctx: &mut Context) -> Result<hir::E
             Ok(hir::ExprKind::Block(Box::new(visit_block(block, ctx)?)))
         }
         ast::Expression::Call{kind, callee, args} => {
-            let (name_id, _) = ctx.symtab.lookup_unit(callee)?;
+            let (name_id, _) = ctx.symtab.lookup_unit(callee)
+        .map_err(|e| Error::SpadeDiagnostic(e.into()))?;
             let args = visit_argument_list(args, ctx)?.at_loc(args);
 
             let kind = visit_call_kind(kind, ctx)?;
@@ -1050,7 +1056,9 @@ pub fn visit_expression(e: &ast::Expression, ctx: &mut Context) -> Result<hir::E
             let id = ctx.symtab.lookup_variable(path).map_err(|err| match err {
                 LookupError::NotAVariable(path, was) => LookupError::NotAValue(path, was),
                 err => err,
-            })?;
+            })
+        .map_err(|e| Error::SpadeDiagnostic(e.into()))?;
+
 
             Ok(hir::ExprKind::Identifier(id))
         }
@@ -1102,7 +1110,10 @@ pub fn visit_expression(e: &ast::Expression, ctx: &mut Context) -> Result<hir::E
             };
 
             let path = Path(vec![name.clone()]).at_loc(name);
-            let (name_id, declares_name) = match ctx.symtab.try_lookup_variable(&path)? {
+            let (name_id, declares_name) = match ctx.symtab.try_lookup_variable(&path)
+        .map_err(|e| Error::SpadeDiagnostic(e.into()))?
+
+            {
                 Some(id) => (id.at_loc(name), false),
                 None => (ctx.symtab.add_declaration(name.clone())?.at_loc(name), true),
             };

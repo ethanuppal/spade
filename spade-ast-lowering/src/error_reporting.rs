@@ -9,9 +9,6 @@ impl CompilationError for Error {
             Error::ArgumentError(e) => {
                 e.report(buffer, code, diag_handler);
             }
-            Error::LookupError(e) => {
-                e.report(buffer, code, diag_handler);
-            }
             Error::SpadeDiagnostic(diag) => {
                 diag_handler.emit(diag, buffer, code);
             }

@@ -27,8 +27,6 @@ pub(crate) struct PatternListLengthMismatch {
 
 #[derive(Error, Debug, PartialEq, Clone)]
 pub enum Error {
-    #[error("Lookup error")]
-    LookupError(#[from] spade_hir::symbol_table::LookupError),
     #[error("Argument error")]
     ArgumentError(#[from] spade_hir::param_util::ArgumentError),
 

@@ -359,6 +359,12 @@ impl CompilationError for std::io::Error {
     }
 }
 
+impl CompilationError for Diagnostic {
+    fn report(&self, buffer: &mut Buffer, code: &CodeBundle, diag_handler: &mut DiagHandler) {
+        diag_handler.emit(self, buffer, code)
+    }
+}
+
 pub struct DiagHandler {
     emitter: Box<dyn Emitter + Send>,
     // Here we can add more shared state for diagnostics. For example, rustc can

@@ -12,7 +12,7 @@ use spade_ast_lowering::id_tracker::{ExprIdTracker, ImplIdTracker};
 use spade_common::location_info::{Loc, WithLocation};
 use spade_common::name::{Identifier, Path as SpadePath};
 use spade_diagnostics::emitter::CodespanEmitter;
-use spade_diagnostics::{CodeBundle, CompilationError, DiagHandler};
+use spade_diagnostics::{CodeBundle, CompilationError, DiagHandler, Diagnostic};
 use spade_hir::symbol_table::{LookupError, SymbolTable};
 use spade_hir::{symbol_table::FrozenSymtab, ItemList};
 use spade_hir::{TypeSpec, UnitHead};
@@ -147,11 +147,9 @@ impl Spade {
             &mut diag_handler,
         )?;
 
-        let uut_head = Self::lookup_function_like(&uut, state.symtab.symtab()).report_and_convert(
-            &mut error_buffer,
-            &code.read().unwrap(),
-            &mut diag_handler,
-        )?;
+        let uut_head = Self::lookup_function_like(&uut, state.symtab.symtab())
+            .map_err(Diagnostic::from)
+            .report_and_convert(&mut error_buffer, &code.read().unwrap(), &mut diag_handler)?;
 
         if !uut_head.type_params.is_empty() {
             return Err(anyhow!(
@@ -400,11 +398,9 @@ impl Spade {
     fn get_port(&mut self, port: String) -> PyResult<(String, TypeSpec)> {
         let owned = self.owned.as_ref().unwrap();
         let symtab = owned.symtab.symtab();
-        let head = Self::lookup_function_like(&self.uut, &symtab).report_and_convert(
-            &mut self.error_buffer,
-            &self.code,
-            &mut self.diag_handler,
-        )?;
+        let head = Self::lookup_function_like(&self.uut, &symtab)
+            .map_err(Diagnostic::from)
+            .report_and_convert(&mut self.error_buffer, &self.code, &mut self.diag_handler)?;
 
         for (name, ty) in &head.inputs.0 {
             if port == name.0 {

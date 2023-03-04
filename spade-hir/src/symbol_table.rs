@@ -1,7 +1,5 @@
 use std::collections::HashMap;
 
-use codespan_reporting::diagnostic::Diagnostic;
-use codespan_reporting::term::{self, termcolor::Buffer};
 use colored::Colorize;
 use serde::{Deserialize, Serialize};
 use tap::prelude::*;
@@ -9,36 +7,74 @@ use thiserror::Error;
 use tracing::trace;
 
 use spade_common::id_tracker::NameIdTracker;
-use spade_common::location_info::{AsLabel, Loc, WithLocation};
+use spade_common::location_info::{Loc, WithLocation};
 use spade_common::name::{Identifier, NameID, Path};
-use spade_diagnostics::diagnostic::Diagnostic as SpadeDiagnostic;
-use spade_diagnostics::emitter::codespan_config;
-use spade_diagnostics::{CodeBundle, CompilationError, DiagHandler};
+use spade_diagnostics::diagnostic::Diagnostic;
 
 use crate::{FunctionKind, ParameterList, TypeParam, TypeSpec, UnitHead, UnitKind};
 
-#[derive(Error, Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum LookupError {
-    #[error("No such symbol")]
     NoSuchSymbol(Loc<Path>),
-    #[error("Not a type symbol")]
     NotATypeSymbol(Loc<Path>, Thing),
-    #[error("Not a variable")]
     NotAVariable(Loc<Path>, Thing),
-    #[error("Not an entity")]
     NotAUnit(Loc<Path>, Thing),
-    #[error("Not an enum variant")]
     NotAnEnumVariant(Loc<Path>, Thing),
-    #[error("Not a patternable type")]
     NotAPatternableType(Loc<Path>, Thing),
-    #[error("Not a struct")]
     NotAStruct(Loc<Path>, Thing),
-    #[error("Not a value")]
     NotAValue(Loc<Path>, Thing),
-    #[error("Not a comptime value")]
     NotAComptimeValue(Loc<Path>, Thing),
-    #[error("Looked up target which is a type")]
     IsAType(Loc<Path>),
+}
+
+impl From<LookupError> for Diagnostic {
+    fn from(lookup_error: LookupError) -> Diagnostic {
+        match lookup_error {
+            LookupError::NoSuchSymbol(path) => {
+                Diagnostic::error(&path, format!("Use of undeclared name {path}"))
+                    .primary_label("Undeclared name")
+            }
+            LookupError::IsAType(_) => todo!(),
+            _ => {
+                let (path, got) = match &lookup_error {
+                    LookupError::NotATypeSymbol(path, got)
+                    | LookupError::NotAVariable(path, got)
+                    | LookupError::NotAUnit(path, got)
+                    | LookupError::NotAnEnumVariant(path, got)
+                    | LookupError::NotAPatternableType(path, got)
+                    | LookupError::NotAStruct(path, got)
+                    | LookupError::NotAValue(path, got)
+                    | LookupError::NotAComptimeValue(path, got) => (path, got),
+                    LookupError::NoSuchSymbol(_) | LookupError::IsAType(_) => unreachable!(),
+                };
+                let expected = match lookup_error {
+                    LookupError::NotATypeSymbol(_, _) => "a type symbol",
+                    LookupError::NotAVariable(_, _) => "a variable",
+                    LookupError::NotAUnit(_, _) => "a unit",
+                    LookupError::NotAnEnumVariant(_, _) => "an enum variant",
+                    LookupError::NotAPatternableType(_, _) => "a patternable type",
+                    LookupError::NotAStruct(_, _) => "a struct",
+                    LookupError::NotAValue(_, _) => "a value",
+                    LookupError::NotAComptimeValue(_, _) => "a compile time value",
+                    LookupError::NoSuchSymbol(_) | LookupError::IsAType(_) => unreachable!(),
+                };
+                let hint = match lookup_error {
+                    LookupError::NotAComptimeValue(_, _) => {
+                        Some("compile time values can be defined with $config <name> = value")
+                    }
+                    _ => None,
+                };
+                let mut diagnostic =
+                    Diagnostic::error(path, format!("Expected {path} to be {expected}"))
+                        .primary_label(format!("Expected {expected} here"))
+                        .secondary_label(got.loc(), format!("{path} is a {}", got.kind_string()));
+                if let Some(hint) = hint {
+                    diagnostic.add_help(hint);
+                }
+                diagnostic
+            }
+        }
+    }
 }
 
 impl LookupError {
@@ -65,123 +101,6 @@ impl LookupError {
             NotAComptimeValue(_, thing) => (path, thing),
             IsAType(_) => (path),
         }
-    }
-}
-
-impl CompilationError for LookupError {
-    fn report(&self, buffer: &mut Buffer, code: &CodeBundle, _diag_handler: &mut DiagHandler) {
-        let diag = match self {
-            LookupError::NoSuchSymbol(path) => Diagnostic::error()
-                .with_message(format!("Use of undeclared name {}", path))
-                .with_labels(vec![path.primary_label().with_message("Undeclared name")]),
-            LookupError::NotATypeSymbol(path, got) => Diagnostic::error()
-                .with_message(format!("Expected {} to be a type", path))
-                .with_labels(vec![
-                    path.primary_label().with_message(format!("Expected type")),
-                    got.loc().secondary_label().with_message(format!(
-                        "{} is a {}",
-                        path,
-                        got.kind_string()
-                    )),
-                ]),
-            LookupError::NotAVariable(path, got) => Diagnostic::error()
-                .with_message(format!("Expected {} to be a variable", path))
-                .with_labels(vec![
-                    path.primary_label()
-                        .with_message(format!("Expected variable")),
-                    got.loc().secondary_label().with_message(format!(
-                        "{} is a {}",
-                        path,
-                        got.kind_string()
-                    )),
-                ]),
-            LookupError::NotAUnit(path, got) => Diagnostic::error()
-                .with_message(format!("Expected {} to be a unit", path))
-                .with_labels(vec![
-                    path.primary_label().with_message(format!("Expected unit")),
-                    got.loc().secondary_label().with_message(format!(
-                        "{} is a {}",
-                        path,
-                        got.kind_string()
-                    )),
-                ]),
-            LookupError::NotAPatternableType(path, got) => Diagnostic::error()
-                .with_message(format!(
-                    "{} can not be used as a pattern",
-                    got.kind_string()
-                ))
-                .with_labels(vec![
-                    path.primary_label()
-                        .with_message(format!("Expected pattern")),
-                    got.loc().secondary_label().with_message(format!(
-                        "{} is a {}",
-                        path,
-                        got.kind_string()
-                    )),
-                ]),
-            LookupError::NotAnEnumVariant(path, was) => Diagnostic::error()
-                .with_message(format!("Expected {} to be an enum variant", path))
-                .with_labels(vec![
-                    path.primary_label()
-                        .with_message(format!("Expected enum variant")),
-                    was.loc().secondary_label().with_message(format!(
-                        "{} is a {}",
-                        path,
-                        was.kind_string()
-                    )),
-                ]),
-            LookupError::NotAStruct(path, was) => Diagnostic::error()
-                .with_message(format!("Expected {} to be an struct", path))
-                .with_labels(vec![
-                    path.primary_label()
-                        .with_message(format!("Expected struct")),
-                    was.loc().secondary_label().with_message(format!(
-                        "{} is a {}",
-                        path,
-                        was.kind_string()
-                    )),
-                ]),
-            // FIXME: We can do suggestions depending on `was`. For example, a struct/enum variant can be initialized,
-            // an entity can be instantiated, ...
-            LookupError::NotAValue(path, was) => Diagnostic::error()
-                .with_message(format!("Expected {} to be a value", path))
-                .with_labels(vec![
-                    path.primary_label().with_message(format!("Expected value")),
-                    was.loc().secondary_label().with_message(format!(
-                        "{} is a {}",
-                        path,
-                        was.kind_string()
-                    )),
-                ])
-                .with_notes(vec![
-                    "Expected value".to_string(),
-                    format!("Found {}", was.kind_string().to_string()),
-                ]),
-            LookupError::NotAComptimeValue(path, was) => Diagnostic::error()
-                .with_message(format!("Expected {} to be a compile time value", path))
-                .with_labels(vec![
-                    path.primary_label()
-                        .with_message(format!("Expected compile time value")),
-                    was.loc().secondary_label().with_message(format!(
-                        "{} is a {}",
-                        path,
-                        was.kind_string()
-                    )),
-                ])
-                .with_notes(vec![
-                    "Expected value".to_string(),
-                    format!("Found {}", was.kind_string().to_string()),
-                    "Hint: compile time values can be defined with $config <name> = value"
-                        .to_string(),
-                ]),
-            LookupError::IsAType(path) => Diagnostic::error()
-                .with_message(format!("Unexpected type {}", path))
-                .with_labels(vec![path
-                    .primary_label()
-                    .with_message(format!("Unexpected type"))]),
-        };
-
-        term::emit(buffer, &codespan_config(), &code.files, &diag).unwrap();
     }
 }
 
@@ -453,11 +372,7 @@ impl SymbolTable {
     }
 
     #[tracing::instrument(skip_all, fields(?name))]
-    pub fn add_unique_thing(
-        &mut self,
-        name: Loc<Path>,
-        item: Thing,
-    ) -> Result<NameID, SpadeDiagnostic> {
+    pub fn add_unique_thing(&mut self, name: Loc<Path>, item: Thing) -> Result<NameID, Diagnostic> {
         self.ensure_is_unique(&name)?;
         Ok(self.add_thing(name.inner, item))
     }
@@ -490,18 +405,14 @@ impl SymbolTable {
         &mut self,
         name: Loc<Path>,
         t: Loc<TypeSymbol>,
-    ) -> Result<NameID, SpadeDiagnostic> {
+    ) -> Result<NameID, Diagnostic> {
         self.ensure_is_unique(&name)?;
 
         Ok(self.add_type(name.inner, t))
     }
 
     #[tracing::instrument(skip_all, fields(?name, ?target))]
-    pub fn add_alias(
-        &mut self,
-        name: Loc<Path>,
-        target: Loc<Path>,
-    ) -> Result<NameID, SpadeDiagnostic> {
+    pub fn add_alias(&mut self, name: Loc<Path>, target: Loc<Path>) -> Result<NameID, Diagnostic> {
         self.ensure_is_unique(&name)?;
         let absolute_path = if let Some(lib_relative) = target.inner.lib_relative() {
             self.base_namespace.join(lib_relative)
@@ -541,9 +452,9 @@ impl SymbolTable {
         self.add_thing_at_offset(offset, path, Thing::Variable(name))
     }
 
-    pub fn add_declaration(&mut self, ident: Loc<Identifier>) -> Result<NameID, SpadeDiagnostic> {
+    pub fn add_declaration(&mut self, ident: Loc<Identifier>) -> Result<NameID, Diagnostic> {
         let declared_more_than_once = |new, old| {
-            SpadeDiagnostic::error(new, "Variable declared more than once")
+            Diagnostic::error(new, "Variable declared more than once")
                 .primary_label("This variable has been declared more than once")
                 .secondary_label(old, "Previously declared here")
         };
@@ -735,7 +646,7 @@ impl SymbolTable {
     /// Look up the previous definition of `name` returning None if no
     /// such definition exists. Only an absolute path in the root name space is checked
     /// as this is intended to be used for item definitions
-    pub fn ensure_is_unique(&self, name: &Loc<Path>) -> Result<(), SpadeDiagnostic> {
+    pub fn ensure_is_unique(&self, name: &Loc<Path>) -> Result<(), Diagnostic> {
         let full_path = self.current_namespace().join(name.inner.clone());
 
         let prev = self
@@ -751,11 +662,9 @@ impl SymbolTable {
             });
 
         match prev {
-            Some(prev) => Err(
-                SpadeDiagnostic::error(name, "Multiple items with the same name")
-                    .primary_label(format!("{} is defined multiple times", name))
-                    .secondary_label(prev, "Previous definition here"),
-            ),
+            Some(prev) => Err(Diagnostic::error(name, "Multiple items with the same name")
+                .primary_label(format!("{} is defined multiple times", name))
+                .secondary_label(prev, "Previous definition here")),
             None => Ok(()),
         }
     }

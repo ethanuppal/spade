@@ -217,7 +217,17 @@ impl Diagnostic {
     }
 
     /// Attach a simple (one-line) help to this diagnostic.
+    ///
+    /// Builder version of [Self::add_help].
     pub fn help(mut self, message: impl Into<Message>) -> Self {
+        self.add_help(message);
+        self
+    }
+
+    /// Attach a simple (one-line) help to this diagnostic.
+    ///
+    /// Modifying version of [Self::help].
+    pub fn add_help(&mut self, message: impl Into<Message>) -> &mut Self {
         self.subdiagnostics.push(Subdiagnostic::Note {
             level: SubdiagnosticLevel::Help,
             message: message.into(),
