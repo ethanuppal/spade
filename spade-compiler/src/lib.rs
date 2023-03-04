@@ -48,9 +48,6 @@ pub enum Error {
     #[error("parse error")]
     ParseError(#[from] spade_parser::error::Error),
 
-    #[error("ast lowering error")]
-    AstLoweringError(#[from] spade_ast_lowering::error::Error),
-
     #[error("hir lowering error")]
     HirLoweringError(#[from] spade_hir_lowering::error::Error),
 

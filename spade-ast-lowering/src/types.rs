@@ -2,9 +2,10 @@ use hir::symbol_table::{SymbolTable, TypeDeclKind, TypeSymbol};
 use local_impl::local_impl;
 use spade_ast as ast;
 use spade_common::{location_info::WithLocation, name::Path};
+use spade_diagnostics::Diagnostic;
 use spade_hir as hir;
 
-use crate::{error::Error, visit_type_param, Result, SelfContext};
+use crate::{visit_type_param, Result, SelfContext};
 
 pub fn lower_type_declaration(
     decl: &ast::TypeDeclaration,
@@ -49,7 +50,7 @@ pub fn lower_type_declaration(
 
     let kind = match kind {
         ast::TypeDeclKind::Enum(e) => {
-            hir::TypeDeclKind::Enum(e.try_map_ref::<_, crate::Error, _>(|e| {
+            hir::TypeDeclKind::Enum(e.try_map_ref::<_, Diagnostic, _>(|e| {
                 let ast::Enum { name: _, options } = e;
 
                 let options = options
@@ -77,7 +78,7 @@ pub fn lower_type_declaration(
             })?)
         }
         ast::TypeDeclKind::Struct(s) => {
-            hir::TypeDeclKind::Struct(s.try_map_ref::<_, crate::Error, _>(|s| {
+            hir::TypeDeclKind::Struct(s.try_map_ref::<_, Diagnostic, _>(|s| {
                 let ast::Struct {
                     name: _,
                     members,
@@ -119,9 +120,7 @@ impl IsPort for ast::TypeSpec {
             }
             ast::TypeSpec::Array { inner, size: _ } => inner.is_port(symtab),
             ast::TypeSpec::Named(name, _) => {
-                let (_, symbol) = symtab
-                    .lookup_type_symbol(name)
-                    .map_err(|e| Error::SpadeDiagnostic(e.into()))?;
+                let (_, symbol) = symtab.lookup_type_symbol(name)?;
 
                 match &symbol.inner {
                     TypeSymbol::Declared(_, kind) => match kind {

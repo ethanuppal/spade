@@ -1,7 +1,7 @@
 use spade_ast::comptime::{ComptimeCondOp, ComptimeCondition, MaybeComptime};
 use spade_hir::symbol_table::SymbolTable;
 
-use crate::error::{Error, Result};
+use crate::error::Result;
 
 pub trait ComptimeCondExt<T> {
     /// Evaluates the comptime condition returning the resulting ast node. If the else
@@ -15,11 +15,7 @@ impl<T: Clone> ComptimeCondExt<T> for ComptimeCondition<T> {
     fn maybe_unpack(&self, symtab: &SymbolTable) -> Result<Option<T>> {
         let (var, op, val) = &self.condition;
 
-        let var_val = symtab
-            .lookup_comptime_config(var)
-            .map_err(|e| Error::SpadeDiagnostic(e.into()))?
-            .1
-            .inner;
+        let var_val = symtab.lookup_comptime_config(var)?.1.inner;
 
         let result_bool = match op {
             ComptimeCondOp::Eq => var_val == val.inner,

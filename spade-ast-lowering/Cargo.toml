@@ -12,9 +12,6 @@ rust-version.workspace = true
 doctest = false
 
 [dependencies]
-thiserror.workspace = true
-codespan.workspace = true
-codespan-reporting.workspace = true
 tracing.workspace = true
 local-impl.workspace = true
 pretty_assertions.workspace = true

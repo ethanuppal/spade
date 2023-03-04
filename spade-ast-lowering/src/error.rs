@@ -1,6 +1,6 @@
 use spade_common::location_info::Loc;
+use spade_diagnostics::Diagnostic;
 use spade_macros::IntoDiagnostic;
-use thiserror::Error;
 
 pub enum ItemKind {
     Pipeline,
@@ -25,11 +25,4 @@ pub(crate) struct PatternListLengthMismatch {
     pub(crate) at: Loc<()>,
 }
 
-#[derive(Error, Debug, PartialEq, Clone)]
-pub enum Error {
-    // Type related errors
-    #[error("Spade diagnostic")]
-    SpadeDiagnostic(#[from] spade_diagnostics::Diagnostic),
-}
-
-pub type Result<T> = std::result::Result<T, Error>;
+pub type Result<T> = std::result::Result<T, Diagnostic>;

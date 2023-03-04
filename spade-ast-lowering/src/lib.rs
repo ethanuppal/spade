@@ -2,7 +2,6 @@ mod attributes;
 pub mod builtins;
 mod comptime;
 pub mod error;
-pub mod error_reporting;
 pub mod global_symbols;
 pub mod pipelines;
 pub mod types;
@@ -13,8 +12,6 @@ use spade_diagnostics::Diagnostic;
 use tracing::{event, info, Level};
 
 use std::collections::{HashMap, HashSet};
-
-use thiserror::Error;
 
 use comptime::ComptimeCondExt;
 use hir::param_util::ArgumentError;
@@ -34,7 +31,7 @@ use hir::symbol_table::{LookupError, SymbolTable, Thing, TypeSymbol};
 use hir::UnitHead;
 pub use spade_common::id_tracker;
 
-use error::{Error, Result};
+use error::Result;
 
 pub struct Context {
     pub symtab: SymbolTable,
@@ -108,9 +105,7 @@ pub fn visit_type_spec(
     let result = match &t.inner {
         ast::TypeSpec::Named(path, params) => {
             // Lookup the referenced type
-            let (base_id, base_t) = symtab
-                .lookup_type_symbol(path)
-                .map_err(|e| Error::SpadeDiagnostic(e.into()))?;
+            let (base_id, base_t) = symtab.lookup_type_symbol(path)?;
 
             // Check if the type is a declared type or a generic argument.
             match &base_t.inner {
@@ -134,11 +129,11 @@ pub fn visit_type_spec(
                     // can't have generic parameters
 
                     if let Some(params) = params {
-                        Err(Error::SpadeDiagnostic(
+                        Err(
                             Diagnostic::error(params, "Generic arguments given for a generic type")
                                 .primary_label("Generic arguments not allowed here")
                                 .secondary_label(base_t, format!("{path} is a generic type")),
-                        ))
+                        )
                     } else {
                         Ok(hir::TypeSpec::Generic(base_id.at_loc(path)))
                     }
@@ -450,10 +445,7 @@ pub fn visit_impl(
     };
 
     // FIXME: Support impls for generic items
-    let target_name = ctx
-        .symtab
-        .lookup_type_symbol(&block.target)
-        .map_err(|e| Error::SpadeDiagnostic(e.into()))?;
+    let target_name = ctx.symtab.lookup_type_symbol(&block.target)?;
     let ast_type_spec = ast::TypeSpec::Named(block.target.clone(), None).at_loc(&block.target);
     let target_type_spec = visit_type_spec(&ast_type_spec, &mut ctx.symtab)?;
 
@@ -612,20 +604,15 @@ pub fn visit_module_body(
 }
 
 fn try_lookup_enum_variant(path: &Loc<Path>, ctx: &mut Context) -> Result<hir::PatternKind> {
-    match ctx.symtab.lookup_enum_variant(path) {
-        Ok((name_id, variant)) => {
-            if variant.inner.params.argument_num() == 0 {
-                Ok(hir::PatternKind::Type(name_id.at_loc(path), vec![]))
-            } else {
-                Err(Diagnostic::from(error::PatternListLengthMismatch {
-                    expected: variant.inner.params.argument_num(),
-                    got: 0,
-                    at: path.loc(),
-                })
-                .into())
-            }
-        }
-        Err(e) => Err(Error::SpadeDiagnostic(e.into())),
+    let (name_id, variant) = ctx.symtab.lookup_enum_variant(path)?;
+    if variant.inner.params.argument_num() == 0 {
+        Ok(hir::PatternKind::Type(name_id.at_loc(path), vec![]))
+    } else {
+        Err(Diagnostic::from(error::PatternListLengthMismatch {
+            expected: variant.inner.params.argument_num(),
+            got: 0,
+            at: path.loc(),
+        }))
     }
 }
 
@@ -686,109 +673,91 @@ pub fn visit_pattern(p: &ast::Pattern, ctx: &mut Context) -> Result<hir::Pattern
         }
         ast::Pattern::Type(path, args) => {
             // Look up the name to see if it's an enum variant.
-            match ctx.symtab.lookup_patternable_type(path) {
-                Ok((name_id, p)) => {
-                    match &args.inner {
-                        ast::ArgumentPattern::Named(patterns) => {
-                            let mut bound = HashSet::<Loc<Identifier>>::new();
-                            let mut unbound = p
-                                .params
-                                .0
-                                .iter()
-                                .map(|(ident, _)| ident.inner.clone())
-                                .collect::<HashSet<_>>();
+            let (name_id, p) = ctx.symtab.lookup_patternable_type(path)?;
+            match &args.inner {
+                ast::ArgumentPattern::Named(patterns) => {
+                    let mut bound = HashSet::<Loc<Identifier>>::new();
+                    let mut unbound = p
+                        .params
+                        .0
+                        .iter()
+                        .map(|(ident, _)| ident.inner.clone())
+                        .collect::<HashSet<_>>();
 
-                            let mut patterns = patterns
-                                .iter()
-                                .map(|(target, pattern)| {
-                                    let ast_pattern =
-                                        pattern.as_ref().map(|i| i.clone()).unwrap_or_else(|| {
-                                            ast::Pattern::Path(
-                                                Path(vec![target.clone()]).at_loc(&target),
-                                            )
-                                            .at_loc(&target)
-                                        });
-                                    let new_pattern = visit_pattern(&ast_pattern, ctx)?;
-                                    // Check if this is a new binding
-                                    if let Some(prev) = bound.get(target) {
-                                        return Err(Error::SpadeDiagnostic(
-                                            ArgumentError::DuplicateNamedBindings {
-                                                new: target.clone(),
-                                                prev_loc: prev.loc(),
-                                            }
-                                            .into(),
-                                        ));
-                                    }
-                                    bound.insert(target.clone());
-                                    if let None = unbound.take(target) {
-                                        return Err(Error::SpadeDiagnostic(
-                                            ArgumentError::NoSuchArgument {
-                                                name: target.clone(),
-                                            }
-                                            .into(),
-                                        ));
-                                    }
-
-                                    let kind = match pattern {
-                                        Some(_) => hir::ArgumentKind::Named,
-                                        None => hir::ArgumentKind::ShortNamed,
-                                    };
-
-                                    Ok(hir::PatternArgument {
-                                        target: target.clone(),
-                                        value: new_pattern.at_loc(&ast_pattern),
-                                        kind,
-                                    })
-                                })
-                                .collect::<Result<Vec<_>>>()?;
-
-                            if !unbound.is_empty() {
-                                return Err(Error::SpadeDiagnostic(
-                                    ArgumentError::MissingArguments {
-                                        missing: unbound.into_iter().collect(),
-                                        at: args.loc(),
-                                    }
-                                    .into(),
+                    let mut patterns = patterns
+                        .iter()
+                        .map(|(target, pattern)| {
+                            let ast_pattern =
+                                pattern.as_ref().map(|i| i.clone()).unwrap_or_else(|| {
+                                    ast::Pattern::Path(Path(vec![target.clone()]).at_loc(&target))
+                                        .at_loc(&target)
+                                });
+                            let new_pattern = visit_pattern(&ast_pattern, ctx)?;
+                            // Check if this is a new binding
+                            if let Some(prev) = bound.get(target) {
+                                return Err(Diagnostic::from(
+                                    ArgumentError::DuplicateNamedBindings {
+                                        new: target.clone(),
+                                        prev_loc: prev.loc(),
+                                    },
                                 ));
                             }
-
-                            patterns
-                                .sort_by_cached_key(|arg| p.params.arg_index(&arg.target).unwrap());
-
-                            hir::PatternKind::Type(name_id.at_loc(path), patterns)
-                        }
-                        ast::ArgumentPattern::Positional(patterns) => {
-                            // Ensure we have the correct amount of arguments
-                            if p.params.argument_num() != patterns.len() {
-                                return Err(Diagnostic::from(error::PatternListLengthMismatch {
-                                    expected: p.params.argument_num(),
-                                    got: patterns.len(),
-                                    at: args.loc(),
-                                })
-                                .into());
+                            bound.insert(target.clone());
+                            if let None = unbound.take(target) {
+                                return Err(Diagnostic::from(ArgumentError::NoSuchArgument {
+                                    name: target.clone(),
+                                }));
                             }
 
-                            let patterns = patterns
-                                .iter()
-                                .zip(p.params.0.iter())
-                                .map(|(p, arg)| {
-                                    let pat = p.try_map_ref(|p| visit_pattern(p, ctx))?;
-                                    Ok(hir::PatternArgument {
-                                        target: arg.0.clone(),
-                                        value: pat,
-                                        kind: hir::ArgumentKind::Positional,
-                                    })
-                                })
-                                .collect::<Result<Vec<_>>>()?;
+                            let kind = match pattern {
+                                Some(_) => hir::ArgumentKind::Named,
+                                None => hir::ArgumentKind::ShortNamed,
+                            };
 
-                            hir::PatternKind::Type(name_id.at_loc(path), patterns)
-                        }
+                            Ok(hir::PatternArgument {
+                                target: target.clone(),
+                                value: new_pattern.at_loc(&ast_pattern),
+                                kind,
+                            })
+                        })
+                        .collect::<Result<Vec<_>>>()?;
+
+                    if !unbound.is_empty() {
+                        return Err(Diagnostic::from(ArgumentError::MissingArguments {
+                            missing: unbound.into_iter().collect(),
+                            at: args.loc(),
+                        }));
                     }
+
+                    patterns.sort_by_cached_key(|arg| p.params.arg_index(&arg.target).unwrap());
+
+                    hir::PatternKind::Type(name_id.at_loc(path), patterns)
                 }
-                // Err(spade_hir::symbol_table::LookupError::NoSuchSymbol(_)) => {
-                //     todo!("Handle new symbols")
-                // }
-                Err(e) => return Err(Error::SpadeDiagnostic(e.into())),
+                ast::ArgumentPattern::Positional(patterns) => {
+                    // Ensure we have the correct amount of arguments
+                    if p.params.argument_num() != patterns.len() {
+                        return Err(Diagnostic::from(error::PatternListLengthMismatch {
+                            expected: p.params.argument_num(),
+                            got: patterns.len(),
+                            at: args.loc(),
+                        }));
+                    }
+
+                    let patterns = patterns
+                        .iter()
+                        .zip(p.params.0.iter())
+                        .map(|(p, arg)| {
+                            let pat = p.try_map_ref(|p| visit_pattern(p, ctx))?;
+                            Ok(hir::PatternArgument {
+                                target: arg.0.clone(),
+                                value: pat,
+                                kind: hir::ArgumentKind::Positional,
+                            })
+                        })
+                        .collect::<Result<Vec<_>>>()?;
+
+                    hir::PatternKind::Type(name_id.at_loc(path), patterns)
+                }
             }
         }
     };
@@ -804,7 +773,6 @@ fn visit_statement(s: &Loc<ast::Statement>, ctx: &mut Context) -> Result<Vec<Loc
                     ctx.symtab
                         .add_declaration(name.clone())
                         .map(|decl| decl.at_loc(name))
-                        .map_err(Error::SpadeDiagnostic)
                 })
                 .collect::<Result<Vec<_>>>()?;
 
@@ -1049,8 +1017,7 @@ pub fn visit_expression(e: &ast::Expression, ctx: &mut Context) -> Result<hir::E
             Ok(hir::ExprKind::Block(Box::new(visit_block(block, ctx)?)))
         }
         ast::Expression::Call{kind, callee, args} => {
-            let (name_id, _) = ctx.symtab.lookup_unit(callee)
-        .map_err(|e| Error::SpadeDiagnostic(e.into()))?;
+            let (name_id, _) = ctx.symtab.lookup_unit(callee)?;
             let args = visit_argument_list(args, ctx)?.at_loc(args);
 
             let kind = visit_call_kind(kind, ctx)?;
@@ -1062,9 +1029,7 @@ pub fn visit_expression(e: &ast::Expression, ctx: &mut Context) -> Result<hir::E
             let id = ctx.symtab.lookup_variable(path).map_err(|err| match err {
                 LookupError::NotAVariable(path, was) => LookupError::NotAValue(path, was),
                 err => err,
-            })
-        .map_err(|e| Error::SpadeDiagnostic(e.into()))?;
-
+            })?;
 
             Ok(hir::ExprKind::Identifier(id))
         }
@@ -1108,18 +1073,15 @@ pub fn visit_expression(e: &ast::Expression, ctx: &mut Context) -> Result<hir::E
                 ast::PipelineStageReference::Absolute(name) => (
                     pipeline_ctx
                         .get_stage(name)
-                        .ok_or_else(|| Error::SpadeDiagnostic(Diagnostic::error(name, "Undefined pipeline stage")
+                        .ok_or_else(|| Diagnostic::error(name, "Undefined pipeline stage")
                             .primary_label(format!("Can't find pipeline stage '{name}"))
-                        ))?,
+                        )?,
                     name.loc(),
                 ),
             };
 
             let path = Path(vec![name.clone()]).at_loc(name);
-            let (name_id, declares_name) = match ctx.symtab.try_lookup_variable(&path)
-        .map_err(|e| Error::SpadeDiagnostic(e.into()))?
-
-            {
+            let (name_id, declares_name) = match ctx.symtab.try_lookup_variable(&path)? {
                 Some(id) => (id.at_loc(name), false),
                 None => (ctx.symtab.add_declaration(name.clone())?.at_loc(name), true),
             };
@@ -1210,7 +1172,7 @@ fn visit_register(reg: &Loc<ast::Register>, ctx: &mut Context) -> Result<Loc<hir
 /// Ensures that there are no functions in anonymous trait impls that have conflicting
 /// names
 #[tracing::instrument(skip(item_list))]
-pub fn ensure_unique_anonymous_traits(item_list: &hir::ItemList) -> Vec<Error> {
+pub fn ensure_unique_anonymous_traits(item_list: &hir::ItemList) -> Vec<Diagnostic> {
     item_list
         .impls
         .iter()
