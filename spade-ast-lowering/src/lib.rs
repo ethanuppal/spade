@@ -711,18 +711,22 @@ pub fn visit_pattern(p: &ast::Pattern, ctx: &mut Context) -> Result<hir::Pattern
                                     let new_pattern = visit_pattern(&ast_pattern, ctx)?;
                                     // Check if this is a new binding
                                     if let Some(prev) = bound.get(target) {
-                                        return Err(ArgumentError::DuplicateNamedBindings {
-                                            new: target.clone(),
-                                            prev_loc: prev.loc(),
-                                        }
-                                        .into());
+                                        return Err(Error::SpadeDiagnostic(
+                                            ArgumentError::DuplicateNamedBindings {
+                                                new: target.clone(),
+                                                prev_loc: prev.loc(),
+                                            }
+                                            .into(),
+                                        ));
                                     }
                                     bound.insert(target.clone());
                                     if let None = unbound.take(target) {
-                                        return Err(ArgumentError::NoSuchArgument {
-                                            name: target.clone(),
-                                        }
-                                        .into());
+                                        return Err(Error::SpadeDiagnostic(
+                                            ArgumentError::NoSuchArgument {
+                                                name: target.clone(),
+                                            }
+                                            .into(),
+                                        ));
                                     }
 
                                     let kind = match pattern {
@@ -739,11 +743,13 @@ pub fn visit_pattern(p: &ast::Pattern, ctx: &mut Context) -> Result<hir::Pattern
                                 .collect::<Result<Vec<_>>>()?;
 
                             if !unbound.is_empty() {
-                                return Err(ArgumentError::MissingArguments {
-                                    missing: unbound.into_iter().collect(),
-                                    at: args.loc(),
-                                }
-                                .into());
+                                return Err(Error::SpadeDiagnostic(
+                                    ArgumentError::MissingArguments {
+                                        missing: unbound.into_iter().collect(),
+                                        at: args.loc(),
+                                    }
+                                    .into(),
+                                ));
                             }
 
                             patterns

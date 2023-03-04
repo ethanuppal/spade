@@ -4,11 +4,7 @@
 
 use std::collections::HashSet;
 
-use codespan_reporting::diagnostic::Diagnostic;
-use codespan_reporting::term::{self, termcolor::Buffer};
-use spade_common::location_info::AsLabel;
-use spade_diagnostics::emitter::codespan_config;
-use spade_diagnostics::{CodeBundle, CompilationError, DiagHandler};
+use spade_diagnostics::Diagnostic;
 use thiserror::Error;
 
 use spade_common::{location_info::Loc, name::Identifier};
@@ -38,21 +34,18 @@ pub enum ArgumentError {
     },
 }
 
-impl CompilationError for ArgumentError {
-    fn report(&self, buffer: &mut Buffer, code: &CodeBundle, _diag_handler: &mut DiagHandler) {
-        let diag = match self {
-            Self::ArgumentListLengthMismatch { expected, got, at } => Diagnostic::error()
-                .with_message(format!("Expected {} arguments, got {}", expected, got))
-                .with_labels(vec![at
-                    .primary_label()
-                    .with_message(format!("Expected {} arguments", expected))]),
-            Self::NoSuchArgument { name } => Diagnostic::error()
-                .with_message(format!("No such argument: {}", name))
-                .with_labels(vec![name
-                    .primary_label()
-                    .with_message(format!("No such argument"))]),
-            Self::MissingArguments { missing, at } => {
-                let mut missing = missing.clone();
+impl From<ArgumentError> for Diagnostic {
+    fn from(error: ArgumentError) -> Self {
+        match error {
+            ArgumentError::ArgumentListLengthMismatch { expected, got, at } => {
+                Diagnostic::error(at, format!("Expected {expected} arguments, got {got}"))
+                    .primary_label(format!("Expected {expected} arguments"))
+            }
+            ArgumentError::NoSuchArgument { name } => {
+                Diagnostic::error(&name, format!("No such argument: {name}"))
+                    .primary_label("No such argument")
+            }
+            ArgumentError::MissingArguments { mut missing, at } => {
                 let plural = if missing.len() == 1 {
                     "argument"
                 } else {
@@ -63,27 +56,19 @@ impl CompilationError for ArgumentError {
 
                 let arg_list = missing
                     .iter()
-                    .map(|i| format!("{}", i))
+                    .map(|i| format!("{i}"))
                     .collect::<Vec<_>>()
                     .join(", ");
 
-                Diagnostic::error()
-                    .with_message(format!("Missing {}: {}", plural, arg_list))
-                    .with_labels(vec![at
-                        .primary_label()
-                        .with_message(format!("Missing {}: {}", plural, arg_list))])
+                Diagnostic::error(at, format!("Missing {plural}: {arg_list}"))
+                    .primary_label(format!("Missing {plural}: {arg_list}"))
             }
-            Self::DuplicateNamedBindings { new, prev_loc } => Diagnostic::error()
-                .with_message(format!("{} specified multiple times", new))
-                .with_labels(vec![
-                    new.primary_label().with_message("Later specified here"),
-                    prev_loc
-                        .secondary_label()
-                        .with_message(format!("First specified here")),
-                ]),
-        };
-
-        term::emit(buffer, &codespan_config(), &code.files, &diag).unwrap();
+            ArgumentError::DuplicateNamedBindings { new, prev_loc } => {
+                Diagnostic::error(&new, format!("{new} specified multiple times"))
+                    .primary_label("Later specified here")
+                    .secondary_label(prev_loc, "First specified here")
+            }
+        }
     }
 }
 
@@ -92,6 +77,7 @@ pub enum ArgumentKind {
     Named,
     ShortNamed,
 }
+
 pub struct Argument<'a> {
     pub target: &'a Loc<Identifier>,
     pub value: &'a Loc<Expression>,
@@ -173,7 +159,7 @@ pub fn match_args_with_params<'a>(
                         Argument {
                             target,
                             value: expr,
-                            target_type: &target_type,
+                            target_type,
                             kind,
                         },
                     ))

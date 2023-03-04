@@ -26,7 +26,7 @@ impl CompilationError for Error {
     fn report(&self, buffer: &mut Buffer, code: &CodeBundle, diag_handler: &mut DiagHandler) {
         match self {
             Error::ArgumentError(inner) => {
-                inner.report(buffer, code, diag_handler);
+                diag_handler.emit(&inner.clone().into(), buffer, code);
                 return;
             }
             _ => {}

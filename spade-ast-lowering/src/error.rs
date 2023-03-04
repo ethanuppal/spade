@@ -27,9 +27,6 @@ pub(crate) struct PatternListLengthMismatch {
 
 #[derive(Error, Debug, PartialEq, Clone)]
 pub enum Error {
-    #[error("Argument error")]
-    ArgumentError(#[from] spade_hir::param_util::ArgumentError),
-
     // Type related errors
     #[error("Spade diagnostic")]
     SpadeDiagnostic(#[from] spade_diagnostics::Diagnostic),

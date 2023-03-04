@@ -40,7 +40,7 @@ impl CompilationError for Error {
                 return;
             }
             Error::ArgumentError(e) => {
-                e.report(buffer, code, diag_handler);
+                diag_handler.emit(&e.clone().into(), buffer, code);
                 return;
             }
             _ => {}
