@@ -58,6 +58,8 @@ impl From<LookupError> for Diagnostic {
                     LookupError::NotAComptimeValue(_, _) => "a compile time value",
                     LookupError::NoSuchSymbol(_) | LookupError::IsAType(_) => unreachable!(),
                 };
+                // FIXME: We can sometimes do suggestions depending on `got`. For example, a struct/enum variant can be initialized,
+                // an entity can be instantiated, ...
                 let hint = match lookup_error {
                     LookupError::NotAComptimeValue(_, _) => {
                         Some("compile time values can be defined with $config <name> = value")
