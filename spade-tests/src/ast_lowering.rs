@@ -828,3 +828,17 @@ snapshot_error! {
         }
     "
 }
+
+snapshot_error! {
+    enum_variant_pattern_without_arguments,
+    "
+        enum E {
+            Variant { b: bool },
+        }
+
+        fn f(e: E) -> bool {
+            let E::Variant = e;
+            false
+        }
+    "
+}

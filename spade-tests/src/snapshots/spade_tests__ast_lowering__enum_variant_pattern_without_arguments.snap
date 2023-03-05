@@ -1,0 +1,20 @@
+---
+source: spade-tests/src/ast_lowering.rs
+---
+enum E {
+    Variant { b: bool },
+}
+
+fn f(e: E) -> bool {
+    let E::Variant = e;
+    false
+}
+
+
+error: Expected 1 arguments, got 0
+  ┌─ testinput:6:9
+  │
+6 │     let E::Variant = e;
+  │         ^^^^^^^^^^ Expected 1 arguments here
+
+
