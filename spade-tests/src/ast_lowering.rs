@@ -667,7 +667,7 @@ snapshot_error! {
         impl X {
             // NOTE: This error should change once
             // pipelines as methods are added
-            pipeline(1) x(self, x: bool) -> bool __builtin__ 
+            pipeline(1) x(self, x: bool) -> bool __builtin__
         }
     "
 }
