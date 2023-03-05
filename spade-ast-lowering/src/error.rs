@@ -21,7 +21,7 @@ pub(crate) struct WireOfPort {
 pub(crate) struct PatternListLengthMismatch {
     pub(crate) expected: usize,
     pub(crate) got: usize,
-    #[diagnostic(primary, "Expected {} arguments here", diag.expected)]
+    #[diagnostic(primary, "Expected {} argument{} here", diag.expected, if diag.expected == 1 { "" } else { "s" })]
     pub(crate) at: Loc<()>,
 }
 
