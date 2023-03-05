@@ -608,11 +608,24 @@ fn try_lookup_enum_variant(path: &Loc<Path>, ctx: &mut Context) -> Result<hir::P
     if variant.inner.params.argument_num() == 0 {
         Ok(hir::PatternKind::Type(name_id.at_loc(path), vec![]))
     } else {
+        let expected = variant.inner.params.argument_num();
         Err(Diagnostic::from(error::PatternListLengthMismatch {
-            expected: variant.inner.params.argument_num(),
+            expected,
             got: 0,
             at: path.loc(),
-        }))
+        })
+        // FIXME: actual names of variant arguments?
+        .span_suggest_insert_after(
+            "help: Add arguments here",
+            path.loc(),
+            format!(
+                "({})",
+                std::iter::repeat("_")
+                    .take(expected)
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ),
+        ))
     }
 }
 

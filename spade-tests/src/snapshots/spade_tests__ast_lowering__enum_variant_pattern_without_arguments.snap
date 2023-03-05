@@ -16,5 +16,10 @@ error: Expected 1 arguments, got 0
   │
 6 │     let E::Variant = e;
   │         ^^^^^^^^^^ Expected 1 arguments here
+  │
+  = help: Add arguments here
+  │
+6 │     let E::Variant(_) = e;
+  │                   +++
 
 
