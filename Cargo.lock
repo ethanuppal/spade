@@ -934,6 +934,7 @@ checksum = "a507befe795404456341dfab10cef66ead4c041f62b8b11bbb92bffe5d0953e0"
 name = "spade"
 version = "0.1.0"
 dependencies = [
+ "atty",
  "clap",
  "codespan",
  "codespan-reporting 0.12.0",

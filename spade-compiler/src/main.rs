@@ -95,7 +95,7 @@ fn main() -> Result<()> {
         )
         .collect();
 
-    let mut buffer = if opts.no_color {
+    let mut buffer = if opts.no_color || atty::isnt(atty::Stream::Stderr) {
         Buffer::no_color()
     } else {
         Buffer::ansi() // FIXME: Use `Buffer::console()` on windows?
