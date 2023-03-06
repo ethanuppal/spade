@@ -1,13 +1,15 @@
+use std::io::Write;
+
 use codespan_reporting::diagnostic::{
     Diagnostic as CodespanDiagnostic, SpannedNote, Subdiagnostic as CodespanSubdiagnostic,
     Suggestion, SuggestionPart,
 };
-use codespan_reporting::term::termcolor::{Color, ColorChoice, ColorSpec};
+use codespan_reporting::term::termcolor::{Color, ColorChoice, ColorSpec, WriteColor};
 use codespan_reporting::term::{self, termcolor::Buffer};
 
 use spade_common::location_info::AsLabel;
 
-use crate::diagnostic::Subdiagnostic;
+use crate::diagnostic::{DiagnosticLevel, Subdiagnostic};
 use crate::{CodeBundle, Diagnostic, Emitter};
 
 pub fn color_choice(no_color: bool) -> ColorChoice {
@@ -39,6 +41,7 @@ pub struct CodespanEmitter;
 impl Emitter for CodespanEmitter {
     fn emit_diagnostic(&mut self, diag: &Diagnostic, buffer: &mut Buffer, code: &CodeBundle) {
         let severity = diag.level.severity();
+        let is_bug = diag.level == DiagnosticLevel::Bug;
         let message = diag.labels.message.as_str();
         let primary_label = if let Some(primary_label_message) = diag.labels.primary_label.as_ref()
         {
@@ -110,7 +113,10 @@ impl Emitter for CodespanEmitter {
             .with_notes(simple_notes)
             .with_subdiagnostics(subdiagnostics);
 
-        eprintln!("{}", super::panik::PANIK);
+        if buffer.supports_color() && is_bug {
+            // Ignore errors from trying to print the panik.
+            let _ = writeln!(buffer, "{}", super::panik::PANIK);
+        }
 
         term::emit(buffer, &codespan_config(), &code.files, &diag).unwrap();
     }
