@@ -188,8 +188,8 @@ pub trait LocExprExt {
 }
 
 impl LocExprExt for Loc<Expression> {
-    /// Checks if the expression is evaluatable at compile time, returning a Loc of
-    /// a (sub)-expression which requires runtime, and None if it is comptime valuatable.
+    /// Checks if the expression is evaluable at compile time, returning a Loc of
+    /// a (sub)-expression which requires runtime, and None if it is comptime evaluable.
     ///
     /// If this method returns None, `.eval()` on the resulting list of mir statements is
     /// guaranteed to work
