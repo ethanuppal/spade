@@ -1,0 +1,21 @@
+---
+source: spade-tests/src/hir_lowering.rs
+---
+fn ff() -> bool { true }
+
+pipeline(1) f(clk: clock) -> bool {
+    reg;
+        stage(-1).ff
+}
+
+
+error: Expected ff to be a variable
+  ┌─ testinput:5:19
+  │
+1 │ fn ff() -> bool { true }
+  │ ------------------------ ff is a unit
+  ·
+5 │         stage(-1).ff
+  │                   ^^ Expected a variable here
+
+

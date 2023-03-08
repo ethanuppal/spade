@@ -1,0 +1,21 @@
+---
+source: spade-tests/src/hir_lowering.rs
+---
+fn ff() -> bool { true }
+
+entity f(clk: clock) -> bool {
+    let a = ff;
+    true
+}
+
+
+error: Expected ff to be a value
+  ┌─ testinput:4:13
+  │
+1 │ fn ff() -> bool { true }
+  │ ------------------------ ff is a unit
+  ·
+4 │     let a = ff;
+  │             ^^ Expected a value here
+
+

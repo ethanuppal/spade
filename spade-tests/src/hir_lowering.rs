@@ -1853,6 +1853,51 @@ mod tests {
         "
     }
 
+    snapshot_error! {
+        expected_unit,
+        "
+            fn f() -> bool {
+                let x = 0;
+                x()
+            }
+        "
+    }
+
+    snapshot_error! {
+        expected_type_symbol,
+        "
+            fn f() -> bool {
+                let A = false;
+                let a: A = false;
+                false
+            }
+        "
+    }
+
+    snapshot_error! {
+    expected_value,
+    "
+            fn ff() -> bool { true }
+
+            entity f(clk: clock) -> bool {
+                let a = ff;
+                true
+            }
+        "
+    }
+
+    snapshot_error! {
+        expected_variable,
+        "
+            fn ff() -> bool { true }
+
+            pipeline(1) f(clk: clock) -> bool {
+                reg;
+                    stage(-1).ff
+            }
+        "
+    }
+
     #[test]
     fn assigning_ports_to_variables_works() {
         let code = r#"
