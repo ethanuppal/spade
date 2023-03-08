@@ -29,24 +29,23 @@ pub enum LookupError {
 
 impl From<LookupError> for Diagnostic {
     fn from(lookup_error: LookupError) -> Diagnostic {
-        match lookup_error {
+        match &lookup_error {
             LookupError::NoSuchSymbol(path) => {
-                Diagnostic::error(&path, format!("Use of undeclared name {path}"))
+                Diagnostic::error(path, format!("Use of undeclared name {path}"))
                     .primary_label("Undeclared name")
             }
-            LookupError::IsAType(_) => todo!(),
-            _ => {
-                let (path, got) = match &lookup_error {
-                    LookupError::NotATypeSymbol(path, got)
-                    | LookupError::NotAVariable(path, got)
-                    | LookupError::NotAUnit(path, got)
-                    | LookupError::NotAnEnumVariant(path, got)
-                    | LookupError::NotAPatternableType(path, got)
-                    | LookupError::NotAStruct(path, got)
-                    | LookupError::NotAValue(path, got)
-                    | LookupError::NotAComptimeValue(path, got) => (path, got),
-                    LookupError::NoSuchSymbol(_) | LookupError::IsAType(_) => unreachable!(),
-                };
+            LookupError::IsAType(path) => {
+                Diagnostic::error(path, format!("Unexpected type {path}"))
+                    .primary_label("Unexpected type")
+            }
+            LookupError::NotATypeSymbol(path, got)
+            | LookupError::NotAVariable(path, got)
+            | LookupError::NotAUnit(path, got)
+            | LookupError::NotAnEnumVariant(path, got)
+            | LookupError::NotAPatternableType(path, got)
+            | LookupError::NotAStruct(path, got)
+            | LookupError::NotAValue(path, got)
+            | LookupError::NotAComptimeValue(path, got) => {
                 let expected = match lookup_error {
                     LookupError::NotATypeSymbol(_, _) => "a type symbol",
                     LookupError::NotAVariable(_, _) => "a variable",
