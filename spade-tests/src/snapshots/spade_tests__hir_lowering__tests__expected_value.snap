@@ -16,6 +16,6 @@ error: Expected ff to be a value
   │ ------------------------ ff is a unit
   ·
 4 │     let a = ff;
-  │             ^^ Expected a value here
+  │             ^^ Expected a value
 
 

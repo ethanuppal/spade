@@ -13,6 +13,6 @@ error: Expected x to be a unit
 2 │     let x = 0;
   │         - x is a variable
 3 │     x()
-  │     ^ Expected a unit here
+  │     ^ Expected a unit
 
 

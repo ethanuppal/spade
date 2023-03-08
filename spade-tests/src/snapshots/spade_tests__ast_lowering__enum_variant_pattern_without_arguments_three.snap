@@ -15,7 +15,7 @@ error: Expected 3 arguments, got 0
   ┌─ testinput:6:9
   │
 6 │     let E::Variant = e;
-  │         ^^^^^^^^^^ Expected 3 arguments here
+  │         ^^^^^^^^^^ Expected 3 arguments for this enum variant
   │
   = help: Add arguments here
   │

@@ -16,6 +16,6 @@ error: Expected ff to be a variable
   │ ------------------------ ff is a unit
   ·
 5 │         stage(-1).ff
-  │                   ^^ Expected a variable here
+  │                   ^^ Expected a variable
 
 

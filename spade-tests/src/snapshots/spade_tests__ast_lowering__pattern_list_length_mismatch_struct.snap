@@ -17,6 +17,6 @@ error: Expected 2 arguments, got 3
   ┌─ testinput:7:10
   │
 7 │     let X(a, b, c) = x;
-  │          ^^^^^^^^^ Expected 2 arguments here
+  │          ^^^^^^^^^ Expected 2 arguments
 
 

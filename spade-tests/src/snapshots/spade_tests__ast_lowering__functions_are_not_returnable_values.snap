@@ -15,6 +15,6 @@ error: Expected f to be a value
   │ ----------------------- f is a unit
 2 │ fn main() -> bool {
 3 │     let x = f;
-  │             ^ Expected a value here
+  │             ^ Expected a value
 
 

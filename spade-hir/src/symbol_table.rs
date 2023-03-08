@@ -67,7 +67,7 @@ impl From<LookupError> for Diagnostic {
                 };
                 let mut diagnostic =
                     Diagnostic::error(path, format!("Expected {path} to be {expected}"))
-                        .primary_label(format!("Expected {expected} here"))
+                        .primary_label(format!("Expected {expected}"))
                         .secondary_label(got.loc(), format!("{path} is a {}", got.kind_string()));
                 if let Some(hint) = hint {
                     diagnostic.add_help(hint);

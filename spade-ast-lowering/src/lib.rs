@@ -613,6 +613,7 @@ fn try_lookup_enum_variant(path: &Loc<Path>, ctx: &mut Context) -> Result<hir::P
             expected,
             got: 0,
             at: path.loc(),
+            for_what: Some("enum variant".to_string()),
         })
         // FIXME: actual names of variant arguments?
         .span_suggest_insert_after(
@@ -753,6 +754,7 @@ pub fn visit_pattern(p: &ast::Pattern, ctx: &mut Context) -> Result<hir::Pattern
                             expected: p.params.argument_num(),
                             got: patterns.len(),
                             at: args.loc(),
+                            for_what: None,
                         }));
                     }
 

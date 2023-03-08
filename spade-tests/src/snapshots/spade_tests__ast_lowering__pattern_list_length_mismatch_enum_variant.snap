@@ -16,6 +16,6 @@ error: Expected 2 arguments, got 3
   ┌─ testinput:7:13
   │
 7 │         X::A(one, two, three) => x
-  │             ^^^^^^^^^^^^^^^^^ Expected 2 arguments here
+  │             ^^^^^^^^^^^^^^^^^ Expected 2 arguments
 
 

@@ -14,6 +14,6 @@ error: Expected A to be a type symbol
 2 │     let A = false;
   │         - A is a variable
 3 │     let a: A = false;
-  │            ^ Expected a type symbol here
+  │            ^ Expected a type symbol
 
 
