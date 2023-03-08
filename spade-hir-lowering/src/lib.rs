@@ -1020,7 +1020,8 @@ impl ExprLocal for Loc<Expression> {
             }
             ExprKind::Call { kind, callee, args } => {
                 let head = ctx.symtab.symtab().unit_by_id(callee);
-                let args = match_args_with_params(args, &head.inputs, false)?;
+                let args =
+                    match_args_with_params(args, &head.inputs, false).map_err(Diagnostic::from)?;
 
                 match (kind, &head.unit_kind.inner) {
                     (CallKind::Function, UnitKind::Function(_))

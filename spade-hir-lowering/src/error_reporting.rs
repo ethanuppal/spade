@@ -39,15 +39,10 @@ impl CompilationError for Error {
                 underlying.report(buffer, code, diag_handler);
                 return;
             }
-            Error::ArgumentError(e) => {
-                diag_handler.emit(&e.clone().into(), buffer, code);
-                return;
-            }
             _ => {}
         }
 
         let diag = match self {
-            Error::ArgumentError(_) => unreachable!(),
             Error::UnificationError(_) => unreachable!(),
             Error::ConcatSizeMismatch {
                 lhs,

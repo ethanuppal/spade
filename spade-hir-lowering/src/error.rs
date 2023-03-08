@@ -7,8 +7,6 @@ use crate::usefulness::Witness;
 
 #[derive(Error, Debug)]
 pub enum Error {
-    #[error("(Internal) Argument error")]
-    ArgumentError(#[from] spade_hir::param_util::ArgumentError),
     #[error("concat size mismatch")]
     ConcatSizeMismatch {
         lhs: Loc<u64>,
