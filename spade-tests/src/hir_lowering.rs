@@ -1875,8 +1875,8 @@ mod tests {
     }
 
     snapshot_error! {
-    expected_value,
-    "
+        expected_value,
+        "
             fn ff() -> bool { true }
 
             entity f(clk: clock) -> bool {
@@ -1894,6 +1894,16 @@ mod tests {
             pipeline(1) f(clk: clock) -> bool {
                 reg;
                     stage(-1).ff
+            }
+        "
+    }
+
+    snapshot_error! {
+        is_a_type_bool,
+        "
+            fn f() -> bool {
+                let a = bool;
+                bool
             }
         "
     }

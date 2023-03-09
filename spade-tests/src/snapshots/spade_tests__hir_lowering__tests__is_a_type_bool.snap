@@ -1,0 +1,16 @@
+---
+source: spade-tests/src/hir_lowering.rs
+---
+fn f() -> bool {
+    let a = bool;
+    bool
+}
+
+
+error: Unexpected type bool
+  ┌─ testinput:2:13
+  │
+2 │     let a = bool;
+  │             ^^^^ Unexpected type
+
+
