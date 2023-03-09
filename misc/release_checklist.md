@@ -7,17 +7,28 @@ take the opportunity to highlight other stuff that normally doesn't fit in a blo
 
 ## Pre release procedure
 
-- [ ] Update changelog
-    - [ ] Bump [unreleased] to [x.y.z].
-    - [ ] Make sure the version header links to the diff between this and the previous version
+- [ ] Spade
+    - [ ] Update changelog
+        - [ ] Bump [unreleased] to [x.y.z].
+        - [ ] Make sure the version header links to the diff between this and the previous version
+- [ ] Swim
+    - [ ] Update changelog
+        - [ ] Bump [unreleased] to [x.y.z].
+        - [ ] Make sure the version header links to the diff between this and the previous version
 
 ## Release
 
-- [ ] Merge changelog update MR
+- [ ] Merge changelog update MRs
+    - [ ] Spade
+    - [ ] Swim
 - [ ] Tag resulting commit as `vX.Y.Z`
+    - [ ] Spade
+    - [ ] Swim
 - [ ] Push tags
+    - [ ] Spade
+    - [ ] Swim
 - [ ] Do a release on gitlab
-- [ ] Upload release to zenodo
+- [ ] Upload Spade release to zenodo
 - [ ] Update release blog post MR with link to relevant changelog section. Merge blog
 
 ## Post release
