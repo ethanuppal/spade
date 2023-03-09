@@ -1,11 +1,3 @@
-## Summary
-
-...
-
-## Description
-
-...
-
 ## Author checklist
 
 - [ ] New Diagnostics have at least one snapshot test that triggers it
