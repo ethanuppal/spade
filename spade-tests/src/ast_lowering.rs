@@ -856,3 +856,31 @@ snapshot_error! {
         }
     "
 }
+
+snapshot_error! {
+    negative_pipeline_depth_is_disallowed,
+    "pipeline(-1) x() -> bool {
+        true
+    }"
+}
+
+snapshot_error! {
+    negative_pipeline_inst_is_disallowed,
+    "
+    pipeline(0) y(clk: clock) -> bool {
+        true
+    }
+    pipeline(0) x(clk: clock) -> bool {
+        inst(-1) y(clk)
+    }"
+}
+
+snapshot_error! {
+    negative_reg_counts_are_disallowed,
+    "
+        pipeline(0) x(clk: clock) -> bool {
+            reg*-10;
+                true
+        }
+    "
+}

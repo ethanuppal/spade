@@ -395,7 +395,7 @@ impl<'a> Parser<'a> {
                 } else {
                     return Err(Error::UnexpectedToken {
                         got: next,
-                        expected: vec!["integer", "'"],
+                        expected: vec!["integer", "identifier"],
                     });
                 };
                 let offset = num.map(IntLiteral::as_signed);
@@ -725,7 +725,7 @@ impl<'a> Parser<'a> {
                         })?
                         .to_usize()
                         .ok_or_else(|| {
-                            Diagnostic::error(&val, "Excessive number of registers").primary_label(
+                            Diagnostic::bug(&val, "Excessive number of registers").primary_label(
                                 format!("At most {} registers are supported", usize::MAX),
                             )
                         })?

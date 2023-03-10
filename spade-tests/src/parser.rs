@@ -89,6 +89,13 @@ snapshot_error! {
     }"
 }
 
+snapshot_error! {
+    negative_tuple_index_error,
+    "fn a() -> int<10> {
+        x#-10
+    }"
+}
+
 #[test]
 fn three_generic_end_chars_work() {
     let code = r#"

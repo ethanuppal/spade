@@ -1,0 +1,16 @@
+---
+source: spade-tests/src/ast_lowering.rs
+---
+pipeline(0) x(clk: clock) -> bool {
+    reg*-10;
+        true
+}
+
+
+error: Negative number of registers
+  ┌─ testinput:2:9
+  │
+2 │     reg*-10;
+  │         ^^^ Expected positive number of stages
+
+
