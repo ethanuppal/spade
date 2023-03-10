@@ -13,11 +13,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Added
 
+- [!155][!155] Support for specifying initial content of memories.
+
 ### Fixed
+
+- [!156][!156] Report an internal error when inferring negative widths instead of panicking
 
 ### Changed
 
 ### Removed
+
+[!155]: https://gitlab.com/spade-lang/spade/-/merge_requests/155
+[!156]: https://gitlab.com/spade-lang/spade/-/merge_requests/155
 
 ## [0.1.0] - 2023-03-07
 
