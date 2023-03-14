@@ -1,0 +1,24 @@
+---
+source: spade-tests/src/parser.rs
+---
+use conv::trunc;
+
+entity counter(clk: clock, rst: bool, max: int<8>) -> int<8> {
+    reg(clk) value reset (rst: 0) =
+        if value == max {
+            0
+        }
+        else {
+            conv::trunc(value + 1)
+        };
+    value
+}
+
+
+error: Use of undeclared name conv::trunc
+  ┌─ testinput:9:13
+  │
+9 │             conv::trunc(value + 1)
+  │             ^^^^^^^^^^^ Undeclared name
+
+

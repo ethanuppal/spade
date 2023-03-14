@@ -161,3 +161,21 @@ snapshot_error! {
     empty_file_is_valid,
     ""
 }
+
+snapshot_error! {
+    using_empty_identifier,
+    "
+    use conv::trunc;
+
+    entity counter(clk: clock, rst: bool, max: int<8>) -> int<8> {
+        reg(clk) value reset (rst: 0) =
+            if value == max {
+                0
+            }
+            else {
+                conv::trunc(value + 1)
+            };
+        value
+    }
+    "
+}
