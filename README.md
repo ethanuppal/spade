@@ -43,10 +43,6 @@ https://gitlab.com/spade-lang/spade`.
 That will install a `spade` binary to your [cargo
 home](https://doc.rust-lang.org/book/ch14-04-installing-binaries.html).
 
-If you are interested in contributing to spade, the
-[ARCHITECTURE.md](ARCHITECTURE.md) document is a good place to start. It gives
-an overview of the inner workings of the compiler.
-
 ## Editor integration
 
 There are editor plugins for syntax highlighting available for some editors
@@ -73,6 +69,9 @@ for your favourite editor, feel free to add it to the list!
 
 If you are interested in using or contributing to Spade, feel free to join our
 [discord group](https://discord.gg/YtXbeamxEX).
+
+The [ARCHITECTURE.md](ARCHITECTURE.md) document is a good place to start. It gives
+a high level overview of the inner workings of the compiler.
 
 Spade is currently being developed as an Open Source project at the Department
 of Electrical Engineering at Linköping university.
