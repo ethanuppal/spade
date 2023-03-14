@@ -777,9 +777,19 @@ impl SymbolTable {
                             // i.e. `mod a {use x;}` looks up `a::x`
                             let path_in_namespace = in_namespace.join(full_path.clone());
 
-                            return self
-                                .try_lookup_id(&path_in_namespace.at_loc(name))
-                                .or_else(|| self.try_lookup_id(&full_path.at_loc(name)));
+                            // Avoid an infinite loop if we search for the same thing again.
+                            return if path_in_namespace == name.inner {
+                                None
+                            } else {
+                                self.try_lookup_id(&path_in_namespace.at_loc(name))
+                            }
+                            .or_else(|| {
+                                if full_path == name.inner {
+                                    None
+                                } else {
+                                    self.try_lookup_id(&full_path.at_loc(name))
+                                }
+                            });
                         }
                         _ => {}
                     }
