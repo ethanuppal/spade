@@ -179,3 +179,13 @@ snapshot_error! {
     }
     "
 }
+
+snapshot_error! {
+    square_wave_readme_example,
+    "
+    entity square_wave(clk: clock, rst: bool) -> bool {
+        reg(clk) value reset (rst: false) = !value;
+        value
+    }
+    "
+}

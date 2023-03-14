@@ -1,0 +1,10 @@
+---
+source: spade-tests/src/parser.rs
+---
+entity square_wave(clk: clock, rst: bool) -> bool {
+    reg(clk) value reset (rst: false) = !value;
+    value
+}
+
+
+

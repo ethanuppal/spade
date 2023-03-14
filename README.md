@@ -10,14 +10,8 @@ level control of the hardware.
 ## Code examples
 
 ```
-entity counter(clk: clock, rst: bool, max: int<8>) -> int<8> {
-    reg(clk) value reset (rst: 0) =
-        if value == max {
-            0
-        }
-        else {
-            value + 1
-        };
+entity square_wave(clk: clock, rst: bool) -> bool {
+    reg(clk) value reset (rst: false) = !value;
     value
 }
 ```
@@ -70,7 +64,7 @@ for your favourite editor, feel free to add it to the list!
 If you are interested in using or contributing to Spade, feel free to join our
 [discord group](https://discord.gg/YtXbeamxEX).
 
-The [ARCHITECTURE.md](ARCHITECTURE.md) document is a good place to start. It gives
+If you want to understand the compiler, the [ARCHITECTURE.md](ARCHITECTURE.md) document is a good place to start. It gives
 a high level overview of the inner workings of the compiler.
 
 Spade is currently being developed as an Open Source project at the Department
