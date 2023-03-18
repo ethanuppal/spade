@@ -163,7 +163,7 @@ snapshot_error! {
 }
 
 snapshot_error! {
-    using_empty_identifier,
+    using_empty_identifier_a,
     "
     use conv::trunc;
 
@@ -181,11 +181,33 @@ snapshot_error! {
 }
 
 snapshot_error! {
-    square_wave_readme_example,
+    using_empty_identifier_b,
     "
-    entity square_wave(clk: clock, rst: bool) -> bool {
-        reg(clk) value reset (rst: false) = !value;
+    use conv;
+
+    entity counter(clk: clock, rst: bool, max: int<8>) -> int<8> {
+        reg(clk) value reset (rst: 0) =
+            if value == max {
+                0
+            }
+            else {
+                conv::trunc(value + 1)
+            };
         value
     }
     "
 }
+
+
+#[test]
+fn square_wave_readme_example() {
+    let code = r#"
+    entity square_wave(clk: clock, rst: bool) -> bool {
+       reg(clk) value reset (rst: false) = !value;
+        value
+    }
+    "#;
+
+    build_items(code);
+}
+
