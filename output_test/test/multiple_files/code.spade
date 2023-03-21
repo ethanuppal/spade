@@ -1,5 +1,3 @@
-use std::conv::trunc;
-
 entity counter(test_case: int<8>) -> int<8> {
     let input = if test_case == 0 {
         TestEnum::Lonely()

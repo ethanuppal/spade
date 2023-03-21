@@ -1,7 +1,6 @@
 ---
 source: spade-tests/src/hir_lowering.rs
 ---
-use std::conv::trunc;
 fn main() -> int<8> {
     let a: int<4> = 0;
     let b: int<8> = std::conv::trunc(a);
@@ -10,9 +9,9 @@ fn main() -> int<8> {
 
 
 error: Truncating to a larger value
-  ┌─ testinput:4:38
+  ┌─ testinput:3:38
   │
-4 │     let b: int<8> = std::conv::trunc(a);
+3 │     let b: int<8> = std::conv::trunc(a);
   │                     -----------------^-
   │                     │                │
   │                     │                This value is 4 bytes

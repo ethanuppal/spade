@@ -1,6 +1,3 @@
-use std::conv::trunc;
-use std::conv::sext;
-
 entity uut(inval: int<8>) -> (int<16>, int<4>) {
     (sext(inval), trunc(inval))
 }

@@ -133,12 +133,24 @@ struct CodegenArtefacts {
 
 #[tracing::instrument(skip_all)]
 pub fn compile(
-    sources: Vec<(ModuleNamespace, String, String)>,
+    mut sources: Vec<(ModuleNamespace, String, String)>,
+    include_stdlib_and_prelude: bool,
     opts: Opt,
     diag_handler: DiagHandler,
 ) -> Result<Artefacts, UnfinishedArtefacts> {
     let mut symtab = SymbolTable::new();
     let mut item_list = ItemList::new();
+
+    let sources = if include_stdlib_and_prelude {
+        // We want to build stdlib and prelude before building user code,
+        // to give `previously defined <here>` pointing into user code, instead
+        // of stdlib code
+        let mut all_sources = stdlib_and_prelude();
+        all_sources.append(&mut sources);
+        all_sources
+    } else {
+        sources
+    };
 
     spade_ast_lowering::builtins::populate_symtab(&mut symtab, &mut item_list);
 
@@ -480,5 +492,75 @@ fn codegen(
         flat_mir_entities,
         module_code,
         mir_code,
+    }
+}
+
+/// The spade source files which are included statically in the binary, rather
+/// than being passed on the command line. This includes the stdlib and prelude
+pub fn stdlib_and_prelude() -> Vec<(ModuleNamespace, String, String)> {
+    macro_rules! sources {
+        ($(($base_namespace:expr, $namespace:expr, $filename:expr)),*$(,)?) => {
+            vec! [
+                $(
+                    (
+                        ModuleNamespace {
+                            namespace: SpadePath::from_strs(&$namespace),
+                            base_namespace: SpadePath::from_strs(&$base_namespace),
+                        },
+                        String::from($filename).replace("../../", "<compiler dir>/"),
+                        String::from(include_str!($filename))
+                    )
+                ),*
+            ]
+        }
+    }
+
+    sources! {
+        ([], [], "../../prelude/prelude.spade"),
+        (["std"], ["std", "conv"], "../../stdlib/conv.spade"),
+        (["std"], ["std", "io"], "../../stdlib/io.spade"),
+        (["std"], ["std", "mem"], "../../stdlib/mem.spade"),
+        (["std"], ["std", "ops"], "../../stdlib/ops.spade"),
+        (["std"], ["std", "ports"], "../../stdlib/ports.spade"),
+        (["std"], ["std", "option"], "../../stdlib/option.spade"),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::path::PathBuf;
+
+    /// Having to maintain the stdlib list is error prone, so having a test
+    /// here to verify that all files in stdlib/<file>.spade
+    #[test]
+    fn sanity_check_static_sources_stdlib_included() {
+        let included = super::stdlib_and_prelude()
+            .into_iter()
+            .filter_map(|(ns, file, _)| {
+                if ns.base_namespace.as_strs() == ["std"] {
+                    Some(
+                        PathBuf::from(file)
+                            .file_name()
+                            .map(|f| f.to_string_lossy().to_string()),
+                    )
+                } else {
+                    None
+                }
+            })
+            .collect::<Vec<_>>();
+
+        let missing_files = std::fs::read_dir("../stdlib/")
+            .expect("Failed to read ../stdlib")
+            .into_iter()
+            .map(|f| {
+                f.unwrap()
+                    .path()
+                    .file_name()
+                    .map(|f| f.to_string_lossy().to_string())
+            })
+            .filter(|f| !included.contains(f))
+            .collect::<Vec<_>>();
+
+        assert_eq!(missing_files, vec![])
     }
 }

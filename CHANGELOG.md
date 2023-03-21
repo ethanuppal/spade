@@ -23,6 +23,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Changed
 
+- [!165][!165] Standard library is now included by the compiler instead of Swim.
+
 ### Removed
 
 ### Internal
@@ -32,6 +34,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 [!154]: https://gitlab.com/spade-lang/spade/-/merge_requests/154
 [!155]: https://gitlab.com/spade-lang/spade/-/merge_requests/155
 [!156]: https://gitlab.com/spade-lang/spade/-/merge_requests/155
+[!165]: https://gitlab.com/spade-lang/spade/-/merge_requests/155
 
 
 ## [0.1.0] - 2023-03-07

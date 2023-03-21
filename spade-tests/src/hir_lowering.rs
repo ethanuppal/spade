@@ -1119,11 +1119,6 @@ mod tests {
     #[test]
     fn enum_instantiation_with_full_generics_works() {
         let code = r#"
-            enum Option<T> {
-                Some{payload: T},
-                None
-            }
-
             entity test(payload: int<5>) -> Option<int<5>> {
                 Option::Some(payload)
             }
@@ -1144,11 +1139,6 @@ mod tests {
     #[test]
     fn enum_match_works() {
         let code = r#"
-            enum Option<T> {
-                Some{ payload: T },
-                None
-            }
-
             entity unwrap_or_0(e: Option<int<16>>) -> int<16> {
                 match e {
                     Option::Some(x) => x,
@@ -1264,11 +1254,6 @@ mod tests {
     #[test]
     fn enum_match_with_sub_pattern_conditions_work() {
         let code = r#"
-            enum Option<T> {
-                Some{ payload: T },
-                None
-            }
-
             entity unwrap_or_0(e: Option<int<16>>) -> int<16> {
                 match e {
                     Option::Some(10) => 5,
@@ -1392,7 +1377,6 @@ mod tests {
     #[test]
     fn concatenation_works() {
         let code = r#"
-            use std::conv::concat;
             entity name(a: int<16>, b: int<8>) -> int<24> {
                 a `concat` b
             }
@@ -1412,7 +1396,6 @@ mod tests {
     #[test]
     fn concatenation_infers_size() {
         let code = r#"
-            use std::conv::concat;
             entity name(a: int<16>, b: int<8>) -> int<24> {
                 let x = a `concat` b;
                 0
@@ -1435,7 +1418,6 @@ mod tests {
     #[test]
     fn zero_extend_works() {
         let code = r#"
-            use std::conv::zext;
             entity name(a: int<16>) -> int<24> {
                 zext(a)
             }
@@ -1514,7 +1496,11 @@ mod tests {
         "#;
 
         let inst_name = spade_mir::UnitName::Escaped {
-            name: "identity[56]".to_string(),
+            // NOTE: The number here is sequential and depends on the number
+            // of generic modules we have. If new moduels are added to the stdlib,
+            // this needs to be incremented. If we end up with more tests
+            // like this, we should do smarter comparison
+            name: "identity[63]".to_string(),
             path: vec!["identity".to_string()],
         };
 
@@ -2159,8 +2145,12 @@ mod tests {
                 inner_w: 8u32.to_biguint(),
                 elems: 2u32.to_biguint(),
                 initial: Some(vec![
-                    vec![statement!(const 7; Type::Int(8u32.to_biguint()); ConstantValue::Int(0.to_bigint()))],
-                    vec![statement!(const 8; Type::Int(8u32.to_biguint()); ConstantValue::Int(1.to_bigint()))],
+                    // NOTE: These constants are not compared using the normal mir comparison
+                    // infrastructure, which means that they get incremented if code before
+                    // them is changed, in particular, the stdlib. If we end up with
+                    // more tests like this we should add them to MIR comparison
+                    vec![statement!(const 33; Type::Int(8u32.to_biguint()); ConstantValue::Int(0.to_bigint()))],
+                    vec![statement!(const 34; Type::Int(8u32.to_biguint()); ConstantValue::Int(1.to_bigint()))],
                 ])
             }); n(0, "clk"), n(11, "ports"));
             (n(2, "mem"); mem_type; Alias; e(1));
@@ -2284,7 +2274,6 @@ mod argument_list_tests {
     snapshot_error! {
         truncating_to_larger_value,
         "
-        use std::conv::trunc;
         fn main() -> int<8> {
             let a: int<4> = 0;
             let b: int<8> = std::conv::trunc(a);

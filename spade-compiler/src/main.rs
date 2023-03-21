@@ -113,7 +113,7 @@ fn main() -> Result<()> {
     };
 
     let diag_handler = DiagHandler::new(Box::new(CodespanEmitter));
-    match spade::compile(sources?, spade_opts, diag_handler) {
+    match spade::compile(sources?, true, spade_opts, diag_handler) {
         Ok(_) => Ok(()),
         Err(_) => {
             std::io::stderr().write_all(buffer.as_slice())?;

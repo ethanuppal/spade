@@ -486,9 +486,6 @@ snapshot_error! {
 snapshot_error! {
     type_error_on_registers_are_useful,
     "
-    fn trunc<#N, #M>(x: int<N>) -> int<M> __builtin__
-    fn concat<#N, #M, #K>(x: int<N>, y: int<M>) -> int<K> __builtin__
-
     entity test(clk: clock, rst: bool) -> bool {
         let shift_clock_initial: int<10> = 0b0000011111;
         reg(clk) shift_clock: int<10> reset(rst: shift_clock_initial) = {

@@ -1,9 +1,6 @@
 ---
 source: spade-tests/src/typeinference.rs
 ---
-fn trunc<#N, #M>(x: int<N>) -> int<M> __builtin__
-fn concat<#N, #M, #K>(x: int<N>, y: int<M>) -> int<K> __builtin__
-
 entity test(clk: clock, rst: bool) -> bool {
     let shift_clock_initial: int<10> = 0b0000011111;
     reg(clk) shift_clock: int<10> reset(rst: shift_clock_initial) = {
@@ -15,9 +12,9 @@ entity test(clk: clock, rst: bool) -> bool {
 }
 
 error: Expected type int<8>, got int<10>
-  ┌─ testinput:8:28
+  ┌─ testinput:5:28
   │
-8 │         let rest: int<8> = shift_clock >> 2;
+5 │         let rest: int<8> = shift_clock >> 2;
   │                            ^^^^^^^^^^^^^^^^ Expected int<8> here
 
 

@@ -136,6 +136,13 @@ snapshot_error! {
     "
 }
 
+// NOTE: When the compiler runs in standalone mode, items added by the user
+// are added to the global namespace, which means that items clash with built-in items.
+snapshot_error! {
+    overwriting_stdlib_gives_useful_error,
+    "enum Option<T> {}"
+}
+
 #[cfg(test)]
 mod trait_tests {
     use crate::{build_items, snapshot_error};

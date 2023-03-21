@@ -1,5 +1,3 @@
-use std::conv::trunc;
-
 enum TestEnum {
     Lonely,
     Payload{a: int<8>}
