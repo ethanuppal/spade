@@ -20,13 +20,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ### Fixed
 
 - [!156][!156] Report an internal error when inferring negative widths instead of panicking
-- [!154](!154) Rewrote compiler to use arbitrary width integers internally.
 
 ### Changed
 
 ### Removed
 
 ### Internal
+
+- [!154](!154) Rewrote compiler to use arbitrary width integers internally.
 
 [!154]: https://gitlab.com/spade-lang/spade/-/merge_requests/154
 [!155]: https://gitlab.com/spade-lang/spade/-/merge_requests/155
