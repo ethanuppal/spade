@@ -198,7 +198,6 @@ snapshot_error! {
     "
 }
 
-
 #[test]
 fn square_wave_readme_example() {
     let code = r#"
@@ -210,4 +209,3 @@ fn square_wave_readme_example() {
 
     build_items(code);
 }
-
