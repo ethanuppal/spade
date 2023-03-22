@@ -1497,9 +1497,10 @@ mod tests {
 
         let inst_name = spade_mir::UnitName::Escaped {
             // NOTE: The number here is sequential and depends on the number
-            // of generic modules we have. If new moduels are added to the stdlib,
+            // of generic modules we have. If new modules are added to the stdlib,
             // this needs to be incremented. If we end up with more tests
             // like this, we should do smarter comparison
+            // lifeguard spade#224
             name: "identity[63]".to_string(),
             path: vec!["identity".to_string()],
         };
@@ -2149,6 +2150,7 @@ mod tests {
                     // infrastructure, which means that they get incremented if code before
                     // them is changed, in particular, the stdlib. If we end up with
                     // more tests like this we should add them to MIR comparison
+                    // lifeguard spade#225
                     vec![statement!(const 33; Type::Int(8u32.to_biguint()); ConstantValue::Int(0.to_bigint()))],
                     vec![statement!(const 34; Type::Int(8u32.to_biguint()); ConstantValue::Int(1.to_bigint()))],
                 ])

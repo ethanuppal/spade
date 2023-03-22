@@ -165,8 +165,6 @@ snapshot_error! {
 snapshot_error! {
     using_empty_identifier_a,
     "
-    use conv::trunc;
-
     entity counter(clk: clock, rst: bool, max: int<8>) -> int<8> {
         reg(clk) value reset (rst: 0) =
             if value == max {
