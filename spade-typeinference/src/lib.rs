@@ -22,7 +22,7 @@ use spade_hir as hir;
 use spade_hir::param_util::{match_args_with_params, Argument};
 use spade_hir::symbol_table::{Patternable, PatternableKind, SymbolTable, TypeSymbol};
 use spade_hir::{
-    ArgumentList, Block, ExecutableItem, ExprKind, Expression, ItemList, Pattern, PatternArgument,
+    ArgumentList, Block, ExprKind, Expression, ItemList, Pattern, PatternArgument,
     Register, Statement, TypeParam, Unit,
 };
 use spade_types::KnownType;
@@ -59,65 +59,6 @@ pub struct Context<'a> {
 macro_rules! add_trace {
     ($self:expr, $($arg : tt) *) => {
         $self.trace_stack.push(TraceStack::Message(format!($($arg)*)))
-    }
-}
-
-pub struct ProcessedUnit {
-    pub unit: Unit,
-    pub type_state: TypeState,
-}
-
-pub enum ProcessedItem {
-    EnumInstance,
-    StructInstance,
-    Unit(ProcessedUnit),
-    Builtin(Loc<hir::UnitHead>),
-}
-
-pub struct ProcessedItemList {
-    pub executables: Vec<ProcessedItem>,
-}
-
-impl ProcessedItemList {
-    pub fn typecheck(items: &ItemList, ctx: &Context, print_trace: bool) -> Result<Self> {
-        Ok(Self {
-            executables: items
-                .executables
-                .clone()
-                .into_iter()
-                .map(|(_name, item)| {
-                    let mut type_state = TypeState::new();
-
-                    // To avoid borrowing type_state too early, we'll do a macro to build
-                    // closures. Kind of ugly, but it gets the job done
-                    macro_rules! err_processor {
-                        () => {
-                            |e| {
-                                if print_trace {
-                                    println!("{}", format_trace_stack(&type_state.trace_stack))
-                                }
-                                e
-                            }
-                        };
-                    }
-
-                    match item {
-                        ExecutableItem::EnumInstance { .. } => Ok(ProcessedItem::EnumInstance),
-                        ExecutableItem::StructInstance { .. } => Ok(ProcessedItem::StructInstance),
-                        ExecutableItem::Unit(unit) => {
-                            type_state
-                                .visit_entity(&unit, ctx)
-                                .map_err(err_processor!())?;
-                            Ok(ProcessedItem::Unit(ProcessedUnit {
-                                unit: unit.inner,
-                                type_state,
-                            }))
-                        }
-                        ExecutableItem::BuiltinUnit(_, head) => Ok(ProcessedItem::Builtin(head)),
-                    }
-                })
-                .collect::<Result<Vec<_>>>()?,
-        })
     }
 }
 
