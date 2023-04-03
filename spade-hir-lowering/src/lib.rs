@@ -2260,20 +2260,7 @@ pub fn generate_unit<'a>(
         .collect::<Result<_>>()?;
 
     let mut statements = StatementList::new();
-    let mut subs = &mut Substitutions::new();
-
-    if let UnitKind::Pipeline(_) = unit.head.unit_kind.inner {
-        lower_pipeline(
-            &unit.inputs,
-            &unit.body,
-            types,
-            &mut statements,
-            &mut subs,
-            symtab,
-            item_list,
-            name_map,
-        )?;
-    }
+    let subs = &mut Substitutions::new();
 
     let mut ctx = Context {
         symtab,
@@ -2284,6 +2271,16 @@ pub fn generate_unit<'a>(
         mono_state,
         diag_handler,
     };
+
+    if let UnitKind::Pipeline(_) = unit.head.unit_kind.inner {
+        lower_pipeline(
+            &unit.inputs,
+            &unit.body,
+            &mut statements,
+            &mut ctx,
+            name_map,
+        )?;
+    }
 
     statements.append(unit.body.lower(&mut ctx)?);
 
