@@ -985,6 +985,89 @@ mod tests {
     }
 
     #[test]
+    fn simple_enable_signals_codegen_correctly() {
+        let code = r#"
+            pipeline(3) pl(clk: clock, a: int<16>) -> int<17> {
+                reg;
+                reg[false];
+                reg;
+                    a+a
+            }
+        "#;
+
+        let expected = entity!(&["pl"]; (
+                "clk", n(3, "clk"), Type::Bool,
+                "a", n(0, "a"), Type::int(16),
+            ) -> Type::int(17); {
+                // Stage 0 has downstream enable signal, use it
+                (e(100); Type::int(16); Select; e(200), n(0, "a"), n(2, "s1_a"));
+                (reg n(2, "s1_a"); Type::int(16); clock(n(3, "clk")); e(100));
+
+                // Stage 1 has local enable signal, use it
+                (const 310; Type::Bool; ConstantValue::Bool(false));
+                (e(110); Type::int(16); Select; e(210), n(2, "s1_a"), n(21, "s2_a"));
+                (reg n(21, "s2_a"); Type::int(16); clock(n(3, "clk")); e(110));
+
+                // Stage 3
+                (reg n(31, "s3_a"); Type::int(16); clock(n(3, "clk")); n(21, "s2_a"));
+
+                // Stage conditions are generated at the end in reverse order
+                (e(210); Type::Bool; Alias; e(310));
+                (e(200); Type::Bool; Alias; e(310));
+
+                // Output
+                (e(3); Type::int(17); Add; n(31, "s3_a"), n(31, "s3_a"));
+            } => e(3)
+        );
+
+        let result = build_entity!(code);
+
+        assert_same_mir!(&result, &expected);
+    }
+
+    #[test]
+    fn chained_enable_signals_codegen_correctly() {
+        let code = r#"
+            pipeline(3) pl(clk: clock, a: int<16>) -> int<17> {
+                reg[false];
+                reg[false];
+                reg;
+                    a+a
+            }
+        "#;
+
+        let expected = entity!(&["pl"]; (
+                "clk", n(3, "clk"), Type::Bool,
+                "a", n(0, "a"), Type::int(16),
+            ) -> Type::int(17); {
+                // Stage 0 has downstream enable signal, use it
+                (const 300; Type::Bool; ConstantValue::Bool(false));
+                (e(100); Type::int(16); Select; e(200), n(0, "a"), n(2, "s1_a"));
+                (reg n(2, "s1_a"); Type::int(16); clock(n(3, "clk")); e(100));
+
+                // Stage 1 has local enable signal, use it
+                (const 310; Type::Bool; ConstantValue::Bool(false));
+                (e(110); Type::int(16); Select; e(210), n(2, "s1_a"), n(21, "s2_a"));
+                (reg n(21, "s2_a"); Type::int(16); clock(n(3, "clk")); e(110));
+
+                // Stage 3
+                (reg n(31, "s3_a"); Type::int(16); clock(n(3, "clk")); n(21, "s2_a"));
+
+                // Stage conditions are generated at the end in reverse order
+                (e(210); Type::Bool; Alias; e(310));
+                (e(200); Type::Bool; LogicalAnd; e(300), e(310));
+
+                // Output
+                (e(3); Type::int(17); Add; n(31, "s3_a"), n(31, "s3_a"));
+            } => e(3)
+        );
+
+        let result = build_entity!(code);
+
+        assert_same_mir!(&result, &expected);
+    }
+
+    #[test]
     fn struct_instantiation_works() {
         let code = r#"
             struct X {payload: bool}
