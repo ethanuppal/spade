@@ -944,3 +944,23 @@ snapshot_error! {
     struct X {
     }"
 }
+
+snapshot_error! {
+    condition_on_multiplied_stage_is_disallowed,
+    "
+        pipeline(3) x(clk: clock) -> bool {
+            reg[false]*3;
+                false
+        }
+    "
+}
+
+snapshot_error! {
+    condition_on_multiplied_stage_is_disallowed_single_extra_stage,
+    "
+        pipeline(2) x(clk: clock) -> bool {
+            reg[false]*2;
+                false
+        }
+    "
+}

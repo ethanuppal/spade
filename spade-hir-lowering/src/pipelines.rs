@@ -77,7 +77,11 @@ pub fn lower_pipeline<'a>(
                 }
             }
             Statement::Declaration(_) => todo!(),
-            Statement::PipelineRegMarker => {
+            Statement::PipelineRegMarker(cond) => {
+                if cond.is_some() {
+                    // TODO
+                    todo!("Implement stage conditions")
+                }
                 let live_vars = subs.next_stage(symtab);
 
                 // Generate pipeline regs for previous live vars

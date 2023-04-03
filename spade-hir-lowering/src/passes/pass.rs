@@ -97,7 +97,11 @@ impl Passable for Loc<Expression> {
                             subnodes!(clock, value);
                         }
                         Statement::Declaration(_) => {}
-                        Statement::PipelineRegMarker => {}
+                        Statement::PipelineRegMarker(cond) => {
+                            if let Some(cond) = cond {
+                                cond.apply(pass)?;
+                            }
+                        }
                         Statement::Label(_) => {}
                         Statement::Assert(expr) => expr.apply(pass)?,
                         Statement::Set { target, value } => subnodes!(target, value),

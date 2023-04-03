@@ -728,34 +728,60 @@ impl<'a> Parser<'a> {
     pub fn register(&mut self, attributes: &AttributeList) -> Result<Option<Loc<Statement>>> {
         let start_token = peek_for!(self, &TokenKind::Reg);
 
+        // NOTE: It might be nicer to use () but that complicates the compiler slightly more
+        // annoying to write, so I'll use [] initially as a proof of concept
+        let cond = if self.peek_kind(&TokenKind::OpenBracket)? {
+            Some(
+                self.surrounded(
+                    &TokenKind::OpenBracket,
+                    Self::expression,
+                    &TokenKind::CloseBracket,
+                )?
+                .0,
+            )
+        } else {
+            None
+        };
+
         // If this is a reg marker for a pipeline
         if self.peek_kind(&TokenKind::Semi)? || self.peek_kind(&TokenKind::Asterisk)? {
             let count = if self.peek_and_eat(&TokenKind::Asterisk)?.is_some() {
                 if let Some(val) = self.int_literal()? {
-                    val.inner
-                        .clone()
-                        .as_unsigned()
-                        .ok_or_else(|| {
-                            Diagnostic::error(&val, "Negative number of registers")
-                                .primary_label("Expected positive number of stages")
-                        })?
-                        .to_usize()
-                        .ok_or_else(|| {
-                            Diagnostic::bug(&val, "Excessive number of registers").primary_label(
-                                format!("At most {} registers are supported", usize::MAX),
-                            )
-                        })?
+                    Some(
+                        val.inner
+                            .clone()
+                            .as_unsigned()
+                            .ok_or_else(|| {
+                                Diagnostic::error(&val, "Negative number of registers")
+                                    .primary_label("Expected positive number of stages")
+                            })?
+                            .to_usize()
+                            .ok_or_else(|| {
+                                Diagnostic::bug(&val, "Excessive number of registers")
+                                    .primary_label(format!(
+                                        "At most {} registers are supported",
+                                        usize::MAX
+                                    ))
+                            })?
+                            .at_loc(&val),
+                    )
                 } else {
                     return Err(Error::ExpectedRegisterCount {
                         got: self.eat_unconditional()?,
                     });
                 }
             } else {
-                1
+                None
+            };
+
+            let full_loc = if let Some(c) = count {
+                ().between(self.file_id, &start_token, &c.loc())
+            } else {
+                ().at(self.file_id, &start_token)
             };
 
             return Ok(Some(
-                Statement::PipelineRegMarker(count).at(self.file_id, &start_token),
+                Statement::PipelineRegMarker(count, cond).at_loc(&full_loc),
             ));
         }
 
@@ -923,7 +949,7 @@ impl<'a> Parser<'a> {
                 self.eat(&TokenKind::Semi)?;
             }
 
-            if let Statement::PipelineRegMarker(_) = statement.inner {
+            if let Statement::PipelineRegMarker(_, _) = statement.inner {
                 if !allow_stages {
                     return Err(Error::StageOutsidePipeline(statement.loc()));
                 }
@@ -3037,14 +3063,14 @@ mod tests {
                 Expression::Block(Box::new(Block {
                     statements: vec![
                         Statement::Label(ast_ident("s0")).nowhere(),
-                        Statement::PipelineRegMarker(1).nowhere(),
+                        Statement::PipelineRegMarker(None, None).nowhere(),
                         Statement::binding(
                             Pattern::name("b"),
                             None,
                             Expression::int_literal(0).nowhere(),
                         )
                         .nowhere(),
-                        Statement::PipelineRegMarker(1).nowhere(),
+                        Statement::PipelineRegMarker(None, None).nowhere(),
                         Statement::Label(ast_ident("s2")).nowhere(),
                         Statement::binding(
                             Pattern::name("c"),
@@ -3084,7 +3110,9 @@ mod tests {
             output_type: Some(TypeSpec::Named(ast_path("bool"), None).nowhere()),
             body: Some(
                 Expression::Block(Box::new(Block {
-                    statements: vec![Statement::PipelineRegMarker(3).nowhere()],
+                    statements: vec![
+                        Statement::PipelineRegMarker(Some(3.nowhere()), None).nowhere()
+                    ],
                     result: Expression::int_literal(0).nowhere(),
                 }))
                 .nowhere(),

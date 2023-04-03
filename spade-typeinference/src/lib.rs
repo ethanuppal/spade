@@ -863,8 +863,15 @@ impl TypeState {
                 }
                 Ok(())
             }
-            // These statements have no effect on the types
-            Statement::PipelineRegMarker | Statement::Label(_) => Ok(()),
+            Statement::PipelineRegMarker(cond) => {
+                if let Some(cond) = cond {
+                    self.visit_expression(cond, ctx, generic_list)?;
+                    self.unify_expression_generic_error(cond, &t_bool(&ctx.symtab), &ctx.symtab)?;
+                }
+                Ok(())
+            }
+            // This statement have no effect on the types
+            Statement::Label(_) => Ok(()),
             Statement::Assert(expr) => {
                 self.visit_expression(expr, ctx, generic_list)?;
                 self.unify_expression_generic_error(expr, &t_bool(&ctx.symtab), &ctx.symtab)?;

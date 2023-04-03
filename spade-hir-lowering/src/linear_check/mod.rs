@@ -206,7 +206,11 @@ fn visit_expression(
                             linear_state.push_new_name(name, ctx)
                         }
                     }
-                    Statement::PipelineRegMarker => {}
+                    Statement::PipelineRegMarker(cond) => {
+                        if let Some(cond) = cond {
+                            visit_expression(cond, linear_state, ctx)?;
+                        }
+                    }
                     Statement::Label(_) => {}
                     Statement::Assert(_) => {}
                     Statement::Set { target, value } => {

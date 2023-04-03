@@ -982,7 +982,8 @@ impl StatementLocal for Statement {
                 result.append(register.pattern.lower(register.pattern.value_name(), ctx)?);
             }
             Statement::Declaration(_) => {}
-            Statement::PipelineRegMarker => {
+            Statement::PipelineRegMarker(_cond) => {
+                // NOTE: Cond is handled by pipeline lowering
                 ctx.subs.current_stage += 1;
             }
             Statement::Label(_) => {}

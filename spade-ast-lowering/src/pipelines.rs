@@ -84,8 +84,8 @@ fn visit_pipeline_statement(
         }
         ast::Statement::Declaration(_) => {}
         ast::Statement::Binding(_) => {}
-        ast::Statement::PipelineRegMarker(count) => {
-            for _ in 0..*count {
+        ast::Statement::PipelineRegMarker(count, _) => {
+            for _ in 0..count.map(|v| v.inner).unwrap_or(1) {
                 *current_stage += 1;
                 pipeline_ctx.stages.push(None)
             }
@@ -206,7 +206,7 @@ mod pipeline_visiting {
             body: Some(
                 ast::Expression::Block(Box::new(ast::Block {
                     statements: vec![
-                        ast::Statement::PipelineRegMarker(1).nowhere(),
+                        ast::Statement::PipelineRegMarker(Some(1.nowhere()), None).nowhere(),
                         ast::Statement::binding(
                             ast::Pattern::name("a"),
                             None,
@@ -214,7 +214,7 @@ mod pipeline_visiting {
                                 .nowhere(),
                         )
                         .nowhere(),
-                        ast::Statement::PipelineRegMarker(1).nowhere(),
+                        ast::Statement::PipelineRegMarker(Some(1.nowhere()), None).nowhere(),
                         ast::Statement::binding(
                             ast::Pattern::name("b"),
                             None,
@@ -240,7 +240,7 @@ mod pipeline_visiting {
         .nowhere();
 
         let expected_statements = vec![
-            hir::Statement::PipelineRegMarker.nowhere(),
+            hir::Statement::PipelineRegMarker(None).nowhere(),
             hir::Statement::named_let(
                 2,
                 name_id(2, "a"),
@@ -248,7 +248,7 @@ mod pipeline_visiting {
                     .with_id(3),
             )
             .nowhere(),
-            hir::Statement::PipelineRegMarker.nowhere(),
+            hir::Statement::PipelineRegMarker(None).nowhere(),
             hir::Statement::named_let(
                 4,
                 name_id(3, "b"),
@@ -302,7 +302,7 @@ mod pipeline_visiting {
             body: Some(
                 ast::Expression::Block(Box::new(ast::Block {
                     statements: vec![
-                        ast::Statement::PipelineRegMarker(1).nowhere(),
+                        ast::Statement::PipelineRegMarker(Some(1.nowhere()), None).nowhere(),
                         ast::Statement::Label(ast_ident("s")).nowhere(),
                         ast::Statement::binding(
                             ast::Pattern::name("a"),
@@ -311,7 +311,7 @@ mod pipeline_visiting {
                                 .nowhere(),
                         )
                         .nowhere(),
-                        ast::Statement::PipelineRegMarker(1).nowhere(),
+                        ast::Statement::PipelineRegMarker(Some(1.nowhere()), None).nowhere(),
                         ast::Statement::binding(
                             ast::Pattern::name("b"),
                             None,
@@ -335,7 +335,7 @@ mod pipeline_visiting {
         .nowhere();
 
         let expected_statements = vec![
-            hir::Statement::PipelineRegMarker.nowhere(),
+            hir::Statement::PipelineRegMarker(None).nowhere(),
             hir::Statement::Label(ast_ident("s")).nowhere(),
             hir::Statement::named_let(
                 2,
@@ -344,7 +344,7 @@ mod pipeline_visiting {
                     .with_id(3),
             )
             .nowhere(),
-            hir::Statement::PipelineRegMarker.nowhere(),
+            hir::Statement::PipelineRegMarker(None).nowhere(),
             hir::Statement::named_let(
                 4,
                 name_id(3, "b"),

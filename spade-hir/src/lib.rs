@@ -143,7 +143,7 @@ pub enum Statement {
     Binding(Binding),
     Register(Loc<Register>),
     Declaration(Vec<Loc<NameID>>),
-    PipelineRegMarker,
+    PipelineRegMarker(Option<Loc<Expression>>),
     Label(Loc<Identifier>),
     Assert(Loc<Expression>),
     Set {

@@ -1,0 +1,23 @@
+---
+source: spade-tests/src/ast_lowering.rs
+---
+pipeline(2) x(clk: clock) -> bool {
+    reg[false]*2;
+        false
+}
+
+
+error: Multiple registers with conditions can not defined
+  ┌─ testinput:2:16
+  │
+2 │     reg[false]*2;
+  │         -----  ^ Multiple registers not allowed
+  │         │       
+  │         Condition specified here
+  │
+  = Consider splitting into two reg statements
+  │
+2 │     reg[...]; reg;
+  │     ~~~~~~~~~~~~~
+
+

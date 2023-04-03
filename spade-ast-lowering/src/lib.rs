@@ -879,14 +879,40 @@ fn visit_statement(s: &Loc<ast::Statement>, ctx: &mut Context) -> Result<Vec<Loc
             let (result, span) = visit_register(&inner, ctx)?.separate_loc();
             Ok(vec![hir::Statement::Register(result).at_loc(&span)])
         }
-        ast::Statement::PipelineRegMarker(count) => {
-            let result = (0..*count)
+        ast::Statement::PipelineRegMarker(count, cond) => {
+            let cond = match cond {
+                Some(cond) => {
+                    if let Some(count) = count {
+                        if count.inner != 1 {
+                            return Err(Diagnostic::error(
+                                count,
+                                "Multiple registers with conditions can not defined",
+                            )
+                            .primary_label("Multiple registers not allowed")
+                            .secondary_label(cond, "Condition specified here")
+                            .span_suggest_replace(
+                                "Consider splitting into two reg statements",
+                                s,
+                                if count.inner - 1 == 1 {
+                                    "reg[...]; reg".to_string()
+                                } else {
+                                    format!("reg[...]; reg*{}", count.inner - 1)
+                                },
+                            ));
+                        }
+                    }
+                    Some(cond.try_map_ref(|c| visit_expression(c, ctx))?)
+                }
+                None => None,
+            };
+
+            let result = (0..count.map(|v| v.inner).unwrap_or(1))
                 .map(|_| {
                     ctx.pipeline_ctx
                         .as_mut()
                         .expect("Expected to have a pipeline context")
                         .current_stage += 1;
-                    hir::Statement::PipelineRegMarker.at_loc(s)
+                    hir::Statement::PipelineRegMarker(cond.clone()).at_loc(s)
                 })
                 .collect();
 
@@ -1598,7 +1624,7 @@ mod statement_visiting {
 
     #[test]
     fn multi_reg_statements_lower_correctly() {
-        let input = ast::Statement::PipelineRegMarker(3).nowhere();
+        let input = ast::Statement::PipelineRegMarker(Some(3.nowhere()), None).nowhere();
 
         let symtab = SymbolTable::new();
         let idtracker = ExprIdTracker::new();
@@ -1614,9 +1640,9 @@ mod statement_visiting {
         assert_eq!(
             visit_statement(&input, &mut ctx),
             Ok(vec![
-                hir::Statement::PipelineRegMarker.nowhere(),
-                hir::Statement::PipelineRegMarker.nowhere(),
-                hir::Statement::PipelineRegMarker.nowhere(),
+                hir::Statement::PipelineRegMarker(None).nowhere(),
+                hir::Statement::PipelineRegMarker(None).nowhere(),
+                hir::Statement::PipelineRegMarker(None).nowhere(),
             ])
         );
 
