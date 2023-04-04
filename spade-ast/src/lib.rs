@@ -177,6 +177,8 @@ pub enum Expression {
         /// ```
         name: Loc<Identifier>,
     },
+    StageValid,
+    StageReady,
     Comptime(Box<Loc<ComptimeCondition<Loc<Expression>>>>),
 }
 impl WithLocation for Expression {}
@@ -213,6 +215,8 @@ impl Expression {
             Expression::BinaryOperator(_, _, _) => "binary operator",
             Expression::Block(_) => "block",
             Expression::PipelineReference { .. } => "pipeline reference",
+            Expression::StageValid => "stage.valid",
+            Expression::StageReady => "stage.ready",
             Expression::Comptime { .. } => "comptime",
         }
     }

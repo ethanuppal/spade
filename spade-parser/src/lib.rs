@@ -373,8 +373,26 @@ impl<'a> Parser<'a> {
     #[trace_parser]
     pub fn pipeline_reference(&mut self) -> Result<Option<Loc<Expression>>> {
         let start = peek_for!(self, &TokenKind::Stage);
+        // Peek here because we can't peek in the .ok_or_else below
+        let next = self.peek()?;
 
-        self.eat(&TokenKind::OpenParen)?;
+        self.first_successful(vec![
+            &|s: &mut Self| s.pipeline_stage_reference(&start),
+            &|s: &mut Self| s.pipeline_stage_status(&start),
+        ])?
+        .ok_or_else(|| Error::UnexpectedToken {
+            got: next,
+            expected: vec![".", "("],
+        })
+        .map(Some)
+    }
+
+    #[trace_parser]
+    pub fn pipeline_stage_reference(
+        &mut self,
+        stage_keyword: &Token,
+    ) -> Result<Option<Loc<Expression>>> {
+        peek_for!(self, &TokenKind::OpenParen);
 
         let next = self.peek()?;
         let reference = match next.kind {
@@ -416,14 +434,43 @@ impl<'a> Parser<'a> {
             Expression::PipelineReference {
                 stage_kw_and_reference_loc: ().between(
                     self.file_id,
-                    &start.span,
+                    &stage_keyword.span,
                     &close_paren.span,
                 ),
                 stage: reference,
                 name: ident.clone(),
             }
-            .between(self.file_id, &start.span, &ident),
+            .between(self.file_id, &stage_keyword.span, &ident),
         ))
+    }
+
+    #[trace_parser]
+    pub fn pipeline_stage_status(
+        &mut self,
+        stage_keyword: &Token,
+    ) -> Result<Option<Loc<Expression>>> {
+        peek_for!(self, &TokenKind::Dot);
+
+        let ident = self.identifier()?;
+
+        match ident.inner.0.as_str() {
+            "valid" => Ok(Some(Expression::StageValid.between(
+                self.file_id,
+                stage_keyword,
+                &ident,
+            ))),
+            "ready" => Ok(Some(Expression::StageReady.between(
+                self.file_id,
+                stage_keyword,
+                &ident,
+            ))),
+            other => Err(Diagnostic::error(
+                &ident,
+                format!("Expected `stage` or `valid`, got `{other}`"),
+            )
+            .primary_label("Expected `stage` or `valid`")
+            .into()),
+        }
     }
 
     #[trace_parser]

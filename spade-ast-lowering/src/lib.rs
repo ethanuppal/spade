@@ -1225,6 +1225,8 @@ pub fn visit_expression(e: &ast::Expression, ctx: &mut Context) -> Result<hir::E
                 })?;
             Ok(visit_expression(&inner, ctx)?.kind)
         }
+        ast::Expression::StageReady => Ok(hir::ExprKind::StageReady),
+        ast::Expression::StageValid => Ok(hir::ExprKind::StageValid),
     }
     .map(|kind| kind.with_id(new_id))
 }

@@ -87,6 +87,7 @@ fn visit_expression(
         spade_hir::ExprKind::Block(_) => true,
         spade_hir::ExprKind::Call { .. } => true,
         spade_hir::ExprKind::If(_, _, _) => true,
+        spade_hir::ExprKind::StageValid | spade_hir::ExprKind::StageReady => false,
         spade_hir::ExprKind::PipelineRef {
             stage: _,
             name: _,
@@ -110,6 +111,7 @@ fn visit_expression(
         }
         spade_hir::ExprKind::IntLiteral(_) => {}
         spade_hir::ExprKind::BoolLiteral(_) => {}
+        spade_hir::ExprKind::StageValid | spade_hir::ExprKind::StageReady => {},
         spade_hir::ExprKind::TupleLiteral(inner) => {
             for (i, expr) in inner.iter().enumerate() {
                 visit_expression(expr, linear_state, ctx)?;

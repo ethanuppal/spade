@@ -144,6 +144,9 @@ impl<'a> Inferer<'a> {
                 None
             }
 
+            // These are booleans
+            ExprKind::StageValid | ExprKind::StageReady => None,
+
             // There's a case to be made for these being valuable to implement. Implementing these
             // is bound to be simple and give value to the language, but it requires figuring out
             // where their return types are stored - which is less interesting.

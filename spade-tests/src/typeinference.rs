@@ -675,3 +675,21 @@ snapshot_error! {
         }
     "
 }
+
+snapshot_error! {
+    pipeline_stage_valid_is_a_bool,
+    "pipeline(1) x(clk: clock) -> bool {
+            let a: int<8> = stage.valid;
+        reg;
+            true
+    }"
+}
+
+snapshot_error! {
+    pipeline_stage_ready_is_a_bool,
+    "pipeline(1) x(clk: clock) -> bool {
+            let a: int<8> = stage.ready;
+        reg;
+            true
+    }"
+}

@@ -1067,6 +1067,8 @@ impl ExprLocal for Loc<Expression> {
                     substitution::Substitution::Port => Ok(Some(name.value_name())),
                 }
             }
+            ExprKind::StageReady => Ok(None),
+            ExprKind::StageValid => Ok(None),
             ExprKind::Call { .. } => Ok(None),
             ExprKind::MethodCall { .. } => diag_bail!(
                 self,
@@ -1512,6 +1514,8 @@ impl ExprLocal for Loc<Expression> {
             ExprKind::PipelineRef { .. } => {
                 // Empty: Pipeline refs are lowered in the alias checking
             }
+            ExprKind::StageReady => todo!("Lower stage ready"),
+            ExprKind::StageValid => todo!("Lower stage valid"),
             ExprKind::MethodCall { .. } => {
                 diag_bail!(
                     self,

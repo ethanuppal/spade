@@ -263,6 +263,7 @@ impl PipelineAvailability for ExprKind {
             ExprKind::IntLiteral(_) => Ok(0),
             ExprKind::BoolLiteral(_) => Ok(0),
             ExprKind::CreatePorts => Ok(0),
+            ExprKind::StageReady | ExprKind::StageValid => Ok(0),
             ExprKind::TupleLiteral(inner) => try_compute_availability(inner),
             ExprKind::ArrayLiteral(elems) => try_compute_availability(elems),
             ExprKind::Index(lhs, idx) => try_compute_availability(&[lhs.as_ref(), idx.as_ref()]),

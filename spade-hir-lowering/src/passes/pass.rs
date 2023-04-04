@@ -27,6 +27,7 @@ impl Passable for Loc<Expression> {
             ExprKind::IntLiteral(_) => {}
             ExprKind::BoolLiteral(_) => {}
             ExprKind::CreatePorts => {}
+            ExprKind::StageReady | ExprKind::StageValid => {}
             ExprKind::TupleLiteral(inner) => {
                 for i in inner {
                     i.apply(pass)?

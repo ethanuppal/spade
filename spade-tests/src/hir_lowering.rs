@@ -1068,6 +1068,16 @@ mod tests {
     }
 
     #[test]
+    fn pipeline_valid_signal_works() {
+        todo!()
+    }
+
+    #[test]
+    fn pipeline_ready_signal_works() {
+        todo!()
+    }
+
+    #[test]
     fn struct_instantiation_works() {
         let code = r#"
             struct X {payload: bool}

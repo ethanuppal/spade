@@ -409,6 +409,9 @@ impl TypeState {
             ExprKind::PipelineRef { .. } => {
                 self.visit_pipeline_ref(expression, ctx)?;
             }
+            ExprKind::StageReady | ExprKind::StageValid => {
+                self.unify_expression_generic_error(expression, &t_bool(ctx.symtab), ctx.symtab)?;
+            }
             ExprKind::Null => {}
         }
         Ok(())

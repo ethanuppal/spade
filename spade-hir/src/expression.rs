@@ -162,6 +162,8 @@ pub enum ExprKind {
         name: Loc<NameID>,
         declares_name: bool,
     },
+    StageValid,
+    StageReady,
     // This is a special case expression which is never created in user code, but which can be used
     // in type inferecne to create virtual expressions with specific IDs
     Null,
@@ -290,6 +292,8 @@ impl LocExprExt for Loc<Expression> {
             ExprKind::Block(_) => Some(self.clone()),
             ExprKind::If(_, _, _) => Some(self.clone()),
             ExprKind::PipelineRef { .. } => Some(self.clone()),
+            ExprKind::StageReady => None,
+            ExprKind::StageValid => None,
             ExprKind::Null => None,
         }
     }
