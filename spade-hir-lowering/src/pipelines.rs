@@ -15,6 +15,31 @@ use crate::Context;
 use crate::ExprLocal;
 use crate::{error::Error, statement_list::StatementList, MirLowerable, NameIDExt, Result};
 
+pub struct PipelineContext {
+    // NOTE: Current stage is being kept track of by [Context::Substitutions]
+    /// Mapping from stage index to the corresponding enable signal, i.e. what
+    /// `stage.ready` should map to. If the stage is unconditionally enabled,
+    /// the corresponding value is None
+    pub ready_signals: Vec<Option<ValueName>>,
+}
+
+pub enum MaybePipelineContext {
+    NotPipeline,
+    Pipeline(PipelineContext),
+}
+impl MaybePipelineContext {
+    /// Returns the pipeline context if we are in a pipeline, otherwise bails
+    /// with a Diagnostic::bug on the specified Loc
+    pub fn get<T>(&mut self, request_loc: &Loc<T>) -> Result<&mut PipelineContext> {
+        match self {
+            MaybePipelineContext::NotPipeline => {
+                diag_bail!(request_loc, "Requesting pipelien context without pipeline")
+            }
+            MaybePipelineContext::Pipeline(ctx) => Ok(ctx),
+        }
+    }
+}
+
 pub fn handle_pattern(pat: &Pattern, live_vars: &mut Vec<NameID>) {
     // Add this variable to the live vars list
     for name in pat.get_names() {
@@ -185,13 +210,16 @@ pub fn lower_pipeline<'a>(
     // Codegen enable signals for the stages that need them. We need to generate them
     // in reverse order because upstream enables depend on downstream
     let mut current_enable = None;
-    for (local_cond, enable_name) in local_conds.iter().zip(stage_enable_names).rev() {
+    for (local_cond, enable_name) in local_conds.iter().zip(stage_enable_names.iter()).rev() {
         match (local_cond, current_enable) {
             // First time we find a condition, alias it to the enable name for the current stage
             (Some(local), None) => {
+                let name = enable_name
+                    .clone()
+                    .expect("No enable name for first stage that needs one");
                 statements.push_anonymous(mir::Statement::Binding(mir::Binding {
                     // NOTE: Diagnostic::bug here?
-                    name: enable_name.expect("No enable name for first stage that needs one"),
+                    name,
                     operator: mir::Operator::Alias,
                     operands: vec![local.clone()],
                     ty: mir::types::Type::Bool,
@@ -201,11 +229,14 @@ pub fn lower_pipeline<'a>(
                 current_enable = Some(local)
             }
             (None, Some(prev)) => {
+                let name = enable_name
+                    .clone()
+                    .expect("No enable name for first stage that needs one");
                 // Since we have no new conditions, we can just alias the one from the previous
                 // stage
                 statements.push_anonymous(mir::Statement::Binding(mir::Binding {
                     // NOTE: Diagnostic::bug here?
-                    name: enable_name.expect("No enable name for first stage that needs one"),
+                    name,
                     operator: mir::Operator::Alias,
                     operands: vec![prev.clone()],
                     ty: mir::types::Type::Bool,
@@ -214,9 +245,12 @@ pub fn lower_pipeline<'a>(
                 }));
             }
             (Some(local), Some(prev)) => {
+                let name = enable_name
+                    .clone()
+                    .expect("No enable name for first stage that needs one");
                 statements.push_anonymous(mir::Statement::Binding(mir::Binding {
                     // NOTE: Diagnostic::bug here?
-                    name: enable_name.expect("No enable name for first stage that needs one"),
+                    name,
                     operator: mir::Operator::LogicalAnd,
                     operands: vec![local.clone(), prev.clone()],
                     ty: mir::types::Type::Bool,
@@ -227,6 +261,15 @@ pub fn lower_pipeline<'a>(
             (None, None) => {}
         }
     }
+
+    let mut ready_signals = stage_enable_names.into_iter().rev().collect::<Vec<_>>();
+    // NOTE: The last stage needs a ready signal because you *can* use `stagel.ready`
+    // after the last `reg` in the final output expression, but it will be `None` because
+    // there is no way to for it to be disabled
+    ready_signals.push(None);
+    *ctx.pipeline_context = MaybePipelineContext::Pipeline(PipelineContext {
+        ready_signals,
+    });
 
     Ok(())
 }

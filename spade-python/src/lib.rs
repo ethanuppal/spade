@@ -19,6 +19,7 @@ use spade_hir::symbol_table::{LookupError, SymbolTable};
 use spade_hir::{symbol_table::FrozenSymtab, ItemList};
 use spade_hir::{Parameter, TypeSpec, UnitHead};
 use spade_hir_lowering::monomorphisation::MonoState;
+use spade_hir_lowering::pipelines::MaybePipelineContext;
 use spade_hir_lowering::substitution::Substitutions;
 use spade_hir_lowering::{expr_to_mir, MirLowerable};
 use spade_mir::codegen::mangle_input;
@@ -589,6 +590,7 @@ impl Spade {
             mono_state: &mut MonoState::new(),
             subs: &mut Substitutions::new(),
             diag_handler: &mut self.diag_handler,
+            pipeline_context: &mut MaybePipelineContext::NotPipeline
         };
 
         let mir = expr_to_mir(hir, &mut hir_ctx).report_and_convert(

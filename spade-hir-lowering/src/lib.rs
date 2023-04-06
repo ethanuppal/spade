@@ -37,6 +37,7 @@ pub use name_map::NameSourceMap;
 use num::{BigUint, One, Zero};
 use pattern::DeconstructedPattern;
 use pipelines::lower_pipeline;
+use pipelines::MaybePipelineContext;
 use spade_common::id_tracker::ExprIdTracker;
 use spade_common::location_info::WithLocation;
 use spade_common::name::{Identifier, Path};
@@ -1514,7 +1515,39 @@ impl ExprLocal for Loc<Expression> {
             ExprKind::PipelineRef { .. } => {
                 // Empty: Pipeline refs are lowered in the alias checking
             }
-            ExprKind::StageReady => todo!("Lower stage ready"),
+            ExprKind::StageReady => {
+                let signal = ctx.pipeline_context.get(self)?
+                    .ready_signals
+                    .get(ctx.subs.current_stage)
+                    .ok_or_else(|| Diagnostic::bug(self, "Pipeline ready signal overflow"))?;
+
+                // If there is no enable signal, valid will be true, generate a constant
+                match signal {
+                    Some(signal_name) => {
+                        // NOTE: we could use the aliases method here, but that
+                        // would require duplicating the logic to check if the enable
+                        // signal is set
+                        result.push_primary(
+                            mir::Statement::Binding(mir::Binding {
+                                name: self.variable(ctx.subs)?,
+                                operator: mir::Operator::Alias,
+                                operands: vec![signal_name.clone()],
+                                ty: mir::types::Type::Bool,
+                                loc: Some(self.loc()),
+                            }),
+                            self,
+                        )
+                    }
+                    None => result.push_primary(
+                        mir::Statement::Constant(
+                            self.id,
+                            mir::types::Type::Bool,
+                            mir::ConstantValue::Bool(true),
+                        ),
+                        self,
+                    ),
+                }
+            }
             ExprKind::StageValid => todo!("Lower stage valid"),
             ExprKind::MethodCall { .. } => {
                 diag_bail!(
@@ -2205,6 +2238,7 @@ pub struct Context<'a> {
     pub mono_state: &'a mut MonoState,
     pub subs: &'a mut Substitutions,
     pub diag_handler: &'a mut DiagHandler,
+    pub pipeline_context: &'a mut MaybePipelineContext,
 }
 
 pub fn generate_unit<'a>(
@@ -2265,6 +2299,7 @@ pub fn generate_unit<'a>(
 
     let mut statements = StatementList::new();
     let subs = &mut Substitutions::new();
+    let pipeline_context = &mut MaybePipelineContext::NotPipeline;
 
     let mut ctx = Context {
         symtab,
@@ -2274,6 +2309,7 @@ pub fn generate_unit<'a>(
         item_list,
         mono_state,
         diag_handler,
+        pipeline_context,
     };
 
     if let UnitKind::Pipeline(_) = unit.head.unit_kind.inner {

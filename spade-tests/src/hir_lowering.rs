@@ -1074,7 +1074,93 @@ mod tests {
 
     #[test]
     fn pipeline_ready_signal_works() {
-        todo!()
+        let code = r#"
+            pipeline(3) pl(clk: clock, a: int<16>) -> int<17> {
+                reg;
+                    let x = stage.ready;
+                reg[false];
+                reg;
+                    a+a
+            }
+        "#;
+
+        let expected = entity!(&["pl"]; (
+                "clk", n(3, "clk"), Type::Bool,
+                "a", n(0, "a"), Type::int(16),
+            ) -> Type::int(17); {
+                // Stage 0 has downstream enable signal, use it
+                (e(100); Type::int(16); Select; e(200), n(0, "a"), n(2, "s1_a"));
+                (reg n(2, "s1_a"); Type::int(16); clock(n(3, "clk")); e(100));
+
+                // Stage 1 has local enable signal, use it
+                (const 310; Type::Bool; ConstantValue::Bool(false));
+                (e(110); Type::int(16); Select; e(210), n(2, "s1_a"), n(21, "s2_a"));
+                (reg n(21, "s2_a"); Type::int(16); clock(n(3, "clk")); e(110));
+                (e(115); Type::Bool; Select; e(210), n(5, "x"), n(25, "s2_x"));
+                (reg n(25, "s2_x"); Type::Bool; clock(n(3, "clk")); e(115));
+
+                // Stage 3
+                (reg n(31, "s3_a"); Type::int(16); clock(n(3, "clk")); n(21, "s2_a"));
+                (reg n(35, "s3_x"); Type::Bool; clock(n(3, "clk")); n(25, "s2_x"));
+
+                // Stage conditions are generated at the end in reverse order
+                (e(210); Type::Bool; Alias; e(310));
+                (e(200); Type::Bool; Alias; e(310));
+
+
+                // Finally, actual non-pipelining code
+                (e(7); Type::Bool; Alias; e(210));
+                (n(5, "x"); Type::Bool; Alias; e(7));
+
+                // Output
+                (e(3); Type::int(17); Add; n(31, "s3_a"), n(31, "s3_a"));
+            } => e(3)
+        );
+
+        let result = build_entity!(code);
+
+        assert_same_mir!(&result, &expected);
+    }
+
+    #[test]
+    fn pipeline_ready_signal_is_true_if_stage_is_always_enabled() {
+        let code = r#"
+            pipeline(3) pl(clk: clock, a: int<16>) -> bool {
+                reg;
+                reg[false];
+                reg;
+                    stage.ready
+            }
+        "#;
+
+        let expected = entity!(&["pl"]; (
+                "clk", n(3, "clk"), Type::Bool,
+                "a", n(0, "a"), Type::int(16),
+            ) -> Type::Bool; {
+                // Stage 0 has downstream enable signal, use it
+                (e(100); Type::int(16); Select; e(200), n(0, "a"), n(2, "s1_a"));
+                (reg n(2, "s1_a"); Type::int(16); clock(n(3, "clk")); e(100));
+
+                // Stage 1 has local enable signal, use it
+                (const 310; Type::Bool; ConstantValue::Bool(false));
+                (e(110); Type::int(16); Select; e(210), n(2, "s1_a"), n(21, "s2_a"));
+                (reg n(21, "s2_a"); Type::int(16); clock(n(3, "clk")); e(110));
+
+                // Stage 3
+                (reg n(31, "s3_a"); Type::int(16); clock(n(3, "clk")); n(21, "s2_a"));
+
+                // Stage conditions are generated at the end in reverse order
+                (e(210); Type::Bool; Alias; e(310));
+                (e(200); Type::Bool; Alias; e(310));
+
+                // Output
+                (const 3; Type::Bool; ConstantValue::Bool(true))
+            } => e(3)
+        );
+
+        let result = build_entity!(code);
+
+        assert_same_mir!(&result, &expected);
     }
 
     #[test]
