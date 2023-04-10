@@ -13,6 +13,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Added
 
+- [!168][!168] Add an inverted port type `~T`. [Documentation][doc_inverted_ports]
+- [!168][!168] Add `port` expression for creating a `(T, ~T)`. [Documentation][doc_inverted_ports]
+
 ### Fixed
 
 - [!188][!188] Fix codegen bug when indexing structs or tuples which are 1 bit wide.
@@ -28,7 +31,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 [!187]: https://gitlab.com/spade-lang/spade/-/merge_requests/185
 [!188]: https://gitlab.com/spade-lang/spade/-/merge_requests/188
 
->>>>>>> 1de09d2 (Fix miscompilation on 1 bit indexees)
+[doc_inverted_ports]: https://docs.spade-lang.org/language_reference/type_system/inverted_ports.html
+
 ## [0.2.0] - 2023-04-20
 
 ### Added
@@ -53,10 +57,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 [!154]: https://gitlab.com/spade-lang/spade/-/merge_requests/154
 [!155]: https://gitlab.com/spade-lang/spade/-/merge_requests/155
-[!156]: https://gitlab.com/spade-lang/spade/-/merge_requests/155
-[!165]: https://gitlab.com/spade-lang/spade/-/merge_requests/155
+[!156]: https://gitlab.com/spade-lang/spade/-/merge_requests/156
+[!165]: https://gitlab.com/spade-lang/spade/-/merge_requests/165
+[!168]: https://gitlab.com/spade-lang/spade/-/merge_requests/168
 [!169]: https://gitlab.com/spade-lang/spade/-/merge_requests/169
 [!185]: https://gitlab.com/spade-lang/spade/-/merge_requests/185
+
 
 
 ## [0.1.0] - 2023-03-07
