@@ -17,6 +17,7 @@ impl TypeState {
         decl: &TypeDeclaration,
         type_list: &TypeList,
         params: Vec<ConcreteType>,
+        invert: bool,
     ) -> ConcreteType {
         // Mapping between generic name and type param
 
@@ -67,7 +68,7 @@ impl TypeState {
                     .map(|(ident, t)| {
                         (
                             ident.inner.clone(),
-                            Self::type_spec_to_concrete(&t, type_list, &generic_subs, false),
+                            Self::type_spec_to_concrete(&t, type_list, &generic_subs, invert),
                         )
                     })
                     .collect();
@@ -117,7 +118,7 @@ impl TypeState {
                     .get(&name)
                     .expect(&format!("Expected {:?} to be in type list", name));
 
-                Self::type_decl_to_concrete(actual, type_list, params)
+                Self::type_decl_to_concrete(actual, type_list, params, invert)
             }
             TypeSpec::Generic(name) => {
                 // Substitute the generic for the current substitution
@@ -216,7 +217,9 @@ impl TypeState {
                     .collect::<Option<Vec<_>>>()?;
 
                 match type_list.get(&t) {
-                    Some(t) => Some(Self::type_decl_to_concrete(&t.inner, type_list, params)),
+                    Some(t) => Some(Self::type_decl_to_concrete(
+                        &t.inner, type_list, params, invert,
+                    )),
                     None => None,
                 }
             }
@@ -251,11 +254,23 @@ impl TypeState {
                 Some(ConcreteType::Tuple(inner))
             }
             TypeVar::Backward(inner) => {
-                Self::inner_ungenerify_type(inner, symtab, type_list, invert)
-                    .map(|t| ConcreteType::Backward(Box::new(t)))
+                if invert {
+                    Self::inner_ungenerify_type(inner, symtab, type_list, invert)
+                        .map(|t| ConcreteType::Wire(Box::new(t)))
+                } else {
+                    Self::inner_ungenerify_type(inner, symtab, type_list, invert)
+                        .map(|t| ConcreteType::Backward(Box::new(t)))
+                }
             }
-            TypeVar::Wire(inner) => Self::inner_ungenerify_type(inner, symtab, type_list, invert)
-                .map(|t| ConcreteType::Wire(Box::new(t))),
+            TypeVar::Wire(inner) => {
+                if invert {
+                    Self::inner_ungenerify_type(inner, symtab, type_list, invert)
+                        .map(|t| ConcreteType::Backward(Box::new(t)))
+                } else {
+                    Self::inner_ungenerify_type(inner, symtab, type_list, invert)
+                        .map(|t| ConcreteType::Wire(Box::new(t)))
+                }
+            }
             TypeVar::Inverted(inner) => {
                 Self::inner_ungenerify_type(inner, symtab, type_list, !invert)
             }

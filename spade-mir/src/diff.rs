@@ -159,6 +159,20 @@ fn compare_statements(s1: &Statement, s2: &Statement, var_map: &mut VarMap) -> b
             check_name!(v1, v2);
             true
         }
+        (
+            Statement::Set {
+                target: tl,
+                value: vl,
+            },
+            Statement::Set {
+                target: tr,
+                value: vr,
+            },
+        ) => {
+            check_name!(tl, tr);
+            check_name!(vl, vr);
+            true
+        }
         _ => false,
     }
 }
@@ -184,6 +198,7 @@ fn populate_var_map(
                 var_map.try_update_name(&ValueName::Expr(*e1), &ValueName::Expr(*e2))
             }
             (Statement::Assert(_), Statement::Assert(_)) => Ok(()),
+            (Statement::Set { .. }, Statement::Set { .. }) => Ok(()),
             _ => Err(Error::StatementMismatch(s1.clone(), s2.clone())),
         })
 }

@@ -670,6 +670,7 @@ impl ExprLocal for Loc<Expression> {
             ExprKind::TupleLiteral(_) => Ok(None),
             ExprKind::TupleIndex(_, _) => Ok(None),
             ExprKind::FieldAccess(_, _) => Ok(None),
+            ExprKind::CreatePorts => Ok(None),
             ExprKind::ArrayLiteral { .. } => Ok(None),
             ExprKind::Index(_, _) => Ok(None),
             ExprKind::Block(block) => block.result.variable(subs).map(Some),
@@ -720,10 +721,10 @@ impl ExprLocal for Loc<Expression> {
     fn lower(&self, ctx: &mut Context) -> Result<StatementList> {
         let mut result = StatementList::new();
 
-        let self_type = ctx
+        let hir_type = ctx
             .types
-            .expr_type(self, ctx.symtab.symtab(), &ctx.item_list.types)?
-            .to_mir_type();
+            .expr_type(self, ctx.symtab.symtab(), &ctx.item_list.types)?;
+        let self_type = hir_type.to_mir_type();
 
         match &self.kind {
             ExprKind::Identifier(_) => {
@@ -806,6 +807,7 @@ impl ExprLocal for Loc<Expression> {
                 match op {
                     hir::expression::UnaryOperator::Sub => unop_builder(USub)?,
                     hir::expression::UnaryOperator::Not => unop_builder(Not)?,
+                    hir::expression::UnaryOperator::FlipPort => unop_builder(FlipPort)?,
                     hir::expression::UnaryOperator::BitwiseNot => unop_builder(BitwiseNot)?,
                     // Dereferences do nothing for codegen of the actual operator. It only
                     // prevents pipelining, hence Alias is fine here
@@ -850,6 +852,61 @@ impl ExprLocal for Loc<Expression> {
                         name: self.variable(ctx.subs)?,
                         operator: mir::Operator::IndexTuple(idx.inner as u64, types),
                         operands: vec![tup.variable(ctx.subs)?],
+                        ty: self_type,
+                        loc: Some(self.loc()),
+                    }),
+                    self,
+                )
+            }
+            ExprKind::CreatePorts => {
+                let (inner_type, right_mir_type) = match &hir_type {
+                    ConcreteType::Tuple(inner) => {
+                        if inner.len() != 2 {
+                            diag_bail!(self, "port type was not 2-tuple. Got {hir_type}")
+                        }
+
+                        (&inner[0], inner[1].to_mir_type())
+                    }
+                    _ => {
+                        diag_bail!(self, "port type was not tuple. Got {hir_type}")
+                    }
+                };
+
+                if !inner_type.is_port() {
+                    Diagnostic::error(self, "The ports expression can not create non-port values")
+                        .primary_label("{inner_type} in {hir_type} is not a port type");
+                }
+
+                let inner_mir_type = inner_type.to_mir_type();
+
+                let lname = mir::ValueName::Expr(ctx.idtracker.next());
+                let rname = mir::ValueName::Expr(ctx.idtracker.next());
+
+                result.append_secondary(
+                    vec![
+                        mir::Statement::Binding(mir::Binding {
+                            name: lname.clone(),
+                            operator: mir::Operator::Nop,
+                            operands: vec![],
+                            ty: inner_mir_type,
+                            loc: Some(self.loc()),
+                        }),
+                        mir::Statement::Binding(mir::Binding {
+                            name: rname.clone(),
+                            operator: mir::Operator::FlipPort,
+                            operands: vec![lname.clone()],
+                            ty: right_mir_type,
+                            loc: Some(self.loc()),
+                        }),
+                    ],
+                    self,
+                    "Port construction",
+                );
+                result.push_primary(
+                    mir::Statement::Binding(mir::Binding {
+                        name: self.variable(&ctx.subs)?,
+                        operator: mir::Operator::ConstructTuple,
+                        operands: vec![lname, rname],
                         ty: self_type,
                         loc: Some(self.loc()),
                     }),

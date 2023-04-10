@@ -943,6 +943,7 @@ pub fn visit_expression(e: &ast::Expression, ctx: &mut Context) -> Result<hir::E
             Ok(hir::ExprKind::IntLiteral(result.clone()))
         },
         ast::Expression::BoolLiteral(val) => Ok(hir::ExprKind::BoolLiteral(*val)),
+        ast::Expression::CreatePorts => Ok(hir::ExprKind::CreatePorts),
         ast::Expression::BinaryOperator(lhs, tok, rhs) => {
             let lhs = lhs.try_visit(visit_expression, ctx)?;
             let rhs = rhs.try_visit(visit_expression, ctx)?;

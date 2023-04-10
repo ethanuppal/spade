@@ -165,6 +165,10 @@ pub enum Operator {
     /// Get the `.0`th element of a tuple. The types of the elements are specified
     /// in the second argument
     IndexTuple(u64, Vec<Type>),
+
+    /// Inverts the direction of all bits of a port. I.e. the forward ports
+    /// become backward ports. This is only valid when converting from T to ~T
+    FlipPort,
     /// Instantiation of another module with the specified name. The operands are passed
     /// positionally to the entity. The target module can only have a single output which
     /// must be the last argument.
@@ -256,6 +260,7 @@ impl std::fmt::Display for Operator {
             Operator::IndexMemory => write!(f, "IndexMemory"),
             Operator::Instance(name, _) => write!(f, "Instance({})", name.as_verilog()),
             Operator::Alias => write!(f, "Alias"),
+            Operator::FlipPort => write!(f, "FlipPort"),
             Operator::Nop => write!(f, "Nop"),
             Operator::ReadPort => write!(f, "ReadPort"),
         }

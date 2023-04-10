@@ -88,8 +88,9 @@ impl Requirement {
                 field,
                 expr,
             } => {
-                target_type.expect_named(
-                    |type_name, params| {
+                target_type.expect_named_or_inverted(
+                    false,
+                    |inverted, type_name, params| {
                         // Check if we're dealing with a struct
                         match ctx.symtab.type_symbol_by_id(&type_name).inner {
                             TypeSymbol::Declared(_, TypeDeclKind::Struct { is_port: _ }) => {}
@@ -138,7 +139,24 @@ impl Requirement {
                         let generic_list = type_state
                             .add_mapped_generic_list(GenericListSource::Anonymous, mapping);
 
-                        let field_type = type_state.type_var_from_hir(&field_spec, &generic_list);
+                        let raw_field_type =
+                            type_state.type_var_from_hir(&field_spec, &generic_list);
+                        let field_type = if inverted {
+                            match raw_field_type {
+                                TypeVar::Backward(inner) => TypeVar::Wire(inner),
+                                TypeVar::Wire(inner) => TypeVar::Backward(inner),
+                                TypeVar::Inverted(inner) => *inner,
+                                _ => {
+                                    return Err(Diagnostic::bug(
+                                        field,
+                                        "Found inverted non-port type",
+                                    )
+                                    .into())
+                                }
+                            }
+                        } else {
+                            raw_field_type
+                        };
 
                         Ok(RequirementResult::Satisfied(vec![Replacement {
                             from: expr.clone(),

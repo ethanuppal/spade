@@ -77,6 +77,7 @@ fn visit_expression(
         spade_hir::ExprKind::BoolLiteral(_) => true,
         spade_hir::ExprKind::TupleLiteral(_) => true,
         spade_hir::ExprKind::ArrayLiteral(_) => true,
+        spade_hir::ExprKind::CreatePorts => true,
         spade_hir::ExprKind::Index(_, _) => true,
         spade_hir::ExprKind::TupleIndex(_, _) => false,
         spade_hir::ExprKind::FieldAccess(_, _) => false,
@@ -122,6 +123,7 @@ fn visit_expression(
                 linear_state.consume_expression(&expr)?;
             }
         }
+        spade_hir::ExprKind::CreatePorts => {}
         spade_hir::ExprKind::Index(target, idx) => {
             visit_expression(target, linear_state, ctx)?;
             visit_expression(idx, linear_state, ctx)?;
@@ -153,6 +155,7 @@ fn visit_expression(
                     linear_state.consume_expression(&operand)?;
                 }
                 UnaryOperator::Dereference => {}
+                UnaryOperator::FlipPort => {}
             }
         }
         spade_hir::ExprKind::Match(cond, variants) => {

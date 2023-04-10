@@ -37,6 +37,7 @@ pub enum UnaryOperator {
     BitwiseNot,
     Dereference,
     Reference,
+    FlipPort,
 }
 
 #[derive(PartialEq, Debug, Clone, Serialize, Deserialize)]
@@ -130,6 +131,7 @@ pub enum ExprKind {
     Identifier(NameID),
     IntLiteral(IntLiteral),
     BoolLiteral(bool),
+    CreatePorts,
     TupleLiteral(Vec<Loc<Expression>>),
     ArrayLiteral(Vec<Loc<Expression>>),
     Index(Box<Loc<Expression>>, Box<Loc<Expression>>),
@@ -229,6 +231,7 @@ impl LocExprExt for Loc<Expression> {
             ExprKind::ArrayLiteral(inner) => {
                 inner.iter().find_map(Self::runtime_requirement_witness)
             }
+            ExprKind::CreatePorts => Some(self.clone()),
             ExprKind::Index(l, r) => l
                 .runtime_requirement_witness()
                 .or_else(|| r.runtime_requirement_witness()),
@@ -275,7 +278,8 @@ impl LocExprExt for Loc<Expression> {
                         UnaryOperator::Not
                         | UnaryOperator::BitwiseNot
                         | UnaryOperator::Dereference
-                        | UnaryOperator::Reference => Some(self.clone()),
+                        | UnaryOperator::Reference
+                        | UnaryOperator::FlipPort => Some(self.clone()),
                     }
                 }
             }

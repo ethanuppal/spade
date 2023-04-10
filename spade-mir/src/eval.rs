@@ -215,6 +215,7 @@ pub fn eval_statements(statements: &[Statement]) -> Value {
                     Operator::EnumMember { .. } => todo!(),
                     Operator::IndexTuple(_, _) => todo!(),
                     Operator::ReadPort => todo!(),
+                    Operator::FlipPort => todo!(),
                     Operator::Instance(_, _) => todo!(),
                     Operator::Alias => todo!(),
                     Operator::Nop => todo!(),

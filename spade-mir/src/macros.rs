@@ -72,6 +72,13 @@ macro_rules! statement {
             loc: None,
         })
     };
+    // Set statement
+    (set; $lhs_kind:ident $lhs_name:tt; $rhs_kind:ident $rhs_name:tt) => {
+        spade_mir::Statement::Set{
+            target: spade_mir::value_name!($lhs_kind $lhs_name).nowhere(),
+            value: spade_mir::value_name!($rhs_kind $rhs_name).nowhere()
+        }
+    };
     (
         assert; $name_kind:ident $name:tt
     ) => {

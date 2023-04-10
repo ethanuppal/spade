@@ -197,6 +197,8 @@ impl<'a> Parser<'a> {
             Ok(operator)
         } else if let Some(stageref) = self.pipeline_reference()? {
             Ok(stageref)
+        } else if let Some(create_ports) = self.peek_and_eat(&TokenKind::Port)? {
+            Ok(Expression::CreatePorts.at(self.file_id, &create_ports))
         } else {
             match self.path() {
                 Ok(path) => {

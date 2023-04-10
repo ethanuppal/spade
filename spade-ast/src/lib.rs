@@ -135,6 +135,7 @@ pub enum Expression {
     TupleLiteral(Vec<Loc<Expression>>),
     TupleIndex(Box<Loc<Expression>>, Loc<u128>),
     FieldAccess(Box<Loc<Expression>>, Loc<Identifier>),
+    CreatePorts,
     Call {
         kind: CallKind,
         callee: Loc<Path>,
@@ -199,6 +200,7 @@ impl Expression {
             Expression::IntLiteral(_) => "int literal",
             Expression::BoolLiteral(_) => "bool literal",
             Expression::ArrayLiteral(_) => "array literal",
+            Expression::CreatePorts => "port",
             Expression::Index(_, _) => "index",
             Expression::TupleLiteral(_) => "tuple literal",
             Expression::TupleIndex(_, _) => "tuple index",

@@ -57,6 +57,35 @@ impl TypeVar {
         }
     }
 
+    /// Expect a named type, or TypeVar::Inverted(named), or a recursive inversion.
+    /// inverted_now is stateful and used to track if we are currently in an
+    /// inverted context.
+    /// The first argument of the on_named function specifies whether or not
+    /// the final named type we found was inverted or not. I.e. if we ran it on
+    /// `~T`, it would be called with (true, T), and if we ran it on `T` it would
+    /// be called with `(false, T)`
+    pub fn expect_named_or_inverted<T, U, K, O>(
+        &self,
+        inverted_now: bool,
+        on_named: K,
+        on_unknown: U,
+        on_other: O,
+    ) -> T
+    where
+        U: FnOnce() -> T,
+        K: FnOnce(bool, &NameID, &[TypeVar]) -> T,
+        O: FnOnce(&TypeVar) -> T,
+    {
+        match self {
+            TypeVar::Unknown(_) => on_unknown(),
+            TypeVar::Known(KnownType::Type(name), params) => on_named(inverted_now, name, params),
+            TypeVar::Inverted(inner) => {
+                inner.expect_named_or_inverted(!inverted_now, on_named, on_unknown, on_other)
+            }
+            other => on_other(other),
+        }
+    }
+
     pub fn expect_specific_named<T, U, K, O>(
         &self,
         name: NameID,

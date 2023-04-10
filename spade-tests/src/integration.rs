@@ -120,6 +120,18 @@ fn using_names_of_types_in_namespaces_works() {
     build_items(code);
 }
 
+#[test]
+fn field_access_works_on_flipped_ports() {
+    let code = r#"
+        struct port P {p1: &bool, p2: &mut bool}
+        entity t(p: ~P) -> bool {
+            set p.p1 = true;
+            *p.p2
+        }
+    "#;
+    build_items(code);
+}
+
 // NOTE: this is an awful error message at the moment, but it is strange code
 // and fixing it would take quite a bit of effort, so we'll leave it be and
 // create an issue for it

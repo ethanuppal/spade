@@ -505,6 +505,10 @@ fn forward_expression_code(binding: &Binding, types: &TypeList, ops: &[ValueName
         Operator::ReadPort => {
             format!("{}", ops[0].backward_var_name())
         }
+        Operator::FlipPort => {
+            // NOTE Dummy. Set in statement_code
+            format!("")
+        }
         Operator::ConstructTuple => {
             let mut members = ops
                 .iter()
@@ -616,6 +620,10 @@ fn backward_expression_code(binding: &Binding, types: &TypeList, ops: &[ValueNam
                     .collect::<Vec<_>>(),
             );
             format!("{}{}", op_names[0], index.verilog_code())
+        }
+        Operator::FlipPort => {
+            // NOTE: Set in statement_code
+            format!("")
         }
         Operator::Instance(_, _) => format!(""),
         Operator::Alias => {
@@ -733,6 +741,15 @@ fn statement_code(statement: &Statement, ctx: &mut Context) -> Code {
                 Operator::Match => format!("{}", forward_expression.unwrap()),
                 Operator::DivPow2 => format!("{}", forward_expression.unwrap()),
                 Operator::Nop => format!(""),
+                Operator::FlipPort => {
+                    // The forward ports of the flipped port (op[0]) and and the original (self)
+                    // should be mapped to the backward ports of the opposite port
+                    code! {
+                        [0] format!("assign {} = {};", name, back_ops[0]);
+                        [0] format!("assign {} = {};", ops[0], back_name);
+                    }
+                    .to_string()
+                }
                 Operator::DeclClockedMemory { .. } => format!("{}", forward_expression.unwrap()),
                 _ => code! {
                     [0] forward_expression.map(|f| format!("assign {} = {};", name, f));
@@ -1435,6 +1452,30 @@ mod backward_expression_tests {
             r#"
             logic[3:0] _e_0_mut;
             assign _e_1_mut[3:0] = _e_0_mut;"#
+        };
+
+        assert_same_code!(
+            &statement_code_and_declaration(
+                &stmt,
+                &TypeList::empty(),
+                &CodeBundle::new("".to_string())
+            )
+            .to_string(),
+            expected
+        );
+    }
+
+    #[test]
+    fn flip_port_works() {
+        let out_type = Type::Tuple(vec![Type::backward(Type::int(2)), Type::int(4)]);
+        let stmt = statement!(e(0); out_type; FlipPort; e(1));
+
+        let expected = indoc! {
+            r#"
+            logic[3:0] _e_0;
+            logic[1:0] _e_0_o;
+            assign _e_0 = _e_1_o;
+            assign _e_1 = _e_0_o;"#
         };
 
         assert_same_code!(

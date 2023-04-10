@@ -1,0 +1,20 @@
+---
+source: spade-tests/src/linear_check.rs
+assertion_line: 243
+---
+struct port P {p1: &mut bool, p2: &bool}
+
+entity x(t: P) -> int<8> {
+    set t.p1 = true;
+    let t_flip = %t;
+    8
+}
+
+
+error: Unexpected `%`, expected expression
+  ┌─ testinput:5:18
+  │
+5 │     let t_flip = %t;
+  │                  ^ expected expression here
+
+

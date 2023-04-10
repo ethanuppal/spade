@@ -2181,6 +2181,35 @@ mod tests {
 
         build_and_compare_entities!(code, expected);
     }
+
+    #[test]
+    fn port_pair_creation_works() {
+        let code = "
+            struct port P {
+                x: &bool,
+                y: &mut int<2>,
+            }
+
+            entity x() -> (P, ~P) {
+                port
+            }
+        ";
+
+        let result = build_entity!(code);
+
+        let intype_inner = vec![Type::Bool, Type::Backward(Box::new(Type::int(2)))];
+        let intype = Type::Tuple(intype_inner.clone());
+        let outtype = Type::Tuple(vec![Type::Backward(Box::new(Type::Bool)), Type::int(2)]);
+        let tuple_type = Type::Tuple(vec![intype.clone(), outtype.clone()]);
+
+        let expected = entity!(&["x"]; () -> tuple_type.clone(); {
+            (e(1); intype; Nop;);
+            (e(2); outtype; FlipPort; e(1));
+            (e(3); tuple_type; ConstructTuple; e(1), e(2))
+        } => e(3));
+
+        assert_same_mir!(&result, &expected);
+    }
 }
 
 #[cfg(test)]

@@ -206,11 +206,11 @@ impl TypeState {
         }
     }
 
-    pub fn inner_type_var_from_hir<'a>(
+    #[tracing::instrument(level = "trace", skip_all, fields(%hir_type))]
+    pub fn type_var_from_hir<'a>(
         &'a self,
         hir_type: &crate::hir::TypeSpec,
         generic_list_token: &GenericListToken,
-        invert: bool,
     ) -> TypeVar {
         let generic_list = self.get_generic_list(generic_list_token);
         match &hir_type {
@@ -235,12 +235,12 @@ impl TypeState {
             hir::TypeSpec::Tuple(inner) => {
                 let inner = inner
                     .iter()
-                    .map(|t| self.inner_type_var_from_hir(t, generic_list_token, invert))
+                    .map(|t| self.type_var_from_hir(t, generic_list_token))
                     .collect();
                 TypeVar::Tuple(inner)
             }
             hir::TypeSpec::Array { inner, size } => {
-                let inner = self.inner_type_var_from_hir(&inner, generic_list_token, invert);
+                let inner = self.type_var_from_hir(&inner, generic_list_token);
                 let size = self.hir_type_expr_to_var(&size, generic_list_token);
 
                 TypeVar::Array {
@@ -252,48 +252,15 @@ impl TypeState {
                 todo!("Support unit type in type inference")
             }
             hir::TypeSpec::Backward(inner) => {
-                if invert {
-                    TypeVar::Wire(Box::new(self.inner_type_var_from_hir(
-                        inner,
-                        generic_list_token,
-                        invert,
-                    )))
-                } else {
-                    TypeVar::Backward(Box::new(self.inner_type_var_from_hir(
-                        inner,
-                        generic_list_token,
-                        invert,
-                    )))
-                }
+                TypeVar::Backward(Box::new(self.type_var_from_hir(inner, generic_list_token)))
             }
             hir::TypeSpec::Wire(inner) => {
-                if invert {
-                    TypeVar::Backward(Box::new(self.inner_type_var_from_hir(
-                        inner,
-                        generic_list_token,
-                        invert,
-                    )))
-                } else {
-                    TypeVar::Wire(Box::new(self.inner_type_var_from_hir(
-                        inner,
-                        generic_list_token,
-                        invert,
-                    )))
-                }
+                TypeVar::Wire(Box::new(self.type_var_from_hir(inner, generic_list_token)))
             }
             hir::TypeSpec::Inverted(inner) => {
-                self.inner_type_var_from_hir(inner, generic_list_token, !invert)
+                TypeVar::Inverted(Box::new(self.type_var_from_hir(inner, generic_list_token)))
             }
         }
-    }
-
-    #[tracing::instrument(level = "trace", skip_all, fields(%hir_type))]
-    pub fn type_var_from_hir<'a>(
-        &'a self,
-        hir_type: &crate::hir::TypeSpec,
-        generic_list_token: &GenericListToken,
-    ) -> TypeVar {
-        self.inner_type_var_from_hir(hir_type, generic_list_token, false)
     }
 
     /// Returns the type of the expression with the specified id. Error if no equation
@@ -453,6 +420,7 @@ impl TypeState {
             ExprKind::TupleLiteral(_) => self.visit_tuple_literal(expression, ctx, generic_list)?,
             ExprKind::TupleIndex(_, _) => self.visit_tuple_index(expression, ctx, generic_list)?,
             ExprKind::ArrayLiteral(_) => self.visit_array_literal(expression, ctx, generic_list)?,
+            ExprKind::CreatePorts => self.visit_create_ports(expression, ctx, generic_list)?,
             ExprKind::FieldAccess(_, _) => {
                 self.visit_field_access(expression, ctx, generic_list)?
             }

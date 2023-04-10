@@ -283,6 +283,23 @@ impl TypeState {
 
     #[trace_typechecker]
     #[tracing::instrument(level = "trace", skip_all)]
+    pub fn visit_create_ports(
+        &mut self,
+        expression: &Loc<Expression>,
+        ctx: &Context,
+        _generic_list: &GenericListToken,
+    ) -> Result<()> {
+        assuming_kind!(ExprKind::CreatePorts = &expression => {
+            let inner_type = self.new_generic();
+            let inverted = TypeVar::Inverted(Box::new(inner_type.clone()));
+            let compound = TypeVar::Tuple(vec![inner_type, inverted]);
+            self.unify_expression_generic_error(expression, &compound, ctx.symtab)?;
+        });
+        Ok(())
+    }
+
+    #[trace_typechecker]
+    #[tracing::instrument(level = "trace", skip_all)]
     pub fn visit_index(
         &mut self,
         expression: &Loc<Expression>,
@@ -578,6 +595,12 @@ impl TypeState {
                     let reference_type = TypeVar::Wire(Box::new(result_type.clone()));
                     self.unify_expression_generic_error(operand, &result_type, &ctx.symtab)?;
                     self.unify_expression_generic_error(expression, &reference_type, &ctx.symtab)?
+                }
+                UnaryOperator::FlipPort => {
+                    let inner_type = self.new_generic();
+                    let inverted_type = TypeVar::Inverted(Box::new(inner_type.clone()));
+                    self.unify_expression_generic_error(operand, &inner_type, &ctx.symtab)?;
+                    self.unify_expression_generic_error(expression, &inverted_type, &ctx.symtab)?
                 }
             }
         });

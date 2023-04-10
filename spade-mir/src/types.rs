@@ -121,7 +121,7 @@ impl std::fmt::Display for Type {
                 write!(f, "enum {}", inner)
             }
             Type::Backward(inner) => {
-                write!(f, "~({inner})")
+                write!(f, "&mut ({inner})")
             }
         }
     }
