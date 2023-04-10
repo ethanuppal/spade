@@ -141,7 +141,7 @@ impl TypeState {
                 TypeVar::Tuple(inner) => {
                     inner
                 }
-                t @ TypeVar::Known(_, _) | t @ TypeVar::Array { .. } | t @ TypeVar::Backward(_) | t @ TypeVar::Wire(_) => {
+                t @ TypeVar::Known(_, _) | t @ TypeVar::Array { .. } | t @ TypeVar::Backward(_) | t @ TypeVar::Wire(_) | t @ TypeVar::Inverted(_) => {
                     return Err(Diagnostic::error(tup.loc(), "Attempt to use tuple indexing on non-tuple")
                         .primary_label("expected tuple")
                         .secondary_label(index, "Because this is a tuple index")

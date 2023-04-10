@@ -288,3 +288,12 @@ snapshot_error! {
         a#0#0
     }"
 }
+
+#[test]
+fn inverted_port_type() {
+    let code = r#"
+    entity square_wave(clk: clock, x: ~&mut bool) -> bool __builtin__
+    "#;
+
+    build_items(code);
+}

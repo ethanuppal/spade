@@ -213,6 +213,17 @@ pub fn visit_type_spec(
                 inner, symtab,
             )?)))
         }
+        ast::TypeSpec::Inverted(inner) => {
+            if !inner.is_port(symtab)? {
+                return Err(Diagnostic::error(t, "A non-port type can not be inverted")
+                    .primary_label("Inverting non-port")
+                    .secondary_label(inner.as_ref(), "This is not a port"));
+            } else {
+                Ok(hir::TypeSpec::Inverted(Box::new(visit_type_spec(
+                    inner, symtab,
+                )?)))
+            }
+        }
     };
 
     Ok(result?.at_loc(&t))

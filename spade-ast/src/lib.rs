@@ -31,6 +31,8 @@ pub enum TypeSpec {
     /// Backward type is considered a port, meaning it cannot be explicitly put in registers, and
     /// is not registered in pipelines
     Backward(Box<Loc<TypeSpec>>),
+    /// An inverted port. Turns `&mut T` into `&T` and `&T` into `&mut T`
+    Inverted(Box<Loc<TypeSpec>>),
     Wire(Box<Loc<TypeSpec>>),
 }
 impl WithLocation for TypeSpec {}

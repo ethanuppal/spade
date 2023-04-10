@@ -206,11 +206,11 @@ impl TypeState {
         }
     }
 
-    #[tracing::instrument(level = "trace", skip_all, fields(%hir_type))]
-    pub fn type_var_from_hir<'a>(
+    pub fn inner_type_var_from_hir<'a>(
         &'a self,
         hir_type: &crate::hir::TypeSpec,
         generic_list_token: &GenericListToken,
+        invert: bool,
     ) -> TypeVar {
         let generic_list = self.get_generic_list(generic_list_token);
         match &hir_type {
@@ -235,12 +235,12 @@ impl TypeState {
             hir::TypeSpec::Tuple(inner) => {
                 let inner = inner
                     .iter()
-                    .map(|t| self.type_var_from_hir(t, generic_list_token))
+                    .map(|t| self.inner_type_var_from_hir(t, generic_list_token, invert))
                     .collect();
                 TypeVar::Tuple(inner)
             }
             hir::TypeSpec::Array { inner, size } => {
-                let inner = self.type_var_from_hir(&inner, generic_list_token);
+                let inner = self.inner_type_var_from_hir(&inner, generic_list_token, invert);
                 let size = self.hir_type_expr_to_var(&size, generic_list_token);
 
                 TypeVar::Array {
@@ -252,12 +252,48 @@ impl TypeState {
                 todo!("Support unit type in type inference")
             }
             hir::TypeSpec::Backward(inner) => {
-                TypeVar::Backward(Box::new(self.type_var_from_hir(inner, generic_list_token)))
+                if invert {
+                    TypeVar::Wire(Box::new(self.inner_type_var_from_hir(
+                        inner,
+                        generic_list_token,
+                        invert,
+                    )))
+                } else {
+                    TypeVar::Backward(Box::new(self.inner_type_var_from_hir(
+                        inner,
+                        generic_list_token,
+                        invert,
+                    )))
+                }
             }
             hir::TypeSpec::Wire(inner) => {
-                TypeVar::Wire(Box::new(self.type_var_from_hir(inner, generic_list_token)))
+                if invert {
+                    TypeVar::Backward(Box::new(self.inner_type_var_from_hir(
+                        inner,
+                        generic_list_token,
+                        invert,
+                    )))
+                } else {
+                    TypeVar::Wire(Box::new(self.inner_type_var_from_hir(
+                        inner,
+                        generic_list_token,
+                        invert,
+                    )))
+                }
+            }
+            hir::TypeSpec::Inverted(inner) => {
+                self.inner_type_var_from_hir(inner, generic_list_token, !invert)
             }
         }
+    }
+
+    #[tracing::instrument(level = "trace", skip_all, fields(%hir_type))]
+    pub fn type_var_from_hir<'a>(
+        &'a self,
+        hir_type: &crate::hir::TypeSpec,
+        generic_list_token: &GenericListToken,
+    ) -> TypeVar {
+        self.inner_type_var_from_hir(hir_type, generic_list_token, false)
     }
 
     /// Returns the type of the expression with the specified id. Error if no equation
@@ -1003,6 +1039,9 @@ impl TypeState {
                 TypeVar::Backward(Box::new(self.check_var_for_replacement(*inner)))
             }
             TypeVar::Wire(inner) => TypeVar::Wire(Box::new(self.check_var_for_replacement(*inner))),
+            TypeVar::Inverted(inner) => {
+                TypeVar::Inverted(Box::new(self.check_var_for_replacement(*inner)))
+            }
             u @ TypeVar::Unknown(_) => u,
         }
     }
@@ -1253,6 +1292,12 @@ impl TypeState {
 
                 Ok((TypeVar::Wire(Box::new(new_inner)), None))
             }
+            (TypeVar::Inverted(i1), TypeVar::Inverted(i2)) => {
+                let new_inner =
+                    try_with_context!(self.unify_inner(i1.as_ref(), i2.as_ref(), symtab));
+
+                Ok((TypeVar::Wire(Box::new(new_inner)), None))
+            }
             // Unknown with other
             (TypeVar::Unknown(_), TypeVar::Unknown(_)) => Ok((v1, Some(v2))),
             (_other, TypeVar::Unknown(_)) => Ok((v1, Some(v2))),
@@ -1266,6 +1311,8 @@ impl TypeState {
             (_other, TypeVar::Backward(_)) => Err(err_producer!()),
             (TypeVar::Wire(_), _other) => Err(err_producer!()),
             (_other, TypeVar::Wire(_)) => Err(err_producer!()),
+            (TypeVar::Inverted(_), _other) => Err(err_producer!()),
+            (_other, TypeVar::Inverted(_)) => Err(err_producer!()),
         };
 
         let (new_type, replaced_type) = result?;
@@ -1406,6 +1453,7 @@ impl TypeState {
             TypeVar::Unknown(_) => {}
             TypeVar::Backward(inner) => Self::replace_type_var(inner, from, replacement),
             TypeVar::Wire(inner) => Self::replace_type_var(inner, from, replacement),
+            TypeVar::Inverted(inner) => Self::replace_type_var(inner, from, replacement),
         }
 
         if in_var == from {

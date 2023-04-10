@@ -897,3 +897,8 @@ snapshot_error! {
         }
     "
 }
+
+snapshot_error! {
+    inverting_non_port_type,
+    "entity x(t: ~int<8>) -> int<8> __builtin__"
+}

@@ -482,6 +482,15 @@ impl<'a> Parser<'a> {
     // Types
     #[trace_parser]
     pub fn type_spec(&mut self) -> Result<Loc<TypeSpec>> {
+        if let Some(tilde) = self.peek_and_eat(&TokenKind::Tilde)? {
+            let rest = self.type_spec()?;
+            return Ok(TypeSpec::Inverted(Box::new(rest.clone())).between(
+                self.file_id,
+                &tilde,
+                &rest,
+            ));
+        }
+
         let wire_sign = self.peek_and_eat(&TokenKind::Ampersand)?;
         let mut_sign = if wire_sign.is_some() {
             self.peek_and_eat(&TokenKind::Mut)?

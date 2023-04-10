@@ -209,6 +209,7 @@ pub enum TypeSpec {
     },
     Unit(Loc<()>),
     Backward(Box<Loc<TypeSpec>>),
+    Inverted(Box<Loc<TypeSpec>>),
     Wire(Box<Loc<TypeSpec>>),
 }
 impl WithLocation for TypeSpec {}
@@ -247,6 +248,7 @@ impl std::fmt::Display for TypeSpec {
             TypeSpec::Array { inner, size } => write!(f, "[{inner}; {size}]"),
             TypeSpec::Unit(_) => write!(f, "()"),
             TypeSpec::Backward(inner) => write!(f, "&mut {inner}"),
+            TypeSpec::Inverted(inner) => write!(f, "~{inner}"),
             TypeSpec::Wire(inner) => write!(f, "&{inner}"),
         }
     }

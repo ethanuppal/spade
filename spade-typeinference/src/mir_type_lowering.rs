@@ -49,6 +49,7 @@ impl TypeState {
                                         &arg.1.inner,
                                         type_list,
                                         &generic_subs,
+                                        false,
                                     ),
                                 )
                             })
@@ -66,7 +67,7 @@ impl TypeState {
                     .map(|(ident, t)| {
                         (
                             ident.inner.clone(),
-                            Self::type_spec_to_concrete(&t, type_list, &generic_subs),
+                            Self::type_spec_to_concrete(&t, type_list, &generic_subs, false),
                         )
                     })
                     .collect();
@@ -87,11 +88,12 @@ impl TypeState {
         expr: &TypeExpression,
         type_list: &TypeList,
         generic_substitutions: &HashMap<NameID, &ConcreteType>,
+        invert: bool,
     ) -> ConcreteType {
         match expr {
             hir::TypeExpression::Integer(val) => ConcreteType::Integer(val.clone()),
             hir::TypeExpression::TypeSpec(inner) => {
-                Self::type_spec_to_concrete(&inner, type_list, generic_substitutions)
+                Self::type_spec_to_concrete(&inner, type_list, generic_substitutions, invert)
             }
         }
     }
@@ -100,12 +102,15 @@ impl TypeState {
         spec: &TypeSpec,
         type_list: &TypeList,
         generic_substitutions: &HashMap<NameID, &ConcreteType>,
+        invert: bool,
     ) -> ConcreteType {
         match spec {
             TypeSpec::Declared(name, params) => {
                 let params = params
                     .iter()
-                    .map(|p| Self::type_expr_to_concrete(p, type_list, generic_substitutions))
+                    .map(|p| {
+                        Self::type_expr_to_concrete(p, type_list, generic_substitutions, invert)
+                    })
                     .collect();
 
                 let actual = type_list
@@ -125,7 +130,12 @@ impl TypeState {
                 let inner = t
                     .iter()
                     .map(|v| {
-                        Self::type_spec_to_concrete(&v.inner, type_list, &generic_substitutions)
+                        Self::type_spec_to_concrete(
+                            &v.inner,
+                            type_list,
+                            &generic_substitutions,
+                            invert,
+                        )
                     })
                     .collect::<Vec<_>>();
                 ConcreteType::Tuple(inner)
@@ -135,6 +145,7 @@ impl TypeState {
                     &size,
                     type_list,
                     &generic_substitutions,
+                    invert,
                 ));
 
                 let size = if let ConcreteType::Integer(size) = size_type.as_ref() {
@@ -148,34 +159,60 @@ impl TypeState {
                         &inner,
                         type_list,
                         &generic_substitutions,
+                        invert,
                     )),
                     size,
                 }
             }
             TypeSpec::Unit(_) => todo!("Handle unit type"),
-            TypeSpec::Backward(inner) => ConcreteType::Backward(Box::new(
-                Self::type_spec_to_concrete(inner, type_list, generic_substitutions),
-            )),
-            TypeSpec::Wire(inner) => ConcreteType::Wire(Box::new(Self::type_spec_to_concrete(
+            TypeSpec::Backward(inner) => {
+                let inner = Box::new(Self::type_spec_to_concrete(
+                    inner,
+                    type_list,
+                    generic_substitutions,
+                    invert,
+                ));
+                if invert {
+                    ConcreteType::Wire(inner)
+                } else {
+                    ConcreteType::Backward(inner)
+                }
+            }
+            TypeSpec::Wire(inner) => {
+                let inner = Box::new(Self::type_spec_to_concrete(
+                    inner,
+                    type_list,
+                    generic_substitutions,
+                    invert,
+                ));
+                if invert {
+                    ConcreteType::Backward(inner)
+                } else {
+                    ConcreteType::Wire(inner)
+                }
+            }
+            TypeSpec::Inverted(inner) => Self::type_spec_to_concrete(
                 inner,
                 type_list,
                 generic_substitutions,
-            ))),
+                // Recursive inversions uninvert, so if we're already inverted while
+                // reaching another inversion, go back to the normal direction
+                !invert,
+            ),
         }
     }
 
-    /// Converts the specified type to a concrete type, returning None
-    /// if it fails
-    pub fn ungenerify_type(
+    pub fn inner_ungenerify_type(
         var: &TypeVar,
         symtab: &SymbolTable,
         type_list: &TypeList,
+        invert: bool,
     ) -> Option<ConcreteType> {
         match var {
             TypeVar::Known(KnownType::Type(t), params) => {
                 let params = params
                     .iter()
-                    .map(|v| Self::ungenerify_type(v, symtab, type_list))
+                    .map(|v| Self::inner_ungenerify_type(v, symtab, type_list, invert))
                     .collect::<Option<Vec<_>>>()?;
 
                 match type_list.get(&t) {
@@ -189,8 +226,8 @@ impl TypeState {
                 Some(ConcreteType::Integer(size.clone()))
             }
             TypeVar::Array { inner, size } => {
-                let inner = Self::ungenerify_type(inner, symtab, type_list);
-                let size = Self::ungenerify_type(size, symtab, type_list).map(|t| {
+                let inner = Self::inner_ungenerify_type(inner, symtab, type_list, invert);
+                let size = Self::inner_ungenerify_type(size, symtab, type_list, invert).map(|t| {
                     if let ConcreteType::Integer(size) = t {
                         size
                     } else {
@@ -209,16 +246,31 @@ impl TypeState {
             TypeVar::Tuple(inner) => {
                 let inner = inner
                     .iter()
-                    .map(|v| Self::ungenerify_type(v, symtab, type_list))
+                    .map(|v| Self::inner_ungenerify_type(v, symtab, type_list, invert))
                     .collect::<Option<Vec<_>>>()?;
                 Some(ConcreteType::Tuple(inner))
             }
-            TypeVar::Backward(inner) => Self::ungenerify_type(inner, symtab, type_list)
-                .map(|t| ConcreteType::Backward(Box::new(t))),
-            TypeVar::Wire(inner) => Self::ungenerify_type(inner, symtab, type_list)
+            TypeVar::Backward(inner) => {
+                Self::inner_ungenerify_type(inner, symtab, type_list, invert)
+                    .map(|t| ConcreteType::Backward(Box::new(t)))
+            }
+            TypeVar::Wire(inner) => Self::inner_ungenerify_type(inner, symtab, type_list, invert)
                 .map(|t| ConcreteType::Wire(Box::new(t))),
+            TypeVar::Inverted(inner) => {
+                Self::inner_ungenerify_type(inner, symtab, type_list, !invert)
+            }
             TypeVar::Unknown(_) => None,
         }
+    }
+
+    /// Converts the specified type to a concrete type, returning None
+    /// if it fails
+    pub fn ungenerify_type(
+        var: &TypeVar,
+        symtab: &SymbolTable,
+        type_list: &TypeList,
+    ) -> Option<ConcreteType> {
+        Self::inner_ungenerify_type(var, symtab, type_list, false)
     }
 
     /// Returns the type of the specified name as a concrete type. If the type is not known,

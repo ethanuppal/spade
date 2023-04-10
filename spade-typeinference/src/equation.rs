@@ -25,6 +25,7 @@ pub enum TypeVar {
     Unknown(u64),
     Backward(Box<TypeVar>),
     Wire(Box<TypeVar>),
+    Inverted(Box<TypeVar>),
 }
 
 impl WithLocation for TypeVar {}
@@ -130,6 +131,7 @@ impl std::fmt::Display for TypeVar {
             TypeVar::Unknown(_) => write!(f, "_"),
             TypeVar::Backward(inner) => write!(f, "&mut {inner}"),
             TypeVar::Wire(inner) => write!(f, "&{inner}"),
+            TypeVar::Inverted(inner) => write!(f, "~{inner}"),
         }
     }
 }
