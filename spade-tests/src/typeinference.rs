@@ -631,3 +631,21 @@ fn unsigned_literals_fit_in_negative_region() {
 
     build_items(code);
 }
+
+#[test]
+fn accessing_fields_of_structs_in_inverted_ports_works() {
+    let code = "
+        struct port Inner {
+            x: &bool
+        }
+        struct port Outer {
+            inner: Inner
+        }
+
+        entity test(p: ~Outer) -> &mut bool {
+            p.inner.x
+        }
+    ";
+
+    build_items(code);
+}

@@ -146,13 +146,11 @@ impl Requirement {
                                 TypeVar::Backward(inner) => TypeVar::Wire(inner),
                                 TypeVar::Wire(inner) => TypeVar::Backward(inner),
                                 TypeVar::Inverted(inner) => *inner,
-                                _ => {
-                                    return Err(Diagnostic::bug(
-                                        field,
-                                        "Found inverted non-port type",
-                                    )
-                                    .into())
-                                }
+                                // If we were in an inverted context and we find
+                                // a type which is not a wire, we need to invert
+                                // it.
+                                // This means that `a.b` if b is `T` is `~T`
+                                other => TypeVar::Inverted(Box::new(other)),
                             }
                         } else {
                             raw_field_type
