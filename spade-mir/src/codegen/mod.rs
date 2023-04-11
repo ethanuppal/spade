@@ -177,6 +177,7 @@ fn forward_expression_code(binding: &Binding, types: &TypeList, ops: &[ValueName
         Operator::Sub => signed_binop!("-"),
         Operator::Mul => signed_binop!("*"),
         Operator::Eq => binop!("=="),
+        Operator::NotEq => binop!("!="),
         Operator::Gt => signed_binop!(">"),
         Operator::Lt => signed_binop!("<"),
         Operator::Ge => signed_binop!(">="),
@@ -528,6 +529,7 @@ fn backward_expression_code(binding: &Binding, types: &TypeList, ops: &[ValueNam
         | Operator::Sub
         | Operator::Mul
         | Operator::Eq
+        | Operator::NotEq
         | Operator::Gt
         | Operator::Lt
         | Operator::Ge

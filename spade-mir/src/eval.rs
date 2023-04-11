@@ -146,6 +146,7 @@ pub fn eval_statements(statements: &[Statement]) -> Value {
                     },
                     Operator::Mul => todo!(),
                     Operator::Eq => todo!(),
+                    Operator::NotEq => todo!(),
                     Operator::Gt => todo!(),
                     Operator::Lt => todo!(),
                     Operator::Ge => todo!(),

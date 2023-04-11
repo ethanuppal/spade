@@ -225,6 +225,25 @@ mod tests {
     }
 
     #[test]
+    fn not_equals_operator_codegens_correctly() {
+        let code = r#"
+        entity name(a: int<16>, b: int<16>) -> bool {
+            a != b
+        }
+        "#;
+
+        let expected = entity!(&["name"]; (
+                "a", n(0, "a"), Type::int(16),
+                "b", n(1, "b"), Type::int(16)
+            ) -> Type::Bool; {
+                (e(0); Type::Bool; NotEq; n(0, "a"), n(1, "b"))
+            } => e(0)
+        );
+
+        assert_same_mir!(&build_entity!(code), &expected);
+    }
+
+    #[test]
     fn logical_and_operator_codegens_correctly() {
         let code = r#"
         entity name(a: bool, b: bool) -> bool {

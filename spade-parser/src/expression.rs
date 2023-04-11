@@ -32,6 +32,7 @@ fn binop_binding_power(op: &BinaryOperator) -> OpBindingPower {
         BinaryOperator::Sub => OpBindingPower::AddLike,
         BinaryOperator::Mul => OpBindingPower::MulLike,
         BinaryOperator::Equals => OpBindingPower::Equality,
+        BinaryOperator::NotEquals => OpBindingPower::Equality,
         BinaryOperator::Lt => OpBindingPower::RelationalCmp,
         BinaryOperator::Gt => OpBindingPower::RelationalCmp,
         BinaryOperator::Le => OpBindingPower::RelationalCmp,
@@ -65,6 +66,7 @@ impl<'a> Parser<'a> {
             TokenKind::Minus => Some(BinaryOperator::Sub),
             TokenKind::Asterisk => Some(BinaryOperator::Mul),
             TokenKind::Equals => Some(BinaryOperator::Equals),
+            TokenKind::NotEquals => Some(BinaryOperator::NotEquals),
             // We have to handle left and right shifts separately because otherwise
             // their parsing interferes with generic arguments
             TokenKind::Lt => Some(BinaryOperator::Lt),

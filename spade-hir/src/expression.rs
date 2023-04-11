@@ -15,6 +15,7 @@ pub enum BinaryOperator {
     Sub,
     Mul,
     Eq,
+    NotEq,
     Gt,
     Lt,
     Ge,
@@ -248,6 +249,7 @@ impl LocExprExt for Loc<Expression> {
                         BinaryOperator::Sub => None,
                         BinaryOperator::Mul
                         | BinaryOperator::Eq
+                        | BinaryOperator::NotEq
                         | BinaryOperator::Gt
                         | BinaryOperator::Lt
                         | BinaryOperator::Ge

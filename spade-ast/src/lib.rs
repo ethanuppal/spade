@@ -83,6 +83,7 @@ pub enum BinaryOperator {
     Sub,
     Mul,
     Equals,
+    NotEquals,
     Lt,
     Gt,
     Le,

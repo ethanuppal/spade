@@ -207,3 +207,14 @@ fn square_wave_readme_example() {
 
     build_items(code);
 }
+
+#[test]
+fn neq_operator_works() {
+    let code = r#"
+    fn neq(x: int<8>, y: int<8>) -> bool {
+        x != y
+    }
+    "#;
+
+    build_items(code);
+}

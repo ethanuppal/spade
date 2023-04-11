@@ -770,6 +770,7 @@ impl ExprLocal for Loc<Expression> {
                     BinaryOperator::Sub => binop_builder(Sub)?,
                     BinaryOperator::Mul => binop_builder(Mul)?,
                     BinaryOperator::Eq => binop_builder(Eq)?,
+                    BinaryOperator::NotEq => binop_builder(NotEq)?,
                     BinaryOperator::Gt => binop_builder(Gt)?,
                     BinaryOperator::Lt => binop_builder(Lt)?,
                     BinaryOperator::Ge => binop_builder(Ge)?,

@@ -518,6 +518,7 @@ impl TypeState {
                     self.unify_expression_generic_error(expression, &rhs.inner, &ctx.symtab)?;
                 }
                 BinaryOperator::Eq
+                | BinaryOperator::NotEq
                 | BinaryOperator::Gt
                 | BinaryOperator::Lt
                 | BinaryOperator::Ge

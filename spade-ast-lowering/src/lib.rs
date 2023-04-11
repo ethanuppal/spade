@@ -943,6 +943,7 @@ pub fn visit_expression(e: &ast::Expression, ctx: &mut Context) -> Result<hir::E
                 ast::BinaryOperator::Sub => Ok(operator(BinaryOperator::Sub)),
                 ast::BinaryOperator::Mul => Ok(operator(BinaryOperator::Mul)),
                 ast::BinaryOperator::Equals => Ok(operator(BinaryOperator::Eq)),
+                ast::BinaryOperator::NotEquals => Ok(operator(BinaryOperator::NotEq)),
                 ast::BinaryOperator::Gt => Ok(operator(BinaryOperator::Gt)),
                 ast::BinaryOperator::Lt => Ok(operator(BinaryOperator::Lt)),
                 ast::BinaryOperator::Ge => Ok(operator(BinaryOperator::Ge)),

@@ -121,6 +121,8 @@ pub enum TokenKind {
     Slash,
     #[token("==")]
     Equals,
+    #[token("!=")]
+    NotEquals,
     #[token("<")]
     Lt,
     #[token(">")]
@@ -255,6 +257,7 @@ impl TokenKind {
             TokenKind::Asterisk => "*",
             TokenKind::Slash => "/",
             TokenKind::Equals => "==",
+            TokenKind::NotEquals => "!=",
             TokenKind::Lt => "<",
             TokenKind::Gt => ">",
             TokenKind::Le => "<=",
