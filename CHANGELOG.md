@@ -18,6 +18,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - [!189][!189] Add `#[no_mangle]` attribute to unit parameters to avoid appending `_i` or `_o`
 - [!191][!191] Add `translate_value` method to spade-python
 - [!200][!200] Add more sophisticated and experimental wordlength inference logic that can be activated with the flag `--infer-method` or the environment variable `SPADE_INFER_METHOD`.
+- [!167][!167] Add support for ready and valid signaling in the pipelines. [Documentation](https://docs.spade-lang.org/language_reference/dynamic_pipelines.html)
 
 ### Fixed
 
@@ -35,6 +36,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - [!184][!184] The CI system now builds both Linux and macOS-AArch64.
 - [!195][!195] Logos and Clap have had their respective versions bumped.
 
+[!167]: https://gitlab.com/spade-lang/spade/-/merge_requests/167
 [!168]: https://gitlab.com/spade-lang/spade/-/merge_requests/168
 [!178]: https://gitlab.com/spade-lang/spade/-/merge_requests/178
 [!184]: https://gitlab.com/spade-lang/spade/-/merge_requests/184
@@ -43,6 +45,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 [!189]: https://gitlab.com/spade-lang/spade/-/merge_requests/189
 [!191]: https://gitlab.com/spade-lang/spade/-/merge_requests/191
 [!195]: https://gitlab.com/spade-lang/spade/-/merge_requests/195
+[!200]: https://gitlab.com/spade-lang/spade/-/merge_requests/200
 [!201]: https://gitlab.com/spade-lang/spade/-/merge_requests/201
 
 [doc_inverted_ports]: https://docs.spade-lang.org/language_reference/type_system/inverted_ports.html
@@ -51,6 +54,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Added
 
+- [!155][!155] Support for specifying initial content of memories.
 - [!155][!155] Support for specifying initial content of memories.
 - [!154][!154] Add unsigned literals, for example `let x: int<8> 255u` as a
   stop gap solution until proper unsigned types are implemented
@@ -75,6 +79,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 [!165]: https://gitlab.com/spade-lang/spade/-/merge_requests/165
 [!169]: https://gitlab.com/spade-lang/spade/-/merge_requests/169
 [!185]: https://gitlab.com/spade-lang/spade/-/merge_requests/185
+
 
 ## [0.1.0] - 2023-03-07
 
