@@ -1,0 +1,23 @@
+---
+source: spade-tests/src/hir_lowering.rs
+assertion_line: 2306
+---
+fn main() -> int<2> {
+    let a: int<1> = 0;
+    let b: int<2> = std::conv::trunc(a);
+    b
+}
+
+
+error: Truncating to a larger value
+  ┌─ testinput:3:38
+  │
+3 │     let b: int<2> = std::conv::trunc(a);
+  │                     -----------------^-
+  │                     │                │
+  │                     │                This value is 1 bit
+  │                     The value is truncated to 2 bits here
+  │
+  = note: Truncation can only remove bits
+
+

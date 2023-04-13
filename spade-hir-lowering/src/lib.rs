@@ -24,7 +24,7 @@ use mir::types::Type as MirType;
 use mir::{ConstantValue, ValueName};
 use monomorphisation::MonoState;
 pub use name_map::NameSourceMap;
-use num::{BigUint, Zero};
+use num::{BigUint, One, Zero};
 use pattern::DeconstructedPattern;
 use pipelines::lower_pipeline;
 use spade_common::id_tracker::ExprIdTracker;
@@ -1431,10 +1431,18 @@ impl ExprLocal for Loc<Expression> {
         if self_type.size() > input_type.size() {
             let input_loc = args[0].value.loc();
             return Err(Diagnostic::error(input_loc, "Truncating to a larger value")
-                .primary_label(format!("This value is {} bytes", input_type.size()))
+                .primary_label(format!(
+                    "This value is {} bit{}",
+                    input_type.size(),
+                    if input_type.size() == One::one() {
+                        ""
+                    } else {
+                        "s"
+                    }
+                ))
                 .secondary_label(
                     self,
-                    format!("The value is truncated to {} bytes here", self_type.size()),
+                    format!("The value is truncated to {} bits here", self_type.size()),
                 )
                 .note("Truncation can only remove bits")
                 .into());

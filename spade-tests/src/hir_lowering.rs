@@ -2302,4 +2302,15 @@ mod argument_list_tests {
         }
         "
     }
+
+    snapshot_error! {
+        truncating_to_larger_value_single_bit,
+        "
+        fn main() -> int<2> {
+            let a: int<1> = 0;
+            let b: int<2> = std::conv::trunc(a);
+            b
+        }
+        "
+    }
 }

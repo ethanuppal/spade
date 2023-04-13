@@ -14,8 +14,8 @@ error: Truncating to a larger value
 3 │     let b: int<8> = std::conv::trunc(a);
   │                     -----------------^-
   │                     │                │
-  │                     │                This value is 4 bytes
-  │                     The value is truncated to 8 bytes here
+  │                     │                This value is 4 bits
+  │                     The value is truncated to 8 bits here
   │
   = note: Truncation can only remove bits
 
