@@ -14,6 +14,6 @@ error: Undefined pipeline stage
   ┌─ testinput:7:15
   │
 7 │         stage(b).x
-  │               ^ Can't find pipeline stage 'b
+  │               ^ Cannot find pipeline stage 'b
 
 

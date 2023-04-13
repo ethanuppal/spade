@@ -3,7 +3,7 @@ source: spade-tests/src/ast_lowering.rs
 ---
 entity x(a: (int<32>, &int<32>)) -> bool __builtin__
 
-error: Can't mix ports and non-ports in a tuple
+error: Cannot mix ports and non-ports in a tuple
   ┌─ testinput:1:14
   │
 1 │ entity x(a: (int<32>, &int<32>)) -> bool __builtin__

@@ -171,7 +171,7 @@ pub fn visit_type_spec(
                     if !ty.is_port(symtab)? {
                         return Err(Diagnostic::error(
                             ty,
-                            "Can't mix ports and non-ports in a tuple",
+                            "Cannot mix ports and non-ports in a tuple",
                         )
                         .primary_label("This is not a port")
                         .secondary_label(witness, "This is a port")
@@ -1105,7 +1105,7 @@ pub fn visit_expression(e: &ast::Expression, ctx: &mut Context) -> Result<hir::E
                     pipeline_ctx
                         .get_stage(name)
                         .ok_or_else(|| Diagnostic::error(name, "Undefined pipeline stage")
-                            .primary_label(format!("Can't find pipeline stage '{name}"))
+                            .primary_label(format!("Cannot find pipeline stage '{name}"))
                         )?,
                     name.loc(),
                 ),

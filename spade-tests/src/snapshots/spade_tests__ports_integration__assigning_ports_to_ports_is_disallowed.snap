@@ -7,13 +7,13 @@ entity not_allowed(a: &mut (&bool, &bool), b: (&bool, &bool)) -> bool {
 }
 
 
-error: Can't create a wire of ports
+error: Cannot create a wire of ports
   ┌─ testinput:1:23
   │
 1 │ entity not_allowed(a: &mut (&bool, &bool), b: (&bool, &bool)) -> bool {
   │                       ^^^^^^^^^^^^^^^^^^^
   │                       │    │
   │                       │    Because this is a port
-  │                       This can't be a wire
+  │                       This cannot be a wire
 
 

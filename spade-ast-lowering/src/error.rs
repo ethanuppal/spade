@@ -8,9 +8,9 @@ pub enum ItemKind {
 }
 
 #[derive(IntoDiagnostic)]
-#[diagnostic(error, "Can't create a wire of ports")]
+#[diagnostic(error, "Cannot create a wire of ports")]
 pub(crate) struct WireOfPort {
-    #[diagnostic(primary, "This can't be a wire")]
+    #[diagnostic(primary, "This cannot be a wire")]
     pub(crate) full_type: Loc<()>,
     #[diagnostic(secondary, "Because this is a port")]
     pub(crate) inner_type: Loc<()>,
