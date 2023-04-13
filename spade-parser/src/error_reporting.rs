@@ -184,7 +184,7 @@ impl CompilationError for Error {
                     .primary_label()
                     .with_message("decl doesn't declare anything")]),
             Error::RegInFunction{at, fn_keyword} => Diagnostic::error()
-                .with_message("Functions can not contain registers")
+                .with_message("Functions cannot contain registers")
                 .with_labels(vec![
                     at
                         .primary_label()

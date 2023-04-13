@@ -746,7 +746,7 @@ impl TypeState {
                 );
 
                 self.unify(pattern, &tuple_type, &ctx.symtab)
-                    .expect("Unification of new_generic with tuple type can not fail");
+                    .expect("Unification of new_generic with tuple type cannot fail");
             }
             hir::PatternKind::Type(name, args) => {
                 let (condition_type, params, generic_list) =
@@ -782,7 +782,7 @@ impl TypeState {
                     };
 
                 self.unify(pattern, &condition_type, &ctx.symtab)
-                    .expect("Unification of new_generic with enum can not fail");
+                    .expect("Unification of new_generic with enum cannot fail");
 
                 for (
                     i,

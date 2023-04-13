@@ -9,7 +9,7 @@ entity x(p: &bool) -> &bool {
 }
 
 
-error: Generic types can not be ports
+error: Generic types cannot be ports
   ┌─ testinput:4:20
   │
 4 │     let x: &bool = inst identity(p);

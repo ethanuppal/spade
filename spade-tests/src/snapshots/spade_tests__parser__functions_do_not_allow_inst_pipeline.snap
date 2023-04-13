@@ -11,7 +11,7 @@ fn X() -> bool {
 }
 
 
-error: Entities and pipelines can not be instantiated in functions
+error: Entities and pipelines cannot be instantiated in functions
   ┌─ testinput:7:5
   │
 6 │ fn X() -> bool {

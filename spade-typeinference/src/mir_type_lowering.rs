@@ -184,7 +184,7 @@ impl TypeState {
                 }
             }
             TypeVar::Known(KnownType::Integer(size), params) => {
-                assert!(params.len() == 0, "integers can not have type parameters");
+                assert!(params.len() == 0, "integers cannot have type parameters");
 
                 Some(ConcreteType::Integer(size.clone()))
             }

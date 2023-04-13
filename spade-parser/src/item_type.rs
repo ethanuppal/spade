@@ -23,7 +23,7 @@ impl UnitKindLocal for Option<Loc<UnitKind>> {
         match self.as_ref().map(|s| &s.inner) {
             Some(UnitKind::Function) => Err(Diagnostic::error(
                 at,
-                "Entities and pipelines can not be instantiated in functions",
+                "Entities and pipelines cannot be instantiated in functions",
             ) // FIXME: Choose "entities" or "pipelines" depending on what we try to instantiate
             .primary_label("inst not allowed here")
             .secondary_label(self.as_ref().unwrap(), "This is a function")

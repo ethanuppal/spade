@@ -5,7 +5,7 @@ fn a() -> bool {
     ()
 }
 
-error: Tuples of 0 elements are not supported
+error: Tuples with no elements are not supported
   ┌─ testinput:2:5
   │
 2 │     ()

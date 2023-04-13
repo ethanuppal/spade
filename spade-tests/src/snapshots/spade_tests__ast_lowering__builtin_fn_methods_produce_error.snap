@@ -7,7 +7,7 @@ impl X {
 }
 
 
-error: Methods can not be __builtin__
+error: Methods cannot be __builtin__
   ┌─ testinput:3:5
   │
 3 │     fn x(self, x: bool) -> bool __builtin__

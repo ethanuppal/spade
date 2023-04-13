@@ -174,7 +174,7 @@ mod tests {
         assert_eq!(input, expected);
     }
 
-    // NOTE: This is purely a limitation based on the fact that constants can not have names,
+    // NOTE: This is purely a limitation based on the fact that constants cannot have names,
     // only IDs. If this is lifted we should probably alias them too
     #[test]
     fn aliasing_does_not_replace_constants() {

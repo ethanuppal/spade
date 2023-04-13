@@ -419,7 +419,7 @@ fn lower_ast(
     errors: &mut ErrorHandler,
 ) {
     for (namespace, module_ast) in module_asts {
-        // Can not be done by do_in_namespace because the symtab has been moved
+        // Cannot be done by do_in_namespace because the symtab has been moved
         // into `ctx`
         for ident in &namespace.namespace.0 {
             // NOTE: These identifiers do not have the correct file_id. However,

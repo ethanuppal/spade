@@ -8,7 +8,7 @@ fn main() -> int<32> {
 }
 
 
-error: Generic builtins can not be instantiated
+error: Generic builtins cannot be instantiated
   ┌─ testinput:4:5
   │
 1 │ fn a<T>() -> T __builtin__

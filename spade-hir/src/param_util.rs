@@ -38,19 +38,19 @@ impl From<ArgumentError> for Diagnostic {
     fn from(error: ArgumentError) -> Self {
         match error {
             ArgumentError::ArgumentListLengthMismatch { expected, got, at } => {
-                Diagnostic::error(at, format!("Expected {expected} arguments, got {got}"))
-                    .primary_label(format!("Expected {expected} arguments"))
+                let plural = if expected == 1 { "" } else { "s" };
+                Diagnostic::error(
+                    at,
+                    format!("Expected {expected} argument{plural}, got {got}"),
+                )
+                .primary_label(format!("Expected {expected} argument{plural}"))
             }
             ArgumentError::NoSuchArgument { name } => {
                 Diagnostic::error(&name, format!("No such argument: {name}"))
                     .primary_label("No such argument")
             }
             ArgumentError::MissingArguments { mut missing, at } => {
-                let plural = if missing.len() == 1 {
-                    "argument"
-                } else {
-                    "arguments"
-                };
+                let plural = if missing.len() == 1 { "" } else { "s" };
 
                 missing.sort_by_key(|arg| arg.0.clone());
 
@@ -60,8 +60,8 @@ impl From<ArgumentError> for Diagnostic {
                     .collect::<Vec<_>>()
                     .join(", ");
 
-                Diagnostic::error(at, format!("Missing {plural}: {arg_list}"))
-                    .primary_label(format!("Missing {plural}: {arg_list}"))
+                Diagnostic::error(at, format!("Missing argument{plural}: {arg_list}"))
+                    .primary_label(format!("Missing argument{plural}: {arg_list}"))
             }
             ArgumentError::DuplicateNamedBindings { new, prev_loc } => {
                 Diagnostic::error(&new, format!("{new} specified multiple times"))

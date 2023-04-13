@@ -96,6 +96,14 @@ snapshot_error! {
     }"
 }
 
+snapshot_error! {
+    tuple_index_out_of_bounds_error,
+    "fn a(b: int<2>, c: int<2> ) -> int<3> {
+        let tup = (b, c);
+        tup#2
+    }"
+}
+
 #[test]
 fn three_generic_end_chars_work() {
     let code = r#"
@@ -161,6 +169,13 @@ snapshot_error! {
     empty_file_is_valid,
     ""
 }
+
+snapshot_error!(
+    missing_expression,
+    "entity a() -> int<32> {
+        if 0 else {4};
+    }"
+);
 
 snapshot_error! {
     using_empty_identifier_a,

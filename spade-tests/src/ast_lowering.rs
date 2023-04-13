@@ -599,6 +599,25 @@ snapshot_error! {
 }
 
 snapshot_error! {
+    incorrect_stage_count_single,
+    "
+        pipeline(1) pipe(clk: clock) -> bool {
+                true
+        }
+    "
+}
+
+snapshot_error! {
+    incorrect_stage_count_only_one,
+    "
+        pipeline(2) pipe(clk: clock) -> bool {
+            reg;
+                true
+        }
+    "
+}
+
+snapshot_error! {
     pipeline_without_arguments,
     "
         pipeline(1) pipe() -> bool {

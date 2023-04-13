@@ -77,7 +77,7 @@ pub enum Error {
 
     // Acts mostly like UnexpectedToken but produced by the argument list parser
     // if it encounters the UnexpectedEndOfSCListError, at which point more tokens
-    // are added to the returned error. This can not be done to the previous variant
+    // are added to the returned error. This cannot be done to the previous variant
     // as recursive errors of the same kind would then add the token multiple times
     #[error("Unexpected end of argument list")]
     UnexpectedEndOfArgList {

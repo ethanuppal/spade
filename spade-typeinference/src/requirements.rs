@@ -204,7 +204,7 @@ impl Requirement {
                                 let size_u32 = size.to_u32().ok_or_else(|| {
                                     Diagnostic::bug(
                                         target_type,
-                                        "Integer size does not fit in 32 bit unsigned number",
+                                        "Integer size does not fit in 32-bit unsigned number",
                                     )
                                     .note("How did you manage to trigger this 🤔")
                                 })?;

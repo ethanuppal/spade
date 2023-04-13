@@ -11,7 +11,7 @@ entity x(clk: clock, a: X) -> bool {
 }
 
 
-error: Ports can not be put in a register
+error: Ports cannot be put in a register
   ┌─ testinput:6:18
   │
 6 │     reg(clk) _ = a;

@@ -60,7 +60,7 @@ impl Type {
                 for v in inner {
                     for i in v {
                         if i.backward_size() != BigUint::zero() {
-                            unreachable!("Enums can not have output wires as payload")
+                            unreachable!("Enums cannot have output wires as payload")
                         }
                     }
                 }
@@ -68,7 +68,7 @@ impl Type {
             }
             Type::Memory { inner, .. } => {
                 if inner.backward_size() != BigUint::zero() {
-                    unreachable!("Memory can not contain output wires")
+                    unreachable!("Memory cannot contain output wires")
                 };
                 BigUint::zero()
             }

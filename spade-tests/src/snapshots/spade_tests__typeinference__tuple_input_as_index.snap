@@ -1,0 +1,16 @@
+---
+source: spade-tests/src/typeinference.rs
+assertion_line: 97
+---
+fn a(y: int<1>) -> int<32> {
+    let t = (3, 5);
+    t#y
+}
+
+error: Expected an index after #
+  ┌─ testinput:3:6
+  │
+3 │     t#y
+  │      ^ expected index
+
+

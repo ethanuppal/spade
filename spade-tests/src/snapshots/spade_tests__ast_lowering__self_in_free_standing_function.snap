@@ -3,7 +3,7 @@ source: spade-tests/src/ast_lowering.rs
 ---
 fn a(self) -> bool {true}
 
-error: 'self' can not be used in free standing units
+error: 'self' cannot be used in free standing units
   ┌─ testinput:1:6
   │
 1 │ fn a(self) -> bool {true}

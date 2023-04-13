@@ -254,7 +254,7 @@ fn visit_parameter_list(
             SelfContext::FreeStanding => {
                 return Err(Diagnostic::error(
                     self_loc,
-                    "'self' can not be used in free standing units",
+                    "'self' cannot be used in free standing units",
                 )
                 .primary_label("not allowed here")
                 .into())
@@ -489,7 +489,7 @@ pub fn visit_impl(
                 );
             }
             hir::Item::Builtin(_, head) => {
-                return Err(Diagnostic::error(head, "Methods can not be __builtin__")
+                return Err(Diagnostic::error(head, "Methods cannot be __builtin__")
                     .help("Consider defining a free-standing function")
                     .into())
             }

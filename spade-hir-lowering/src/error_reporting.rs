@@ -1,6 +1,7 @@
 use codespan_reporting::diagnostic::Diagnostic;
 use codespan_reporting::term::{self, termcolor::Buffer};
 use itertools::Itertools;
+use num::One;
 
 use spade_common::location_info::AsLabel;
 use spade_diagnostics::emitter::codespan_config;
@@ -49,19 +50,24 @@ impl CompilationError for Error {
                 rhs,
                 result,
                 expected,
-            } => Diagnostic::error()
-                .with_message(format!(
-                    "Concatenation produces {result} bits, expected {expected}"
-                ))
-                .with_labels(vec![
-                    result
-                        .primary_label()
-                        .with_message(format!("Expected {expected} bits")),
-                    lhs.secondary_label()
-                        .with_message(format!("This has {lhs} bits")),
-                    rhs.secondary_label()
-                        .with_message(format!("This has {rhs} bits")),
-                ]),
+            } => {
+                let lhs_plural = if lhs.inner == One::one() { "" } else { "s" };
+                let rhs_plural = if rhs.inner == One::one() { "" } else { "s" };
+
+                Diagnostic::bug()
+                    .with_message(format!(
+                        "Concatenation produces {result} bits, expected {expected}"
+                    ))
+                    .with_labels(vec![
+                        result
+                            .primary_label()
+                            .with_message(format!("Expected {expected} bits")),
+                        lhs.secondary_label()
+                            .with_message(format!("This has {lhs} bit{lhs_plural}")),
+                        rhs.secondary_label()
+                            .with_message(format!("This has {rhs} bit{rhs_plural}")),
+                    ])
+            }
             Error::UndefinedVariable { name } => Diagnostic::error()
                 .with_message(format!("Use of undeclared name {name}"))
                 .with_labels(vec![name.primary_label().with_message("Undeclared name")]),
@@ -69,18 +75,22 @@ impl CompilationError for Error {
                 name,
                 unavailable_for,
                 referenced_at_stage,
-            } => Diagnostic::error()
-                .with_message(format!("Use of {name} before it is ready"))
-                .with_labels(vec![name.primary_label().with_message(format!(
-                    "Is unavailable for another {unavailable_for} stages"
-                ))])
-                .with_notes(vec![
-                    format!("Requesting {name} from stage {referenced_at_stage}"),
-                    format!(
-                        "But it will not be available until stage {}",
-                        referenced_at_stage + unavailable_for
-                    ),
-                ]),
+            } => {
+                let plural = if *unavailable_for == 1 { "" } else { "s" };
+
+                Diagnostic::error()
+                    .with_message(format!("Use of {name} before it is ready"))
+                    .with_labels(vec![name.primary_label().with_message(format!(
+                        "Is unavailable for another {unavailable_for} stage{plural}"
+                    ))])
+                    .with_notes(vec![
+                        format!("Requesting {name} from stage {referenced_at_stage}"),
+                        format!(
+                            "But it will not be available until stage {}",
+                            referenced_at_stage + unavailable_for
+                        ),
+                    ])
+            }
             Error::AvailabilityMismatch { prev, new } => Diagnostic::error()
                 .with_message("All subexpressions need the same pipeline delay")
                 .with_labels(vec![
@@ -90,7 +100,7 @@ impl CompilationError for Error {
                         .with_message(format!("But this has delay {prev}")),
                 ]),
             Error::InstantiatingGenericBuiltin { loc, head } => Diagnostic::error()
-                .with_message("Generic builtins can not be instantiated")
+                .with_message("Generic builtins cannot be instantiated")
                 .with_labels(vec![
                     loc.primary_label().with_message("Invalid instance"),
                     head.secondary_label()
@@ -125,11 +135,11 @@ impl CompilationError for Error {
                     ])
             }
             Error::PortInRegister { loc, ty } => Diagnostic::error()
-                .with_message("Ports can not be put in a register")
+                .with_message("Ports cannot be put in a register")
                 .with_labels(vec![loc.primary_label().with_message("This is a port")])
                 .with_notes(vec![format!("{ty} is a port")]),
             Error::PortInGenericType { loc, param, actual } => Diagnostic::error()
-                .with_message("Generic types can not be ports")
+                .with_message("Generic types cannot be ports")
                 .with_labels(vec![loc.primary_label().with_message(format!(
                     "Parameter {param} is {actual} which is a port type"
                 ))]),

@@ -62,7 +62,7 @@ impl ConcreteType {
             ConcreteType::Tuple(inner) => inner.iter().any(Self::is_port),
             ConcreteType::Struct { name: _, members } => members.iter().any(|(_, t)| t.is_port()),
             ConcreteType::Array { inner, size: _ } => inner.is_port(),
-            // Enums can not be ports
+            // Enums cannot be ports
             ConcreteType::Enum { .. } => false,
             ConcreteType::Single {
                 base: PrimitiveType::Memory,

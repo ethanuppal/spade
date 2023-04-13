@@ -560,7 +560,7 @@ fn backward_expression_code(binding: &Binding, types: &TypeList, ops: &[ValueNam
         | Operator::Match
         | Operator::ReadPort
         | Operator::Truncate => panic!(
-            "{} can not be used on types with backward size",
+            "{} cannot be used on types with backward size",
             binding.operator
         ),
         Operator::ConstructArray => {

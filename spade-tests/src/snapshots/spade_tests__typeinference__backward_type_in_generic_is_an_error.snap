@@ -8,7 +8,7 @@ entity x(b: &mut bool) -> bool {
 }
 
 
-error: Generic types can not be ports
+error: Generic types cannot be ports
   ┌─ testinput:4:5
   │
 4 │     inst takes_generic(b)

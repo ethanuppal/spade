@@ -148,9 +148,21 @@ pub fn maybe_perform_pipelining_tasks(
 
             let depth = int_literal_to_pipeline_stages(&depth)?;
             if current_stage != depth.inner {
+                let stage_str = format!("{current_stage}");
                 return Err(Diagnostic::error(body, "Wrong number of pipeline stages")
-                    .primary_label(format!("Found {} stages here", current_stage))
-                    .secondary_label(depth, format!("{} stages specified here", depth))
+                    .primary_label(format!(
+                        "Found {} stage{} here",
+                        if current_stage == 0 { "no" } else { &stage_str },
+                        if current_stage <= 1 { "" } else { "s" }
+                    ))
+                    .secondary_label(
+                        depth,
+                        format!(
+                            "{} stage{} specified here",
+                            depth,
+                            if depth.inner == 1 { "" } else { "s" }
+                        ),
+                    )
                     .into());
             }
 

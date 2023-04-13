@@ -852,7 +852,7 @@ impl SymbolTable {
     }
 }
 
-/// A symbol table that can not have any new symbols added to it. The ID tracker can be used to
+/// A symbol table that cannot have any new symbols added to it. The ID tracker can be used to
 /// generate new names for for intermediate variables during codegen.
 ///
 /// Mutable references to `SymbolTable` are never given out, ensuring that nothing can be added to

@@ -1310,7 +1310,7 @@ impl ExprLocal for Loc<Expression> {
                 .primary_label("Value not known at compile time")
                 .secondary_label(
                     witness,
-                    "This subexpression can not be computed at compile time",
+                    "This subexpression cannot be computed at compile time",
                 )
                 .into());
             }

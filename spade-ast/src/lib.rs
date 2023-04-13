@@ -28,7 +28,7 @@ pub enum TypeSpec {
     Named(Loc<Path>, Option<Loc<Vec<Loc<TypeExpression>>>>),
     Unit(Loc<()>),
     /// A type in which signals travel in the opposite direction to normal. Any type containing a
-    /// Backward type is considered a port, meaning it can not be explicitly put in registers, and
+    /// Backward type is considered a port, meaning it cannot be explicitly put in registers, and
     /// is not registered in pipelines
     Backward(Box<Loc<TypeSpec>>),
     Wire(Box<Loc<TypeSpec>>),

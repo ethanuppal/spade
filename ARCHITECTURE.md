@@ -21,7 +21,7 @@ a description of roughly how the passes work.
 
 The AST is a tree based representation of the program structure, free of any
 details from the source code such as white space or comments. The structure of
-the AST is guaranteed to be `valid`, i.e. you can not have a keyword in place
+the AST is guaranteed to be `valid`, i.e. you cannot have a keyword in place
 of an identifier, if statements have both a condition and a branch etc.
 
 

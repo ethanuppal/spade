@@ -36,7 +36,7 @@ impl<'a> Pass for LowerMethods<'a> {
                     |other| {
                         Err(Diagnostic::bug(
                             self_.as_ref(),
-                            format!("{other} can not have methods"),
+                            format!("{other} cannot have methods"),
                         ))
                     },
                 )?;
@@ -64,7 +64,7 @@ impl<'a> Pass for LowerMethods<'a> {
                     spade_hir::UnitKind::Pipeline(_) => {
                         return Err(Diagnostic::error(
                             expression.loc(),
-                            "Pipeline methods can not be instantiated",
+                            "Pipeline methods cannot be instantiated",
                         )
                         .secondary_label(&unit.unit_kind, "This is a pipeline")
                         .note("This restriction will be lifted in the future")

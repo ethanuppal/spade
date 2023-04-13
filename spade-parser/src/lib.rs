@@ -173,7 +173,7 @@ impl<'a> Parser<'a> {
             // NOTE: Early return because we have now consumed the closing paren
             return Err(Diagnostic::error(
                 ().between(self.file_id, &start, &end),
-                "Tuples of 0 elements are not supported",
+                "Tuples with no elements are not supported",
             )
             .into());
         } else if inner.len() == 1 {
@@ -322,7 +322,7 @@ impl<'a> Parser<'a> {
                             if val_int < &BigInt::zero() {
                                 return Err(Diagnostic::error(
                                     token,
-                                    "An unsigned int literal can not be negative",
+                                    "An unsigned int literal cannot be negative",
                                 )
                                 .into());
                             } else {
@@ -754,7 +754,7 @@ impl<'a> Parser<'a> {
             &TokenKind::CloseParen,
         )?;
 
-        // Identifier parsing can not fail since we map it into a Some. Therefore,
+        // Identifier parsing cannot fail since we map it into a Some. Therefore,
         // unwrap is safe
         let clock = clock.unwrap();
 
@@ -1576,7 +1576,7 @@ impl<'a> Parser<'a> {
         ))
     }
 
-    // NOTE: This can not currently use #[trace_parser] as it returns an error which is not
+    // NOTE: This cannot currently use #[trace_parser] as it returns an error which is not
     // convertible into `Error`. If we end up with more functions like this, that
     // macro should probably be made smarter
     #[tracing::instrument(level = "debug", skip(self, inner))]

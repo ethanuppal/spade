@@ -8,7 +8,7 @@ entity x(p: &bool) -> &bool {
 }
 
 
-error: Generic types can not be ports
+error: Generic types cannot be ports
   ┌─ testinput:4:5
   │
 4 │     inst identity(p)
