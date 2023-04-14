@@ -2385,4 +2385,48 @@ mod argument_list_tests {
         }
         "
     }
+
+    snapshot_error! {
+        signextending_to_shorter_value,
+        "
+        fn main() -> int<4> {
+            let a: int<8> = 0;
+            let b: int<4> = std::conv::sext(a);
+            b
+        }
+        "
+    }
+
+    snapshot_error! {
+        signextending_to_shorter_value_single_bit,
+        "
+        fn main() -> int<1> {
+            let a: int<2> = 0;
+            let b: int<1> = std::conv::sext(a);
+            b
+        }
+        "
+    }
+
+    snapshot_error! {
+        zeroextending_to_shorter_value,
+        "
+        fn main() -> int<4> {
+            let a: int<8> = 0;
+            let b: int<4> = std::conv::zext(a);
+            b
+        }
+        "
+    }
+
+    snapshot_error! {
+        zeroextending_to_shorter_value_single_bit,
+        "
+        fn main() -> int<1> {
+            let a: int<2> = 0;
+            let b: int<1> = std::conv::zext(a);
+            b
+        }
+        "
+    }
 }

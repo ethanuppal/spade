@@ -1568,6 +1568,28 @@ impl ExprLocal for Loc<Expression> {
             .expr_type(&args[0].value, ctx.symtab.symtab(), &ctx.item_list.types)?
             .to_mir_type();
 
+        if self_type.size() < input_type.size() {
+            let input_loc = args[0].value.loc();
+            return Err(
+                Diagnostic::error(input_loc, "Sign-extending to a shorter value")
+                    .primary_label(format!("This value is {} bits", input_type.size()))
+                    .secondary_label(
+                        self,
+                        format!(
+                            "The value is zero-extended to {} bit{} here",
+                            self_type.size(),
+                            if self_type.size() == One::one() {
+                                ""
+                            } else {
+                                "s"
+                            }
+                        ),
+                    )
+                    .note("Sign-extension cannot decrease width, use trunc instead")
+                    .into(),
+            );
+        }
+
         let extra_bits = if self_type.size() > input_type.size() {
             self_type.size() - input_type.size()
         } else {
@@ -1608,6 +1630,28 @@ impl ExprLocal for Loc<Expression> {
             .types
             .expr_type(&args[0].value, ctx.symtab.symtab(), &ctx.item_list.types)?
             .to_mir_type();
+
+        if self_type.size() < input_type.size() {
+            let input_loc = args[0].value.loc();
+            return Err(
+                Diagnostic::error(input_loc, "Zero-extending to a shorter value")
+                    .primary_label(format!("This value is {} bits", input_type.size()))
+                    .secondary_label(
+                        self,
+                        format!(
+                            "The value is zero-extended to {} bit{} here",
+                            self_type.size(),
+                            if self_type.size() == One::one() {
+                                ""
+                            } else {
+                                "s"
+                            }
+                        ),
+                    )
+                    .note("Zero-extension cannot decrease width, use trunc instead")
+                    .into(),
+            );
+        }
 
         let extra_bits = if self_type.size() > input_type.size() {
             self_type.size() - input_type.size()

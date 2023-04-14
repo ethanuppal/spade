@@ -2,12 +2,12 @@
 /// larger than the input, an error is emitted
 fn trunc<#N, #M>(x: int<N>) -> int<M> __builtin__
 
-/// Sign extend the provided integer. Has no effect if the output is smaller
+/// Sign extend the provided integer. Gives a compiler error if the output is smaller
 /// than the input
 fn sext<#N, #M>(x: int<N>) -> int<M> __builtin__
 
-/// Zero extend the provided integer. Has no effect if the output is smaller than
-/// the input
+/// Zero extend the provided integer. Gives a compiler error if the output is smaller
+/// than the input
 fn zext<#N, #M>(x: int<N>) -> int<M> __builtin__
 
 // Concatenate 2 integers. The resulting integer must be of length N+M, and this

@@ -19,6 +19,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Fixed
 
+- [!178][!178] `sext` and `zext` now error when trying to reduce the width
 - [!188][!188] Fix codegen bug when indexing structs or tuples which are 1 bit wide.
 
 ### Changed
@@ -32,6 +33,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - [!195][!195] Logos and Clap have had their respective versions bumped.
 
 [!168]: https://gitlab.com/spade-lang/spade/-/merge_requests/168
+[!178]: https://gitlab.com/spade-lang/spade/-/merge_requests/178
 [!184]: https://gitlab.com/spade-lang/spade/-/merge_requests/184
 [!187]: https://gitlab.com/spade-lang/spade/-/merge_requests/187
 [!188]: https://gitlab.com/spade-lang/spade/-/merge_requests/188
@@ -68,8 +70,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 [!165]: https://gitlab.com/spade-lang/spade/-/merge_requests/165
 [!169]: https://gitlab.com/spade-lang/spade/-/merge_requests/169
 [!185]: https://gitlab.com/spade-lang/spade/-/merge_requests/185
-
-
 
 ## [0.1.0] - 2023-03-07
 
