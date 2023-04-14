@@ -564,6 +564,56 @@ fn rom_is_describable() {
 }
 
 snapshot_error! {
+    different_types_in_if,
+    "
+        fn test(b: int<4>) -> int<8> {
+            let a = if b == 4 { 3 } else { true };
+            7
+        }
+    "
+}
+
+snapshot_error! {
+    clock_must_be_of_type_clock,
+    "
+        entity test(b: int<4>) -> int<8> {
+            reg(b) a = 3;
+            a
+        }
+    "
+}
+
+snapshot_error! {
+    reset_must_be_of_type_bool,
+    "
+        entity test(clk: clock, b: int<4>) -> int<8> {
+            reg(clk) a reset (b: 0) = 3;
+            a
+        }
+    "
+}
+
+snapshot_error! {
+    reset_mismatch,
+    "
+        entity test(clk: clock, rst: bool) -> int<8> {
+            reg(clk) a reset (rst: true) = 3;
+            a
+        }
+    "
+}
+
+snapshot_error! {
+    array_type_mismatch,
+    "
+        fn x() -> bool  {
+            let a = [0, true, 2];
+            false
+        }
+    "
+}
+
+snapshot_error! {
     // NOTE: This test should be removed once we support unsigned ints properly
     unsigned_literals_error_on_overflow,
     "
