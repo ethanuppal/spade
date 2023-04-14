@@ -30,7 +30,7 @@ spade-typeinference = {path = "../spade-typeinference"}
 spade = {path = "../spade-compiler"}
 
 [dev-dependencies]
-unindent = "0.1.8"
+unindent = "0.2.1"
 colored.workspace = true
 insta.workspace = true
 prettydiff.workspace = true

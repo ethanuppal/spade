@@ -11,7 +11,7 @@ rust-version.workspace = true
 vcd = "0.6.1"
 color-eyre.workspace = true
 clap.workspace = true
-ron = "0.7.0"
+ron = "0.8.0"
 num = "0.4.0"
 itertools = "0.10.3"
 
