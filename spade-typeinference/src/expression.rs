@@ -2,6 +2,7 @@ use num::{BigInt, One};
 use spade_common::location_info::{Loc, WithLocation};
 use spade_common::name::Identifier;
 use spade_common::num_ext::InfallibleToBigUint;
+use spade_diagnostics::Diagnostic;
 use spade_hir::expression::{BinaryOperator, NamedArgument, UnaryOperator};
 use spade_hir::{ExprKind, Expression};
 use spade_macros::trace_typechecker;
@@ -10,6 +11,7 @@ use spade_types::KnownType;
 use crate::constraints::{bits_to_store, ce_int, ce_var, ConstraintSource};
 use crate::equation::{TypeVar, TypedExpression};
 use crate::error::{Error, UnificationErrorExt};
+use crate::error_reporting::LocExt;
 use crate::fixed_types::t_bool;
 use crate::requirements::Requirement;
 use crate::{kvar, Context, GenericListToken, HasType, Result, TraceStackEntry, TypeState};
@@ -140,10 +142,12 @@ impl TypeState {
                     inner
                 }
                 t @ TypeVar::Known(_, _) | t @ TypeVar::Array { .. } | t @ TypeVar::Backward(_) | t @ TypeVar::Wire(_) => {
-                    return Err(Error::TupleIndexOfNonTuple {
-                        got: t.clone(),
-                        loc: tup.loc(),
-                    })
+                    return Err(Diagnostic::error(tup.loc(), "Attempt to use tuple indexing on non-tuple")
+                        .primary_label("expected tuple")
+                        .secondary_label(index, "Because this is a tuple index")
+                        .type_var_mismatch_notes(&t, &"tuple")
+                        .into()
+                    );
                 }
                 TypeVar::Unknown(_) => {
                     return Err(Error::TupleIndexOfGeneric { loc: tup.loc() })

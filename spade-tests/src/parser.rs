@@ -218,3 +218,10 @@ fn neq_operator_works() {
 
     build_items(code);
 }
+
+snapshot_error! {
+    tuple_index_points_to_the_right_thing,
+    "fn test(a: (bool,)) -> bool {
+        a#0#0
+    }"
+}

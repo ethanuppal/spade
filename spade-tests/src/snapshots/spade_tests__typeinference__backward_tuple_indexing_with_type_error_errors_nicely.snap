@@ -9,9 +9,11 @@ error: Attempt to use tuple indexing on non-tuple
   ┌─ testinput:2:5
   │
 2 │     x#0
-  │     ^ expected tuple
+  │     ^-- Because this is a tuple index
+  │     │ 
+  │     expected tuple
   │
-  = Expected: tuple
-  =      Got: &mut (bool, bool)
+  = note: Expected: tuple
+  = note:      Got: &mut (bool, bool)
 
 

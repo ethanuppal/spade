@@ -254,25 +254,32 @@ impl<'a> Parser<'a> {
     fn expression_suffix(&mut self, expr: Loc<Expression>) -> Result<Loc<Expression>> {
         let base = if let Some(hash) = self.peek_and_eat(&TokenKind::Hash)? {
             if let Some(index) = self.int_literal()? {
-                let index = index.try_map_ref(|idx| -> Result<u128> {
-                    let as_u128 = idx
-                        .clone()
-                        .as_unsigned()
-                        .ok_or_else(|| {
-                            Diagnostic::error(&index, "Tuple indices must be positive")
-                                .primary_label("Negative tuple index")
-                        })?
-                        .to_u128()
-                        .ok_or_else(|| {
-                            Diagnostic::bug(&index, "Tuple index too large")
-                                .primary_label("Tuple index too large")
-                                .note(format!("Tuple index can be at most {}", u128::MAX))
-                        })?;
+                let index = index
+                    .try_map_ref(|idx| -> Result<u128> {
+                        let as_u128 = idx
+                            .clone()
+                            .as_unsigned()
+                            .ok_or_else(|| {
+                                Diagnostic::error(&index, "Tuple indices must be positive")
+                                    .primary_label("Negative tuple index")
+                            })?
+                            .to_u128()
+                            .ok_or_else(|| {
+                                Diagnostic::bug(&index, "Tuple index too large")
+                                    .primary_label("Tuple index too large")
+                                    .note(format!("Tuple index can be at most {}", u128::MAX))
+                            })?;
 
-                    Ok(as_u128)
-                })?;
-                let span = expr.span.merge(lspan(hash.span));
-                Ok(Expression::TupleIndex(Box::new(expr), index).at(self.file_id, &span))
+                        Ok(as_u128)
+                    })?
+                    .between(self.file_id, &hash, &index);
+                Ok(
+                    Expression::TupleIndex(Box::new(expr.clone()), index).between(
+                        self.file_id,
+                        &expr,
+                        &index,
+                    ),
+                )
             } else {
                 Err(Error::MissingTupleIndex {
                     hash_loc: Loc::new((), lspan(hash.span), self.file_id),

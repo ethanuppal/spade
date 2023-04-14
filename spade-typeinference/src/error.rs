@@ -209,8 +209,6 @@ pub enum Error {
 
     #[error("Tuple index of generic argument")]
     TupleIndexOfGeneric { loc: Loc<()> },
-    #[error("Tuple index of non-tuple")]
-    TupleIndexOfNonTuple { got: TypeVar, loc: Loc<()> },
     #[error("Tuple index out of bounds")]
     TupleIndexOutOfBounds { index: Loc<u128>, actual_size: u128 },
 

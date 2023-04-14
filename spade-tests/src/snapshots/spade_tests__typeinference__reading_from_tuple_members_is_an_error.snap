@@ -16,9 +16,11 @@ error: Attempt to use tuple indexing on non-tuple
   ┌─ testinput:6:32
   │
 6 │     let x = inst read_mut_wire(val#0);
-  │                                ^^^ expected tuple
+  │                                ^^^-- Because this is a tuple index
+  │                                │   
+  │                                expected tuple
   │
-  = Expected: tuple
-  =      Got: &mut (bool, int<3>)
+  = note: Expected: tuple
+  = note:      Got: &mut (bool, int<3>)
 
 

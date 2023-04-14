@@ -10,7 +10,7 @@ error: Use of consumed resource
   ┌─ testinput:2:18
   │
 2 │     (resource#0, resource#0)
-  │      ---------   ^^^^^^^^^ Use of consumed resource
+  │      ----------  ^^^^^^^^^^ Use of consumed resource
   │      │            
   │      Previously used here
 

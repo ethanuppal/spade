@@ -3,10 +3,28 @@ use codespan_reporting::term::{self, termcolor::Buffer};
 
 use spade_common::location_info::AsLabel;
 use spade_diagnostics::emitter::codespan_config;
-use spade_diagnostics::{CodeBundle, CompilationError, DiagHandler};
+use spade_diagnostics::{CodeBundle, CompilationError, DiagHandler, Diagnostic as SpadeDiagnostic};
 
 use crate::constraints::ConstraintSource;
 use crate::error::{Error, UnificationTrace};
+
+pub trait LocExt {
+    fn type_var_mismatch_notes<G, E>(self, got: &G, expected: &E) -> Self
+    where
+        G: std::fmt::Display,
+        E: std::fmt::Display;
+}
+
+impl LocExt for SpadeDiagnostic {
+    fn type_var_mismatch_notes<G, E>(self, got: &G, expected: &E) -> Self
+    where
+        G: std::fmt::Display,
+        E: std::fmt::Display,
+    {
+        self.note(format!("Expected: {expected}"))
+            .note(format!("     Got: {got}"))
+    }
+}
 
 pub fn type_mismatch_notes(got: &UnificationTrace, expected: &UnificationTrace) -> Vec<String> {
     let mut result = vec![];
@@ -171,15 +189,6 @@ impl CompilationError for Error {
                 .with_labels(vec![loc
                     .primary_label()
                     .with_message("The type of this must be known")]),
-            Error::TupleIndexOfNonTuple { got, loc } => Diagnostic::error()
-                .with_message(format!("Attempt to use tuple indexing on non-tuple"))
-                .with_labels(vec![loc
-                    .primary_label()
-                    .with_message(format!("expected tuple"))])
-                .with_notes(vec![
-                    format!("Expected: tuple"),
-                    format!("     Got: {}", got),
-                ]),
             Error::TupleIndexOutOfBounds { index, actual_size } => Diagnostic::error()
                 .with_message(format!("Tuple index out of bounds"))
                 .with_labels(vec![index
