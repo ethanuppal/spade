@@ -122,6 +122,12 @@ cargo-fmt:
         # pass --check to rustfmt to error if un-formatted
         - cargo fmt -- --check
 
+doc:
+    stage: test
+    script:
+        - apt install -y g++
+        - cargo doc --no-deps
+
 grep-todo:
     stage: test
     script:
