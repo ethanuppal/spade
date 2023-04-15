@@ -104,6 +104,36 @@ snapshot_error! {
     }"
 }
 
+snapshot_error! {
+    unexpected_token,
+    "fn a() -> int<8> {
+        let x : = 10;
+        x
+    }"
+}
+
+snapshot_error! {
+    no_reg_in_function,
+    "fn a(clk: clock) -> int<8> {
+        reg(clk) x = 10;
+        x
+    }"
+}
+
+snapshot_error! {
+    lexer_error_unexpected_symbol,
+    "fn a() {
+        let x = ¤;
+    }"
+}
+
+snapshot_error! {
+    empty_decl_error,
+    "fn a() {
+        decl;
+    }"
+}
+
 #[test]
 fn three_generic_end_chars_work() {
     let code = r#"
