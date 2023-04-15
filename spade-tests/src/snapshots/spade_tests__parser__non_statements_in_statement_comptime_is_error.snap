@@ -10,10 +10,10 @@ fn a() {
 }
 
 
-error: Unexpected `false`, expected `}`, or `statement`
+error: Unexpected `false`, expected `}` or `statement`
   ┌─ testinput:4:9
   │
 4 │         false
-  │         ^^^^^ expected `}`, or `statement`
+  │         ^^^^^ expected `}` or `statement`
 
 

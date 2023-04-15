@@ -15,6 +15,8 @@ fn unexpected_token_list<'a>(expected: impl IntoIterator<Item = &'a str>) -> Str
     let count = expected.len();
     if count == 1 {
         format!("{}", expected[0])
+    } else if count == 2 {
+        format!("{} or {}", expected[0], expected[1])
     } else {
         format!(
             "{}, or {}",
