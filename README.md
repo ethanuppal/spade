@@ -1,11 +1,11 @@
 <img src="misc/spadefish.svg" />
 
-![Gitlab pipeline status](https://img.shields.io/gitlab/pipeline-status/spade-lang/spade?branch=master)
-![Gitlab code coverage](https://img.shields.io/gitlab/pipeline-coverage/spade-lang/spade?branch=master)
-![GitLab tag (latest by date)](https://img.shields.io/gitlab/v/tag/spade-lang/spade)
-![GitLab last commit](https://img.shields.io/gitlab/last-commit/spade-lang/spade)
-![GitLab contributors](https://img.shields.io/gitlab/contributors/spade-lang/spade)
-![GitLab language count](https://img.shields.io/gitlab/languages/count/spade-lang/spade)
+[![Gitlab pipeline status](https://img.shields.io/gitlab/pipeline-status/spade-lang/spade?branch=master)](https://img.shields.io/gitlab/pipeline-status/spade-lang/spade?branch=master)
+[![Gitlab code coverage](https://img.shields.io/gitlab/pipeline-coverage/spade-lang/spade?branch=master)](https://img.shields.io/gitlab/pipeline-coverage/spade-lang/spade?branch=master)
+[![GitLab tag (latest by date)](https://img.shields.io/gitlab/v/tag/spade-lang/spade)](https://img.shields.io/gitlab/v/tag/spade-lang/spade)
+[![GitLab last commit](https://img.shields.io/gitlab/last-commit/spade-lang/spade)](https://img.shields.io/gitlab/last-commit/spade-lang/spade)
+[![GitLab contributors](https://img.shields.io/gitlab/contributors/spade-lang/spade)](https://img.shields.io/gitlab/contributors/spade-lang/spade)
+[![GitLab language count](https://img.shields.io/gitlab/languages/count/spade-lang/spade)](https://img.shields.io/gitlab/languages/count/spade-lang/spade)
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.7713114.svg)](https://doi.org/10.5281/zenodo.7713114)
 
 # Spade
