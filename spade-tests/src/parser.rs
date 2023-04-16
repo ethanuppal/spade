@@ -163,6 +163,24 @@ snapshot_error! {
 }
 
 snapshot_error! {
+    min_max_compiles,
+    "
+        entity a(b: int<8>, c: int<8>, d: int<8>) -> int<8> {
+            std::ops::min(c, std::ops::max(b, d))
+        }
+    "
+}
+
+snapshot_error! {
+    order_compiles,
+    "
+        entity a(b: int<8>, c: int<8>) -> (int<8>, int<8>) {
+            std::ops::order(b, c)
+        }
+    "
+}
+
+snapshot_error! {
     non_statements_in_statement_comptime_is_error,
     "
         fn a() {

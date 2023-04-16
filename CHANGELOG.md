@@ -17,6 +17,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - [!154](!154) Add unsigned literals, for example `let x: int<8> 255u` as a
   stop gap solution until proper unsigned types are implemented
 - [!169][!169] Add `!=` operator
+- [!185][!185] `max`, `min`, and `order` operation added to `std::ops`
 
 ### Fixed
 
@@ -37,6 +38,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 [!156]: https://gitlab.com/spade-lang/spade/-/merge_requests/155
 [!165]: https://gitlab.com/spade-lang/spade/-/merge_requests/155
 [!169]: https://gitlab.com/spade-lang/spade/-/merge_requests/169
+[!185]: https://gitlab.com/spade-lang/spade/-/merge_requests/185
 
 
 ## [0.1.0] - 2023-03-07

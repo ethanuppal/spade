@@ -16,12 +16,39 @@ fn div_pow2<#N>(x: int<N>, pow: int<N>) -> int<N> __builtin__
 
 
 /// Computes the absolute value of x. The result is truncated, meaning that
-/// `abs(-2^(N-1)) == -2^(N-1))`.
+/// `abs(-2^(N-1)) == -2^(N-1)`.
 fn abs_trunc<#N>(x: int<N>) -> int<N> {
     if x < 0 {
         -x
     }
     else {
         x
+    }
+}
+
+/// Returns the max value of two integers
+fn max<#N>(x: int<N>, y: int<N>) -> int<N> {
+    if x < y {
+        y
+    } else {
+        x
+    }
+}
+
+/// Returns the min value of two integers
+fn min<#N>(x: int<N>, y: int<N>) -> int<N> {
+    if x < y {
+        x
+    } else {
+        y
+    }
+}
+
+/// Returns the two integers in increasing order
+fn order<#N>(x: int<N>, y: int<N>) -> (int<N>, int<N>) {
+    if x < y {
+        (x, y)
+    } else {
+        (y, x)
     }
 }
