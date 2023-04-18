@@ -6,6 +6,7 @@ pub mod diff_printing;
 mod enum_util;
 pub mod eval;
 pub mod macros;
+mod renaming;
 mod type_list;
 pub mod types;
 pub mod unit_name;
@@ -61,7 +62,13 @@ impl WithLocation for ValueName {}
 impl std::fmt::Display for ValueName {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            ValueName::Named(id, s) => write!(f, "{s}_n{id}"),
+            ValueName::Named(id, s) => {
+                if *id == 0 {
+                    write!(f, "\\{s} ")
+                } else {
+                    write!(f, "{s}_n{id}")
+                }
+            }
             ValueName::Expr(id) => write!(f, "e{id}"),
         }
     }

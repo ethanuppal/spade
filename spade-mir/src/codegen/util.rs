@@ -5,9 +5,7 @@ use crate::ValueName;
 impl ValueName {
     pub fn var_name(&self) -> String {
         match self {
-            ValueName::Named(id, name) => {
-                format!("{}_n{}", name, id)
-            }
+            ValueName::Named(_, _) => format!("{self}"),
             ValueName::Expr(id) => {
                 format!("_e_{}", id)
             }
@@ -17,10 +15,14 @@ impl ValueName {
     pub fn backward_var_name(&self) -> String {
         match self {
             ValueName::Named(id, name) => {
-                format!("{}_n{}_o", name, id)
+                if *id == 0 {
+                    format!("\\{}_mut ", name)
+                } else {
+                    format!("{}_n{}_mut", name, id)
+                }
             }
             ValueName::Expr(id) => {
-                format!("_e_{}_o", id)
+                format!("_e_{}_mut", id)
             }
         }
     }

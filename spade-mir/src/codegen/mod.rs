@@ -11,13 +11,21 @@ use spade_diagnostics::{CodeBundle, CompilationError, DiagHandler};
 use crate::aliasing::flatten_aliases;
 use crate::assertion_codegen::AssertedExpression;
 use crate::eval::eval_statements;
+use crate::renaming::make_names_predictable;
 use crate::type_list::TypeList;
+use crate::unit_name::InstanceNameTracker;
 use crate::verilog::{self, assign, logic, size_spec};
 use crate::{enum_util, Binding, ConstantValue, Entity, Operator, Statement, ValueName};
 
 pub mod util;
 
 pub use util::{escape_path, mangle_entity, mangle_input, mangle_output, TupleIndex};
+
+struct Context<'a> {
+    types: &'a TypeList,
+    source_code: &'a Option<CodeBundle>,
+    instance_names: &'a mut InstanceNameTracker,
+}
 
 /// Produces a source location verilog attribute if the loc and code bundle are defined
 fn source_attribute(loc: &Option<Loc<()>>, code: &Option<CodeBundle>) -> Option<String> {
@@ -617,11 +625,7 @@ fn backward_expression_code(binding: &Binding, types: &TypeList, ops: &[ValueNam
     }
 }
 
-fn statement_code(
-    statement: &Statement,
-    types: &TypeList,
-    source_code: &Option<CodeBundle>,
-) -> Code {
+fn statement_code(statement: &Statement, ctx: &mut Context) -> Code {
     match statement {
         Statement::Binding(binding) => {
             let name = binding.name.var_name();
@@ -640,12 +644,20 @@ fn statement_code(
                 .collect::<Vec<_>>();
 
             let forward_expression = if binding.ty.size() != BigUint::zero() {
-                Some(forward_expression_code(binding, types, &binding.operands))
+                Some(forward_expression_code(
+                    binding,
+                    ctx.types,
+                    &binding.operands,
+                ))
             } else {
                 None
             };
             let backward_expression = if binding.ty.backward_size() != BigUint::zero() {
-                Some(backward_expression_code(binding, types, &binding.operands))
+                Some(backward_expression_code(
+                    binding,
+                    ctx.types,
+                    &binding.operands,
+                ))
             } else {
                 None
             };
@@ -658,7 +670,7 @@ fn statement_code(
                         .operands
                         .iter()
                         .flat_map(|port| {
-                            let ty = &types[port];
+                            let ty = &ctx.types[port];
 
                             // Push the input and output into the result if they
                             // should be bound
@@ -693,10 +705,10 @@ fn statement_code(
                         args += &back_name;
                     }
 
-                    let instance_name = module_name.instance_name(&name);
+                    let instance_name = module_name.instance_name(ctx.instance_names);
 
                     code!{
-                        [0] source_attribute(loc, source_code);
+                        [0] source_attribute(loc, ctx.source_code);
                         [0] format!(
                             "{} {}({});",
                             &module_name.as_verilog(),
@@ -793,7 +805,7 @@ fn statement_code(
 
             AssertedExpression(val.clone()).report(
                 &mut msg_buf,
-                &source_code.as_ref().unwrap(),
+                &ctx.source_code.as_ref().unwrap(),
                 &mut diag_handler,
             );
 
@@ -849,9 +861,14 @@ fn statement_code_and_declaration(
     types: &TypeList,
     source_code: &CodeBundle,
 ) -> Code {
+    let mut ctx = Context {
+        types,
+        source_code: &Some(source_code.clone()),
+        instance_names: &mut InstanceNameTracker::new(),
+    };
     code! {
         [0] statement_declaration(statement, &Some(source_code.clone()));
-        [0] statement_code(statement, types, &Some(source_code.clone()));
+        [0] statement_code(statement, &mut ctx);
     }
 }
 
@@ -862,6 +879,7 @@ fn statement_code_and_declaration(
 /// In actual compilation this should be Some
 pub fn entity_code(entity: &mut Entity, source_code: &Option<CodeBundle>) -> Code {
     flatten_aliases(entity);
+    make_names_predictable(entity);
 
     let types = &TypeList::from_entity(&entity);
 
@@ -950,13 +968,19 @@ pub fn entity_code(entity: &mut Entity, source_code: &Option<CodeBundle>) -> Cod
         (None, None)
     };
 
+    let mut ctx = Context {
+        types: &types,
+        source_code: &source_code,
+        instance_names: &mut InstanceNameTracker::new(),
+    };
+
     let mut body = Code::new();
 
     for stmt in &entity.statements {
         body.join(&statement_declaration(stmt, source_code))
     }
     for stmt in &entity.statements {
-        body.join(&statement_code(stmt, types, source_code))
+        body.join(&statement_code(stmt, &mut ctx))
     }
 
     code! {
@@ -1063,9 +1087,9 @@ mod tests {
 
         let expected = indoc!(
             r#"
-                reg[6:0] r_n0;
+                reg[6:0] \r ;
                 always @(posedge _e_0) begin
-                    r_n0 <= _e_1;
+                    \r  <= _e_1;
                 end"#
         );
 
@@ -1086,13 +1110,13 @@ mod tests {
 
         let expected = indoc!(
             r#"
-                reg[6:0] r_n0;
+                reg[6:0] \r ;
                 always @(posedge _e_0, posedge _e_2) begin
                     if (_e_2) begin
-                        r_n0 <= _e_3;
+                        \r  <= _e_3;
                     end
                     else begin
-                        r_n0 <= _e_1;
+                        \r  <= _e_1;
                     end
                 end"#
         );
@@ -1131,10 +1155,10 @@ mod tests {
                     #1;
                 end
                 `endif
-                logic[5:0] op_n0;
-                assign op_n0 = op_i;
+                logic[5:0] \op ;
+                assign \op  = op_i;
                 logic[5:0] _e_0;
-                assign _e_0 = $signed(op_n0) + $signed(_e_1);
+                assign _e_0 = $signed(\op ) + $signed(_e_1);
                 assign output__ = _e_0;
             endmodule"#
         );
@@ -1168,8 +1192,8 @@ mod tests {
                     #1;
                 end
                 `endif
-                logic[2:0] a_n0_o;
-                assign a_o = a_n0_o;
+                logic[2:0] \a_mut ;
+                assign a_o = \a_mut ;
                 logic[5:0] _e_0;
                 assign _e_0 = 3;
                 assign output__ = _e_0;
@@ -1205,10 +1229,10 @@ mod tests {
                     #1;
                 end
                 `endif
-                logic[3:0] a_n0;
-                assign a_n0 = a_i;
-                logic[2:0] a_n0_o;
-                assign a_o = a_n0_o;
+                logic[3:0] \a ;
+                assign \a  = a_i;
+                logic[2:0] \a_mut ;
+                assign a_o = \a_mut ;
                 logic[5:0] _e_0;
                 assign _e_0 = 3;
                 assign output__ = _e_0;
@@ -1244,7 +1268,7 @@ mod tests {
                 end
                 `endif
                 assign output__ = _e_0;
-                assign _e_0_o = input__;
+                assign _e_0_mut = input__;
             endmodule"#
         );
 
@@ -1308,15 +1332,15 @@ mod tests {
                     #1;
                 end
                 `endif
-                logic clk_n3;
-                assign clk_n3 = clk_i;
-                reg[15:0] x__s1_n10;
-                logic[15:0] x_n1;
-                always @(posedge clk_n3) begin
-                    x__s1_n10 <= x_n1;
+                logic \clk ;
+                assign \clk  = clk_i;
+                reg[15:0] \x__s1 ;
+                logic[15:0] \x ;
+                always @(posedge \clk ) begin
+                    \x__s1  <= \x ;
                 end
-                \A  \A=>x_n1 (x_n1);
-                assign output__ = x_n1;
+                \A  A_0(\x );
+                assign output__ = \x ;
             endmodule"#
         );
 
@@ -1324,6 +1348,45 @@ mod tests {
             &entity_code(&mut input.clone(), &None).to_string(),
             expected
         );
+    }
+
+    #[test]
+    fn duplicate_names_adds_nx() {
+        let input = entity!(&["pl"]; (
+            ) -> Type::int(16); {
+                (n(1, "x"); Type::int(16); Not; e(0));
+                (n(2, "x"); Type::int(16); Not; e(1));
+            } => n(1, "x")
+        );
+
+        let expected = indoc!(
+            r#"
+            module \pl  (
+                    output[15:0] output__
+                );
+                `ifdef COCOTB_SIM
+                string __top_module;
+                string __vcd_file;
+                initial begin
+                    if ($value$plusargs("TOP_MODULE=%s", __top_module) && __top_module == "pl" && $value$plusargs("VCD_FILENAME=%s", __vcd_file)) begin
+                        $dumpfile (__vcd_file);
+                        $dumpvars (0, \pl );
+                    end
+                    #1;
+                end
+                `endif
+                logic[15:0] \x ;
+                logic[15:0] x_n1;
+                assign \x  = !_e_0;
+                assign x_n1 = !_e_1;
+                assign output__ = \x ;
+            endmodule"#
+        );
+
+        assert_same_code! {
+            &entity_code(&mut input.clone(), &None).to_string(),
+            expected
+        }
     }
 }
 
@@ -1344,8 +1407,8 @@ mod backward_expression_tests {
 
         let expected = indoc! {
             r#"
-            logic[7:0] _e_0_o;
-            assign _e_1_o = _e_0_o;"#
+            logic[7:0] _e_0_mut;
+            assign _e_1_mut = _e_0_mut;"#
         };
 
         assert_same_code!(
@@ -1367,8 +1430,8 @@ mod backward_expression_tests {
 
         let expected = indoc! {
             r#"
-            logic[3:0] _e_0_o;
-            assign _e_1_o[3:0] = _e_0_o;"#
+            logic[3:0] _e_0_mut;
+            assign _e_1_mut[3:0] = _e_0_mut;"#
         };
 
         assert_same_code!(
@@ -1394,8 +1457,8 @@ mod backward_expression_tests {
 
         let expected = indoc! {
             r#"
-            logic[11:0] _e_0_o;
-            assign {_e_1_o, _e_2_o} = _e_0_o;"#
+            logic[11:0] _e_0_mut;
+            assign {_e_1_mut, _e_2_mut} = _e_0_mut;"#
         };
 
         assert_same_code!(
@@ -1418,9 +1481,9 @@ mod backward_expression_tests {
         let expected = indoc! {
             r#"
             logic[6:0] _e_0;
-            logic[11:0] _e_0_o;
+            logic[11:0] _e_0_mut;
             assign _e_0 = {_e_2, _e_3};
-            assign {_e_1_o, _e_2_o} = _e_0_o;"#
+            assign {_e_1_mut, _e_2_mut} = _e_0_mut;"#
         };
 
         let type_list = TypeList::empty()
@@ -1448,8 +1511,8 @@ mod backward_expression_tests {
 
         let expected = indoc! {
             r#"
-            logic[14:0] _e_0_o;
-            assign {_e_3_o, _e_2_o, _e_1_o} = _e_0_o;"#
+            logic[14:0] _e_0_mut;
+            assign {_e_3_mut, _e_2_mut, _e_1_mut} = _e_0_mut;"#
         };
 
         assert_same_code!(
@@ -1954,7 +2017,7 @@ mod expression_tests {
         let expected = indoc!(
             r#"
             logic _e_0;
-            e_test \e_test=>_e_0 (_e_1, _e_2, _e_0);"#
+            e_test e_test_0(_e_1, _e_2, _e_0);"#
         );
 
         assert_same_code!(
@@ -1979,8 +2042,8 @@ mod expression_tests {
         let expected = indoc!(
             r#"
             logic _e_0;
-            logic _e_0_o;
-            e_test \e_test=>_e_0 (_e_1, _e_2, _e_0, _e_0_o);"#
+            logic _e_0_mut;
+            e_test e_test_0(_e_1, _e_2, _e_0, _e_0_mut);"#
         );
 
         assert_same_code!(
@@ -2003,8 +2066,8 @@ mod expression_tests {
 
         let expected = indoc!(
             r#"
-            logic _e_0_o;
-            e_test \e_test=>_e_0 (_e_1, _e_2, _e_0_o);"#
+            logic _e_0_mut;
+            e_test e_test_0(_e_1, _e_2, _e_0_mut);"#
         );
 
         assert_same_code!(
@@ -2029,7 +2092,7 @@ mod expression_tests {
         let expected = indoc!(
             r#"
             logic _e_0;
-            \test  \test=>_e_0 (_e_1, _e_1_o, _e_2_o, _e_0);"#
+            \test  test_0(_e_1, _e_1_mut, _e_2_mut, _e_0);"#
         );
 
         let type_list = TypeList::empty()
@@ -2446,7 +2509,7 @@ mod expression_tests {
 
         let expected = indoc! {
             r#"
-            assign _e_0_o = _e_1;"#
+            assign _e_0_mut = _e_1;"#
         };
 
         assert_same_code!(
@@ -2467,7 +2530,7 @@ mod expression_tests {
         let expected = indoc! {
             r#"
             logic[7:0] _e_0;
-            assign _e_0 = _e_1_o;"#
+            assign _e_0 = _e_1_mut;"#
         };
 
         assert_same_code!(

@@ -21,6 +21,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Internal
 
+- [!187][!187] Change naming scheme of Verilog variables to make names more predictable. [Documentation](https://docs.spade-lang.org/internal/naming.html)
+
+[!187]: https://gitlab.com/spade-lang/spade/-/merge_requests/185
+
+
 ## [0.2.0] - 2023-04-20
 
 ### Added

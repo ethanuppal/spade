@@ -1,4 +1,25 @@
+use std::collections::HashMap;
+
 use itertools::Itertools;
+
+pub struct InstanceNameTracker {
+    previous_names: HashMap<String, usize>,
+}
+
+impl InstanceNameTracker {
+    pub fn new() -> Self {
+        Self {
+            previous_names: HashMap::new(),
+        }
+    }
+
+    pub fn use_name(&mut self, name: &str) -> String {
+        let e = self.previous_names.entry(name.to_string()).or_default();
+        let result = format!("{name}_{e}");
+        *e += 1;
+        result
+    }
+}
 
 #[derive(Clone, Debug, PartialEq, PartialOrd, Ord, Eq)]
 /// The name of a verilog module
@@ -29,13 +50,12 @@ impl UnitName {
         }
     }
 
-    pub fn instance_name(&self, result_name: &str) -> String {
-        match self {
-            UnitName::Escaped { name, path } => {
-                format!("\\{}=>{result_name} ", path.last().unwrap_or(&name).clone())
-            }
-            UnitName::Unescaped(name) => format!("\\{name}=>{result_name} "),
-        }
+    pub fn instance_name(&self, names: &mut InstanceNameTracker) -> String {
+        let name = match self {
+            UnitName::Escaped { name, path } => path.last().unwrap_or(&name),
+            UnitName::Unescaped(name) => name,
+        };
+        names.use_name(name)
     }
 
     /// The \ and ' ' are not part of the actual identifier when escaping. So when we check
