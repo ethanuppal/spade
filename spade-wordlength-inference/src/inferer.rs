@@ -164,48 +164,60 @@ impl<'a> Inferer<'a> {
 
     fn block(&mut self, block: &Block) -> Res {
         for stmt in block.statements.iter() {
-            match &stmt.inner {
-                Statement::Binding(spade_hir::Binding {
-                    pattern: _,
-                    ty: _,
-                    value,
-                    wal_trace,
-                }) => {
-                    if let Some(wal_trace) = wal_trace {
-                        if let Some(expr) = &wal_trace.rst {
-                            self.expression(expr)?;
-                        }
-                        if let Some(expr) = &wal_trace.clk {
-                            self.expression(expr)?;
-                        }
-                    }
-                    self.expression(value)?;
-                }
-                Statement::Assert(expr) => {
-                    self.expression(expr)?;
-                }
-
-                Statement::Set { target, value } => {
-                    self.expression(target)?;
-                    self.expression(value)?;
-                }
-
-                Statement::Register(register) => {
-                    let register = &register.inner;
-                    self.expression(&register.clock)?;
-                    if let Some((left, right)) = &register.reset {
-                        self.expression(left)?;
-                        self.expression(right)?;
-                    }
-                    self.expression(&register.value)?;
-                }
-
-                // Nothing to be done for these since they contain no expressions and thus no
-                // integer operations.
-                Statement::Declaration(_) | Statement::PipelineRegMarker(_) | Statement::Label(_) => {}
-            }
+            self.handle_statement(stmt)?;
         }
         self.expression(&block.result)
+    }
+
+    fn handle_statement(&mut self, stmt: &Statement) -> error::Result<()> {
+        match &stmt {
+            Statement::Binding(spade_hir::Binding {
+                pattern: _,
+                ty: _,
+                value,
+                wal_trace,
+            }) => {
+                if let Some(wal_trace) = wal_trace {
+                    if let Some(expr) = &wal_trace.rst {
+                        self.expression(expr)?;
+                    }
+                    if let Some(expr) = &wal_trace.clk {
+                        self.expression(expr)?;
+                    }
+                }
+                self.expression(value)?;
+            }
+            Statement::Assert(expr) => {
+                self.expression(expr)?;
+            }
+
+            Statement::Set { target, value } => {
+                self.expression(target)?;
+                self.expression(value)?;
+            }
+
+            Statement::Register(register) => {
+                let register = &register.inner;
+                self.expression(&register.clock)?;
+                if let Some((left, right)) = &register.reset {
+                    self.expression(left)?;
+                    self.expression(right)?;
+                }
+                self.expression(&register.value)?;
+            }
+
+            Statement::Substatements(stmts) => {
+                for stmt in stmts {
+                    self.handle_statement(stmt)?;
+                }
+            }
+
+            // Nothing to be done for these since they contain no expressions and thus no
+            // integer operations.
+            Statement::Declaration(_) | Statement::PipelineRegMarker(_) | Statement::Label(_) => {}
+        }
+
+        Ok(())
     }
 
     fn match_(

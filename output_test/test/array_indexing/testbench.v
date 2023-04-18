@@ -17,8 +17,8 @@ module pipeline_tb();
 
 
     reg valid;
-    reg[15:0] index;
-    wire[16:0] result;
+    reg[1:0] index;
+    wire[15:0] result;
 
     initial begin
         index <= 0;

@@ -1015,6 +1015,9 @@ mod tests {
                 (e(210); Type::Bool; Alias; e(310));
                 (e(200); Type::Bool; Alias; e(310));
 
+                (reg e(501); Type::Bool; clock(n(3, "clk")); e(310));
+                (reg e(502); Type::Bool; clock(n(3, "clk")); e(501));
+
                 // Output
                 (e(3); Type::int(17); Add; n(31, "s3_a"), n(31, "s3_a"));
             } => e(3)
@@ -1057,6 +1060,12 @@ mod tests {
                 (e(210); Type::Bool; Alias; e(310));
                 (e(200); Type::Bool; LogicalAnd; e(300), e(310));
 
+                (reg e(500); Type::Bool; clock(n(3, "clk")); e(300));
+                (e(511); Type::Bool; LogicalAnd; e(310), e(500));
+                (reg e(501); Type::Bool; clock(n(3, "clk")); e(511));
+                (reg e(502); Type::Bool; clock(n(3, "clk")); e(501));
+
+
                 // Output
                 (e(3); Type::int(17); Add; n(31, "s3_a"), n(31, "s3_a"));
             } => e(3)
@@ -1068,8 +1077,113 @@ mod tests {
     }
 
     #[test]
-    fn pipeline_valid_signal_works() {
-        todo!()
+    fn pipeline_valid_in_non_stalled_stage_is_constant() {
+        let code = r#"
+            pipeline(2) pl(clk: clock) -> bool {
+                    let x = stage.valid;
+                reg[false];
+                reg;
+                    true
+            }
+        "#;
+
+        let expected = entity!(&["pl"]; (
+                "clk", n(3, "clk"), Type::Bool,
+            ) -> Type::Bool; {
+                (const 300; Type::Bool; ConstantValue::Bool(false));
+                (e(100); Type::Bool; Select; e(200), n(1, "x"), n(2, "s1_x"));
+                (reg n(2, "s1_x"); Type::Bool; clock(n(3, "clk")); e(100));
+
+                (reg n(22, "s2_x"); Type::Bool; clock(n(3, "clk")); n(2, "s1_x"));
+
+                (e(200); Type::Bool; Alias; e(300));
+
+                (reg e(500); Type::Bool; clock(n(3, "clk")); e(300));
+                (reg e(501); Type::Bool; clock(n(3, "clk")); e(500));
+
+                (const 100; Type::Bool; ConstantValue::Bool(true));
+                (n(1, "x"); Type::Bool; Alias; e(100));
+
+                (const 3; Type::Bool; ConstantValue::Bool(true));
+            } => e(3)
+        );
+
+        let result = build_entity!(code);
+
+        assert_same_mir!(&result, &expected);
+    }
+
+    #[test]
+    fn pipeline_valid_with_single_stalled_stage_works() {
+        let code = r#"
+            pipeline(2) pl(clk: clock) -> bool {
+                reg[false];
+                    let x = stage.valid;
+                reg;
+                    true
+            }
+        "#;
+
+        let expected = entity!(&["pl"]; (
+                "clk", n(3, "clk"), Type::Bool,
+            ) -> Type::Bool; {
+                (const 300; Type::Bool; ConstantValue::Bool(false));
+
+                (reg n(22, "s2_x"); Type::Bool; clock(n(3, "clk")); n(1, "x"));
+
+                (e(200); Type::Bool; Alias; e(300));
+
+                (reg e(500); Type::Bool; clock(n(3, "clk")); e(300));
+                (reg e(501); Type::Bool; clock(n(3, "clk")); e(500));
+
+                (e(601); Type::Bool; Alias; e(500));
+                (n(1, "x"); Type::Bool; Alias; e(601));
+
+                (const 3; Type::Bool; ConstantValue::Bool(true));
+            } => e(3)
+        );
+
+        let result = build_entity!(code);
+
+        assert_same_mir!(&result, &expected);
+    }
+
+    #[test]
+    fn pipeline_late_valid_with_single_stalled_stage_works() {
+        let code = r#"
+            pipeline(3) pl(clk: clock) -> bool {
+                reg[false];
+                reg;
+                    let x = stage.valid;
+                reg;
+                    true
+            }
+        "#;
+
+        let expected = entity!(&["pl"]; (
+                "clk", n(3, "clk"), Type::Bool,
+            ) -> Type::Bool; {
+                // Stage condition
+                (const 300; Type::Bool; ConstantValue::Bool(false));
+
+                (reg n(22, "s3_x"); Type::Bool; clock(n(3, "clk")); n(1, "x"));
+
+                (e(200); Type::Bool; Alias; e(300));
+
+                (reg e(500); Type::Bool; clock(n(3, "clk")); e(300));
+                (reg e(501); Type::Bool; clock(n(3, "clk")); e(500));
+                (reg e(502); Type::Bool; clock(n(3, "clk")); e(501));
+
+                (e(601); Type::Bool; Alias; e(501));
+                (n(1, "x"); Type::Bool; Alias; e(601));
+
+                (const 3; Type::Bool; ConstantValue::Bool(true));
+            } => e(3)
+        );
+
+        let result = build_entity!(code);
+
+        assert_same_mir!(&result, &expected);
     }
 
     #[test]
@@ -1106,6 +1220,10 @@ mod tests {
                 // Stage conditions are generated at the end in reverse order
                 (e(210); Type::Bool; Alias; e(310));
                 (e(200); Type::Bool; Alias; e(310));
+
+                // Stage valid signals
+                (reg e(501); Type::Bool; clock(n(3, "clk")); e(310));
+                (reg e(502); Type::Bool; clock(n(3, "clk")); e(501));
 
 
                 // Finally, actual non-pipelining code
@@ -1152,6 +1270,10 @@ mod tests {
                 // Stage conditions are generated at the end in reverse order
                 (e(210); Type::Bool; Alias; e(310));
                 (e(200); Type::Bool; Alias; e(310));
+
+                (reg e(501); Type::Bool; clock(n(3, "clk")); e(310));
+                (reg e(502); Type::Bool; clock(n(3, "clk")); e(501));
+
 
                 // Output
                 (const 3; Type::Bool; ConstantValue::Bool(true))

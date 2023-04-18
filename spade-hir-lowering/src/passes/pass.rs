@@ -15,6 +15,51 @@ pub trait Passable {
     fn apply(&mut self, pass: &mut impl Pass) -> Result<()>;
 }
 
+impl Passable for Loc<Statement> {
+    fn apply(&mut self, pass: &mut impl Pass) -> Result<()> {
+        macro_rules! subnodes {
+            ($($node:expr),*) => {
+                {$($node.apply(pass)?;)*}
+            };
+        }
+        match &mut self.inner {
+            Statement::Binding(Binding{pattern: _, ty: _, value: expr, wal_trace: _} ) => expr.apply(pass)?,
+            Statement::Register(reg) => {
+                let Register {
+                    pattern: _,
+                    clock,
+                    reset,
+                    value,
+                    value_type: _,
+                    attributes: _
+                } = &mut reg.inner;
+
+                match reset {
+                    Some((trig, val)) => subnodes!(trig, val),
+                    None => {}
+                }
+
+                subnodes!(clock, value);
+            }
+            Statement::Declaration(_) => {}
+            Statement::PipelineRegMarker(cond) => {
+                if let Some(cond) = cond {
+                    cond.apply(pass)?;
+                }
+            }
+            Statement::Label(_) => {}
+            Statement::Assert(expr) => expr.apply(pass)?,
+            Statement::Set { target, value } => subnodes!(target, value),
+            Statement::Substatements(statements) => {
+                for stmt in statements {
+                    stmt.apply(pass)?;
+                }
+            }
+        }
+        Ok(())
+    }
+}
+
 impl Passable for Loc<Expression> {
     fn apply(&mut self, pass: &mut impl Pass) -> Result<()> {
         macro_rules! subnodes {
@@ -73,41 +118,6 @@ impl Passable for Loc<Expression> {
             }
             ExprKind::Block(block) => {
                 for statement in &mut block.statements {
-                    match &mut statement.inner {
-                        Statement::Binding(Binding {
-                            pattern: _,
-                            ty: _,
-                            value,
-                            wal_trace: _,
-                        }) => value.apply(pass)?,
-                        Statement::Register(reg) => {
-                            let Register {
-                                pattern: _,
-                                clock,
-                                reset,
-                                value,
-                                value_type: _,
-                                attributes: _,
-                            } = &mut reg.inner;
-
-                            match reset {
-                                Some((trig, val)) => subnodes!(trig, val),
-                                None => {}
-                            }
-
-                            subnodes!(clock, value);
-                        }
-                        Statement::Declaration(_) => {}
-                        Statement::PipelineRegMarker(cond) => {
-                            if let Some(cond) = cond {
-                                cond.apply(pass)?;
-                            }
-                        }
-                        Statement::Label(_) => {}
-                        Statement::Assert(expr) => expr.apply(pass)?,
-                        Statement::Set { target, value } => subnodes!(target, value),
-                    }
-
                     pass.visit_statement(statement)?;
                 }
 

@@ -65,6 +65,66 @@ pub fn check_linear_types(
     Ok(())
 }
 
+pub fn visit_statement(
+    stmt: &Loc<Statement>,
+    linear_state: &mut LinearState,
+    ctx: &LinearCtx,
+) -> Result<()> {
+    match &stmt.inner {
+        Statement::Binding(Binding{pattern, ty: _, value, wal_trace: _}) => {
+            visit_expression(value, linear_state, ctx)?;
+            linear_state.consume_expression(&value)?;
+            linear_state.push_pattern(pattern, ctx)?
+        }
+        Statement::Register(reg) => {
+            let Register {
+                pattern,
+                clock,
+                reset,
+                value,
+                value_type: _,
+                attributes: _
+            } = &reg.inner;
+
+            linear_state.push_pattern(&pattern, ctx)?;
+
+            visit_expression(clock, linear_state, ctx)?;
+            if let Some((trig, val)) = &reset {
+                visit_expression(trig, linear_state, ctx)?;
+                visit_expression(val, linear_state, ctx)?;
+            }
+
+            visit_expression(value, linear_state, ctx)?;
+
+            linear_state.consume_expression(&value)?;
+        }
+        Statement::Declaration(names) => {
+            for name in names {
+                linear_state.push_new_name(name, ctx)
+            }
+        }
+        Statement::PipelineRegMarker(cond) => {
+            if let Some(cond) = cond {
+                visit_expression(cond, linear_state, ctx)?;
+            }
+        }
+        Statement::Label(_) => {}
+        Statement::Assert(_) => {}
+        Statement::Set { target, value } => {
+            visit_expression(target, linear_state, ctx)?;
+            visit_expression(value, linear_state, ctx)?;
+            linear_state.consume_expression(target)?;
+            linear_state.consume_expression(value)?;
+        }
+        Statement::Substatements(stmts) => {
+            for stmt in stmts {
+                visit_statement(stmt, linear_state, ctx)?;
+            }
+        }
+    }
+    Ok(())
+}
+
 #[tracing::instrument(level = "trace", skip_all)]
 fn visit_expression(
     expr: &Loc<Expression>,
@@ -111,7 +171,7 @@ fn visit_expression(
         }
         spade_hir::ExprKind::IntLiteral(_) => {}
         spade_hir::ExprKind::BoolLiteral(_) => {}
-        spade_hir::ExprKind::StageValid | spade_hir::ExprKind::StageReady => {},
+        spade_hir::ExprKind::StageValid | spade_hir::ExprKind::StageReady => {}
         spade_hir::ExprKind::TupleLiteral(inner) => {
             for (i, expr) in inner.iter().enumerate() {
                 visit_expression(expr, linear_state, ctx)?;
@@ -170,58 +230,7 @@ fn visit_expression(
         }
         spade_hir::ExprKind::Block(b) => {
             for statement in &b.statements {
-                match &statement.inner {
-                    Statement::Binding(Binding {
-                        pattern,
-                        ty: _,
-                        value,
-                        wal_trace: _,
-                    }) => {
-                        visit_expression(value, linear_state, ctx)?;
-                        linear_state.consume_expression(&value)?;
-                        linear_state.push_pattern(pattern, ctx)?
-                    }
-                    Statement::Register(reg) => {
-                        let Register {
-                            pattern,
-                            clock,
-                            reset,
-                            value,
-                            value_type: _,
-                            attributes: _,
-                        } = &reg.inner;
-
-                        linear_state.push_pattern(&pattern, ctx)?;
-
-                        visit_expression(clock, linear_state, ctx)?;
-                        if let Some((trig, val)) = &reset {
-                            visit_expression(trig, linear_state, ctx)?;
-                            visit_expression(val, linear_state, ctx)?;
-                        }
-
-                        visit_expression(value, linear_state, ctx)?;
-
-                        linear_state.consume_expression(&value)?;
-                    }
-                    Statement::Declaration(names) => {
-                        for name in names {
-                            linear_state.push_new_name(name, ctx)
-                        }
-                    }
-                    Statement::PipelineRegMarker(cond) => {
-                        if let Some(cond) = cond {
-                            visit_expression(cond, linear_state, ctx)?;
-                        }
-                    }
-                    Statement::Label(_) => {}
-                    Statement::Assert(_) => {}
-                    Statement::Set { target, value } => {
-                        visit_expression(target, linear_state, ctx)?;
-                        visit_expression(value, linear_state, ctx)?;
-                        linear_state.consume_expression(target)?;
-                        linear_state.consume_expression(value)?;
-                    }
-                }
+                visit_statement(statement, linear_state, ctx)?;
             }
             visit_expression(&b.result, linear_state, ctx)?;
             trace!("Consuming block {}", expr.id);

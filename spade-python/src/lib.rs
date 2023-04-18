@@ -590,7 +590,7 @@ impl Spade {
             mono_state: &mut MonoState::new(),
             subs: &mut Substitutions::new(),
             diag_handler: &mut self.diag_handler,
-            pipeline_context: &mut MaybePipelineContext::NotPipeline
+            pipeline_context: &mut MaybePipelineContext::NotPipeline,
         };
 
         let mir = expr_to_mir(hir, &mut hir_ctx).report_and_convert(

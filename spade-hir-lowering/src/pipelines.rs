@@ -1,6 +1,7 @@
 use std::collections::BTreeMap;
 
 use local_impl::local_impl;
+use mir::Register;
 use mir::ValueName;
 use spade_common::{location_info::Loc, name::NameID};
 use spade_diagnostics::diag_bail;
@@ -19,8 +20,12 @@ pub struct PipelineContext {
     // NOTE: Current stage is being kept track of by [Context::Substitutions]
     /// Mapping from stage index to the corresponding enable signal, i.e. what
     /// `stage.ready` should map to. If the stage is unconditionally enabled,
-    /// the corresponding value is None
+    /// the corresponding value is `None`
     pub ready_signals: Vec<Option<ValueName>>,
+    /// Mapping from stage index to the corresponding valid signal. I.e. what
+    /// `stage.valid` should map to. If the stage is always valid, the corresponding
+    /// value is `None`
+    pub valid_signals: Vec<Option<ValueName>>,
 }
 
 pub enum MaybePipelineContext {
@@ -33,7 +38,7 @@ impl MaybePipelineContext {
     pub fn get<T>(&mut self, request_loc: &Loc<T>) -> Result<&mut PipelineContext> {
         match self {
             MaybePipelineContext::NotPipeline => {
-                diag_bail!(request_loc, "Requesting pipelien context without pipeline")
+                diag_bail!(request_loc, "Requesting pipeline context without pipeline")
             }
             MaybePipelineContext::Pipeline(ctx) => Ok(ctx),
         }
@@ -45,6 +50,131 @@ pub fn handle_pattern(pat: &Pattern, live_vars: &mut Vec<NameID>) {
     for name in pat.get_names() {
         live_vars.push(name.inner.clone());
     }
+}
+
+pub fn handle_statement(
+    statement: &Loc<Statement>,
+    ctx: &mut Context,
+    name_map: &mut BTreeMap<NameID, NameID>,
+    statements: &mut StatementList,
+    clock: &Loc<NameID>,
+    local_conds: &mut Vec<Option<ValueName>>,
+    stage_enable_names: &mut Vec<Option<ValueName>>,
+    current_stage: &mut usize,
+) -> Result<()> {
+    match &statement.inner {
+        Statement::Binding(Binding{pattern: pat, value: expr, wal_trace: _, ty: _}) => {
+            let time = expr.inner.kind.available_in()?;
+            for name in pat.get_names() {
+                let is_port = ctx
+                    .types
+                    .name_type(&name, ctx.symtab.symtab(), &ctx.item_list.types)?
+                    .is_port();
+
+                ctx.subs.set_available(name, time, is_port)
+            }
+        }
+        Statement::Register(reg) => {
+            let time = reg.inner.value.kind.available_in()?;
+            for name in reg.pattern.get_names() {
+                let is_port = ctx
+                    .types
+                    .name_type(&name, ctx.symtab.symtab(), &ctx.item_list.types)?
+                    .is_port();
+                ctx.subs.set_available(name, time, is_port)
+            }
+        }
+        Statement::Declaration(_) => todo!(),
+        Statement::PipelineRegMarker(cond) => {
+            local_conds.push(if let Some(cond) = cond {
+                statements.append(cond.lower(ctx)?);
+                Some(cond.variable(ctx.subs)?)
+            } else {
+                None
+            });
+            let live_vars = ctx.subs.next_stage(ctx.symtab);
+
+            // Generate pipeline regs for previous live vars
+            for reg in &live_vars {
+                if name_map
+                    .insert(reg.new.clone(), reg.original.inner.clone())
+                    .is_some()
+                {
+                    // NOTE: Panic because this should not occur in user code
+                    panic!("inserted duplicate in name map");
+                }
+
+                let reg_type = ctx
+                    .types
+                    .name_type(&reg.original, ctx.symtab.symtab(), &ctx.item_list.types)?
+                    .to_mir_type();
+                // If this stage has an enable signal, generate a mux to optionally select
+                // the previous value, otherwise use the previous value right away
+                let next = if let Some(enable) = &stage_enable_names[*current_stage] {
+                    let next_name = ValueName::Expr(ctx.idtracker.next());
+                    statements.push_secondary(
+                        mir::Statement::Binding(mir::Binding {
+                            name: next_name.clone(),
+                            operator: mir::Operator::Select,
+                            operands: vec![
+                                enable.clone(),
+                                reg.previous.value_name(),
+                                reg.new.value_name(),
+                            ],
+                            ty: reg_type.clone(),
+                            loc: Some(statement.loc()),
+                        }),
+                        &reg.original,
+                        "Pipeline enable mux",
+                    );
+                    next_name
+                } else {
+                    reg.previous.value_name()
+                };
+
+                statements.push_secondary(
+                    mir::Statement::Register(mir::Register {
+                        name: reg.new.value_name(),
+                        ty: reg_type,
+                        clock: clock.value_name(),
+                        reset: None,
+                        value: next,
+                        traced: None,
+                        // NOTE: Do we/can we also want to point to the declaration
+                        // of the variable?
+                        loc: Some(statement.loc()),
+                    }),
+                    &reg.original,
+                    "Pipelined",
+                );
+            }
+            *current_stage += 1;
+        }
+        Statement::Substatements(sub) => {
+            for statement in sub {
+                handle_statement(
+                    statement,
+                    ctx,
+                    name_map,
+                    statements,
+                    clock,
+                    local_conds,
+                    stage_enable_names,
+                    current_stage,
+                )?;
+            }
+        }
+        Statement::Label(_) => {
+            // Labels have no effect on codegen
+        }
+        Statement::Assert(_) => {
+            // Assertions have no effect on pipeline state
+        }
+        Statement::Set { .. } => {
+            // Set have no effect on pipeline state
+        }
+    }
+    Ok(())
 }
 
 pub fn lower_pipeline<'a>(
@@ -102,109 +232,16 @@ pub fn lower_pipeline<'a>(
     let mut current_stage = 0;
     let mut local_conds = vec![];
     for statement in body_statements {
-        match &statement.inner {
-            Statement::Binding(Binding {
-                pattern,
-                ty: _,
-                value,
-                wal_trace: _,
-            }) => {
-                let time = value.inner.kind.available_in()?;
-                for name in pattern.get_names() {
-                    let is_port = ctx
-                        .types
-                        .name_type(&name, ctx.symtab.symtab(), &ctx.item_list.types)?
-                        .is_port();
-
-                    ctx.subs.set_available(name, time, is_port)
-                }
-            }
-            Statement::Register(reg) => {
-                let time = reg.inner.value.kind.available_in()?;
-                for name in reg.pattern.get_names() {
-                    let is_port = ctx
-                        .types
-                        .name_type(&name, ctx.symtab.symtab(), &ctx.item_list.types)?
-                        .is_port();
-                    ctx.subs.set_available(name, time, is_port)
-                }
-            }
-            Statement::Declaration(_) => todo!(),
-            Statement::PipelineRegMarker(cond) => {
-                local_conds.push(if let Some(cond) = cond {
-                    statements.append(cond.lower(ctx)?);
-                    Some(cond.variable(ctx.subs)?)
-                } else {
-                    None
-                });
-                let live_vars = ctx.subs.next_stage(ctx.symtab);
-
-                // Generate pipeline regs for previous live vars
-                for reg in &live_vars {
-                    if name_map
-                        .insert(reg.new.clone(), reg.original.inner.clone())
-                        .is_some()
-                    {
-                        // NOTE: Panic because this should not occur in user code
-                        panic!("inserted duplicate in name map");
-                    }
-
-                    let reg_type = ctx
-                        .types
-                        .name_type(&reg.original, ctx.symtab.symtab(), &ctx.item_list.types)?
-                        .to_mir_type();
-                    // If this stage has an enable signal, generate a mux to optionally select
-                    // the previous value, otherwise use the previous value right away
-                    let next = if let Some(enable) = &stage_enable_names[current_stage] {
-                        let next_name = ValueName::Expr(ctx.idtracker.next());
-                        statements.push_secondary(
-                            mir::Statement::Binding(mir::Binding {
-                                name: next_name.clone(),
-                                operator: mir::Operator::Select,
-                                operands: vec![
-                                    enable.clone(),
-                                    reg.previous.value_name(),
-                                    reg.new.value_name(),
-                                ],
-                                ty: reg_type.clone(),
-                                loc: Some(statement.loc()),
-                            }),
-                            &reg.original,
-                            "Pipeline enable mux",
-                        );
-                        next_name
-                    } else {
-                        reg.previous.value_name()
-                    };
-
-                    statements.push_secondary(
-                        mir::Statement::Register(mir::Register {
-                            name: reg.new.value_name(),
-                            ty: reg_type,
-                            clock: clock.value_name(),
-                            reset: None,
-                            value: next,
-                            // NOTE: Do we/can we also want to point to the declaration
-                            // of the variable?
-                            loc: Some(statement.loc()),
-                            traced: None,
-                        }),
-                        &reg.original,
-                        "Pipelined",
-                    );
-                }
-                current_stage += 1;
-            }
-            Statement::Label(_) => {
-                // Labels have no effect on codegen
-            }
-            Statement::Assert(_) => {
-                // Assertions have no effect on pipeline state
-            }
-            Statement::Set { .. } => {
-                // Set have no effect on pipeline state
-            }
-        }
+        handle_statement(
+            statement,
+            ctx,
+            name_map,
+            statements,
+            clock,
+            &mut local_conds,
+            &mut stage_enable_names,
+            &mut current_stage,
+        )?
     }
 
     // Codegen enable signals for the stages that need them. We need to generate them
@@ -223,7 +260,6 @@ pub fn lower_pipeline<'a>(
                     operator: mir::Operator::Alias,
                     operands: vec![local.clone()],
                     ty: mir::types::Type::Bool,
-                    // TODO: Add correct location
                     loc: None,
                 }));
                 current_enable = Some(local)
@@ -240,7 +276,6 @@ pub fn lower_pipeline<'a>(
                     operator: mir::Operator::Alias,
                     operands: vec![prev.clone()],
                     ty: mir::types::Type::Bool,
-                    // TODO: Add correct location?
                     loc: None,
                 }));
             }
@@ -254,12 +289,60 @@ pub fn lower_pipeline<'a>(
                     operator: mir::Operator::LogicalAnd,
                     operands: vec![local.clone(), prev.clone()],
                     ty: mir::types::Type::Bool,
-                    // TODO: Add correct location?
                     loc: None,
                 }));
             }
             (None, None) => {}
         }
+    }
+
+    // Codegen valid signals
+    // The first stage, before any `reg` statement is valid, so we can initialize the vector
+    // with `None`
+    let mut valid_signals = vec![None];
+    let mut last_cond: Option<ValueName> = None;
+    for local_cond in local_conds {
+        // Generate the conditions for validity of this stage
+        let cond_name = match (local_cond, &last_cond) {
+            // Both a local and a previous condition, or them together
+            (Some(local), Some(prev)) => {
+                let new_name = ValueName::Expr(ctx.idtracker.next());
+
+                statements.push_anonymous(mir::Statement::Binding(mir::Binding {
+                    name: new_name.clone(),
+                    operator: mir::Operator::LogicalAnd,
+                    operands: vec![local, prev.clone()],
+                    ty: mir::types::Type::Bool,
+                    loc: None,
+                }));
+
+                Some(new_name)
+            }
+            // New condition but no previous, alias
+            (Some(local), None) => Some(local),
+            (None, Some(prev)) => Some(prev.clone()),
+            (None, None) => None,
+        };
+        // Register the local condition for one cycle.
+
+        if let Some(cond_name) = cond_name {
+            let new_name = ValueName::Expr(ctx.idtracker.next());
+
+            statements.push_anonymous(mir::Statement::Register(Register {
+                name: new_name.clone(),
+                ty: mir::types::Type::Bool,
+                clock: clock.value_name(),
+                // FIXME: We should probably handle resets here, but I don't know how
+                reset: None,
+                value: cond_name,
+                traced: None,
+                loc: None,
+            }));
+
+            last_cond = Some(new_name);
+        }
+
+        valid_signals.push(last_cond.clone());
     }
 
     let mut ready_signals = stage_enable_names.into_iter().rev().collect::<Vec<_>>();
@@ -269,6 +352,7 @@ pub fn lower_pipeline<'a>(
     ready_signals.push(None);
     *ctx.pipeline_context = MaybePipelineContext::Pipeline(PipelineContext {
         ready_signals,
+        valid_signals,
     });
 
     Ok(())

@@ -1002,6 +1002,11 @@ impl StatementLocal for Statement {
                     value: value.variable(ctx.subs)?.at_loc(value),
                 })
             }
+            Statement::Substatements(statements) => {
+                for stmt in statements {
+                    result.append(stmt.lower(ctx)?);
+                }
+            }
         }
         Ok(result)
     }
@@ -1516,7 +1521,9 @@ impl ExprLocal for Loc<Expression> {
                 // Empty: Pipeline refs are lowered in the alias checking
             }
             ExprKind::StageReady => {
-                let signal = ctx.pipeline_context.get(self)?
+                let signal = ctx
+                    .pipeline_context
+                    .get(self)?
                     .ready_signals
                     .get(ctx.subs.current_stage)
                     .ok_or_else(|| Diagnostic::bug(self, "Pipeline ready signal overflow"))?;
@@ -1548,7 +1555,40 @@ impl ExprLocal for Loc<Expression> {
                     ),
                 }
             }
-            ExprKind::StageValid => todo!("Lower stage valid"),
+            ExprKind::StageValid => {
+                let signal = ctx
+                    .pipeline_context
+                    .get(self)?
+                    .valid_signals
+                    .get(ctx.subs.current_stage)
+                    .ok_or_else(|| Diagnostic::bug(self, "Pipeline valid signal overflow"))?;
+
+                match signal {
+                    Some(signal_name) => {
+                        // NOTE: we could use the aliases method here, but that
+                        // would require duplicating the logic to check if the enable
+                        // signal is set
+                        result.push_primary(
+                            mir::Statement::Binding(mir::Binding {
+                                name: self.variable(ctx.subs)?,
+                                operator: mir::Operator::Alias,
+                                operands: vec![signal_name.clone()],
+                                ty: mir::types::Type::Bool,
+                                loc: Some(self.loc()),
+                            }),
+                            self,
+                        )
+                    }
+                    None => result.push_primary(
+                        mir::Statement::Constant(
+                            self.id,
+                            mir::types::Type::Bool,
+                            mir::ConstantValue::Bool(true),
+                        ),
+                        self,
+                    ),
+                }
+            }
             ExprKind::MethodCall { .. } => {
                 diag_bail!(
                     self,

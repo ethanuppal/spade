@@ -891,6 +891,12 @@ impl TypeState {
 
                 Ok(())
             }
+            Statement::Substatements(sub) => {
+                for statement in sub {
+                    self.visit_statement(statement, ctx, generic_list)?;
+                }
+                Ok(())
+            }
         }
     }
 
