@@ -10,6 +10,7 @@ take the opportunity to highlight other stuff that normally doesn't fit in a blo
 - [ ] Spade
     - [ ] Update changelog
         - [ ] Bump [unreleased] to [x.y.z].
+        - [ ] Update unreleased compare link to latest version
         - [ ] Make sure the version header links to the diff between this and the previous version
 - [ ] Swim
     - [ ] Update changelog

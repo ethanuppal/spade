@@ -13,8 +13,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Added
 
+### Fixed
+
+### Changed
+
+### Removed
+
+### Internal
+
+## [0.2.0] - 2023-04-20
+
+### Added
+
 - [!155][!155] Support for specifying initial content of memories.
-- [!154](!154) Add unsigned literals, for example `let x: int<8> 255u` as a
+- [!154][!154] Add unsigned literals, for example `let x: int<8> 255u` as a
   stop gap solution until proper unsigned types are implemented
 - [!169][!169] Add `!=` operator
 - [!185][!185] `max`, `min`, and `order` operation added to `std::ops`
@@ -26,8 +38,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ### Changed
 
 - [!165][!165] Standard library is now included by the compiler instead of Swim.
-
-### Removed
 
 ### Internal
 
@@ -47,4 +57,6 @@ Initial numbered version
 
 [Associated Swim release](https://gitlab.com/spade-lang/swim/-/tree/v0.1.0)
 
+[Unreleased]: https://gitlab.com/spade-lang/spade/-/compare/v0.2.0...master
+[0.2.0]: https://gitlab.com/spade-lang/spade/-/compare/v0.1.0...v0.2.0
 [0.1.0]: https://gitlab.com/spade-lang/spade/-/tree/v0.1.0
