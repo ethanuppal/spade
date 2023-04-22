@@ -15,6 +15,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Fixed
 
+- [!188][!188] Fix codegen bug when indexing structs or tuples which are 1 bit wide.
+
 ### Changed
 
 ### Removed
@@ -24,8 +26,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - [!187][!187] Change naming scheme of Verilog variables to make names more predictable. [Documentation](https://docs.spade-lang.org/internal/naming.html)
 
 [!187]: https://gitlab.com/spade-lang/spade/-/merge_requests/185
+[!188]: https://gitlab.com/spade-lang/spade/-/merge_requests/188
 
-
+>>>>>>> 1de09d2 (Fix miscompilation on 1 bit indexees)
 ## [0.2.0] - 2023-04-20
 
 ### Added

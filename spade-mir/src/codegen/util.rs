@@ -49,6 +49,9 @@ pub fn mangle_output(input: &str) -> String {
 }
 
 pub enum TupleIndex {
+    /// The indexee is a 1 bit scalar, so no indexing should be performed.
+    /// Codegens as empty string
+    None,
     /// The index is a single bit, i.e. codegens as [val]
     Single(BigUint),
     /// The index is a range of bits, codegens as [left:right]
@@ -58,6 +61,7 @@ pub enum TupleIndex {
 impl TupleIndex {
     pub fn verilog_code(&self) -> String {
         match self {
+            TupleIndex::None => format!(""),
             TupleIndex::Single(i) => format!("[{i}]"),
             TupleIndex::Range { left, right } => format!("[{left}:{right}]"),
         }

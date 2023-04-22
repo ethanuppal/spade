@@ -1,0 +1,5 @@
+[compiler]
+path = ".."
+
+[simulation]
+testbench_dir = "test"

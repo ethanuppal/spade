@@ -131,7 +131,9 @@ fn compute_tuple_index(idx: u64, sizes: &[BigUint]) -> TupleIndex {
     let total_width: BigUint = sizes.iter().sum();
 
     // Check if this is a single bit, if so, index using just it
-    if target_width == &1u32.to_biguint() {
+    if sizes.iter().sum::<BigUint>() == 1u32.to_biguint() {
+        TupleIndex::None
+    } else if target_width == &1u32.to_biguint() {
         TupleIndex::Single(total_width - start_bit - 1u32.to_biguint())
     } else {
         TupleIndex::Range {
@@ -605,6 +607,7 @@ fn backward_expression_code(binding: &Binding, types: &TypeList, ops: &[ValueNam
         }
         Operator::IndexTuple(index, inner_types) => {
             assert_eq!(&inner_types[*index as usize], self_type);
+
             let index = compute_tuple_index(
                 *index,
                 &inner_types

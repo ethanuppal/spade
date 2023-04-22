@@ -1,0 +1,9 @@
+struct port Inner {
+    b: &mut bool
+}
+
+entity harness(p: Inner) -> bool {
+    set p.b = true;
+    true
+}
+
