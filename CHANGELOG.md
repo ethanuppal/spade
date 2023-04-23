@@ -15,6 +15,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 - [!168][!168] Add an inverted port type `~T`. [Documentation][doc_inverted_ports]
 - [!168][!168] Add `port` expression for creating a `(T, ~T)`. [Documentation][doc_inverted_ports]
+- [!189][!189] Add `#[no_mangle]` attribute to unit parameters to avoid appending `_i` or `_o`
 
 ### Fixed
 
@@ -34,6 +35,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 [!184]: https://gitlab.com/spade-lang/spade/-/merge_requests/184
 [!187]: https://gitlab.com/spade-lang/spade/-/merge_requests/187
 [!188]: https://gitlab.com/spade-lang/spade/-/merge_requests/188
+[!189]: https://gitlab.com/spade-lang/spade/-/merge_requests/189
 [!195]: https://gitlab.com/spade-lang/spade/-/merge_requests/195
 
 [doc_inverted_ports]: https://docs.spade-lang.org/language_reference/type_system/inverted_ports.html
