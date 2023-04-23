@@ -23,7 +23,7 @@ pub fn t_num(size: u128) -> Loc<crate::TypeExpression> {
 
 #[macro_export]
 macro_rules! hparams {
-    ($(($name:expr, $type:expr)),*) => {
-        hir::ParameterList(vec![$((ast_ident($name), $type)),*])
+    ($(($name:expr, $type:expr)),*$(,)?) => {
+        hir::ParameterList(vec![$(hir::Parameter{name: ast_ident($name), ty: $type, no_mangle: None}),*])
     }
 }

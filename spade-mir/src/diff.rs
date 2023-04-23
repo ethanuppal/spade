@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use thiserror::Error;
 
-use crate::{Entity, Statement, ValueName};
+use crate::{Entity, MirInput, Statement, ValueName};
 
 macro_rules! check {
     ($cond:expr) => {
@@ -207,7 +207,22 @@ pub fn compare_entity(e1: &Entity, e2: &Entity, var_map: &mut VarMap) -> bool {
     check!(e1.name == e2.name);
     check!(e1.output_type == e2.output_type);
 
-    for ((n1, vn1, t1), (n2, vn2, t2)) in e1.inputs.iter().zip(e2.inputs.iter()) {
+    for (
+        MirInput {
+            name: n1,
+            val_name: vn1,
+            ty: t1,
+            no_mangle: nm1,
+        },
+        MirInput {
+            name: n2,
+            val_name: vn2,
+            ty: t2,
+            no_mangle: nm2,
+        },
+    ) in e1.inputs.iter().zip(e2.inputs.iter())
+    {
+        check!(nm1 == nm2);
         check!(n1 == n2);
         check!(var_map.try_update_name(vn1, vn2).is_ok());
         check!(t1 == t2);

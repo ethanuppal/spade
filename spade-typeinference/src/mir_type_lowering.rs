@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use hir::symbol_table::SymbolTable;
-use hir::{TypeExpression, TypeSpec};
+use hir::{Parameter, TypeExpression, TypeSpec};
 use spade_common::location_info::Loc;
 use spade_common::name::NameID;
 use spade_diagnostics::Diagnostic;
@@ -45,9 +45,9 @@ impl TypeState {
                             .iter()
                             .map(|arg| {
                                 (
-                                    arg.0.inner.clone(),
+                                    arg.name.inner.clone(),
                                     Self::type_spec_to_concrete(
-                                        &arg.1.inner,
+                                        &arg.ty.inner,
                                         type_list,
                                         &generic_subs,
                                         false,
@@ -65,12 +65,18 @@ impl TypeState {
                     .members
                     .0
                     .iter()
-                    .map(|(ident, t)| {
-                        (
-                            ident.inner.clone(),
-                            Self::type_spec_to_concrete(&t, type_list, &generic_subs, invert),
-                        )
-                    })
+                    .map(
+                        |Parameter {
+                             name: ident,
+                             ty: t,
+                             no_mangle: _,
+                         }| {
+                            (
+                                ident.inner.clone(),
+                                Self::type_spec_to_concrete(&t, type_list, &generic_subs, invert),
+                            )
+                        },
+                    )
                     .collect();
 
                 ConcreteType::Struct {

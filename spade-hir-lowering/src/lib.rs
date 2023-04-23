@@ -15,12 +15,14 @@ use std::collections::HashMap;
 use error::{expect_entity, expect_function, expect_pipeline};
 use hir::expression::CallKind;
 use hir::expression::LocExprExt;
+use hir::Parameter;
 use local_impl::local_impl;
 
 use hir::param_util::{match_args_with_params, Argument};
 use hir::symbol_table::{FrozenSymtab, PatternableKind};
 use hir::{ItemList, Pattern, PatternArgument, UnitKind, UnitName};
 use mir::types::Type as MirType;
+use mir::MirInput;
 use mir::{ConstantValue, ValueName};
 use monomorphisation::MonoState;
 pub use name_map::NameSourceMap;
@@ -1788,17 +1790,46 @@ pub fn generate_unit<'a>(
     name_source_map: &mut NameSourceMap,
 ) -> Result<mir::Entity> {
     let mir_inputs = unit
+        .head
         .inputs
+        .0
         .iter()
-        .map(|(name_id, _)| {
-            let name = name_id.1.tail().to_string();
-            let val_name = name_id.value_name();
-            let ty = types
-                .name_type(name_id, symtab.symtab(), &item_list.types)?
-                .to_mir_type();
+        .zip(&unit.inputs)
+        .map(
+            |(
+                Parameter {
+                    name: _,
+                    ty: type_spec,
+                    no_mangle,
+                },
+                (name_id, _),
+            )| {
+                let name = name_id.1.tail().to_string();
+                let val_name = name_id.value_name();
+                let ty = types
+                    .name_type(name_id, symtab.symtab(), &item_list.types)?
+                    .to_mir_type();
 
-            Ok((name, val_name, ty))
-        })
+                if ty.backward_size() != BigUint::zero() && ty.size() != BigUint::zero() {
+                    if let Some(no_mangle) = no_mangle {
+                        return Err(Diagnostic::error(
+                            no_mangle,
+                            "Ports with both & and &mut cannot be #[no_mangle]",
+                        )
+                        .primary_label("Not allowed on mixed-direction ports")
+                        .secondary_label(type_spec, "This has both & and &mut components")
+                        .into());
+                    }
+                }
+
+                Ok(MirInput {
+                    name,
+                    val_name,
+                    ty,
+                    no_mangle: no_mangle.clone(),
+                })
+            },
+        )
         .collect::<Result<_>>()?;
 
     let mut statements = StatementList::new();

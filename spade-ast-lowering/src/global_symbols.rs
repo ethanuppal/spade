@@ -238,7 +238,7 @@ pub fn re_visit_type_declaration(
                     .unwrap_or(Ok(vec![]))?;
 
                 // Ensure that we don't have any port types in the enum variants
-                for (_, ty) in args {
+                for (_, _, ty) in args {
                     if ty.is_port(symtab)? {
                         return Err(Diagnostic::error(ty, "Port in enum")
                             .primary_label("This is a port")
@@ -298,7 +298,7 @@ pub fn re_visit_type_declaration(
             // Disallow normal arguments if the struct is a port, and port types
             // if it is not
             if s.is_port() {
-                for (f, ty) in &s.members.args {
+                for (_, f, ty) in &s.members.args {
                     if !ty.is_port(symtab)? {
                         return Err(Diagnostic::error(ty, "Non-port in port struct")
                             .primary_label("This is not a port type")
@@ -316,7 +316,7 @@ pub fn re_visit_type_declaration(
                     }
                 }
             } else {
-                for (_, ty) in &s.members.args {
+                for (_, _, ty) in &s.members.args {
                     if ty.is_port(symtab)? {
                         return Err(Diagnostic::error(ty, "Port in non-port struct")
                             .primary_label("This is a port")

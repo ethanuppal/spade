@@ -902,3 +902,22 @@ snapshot_error! {
     inverting_non_port_type,
     "entity x(t: ~int<8>) -> int<8> __builtin__"
 }
+
+snapshot_error! {
+    unused_attribute_on_parameter_is_an_error,
+    "fn test(#[owo] a: bool) -> bool {true}"
+}
+
+snapshot_error! {
+    no_mangle_on_struct_fields_is_disallowed,
+    "struct T {
+        #[no_mangle] x: bool,
+    }"
+}
+
+snapshot_error! {
+    no_mangle_on_enum_members_is_disallowed,
+    "enum T {
+        A{#[no_mangle] x: bool}
+    }"
+}

@@ -109,11 +109,14 @@ macro_rules! entity {
         spade_mir::Entity {
             name: spade_mir::unit_name::IntoUnitName::into_unit_name($name),
             inputs: vec![
-                $( (
-                    $arg_name.to_string(),
-                    spade_mir::value_name!($arg_intern_kind $arg_intern_name),
-                    $arg_type
-                )),*
+                $(
+                    spade_mir::MirInput {
+                        name: $arg_name.to_string(),
+                        val_name: spade_mir::value_name!($arg_intern_kind $arg_intern_name),
+                        ty: $arg_type,
+                        no_mangle: None
+                    }
+                ),*
             ],
             output: spade_mir::value_name!($output_name_kind $output_name),
             output_type: $output_type,
@@ -126,7 +129,7 @@ macro_rules! entity {
 
 #[cfg(test)]
 mod tests {
-    use crate::{self as spade_mir, UnitName};
+    use crate::{self as spade_mir, MirInput, UnitName};
     use crate::{types::Type, Binding, ConstantValue, Operator, Register, Statement, ValueName};
 
     #[test]
@@ -211,11 +214,12 @@ mod tests {
                 name: "pong".to_string(),
                 path: vec!["pong".to_string()],
             },
-            inputs: vec![(
-                "_i_clk".to_string(),
-                ValueName::Named(0, "clk".to_string()),
-                Type::Bool,
-            )],
+            inputs: vec![MirInput {
+                name: "_i_clk".to_string(),
+                val_name: ValueName::Named(0, "clk".to_string()),
+                ty: Type::Bool,
+                no_mangle: None,
+            }],
             output: ValueName::Named(1, "value".to_string()),
             output_type: Type::int(6),
             statements: vec![

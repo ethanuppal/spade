@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::{types::Type, Entity, Statement, ValueName};
+use crate::{types::Type, Entity, MirInput, Statement, ValueName};
 
 pub struct TypeList {
     inner: HashMap<ValueName, Type>,
@@ -16,8 +16,14 @@ impl TypeList {
     pub fn from_entity(e: &Entity) -> Self {
         let mut result = Self::empty();
 
-        for (_, name, ty) in &e.inputs {
-            result.inner.insert(name.clone(), ty.clone());
+        for MirInput {
+            val_name,
+            name: _,
+            ty,
+            no_mangle: _,
+        } in &e.inputs
+        {
+            result.inner.insert(val_name.clone(), ty.clone());
         }
 
         result.add_statements(&e.statements);

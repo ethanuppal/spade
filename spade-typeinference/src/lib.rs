@@ -9,7 +9,7 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use hir::UnitHead;
+use hir::{Parameter, UnitHead};
 use num::{BigInt, Zero};
 use spade_common::num_ext::InfallibleToBigInt;
 use spade_macros::trace_typechecker;
@@ -737,7 +737,11 @@ impl TypeState {
                             value: pattern,
                             kind,
                         },
-                        (_, target_type),
+                        Parameter {
+                            name: _,
+                            ty: target_type,
+                            no_mangle: _,
+                        },
                     ),
                 ) in args.iter().zip(params.0.iter()).enumerate()
                 {
@@ -1546,6 +1550,7 @@ mod tests {
         hir::{self, Block},
     };
     use hir::expression::IntLiteral;
+    use hir::hparams;
     use hir::symbol_table::TypeDeclKind;
     use hir::PatternKind;
     use hir::{dtype, testutil::t_num, ArgumentList};
@@ -2245,10 +2250,10 @@ mod tests {
         let unit = hir::UnitHead {
             name: Identifier("".to_string()).nowhere(),
             unit_kind: hir::UnitKind::Entity.nowhere(),
-            inputs: hir::ParameterList(vec![
-                (ast_ident("a"), dtype!(symtab => "bool")),
-                (ast_ident("b"), dtype!(symtab => "int"; (t_num(10)))),
-            ]),
+            inputs: hparams![
+                ("a", dtype!(symtab => "bool")),
+                ("b", dtype!(symtab => "int"; (t_num(10)))),
+            ],
             output_type: Some(dtype!(symtab => "int"; (t_num(5)))),
             type_params: vec![],
         };
@@ -2328,10 +2333,10 @@ mod tests {
         let unit = hir::UnitHead {
             name: Identifier("".to_string()).nowhere(),
             unit_kind: hir::UnitKind::Pipeline(2.nowhere()).nowhere(),
-            inputs: hir::ParameterList(vec![
-                (ast_ident("a"), dtype!(symtab => "bool")),
-                (ast_ident("b"), dtype!(symtab => "int"; ( t_num(10) ))),
-            ]),
+            inputs: hparams![
+                ("a", dtype!(symtab => "bool")),
+                ("b", dtype!(symtab => "int"; ( t_num(10) ))),
+            ],
             output_type: Some(dtype!(symtab => "int"; ( t_num(5) ))),
             type_params: vec![],
         };

@@ -7,7 +7,7 @@
 use std::collections::HashMap;
 
 use crate::{diff::VarMap, Entity};
-use crate::{Binding, Register, Statement, ValueName};
+use crate::{Binding, MirInput, Register, Statement, ValueName};
 
 pub fn translate_expr(
     name: u64,
@@ -171,11 +171,21 @@ where
 
     let inputs = inputs
         .iter()
-        .map(|(name, val_name, ty)| {
-            let val_name = translate_val_name(val_name, lhs_trans, rhs_trans);
+        .map(
+            |MirInput {
+                 name,
+                 val_name,
+                 ty,
+                 no_mangle,
+             }| {
+                let val_name = translate_val_name(val_name, lhs_trans, rhs_trans);
 
-            format!("({}, {}: {})", name, val_name, ty)
-        })
+                format!(
+                    "({}{name}, {val_name}: {ty})",
+                    no_mangle.map(|_| "#[no_mangle]").unwrap_or("")
+                )
+            },
+        )
         .collect::<Vec<_>>()
         .join(",");
 

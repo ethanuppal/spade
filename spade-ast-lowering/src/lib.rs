@@ -6,7 +6,6 @@ pub mod global_symbols;
 pub mod pipelines;
 pub mod types;
 
-use attributes::{report_unused_attributes, unit_name};
 use num::{BigInt, ToPrimitive, Zero};
 use pipelines::{int_literal_to_pipeline_stages, PipelineContext};
 use spade_diagnostics::Diagnostic;
@@ -24,6 +23,7 @@ use spade_common::location_info::{Loc, WithLocation};
 use spade_common::name::{Identifier, Path};
 use spade_hir as hir;
 
+use crate::attributes::AttributeListExt;
 use crate::pipelines::maybe_perform_pipelining_tasks;
 use crate::types::IsPort;
 use ast::{ParameterList, UnitKind};
@@ -254,7 +254,7 @@ fn visit_parameter_list(
             diag = if l.args.is_empty() {
                 diag.span_suggest_replace(suggest_msg, l, "(self)")
             } else {
-                diag.span_suggest_insert_before(suggest_msg, &l.args[0].0, "self, ")
+                diag.span_suggest_insert_before(suggest_msg, &l.args[0].1, "self, ")
             };
             return Err(diag.into());
         }
@@ -270,14 +270,15 @@ fn visit_parameter_list(
                 .primary_label("not allowed here")
                 .into())
             }
-            SelfContext::ImplBlock(spec) => result.push((
-                Identifier(String::from("self")).at_loc(&self_loc),
-                spec.clone(),
-            )),
+            SelfContext::ImplBlock(spec) => result.push(hir::Parameter {
+                no_mangle: None,
+                name: Identifier(String::from("self")).at_loc(&self_loc),
+                ty: spec.clone(),
+            }),
         }
     }
 
-    for (name, input_type) in &l.args {
+    for (attrs, name, input_type) in &l.args {
         if let Some(prev) = arg_names.get(name) {
             return Err(
                 Diagnostic::error(name, "Multiple arguments with the same name")
@@ -289,7 +290,15 @@ fn visit_parameter_list(
         arg_names.insert(name.clone());
         let t = visit_type_spec(input_type, symtab)?;
 
-        result.push((name.clone(), t));
+        let mut attrs = attrs.clone();
+        let no_mangle = attrs.consume_no_mangle().map(|ident| ident.loc());
+        attrs.report_unused()?;
+
+        result.push(hir::Parameter {
+            name: name.clone(),
+            ty: t,
+            no_mangle,
+        });
     }
     Ok(hir::ParameterList(result))
 }
@@ -321,7 +330,7 @@ pub fn entity_head(
     // the scope if we fail here, so we'll store port_error in a variable
     let mut port_error = Ok(());
     if let ast::UnitKind::Function = item.unit_kind.inner {
-        for (_, ty) in &item.inputs.args {
+        for (_, _, ty) in &item.inputs.args {
             if ty.is_port(symtab)? {
                 port_error = Err(Diagnostic::error(ty, "Port argument in function")
                     .primary_label("This is a port")
@@ -398,11 +407,11 @@ pub fn visit_unit(
     let head = head.clone(); // An offering to the borrow checker. May ferris have mercy on us all
 
     let mut attributes = attributes.clone();
-    let unit_name = unit_name(&mut attributes, &id.at_loc(name), name, type_params)?;
+    let unit_name = attributes.unit_name(&id.at_loc(name), name, type_params)?;
 
     // If this is a builtin entity
     if body.is_none() {
-        report_unused_attributes(&attributes)?;
+        attributes.report_unused()?;
         return Ok(hir::Item::Builtin(unit_name, head));
     }
 
@@ -411,12 +420,18 @@ pub fn visit_unit(
         .inputs
         .0
         .iter()
-        .map(|(ident, ty)| {
-            (
-                ctx.symtab.add_local_variable(ident.clone()).at_loc(ident),
-                ty.clone(),
-            )
-        })
+        .map(
+            |hir::Parameter {
+                 name: ident,
+                 ty,
+                 no_mangle: _,
+             }| {
+                (
+                    ctx.symtab.add_local_variable(ident.clone()).at_loc(ident),
+                    ty.clone(),
+                )
+            },
+        )
         .collect();
 
     ctx.pipeline_ctx = maybe_perform_pipelining_tasks(&unit, &head, ctx)?;
@@ -426,7 +441,7 @@ pub fn visit_unit(
     ctx.symtab.close_scope();
 
     // Any remaining attributes are unused and will have an error reported
-    report_unused_attributes(&attributes)?;
+    attributes.report_unused()?;
 
     info!("Checked all function arguments");
 
@@ -709,7 +724,13 @@ pub fn visit_pattern(p: &ast::Pattern, ctx: &mut Context) -> Result<hir::Pattern
                         .params
                         .0
                         .iter()
-                        .map(|(ident, _)| ident.inner.clone())
+                        .map(
+                            |hir::Parameter {
+                                 name: ident,
+                                 ty: _,
+                                 no_mangle: _,
+                             }| ident.inner.clone(),
+                        )
                         .collect::<HashSet<_>>();
 
                     let mut patterns = patterns
@@ -778,7 +799,7 @@ pub fn visit_pattern(p: &ast::Pattern, ctx: &mut Context) -> Result<hir::Pattern
                         .map(|(p, arg)| {
                             let pat = p.try_map_ref(|p| visit_pattern(p, ctx))?;
                             Ok(hir::PatternArgument {
-                                target: arg.0.clone(),
+                                target: arg.name.clone(),
                                 value: pat,
                                 kind: hir::ArgumentKind::Positional,
                             })
@@ -1262,7 +1283,7 @@ pub fn ensure_unique_anonymous_traits(item_list: &hir::ItemList) -> Vec<Diagnost
 mod entity_visiting {
     use super::*;
 
-    use hir::UnitName;
+    use hir::{hparams, UnitName};
     use spade_ast::testutil::{ast_ident, ast_path};
     use spade_common::name::testutil::name_id;
     use spade_common::{location_info::WithLocation, name::Identifier};
@@ -1301,7 +1322,7 @@ mod entity_visiting {
             name: UnitName::FullPath(name_id(0, "test")),
             head: hir::UnitHead {
                 name: Identifier("test".to_string()).nowhere(),
-                inputs: hir::ParameterList(vec![(ast_ident("a"), hir::TypeSpec::unit().nowhere())]),
+                inputs: hparams!(("a", hir::TypeSpec::unit().nowhere())),
                 output_type: None,
                 type_params: vec![],
                 unit_kind: hir::UnitKind::Entity.nowhere(),
@@ -1544,6 +1565,7 @@ mod expression_visiting {
     use super::*;
 
     use ast::comptime::MaybeComptime;
+    use hir::hparams;
     use hir::symbol_table::EnumVariant;
     use spade_ast::testutil::{ast_ident, ast_path};
     use spade_common::location_info::WithLocation;
@@ -1873,10 +1895,7 @@ mod expression_visiting {
             name: Identifier("".to_string()).nowhere(),
             output_type: hir::TypeSpec::Unit(().nowhere()).nowhere(),
             option: 0,
-            params: hir::ParameterList(vec![(
-                ast_ident("x"),
-                hir::TypeSpec::Unit(().nowhere()).nowhere(),
-            )]),
+            params: hparams![("x", hir::TypeSpec::Unit(().nowhere()).nowhere())],
             type_params: vec![],
         }
         .nowhere();
@@ -1941,10 +1960,7 @@ mod expression_visiting {
             name: Identifier("".to_string()).nowhere(),
             output_type: hir::TypeSpec::Unit(().nowhere()).nowhere(),
             option: 0,
-            params: hir::ParameterList(vec![(
-                ast_ident("x"),
-                hir::TypeSpec::Unit(().nowhere()).nowhere(),
-            )]),
+            params: hparams![("x", hir::TypeSpec::Unit(().nowhere()).nowhere())],
             type_params: vec![],
         }
         .nowhere();
@@ -1997,10 +2013,10 @@ mod expression_visiting {
             Thing::Unit(
                 UnitHead {
                     name: Identifier("".to_string()).nowhere(),
-                    inputs: hir::ParameterList(vec![
-                        (ast_ident("a"), hir::TypeSpec::unit().nowhere()),
-                        (ast_ident("b"), hir::TypeSpec::unit().nowhere()),
-                    ]),
+                    inputs: hparams![
+                        ("a", hir::TypeSpec::unit().nowhere()),
+                        ("b", hir::TypeSpec::unit().nowhere()),
+                    ],
                     output_type: None,
                     type_params: vec![],
                     unit_kind: hir::UnitKind::Entity.nowhere(),
@@ -2061,10 +2077,10 @@ mod expression_visiting {
             Thing::Unit(
                 UnitHead {
                     name: Identifier("".to_string()).nowhere(),
-                    inputs: hir::ParameterList(vec![
-                        (ast_ident("a"), hir::TypeSpec::unit().nowhere()),
-                        (ast_ident("b"), hir::TypeSpec::unit().nowhere()),
-                    ]),
+                    inputs: hparams![
+                        ("a", hir::TypeSpec::unit().nowhere()),
+                        ("b", hir::TypeSpec::unit().nowhere()),
+                    ],
                     output_type: None,
                     type_params: vec![],
                     unit_kind: hir::UnitKind::Entity.nowhere(),
@@ -2119,10 +2135,10 @@ mod expression_visiting {
             Thing::Unit(
                 UnitHead {
                     name: Identifier("".to_string()).nowhere(),
-                    inputs: hir::ParameterList(vec![
-                        (ast_ident("a"), hir::TypeSpec::unit().nowhere()),
-                        (ast_ident("b"), hir::TypeSpec::unit().nowhere()),
-                    ]),
+                    inputs: hparams![
+                        ("a", hir::TypeSpec::unit().nowhere()),
+                        ("b", hir::TypeSpec::unit().nowhere()),
+                    ],
                     output_type: None,
                     type_params: vec![],
                     unit_kind: hir::UnitKind::Function(hir::FunctionKind::Fn).nowhere(),
@@ -2181,10 +2197,10 @@ mod expression_visiting {
                 UnitHead {
                     name: Identifier("".to_string()).nowhere(),
                     unit_kind: hir::UnitKind::Pipeline(2.nowhere()).nowhere(),
-                    inputs: hir::ParameterList(vec![
-                        (ast_ident("a"), hir::TypeSpec::unit().nowhere()),
-                        (ast_ident("b"), hir::TypeSpec::unit().nowhere()),
-                    ]),
+                    inputs: hparams![
+                        ("a", hir::TypeSpec::unit().nowhere()),
+                        ("b", hir::TypeSpec::unit().nowhere()),
+                    ],
                     output_type: None,
                     type_params: vec![],
                 }
@@ -2214,6 +2230,7 @@ mod pattern_visiting {
         ArgumentPattern,
     };
     use hir::{
+        hparams,
         symbol_table::{StructCallable, TypeDeclKind},
         PatternKind,
     };
@@ -2287,10 +2304,10 @@ mod pattern_visiting {
                     name: Identifier("".to_string()).nowhere(),
                     self_type: hir::TypeSpec::Declared(type_name.clone().nowhere(), vec![])
                         .nowhere(),
-                    params: hir::ParameterList(vec![
-                        (ast_ident("x"), hir::TypeSpec::unit().nowhere()),
-                        (ast_ident("y"), hir::TypeSpec::unit().nowhere()),
-                    ]),
+                    params: hparams![
+                        ("x", hir::TypeSpec::unit().nowhere()),
+                        ("y", hir::TypeSpec::unit().nowhere()),
+                    ],
                     type_params: vec![],
                 }
                 .nowhere(),
@@ -2468,7 +2485,7 @@ mod impl_blocks {
         testutil::{ast_ident, ast_path},
         ImplBlock,
     };
-    use hir::{symbol_table::TypeDeclKind, ItemList};
+    use hir::{hparams, symbol_table::TypeDeclKind, ItemList};
     use spade_common::name::testutil::name_id;
 
     use pretty_assertions::assert_eq;
@@ -2526,7 +2543,7 @@ mod impl_blocks {
 
         let param_type_spec =
             hir::TypeSpec::Declared(target_type_name.clone().nowhere(), vec![]).nowhere();
-        let hir_param_list = hir::ParameterList(vec![(ast_ident("self"), param_type_spec.clone())]);
+        let hir_param_list = hparams![("self", param_type_spec.clone())];
         let expected_item = hir::Item::Unit(
             hir::Unit {
                 name: entity_name.clone(),

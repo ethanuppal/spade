@@ -328,7 +328,16 @@ pub struct Unit {
 impl WithLocation for Unit {}
 
 #[derive(PartialEq, Debug, Clone, Serialize, Deserialize)]
-pub struct ParameterList(pub Vec<(Loc<Identifier>, Loc<TypeSpec>)>);
+pub struct Parameter {
+    /// If the #[no_mangle] attribute is present, this field is set
+    /// with the Loc pointing to the attribute
+    pub no_mangle: Option<Loc<()>>,
+    pub name: Loc<Identifier>,
+    pub ty: Loc<TypeSpec>,
+}
+
+#[derive(PartialEq, Debug, Clone, Serialize, Deserialize)]
+pub struct ParameterList(pub Vec<Parameter>);
 impl WithLocation for ParameterList {}
 
 impl ParameterList {
@@ -350,7 +359,12 @@ impl ParameterList {
 
     /// Look up the type of an argument, returning None if no such argument exists
     pub fn try_get_arg_type(&self, name: &Identifier) -> Option<&Loc<TypeSpec>> {
-        for (arg, ty) in &self.0 {
+        for Parameter {
+            name: arg,
+            ty,
+            no_mangle: _,
+        } in &self.0
+        {
             if &arg.inner == name {
                 return Some(ty);
             }
@@ -364,7 +378,14 @@ impl ParameterList {
             .iter()
             .enumerate()
             .filter_map(
-                |(i, (name, _))| {
+                |(
+                    i,
+                    Parameter {
+                        name,
+                        ty: _,
+                        no_mangle: _,
+                    },
+                )| {
                     if &name.inner == target {
                         Some(i)
                     } else {

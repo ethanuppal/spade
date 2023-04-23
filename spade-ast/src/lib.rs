@@ -310,19 +310,28 @@ impl AttributeList {
 #[derive(PartialEq, Debug, Clone)]
 pub struct ParameterList {
     pub self_: Option<Loc<()>>,
-    pub args: Vec<(Loc<Identifier>, Loc<TypeSpec>)>,
+    pub args: Vec<(AttributeList, Loc<Identifier>, Loc<TypeSpec>)>,
 }
 impl WithLocation for ParameterList {}
 
 impl ParameterList {
     pub fn without_self(args: Vec<(Loc<Identifier>, Loc<TypeSpec>)>) -> Self {
-        Self { self_: None, args }
+        Self {
+            self_: None,
+            args: args
+                .into_iter()
+                .map(|(n, t)| (AttributeList::empty(), n, t))
+                .collect(),
+        }
     }
 
     pub fn with_self(self_: Loc<()>, args: Vec<(Loc<Identifier>, Loc<TypeSpec>)>) -> Self {
         Self {
             self_: Some(self_),
-            args,
+            args: args
+                .into_iter()
+                .map(|(n, t)| (AttributeList::empty(), n, t))
+                .collect(),
         }
     }
 }

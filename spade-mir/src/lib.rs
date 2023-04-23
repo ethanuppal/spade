@@ -349,11 +349,19 @@ impl std::fmt::Display for Statement {
 }
 
 #[derive(Clone, PartialEq, Debug)]
+pub struct MirInput {
+    pub name: String,
+    pub val_name: ValueName,
+    pub ty: Type,
+    pub no_mangle: Option<Loc<()>>,
+}
+
+#[derive(Clone, PartialEq, Debug)]
 pub struct Entity {
     /// The name of the module
     pub name: UnitName,
     /// A module input which is called `.1` externally and `.2` internally in the module
-    pub inputs: Vec<(String, ValueName, Type)>,
+    pub inputs: Vec<MirInput>,
     pub output: ValueName,
     pub output_type: Type,
     pub statements: Vec<Statement>,
@@ -371,7 +379,19 @@ impl std::fmt::Display for Entity {
 
         let inputs = inputs
             .iter()
-            .map(|(name, val, ty)| format!("({name}, {val}, {ty})"))
+            .map(
+                |MirInput {
+                     name,
+                     val_name,
+                     ty,
+                     no_mangle,
+                 }| {
+                    format!(
+                        "({}{name}, {val_name}, {ty})",
+                        no_mangle.map(|_| "#[no_mangle]").unwrap_or("")
+                    )
+                },
+            )
             .join(", ");
 
         let statements = statements.iter().map(|s| format!("\t{s}\n")).join("");

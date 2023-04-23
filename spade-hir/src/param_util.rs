@@ -10,7 +10,7 @@ use thiserror::Error;
 use spade_common::{location_info::Loc, name::Identifier};
 
 use crate::expression::NamedArgument;
-use crate::{ArgumentList, Expression, ParameterList, TypeSpec};
+use crate::{ArgumentList, Expression, Parameter, ParameterList, TypeSpec};
 
 #[derive(Error, Debug, PartialEq, Clone)]
 pub enum ArgumentError {
@@ -108,8 +108,8 @@ pub fn match_args_with_params<'a>(
                 .iter()
                 .zip(params.0.iter())
                 .map(|(arg, param)| Argument {
-                    target: &param.0,
-                    target_type: &param.1,
+                    target: &param.name,
+                    target_type: &param.ty,
                     value: arg,
                     kind: ArgumentKind::Positional,
                 })
@@ -120,7 +120,7 @@ pub fn match_args_with_params<'a>(
             let mut unbound = params
                 .0
                 .iter()
-                .map(|(ident, _)| ident.inner.clone())
+                .map(|Parameter { name: ident, .. }| ident.inner.clone())
                 .collect::<HashSet<_>>();
 
             let mut result = inner

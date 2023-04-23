@@ -15,7 +15,7 @@ use crate::renaming::make_names_predictable;
 use crate::type_list::TypeList;
 use crate::unit_name::InstanceNameTracker;
 use crate::verilog::{self, assign, logic, size_spec};
-use crate::{enum_util, Binding, ConstantValue, Entity, Operator, Statement, ValueName};
+use crate::{enum_util, Binding, ConstantValue, Entity, MirInput, Operator, Statement, ValueName};
 
 pub mod util;
 
@@ -905,54 +905,57 @@ pub fn entity_code(entity: &mut Entity, source_code: &Option<CodeBundle>) -> Cod
 
     let entity_name = entity.name.as_verilog();
 
-    let inputs: Vec<_> = entity
-        .inputs
-        .iter()
-        .map(|(name, value_name, ty)| (name, value_name, ty))
-        .collect();
+    let inputs = &entity.inputs;
 
-    let inputs = inputs.iter().map(|(name, value_name, ty)| {
-        let size = ty.size();
-        let (input_head, input_code) = if size != BigUint::zero() {
-            let name = mangle_input(name);
+    let inputs = inputs.iter().map(
+        |MirInput {
+             name,
+             val_name,
+             ty,
+             no_mangle,
+         }| {
+            let size = ty.size();
+            let (input_head, input_code) = if size != BigUint::zero() {
+                let name = mangle_input(no_mangle, name);
+                (
+                    format!("input{} {},", size_spec(&size), name),
+                    code! {
+                        [0] &logic(&val_name.var_name(), &size);
+                        [0] &assign(&val_name.var_name(), &name)
+                    },
+                )
+            } else {
+                (String::new(), code! {})
+            };
+
+            let backward_size = ty.backward_size();
+            let (output_head, output_code) = if backward_size != BigUint::zero() {
+                let name = mangle_output(no_mangle, name);
+                (
+                    format!("output{} {},", size_spec(&backward_size), name),
+                    code! {
+                        [0] &logic(&val_name.backward_var_name(), &backward_size);
+                        [0] &assign(&name, &val_name.backward_var_name())
+                    },
+                )
+            } else {
+                (String::new(), code! {})
+            };
+
+            let spacing = if !input_head.is_empty() && !output_head.is_empty() {
+                " "
+            } else {
+                ""
+            };
             (
-                format!("input{} {},", size_spec(&size), name),
+                format!("{input_head}{spacing}{output_head}"),
                 code! {
-                    [0] &logic(&value_name.var_name(), &size);
-                    [0] &assign(&value_name.var_name(), &name)
+                    [0] input_code;
+                    [0] output_code;
                 },
             )
-        } else {
-            (String::new(), code! {})
-        };
-
-        let backward_size = ty.backward_size();
-        let (output_head, output_code) = if backward_size != BigUint::zero() {
-            let name = mangle_output(name);
-            (
-                format!("output{} {},", size_spec(&backward_size), name),
-                code! {
-                    [0] &logic(&value_name.backward_var_name(), &backward_size);
-                    [0] &assign(&name, &value_name.backward_var_name())
-                },
-            )
-        } else {
-            (String::new(), code! {})
-        };
-
-        let spacing = if !input_head.is_empty() && !output_head.is_empty() {
-            " "
-        } else {
-            ""
-        };
-        (
-            format!("{input_head}{spacing}{output_head}"),
-            code! {
-                [0] input_code;
-                [0] output_code;
-            },
-        )
-    });
+        },
+    );
 
     let (inputs, input_assignments): (Vec<_>, Vec<_>) = inputs.unzip();
 

@@ -961,6 +961,13 @@ impl<'a> Parser<'a> {
     }
 
     #[trace_parser]
+    pub fn parameter(&mut self) -> Result<(AttributeList, Loc<Identifier>, Loc<TypeSpec>)> {
+        let attrs = self.attributes()?;
+        let (name, ty) = self.name_and_type()?;
+        Ok((attrs, name, ty))
+    }
+
+    #[trace_parser]
     pub fn parameter_list(&mut self) -> Result<ParameterList> {
         let self_ = if self.peek_cond(
             |tok| tok == &TokenKind::Identifier(String::from("self")),
@@ -976,7 +983,7 @@ impl<'a> Parser<'a> {
         Ok(ParameterList {
             self_,
             args: self
-                .comma_separated(Self::name_and_type, &TokenKind::CloseParen)
+                .comma_separated(Self::parameter, &TokenKind::CloseParen)
                 .no_context()?,
         })
     }

@@ -1,6 +1,6 @@
 use std::collections::{HashMap, HashSet};
 
-use crate::{Entity, Operator, Statement, ValueName};
+use crate::{Entity, MirInput, Operator, Statement, ValueName};
 
 fn try_rename(name: &mut ValueName, replacements: &HashMap<ValueName, ValueName>) {
     if let Some(replacement) = replacements.get(name) {
@@ -18,7 +18,7 @@ pub fn flatten_aliases(entity: &mut Entity) {
     // track of those here to avoid problems
     let mut unaliasable = HashSet::new();
 
-    for (_, val, _) in &entity.inputs {
+    for MirInput { val_name: val, .. } in &entity.inputs {
         unaliasable.insert(val.clone());
     }
 

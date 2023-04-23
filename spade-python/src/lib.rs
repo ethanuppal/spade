@@ -16,7 +16,7 @@ use spade_diagnostics::emitter::CodespanEmitter;
 use spade_diagnostics::{CodeBundle, CompilationError, DiagHandler, Diagnostic};
 use spade_hir::symbol_table::{LookupError, SymbolTable};
 use spade_hir::{symbol_table::FrozenSymtab, ItemList};
-use spade_hir::{TypeSpec, UnitHead};
+use spade_hir::{Parameter, TypeSpec, UnitHead};
 use spade_hir_lowering::monomorphisation::MonoState;
 use spade_hir_lowering::substitution::Substitutions;
 use spade_hir_lowering::{expr_to_mir, MirLowerable};
@@ -413,9 +413,19 @@ impl Spade {
             .map_err(Diagnostic::from)
             .report_and_convert(&mut self.error_buffer, &self.code, &mut self.diag_handler)?;
 
-        for (name, ty) in &head.inputs.0 {
+        for Parameter {
+            name,
+            ty,
+            no_mangle,
+        } in &head.inputs.0
+        {
             if port == name.0 {
-                return Ok((mangle_input(&port), ty.inner.clone()));
+                let verilog_name = if no_mangle.is_some() {
+                    mangle_input(no_mangle, &port)
+                } else {
+                    port
+                };
+                return Ok((verilog_name, ty.inner.clone()));
             }
         }
 

@@ -2222,6 +2222,37 @@ mod tests {
             }
         "
     }
+
+    snapshot_error! {
+        bidirectional_ports_cannot_be_no_mangle,
+        "
+            entity x(#[no_mangle] t: (&bool, &mut bool)) -> bool {
+                set t#1 = false;
+                true
+            }
+        "
+    }
+
+    #[test]
+    fn input_only_port_can_be_no_mangle() {
+        let code = "
+            entity x(#[no_mangle] t: bool) -> bool {
+                true
+            }
+        ";
+        build_items(code);
+    }
+
+    #[test]
+    fn output_only_port_can_be_no_mangle() {
+        let code = "
+            entity x(#[no_mangle] t: &mut bool) -> bool {
+                set t = true;
+                true
+            }
+        ";
+        build_items(code);
+    }
 }
 
 #[cfg(test)]

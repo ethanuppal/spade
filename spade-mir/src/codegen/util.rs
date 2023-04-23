@@ -1,4 +1,5 @@
 use num::BigUint;
+use spade_common::location_info::Loc;
 
 use crate::ValueName;
 
@@ -40,12 +41,20 @@ pub fn mangle_entity(module: &str) -> String {
     }
 }
 
-pub fn mangle_input(input: &str) -> String {
-    format!("{}_i", input)
+pub fn mangle_input(no_mangle: &Option<Loc<()>>, input: &str) -> String {
+    if no_mangle.is_some() {
+        input.to_string()
+    } else {
+        format!("{}_i", input)
+    }
 }
 
-pub fn mangle_output(input: &str) -> String {
-    format!("{}_o", input)
+pub fn mangle_output(no_mangle: &Option<Loc<()>>, input: &str) -> String {
+    if no_mangle.is_some() {
+        input.to_string()
+    } else {
+        format!("{}_o", input)
+    }
 }
 
 pub enum TupleIndex {
