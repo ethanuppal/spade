@@ -105,6 +105,9 @@ pub struct TypeState {
     replacements: HashMap<TypeVar, TypeVar>,
 
     pub trace_stack: Arc<TraceStack>,
+
+    /// (Experimental) Use Affine- and Interval-Arithmetic to bounds check integers.
+    pub use_aa: bool,
 }
 
 impl TypeState {
@@ -117,6 +120,7 @@ impl TypeState {
             requirements: vec![],
             replacements: HashMap::new(),
             generic_lists: HashMap::new(),
+            use_aa: false,
         }
     }
 
