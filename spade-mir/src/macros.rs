@@ -4,7 +4,7 @@
 #[macro_export]
 macro_rules! value_name {
     (n($id:expr, $debug_name:expr)) => {
-        spade_mir::ValueName::Named($id, $debug_name.to_string())
+        spade_mir::ValueName::_test_named($id, $debug_name.to_string())
     };
     (e($id:expr)) => {
         spade_mir::ValueName::Expr($id)
@@ -136,7 +136,7 @@ mod tests {
     fn value_name_parsing_works() {
         assert_eq!(
             value_name!(n(0, "test")),
-            ValueName::Named(0, "test".to_string())
+            ValueName::_test_named(0, "test".to_string())
         );
         assert_eq!(value_name!(e(0)), ValueName::Expr(0));
     }
@@ -146,7 +146,10 @@ mod tests {
         let expected = Statement::Binding(Binding {
             name: ValueName::Expr(0),
             operator: Operator::Add,
-            operands: vec![ValueName::Expr(1), ValueName::Named(1, "test".to_string())],
+            operands: vec![
+                ValueName::Expr(1),
+                ValueName::_test_named(1, "test".to_string()),
+            ],
             ty: Type::Bool,
             loc: None,
         });
@@ -160,9 +163,12 @@ mod tests {
     #[test]
     fn named_parsing_works() {
         let expected = Statement::Binding(Binding {
-            name: ValueName::Named(0, "string".to_string()),
+            name: ValueName::_test_named(0, "string".to_string()),
             operator: Operator::Add,
-            operands: vec![ValueName::Expr(1), ValueName::Named(1, "test".to_string())],
+            operands: vec![
+                ValueName::Expr(1),
+                ValueName::_test_named(1, "test".to_string()),
+            ],
             ty: Type::Bool,
             loc: None,
         });
@@ -176,9 +182,9 @@ mod tests {
     #[test]
     fn register_parsing_works() {
         let expected = Statement::Register(Register {
-            name: ValueName::Named(0, "test".into()),
+            name: ValueName::_test_named(0, "test".into()),
             ty: Type::int(5),
-            clock: ValueName::Named(1, "clk".into()),
+            clock: ValueName::_test_named(1, "clk".into()),
             reset: None,
             value: ValueName::Expr(0),
             loc: None,
@@ -193,9 +199,9 @@ mod tests {
     #[test]
     fn register_with_reset_parsing_works() {
         let expected = Statement::Register(Register {
-            name: ValueName::Named(0, "test".into()),
+            name: ValueName::_test_named(0, "test".into()),
             ty: Type::int(5),
-            clock: ValueName::Named(1, "clk".into()),
+            clock: ValueName::_test_named(1, "clk".into()),
             reset: Some((ValueName::Expr(1), ValueName::Expr(2))),
             value: ValueName::Expr(0),
             loc: None,
@@ -216,11 +222,11 @@ mod tests {
             },
             inputs: vec![MirInput {
                 name: "_i_clk".to_string(),
-                val_name: ValueName::Named(0, "clk".to_string()),
+                val_name: ValueName::_test_named(0, "clk".to_string()),
                 ty: Type::Bool,
                 no_mangle: None,
             }],
-            output: ValueName::Named(1, "value".to_string()),
+            output: ValueName::_test_named(1, "value".to_string()),
             output_type: Type::int(6),
             statements: vec![
                 statement!(e(0); Type::int(6); Add; n(1, "value")),

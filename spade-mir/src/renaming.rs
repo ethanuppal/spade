@@ -19,14 +19,14 @@ impl NameState {
 
     pub fn push(&mut self, name: &ValueName) {
         let new_name = match name {
-            ValueName::Named(_, name_str) => {
+            ValueName::Named(_, name_str, source) => {
                 let id = self
                     .names
                     .entry(name_str.clone())
                     .and_modify(|v| *v = *v + 1)
                     .or_insert(0);
 
-                ValueName::Named(*id, name_str.clone())
+                ValueName::Named(*id, name_str.clone(), source.clone())
             }
             v @ ValueName::Expr(_) => v.clone(),
         };

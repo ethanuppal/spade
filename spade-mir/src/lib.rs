@@ -18,6 +18,7 @@ use itertools::Itertools;
 use num::{BigInt, BigUint};
 use spade_common::{
     location_info::{Loc, WithLocation},
+    name::NameID,
     num_ext::InfallibleToBigInt,
 };
 use types::Type;
@@ -49,9 +50,17 @@ impl std::fmt::Display for ConstantValue {
 /// variable, or the id of the underlying expression
 #[derive(Clone, PartialEq, Debug, Hash, Eq, serde::Serialize, serde::Deserialize)]
 pub enum ValueName {
-    /// A named value in the code with with an index to make that name globally unique
-    /// In the resulting verilog, this is translated as _n_$id_$name
-    Named(u64, String),
+    /// A named value in the code with with an index to make that name locally unique
+    Named(
+        // ID of the name in the generated verilog
+        u64,
+        // Human readable name in the generated verilog. If this is not unique
+        // to the current module, the id will be appended
+        String,
+        // The original name ID from which this name originates
+        // NOTE: Not checked by MIR diff
+        NameID,
+    ),
     // FIXME: Consider renaming this since it's now used for both patterns and expressions
     /// An un-named expression. In the resulting verilog, this is called _e_$id
     Expr(u64),
@@ -59,10 +68,22 @@ pub enum ValueName {
 
 impl WithLocation for ValueName {}
 
+impl ValueName {
+    pub fn _test_named(id: u64, name: String) -> Self {
+        use spade_common::name::Path;
+
+        Self::Named(
+            id,
+            name.clone(),
+            NameID(id, Path::from_strs(&vec![name.as_str()])),
+        )
+    }
+}
+
 impl std::fmt::Display for ValueName {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            ValueName::Named(id, s) => {
+            ValueName::Named(id, s, _) => {
                 if *id == 0 {
                     write!(f, "\\{s} ")
                 } else {

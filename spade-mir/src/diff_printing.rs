@@ -78,7 +78,7 @@ where
     RG: Fn(u64) -> Option<u64>,
 {
     match name {
-        ValueName::Named(id, n) => translate_name((*id, n), &lhs_trans.name, &rhs_trans.name),
+        ValueName::Named(id, n, _) => translate_name((*id, n), &lhs_trans.name, &rhs_trans.name),
         ValueName::Expr(id) => translate_expr(*id, &lhs_trans.expr, &rhs_trans.expr),
     }
 }

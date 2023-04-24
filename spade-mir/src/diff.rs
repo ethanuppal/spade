@@ -52,7 +52,7 @@ impl VarMap {
     fn try_update_name(&mut self, lhs: &ValueName, rhs: &ValueName) -> Result<(), Error> {
         // Update the name if both are the same kind
         match (lhs, rhs) {
-            (ValueName::Named(i1, n1), ValueName::Named(i2, n2)) => {
+            (ValueName::Named(i1, n1, _), ValueName::Named(i2, n2, _)) => {
                 if n1 != n2 {
                     Err(Error::NameMismatch(lhs.clone(), rhs.clone()))
                 } else {
@@ -89,7 +89,7 @@ impl VarMap {
 
     pub fn compare_vals(&self, lhs: &ValueName, rhs: &ValueName) -> bool {
         match (lhs, rhs) {
-            (ValueName::Named(i1, n1), ValueName::Named(i2, n2)) => {
+            (ValueName::Named(i1, n1, _), ValueName::Named(i2, n2, _)) => {
                 self.compare_name((i1, n1), (i2, n2))
             }
             (ValueName::Expr(i1), ValueName::Expr(i2)) => self.compare_exprs(*i1, *i2),

@@ -158,7 +158,7 @@ pub trait NameIDExt {
 impl NameIDExt for NameID {
     fn value_name(&self) -> mir::ValueName {
         let mangled = format!("{}", self.1.tail());
-        mir::ValueName::Named(self.0, mangled)
+        mir::ValueName::Named(self.0, mangled, self.clone())
     }
 }
 

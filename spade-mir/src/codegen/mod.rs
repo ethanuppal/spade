@@ -1209,7 +1209,7 @@ mod tests {
             name: spade_mir::unit_name::IntoUnitName::into_unit_name("test"),
             inputs: vec![spade_mir::MirInput {
                 name: "a".to_string(),
-                val_name: ValueName::Named(0, "a".to_string()),
+                val_name: ValueName::_test_named(0, "a".to_string()),
                 ty: Type::Bool,
                 no_mangle: Some(().nowhere()),
             }],
@@ -1251,7 +1251,7 @@ mod tests {
             name: spade_mir::unit_name::IntoUnitName::into_unit_name("test"),
             inputs: vec![spade_mir::MirInput {
                 name: "a".to_string(),
-                val_name: ValueName::Named(0, "a".to_string()),
+                val_name: ValueName::_test_named(0, "a".to_string()),
                 ty: Type::Backward(Box::new(Type::Bool)),
                 no_mangle: Some(().nowhere()),
             }],
