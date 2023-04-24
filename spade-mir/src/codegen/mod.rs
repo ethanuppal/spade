@@ -917,12 +917,22 @@ pub fn entity_code(entity: &mut Entity, source_code: &Option<CodeBundle>) -> Cod
             let size = ty.size();
             let (input_head, input_code) = if size != BigUint::zero() {
                 let name = mangle_input(no_mangle, name);
-                (
-                    format!("input{} {},", size_spec(&size), name),
+
+                // If the no_mangle attribute is set, we need to avoid clashing between the port
+                // name, and the value_name. Because the first value_name in a module has the same
+                // name as the value_name, and because inputs are unique it is enough to just skip
+                // alias assignment if no_mangle is set
+                let alias_assignment = if no_mangle.is_none() {
                     code! {
                         [0] &logic(&val_name.var_name(), &size);
                         [0] &assign(&val_name.var_name(), &name)
-                    },
+                    }
+                } else {
+                    code! {}
+                };
+                (
+                    format!("input{} {},", size_spec(&size), name),
+                    alias_assignment,
                 )
             } else {
                 (String::new(), code! {})
@@ -1056,6 +1066,7 @@ macro_rules! assert_same_code {
 mod tests {
     use super::*;
     use colored::Colorize;
+    use spade_common::location_info::WithLocation;
 
     use crate as spade_mir;
     use crate::{entity, statement, types::Type};
@@ -1182,6 +1193,92 @@ mod tests {
                 assign \op  = op_i;
                 logic[5:0] _e_0;
                 assign _e_0 = $signed(\op ) + $signed(_e_1);
+                assign output__ = _e_0;
+            endmodule"#
+        );
+
+        assert_same_code!(
+            &entity_code(&mut input.clone(), &None).to_string(),
+            expected
+        );
+    }
+
+    #[test]
+    fn no_mangle_input_does_not_clash() {
+        let input = spade_mir::Entity {
+            name: spade_mir::unit_name::IntoUnitName::into_unit_name("test"),
+            inputs: vec![spade_mir::MirInput {
+                name: "a".to_string(),
+                val_name: ValueName::Named(0, "a".to_string()),
+                ty: Type::Bool,
+                no_mangle: Some(().nowhere()),
+            }],
+            output: ValueName::Expr(0),
+            output_type: Type::Bool,
+            statements: vec![],
+        };
+
+        let expected = indoc!(
+            r#"
+            module test (
+                    input a,
+                    output output__
+                );
+                `ifdef COCOTB_SIM
+                string __top_module;
+                string __vcd_file;
+                initial begin
+                    if ($value$plusargs("TOP_MODULE=%s", __top_module) && __top_module == "test" && $value$plusargs("VCD_FILENAME=%s", __vcd_file)) begin
+                        $dumpfile (__vcd_file);
+                        $dumpvars (0, test);
+                    end
+                    #1;
+                end
+                `endif
+                assign output__ = _e_0;
+            endmodule"#
+        );
+
+        assert_same_code!(
+            &entity_code(&mut input.clone(), &None).to_string(),
+            expected
+        );
+    }
+
+    #[test]
+    fn no_mangle_output_does_not_clash() {
+        let input = spade_mir::Entity {
+            name: spade_mir::unit_name::IntoUnitName::into_unit_name("test"),
+            inputs: vec![spade_mir::MirInput {
+                name: "a".to_string(),
+                val_name: ValueName::Named(0, "a".to_string()),
+                ty: Type::Backward(Box::new(Type::Bool)),
+                no_mangle: Some(().nowhere()),
+            }],
+            output: ValueName::Expr(0),
+            output_type: Type::Bool,
+            statements: vec![],
+        };
+
+        let expected = indoc!(
+            r#"
+            module test (
+                    output a,
+                    output output__
+                );
+                `ifdef COCOTB_SIM
+                string __top_module;
+                string __vcd_file;
+                initial begin
+                    if ($value$plusargs("TOP_MODULE=%s", __top_module) && __top_module == "test" && $value$plusargs("VCD_FILENAME=%s", __vcd_file)) begin
+                        $dumpfile (__vcd_file);
+                        $dumpvars (0, test);
+                    end
+                    #1;
+                end
+                `endif
+                logic \a_mut ;
+                assign a = \a_mut ;
                 assign output__ = _e_0;
             endmodule"#
         );

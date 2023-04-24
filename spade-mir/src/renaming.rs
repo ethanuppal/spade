@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::{Binding, Entity, Register, ValueName};
+use crate::{Binding, Entity, MirInput, Register, ValueName};
 
 struct NameState {
     /// Mapping between names and the amount of copies of that name we've seen so far
@@ -56,7 +56,7 @@ pub fn make_names_predictable(e: &mut Entity) {
         } = e;
 
         for input in inputs {
-            state.push(&input.1);
+            state.push(&input.val_name);
         }
 
         for stmt in statements {
@@ -96,7 +96,13 @@ pub fn make_names_predictable(e: &mut Entity) {
             statements,
         } = e;
 
-        for (_, val, _) in inputs.iter_mut() {
+        for MirInput {
+            name: _,
+            val_name: val,
+            ty: _,
+            no_mangle: _,
+        } in inputs.iter_mut()
+        {
             *val = state.get(val)
         }
 
