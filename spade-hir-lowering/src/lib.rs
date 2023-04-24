@@ -31,6 +31,8 @@ use spade_common::id_tracker::ExprIdTracker;
 use spade_common::location_info::WithLocation;
 use spade_common::name::{Identifier, Path};
 use spade_diagnostics::{diag_assert, diag_bail, DiagHandler, Diagnostic};
+use spade_typeinference::equation::TypeVar;
+use spade_typeinference::equation::TypedExpression;
 use spade_typeinference::GenericListToken;
 use statement_list::StatementList;
 use substitution::Substitutions;
@@ -873,8 +875,32 @@ impl ExprLocal for Loc<Expression> {
                 };
 
                 if !inner_type.is_port() {
-                    Diagnostic::error(self, "The ports expression can not create non-port values")
-                        .primary_label("{inner_type} in {hir_type} is not a port type");
+                    // For good diagnostics, we also need to look up the TypeVars
+                    let self_tvar = ctx
+                        .types
+                        .type_of(&TypedExpression::Id(self.id))
+                        .expect(&format!("Found no type for {}", self.id));
+
+                    let inner_tvar = match &self_tvar {
+                        TypeVar::Tuple(inner) => {
+                            if inner.len() != 2 {
+                                diag_bail!(self, "port type was not 2-tuple. Got {hir_type}")
+                            }
+
+                            &inner[0]
+                        }
+                        _ => {
+                            diag_bail!(self, "port type was not tuple. Got {hir_type}")
+                        }
+                    };
+
+                    return Err(Diagnostic::error(
+                        self,
+                        "A port expression cannot create non-port values",
+                    )
+                    .primary_label(format!("{inner_tvar} is not a port type"))
+                    .note(format!("The port expression creates a {self_tvar}"))
+                    .into());
                 }
 
                 let inner_mir_type = inner_type.to_mir_type();

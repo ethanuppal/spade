@@ -1473,9 +1473,9 @@ mod backward_expression_tests {
         let expected = indoc! {
             r#"
             logic[3:0] _e_0;
-            logic[1:0] _e_0_o;
-            assign _e_0 = _e_1_o;
-            assign _e_1 = _e_0_o;"#
+            logic[1:0] _e_0_mut;
+            assign _e_0 = _e_1_mut;
+            assign _e_1 = _e_0_mut;"#
         };
 
         assert_same_code!(

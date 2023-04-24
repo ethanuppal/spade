@@ -93,6 +93,7 @@ pub struct Labels {
 }
 
 /// Something that is wrong in the code.
+#[must_use]
 #[derive(Debug, Clone, PartialEq)]
 pub struct Diagnostic {
     pub level: DiagnosticLevel,

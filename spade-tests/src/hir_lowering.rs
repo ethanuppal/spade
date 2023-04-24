@@ -2210,6 +2210,18 @@ mod tests {
 
         assert_same_mir!(&result, &expected);
     }
+
+    snapshot_error! {
+        port_expression_does_not_create_non_ports,
+        "
+            struct X {x: int<8>}
+
+            entity t() -> X {
+                let (a, b) = port;
+                a
+            }
+        "
+    }
 }
 
 #[cfg(test)]
