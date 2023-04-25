@@ -5,6 +5,7 @@ pub mod namespaced_file;
 use codespan_reporting::term::termcolor::Buffer;
 use compiler_state::CompilerState;
 use logos::Logos;
+use spade_mir::unit_name::InstanceMap;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::rc::Rc;
@@ -129,6 +130,7 @@ struct CodegenArtefacts {
     flat_mir_entities: Vec<spade_mir::Entity>,
     module_code: Vec<String>,
     mir_code: Vec<String>,
+    instance_map: InstanceMap,
 }
 
 #[tracing::instrument(skip_all)]
@@ -292,6 +294,7 @@ pub fn compile(
         flat_mir_entities,
         module_code,
         mir_code,
+        instance_map,
     } = codegen(
         mir_entities,
         Rc::clone(&code),
@@ -337,6 +340,7 @@ pub fn compile(
             impl_idtracker,
             item_list: item_list.clone(),
             name_source_map,
+            instance_map,
         };
         match ron::to_string(&state) {
             Ok(encoded) => {
@@ -450,6 +454,7 @@ fn codegen(
     let mut flat_mir_entities = vec![];
     let mut module_code = vec![];
     let mut mir_code = vec![];
+    let mut instance_map = InstanceMap::new();
 
     for mir in mir_entities {
         if let Some(MirOutput {
@@ -460,8 +465,11 @@ fn codegen(
         {
             bumpy_mir_entities.push(mir.clone());
 
-            let code =
-                spade_mir::codegen::entity_code(&mut mir, &Some(code.read().unwrap().clone()));
+            let code = spade_mir::codegen::entity_code(
+                &mut mir,
+                &mut instance_map,
+                &Some(code.read().unwrap().clone()),
+            );
 
             mir_code.push(format!("{}", mir));
 
@@ -492,6 +500,7 @@ fn codegen(
         flat_mir_entities,
         module_code,
         mir_code,
+        instance_map,
     }
 }
 

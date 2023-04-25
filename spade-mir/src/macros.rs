@@ -107,7 +107,7 @@ macro_rules! entity {
         } => $output_name_kind:ident $output_name:tt
     ) => {
         spade_mir::Entity {
-            name: spade_mir::unit_name::IntoUnitName::into_unit_name($name),
+            name: spade_mir::unit_name::IntoUnitName::_test_into_unit_name($name),
             inputs: vec![
                 $(
                     spade_mir::MirInput {
@@ -129,6 +129,9 @@ macro_rules! entity {
 
 #[cfg(test)]
 mod tests {
+    use spade_common::name::{NameID, Path};
+    use spade_mir::unit_name::UnitNameKind;
+
     use crate::{self as spade_mir, MirInput, UnitName};
     use crate::{types::Type, Binding, ConstantValue, Operator, Register, Statement, ValueName};
 
@@ -216,9 +219,12 @@ mod tests {
     #[test]
     fn entity_parsing_works() {
         let expected = crate::Entity {
-            name: UnitName::Escaped {
-                name: "pong".to_string(),
-                path: vec!["pong".to_string()],
+            name: UnitName {
+                kind: UnitNameKind::Escaped {
+                    name: "pong".to_string(),
+                    path: vec!["pong".to_string()],
+                },
+                source: NameID(0, Path::from_strs(&["pong"])),
             },
             inputs: vec![MirInput {
                 name: "_i_clk".to_string(),

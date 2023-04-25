@@ -243,7 +243,7 @@ mod tests {
 
     #[test]
     fn aliases_in_pipelines_work_correctly() {
-        let inst_name = spade_mir::UnitName::from_strs(&["A"]);
+        let inst_name = spade_mir::UnitName::_test_from_strs(&["A"]);
 
         let mut input = entity!("pl"; (
                 "clk", n(3, "clk"), Type::Bool,

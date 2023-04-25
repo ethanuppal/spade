@@ -7,6 +7,7 @@ use spade_hir_lowering::{
     name_map::{NameSource, NamedValue},
     NameSourceMap,
 };
+use spade_mir::unit_name::InstanceMap;
 
 /// All the state required in order to add more things to the compilation process
 #[derive(Serialize, Deserialize)]
@@ -18,6 +19,7 @@ pub struct CompilerState {
     pub impl_idtracker: ImplIdTracker,
     pub item_list: ItemList,
     pub name_source_map: NameSourceMap,
+    pub instance_map: InstanceMap,
 }
 
 impl CompilerState {

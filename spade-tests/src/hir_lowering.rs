@@ -6,7 +6,10 @@ mod tests {
     };
     use colored::Colorize;
     use spade_common::{
-        location_info::WithLocation, num_ext::InfallibleToBigInt, num_ext::InfallibleToBigUint,
+        location_info::WithLocation,
+        name::{NameID, Path},
+        num_ext::InfallibleToBigInt,
+        num_ext::InfallibleToBigUint,
     };
     use spade_mir::{
         self,
@@ -14,7 +17,8 @@ mod tests {
         diff_printing::translated_strings,
         entity, statement,
         types::Type,
-        ConstantValue,
+        unit_name::UnitNameKind,
+        ConstantValue, UnitName,
     };
 
     #[macro_export]
@@ -687,7 +691,7 @@ mod tests {
             }
         "#;
 
-        let inst_name = spade_mir::UnitName::from_strs(&["sub"]);
+        let inst_name = spade_mir::UnitName::_test_from_strs(&["sub"]);
 
         let mut expected = vec![
             entity!(&["sub"]; (
@@ -725,7 +729,7 @@ mod tests {
             }
         "#;
 
-        let inst_name = spade_mir::UnitName::from_strs(&["sub"]);
+        let inst_name = spade_mir::UnitName::_test_from_strs(&["sub"]);
 
         let mut expected = vec![
             entity!(&["sub"]; (
@@ -834,7 +838,7 @@ mod tests {
             }
         "#;
 
-        let inst_name = spade_mir::UnitName::from_strs(&["sub"]);
+        let inst_name = spade_mir::UnitName::_test_from_strs(&["sub"]);
         let expected = entity!(&["pl"]; (
                 "clk", n(3, "clk"), Type::Bool,
             ) -> Type::int(18); {
@@ -991,7 +995,7 @@ mod tests {
             }
             "#;
 
-        let inst_name = spade_mir::UnitName::from_strs(&["A"]);
+        let inst_name = spade_mir::UnitName::_test_from_strs(&["A"]);
 
         let expected = entity!(&["pl"]; (
                 "clk", n(3, "clk"), Type::Bool,
@@ -1514,14 +1518,17 @@ mod tests {
             }
         "#;
 
-        let inst_name = spade_mir::UnitName::Escaped {
-            // NOTE: The number here is sequential and depends on the number
-            // of generic modules we have. If new modules are added to the stdlib,
-            // this needs to be incremented. If we end up with more tests
-            // like this, we should do smarter comparison
-            // lifeguard spade#224
-            name: "identity[75]".to_string(),
-            path: vec!["identity".to_string()],
+        let inst_name = UnitName {
+            kind: UnitNameKind::Escaped {
+                // NOTE: The number here is sequential and depends on the number
+                // of generic modules we have. If new modules are added to the stdlib,
+                // this needs to be incremented. If we end up with more tests
+                // like this, we should do smarter comparison
+                // lifeguard spade#224
+                name: "identity[75]".to_string(),
+                path: vec!["identity".to_string()],
+            },
+            source: NameID(0, Path::from_strs(&["identity"])),
         };
 
         let expected = vec![
@@ -1685,7 +1692,7 @@ mod tests {
             }
         "#;
 
-        let inst_name = spade_mir::UnitName::from_strs(&["sub"]);
+        let inst_name = spade_mir::UnitName::_test_from_strs(&["sub"]);
 
         let expected = vec![entity! {&["test"]; (
             "a", n(0, "a"), Type::Bool,
@@ -1944,7 +1951,7 @@ mod tests {
             }
         "#;
 
-        let inst_name = spade_mir::UnitName::from_strs(&["impl_0", "a"]);
+        let inst_name = spade_mir::UnitName::_test_from_strs(&["impl_0", "a"]);
 
         let x_type = Type::Tuple(vec![]);
         let expected = vec![
@@ -1978,7 +1985,7 @@ mod tests {
             }
         "#;
 
-        let inst_name = spade_mir::UnitName::from_strs(&["impl_0", "a"]);
+        let inst_name = spade_mir::UnitName::_test_from_strs(&["impl_0", "a"]);
 
         let x_type = Type::Tuple(vec![]);
         let expected = vec![

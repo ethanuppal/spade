@@ -127,9 +127,9 @@ fn build_items(code: &str) -> Vec<spade_mir::Entity> {
 fn build_items_with_stdlib(code: &str) -> Vec<spade_mir::Entity> {
     build_items_inner(code, true)
         .into_iter()
-        .filter(|f| match &f.name {
-            spade_mir::UnitName::Unescaped(_) => true,
-            spade_mir::UnitName::Escaped { name: _, path } => {
+        .filter(|f| match &f.name.kind {
+            spade_mir::unit_name::UnitNameKind::Unescaped(_) => true,
+            spade_mir::unit_name::UnitNameKind::Escaped { name: _, path } => {
                 !path.starts_with(&["std".to_string()])
             }
         })

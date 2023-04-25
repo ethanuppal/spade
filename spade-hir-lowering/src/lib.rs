@@ -65,16 +65,25 @@ pub trait UnitNameExt {
 
 impl UnitNameExt for UnitName {
     fn as_mir(&self) -> mir::UnitName {
-        match self {
-            UnitName::WithID(name) => mir::UnitName::Escaped {
+        let kind = match self {
+            UnitName::WithID(name) => mir::unit_name::UnitNameKind::Escaped {
                 name: format!("{}[{}]", name.inner.1.as_strs().join("::"), name.inner.0),
                 path: name.inner.1.as_strings(),
             },
-            UnitName::FullPath(name) => mir::UnitName::Escaped {
+            UnitName::FullPath(name) => mir::unit_name::UnitNameKind::Escaped {
                 name: format!("{}", name.inner.1.as_strs().join("::")),
                 path: name.inner.1.as_strings(),
             },
-            UnitName::Unmangled(name, _) => mir::UnitName::Unescaped(name.clone()),
+            UnitName::Unmangled(name, _) => mir::unit_name::UnitNameKind::Unescaped(name.clone()),
+        };
+
+        mir::UnitName {
+            kind,
+            source: match self {
+                UnitName::WithID(name) => name.inner.clone(),
+                UnitName::FullPath(name) => name.inner.clone(),
+                UnitName::Unmangled(_, name) => name.inner.clone(),
+            },
         }
     }
 }

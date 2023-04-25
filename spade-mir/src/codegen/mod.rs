@@ -4,6 +4,7 @@ use nesty::{code, Code};
 
 use num::{BigInt, BigUint, Signed, ToPrimitive, Zero};
 use spade_common::location_info::Loc;
+use spade_common::name::NameID;
 use spade_common::num_ext::InfallibleToBigUint;
 use spade_diagnostics::emitter::CodespanEmitter;
 use spade_diagnostics::{CodeBundle, CompilationError, DiagHandler};
@@ -13,7 +14,7 @@ use crate::assertion_codegen::AssertedExpression;
 use crate::eval::eval_statements;
 use crate::renaming::make_names_predictable;
 use crate::type_list::TypeList;
-use crate::unit_name::InstanceNameTracker;
+use crate::unit_name::{InstanceMap, InstanceNameTracker};
 use crate::verilog::{self, assign, logic, size_spec};
 use crate::{enum_util, Binding, ConstantValue, Entity, MirInput, Operator, Statement, ValueName};
 
@@ -25,6 +26,9 @@ struct Context<'a> {
     types: &'a TypeList,
     source_code: &'a Option<CodeBundle>,
     instance_names: &'a mut InstanceNameTracker,
+    instance_map: &'a mut InstanceMap,
+    // The NameID of the unit being generated
+    unit_nameid: &'a NameID,
 }
 
 /// Produces a source location verilog attribute if the loc and code bundle are defined
@@ -716,7 +720,11 @@ fn statement_code(statement: &Statement, ctx: &mut Context) -> Code {
                         args += &back_name;
                     }
 
-                    let instance_name = module_name.instance_name(ctx.instance_names);
+                    let instance_name = module_name.instance_name(
+                        ctx.unit_nameid.clone(),
+                        ctx.instance_map,
+                        ctx.instance_names
+                    );
 
                     code!{
                         [0] source_attribute(loc, ctx.source_code);
@@ -881,10 +889,14 @@ fn statement_code_and_declaration(
     types: &TypeList,
     source_code: &CodeBundle,
 ) -> Code {
+    use spade_common::name::Path;
+
     let mut ctx = Context {
         types,
         source_code: &Some(source_code.clone()),
         instance_names: &mut InstanceNameTracker::new(),
+        instance_map: &mut InstanceMap::new(),
+        unit_nameid: &NameID(0, Path::from_strs(&["dummy"])),
     };
     code! {
         [0] statement_declaration(statement, &Some(source_code.clone()));
@@ -897,7 +909,11 @@ fn statement_code_and_declaration(
 /// emitted, however, assertions will cause a panic. This is convenient for tests where specifying
 /// source location is annoying to specify.
 /// In actual compilation this should be Some
-pub fn entity_code(entity: &mut Entity, source_code: &Option<CodeBundle>) -> Code {
+pub fn entity_code(
+    entity: &mut Entity,
+    instance_map: &mut InstanceMap,
+    source_code: &Option<CodeBundle>,
+) -> Code {
     flatten_aliases(entity);
     make_names_predictable(entity);
 
@@ -1005,6 +1021,8 @@ pub fn entity_code(entity: &mut Entity, source_code: &Option<CodeBundle>) -> Cod
         types: &types,
         source_code: &source_code,
         instance_names: &mut InstanceNameTracker::new(),
+        instance_map,
+        unit_nameid: &entity.name.source,
     };
 
     let mut body = Code::new();
@@ -1067,6 +1085,7 @@ mod tests {
     use super::*;
     use colored::Colorize;
     use spade_common::location_info::WithLocation;
+    use spade_common::name::Path;
 
     use crate as spade_mir;
     use crate::{entity, statement, types::Type};
@@ -1198,7 +1217,7 @@ mod tests {
         );
 
         assert_same_code!(
-            &entity_code(&mut input.clone(), &None).to_string(),
+            &entity_code(&mut input.clone(), &mut InstanceMap::new(), &None).to_string(),
             expected
         );
     }
@@ -1206,7 +1225,7 @@ mod tests {
     #[test]
     fn no_mangle_input_does_not_clash() {
         let input = spade_mir::Entity {
-            name: spade_mir::unit_name::IntoUnitName::into_unit_name("test"),
+            name: spade_mir::unit_name::IntoUnitName::_test_into_unit_name("test"),
             inputs: vec![spade_mir::MirInput {
                 name: "a".to_string(),
                 val_name: ValueName::_test_named(0, "a".to_string()),
@@ -1240,7 +1259,7 @@ mod tests {
         );
 
         assert_same_code!(
-            &entity_code(&mut input.clone(), &None).to_string(),
+            &entity_code(&mut input.clone(), &mut InstanceMap::new(), &None).to_string(),
             expected
         );
     }
@@ -1248,7 +1267,7 @@ mod tests {
     #[test]
     fn no_mangle_output_does_not_clash() {
         let input = spade_mir::Entity {
-            name: spade_mir::unit_name::IntoUnitName::into_unit_name("test"),
+            name: spade_mir::unit_name::IntoUnitName::_test_into_unit_name("test"),
             inputs: vec![spade_mir::MirInput {
                 name: "a".to_string(),
                 val_name: ValueName::_test_named(0, "a".to_string()),
@@ -1284,7 +1303,7 @@ mod tests {
         );
 
         assert_same_code!(
-            &entity_code(&mut input.clone(), &None).to_string(),
+            &entity_code(&mut input.clone(), &mut InstanceMap::new(), &None).to_string(),
             expected
         );
     }
@@ -1321,7 +1340,7 @@ mod tests {
         );
 
         assert_same_code!(
-            &entity_code(&mut input.clone(), &None).to_string(),
+            &entity_code(&mut input.clone(), &mut InstanceMap::new(), &None).to_string(),
             expected
         );
     }
@@ -1360,7 +1379,7 @@ mod tests {
         );
 
         assert_same_code!(
-            &entity_code(&mut input.clone(), &None).to_string(),
+            &entity_code(&mut input.clone(), &mut InstanceMap::new(), &None).to_string(),
             expected
         );
     }
@@ -1393,7 +1412,7 @@ mod tests {
         );
 
         assert_same_code!(
-            &entity_code(&mut input.clone(), &None).to_string(),
+            &entity_code(&mut input.clone(), &mut InstanceMap::new(), &None).to_string(),
             expected
         );
     }
@@ -1421,7 +1440,7 @@ mod tests {
 
     #[test]
     fn pipeline_with_stage_references_codegens_correctly() {
-        let inst_name = spade_mir::UnitName::from_strs(&["A"]);
+        let inst_name = spade_mir::UnitName::_test_from_strs(&["A"]);
         let input = entity!(&["pl"]; (
                 "clk", n(3, "clk"), Type::Bool,
             ) -> Type::int(16); {
@@ -1465,7 +1484,7 @@ mod tests {
         );
 
         assert_same_code!(
-            &entity_code(&mut input.clone(), &None).to_string(),
+            &entity_code(&mut input.clone(), &mut InstanceMap::new(), &None).to_string(),
             expected
         );
     }
@@ -1504,9 +1523,59 @@ mod tests {
         );
 
         assert_same_code! {
-            &entity_code(&mut input.clone(), &None).to_string(),
+            &entity_code(&mut input.clone(), &mut InstanceMap::new(), &None).to_string(),
             expected
         }
+    }
+
+    #[test]
+    fn instance_map_is_populated() {
+        let inst1_name = NameID(10, Path::from_strs(&["test1"]));
+        let inst1_unit_name = spade_mir::UnitName {
+            kind: spade_mir::unit_name::UnitNameKind::Unescaped("test1".into()),
+            source: inst1_name.clone(),
+        };
+        let inst2_name = NameID(11, Path::from_strs(&["test1"]));
+        let inst2_unit_name = spade_mir::UnitName {
+            kind: spade_mir::unit_name::UnitNameKind::Unescaped("test1".into()),
+            source: inst2_name.clone(),
+        };
+
+        let top_name = NameID(1, Path::from_strs(&["top"]));
+        let top_unit_name = spade_mir::UnitName {
+            kind: spade_mir::unit_name::UnitNameKind::Unescaped("test1".into()),
+            source: top_name.clone(),
+        };
+        let mut input = entity!(&top_unit_name; (
+                "clk", n(3, "clk"), Type::Bool,
+            ) -> Type::int(16); {
+                (reg n(10, "x__s1"); Type::int(16); clock(n(3, "clk")); n(0, "x_"));
+                // Stage 0
+                (e(0); Type::int(16); Instance((inst1_unit_name, None)););
+                (e(0); Type::int(16); Instance((inst2_unit_name, None)););
+                (n(0, "x_"); Type::int(16); Alias; e(0));
+                // Stage 1
+                (n(1, "x"); Type::int(16); Alias; n(0, "x_"));
+            } => n(1, "x")
+        );
+
+        let mut instance_map = InstanceMap::new();
+        entity_code(&mut input, &mut instance_map, &None);
+
+        assert_eq!(
+            instance_map
+                .inner
+                .get(&(top_name.clone(), "test1_0".to_string()))
+                .expect("failed to get test1_0"),
+            &inst1_name
+        );
+        assert_eq!(
+            instance_map
+                .inner
+                .get(&(top_name, "test1_1".to_string()))
+                .expect("failed to get test1_0"),
+            &inst2_name
+        );
     }
 }
 
@@ -2155,13 +2224,13 @@ mod expression_tests {
 
     #[test]
     fn entity_instantiation_works() {
-        let inst_name = UnitName::Unescaped("e_test".to_string());
+        let inst_name = UnitName::_test_from_strs(&["e_test"]);
         let stmt = statement!(e(0); Type::Bool; Instance((inst_name, None)); e(1), e(2));
 
         let expected = indoc!(
             r#"
             logic _e_0;
-            e_test e_test_0(_e_1, _e_2, _e_0);"#
+            \e_test  e_test_0(_e_1, _e_2, _e_0);"#
         );
 
         assert_same_code!(
@@ -2179,7 +2248,7 @@ mod expression_tests {
 
     #[test]
     fn entity_instantiation_with_back_and_forward_ports_works() {
-        let inst_name = UnitName::Unescaped("e_test".to_string());
+        let inst_name = UnitName::_test_from_strs(&["e_test"]);
         let ty = Type::Tuple(vec![Type::backward(Type::Bool), Type::Bool]);
         let stmt = statement!(e(0); ty; Instance((inst_name, None)); e(1), e(2));
 
@@ -2187,7 +2256,7 @@ mod expression_tests {
             r#"
             logic _e_0;
             logic _e_0_mut;
-            e_test e_test_0(_e_1, _e_2, _e_0, _e_0_mut);"#
+            \e_test  e_test_0(_e_1, _e_2, _e_0, _e_0_mut);"#
         );
 
         assert_same_code!(
@@ -2206,12 +2275,12 @@ mod expression_tests {
     #[test]
     fn entity_instantiation_with_back_ports_works() {
         let ty = Type::backward(Type::Bool);
-        let stmt = statement!(e(0); ty; Instance((UnitName::Unescaped("e_test".to_string()), None)); e(1), e(2));
+        let stmt = statement!(e(0); ty; Instance((UnitName::_test_from_strs(&["e_test"]), None)); e(1), e(2));
 
         let expected = indoc!(
             r#"
             logic _e_0_mut;
-            e_test e_test_0(_e_1, _e_2, _e_0_mut);"#
+            \e_test  e_test_0(_e_1, _e_2, _e_0_mut);"#
         );
 
         assert_same_code!(
@@ -2230,8 +2299,7 @@ mod expression_tests {
     #[test]
     fn entity_instantiation_with_back_inputs_works() {
         let ty = Type::Bool;
-        let stmt =
-            statement!(e(0); ty; Instance((UnitName::from_strs(&["test"]), None)); e(1), e(2));
+        let stmt = statement!(e(0); ty; Instance((UnitName::_test_from_strs(&["test"]), None)); e(1), e(2));
 
         let expected = indoc!(
             r#"
