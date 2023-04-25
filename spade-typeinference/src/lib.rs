@@ -22,8 +22,8 @@ use spade_hir as hir;
 use spade_hir::param_util::{match_args_with_params, Argument};
 use spade_hir::symbol_table::{Patternable, PatternableKind, SymbolTable, TypeSymbol};
 use spade_hir::{
-    ArgumentList, Block, ExprKind, Expression, ItemList, Pattern, PatternArgument,
-    Register, Statement, TypeParam, Unit,
+    ArgumentList, Block, ExprKind, Expression, ItemList, Pattern, PatternArgument, Register,
+    Statement, TypeParam, Unit,
 };
 use spade_types::KnownType;
 
