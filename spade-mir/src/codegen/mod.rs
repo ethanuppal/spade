@@ -12,7 +12,7 @@ use spade_diagnostics::{CodeBundle, CompilationError, DiagHandler};
 use crate::aliasing::flatten_aliases;
 use crate::assertion_codegen::AssertedExpression;
 use crate::eval::eval_statements;
-use crate::renaming::make_names_predictable;
+use crate::renaming::{make_names_predictable, VerilogNameMap};
 use crate::type_list::TypeList;
 use crate::unit_name::{InstanceMap, InstanceNameTracker};
 use crate::verilog::{self, assign, logic, size_spec};
@@ -913,9 +913,9 @@ pub fn entity_code(
     entity: &mut Entity,
     instance_map: &mut InstanceMap,
     source_code: &Option<CodeBundle>,
-) -> Code {
+) -> (Code, VerilogNameMap) {
     flatten_aliases(entity);
-    make_names_predictable(entity);
+    let name_map = make_names_predictable(entity);
 
     let types = &TypeList::from_entity(&entity);
 
@@ -1034,7 +1034,7 @@ pub fn entity_code(
         body.join(&statement_code(stmt, &mut ctx))
     }
 
-    code! {
+    let code = code! {
         [0] &format!("module {} (", entity_name);
                 [2] &inputs;
                 [2] &output_definition;
@@ -1056,7 +1056,8 @@ pub fn entity_code(
             [1] &output_assignment;
             [1] &back_port_assignment;
         [0] &"endmodule"
-    }
+    };
+    (code, name_map.verilog_name_map())
 }
 
 #[macro_export]
@@ -1217,7 +1218,9 @@ mod tests {
         );
 
         assert_same_code!(
-            &entity_code(&mut input.clone(), &mut InstanceMap::new(), &None).to_string(),
+            &entity_code(&mut input.clone(), &mut InstanceMap::new(), &None)
+                .0
+                .to_string(),
             expected
         );
     }
@@ -1259,7 +1262,7 @@ mod tests {
         );
 
         assert_same_code!(
-            &entity_code(&mut input.clone(), &mut InstanceMap::new(), &None).to_string(),
+            &entity_code(&mut input.clone(), &mut InstanceMap::new(), &None).0.to_string(),
             expected
         );
     }
@@ -1303,7 +1306,7 @@ mod tests {
         );
 
         assert_same_code!(
-            &entity_code(&mut input.clone(), &mut InstanceMap::new(), &None).to_string(),
+            &entity_code(&mut input.clone(), &mut InstanceMap::new(), &None).0.to_string(),
             expected
         );
     }
@@ -1340,7 +1343,9 @@ mod tests {
         );
 
         assert_same_code!(
-            &entity_code(&mut input.clone(), &mut InstanceMap::new(), &None).to_string(),
+            &entity_code(&mut input.clone(), &mut InstanceMap::new(), &None)
+                .0
+                .to_string(),
             expected
         );
     }
@@ -1379,7 +1384,9 @@ mod tests {
         );
 
         assert_same_code!(
-            &entity_code(&mut input.clone(), &mut InstanceMap::new(), &None).to_string(),
+            &entity_code(&mut input.clone(), &mut InstanceMap::new(), &None)
+                .0
+                .to_string(),
             expected
         );
     }
@@ -1412,7 +1419,9 @@ mod tests {
         );
 
         assert_same_code!(
-            &entity_code(&mut input.clone(), &mut InstanceMap::new(), &None).to_string(),
+            &entity_code(&mut input.clone(), &mut InstanceMap::new(), &None)
+                .0
+                .to_string(),
             expected
         );
     }
@@ -1484,7 +1493,9 @@ mod tests {
         );
 
         assert_same_code!(
-            &entity_code(&mut input.clone(), &mut InstanceMap::new(), &None).to_string(),
+            &entity_code(&mut input.clone(), &mut InstanceMap::new(), &None)
+                .0
+                .to_string(),
             expected
         );
     }
@@ -1523,7 +1534,7 @@ mod tests {
         );
 
         assert_same_code! {
-            &entity_code(&mut input.clone(), &mut InstanceMap::new(), &None).to_string(),
+            &entity_code(&mut input.clone(), &mut InstanceMap::new(), &None).0.to_string(),
             expected
         }
     }

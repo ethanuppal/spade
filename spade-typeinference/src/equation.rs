@@ -12,7 +12,7 @@ pub type TypeEquations = HashMap<TypedExpression, TypeVar>;
 ///
 /// When TypeVars are passed externally into TypeState, they must be checked for replacement,
 /// as the type inference process might have refined them.
-#[derive(Debug, Clone, PartialEq, Hash, Eq)]
+#[derive(Debug, Clone, PartialEq, Hash, Eq, Serialize, Deserialize)]
 pub enum TypeVar {
     /// The base type is known and has a list of parameters
     Known(KnownType, Vec<TypeVar>),

@@ -11,6 +11,7 @@ use std::sync::Arc;
 
 use hir::{Parameter, UnitHead};
 use num::{BigInt, Zero};
+use serde::{Deserialize, Serialize};
 use spade_common::num_ext::InfallibleToBigInt;
 use spade_macros::trace_typechecker;
 use trace_stack::TraceStack;
@@ -1533,6 +1534,28 @@ impl HasType for KnownType {
 impl HasType for NameID {
     fn get_type(&self, state: &TypeState) -> Result<TypeVar> {
         state.type_of(&TypedExpression::Name(self.clone()))
+    }
+}
+
+/// Mapping between names and concrete type used for lookup, without being
+/// able to do more type inference
+/// Required because we can't serde the whole TypeState
+#[derive(Serialize, Deserialize)]
+pub struct TypeMap {
+    equations: TypeEquations,
+}
+
+impl TypeMap {
+    pub fn type_of(&self, thing: &TypedExpression) -> Option<&TypeVar> {
+        self.equations.get(thing)
+    }
+}
+
+impl Into<TypeMap> for TypeState {
+    fn into(self) -> TypeMap {
+        TypeMap {
+            equations: self.equations,
+        }
     }
 }
 

@@ -2,12 +2,22 @@ use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
 use spade_ast_lowering::id_tracker::{ExprIdTracker, ImplIdTracker};
+use spade_common::name::NameID;
 use spade_hir::{symbol_table::FrozenSymtab, ItemList};
 use spade_hir_lowering::{
     name_map::{NameSource, NamedValue},
     NameSourceMap,
 };
-use spade_mir::unit_name::InstanceMap;
+use spade_mir::{renaming::VerilogNameMap, unit_name::InstanceMap};
+use spade_typeinference::TypeMap;
+
+#[derive(Serialize, Deserialize)]
+pub struct MirContext {
+    /// Mapping to concrete types for this instantiation of the entity
+    pub type_map: TypeMap,
+    pub reg_name_map: HashMap<NameID, NameID>,
+    pub verilog_name_map: VerilogNameMap,
+}
 
 /// All the state required in order to add more things to the compilation process
 #[derive(Serialize, Deserialize)]
@@ -20,6 +30,7 @@ pub struct CompilerState {
     pub item_list: ItemList,
     pub name_source_map: NameSourceMap,
     pub instance_map: InstanceMap,
+    pub mir_context: HashMap<NameID, MirContext>,
 }
 
 impl CompilerState {

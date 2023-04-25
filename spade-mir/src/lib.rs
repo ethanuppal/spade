@@ -6,7 +6,7 @@ pub mod diff_printing;
 mod enum_util;
 pub mod eval;
 pub mod macros;
-mod renaming;
+pub mod renaming;
 mod type_list;
 pub mod types;
 pub mod unit_name;

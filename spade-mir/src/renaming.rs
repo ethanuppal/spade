@@ -1,8 +1,25 @@
 use std::collections::HashMap;
 
+use serde::{Deserialize, Serialize};
+use spade_common::name::NameID;
+
 use crate::{Binding, Entity, MirInput, Register, ValueName};
 
-struct NameState {
+/// Mapping from verilog name back to the corresponding NameID
+#[derive(Serialize, Deserialize)]
+pub struct VerilogNameMap {
+    pub inner: HashMap<String, NameSource>,
+}
+
+#[derive(Serialize, Deserialize)]
+pub enum NameSource {
+    ForwardName(NameID),
+    BackwardName(NameID),
+    ForwardExpr(u64),
+    BackwardExpr(u64),
+}
+
+pub struct NameState {
     /// Mapping between names and the amount of copies of that name we've seen so far
     names: HashMap<String, u64>,
     /// Mapping between ValueName and predictable name
@@ -40,9 +57,37 @@ impl NameState {
             .cloned()
             .unwrap_or_else(|| name.clone())
     }
+
+    // Mapping from verilog name back to NameID
+    pub fn verilog_name_map(&self) -> VerilogNameMap {
+        let inner = self
+            .name_map
+            .iter()
+            .map(|(from, to)| match from {
+                ValueName::Named(_, _, name_id) => {
+                    vec![
+                        (to.var_name(), NameSource::ForwardName(name_id.clone())),
+                        (
+                            to.backward_var_name(),
+                            NameSource::BackwardName(name_id.clone()),
+                        ),
+                    ]
+                }
+                ValueName::Expr(id) => {
+                    vec![
+                        (to.var_name(), NameSource::ForwardExpr(*id)),
+                        (to.backward_var_name(), NameSource::ForwardExpr(*id)),
+                    ]
+                }
+            })
+            .flatten()
+            .collect();
+
+        VerilogNameMap { inner }
+    }
 }
 
-pub fn make_names_predictable(e: &mut Entity) {
+pub fn make_names_predictable(e: &mut Entity) -> NameState {
     let mut state = NameState::new();
 
     {
@@ -148,4 +193,5 @@ pub fn make_names_predictable(e: &mut Entity) {
             }
         }
     }
+    state
 }

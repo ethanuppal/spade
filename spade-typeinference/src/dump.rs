@@ -5,6 +5,7 @@ use spade_types::ConcreteType;
 
 use crate::{equation::TypedExpression, TypeState};
 
+// TODO: Remove this
 pub fn dump_types(
     type_state: &TypeState,
     type_list: &TypeList,

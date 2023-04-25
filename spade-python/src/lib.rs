@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::rc::Rc;
 use std::sync::RwLock;
 
@@ -8,10 +9,10 @@ use logos::Logos;
 use num::{BigUint, ToPrimitive, Zero};
 use pyo3::prelude::*;
 
-use ::spade::compiler_state::CompilerState;
+use ::spade::compiler_state::{CompilerState, MirContext};
 use spade_ast_lowering::id_tracker::{ExprIdTracker, ImplIdTracker};
 use spade_common::location_info::{Loc, WithLocation};
-use spade_common::name::{Identifier, Path as SpadePath};
+use spade_common::name::{Identifier, NameID, Path as SpadePath};
 use spade_diagnostics::emitter::CodespanEmitter;
 use spade_diagnostics::{CodeBundle, CompilationError, DiagHandler, Diagnostic};
 use spade_hir::symbol_table::{LookupError, SymbolTable};
@@ -22,6 +23,8 @@ use spade_hir_lowering::substitution::Substitutions;
 use spade_hir_lowering::{expr_to_mir, MirLowerable};
 use spade_mir::codegen::mangle_input;
 use spade_mir::eval::eval_statements;
+use spade_mir::renaming::NameSource;
+use spade_mir::unit_name::InstanceMap;
 use spade_parser::lexer;
 use spade_parser::Parser;
 use spade_typeinference::equation::{TypeVar, TypedExpression};
@@ -120,8 +123,12 @@ struct Spade {
     owned: Option<OwnedState>,
     item_list: ItemList,
     uut: Loc<SpadePath>,
+    /// Type state used for new code written into the context of this struct.
     type_state: TypeState,
     uut_head: UnitHead,
+    uut_nameid: NameID,
+    instance_map: InstanceMap,
+    mir_context: HashMap<NameID, MirContext>,
 }
 
 #[pymethods]
@@ -148,7 +155,7 @@ impl Spade {
             &mut diag_handler,
         )?;
 
-        let uut_head = Self::lookup_function_like(&uut, state.symtab.symtab())
+        let (uut_nameid, uut_head) = Self::lookup_function_like(&uut, state.symtab.symtab())
             .map_err(Diagnostic::from)
             .report_and_convert(&mut error_buffer, &code.read().unwrap(), &mut diag_handler)?;
 
@@ -180,6 +187,9 @@ impl Spade {
                 impl_idtracker: state.impl_idtracker,
             }),
             uut_head,
+            uut_nameid,
+            instance_map: state.instance_map,
+            mir_context: state.mir_context,
         })
     }
 
@@ -392,6 +402,76 @@ impl Spade {
             ty: result_type,
         })
     }
+
+    // Translate a value from a verilog instance path into a string value
+    fn translate_value(&self, path: &str, value: &str) -> PyResult<String> {
+        let mut hierarchy = path.split(".").collect::<Vec<_>>();
+        if hierarchy.len() == 0 {
+            return Err(anyhow!("{path} is not a hierarchy path").into());
+        };
+
+        // NOTE: Safe unwrap, we already checked that there is at least one item
+        // in the hierarchy
+        let value_name = hierarchy.pop().unwrap();
+
+        // Lookup the name_id of the instance we want to query for the value_name in
+        let mut current_unit = &self.uut_nameid;
+        let mut path_so_far = vec![];
+        while let Some(next_instance_name) = hierarchy.pop() {
+            path_so_far.push(next_instance_name);
+            let next = self
+                .instance_map
+                .inner
+                .get(&(current_unit.clone(), next_instance_name.to_string()));
+            if let Some(next) = next {
+                current_unit = next;
+            } else {
+                return Err(anyhow!(
+                    "{} has no spade unit instance named {next_instance_name}",
+                    path_so_far.join(".")
+                )
+                .into());
+            };
+        }
+
+        // Look up the mir context of the unit we are observing
+        let mir_ctx = self
+            .mir_context
+            .get(current_unit)
+            .ok_or_else(|| anyhow!("Did not find information a unit named {current_unit}"))?;
+
+        let source = mir_ctx
+            .verilog_name_map
+            .inner
+            .get(value_name)
+            .ok_or_else(|| {
+                anyhow!(
+                    "Did not find spade variable for verilog identifier '{value_name}' in '{path}'"
+                )
+            })?;
+
+        let typed_expr = match source {
+            NameSource::ForwardName(n) => TypedExpression::Name(n.clone()),
+            NameSource::ForwardExpr(id) => TypedExpression::Id(*id),
+            NameSource::BackwardName(_) | NameSource::BackwardExpr(_) => {
+                return Err(anyhow!("Translation of backward port types is unsupported").into())
+            }
+        };
+
+        let ty = mir_ctx
+            .type_map
+            .type_of(&typed_expr)
+            .ok_or_else(|| anyhow!("Did not find a type for {typed_expr}"))?;
+
+        let concrete = TypeState::ungenerify_type(
+            ty,
+            self.owned.as_ref().unwrap().symtab.symtab(),
+            &self.item_list.types,
+        )
+        .ok_or_else(|| anyhow!("Tried to ungenerify generic type {ty}"))?;
+
+        Ok(val_to_spade(value, concrete))
+    }
 }
 
 impl Spade {
@@ -399,8 +479,10 @@ impl Spade {
     fn lookup_function_like(
         name: &Loc<SpadePath>,
         symtab: &SymbolTable,
-    ) -> Result<UnitHead, LookupError> {
-        symtab.lookup_unit(name).map(|(_name, head)| head.inner)
+    ) -> Result<(NameID, UnitHead), LookupError> {
+        symtab
+            .lookup_unit(name)
+            .map(|(name, head)| (name, head.inner))
     }
 
     /// Tries to get the type and the name of the port in the generated verilog of the specified
@@ -417,7 +499,7 @@ impl Spade {
             name,
             ty,
             no_mangle,
-        } in &head.inputs.0
+        } in &head.1.inputs.0
         {
             if port == name.0 {
                 let verilog_name = if no_mangle.is_some() {
