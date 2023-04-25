@@ -5,6 +5,7 @@ pub mod namespaced_file;
 use codespan_reporting::term::termcolor::Buffer;
 use compiler_state::{CompilerState, MirContext};
 use logos::Logos;
+use ron::ser::PrettyConfig;
 use spade_mir::unit_name::InstanceMap;
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -345,7 +346,7 @@ pub fn compile(
             instance_map,
             mir_context,
         };
-        match ron::to_string(&state) {
+        match ron::ser::to_string_pretty(&state, PrettyConfig::default()) {
             Ok(encoded) => {
                 std::fs::write(state_dump_file, encoded).or_report(&mut errors);
             }

@@ -45,6 +45,7 @@ impl MonoState {
     pub fn request_compilation(
         &mut self,
         source_name: UnitName,
+        reuse_nameid: bool,
         params: Vec<TypeVar>,
         symtab: &mut FrozenSymtab,
     ) -> NameID {
@@ -54,7 +55,11 @@ impl MonoState {
         {
             Some(prev) => prev.clone(),
             None => {
-                let new_name = symtab.new_name(source_name.name_id().1.clone());
+                let new_name = if reuse_nameid {
+                    source_name.name_id().inner.clone()
+                } else {
+                    symtab.new_name(source_name.name_id().1.clone())
+                };
 
                 // Wrap the new name in a UnitName to match the source. Previous steps
                 // ensure that the unit name is general enough to not cause name collisions
@@ -106,7 +111,7 @@ pub fn compile_items(
         match item {
             ExecutableItem::Unit(u) => {
                 if u.head.type_params.is_empty() {
-                    state.request_compilation(u.name.clone(), vec![], symtab);
+                    state.request_compilation(u.name.clone(), true, vec![], symtab);
                 }
             }
             ExecutableItem::StructInstance => {}
@@ -155,7 +160,7 @@ pub fn compile_items(
                 let pass_result = u.apply(&mut LowerMethods {
                     type_state: &type_state,
                     items: item_list,
-                    symtab: symtab,
+                    symtab,
                 });
                 if let Err(e) = pass_result {
                     result.push(Err(e));

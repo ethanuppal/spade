@@ -1285,7 +1285,7 @@ impl ExprLocal for Loc<Expression> {
 
                     UnitName::WithID(
                         ctx.mono_state
-                            .request_compilation(unit_name, t, ctx.symtab)
+                            .request_compilation(unit_name, false, t, ctx.symtab)
                             .nowhere(),
                     )
                 } else {

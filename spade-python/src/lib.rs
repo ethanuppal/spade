@@ -442,8 +442,7 @@ impl Spade {
 
         let source = mir_ctx
             .verilog_name_map
-            .inner
-            .get(value_name)
+            .lookup_name(value_name)
             .ok_or_else(|| {
                 anyhow!(
                     "Did not find spade variable for verilog identifier '{value_name}' in '{path}'"

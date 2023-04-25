@@ -6,12 +6,39 @@ use spade_common::name::NameID;
 use crate::{Binding, Entity, MirInput, Register, ValueName};
 
 /// Mapping from verilog name back to the corresponding NameID
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct VerilogNameMap {
-    pub inner: HashMap<String, NameSource>,
+    inner: HashMap<String, NameSource>,
 }
 
-#[derive(Serialize, Deserialize)]
+impl VerilogNameMap {
+    /// If from mappings contain verilog escape characters (\\<name> ), those are removed
+    pub fn from_hash_map(hm: HashMap<String, NameSource>) -> Self {
+        let mut result = Self {
+            inner: HashMap::new(),
+        };
+        for (k, v) in hm {
+            result.insert(&k, v)
+        }
+        result
+    }
+    /// Insert the specified string into the name map. If the string contains
+    /// verilog escape characters (\\<name> ), those are removed
+    pub fn insert(&mut self, from: &str, to: NameSource) {
+        self.inner.insert(
+            from.trim_start_matches("\\")
+                .trim_end_matches(" ")
+                .to_string(),
+            to,
+        );
+    }
+
+    pub fn lookup_name(&self, name: &str) -> Option<&NameSource> {
+        self.inner.get(&name.to_string())
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug)]
 pub enum NameSource {
     ForwardName(NameID),
     BackwardName(NameID),
@@ -83,7 +110,7 @@ impl NameState {
             .flatten()
             .collect();
 
-        VerilogNameMap { inner }
+        VerilogNameMap::from_hash_map(inner)
     }
 }
 
