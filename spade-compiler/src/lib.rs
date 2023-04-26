@@ -502,7 +502,8 @@ fn codegen(
                 mir.name.source,
                 MirContext {
                     reg_name_map: reg_name_map.clone(),
-                    // TODO: Insert pipelien register stuff into the type map
+                    // lifeguard spade#254
+                    // FIXME: Insert pipeline register stuff into the type map
                     type_map: type_state.into(),
                     verilog_name_map,
                 },

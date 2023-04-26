@@ -5,7 +5,8 @@ use spade_types::ConcreteType;
 
 use crate::{equation::TypedExpression, TypeState};
 
-// TODO: Remove this
+// lifeguard spade#254
+// FIXME: Remove this since we dump the whole type statem
 pub fn dump_types(
     type_state: &TypeState,
     type_list: &TypeList,
