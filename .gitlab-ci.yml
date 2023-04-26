@@ -48,7 +48,7 @@ clippy:
             - target
             - $CARGO_HOME
 
-test:
+test:linux:
     stage: test
     script:
         - cargo test --workspace --exclude spade-cxx --color=always
@@ -64,6 +64,7 @@ build:linux:
   script:
     - cargo build --workspace --exclude spade-cxx --release
     - mv target/release/spade spadec
+    - mv target/release/libspade.so .
   artifacts:
     name: spade-linux
     # Artifacts are kept indefinitely for the latest successful pipeline on a
@@ -74,6 +75,15 @@ build:linux:
       - spadec
       - stdlib
       - libspade.so
+
+test:macos-aarch64:
+  image: potyarkin/cirrus-run
+  before_script:
+    - sed -e "s|[@]CI_REPOSITORY_URL@|$CI_REPOSITORY_URL|g"
+          -e "s|[@]CI_COMMIT_REF_NAME@|$CI_COMMIT_REF_NAME|g"
+          -i .cirrus.yml
+  script: 
+    - cirrus-run --github sornas/spade-cirrus-ci
 
 output_test:
     # Ubuntu 18.04 only has iverilog-10.1 but 22.04 has 11.0, which it seems like we need.
