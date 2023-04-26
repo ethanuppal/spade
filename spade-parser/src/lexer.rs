@@ -207,9 +207,6 @@ pub enum TokenKind {
     Comment,
 
     Eof,
-
-    #[error]
-    Error,
 }
 
 impl TokenKind {
@@ -300,7 +297,6 @@ impl TokenKind {
 
             TokenKind::Whitespace => "whitespace",
             TokenKind::Comment => "comment",
-            TokenKind::Error => "error",
         }
     }
 
@@ -327,7 +323,7 @@ mod tests {
 
         assert_eq!(
             lex.next(),
-            Some(TokenKind::Identifier("abc123_".to_string()))
+            Some(Ok(TokenKind::Identifier("abc123_".to_string())))
         );
     }
 
@@ -337,7 +333,10 @@ mod tests {
 
         assert_eq!(
             lex.next(),
-            Some(TokenKind::Integer((123.to_bigint(), LiteralKind::Signed)))
+            Some(Ok(TokenKind::Integer((
+                123.to_bigint(),
+                LiteralKind::Signed
+            ))))
         );
         assert_eq!(lex.next(), None);
     }
@@ -345,15 +344,15 @@ mod tests {
     #[test]
     fn hex_array() {
         let mut lex = TokenKind::lexer("[0x45]");
-        assert_eq!(lex.next(), Some(TokenKind::OpenBracket));
+        assert_eq!(lex.next(), Some(Ok(TokenKind::OpenBracket)));
         assert_eq!(
             lex.next(),
-            Some(TokenKind::HexInteger((
+            Some(Ok(TokenKind::HexInteger((
                 0x45.to_bigint(),
                 LiteralKind::Signed
-            )))
+            ))))
         );
-        assert_eq!(lex.next(), Some(TokenKind::CloseBracket));
+        assert_eq!(lex.next(), Some(Ok(TokenKind::CloseBracket)));
         assert_eq!(lex.next(), None);
     }
 
@@ -362,9 +361,12 @@ mod tests {
         let mut lex = TokenKind::lexer("0xg");
         assert_eq!(
             lex.next(),
-            Some(TokenKind::Integer((0.to_bigint(), LiteralKind::Signed)))
+            Some(Ok(TokenKind::Integer((0.to_bigint(), LiteralKind::Signed))))
         );
-        assert_eq!(lex.next(), Some(TokenKind::Identifier("xg".to_string())));
+        assert_eq!(
+            lex.next(),
+            Some(Ok(TokenKind::Identifier("xg".to_string())))
+        );
         assert_eq!(lex.next(), None);
     }
 }

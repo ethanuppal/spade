@@ -1760,30 +1760,22 @@ impl<'a> Parser<'a> {
     }
 
     fn next_token(&mut self) -> Result<Token> {
-        let tok = self
-            .lex
-            .next()
-            .map(|k| Token::new(k, &self.lex, self.file_id))
-            .unwrap_or({
-                match &self.last_token {
-                    Some(last) => Token {
-                        kind: TokenKind::Eof,
-                        span: last.span.end..last.span.end,
-                        file_id: last.file_id,
-                    },
-                    None => Token {
-                        kind: TokenKind::Eof,
-                        span: logos::Span { start: 0, end: 0 },
-                        file_id: self.file_id,
-                    },
-                }
-            });
-
-        if let TokenKind::Error = tok.kind {
-            return Err(Error::LexerError(self.file_id, lspan(self.lex.span())));
-        };
-
-        Ok(tok)
+        match self.lex.next() {
+            Some(Ok(k)) => Ok(Token::new(k, &self.lex, self.file_id)),
+            Some(Err(_)) => Err(Error::LexerError(self.file_id, lspan(self.lex.span()))),
+            None => Ok(match &self.last_token {
+                Some(last) => Token {
+                    kind: TokenKind::Eof,
+                    span: last.span.end..last.span.end,
+                    file_id: last.file_id,
+                },
+                None => Token {
+                    kind: TokenKind::Eof,
+                    span: logos::Span { start: 0, end: 0 },
+                    file_id: self.file_id,
+                },
+            }),
+        }
     }
 }
 
