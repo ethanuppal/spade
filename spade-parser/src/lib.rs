@@ -688,8 +688,9 @@ impl<'a> Parser<'a> {
     // Statements
 
     #[trace_parser]
-    pub fn binding(&mut self) -> Result<Option<Loc<Statement>>> {
-        peek_for!(self, &TokenKind::Let);
+    pub fn binding(&mut self, attrs: &AttributeList) -> Result<Option<Loc<Statement>>> {
+        let start = peek_for!(self, &TokenKind::Let);
+        self.disallow_attributes(&attrs, &start)?;
 
         let (pattern, start_span) = self.pattern()?.separate();
 
@@ -719,7 +720,7 @@ impl<'a> Parser<'a> {
     }
 
     #[trace_parser]
-    pub fn register(&mut self) -> Result<Option<Loc<Statement>>> {
+    pub fn register(&mut self, attributes: &AttributeList) -> Result<Option<Loc<Statement>>> {
         let start_token = peek_for!(self, &TokenKind::Reg);
 
         // If this is a reg marker for a pipeline
@@ -801,6 +802,7 @@ impl<'a> Parser<'a> {
                 reset,
                 value,
                 value_type,
+                attributes: attributes.clone(),
             }
             .at(self.file_id, &span),
         )
@@ -809,8 +811,9 @@ impl<'a> Parser<'a> {
     }
 
     #[trace_parser]
-    pub fn declaration(&mut self) -> Result<Option<Loc<Statement>>> {
+    pub fn declaration(&mut self, attrs: &AttributeList) -> Result<Option<Loc<Statement>>> {
         let start_token = peek_for!(self, &TokenKind::Decl);
+        self.disallow_attributes(attrs, &start_token)?;
 
         let mut identifiers = vec![];
         while self.peek_cond(|t| t.is_identifier(), "expected identifier")? {
@@ -837,8 +840,9 @@ impl<'a> Parser<'a> {
     }
 
     #[trace_parser]
-    pub fn label(&mut self) -> Result<Option<Loc<Statement>>> {
+    pub fn label(&mut self, attrs: &AttributeList) -> Result<Option<Loc<Statement>>> {
         let tok = peek_for!(self, &TokenKind::SingleQuote);
+        self.disallow_attributes(attrs, &tok)?;
 
         let name = self.identifier()?;
         Ok(Some(Statement::Label(name.clone()).between(
@@ -849,8 +853,9 @@ impl<'a> Parser<'a> {
     }
 
     #[trace_parser]
-    pub fn assert(&mut self) -> Result<Option<Loc<Statement>>> {
+    pub fn assert(&mut self, attrs: &AttributeList) -> Result<Option<Loc<Statement>>> {
         let tok = peek_for!(self, &TokenKind::Assert);
+        self.disallow_attributes(attrs, &tok)?;
 
         let expr = self.expression()?;
 
@@ -872,8 +877,9 @@ impl<'a> Parser<'a> {
     }
 
     #[trace_parser]
-    pub fn set(&mut self) -> Result<Option<Loc<Statement>>> {
+    pub fn set(&mut self, attrs: &AttributeList) -> Result<Option<Loc<Statement>>> {
         let tok = peek_for!(self, &TokenKind::Set);
+        self.disallow_attributes(attrs, &tok)?;
 
         let target = self.expression()?;
 
@@ -895,13 +901,14 @@ impl<'a> Parser<'a> {
     #[trace_parser]
     #[tracing::instrument(skip(self))]
     pub fn statement(&mut self, allow_stages: bool) -> Result<Option<Loc<Statement>>> {
+        let attrs = self.attributes()?;
         let result = self.first_successful(vec![
-            &Self::binding,
-            &Self::register,
-            &Self::declaration,
-            &Self::label,
-            &Self::assert,
-            &Self::set,
+            &|s| s.binding(&attrs),
+            &|s| s.register(&attrs),
+            &|s| s.declaration(&attrs),
+            &|s| s.label(&attrs),
+            &|s| s.assert(&attrs),
+            &|s| s.set(&attrs),
             &|s| s.comptime_statement(allow_stages),
         ])?;
 
@@ -1965,21 +1972,29 @@ mod tests {
             Expression::int_literal(123).nowhere(),
         )
         .nowhere();
-        check_parse!("let test = 123;", binding, Ok(Some(expected)));
+        check_parse!(
+            "let test = 123;",
+            binding(&AttributeList::empty()),
+            Ok(Some(expected))
+        );
     }
 
     #[test]
     fn declarations_work() {
         let expected = Statement::Declaration(vec![ast_ident("x"), ast_ident("y")]).nowhere();
 
-        check_parse!("decl x, y;", declaration, Ok(Some(expected)));
+        check_parse!(
+            "decl x, y;",
+            declaration(&AttributeList::empty()),
+            Ok(Some(expected))
+        );
     }
 
     #[test]
     fn empty_declaration_results_in_error() {
         check_parse!(
             "decl;",
-            declaration,
+            declaration(&AttributeList::empty()),
             Err(Error::EmptyDeclStatement { at: ().nowhere() })
         );
     }
@@ -2095,6 +2110,7 @@ mod tests {
                 reset: None,
                 value: Expression::int_literal(1).nowhere(),
                 value_type: None,
+                attributes: ast::AttributeList::empty(),
             }
             .nowhere(),
         )
@@ -2122,6 +2138,7 @@ mod tests {
                 )),
                 value: Expression::int_literal(1).nowhere(),
                 value_type: None,
+                attributes: ast::AttributeList::empty(),
             }
             .nowhere(),
         )
@@ -2149,6 +2166,7 @@ mod tests {
                 )),
                 value: Expression::int_literal(1).nowhere(),
                 value_type: Some(TypeSpec::Named(ast_path("Type"), None).nowhere()),
+                attributes: ast::AttributeList::empty(),
             }
             .nowhere(),
         )

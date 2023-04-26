@@ -1472,6 +1472,7 @@ mod statement_visiting {
                 reset: None,
                 value: ast::Expression::int_literal(0).nowhere(),
                 value_type: None,
+                attributes: ast::AttributeList::empty(),
             }
             .nowhere(),
         )
@@ -2363,6 +2364,7 @@ mod register_visiting {
             )),
             value: ast::Expression::int_literal(1).nowhere(),
             value_type: Some(ast::TypeSpec::Unit(().nowhere()).nowhere()),
+            attributes: ast::AttributeList::empty(),
         }
         .nowhere();
 
