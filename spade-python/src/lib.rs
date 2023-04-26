@@ -416,13 +416,25 @@ impl Spade {
 
         // Lookup the name_id of the instance we want to query for the value_name in
         let mut current_unit = &self.uut_nameid;
-        let mut path_so_far = vec![];
+        let mut path_so_far = vec![format!("{}", self.uut_nameid)];
         while let Some(next_instance_name) = hierarchy.pop() {
-            path_so_far.push(next_instance_name);
             let next = self
                 .instance_map
                 .inner
-                .get(&(current_unit.clone(), next_instance_name.to_string()));
+                .get(&current_unit.clone())
+                .ok_or_else(|| {
+                    let candidates = self
+                        .instance_map
+                        .inner
+                        .keys()
+                        .map(|v| format!("{v:?}"))
+                        .join("\n     ");
+                    anyhow!(
+                        "(internal) Did not find a unit named {:?}\nCandidates:\n    {candidates}",
+                        &current_unit
+                    )
+                })?
+                .get(next_instance_name);
             if let Some(next) = next {
                 current_unit = next;
             } else {
@@ -432,6 +444,7 @@ impl Spade {
                 )
                 .into());
             };
+            path_so_far.push(next_instance_name.to_string());
         }
 
         // Look up the mir context of the unit we are observing

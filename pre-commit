@@ -16,6 +16,7 @@ function run_tests {(
     cargo +stable fmt -- --check && \
     sh -c "cd output_test && make" && \
     sh -c "cd swim_tests && swim test" && \
+    sh -c "cd swim_tests && ./do_pytest" && \
     true
 )}
 

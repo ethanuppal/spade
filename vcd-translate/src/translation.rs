@@ -225,7 +225,7 @@ pub fn inner_translate_value(result: &mut String, in_value: &[Value], t: &Concre
                         } else {
                             let variant_idx = tag as usize;
                             let (variant_name, inner_types) = &options[variant_idx];
-                            *result += &format!("{variant_name}");
+                            *result += &format!("{}", variant_name.1.tail());
 
                             result.push('(');
                             let mut offset = tag_size;

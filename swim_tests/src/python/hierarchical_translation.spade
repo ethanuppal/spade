@@ -1,0 +1,13 @@
+enum X {
+    A,
+    B{x: bool}
+}
+
+entity sub(in: X) -> bool {
+    let local = in;
+    true
+}
+
+entity top(in: X) -> bool {
+    inst sub(in)
+}

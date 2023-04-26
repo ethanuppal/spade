@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
@@ -37,7 +37,7 @@ use spade_common::name::{NameID, Path};
 /// (main_n2, "y_0") -> y_n0
 #[derive(Serialize, Deserialize, Debug)]
 pub struct InstanceMap {
-    pub inner: HashMap<(NameID, String), NameID>,
+    pub inner: HashMap<NameID, BTreeMap<String, NameID>>,
 }
 
 impl InstanceMap {
@@ -77,7 +77,10 @@ impl InstanceNameTracker {
         let result = format!("{instance_name}_{e}");
         *e += 1;
 
-        map.inner.insert((in_unit, result.clone()), unit_name);
+        map.inner
+            .entry(in_unit)
+            .or_default()
+            .insert(result.clone(), unit_name);
 
         result
     }

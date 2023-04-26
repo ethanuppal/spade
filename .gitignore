@@ -3,6 +3,8 @@ target
 parse_tree_macros/target
 build
 .ecp5.d
+swim_tests/pytest/__pycache__
+swim_tests/build
 
 .env
 .coverage

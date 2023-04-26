@@ -1262,7 +1262,9 @@ mod tests {
         );
 
         assert_same_code!(
-            &entity_code(&mut input.clone(), &mut InstanceMap::new(), &None).0.to_string(),
+            &entity_code(&mut input.clone(), &mut InstanceMap::new(), &None)
+                .0
+                .to_string(),
             expected
         );
     }
@@ -1306,7 +1308,9 @@ mod tests {
         );
 
         assert_same_code!(
-            &entity_code(&mut input.clone(), &mut InstanceMap::new(), &None).0.to_string(),
+            &entity_code(&mut input.clone(), &mut InstanceMap::new(), &None)
+                .0
+                .to_string(),
             expected
         );
     }
@@ -1573,17 +1577,18 @@ mod tests {
         let mut instance_map = InstanceMap::new();
         entity_code(&mut input, &mut instance_map, &None);
 
+        let top = instance_map
+            .inner
+            .get(&(top_name.clone()))
+            .expect("Failed to get top");
+
         assert_eq!(
-            instance_map
-                .inner
-                .get(&(top_name.clone(), "test1_0".to_string()))
+            top.get(&"test1_0".to_string())
                 .expect("failed to get test1_0"),
             &inst1_name
         );
         assert_eq!(
-            instance_map
-                .inner
-                .get(&(top_name, "test1_1".to_string()))
+            top.get(&"test1_1".to_string())
                 .expect("failed to get test1_0"),
             &inst2_name
         );
