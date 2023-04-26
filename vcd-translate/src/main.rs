@@ -2,7 +2,7 @@ mod translation;
 
 use std::{collections::HashMap, fs::File, path::PathBuf};
 
-use clap::StructOpt;
+use clap::Parser;
 use color_eyre::{eyre::Context, Result};
 use translation::translate_names;
 use vcd::{IdCode, ScopeItem};

@@ -19,9 +19,9 @@ use spade::{
 #[derive(Parser)]
 #[structopt(name = "spade", about = "Compiler for the spade language")]
 pub struct Opt {
-    #[structopt(name = "INPUT_FILE", parse(try_from_str = namespaced_file))]
+    #[arg(name = "INPUT_FILE", value_parser(namespaced_file))]
     pub infile: NamespacedFile,
-    #[structopt(name = "EXTRA_FILES", parse(try_from_str = namespaced_file))]
+    #[arg(name = "EXTRA_FILES", value_parser(namespaced_file))]
     pub extra_files: Vec<NamespacedFile>,
     #[structopt(short = 'o')]
     pub outfile: PathBuf,
