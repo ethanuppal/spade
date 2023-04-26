@@ -28,11 +28,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 - [!187][!187] Change naming scheme of Verilog variables to make names more predictable. [Documentation](https://docs.spade-lang.org/internal/naming.html)
 - [!184][!184] The CI system now builds both Linux and macOS-AArch64.
+- [!195][!195] Logos and Clap have had their respective versions bumped.
 
 [!168]: https://gitlab.com/spade-lang/spade/-/merge_requests/168
 [!184]: https://gitlab.com/spade-lang/spade/-/merge_requests/184
 [!187]: https://gitlab.com/spade-lang/spade/-/merge_requests/187
 [!188]: https://gitlab.com/spade-lang/spade/-/merge_requests/188
+[!195]: https://gitlab.com/spade-lang/spade/-/merge_requests/195
 
 [doc_inverted_ports]: https://docs.spade-lang.org/language_reference/type_system/inverted_ports.html
 
