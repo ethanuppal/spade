@@ -13,7 +13,7 @@ use num::{BigInt, ToPrimitive, Zero};
 use tracing::{event, Level};
 
 use spade_ast::{
-    ArgumentList, ArgumentPattern, AttributeList, Block, CallKind, ComptimeConfig, Enum,
+    ArgumentList, ArgumentPattern, Attribute, AttributeList, Block, CallKind, ComptimeConfig, Enum,
     Expression, FunctionDecl, ImplBlock, IntLiteral, Item, Module, ModuleBody, NamedArgument,
     ParameterList, Pattern, PipelineStageReference, Register, Statement, Struct, TraitDef,
     TypeDeclKind, TypeDeclaration, TypeExpression, TypeParam, TypeSpec, Unit, UnitKind,
@@ -1487,20 +1487,31 @@ impl<'a> Parser<'a> {
         ))
     }
 
+    pub fn attribute_inner(&mut self) -> Result<Attribute> {
+        let start = self.identifier()?;
+
+        match start.inner.0.as_str() {
+            "no_mangle" => Ok(Attribute::NoMangle),
+            other => Err(
+                Diagnostic::error(&start, format!("Unknown attribute '{other}'"))
+                    .primary_label("Unrecognised attribute")
+                    .into(),
+            ),
+        }
+    }
+
     #[trace_parser]
     pub fn attributes(&mut self) -> Result<AttributeList> {
         // peek_for!(self, &TokenKind::Hash)
         let mut result = AttributeList(vec![]);
         while let Some(start) = self.peek_and_eat(&TokenKind::Hash)? {
-            let (ident, loc) = self.surrounded(
+            let (inner, loc) = self.surrounded(
                 &TokenKind::OpenBracket,
-                Self::identifier,
+                Self::attribute_inner,
                 &TokenKind::CloseBracket,
             )?;
 
-            result
-                .0
-                .push(ident.inner.between(self.file_id, &start, &loc));
+            result.0.push(inner.between(self.file_id, &start, &loc));
         }
         Ok(result)
     }
@@ -2658,12 +2669,12 @@ mod tests {
     #[test]
     fn functions_can_have_attributes() {
         let code = r#"
-            #[attr]
+            #[no_mangle]
             fn X() __builtin__"#;
 
         let expected = Some(Item::Unit(
             Unit {
-                attributes: AttributeList(vec![ast_ident("attr")]),
+                attributes: AttributeList(vec![Attribute::NoMangle.nowhere()]),
                 unit_kind: UnitKind::Function.nowhere(),
                 name: ast_ident("X"),
                 inputs: ParameterList::without_self(vec![]).nowhere(),
@@ -2680,12 +2691,12 @@ mod tests {
     #[test]
     fn entities_can_have_attributes() {
         let code = r#"
-            #[attr]
+            #[no_mangle]
             entity X() __builtin__"#;
 
         let expected = Some(Item::Unit(
             Unit {
-                attributes: AttributeList(vec![ast_ident("attr")]),
+                attributes: AttributeList(vec![Attribute::NoMangle.nowhere()]),
                 unit_kind: UnitKind::Entity.nowhere(),
                 name: ast_ident("X"),
                 inputs: ParameterList::without_self(vec![]).nowhere(),
@@ -2702,13 +2713,13 @@ mod tests {
     #[test]
     fn pipelines_can_have_attributes() {
         let code = r#"
-            #[attr]
+            #[no_mangle]
             pipeline(2) test(a: bool) __builtin__
         "#;
 
         let expected = Item::Unit(
             Unit {
-                attributes: AttributeList(vec![ast_ident("attr")]),
+                attributes: AttributeList(vec![Attribute::NoMangle.nowhere()]),
                 unit_kind: UnitKind::Pipeline(
                     MaybeComptime::Raw(IntLiteral::signed(2).nowhere()).nowhere(),
                 )

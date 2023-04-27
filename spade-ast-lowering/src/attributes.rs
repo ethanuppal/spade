@@ -1,4 +1,4 @@
-use ast::AttributeList;
+use ast::{Attribute, AttributeList};
 use local_impl::local_impl;
 use spade_ast as ast;
 use spade_common::{
@@ -49,14 +49,12 @@ impl AttributeListExt for AttributeList {
 
     /// Removes #[no_mangle] from the attribute list and returns it if
     /// it was present
-    fn consume_no_mangle(&mut self) -> Option<Loc<Identifier>> {
+    fn consume_no_mangle(&mut self) -> Option<Loc<()>> {
         let mut mangle_attribute = None;
-        self.0.retain(|attr| {
-            if attr.inner.0 == "no_mangle" {
-                mangle_attribute = Some(attr.clone());
+        self.0.retain(|attr| match attr.inner {
+            Attribute::NoMangle => {
+                mangle_attribute = Some(attr.loc());
                 false
-            } else {
-                true
             }
         });
         mangle_attribute

@@ -300,7 +300,13 @@ impl TypeParam {
 }
 
 #[derive(PartialEq, Debug, Clone)]
-pub struct AttributeList(pub Vec<Loc<Identifier>>);
+pub enum Attribute {
+    NoMangle,
+}
+impl WithLocation for Attribute {}
+
+#[derive(PartialEq, Debug, Clone)]
+pub struct AttributeList(pub Vec<Loc<Attribute>>);
 impl AttributeList {
     pub fn empty() -> Self {
         Self(vec![])

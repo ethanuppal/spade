@@ -3,10 +3,10 @@ source: spade-tests/src/ast_lowering.rs
 ---
 fn test(#[owo] a: bool) -> bool {true}
 
-error: Unrecognised attribute
-  ┌─ testinput:1:9
+error: Unknown attribute 'owo'
+  ┌─ testinput:1:11
   │
 1 │ fn test(#[owo] a: bool) -> bool {true}
-  │         ^^^^^^ Unrecognised attribute
+  │           ^^^ Unrecognised attribute
 
 
