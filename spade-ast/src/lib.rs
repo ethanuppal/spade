@@ -302,7 +302,18 @@ impl TypeParam {
 #[derive(PartialEq, Debug, Clone)]
 pub enum Attribute {
     NoMangle,
+    Fsm { state: Loc<Identifier> },
 }
+
+impl Attribute {
+    pub fn name(&self) -> &str {
+        match self {
+            Attribute::NoMangle => "no_mangle",
+            Attribute::Fsm { state } => "fsm",
+        }
+    }
+}
+
 impl WithLocation for Attribute {}
 
 #[derive(PartialEq, Debug, Clone)]
@@ -310,6 +321,10 @@ pub struct AttributeList(pub Vec<Loc<Attribute>>);
 impl AttributeList {
     pub fn empty() -> Self {
         Self(vec![])
+    }
+
+    pub fn from_vec(attrs: Vec<Loc<Attribute>>) -> Self {
+        Self(attrs)
     }
 }
 

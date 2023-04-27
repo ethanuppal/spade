@@ -180,6 +180,7 @@ fn visit_expression(
                             reset,
                             value,
                             value_type: _,
+                            attributes: _,
                         } = &reg.inner;
 
                         linear_state.push_pattern(&pattern, ctx)?;

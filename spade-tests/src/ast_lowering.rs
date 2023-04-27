@@ -921,3 +921,12 @@ snapshot_error! {
         A{#[no_mangle] x: bool}
     }"
 }
+
+snapshot_error! {
+    registers_can_not_be_no_mangle,
+    "entity x(clk: clock) -> bool {
+        #[no_mangle]
+        reg(clk) x = false;
+        x
+    }"
+}

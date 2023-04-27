@@ -154,6 +154,7 @@ pub struct Register {
     pub reset: Option<(Loc<Expression>, Loc<Expression>)>,
     pub value: Loc<Expression>,
     pub value_type: Option<Loc<TypeSpec>>,
+    pub attributes: AttributeList,
 }
 impl WithLocation for Register {}
 
@@ -482,6 +483,24 @@ pub enum TraitName {
 impl TraitName {
     pub fn is_anonymous(&self) -> bool {
         matches!(self, Self::Anonymous(_))
+    }
+}
+
+/// Attributes that are still present as attributes in the HIR. Not all AST
+/// attributes are in this list, as some are consumed and inlined into the corresponding
+/// ast node
+#[derive(PartialEq, Debug, Clone, Serialize, Deserialize)]
+pub enum Attribute {
+    Fsm { state: NameID },
+}
+impl WithLocation for Attribute {}
+
+#[derive(PartialEq, Debug, Clone, Serialize, Deserialize)]
+pub struct AttributeList(pub Vec<Loc<Attribute>>);
+
+impl AttributeList {
+    pub fn empty() -> Self {
+        Self(vec![])
     }
 }
 

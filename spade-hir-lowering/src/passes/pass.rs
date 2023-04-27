@@ -81,6 +81,7 @@ impl Passable for Loc<Expression> {
                                 reset,
                                 value,
                                 value_type: _,
+                                attributes: _,
                             } = &mut reg.inner;
 
                             match reset {

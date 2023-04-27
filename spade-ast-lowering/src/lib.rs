@@ -6,6 +6,7 @@ pub mod global_symbols;
 pub mod pipelines;
 pub mod types;
 
+use attributes::LocAttributeExt;
 use num::{BigInt, ToPrimitive, Zero};
 use pipelines::{int_literal_to_pipeline_stages, PipelineContext};
 use spade_diagnostics::Diagnostic;
@@ -291,7 +292,7 @@ fn visit_parameter_list(
 
         let mut attrs = attrs.clone();
         let no_mangle = attrs.consume_no_mangle().map(|ident| ident.loc());
-        attrs.report_unused()?;
+        attrs.report_unused("a parameter")?;
 
         result.push(hir::Parameter {
             name: name.clone(),
@@ -410,7 +411,7 @@ pub fn visit_unit(
 
     // If this is a builtin entity
     if body.is_none() {
-        attributes.report_unused()?;
+        attributes.report_unused("a unit")?;
         return Ok(hir::Item::Builtin(unit_name, head));
     }
 
@@ -440,7 +441,7 @@ pub fn visit_unit(
     ctx.symtab.close_scope();
 
     // Any remaining attributes are unused and will have an error reported
-    attributes.report_unused()?;
+    attributes.report_unused("a unit")?;
 
     info!("Checked all function arguments");
 
@@ -1222,12 +1223,27 @@ fn visit_register(reg: &Loc<ast::Register>, ctx: &mut Context) -> Result<Loc<hir
         None
     };
 
+    let attributes = reg.attributes.lower(&mut |attr| {
+        match &attr.inner {
+            ast::Attribute::Fsm { state } => {
+                // First: ensure that the specified name is present in the symtab at all
+                let name_id = ctx
+                    .symtab
+                    .lookup_variable(&Path(vec![state.clone()]).at_loc(state))?;
+
+                Ok(Some(hir::Attribute::Fsm { state: name_id }))
+            }
+            _ => Err(attr.report_unused("a register").into()),
+        }
+    })?;
+
     Ok(hir::Register {
         pattern,
         clock,
         reset,
         value,
         value_type,
+        attributes,
     }
     .at_loc(&loc))
 }
@@ -1489,6 +1505,7 @@ mod statement_visiting {
                 reset: None,
                 value: hir::ExprKind::int_literal(0).idless().nowhere(),
                 value_type: None,
+                attributes: hir::AttributeList::empty(),
             }
             .nowhere(),
         )
@@ -2383,6 +2400,7 @@ mod register_visiting {
             )),
             value: hir::ExprKind::int_literal(1).idless().nowhere(),
             value_type: Some(hir::TypeSpec::unit().nowhere()),
+            attributes: hir::AttributeList::empty(),
         }
         .nowhere();
 

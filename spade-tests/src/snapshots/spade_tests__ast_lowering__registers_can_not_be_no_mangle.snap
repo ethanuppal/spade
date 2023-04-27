@@ -1,0 +1,16 @@
+---
+source: spade-tests/src/ast_lowering.rs
+---
+entity x(clk: clock) -> bool {
+    #[no_mangle]
+    reg(clk) x = false;
+    x
+}
+
+error: no_mangle is not a valid attribute for a register
+  ┌─ testinput:2:5
+  │
+2 │     #[no_mangle]
+  │     ^^^^^^^^^^^^ Unrecognised attribute
+
+

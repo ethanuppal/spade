@@ -56,16 +56,49 @@ impl AttributeListExt for AttributeList {
                 mangle_attribute = Some(attr.loc());
                 false
             }
+            _ => false,
         });
         mangle_attribute
     }
 
-    fn report_unused(&self) -> Result<()> {
+    fn report_unused(&self, on: &str) -> Result<()> {
         if let Some(attr) = self.0.first() {
-            return Err(Diagnostic::error(attr, "Unrecognised attribute")
-                .primary_label("Unrecognised attribute")
-                .into());
+            Err(attr.report_unused(on))
+        } else {
+            Ok(())
         }
-        Ok(())
+    }
+
+    fn lower(
+        &self,
+        handler: &mut impl FnMut(&Loc<ast::Attribute>) -> Result<Option<hir::Attribute>>,
+    ) -> Result<hir::AttributeList> {
+        let inner = self
+            .0
+            .iter()
+            .map(|attr| {
+                let loc = attr.loc();
+                Ok(handler(attr)?.map(|o| o.at_loc(&loc)))
+            })
+            .collect::<Result<Vec<_>>>()?
+            .into_iter()
+            .filter_map(|x| x)
+            .collect();
+
+        Ok(hir::AttributeList(inner))
+    }
+}
+
+#[local_impl]
+impl LocAttributeExt for Loc<ast::Attribute> {
+    /// Report this attribute as unused on `on`
+    /// on should be writte nto fit in the sentecnce {} is not a valid attribute for {on},
+    /// i.e. `a thing` or `an item` should probably be used
+    fn report_unused(&self, on: &str) -> Diagnostic {
+        Diagnostic::error(
+            self,
+            format!("{} is not a valid attribute for {on}", self.name()),
+        )
+        .primary_label("Unrecognised attribute")
     }
 }

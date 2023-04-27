@@ -1492,6 +1492,14 @@ impl<'a> Parser<'a> {
 
         match start.inner.0.as_str() {
             "no_mangle" => Ok(Attribute::NoMangle),
+            "fsm" => {
+                let (state, _) = self.surrounded(
+                    &TokenKind::OpenParen,
+                    Self::identifier,
+                    &TokenKind::CloseParen,
+                )?;
+                Ok(Attribute::Fsm { state })
+            }
             other => Err(
                 Diagnostic::error(&start, format!("Unknown attribute '{other}'"))
                     .primary_label("Unrecognised attribute")
@@ -2734,6 +2742,51 @@ mod tests {
         );
 
         check_parse!(code, item, Ok(Some(expected)));
+    }
+
+    #[test]
+    fn reg_has_fsm_attribute() {
+        let code = r#"
+            entity X() {
+                #[fsm(state)]
+                reg(clk) state = false;
+                false
+            }"#;
+
+        let expected = Some(Item::Unit(
+            Unit {
+                attributes: AttributeList::empty(),
+                unit_kind: UnitKind::Entity.nowhere(),
+                name: ast_ident("X"),
+                inputs: ParameterList::without_self(vec![]).nowhere(),
+                output_type: None,
+                body: Some(
+                    Expression::Block(Box::new(Block {
+                        statements: vec![Statement::Register(
+                            Register {
+                                pattern: Pattern::Path(ast_path("state")).nowhere(),
+                                clock: Expression::Identifier(ast_path("clk")).nowhere(),
+                                reset: None,
+                                value: Expression::BoolLiteral(false).nowhere(),
+                                value_type: None,
+                                attributes: AttributeList::from_vec(vec![Attribute::Fsm {
+                                    state: ast_ident("state"),
+                                }
+                                .nowhere()]),
+                            }
+                            .nowhere(),
+                        )
+                        .nowhere()],
+                        result: Expression::BoolLiteral(false).nowhere(),
+                    }))
+                    .nowhere(),
+                ),
+                type_params: vec![],
+            }
+            .nowhere(),
+        ));
+
+        check_parse!(code, item, Ok(expected));
     }
 
     #[test]

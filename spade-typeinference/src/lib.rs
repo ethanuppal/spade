@@ -1575,6 +1575,7 @@ mod tests {
     use hir::expression::IntLiteral;
     use hir::hparams;
     use hir::symbol_table::TypeDeclKind;
+    use hir::AttributeList;
     use hir::PatternKind;
     use hir::{dtype, testutil::t_num, ArgumentList};
     use spade_ast::testutil::{ast_ident, ast_path};
@@ -2025,6 +2026,7 @@ mod tests {
             reset: None,
             value: ExprKind::int_literal(0).with_id(0).nowhere(),
             value_type: None,
+            attributes: AttributeList::empty(),
         };
 
         let mut state = TypeState::new();
@@ -2068,6 +2070,7 @@ mod tests {
                 .with_id(0)
                 .nowhere(),
             value_type: None,
+            attributes: hir::AttributeList::empty(),
         };
 
         let mut state = TypeState::new();
@@ -2109,6 +2112,7 @@ mod tests {
             )),
             value: ExprKind::int_literal(0).with_id(0).nowhere(),
             value_type: None,
+            attributes: hir::AttributeList::empty(),
         };
 
         let mut state = TypeState::new();
@@ -2234,6 +2238,7 @@ mod tests {
                 ])
                 .nowhere(),
             ),
+            attributes: hir::AttributeList::empty(),
         };
 
         let mut state = TypeState::new();
