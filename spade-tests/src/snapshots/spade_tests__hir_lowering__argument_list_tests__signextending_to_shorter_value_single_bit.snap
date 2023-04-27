@@ -1,6 +1,5 @@
 ---
 source: spade-tests/src/hir_lowering.rs
-assertion_line: 2328
 ---
 fn main() -> int<1> {
     let a: int<2> = 0;
@@ -10,14 +9,18 @@ fn main() -> int<1> {
 
 
 error: Sign-extending to a shorter value
-  ┌─ testinput:3:37
+  ┌─ testinput:3:21
   │
 3 │     let b: int<1> = std::conv::sext(a);
-  │                     ----------------^-
+  │                     ^^^^^^^^^^^^^^^^^^
   │                     │               │
   │                     │               This value is 2 bits
-  │                     The value is zero-extended to 1 bit here
+  │                     The value is sign-extended to 1 bit here
   │
-  = note: Sign-extension cannot decrease width, use trunc instead
+  = note: 
+  = Sign-extension cannot decrease width, use trunc instead
+  │
+3 │     let b: int<1> = trunc(a);
+  │                     ~~~~~
 
 

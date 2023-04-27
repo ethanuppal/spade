@@ -1159,7 +1159,7 @@ impl ExprLocal for Loc<Expression> {
 
     fn handle_call(
         &self,
-        name: &NameID,
+        name: &Loc<NameID>,
         args: &[Argument],
         ctx: &mut Context,
     ) -> Result<StatementList> {
@@ -1176,10 +1176,10 @@ impl ExprLocal for Loc<Expression> {
                     let path = Path(vec![$(Identifier($path.to_string()).nowhere()),*]).nowhere();
                     let final_id = ctx.symtab.symtab().try_lookup_final_id(&path);
                     if final_id
-                        .map(|n| &n == name)
+                        .map(|n| &n == &name.inner)
                         .unwrap_or(false)
                     {
-                        return self.$handler(result, args, ctx);
+                        return self.$handler(&name, result, args, ctx);
                     };
                 )*
             }
@@ -1342,6 +1342,7 @@ impl ExprLocal for Loc<Expression> {
     /// Result is the initial statement list to expand and return
     fn handle_clocked_memory_decl(
         &self,
+        _path: &Loc<NameID>,
         result: StatementList,
         args: &[Argument],
         ctx: &mut Context,
@@ -1351,6 +1352,7 @@ impl ExprLocal for Loc<Expression> {
 
     fn handle_clocked_memory_initial_decl(
         &self,
+        _path: &Loc<NameID>,
         result: StatementList,
         args: &[Argument],
         ctx: &mut Context,
@@ -1466,6 +1468,7 @@ impl ExprLocal for Loc<Expression> {
     /// Result is the initial statement list to expand and return
     fn handle_read_memory(
         &self,
+        _path: &Loc<NameID>,
         result: StatementList,
         args: &[Argument],
         ctx: &mut Context,
@@ -1497,6 +1500,7 @@ impl ExprLocal for Loc<Expression> {
 
     fn handle_trunc(
         &self,
+        _path: &Loc<NameID>,
         result: StatementList,
         args: &[Argument],
         ctx: &mut Context,
@@ -1552,6 +1556,7 @@ impl ExprLocal for Loc<Expression> {
 
     fn handle_sext(
         &self,
+        path: &Loc<NameID>,
         result: StatementList,
         args: &[Argument],
         ctx: &mut Context,
@@ -1570,24 +1575,27 @@ impl ExprLocal for Loc<Expression> {
 
         if self_type.size() < input_type.size() {
             let input_loc = args[0].value.loc();
-            return Err(
-                Diagnostic::error(input_loc, "Sign-extending to a shorter value")
-                    .primary_label(format!("This value is {} bits", input_type.size()))
-                    .secondary_label(
-                        self,
-                        format!(
-                            "The value is zero-extended to {} bit{} here",
-                            self_type.size(),
-                            if self_type.size() == One::one() {
-                                ""
-                            } else {
-                                "s"
-                            }
-                        ),
-                    )
-                    .note("Sign-extension cannot decrease width, use trunc instead")
-                    .into(),
-            );
+            return Err(Diagnostic::error(self, "Sign-extending to a shorter value")
+                .primary_label(format!(
+                    "The value is sign-extended to {} bit{} here",
+                    self_type.size(),
+                    if self_type.size() == One::one() {
+                        ""
+                    } else {
+                        "s"
+                    }
+                ))
+                .secondary_label(
+                    input_loc,
+                    format!("This value is {} bits", input_type.size()),
+                )
+                .note("")
+                .span_suggest_replace(
+                    "Sign-extension cannot decrease width, use trunc instead",
+                    path,
+                    "trunc",
+                )
+                .into());
         }
 
         let extra_bits = if self_type.size() > input_type.size() {
@@ -1615,6 +1623,7 @@ impl ExprLocal for Loc<Expression> {
 
     fn handle_zext(
         &self,
+        path: &Loc<NameID>,
         result: StatementList,
         args: &[Argument],
         ctx: &mut Context,
@@ -1633,24 +1642,26 @@ impl ExprLocal for Loc<Expression> {
 
         if self_type.size() < input_type.size() {
             let input_loc = args[0].value.loc();
-            return Err(
-                Diagnostic::error(input_loc, "Zero-extending to a shorter value")
-                    .primary_label(format!("This value is {} bits", input_type.size()))
-                    .secondary_label(
-                        self,
-                        format!(
-                            "The value is zero-extended to {} bit{} here",
-                            self_type.size(),
-                            if self_type.size() == One::one() {
-                                ""
-                            } else {
-                                "s"
-                            }
-                        ),
-                    )
-                    .note("Zero-extension cannot decrease width, use trunc instead")
-                    .into(),
-            );
+            return Err(Diagnostic::error(self, "Zero-extending to a shorter value")
+                .primary_label(format!(
+                    "The value is zero-extended to {} bit{} here",
+                    self_type.size(),
+                    if self_type.size() == One::one() {
+                        ""
+                    } else {
+                        "s"
+                    }
+                ))
+                .secondary_label(
+                    input_loc,
+                    format!("This value is {} bits", input_type.size()),
+                )
+                .span_suggest_replace(
+                    "Zero-extension cannot decrease width, use trunc instead",
+                    path,
+                    "trunc",
+                )
+                .into());
         }
 
         let extra_bits = if self_type.size() > input_type.size() {
@@ -1675,6 +1686,7 @@ impl ExprLocal for Loc<Expression> {
 
     fn handle_concat(
         &self,
+        _path: &Loc<NameID>,
         result: StatementList,
         args: &[Argument],
         ctx: &mut Context,
@@ -1723,6 +1735,7 @@ impl ExprLocal for Loc<Expression> {
 
     fn handle_div_pow2(
         &self,
+        _path: &Loc<NameID>,
         result: StatementList,
         args: &[Argument],
         ctx: &mut Context,
@@ -1753,6 +1766,7 @@ impl ExprLocal for Loc<Expression> {
 
     fn handle_new_mut_wire(
         &self,
+        _path: &Loc<NameID>,
         result: StatementList,
         args: &[Argument],
         ctx: &mut Context,
@@ -1782,6 +1796,7 @@ impl ExprLocal for Loc<Expression> {
 
     fn handle_read_mut_wire(
         &self,
+        _path: &Loc<NameID>,
         result: StatementList,
         args: &[Argument],
         ctx: &mut Context,
