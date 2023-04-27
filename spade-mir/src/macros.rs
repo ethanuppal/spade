@@ -12,6 +12,12 @@ macro_rules! value_name {
 }
 
 #[macro_export]
+macro_rules! if_tracing {
+    () => {None};
+    ($traced_kind:ident $traced_name:tt) => {Some(spade_mir::value_name!($traced_kind $traced_name))}
+}
+
+#[macro_export]
 macro_rules! statement {
     // Normal constants
     (
@@ -38,6 +44,7 @@ macro_rules! statement {
     };
     //register with async reset
     (
+        $(traced($traced_kind:ident $traced_name:tt))?
         reg $name_kind:ident $name:tt;
         $type:expr;
         clock ($clk_name_kind:ident $clk_name:tt);
@@ -53,11 +60,13 @@ macro_rules! statement {
                 spade_mir::value_name!($rst_val_kind $rst_val_name)
             )),
             value: spade_mir::value_name!($val_kind $val_name),
-            loc: None
+            loc: None,
+            traced: spade_mir::if_tracing!($($traced_kind $traced_name)?)
         })
     };
     // Register without reset
     (
+        $(traced($traced_kind:ident $traced_name:tt))?
         reg $name_kind:ident $name:tt;
         $type:expr;
         clock ($clk_name_kind:ident $clk_name:tt);
@@ -70,6 +79,7 @@ macro_rules! statement {
             reset: None,
             value: spade_mir::value_name!($val_kind $val_name),
             loc: None,
+            traced: spade_mir::if_tracing!($($traced_kind $traced_name)?)
         })
     };
     // Set statement
@@ -191,10 +201,11 @@ mod tests {
             reset: None,
             value: ValueName::Expr(0),
             loc: None,
+            traced: Some(ValueName::Expr(2)),
         });
 
         assert_eq!(
-            statement!(reg n(0, "test"); Type::int(5); clock (n(1, "clk")); e(0)),
+            statement!(traced(e(2)) reg n(0, "test"); Type::int(5); clock (n(1, "clk")); e(0)),
             expected
         );
     }
@@ -208,6 +219,7 @@ mod tests {
             reset: Some((ValueName::Expr(1), ValueName::Expr(2))),
             value: ValueName::Expr(0),
             loc: None,
+            traced: None,
         });
 
         assert_eq!(

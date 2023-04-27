@@ -2260,6 +2260,26 @@ mod tests {
         ";
         build_items(code);
     }
+
+    #[test]
+    fn traced_fsm_is_traced() {
+        let code = r#"
+        entity name(clk: clock, x: bool) -> bool {
+            #[fsm(state)]
+            reg(clk) state = x;
+            x
+        }
+        "#;
+
+        let expected = entity!(&["name"]; (
+            "clk", n(0, "clk"), Type::Bool,
+            "x", n(2, "x"), Type::Bool,
+        ) -> Type::Bool; {
+            (traced(n(1, "state")) reg n(1, "state"); Type::Bool; clock(n(0, "clk")); n(2, "x"));
+        } => n(2, "x"));
+
+        assert_same_mir!(&build_entity!(code), &expected);
+    }
 }
 
 #[cfg(test)]

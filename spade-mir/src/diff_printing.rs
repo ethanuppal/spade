@@ -118,6 +118,7 @@ where
             reset,
             value,
             loc: _,
+            traced,
         }) => {
             let name = translate_val_name(name, lhs_trans, rhs_trans);
             let clock = translate_val_name(clock, lhs_trans, rhs_trans);
@@ -130,8 +131,19 @@ where
                 })
                 .unwrap_or_else(|| "".to_string());
             let value = translate_val_name(value, lhs_trans, rhs_trans);
+            let traced = if let Some(traced) = traced {
+                format!(
+                    "traced({})",
+                    translate_val_name(traced, lhs_trans, rhs_trans)
+                )
+            } else {
+                "".to_string()
+            };
 
-            format!("reg {}: {} clock {}{} {}", name, ty, clock, reset, value)
+            format!(
+                "{traced}reg {}: {} clock {}{} {}",
+                name, ty, clock, reset, value
+            )
         }
         Statement::Constant(name, ty, value) => {
             let name = translate_expr(*name, &lhs_trans.expr, &rhs_trans.expr);

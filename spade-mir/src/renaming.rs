@@ -147,6 +147,7 @@ pub fn make_names_predictable(e: &mut Entity) -> NameState {
                     reset: _,
                     value: _,
                     loc: _,
+                    traced: _,
                 }) => state.push(name),
                 crate::Statement::Constant(_, _, _) => {}
                 crate::Statement::Assert(_) => {}
@@ -202,6 +203,7 @@ pub fn make_names_predictable(e: &mut Entity) -> NameState {
                     reset,
                     value,
                     loc: _,
+                    traced,
                 }) => {
                     *name = state.get(name);
                     *clock = state.get(clock);
@@ -209,7 +211,8 @@ pub fn make_names_predictable(e: &mut Entity) -> NameState {
                         *trig = state.get(trig);
                         *val = state.get(val);
                     });
-                    *value = state.get(value)
+                    *value = state.get(value);
+                    traced.as_mut().map(|traced| *traced = state.get(traced));
                 }
                 crate::Statement::Constant(_, _, _) => {}
                 crate::Statement::Assert(val) => val.inner = state.get(val),

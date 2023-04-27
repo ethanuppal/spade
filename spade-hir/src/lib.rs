@@ -493,6 +493,13 @@ impl TraitName {
 pub enum Attribute {
     Fsm { state: NameID },
 }
+impl Attribute {
+    pub fn name(&self) -> &str {
+        match self {
+            Attribute::Fsm { state: _ } => "fsm",
+        }
+    }
+}
 impl WithLocation for Attribute {}
 
 #[derive(PartialEq, Debug, Clone, Serialize, Deserialize)]

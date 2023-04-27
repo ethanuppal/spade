@@ -1,3 +1,4 @@
+mod attributes;
 pub mod error;
 pub mod error_reporting;
 mod linear_check;
@@ -12,9 +13,11 @@ mod usefulness;
 
 use std::collections::HashMap;
 
+use attributes::AttributeListExt;
 use error::{expect_entity, expect_function, expect_pipeline};
 use hir::expression::CallKind;
 use hir::expression::LocExprExt;
+use hir::Attribute;
 use hir::Parameter;
 use local_impl::local_impl;
 
@@ -602,6 +605,14 @@ impl StatementLocal for Statement {
                     });
                 }
 
+                let mut traced = None;
+                register.attributes.lower(&mut |attr| match &attr.inner {
+                    Attribute::Fsm { state } => {
+                        traced = Some(state.value_name());
+                        Ok(())
+                    }
+                })?;
+
                 result.push_primary(
                     mir::Statement::Register(mir::Register {
                         name: register.pattern.value_name(),
@@ -623,6 +634,7 @@ impl StatementLocal for Statement {
                             .transpose()?,
                         value: register.value.variable(ctx.subs)?,
                         loc: Some(register.pattern.loc()),
+                        traced,
                     }),
                     &register.pattern,
                 );

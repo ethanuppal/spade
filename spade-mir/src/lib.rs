@@ -322,6 +322,9 @@ pub struct Register {
     pub reset: Option<(ValueName, ValueName)>,
     pub value: ValueName,
     pub loc: Option<Loc<()>>,
+    /// True if this register corresponds to an fsm with the specified ValueName
+    /// as the actual state
+    pub traced: Option<ValueName>,
 }
 
 impl std::fmt::Display for Register {
@@ -333,6 +336,7 @@ impl std::fmt::Display for Register {
             reset,
             value,
             loc: _,
+            traced: _,
         } = self;
 
         let reset = reset

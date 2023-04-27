@@ -309,7 +309,7 @@ impl Attribute {
     pub fn name(&self) -> &str {
         match self {
             Attribute::NoMangle => "no_mangle",
-            Attribute::Fsm { state } => "fsm",
+            Attribute::Fsm { state: _ } => "fsm",
         }
     }
 }

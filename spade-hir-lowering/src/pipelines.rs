@@ -96,6 +96,7 @@ pub fn lower_pipeline<'a>(
                             // NOTE: Do we/can we also want to point to the declaration
                             // of the variable?
                             loc: Some(statement.loc()),
+                            traced: None,
                         }),
                         &reg.original,
                         "Pipelined",
