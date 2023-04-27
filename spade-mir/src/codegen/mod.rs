@@ -12,7 +12,7 @@ use spade_diagnostics::{CodeBundle, CompilationError, DiagHandler};
 use crate::aliasing::flatten_aliases;
 use crate::assertion_codegen::AssertedExpression;
 use crate::eval::eval_statements;
-use crate::renaming::{make_names_predictable, VerilogNameMap};
+use crate::renaming::{make_names_predictable, NameState};
 use crate::type_list::TypeList;
 use crate::unit_name::{InstanceMap, InstanceNameTracker};
 use crate::verilog::{self, assign, logic, size_spec};
@@ -904,18 +904,30 @@ fn statement_code_and_declaration(
     }
 }
 
+/// A mir entity which has had passes required for codegen performed on it
+#[derive(Clone)]
+pub struct Codegenable(pub Entity, pub NameState);
+
+pub fn prepare_codegen(mut entity: Entity) -> Codegenable {
+    flatten_aliases(&mut entity);
+    let name_state = make_names_predictable(&mut entity);
+
+    Codegenable(entity, name_state)
+}
+
 /// Source code is used for two things: mapping expressions back to their original source code
 /// location, and for assertions. If source_code is None, no (* src = *) attributes will be
 /// emitted, however, assertions will cause a panic. This is convenient for tests where specifying
 /// source location is annoying to specify.
 /// In actual compilation this should be Some
+///
+/// Before prerforming codegen, `prepare_codegen` should be run
 pub fn entity_code(
-    entity: &mut Entity,
+    entity: &Codegenable,
     instance_map: &mut InstanceMap,
     source_code: &Option<CodeBundle>,
-) -> (Code, VerilogNameMap) {
-    flatten_aliases(entity);
-    let name_map = make_names_predictable(entity);
+) -> Code {
+    let Codegenable(entity, _) = entity;
 
     let types = &TypeList::from_entity(&entity);
 
@@ -1057,7 +1069,7 @@ pub fn entity_code(
             [1] &back_port_assignment;
         [0] &"endmodule"
     };
-    (code, name_map.verilog_name_map())
+    code
 }
 
 #[macro_export]
@@ -1218,9 +1230,7 @@ mod tests {
         );
 
         assert_same_code!(
-            &entity_code(&mut input.clone(), &mut InstanceMap::new(), &None)
-                .0
-                .to_string(),
+            &entity_code(&prepare_codegen(input.clone()), &mut InstanceMap::new(), &None).to_string(),
             expected
         );
     }
@@ -1262,9 +1272,7 @@ mod tests {
         );
 
         assert_same_code!(
-            &entity_code(&mut input.clone(), &mut InstanceMap::new(), &None)
-                .0
-                .to_string(),
+            &entity_code(&prepare_codegen(input.clone()), &mut InstanceMap::new(), &None).to_string(),
             expected
         );
     }
@@ -1308,9 +1316,7 @@ mod tests {
         );
 
         assert_same_code!(
-            &entity_code(&mut input.clone(), &mut InstanceMap::new(), &None)
-                .0
-                .to_string(),
+            &entity_code(&prepare_codegen(input.clone()), &mut InstanceMap::new(), &None).to_string(),
             expected
         );
     }
@@ -1347,9 +1353,7 @@ mod tests {
         );
 
         assert_same_code!(
-            &entity_code(&mut input.clone(), &mut InstanceMap::new(), &None)
-                .0
-                .to_string(),
+            &entity_code(&prepare_codegen(input.clone()), &mut InstanceMap::new(), &None).to_string(),
             expected
         );
     }
@@ -1388,9 +1392,7 @@ mod tests {
         );
 
         assert_same_code!(
-            &entity_code(&mut input.clone(), &mut InstanceMap::new(), &None)
-                .0
-                .to_string(),
+            &entity_code(&prepare_codegen(input.clone()), &mut InstanceMap::new(), &None).to_string(),
             expected
         );
     }
@@ -1423,9 +1425,7 @@ mod tests {
         );
 
         assert_same_code!(
-            &entity_code(&mut input.clone(), &mut InstanceMap::new(), &None)
-                .0
-                .to_string(),
+            &entity_code(&prepare_codegen(input.clone()), &mut InstanceMap::new(), &None).to_string(),
             expected
         );
     }
@@ -1497,9 +1497,7 @@ mod tests {
         );
 
         assert_same_code!(
-            &entity_code(&mut input.clone(), &mut InstanceMap::new(), &None)
-                .0
-                .to_string(),
+            &entity_code(&prepare_codegen(input.clone()), &mut InstanceMap::new(), &None).to_string(),
             expected
         );
     }
@@ -1538,9 +1536,9 @@ mod tests {
         );
 
         assert_same_code! {
-            &entity_code(&mut input.clone(), &mut InstanceMap::new(), &None).0.to_string(),
-            expected
-        }
+                    &entity_code(&prepare_codegen(input.clone()), &mut InstanceMap::new(), &None).to_string(),
+                    expected
+                }
     }
 
     #[test]
@@ -1561,7 +1559,7 @@ mod tests {
             kind: spade_mir::unit_name::UnitNameKind::Unescaped("test1".into()),
             source: top_name.clone(),
         };
-        let mut input = entity!(&top_unit_name; (
+        let input = entity!(&top_unit_name; (
                 "clk", n(3, "clk"), Type::Bool,
             ) -> Type::int(16); {
                 (reg n(10, "x__s1"); Type::int(16); clock(n(3, "clk")); n(0, "x_"));
@@ -1575,7 +1573,7 @@ mod tests {
         );
 
         let mut instance_map = InstanceMap::new();
-        entity_code(&mut input, &mut instance_map, &None);
+        entity_code(&prepare_codegen(input), &mut instance_map, &None);
 
         let top = instance_map
             .inner

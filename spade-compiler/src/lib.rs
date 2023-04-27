@@ -6,6 +6,7 @@ use codespan_reporting::term::termcolor::Buffer;
 use compiler_state::{CompilerState, MirContext};
 use logos::Logos;
 use ron::ser::PrettyConfig;
+use spade_mir::codegen::{prepare_codegen, Codegenable};
 use spade_mir::unit_name::InstanceMap;
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -117,7 +118,7 @@ pub struct Artefacts {
     // MIR entities before aliases have been flattened
     pub bumpy_mir_entities: Vec<spade_mir::Entity>,
     // MIR entities after flattening
-    pub flat_mir_entities: Vec<spade_mir::Entity>,
+    pub flat_mir_entities: Vec<Codegenable>,
 }
 
 /// Like [Artefacts], but if the compiler didn't finish due to errors.
@@ -128,7 +129,7 @@ pub struct UnfinishedArtefacts {
 
 struct CodegenArtefacts {
     bumpy_mir_entities: Vec<spade_mir::Entity>,
-    flat_mir_entities: Vec<spade_mir::Entity>,
+    flat_mir_entities: Vec<Codegenable>,
     module_code: Vec<String>,
     mir_code: Vec<String>,
     instance_map: InstanceMap,
@@ -463,22 +464,21 @@ fn codegen(
 
     for mir in mir_entities {
         if let Some(MirOutput {
-            mut mir,
+            mir,
             type_state,
             reg_name_map,
         }) = mir.or_report(errors)
         {
             bumpy_mir_entities.push(mir.clone());
 
-            let (code, verilog_name_map) = spade_mir::codegen::entity_code(
-                &mut mir,
-                &mut instance_map,
-                &Some(code.read().unwrap().clone()),
-            );
+            let codegenable = prepare_codegen(mir);
 
-            mir_code.push(format!("{}", mir));
+            let code =
+                spade_mir::codegen::entity_code(&codegenable, &mut instance_map, &Some(code.read().unwrap().clone()));
 
-            flat_mir_entities.push(mir.clone());
+            mir_code.push(format!("{}", codegenable.0));
+
+            flat_mir_entities.push(codegenable.clone());
 
             module_code.push(code.to_string());
 
@@ -499,13 +499,13 @@ fn codegen(
             }
 
             mir_context.insert(
-                mir.name.source,
+                codegenable.0.name.source,
                 MirContext {
                     reg_name_map: reg_name_map.clone(),
                     // lifeguard spade#254
                     // FIXME: Insert pipeline register stuff into the type map
                     type_map: type_state.into(),
-                    verilog_name_map,
+                    verilog_name_map: codegenable.1.verilog_name_map(),
                 },
             );
         }

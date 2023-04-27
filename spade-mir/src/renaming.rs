@@ -46,6 +46,7 @@ pub enum NameSource {
     BackwardExpr(u64),
 }
 
+#[derive(Clone)]
 pub struct NameState {
     /// Mapping between names and the amount of copies of that name we've seen so far
     names: HashMap<String, u64>,
