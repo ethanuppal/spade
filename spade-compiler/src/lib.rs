@@ -473,8 +473,11 @@ fn codegen(
 
             let codegenable = prepare_codegen(mir);
 
-            let code =
-                spade_mir::codegen::entity_code(&codegenable, &mut instance_map, &Some(code.read().unwrap().clone()));
+            let code = spade_mir::codegen::entity_code(
+                &codegenable,
+                &mut instance_map,
+                &Some(code.read().unwrap().clone()),
+            );
 
             mir_code.push(format!("{}", codegenable.0));
 

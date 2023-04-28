@@ -92,7 +92,7 @@ impl AttributeListExt for AttributeList {
 #[local_impl]
 impl LocAttributeExt for Loc<ast::Attribute> {
     /// Report this attribute as unused on `on`
-    /// on should be writte nto fit in the sentecnce {} is not a valid attribute for {on},
+    /// on should be writte not fit in the sentecnce {} is not a valid attribute for {on},
     /// i.e. `a thing` or `an item` should probably be used
     fn report_unused(&self, on: &str) -> Diagnostic {
         Diagnostic::error(

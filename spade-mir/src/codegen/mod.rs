@@ -1230,7 +1230,12 @@ mod tests {
         );
 
         assert_same_code!(
-            &entity_code(&prepare_codegen(input.clone()), &mut InstanceMap::new(), &None).to_string(),
+            &entity_code(
+                &prepare_codegen(input.clone()),
+                &mut InstanceMap::new(),
+                &None
+            )
+            .to_string(),
             expected
         );
     }
@@ -1272,7 +1277,12 @@ mod tests {
         );
 
         assert_same_code!(
-            &entity_code(&prepare_codegen(input.clone()), &mut InstanceMap::new(), &None).to_string(),
+            &entity_code(
+                &prepare_codegen(input.clone()),
+                &mut InstanceMap::new(),
+                &None
+            )
+            .to_string(),
             expected
         );
     }
@@ -1316,7 +1326,12 @@ mod tests {
         );
 
         assert_same_code!(
-            &entity_code(&prepare_codegen(input.clone()), &mut InstanceMap::new(), &None).to_string(),
+            &entity_code(
+                &prepare_codegen(input.clone()),
+                &mut InstanceMap::new(),
+                &None
+            )
+            .to_string(),
             expected
         );
     }
@@ -1353,7 +1368,12 @@ mod tests {
         );
 
         assert_same_code!(
-            &entity_code(&prepare_codegen(input.clone()), &mut InstanceMap::new(), &None).to_string(),
+            &entity_code(
+                &prepare_codegen(input.clone()),
+                &mut InstanceMap::new(),
+                &None
+            )
+            .to_string(),
             expected
         );
     }
@@ -1392,7 +1412,12 @@ mod tests {
         );
 
         assert_same_code!(
-            &entity_code(&prepare_codegen(input.clone()), &mut InstanceMap::new(), &None).to_string(),
+            &entity_code(
+                &prepare_codegen(input.clone()),
+                &mut InstanceMap::new(),
+                &None
+            )
+            .to_string(),
             expected
         );
     }
@@ -1425,7 +1450,12 @@ mod tests {
         );
 
         assert_same_code!(
-            &entity_code(&prepare_codegen(input.clone()), &mut InstanceMap::new(), &None).to_string(),
+            &entity_code(
+                &prepare_codegen(input.clone()),
+                &mut InstanceMap::new(),
+                &None
+            )
+            .to_string(),
             expected
         );
     }
@@ -1497,7 +1527,12 @@ mod tests {
         );
 
         assert_same_code!(
-            &entity_code(&prepare_codegen(input.clone()), &mut InstanceMap::new(), &None).to_string(),
+            &entity_code(
+                &prepare_codegen(input.clone()),
+                &mut InstanceMap::new(),
+                &None
+            )
+            .to_string(),
             expected
         );
     }
@@ -1536,9 +1571,9 @@ mod tests {
         );
 
         assert_same_code! {
-                    &entity_code(&prepare_codegen(input.clone()), &mut InstanceMap::new(), &None).to_string(),
-                    expected
-                }
+            &entity_code(&prepare_codegen(input.clone()), &mut InstanceMap::new(), &None).to_string(),
+            expected
+        }
     }
 
     #[test]
