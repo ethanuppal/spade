@@ -8,28 +8,28 @@ variables:
     CARGO_HOME: $CI_PROJECT_DIR/cargo
     FF_ENABLE_BASH_EXIT_CODE_CHECK: "true"
     GIT_SUBMODULE_STRATEGY: normal
-    # Since we mix Ubuntu 18.04 and Ubuntu 22.04 (see the job output_test) we
-    # have to specify the Python version per job, since they don't have the
-    # same version _and_ `python3` refers to 3.6 in 18.04 but we need 3.7 for
-    # pyo3.
-    APT_PYTHON_VERSION: "3.7"  
-
-# Setup environment for spade as a whole.
-before_script:
-  - apt update
-  - apt install -y curl gcc make python$APT_PYTHON_VERSION
-  # pyo3 expects `python3` in the path. `python3.7` isn't enough.
-  - command -v /usr/bin/python3 || ln -s /usr/bin/python$APT_PYTHON_VERSION /usr/bin/python3
-  - curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain none
-  - source ./cargo/env
-  - rustup install 1.64
+    RUST_IMAGE: "rust:1.64"
+    # Best practices: https://archives.docs.gitlab.com/13.9/ee/ci/large_repositories/
+    GIT_DEPTH: 5
+    # Faster zipping helping with cache sync speeds (https://gitlab.com/gitlab-org/gitlab-runner/-/issues/1797)
+    FF_USE_FASTZIP: "true" 
+    CACHE_COMPRESSION_LEVEL: fast
 
 stages:
     - test
     - trawler
 
+cache:
+    key:
+        files:
+            - Cargo.lock
+    paths:
+        - target
+        - $CARGO_HOME
+
 clippy:
     stage: test
+    image: $RUST_IMAGE
     script:
         - rustup component add clippy
         - cargo install gitlab_clippy
@@ -40,41 +40,13 @@ clippy:
         reports:
             codequality: gl-code-quality-report.json
         expire_in: 1 week
-    cache:
-        key:
-            files:
-                - Cargo.lock
-        paths:
-            - target
-            - $CARGO_HOME
 
 test:linux:
     stage: test
+    image: $RUST_IMAGE
     script:
         - cargo test --workspace --exclude spade-cxx --color=always
-    cache:
-        key:
-            files:
-                - Cargo.lock
-        paths:
-            - target
-            - $CARGO_HOME
-
-build:linux:
-  script:
-    - cargo build --workspace --exclude spade-cxx --release
-    - mv target/release/spade spadec
-    - mv target/release/libspade.so .
-  artifacts:
-    name: spade-linux
-    # Artifacts are kept indefinitely for the latest successful pipeline on a
-    # ref. For us, this means we keep at least one compiler for the master
-    # branch. Choose an arbitrary expiry just in case.
-    expire_in: 1 day
-    paths:
-      - spadec
-      - stdlib
-      - libspade.so
+        - cargo doc --no-deps
 
 test:macos-aarch64:
   image: potyarkin/cirrus-run
@@ -92,15 +64,15 @@ output_test:
         APT_PYTHON_VERSION: "3.10"
     stage: test
     script:
-        - apt install -y iverilog
+        - apt update
+        - apt install -y iverilog curl gcc make python$APT_PYTHON_VERSION
+        # pyo3 expects exactly `python3` in the path.
+        - command -v /usr/bin/python3 || ln -s /usr/bin/python$APT_PYTHON_VERSION /usr/bin/python3
+        - curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain none
+        - source ./cargo/env
+        - rustup install 1.64
+        - source ./cargo/env
         - cd output_test && make
-    cache:
-        key:
-            files:
-                - Cargo.lock
-        paths:
-            - target
-            - $CARGO_HOME
 
 coverage:
     image: xd009642/tarpaulin
@@ -117,35 +89,19 @@ coverage:
             coverage_report:
                 coverage_format: cobertura
                 path: cobertura.xml
-    cache:
-        key:
-            files:
-                - Cargo.lock
-        paths:
-            - target
-            - $CARGO_HOME
 
 cargo-fmt:
     stage: test
+    image: $RUST_IMAGE
+    cache: [] # Disable cache since it takes too much space in gitlab
     script:
         - rustup component add rustfmt
         # pass --check to rustfmt to error if un-formatted
         - cargo fmt -- --check
 
-doc:
+typos-and-todos:
     stage: test
-    script:
-        - apt install -y g++
-        - cargo doc --no-deps
-
-grep-todo:
-    stage: test
-    script:
-        # invert exit code of grep while still printing all matches
-        - set -e; find . -name "*.rs" | xargs grep -E "// ?TODO" || exit 0 && exit 1
-
-typos:
-    stage: test
+    cache: [] # Disable cache since the spell checker finds typos in other peoples source code 
     before_script:
         - apt update
         - apt install -y wget
@@ -155,10 +111,21 @@ typos:
         - tar xzf typos.tar.gz ./typos
     script:
         - ./typos
-
+          # invert exit code of grep while still printing all matches
+        - set -e; find . -name "*.rs" | xargs grep -Ei "// *TODO" || exit 0 && exit 1
+    after_script:
+        - >
+            if [ $CI_JOB_STATUS == 'success' ]; then
+              echo 'SUCCESS'
+            else
+              echo 'Running again to give you all output since the test failed'
+              ./typos || echo ""
+              find . -name "*.rs" | xargs grep -Ei "// *TODO" || echo ""
+            fi
 cxx:
     image: thezoq2/trawl
     stage: test
+    cache: [] # Disable cache since it takes too much space in gitlab
     variables:
         APT_PYTHON_VERSION: "3"
     script:
@@ -170,4 +137,3 @@ trawler:
     variables:
         UPSTREAM_BRANCH: $CI_COMMIT_REF_NAME
     trigger: spade-lang/trawler
-

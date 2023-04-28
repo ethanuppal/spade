@@ -88,7 +88,6 @@ pub fn visit_type_expression(
     expr: &ast::TypeExpression,
     symtab: &mut SymbolTable,
 ) -> Result<hir::TypeExpression> {
-    // todo!("Implement visiting type expressions")
     match expr {
         ast::TypeExpression::TypeSpec(spec) => {
             let inner = visit_type_spec(spec, symtab)?;
