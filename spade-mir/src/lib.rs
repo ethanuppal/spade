@@ -11,6 +11,7 @@ mod type_list;
 pub mod types;
 pub mod unit_name;
 mod verilog;
+mod wal;
 
 use derivative::Derivative;
 use itertools::Itertools;

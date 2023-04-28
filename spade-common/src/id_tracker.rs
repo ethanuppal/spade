@@ -12,6 +12,10 @@ macro_rules! def_id_tracker {
                 Self { id: 0 }
             }
 
+            pub fn new_at(id: u64) -> Self {
+                Self { id }
+            }
+
             pub fn next(&mut self) -> u64 {
                 let result = self.id;
                 self.id += 1;

@@ -11,40 +11,10 @@ mod tests {
         num_ext::InfallibleToBigInt,
         num_ext::InfallibleToBigUint,
     };
+    use spade_mir::assert_same_mir;
     use spade_mir::{
-        self,
-        diff::{compare_entity, VarMap},
-        diff_printing::translated_strings,
-        entity, statement,
-        types::Type,
-        unit_name::UnitNameKind,
-        ConstantValue, UnitName,
+        self, entity, statement, types::Type, unit_name::UnitNameKind, ConstantValue, UnitName,
     };
-
-    #[macro_export]
-    macro_rules! assert_same_mir {
-        ($got:expr, $expected:expr) => {
-            let mut var_map = VarMap::new();
-
-            if !compare_entity($got, $expected, &mut var_map) {
-                let (got, expected) = translated_strings($got, $expected, &var_map);
-
-                println!("{}:\n{}", "got".red(), got);
-                println!("{}", "==============================================".red());
-                println!("{}:\n{}", "expected".green(), expected);
-                println!(
-                    "{}",
-                    "==============================================".green()
-                );
-                println!("{}", prettydiff::diff_chars(&got, &expected));
-                println!(
-                    "{}",
-                    "==============================================".yellow()
-                );
-                panic!("Code mismatch")
-            }
-        };
-    }
 
     #[test]
     fn entity_definitions_are_correct() {

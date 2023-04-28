@@ -3,6 +3,7 @@ use itertools::Itertools;
 use nesty::{code, Code};
 
 use num::{BigInt, BigUint, Signed, ToPrimitive, Zero};
+use spade_common::id_tracker::ExprIdTracker;
 use spade_common::location_info::Loc;
 use spade_common::name::NameID;
 use spade_common::num_ext::InfallibleToBigUint;
@@ -16,6 +17,7 @@ use crate::renaming::{make_names_predictable, NameState};
 use crate::type_list::TypeList;
 use crate::unit_name::{InstanceMap, InstanceNameTracker};
 use crate::verilog::{self, assign, logic, size_spec};
+use crate::wal::insert_wal_signals;
 use crate::{enum_util, Binding, ConstantValue, Entity, MirInput, Operator, Statement, ValueName};
 
 pub mod util;
@@ -908,9 +910,10 @@ fn statement_code_and_declaration(
 #[derive(Clone)]
 pub struct Codegenable(pub Entity, pub NameState);
 
-pub fn prepare_codegen(mut entity: Entity) -> Codegenable {
+pub fn prepare_codegen(mut entity: Entity, expr_idtracker: &mut ExprIdTracker) -> Codegenable {
     flatten_aliases(&mut entity);
     let name_state = make_names_predictable(&mut entity);
+    insert_wal_signals(&mut entity, expr_idtracker, &mut None);
 
     Codegenable(entity, name_state)
 }
@@ -1231,7 +1234,7 @@ mod tests {
 
         assert_same_code!(
             &entity_code(
-                &prepare_codegen(input.clone()),
+                &prepare_codegen(input.clone(), &mut ExprIdTracker::new()),
                 &mut InstanceMap::new(),
                 &None
             )
@@ -1278,7 +1281,7 @@ mod tests {
 
         assert_same_code!(
             &entity_code(
-                &prepare_codegen(input.clone()),
+                &prepare_codegen(input.clone(), &mut ExprIdTracker::new()),
                 &mut InstanceMap::new(),
                 &None
             )
@@ -1327,7 +1330,7 @@ mod tests {
 
         assert_same_code!(
             &entity_code(
-                &prepare_codegen(input.clone()),
+                &prepare_codegen(input.clone(), &mut ExprIdTracker::new()),
                 &mut InstanceMap::new(),
                 &None
             )
@@ -1369,7 +1372,7 @@ mod tests {
 
         assert_same_code!(
             &entity_code(
-                &prepare_codegen(input.clone()),
+                &prepare_codegen(input.clone(), &mut ExprIdTracker::new()),
                 &mut InstanceMap::new(),
                 &None
             )
@@ -1413,7 +1416,7 @@ mod tests {
 
         assert_same_code!(
             &entity_code(
-                &prepare_codegen(input.clone()),
+                &prepare_codegen(input.clone(), &mut ExprIdTracker::new()),
                 &mut InstanceMap::new(),
                 &None
             )
@@ -1451,7 +1454,7 @@ mod tests {
 
         assert_same_code!(
             &entity_code(
-                &prepare_codegen(input.clone()),
+                &prepare_codegen(input.clone(), &mut ExprIdTracker::new()),
                 &mut InstanceMap::new(),
                 &None
             )
@@ -1528,7 +1531,7 @@ mod tests {
 
         assert_same_code!(
             &entity_code(
-                &prepare_codegen(input.clone()),
+                &prepare_codegen(input.clone(), &mut ExprIdTracker::new()),
                 &mut InstanceMap::new(),
                 &None
             )
@@ -1571,7 +1574,7 @@ mod tests {
         );
 
         assert_same_code! {
-            &entity_code(&prepare_codegen(input.clone()), &mut InstanceMap::new(), &None).to_string(),
+            &entity_code(&prepare_codegen(input.clone(), &mut ExprIdTracker::new()), &mut InstanceMap::new(), &None).to_string(),
             expected
         }
     }
@@ -1608,7 +1611,11 @@ mod tests {
         );
 
         let mut instance_map = InstanceMap::new();
-        entity_code(&prepare_codegen(input), &mut instance_map, &None);
+        entity_code(
+            &prepare_codegen(input, &mut ExprIdTracker::new()),
+            &mut instance_map,
+            &None,
+        );
 
         let top = instance_map
             .inner

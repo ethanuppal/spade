@@ -137,6 +137,32 @@ macro_rules! entity {
     }
 }
 
+#[macro_export]
+macro_rules! assert_same_mir {
+    ($got:expr, $expected:expr) => {{
+        let mut var_map = spade_mir::diff::VarMap::new();
+
+        if !spade_mir::diff::compare_entity($got, $expected, &mut var_map) {
+            let (got, expected) =
+                spade_mir::diff_printing::translated_strings($got, $expected, &var_map);
+
+            println!("{}:\n{}", "got".red(), got);
+            println!("{}", "==============================================".red());
+            println!("{}:\n{}", "expected".green(), expected);
+            println!(
+                "{}",
+                "==============================================".green()
+            );
+            println!("{}", prettydiff::diff_chars(&got, &expected));
+            println!(
+                "{}",
+                "==============================================".yellow()
+            );
+            panic!("Code mismatch")
+        }
+    }};
+}
+
 #[cfg(test)]
 mod tests {
     use spade_common::name::{NameID, Path};

@@ -6,6 +6,7 @@ use codespan_reporting::term::termcolor::Buffer;
 use compiler_state::{CompilerState, MirContext};
 use logos::Logos;
 use ron::ser::PrettyConfig;
+use spade_ast_lowering::id_tracker::ExprIdTracker;
 use spade_mir::codegen::{prepare_codegen, Codegenable};
 use spade_mir::unit_name::InstanceMap;
 use std::collections::HashMap;
@@ -306,6 +307,7 @@ pub fn compile(
         &frozen_symtab,
         &mut all_types,
         &mut errors,
+        &mut idtracker,
     );
 
     if let Some(outfile) = opts.outfile {
@@ -454,6 +456,7 @@ fn codegen(
     frozen_symtab: &FrozenSymtab,
     all_types: &mut HashMap<TypedExpression, Option<ConcreteType>>,
     errors: &mut ErrorHandler,
+    idtracker: &mut ExprIdTracker,
 ) -> CodegenArtefacts {
     let mut bumpy_mir_entities = vec![];
     let mut flat_mir_entities = vec![];
@@ -471,7 +474,7 @@ fn codegen(
         {
             bumpy_mir_entities.push(mir.clone());
 
-            let codegenable = prepare_codegen(mir);
+            let codegenable = prepare_codegen(mir, idtracker);
 
             let code = spade_mir::codegen::entity_code(
                 &codegenable,
