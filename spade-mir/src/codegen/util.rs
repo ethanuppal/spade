@@ -4,12 +4,32 @@ use spade_common::location_info::Loc;
 use crate::ValueName;
 
 impl ValueName {
-    pub fn var_name(&self) -> String {
+    pub fn unescaped_var_name(&self) -> String {
         match self {
-            ValueName::Named(_, _, _) => format!("{self}"),
-            ValueName::Expr(id) => {
-                format!("_e_{}", id)
+            ValueName::Named(id, s, _) => {
+                if *id == 0 {
+                    format!("{s}")
+                } else {
+                    format!("{s}_n{id}")
+                }
             }
+            ValueName::Expr(id) => format!("_e_{id}"),
+        }
+    }
+
+    // Returns true if this name needs to be escaped using `\ `
+    pub fn needs_escaping(&self) -> bool {
+        match self {
+            ValueName::Named(id, _, _) => *id == 0,
+            ValueName::Expr(_) => false,
+        }
+    }
+
+    pub fn var_name(&self) -> String {
+        if self.needs_escaping() {
+            format!("\\{} ", self.unescaped_var_name())
+        } else {
+            self.unescaped_var_name()
         }
     }
 

@@ -86,7 +86,7 @@ impl std::fmt::Display for ValueName {
         match self {
             ValueName::Named(id, s, _) => {
                 if *id == 0 {
-                    write!(f, "\\{s} ")
+                    write!(f, "{s}")
                 } else {
                     write!(f, "{s}_n{id}")
                 }

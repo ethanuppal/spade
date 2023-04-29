@@ -51,7 +51,7 @@ pub fn insert_wal_signals(
             match s {
                 Statement::Register(reg) => {
                     if let Some(traced_name) = &reg.traced {
-                        let prefix = traced_name.var_name();
+                        let prefix = traced_name.unescaped_var_name();
                         let mut result = vec![
                             // Emit the register itself
                             s.clone(),
@@ -113,24 +113,26 @@ mod test {
     #[test]
     fn traced_register_has_wal_tracing_applied() {
         let mut input = entity!(&["name"]; (
-            "clk", n(0, "clk"), Type::Bool,
+            "clk", n(1, "clk"), Type::Bool,
             "x", n(2, "x"), Type::Bool,
+            "rst", n(3, "rst"), Type::Bool,
         ) -> Type::Bool; {
             (const 0; Type::Bool; ConstantValue::Bool(true));
-            (traced(n(1, "state"))
-                reg n(1, "state"); Type::int(5); clock(n(0, "clk")); reset (n(1, "rst"), e(0)); n(2, "x"));
+            (traced(n(0, "state"))
+                reg n(0, "state"); Type::int(5); clock(n(1, "clk")); reset (n(3, "rst"), e(0)); n(2, "x"));
         } => n(2, "x"));
 
         let expected = entity!(&["name"]; (
             "clk", n(0, "clk"), Type::Bool,
             "x", n(2, "x"), Type::Bool,
+            "rst", n(3, "rst"), Type::Bool,
         ) -> Type::Bool; {
             (const 0; Type::Bool; ConstantValue::Bool(true));
             (traced(n(1, "state"))
-                reg n(1, "state"); Type::int(5); clock(n(0, "clk")); reset (n(1, "rst"), e(0)); n(2, "x"));
-            (n(10, "state_n1__wal_fsm_state"); Type::int(5); Alias; n(1, "state"));
-            (n(11, "state_n1__wal_fsm_clk"); Type::Bool; Alias; n(0, "clk"));
-            (n(12, "state_n1__wal_fsm_rst"); Type::Bool; Alias; n(1, "rst"));
+                reg n(1, "state"); Type::int(5); clock(n(0, "clk")); reset (n(3, "rst"), e(0)); n(2, "x"));
+            (n(10, "state__wal_fsm_state"); Type::int(5); Alias; n(1, "state"));
+            (n(11, "state__wal_fsm_clk"); Type::Bool; Alias; n(0, "clk"));
+            (n(12, "state__wal_fsm_rst"); Type::Bool; Alias; n(3, "rst"));
         } => n(2, "x"));
 
         insert_wal_signals(
