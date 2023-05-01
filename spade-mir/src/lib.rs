@@ -47,6 +47,33 @@ impl std::fmt::Display for ConstantValue {
     }
 }
 
+#[derive(Clone, PartialEq, Debug, Hash, Eq, serde::Serialize, serde::Deserialize)]
+pub enum ValueNameSource {
+    Name(NameID),
+    Expr(u64),
+}
+
+impl From<NameID> for ValueNameSource {
+    fn from(value: NameID) -> Self {
+        (&value).into()
+    }
+}
+
+impl From<&NameID> for ValueNameSource {
+    fn from(value: &NameID) -> Self {
+        Self::Name(value.clone())
+    }
+}
+
+impl From<&ValueName> for ValueNameSource {
+    fn from(value: &ValueName) -> Self {
+        match value {
+            ValueName::Named(_, _, source) => source.clone(),
+            ValueName::Expr(id) => Self::Expr(*id),
+        }
+    }
+}
+
 /// A name of a value. Can either come from the NameID of the underlying
 /// variable, or the id of the underlying expression
 #[derive(Clone, PartialEq, Debug, Hash, Eq, serde::Serialize, serde::Deserialize)]
@@ -60,7 +87,7 @@ pub enum ValueName {
         String,
         // The original name ID from which this name originates
         // NOTE: Not checked by MIR diff
-        NameID,
+        ValueNameSource,
     ),
     // FIXME: Consider renaming this since it's now used for both patterns and expressions
     /// An un-named expression. In the resulting verilog, this is called _e_$id
@@ -76,7 +103,7 @@ impl ValueName {
         Self::Named(
             id,
             name.clone(),
-            NameID(id, Path::from_strs(&vec![name.as_str()])),
+            NameID(id, Path::from_strs(&vec![name.as_str()])).into(),
         )
     }
 }

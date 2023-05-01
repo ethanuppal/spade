@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
 use spade_common::name::NameID;
 
-use crate::{Binding, Entity, MirInput, Register, ValueName};
+use crate::{Binding, Entity, MirInput, Register, ValueName, ValueNameSource};
 
 /// Mapping from verilog name back to the corresponding NameID
 #[derive(Serialize, Deserialize, Debug)]
@@ -92,7 +92,7 @@ impl NameState {
             .name_map
             .iter()
             .map(|(from, to)| match from {
-                ValueName::Named(_, _, name_id) => {
+                ValueName::Named(_, _, ValueNameSource::Name(name_id)) => {
                     vec![
                         (to.var_name(), NameSource::ForwardName(name_id.clone())),
                         (
@@ -101,7 +101,7 @@ impl NameState {
                         ),
                     ]
                 }
-                ValueName::Expr(id) => {
+                ValueName::Named(_, _, ValueNameSource::Expr(id)) | ValueName::Expr(id) => {
                     vec![
                         (to.var_name(), NameSource::ForwardExpr(*id)),
                         (to.backward_var_name(), NameSource::ForwardExpr(*id)),

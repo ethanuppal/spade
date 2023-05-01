@@ -26,6 +26,7 @@ use hir::symbol_table::{FrozenSymtab, PatternableKind};
 use hir::{ItemList, Pattern, PatternArgument, UnitKind, UnitName};
 use mir::types::Type as MirType;
 use mir::MirInput;
+use mir::ValueNameSource;
 use mir::{ConstantValue, ValueName};
 use monomorphisation::MonoState;
 pub use name_map::NameSourceMap;
@@ -170,7 +171,7 @@ pub trait NameIDExt {
 impl NameIDExt for NameID {
     fn value_name(&self) -> mir::ValueName {
         let mangled = format!("{}", self.1.tail());
-        mir::ValueName::Named(self.0, mangled, self.clone())
+        mir::ValueName::Named(self.0, mangled, ValueNameSource::Name(self.clone()))
     }
 }
 

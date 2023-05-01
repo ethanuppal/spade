@@ -1,7 +1,4 @@
-use spade_common::{
-    id_tracker::{ExprIdTracker, NameIdTracker},
-    name::{NameID, Path},
-};
+use spade_common::id_tracker::{ExprIdTracker, NameIdTracker};
 
 use crate::{types::Type, Binding, ConstantValue, Entity, Operator, Statement, ValueName};
 
@@ -12,19 +9,13 @@ pub fn wal_alias(
     ty: &Type,
     idtracker: &mut Option<&mut NameIdTracker>,
 ) -> Statement {
-    let source_nameid = match source {
-        ValueName::Named(_, _, source) => source.clone(),
-        // TODO: This is a horrible hack, but we are now generating a name_id from
-        // an expression which doesn't have a source
-        ValueName::Expr(_) => NameID(0, Path::from_strs(&["__unknown__"])),
-    };
     // Because we know that traced_name is now unique, we also
     // know that any signals we generate with that name will be unique.
     // Therefore, we are free to generate `n(0, <name>_...)`
     let new_name = ValueName::Named(
         idtracker.as_mut().map(|t| t.next()).unwrap_or_default(),
         format!("{prefix}{suffix}"),
-        source_nameid.clone(),
+        source.into(),
     );
     Statement::Binding(Binding {
         name: new_name,
