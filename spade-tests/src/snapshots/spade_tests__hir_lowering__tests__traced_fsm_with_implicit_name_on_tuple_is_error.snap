@@ -1,0 +1,24 @@
+---
+source: spade-tests/src/hir_lowering.rs
+---
+entity name(clk: clock, x: bool) -> bool {
+    #[fsm]
+    reg(clk) (x, y) = x;
+    x
+}
+
+
+error: #[fsm] without explicit name on non-name pattern
+  ┌─ testinput:2:5
+  │
+2 │     #[fsm]
+  │     ^^^^^^
+3 │     reg(clk) (x, y) = x;
+  │              ------ This is a pattern
+  │
+  = Consider specifying the name of the s ignal containing the state
+  │
+2 │     #[fsm(<name>)]
+  │     ~~~~~~~~~~~~~~
+
+

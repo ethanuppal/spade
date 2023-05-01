@@ -1493,12 +1493,16 @@ impl<'a> Parser<'a> {
         match start.inner.0.as_str() {
             "no_mangle" => Ok(Attribute::NoMangle),
             "fsm" => {
-                let (state, _) = self.surrounded(
-                    &TokenKind::OpenParen,
-                    Self::identifier,
-                    &TokenKind::CloseParen,
-                )?;
-                Ok(Attribute::Fsm { state })
+                if self.peek_kind(&TokenKind::OpenParen)? {
+                    let (state, _) = self.surrounded(
+                        &TokenKind::OpenParen,
+                        Self::identifier,
+                        &TokenKind::CloseParen,
+                    )?;
+                    Ok(Attribute::Fsm { state: Some(state) })
+                } else {
+                    Ok(Attribute::Fsm { state: None })
+                }
             }
             other => Err(
                 Diagnostic::error(&start, format!("Unknown attribute '{other}'"))
@@ -2770,7 +2774,7 @@ mod tests {
                                 value: Expression::BoolLiteral(false).nowhere(),
                                 value_type: None,
                                 attributes: AttributeList::from_vec(vec![Attribute::Fsm {
-                                    state: ast_ident("state"),
+                                    state: Some(ast_ident("state")),
                                 }
                                 .nowhere()]),
                             }

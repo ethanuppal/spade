@@ -17,7 +17,7 @@ use std::collections::{HashMap, HashSet};
 use comptime::ComptimeCondExt;
 use hir::param_util::ArgumentError;
 use hir::symbol_table::DeclarationState;
-use hir::{ExecutableItem, TraitName};
+use hir::{ExecutableItem, PatternKind, TraitName};
 use spade_ast as ast;
 use spade_common::id_tracker::{ExprIdTracker, ImplIdTracker};
 use spade_common::location_info::{Loc, WithLocation};
@@ -1223,18 +1223,31 @@ fn visit_register(reg: &Loc<ast::Register>, ctx: &mut Context) -> Result<Loc<hir
         None
     };
 
-    let attributes = reg.attributes.lower(&mut |attr| {
-        match &attr.inner {
-            ast::Attribute::Fsm { state } => {
-                // First: ensure that the specified name is present in the symtab at all
-                let name_id = ctx
-                    .symtab
-                    .lookup_variable(&Path(vec![state.clone()]).at_loc(state))?;
+    let attributes = reg.attributes.lower(&mut |attr| match &attr.inner {
+        ast::Attribute::Fsm { state } => {
+            let name_id = if let Some(state) = state {
+                ctx.symtab
+                    .lookup_variable(&Path(vec![state.clone()]).at_loc(state))?
+            } else {
+                if let PatternKind::Name { name, .. } = &pattern.inner.kind {
+                    name.inner.clone()
+                } else {
+                    return Err(Diagnostic::error(
+                        attr,
+                        "#[fsm] without explicit name on non-name pattern",
+                    )
+                    .secondary_label(&pattern, "This is a pattern")
+                    .span_suggest(
+                        "Consider specifying the name of the s ignal containing the state",
+                        attr,
+                        "#[fsm(<name>)]",
+                    ));
+                }
+            };
 
-                Ok(Some(hir::Attribute::Fsm { state: name_id }))
-            }
-            _ => Err(attr.report_unused("a register").into()),
+            Ok(Some(hir::Attribute::Fsm { state: name_id }))
         }
+        _ => Err(attr.report_unused("a register").into()),
     })?;
 
     Ok(hir::Register {

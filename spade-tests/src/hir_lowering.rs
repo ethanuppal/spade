@@ -2250,6 +2250,36 @@ mod tests {
 
         assert_same_mir!(&build_entity!(code), &expected);
     }
+
+    #[test]
+    fn traced_fsm_with_implicit_name_is_traced() {
+        let code = r#"
+        entity name(clk: clock, x: bool) -> bool {
+            #[fsm]
+            reg(clk) state = x;
+            x
+        }
+        "#;
+
+        let expected = entity!(&["name"]; (
+            "clk", n(0, "clk"), Type::Bool,
+            "x", n(2, "x"), Type::Bool,
+        ) -> Type::Bool; {
+            (traced(n(1, "state")) reg n(1, "state"); Type::Bool; clock(n(0, "clk")); n(2, "x"));
+        } => n(2, "x"));
+
+        assert_same_mir!(&build_entity!(code), &expected);
+    }
+
+    snapshot_error! { traced_fsm_with_implicit_name_on_tuple_is_error,
+        r#"
+        entity name(clk: clock, x: bool) -> bool {
+            #[fsm]
+            reg(clk) (x, y) = x;
+            x
+        }
+        "#
+    }
 }
 
 #[cfg(test)]

@@ -302,7 +302,7 @@ impl TypeParam {
 #[derive(PartialEq, Debug, Clone)]
 pub enum Attribute {
     NoMangle,
-    Fsm { state: Loc<Identifier> },
+    Fsm { state: Option<Loc<Identifier>> },
 }
 
 impl Attribute {
