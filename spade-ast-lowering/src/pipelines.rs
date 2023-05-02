@@ -83,7 +83,7 @@ fn visit_pipeline_statement(
             pipeline_ctx.stages[*current_stage] = Some(name.clone());
         }
         ast::Statement::Declaration(_) => {}
-        ast::Statement::Binding(_, _, _) => {}
+        ast::Statement::Binding(_) => {}
         ast::Statement::PipelineRegMarker(count) => {
             for _ in 0..*count {
                 *current_stage += 1;
@@ -207,7 +207,7 @@ mod pipeline_visiting {
                 ast::Expression::Block(Box::new(ast::Block {
                     statements: vec![
                         ast::Statement::PipelineRegMarker(1).nowhere(),
-                        ast::Statement::Binding(
+                        ast::Statement::binding(
                             ast::Pattern::name("a"),
                             None,
                             ast::Expression::IntLiteral(ast::IntLiteral::Signed(0.to_bigint()))
@@ -215,7 +215,7 @@ mod pipeline_visiting {
                         )
                         .nowhere(),
                         ast::Statement::PipelineRegMarker(1).nowhere(),
-                        ast::Statement::Binding(
+                        ast::Statement::binding(
                             ast::Pattern::name("b"),
                             None,
                             ast::Expression::PipelineReference {
@@ -304,7 +304,7 @@ mod pipeline_visiting {
                     statements: vec![
                         ast::Statement::PipelineRegMarker(1).nowhere(),
                         ast::Statement::Label(ast_ident("s")).nowhere(),
-                        ast::Statement::Binding(
+                        ast::Statement::binding(
                             ast::Pattern::name("a"),
                             None,
                             ast::Expression::IntLiteral(ast::IntLiteral::Signed(0.to_bigint()))
@@ -312,7 +312,7 @@ mod pipeline_visiting {
                         )
                         .nowhere(),
                         ast::Statement::PipelineRegMarker(1).nowhere(),
-                        ast::Statement::Binding(
+                        ast::Statement::binding(
                             ast::Pattern::name("b"),
                             None,
                             ast::Expression::PipelineReference {

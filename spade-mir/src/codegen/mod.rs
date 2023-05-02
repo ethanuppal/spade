@@ -121,6 +121,17 @@ fn statement_declaration(statement: &Statement, code: &Option<CodeBundle>) -> Co
         Statement::Set { .. } => {
             code! {}
         }
+        Statement::WalTrace(_, _) => {
+            // NOTE: Wal tracing does not generate any code here. This attribute should
+            // have been removed from the mir list at this point. We'll give a warning here
+            // but there is no point in failing here because of it because it won't affect
+            // the correctness of the generated code
+            println!(
+                "INTERNAL WARNING({}): Encountered a WalTrace mir node during codegen",
+                file!()
+            );
+            code! {}
+        }
     }
 }
 
@@ -881,6 +892,17 @@ fn statement_code(statement: &Statement, ctx: &mut Context) -> Code {
             code! {
                 [0] assignment
             }
+        }
+        Statement::WalTrace(_, _) => {
+            // NOTE: Wal tracing does not generate any code here. This attribute should
+            // have been removed from the mir list at this point. We'll give a warning here
+            // but there is no point in failing here because of it because it won't affect
+            // the correctness of the generated code
+            println!(
+                "INTERNAL WARNING({}): Encountered a WalTrace mir node during codegen",
+                file!()
+            );
+            code! {}
         }
     }
 }

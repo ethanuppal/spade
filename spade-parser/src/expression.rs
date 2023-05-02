@@ -787,7 +787,7 @@ mod test {
             "#;
 
         let expected = Block {
-            statements: vec![Statement::Binding(
+            statements: vec![Statement::binding(
                 Pattern::name("a"),
                 None,
                 Expression::int_literal(0).nowhere(),
@@ -810,7 +810,7 @@ mod test {
             "#;
 
         let expected = Expression::Block(Box::new(Block {
-            statements: vec![Statement::Binding(
+            statements: vec![Statement::binding(
                 Pattern::name("a"),
                 None,
                 Expression::int_literal(0).nowhere(),

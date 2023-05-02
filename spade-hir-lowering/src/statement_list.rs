@@ -17,7 +17,8 @@ impl StatementList {
         }
     }
 
-    /// Pushes a statemnt which has no associated name or id. Currently used for asserts
+    /// Pushes a statemnt which has no associated name or id. Currently used for asserts and
+    /// wal_tracing statements
     pub fn push_anonymous(&mut self, stmt: Statement) {
         self.stmts.push(stmt)
     }
@@ -30,6 +31,7 @@ impl StatementList {
             Statement::Constant(id, _, _) => Some(ValueName::Expr(*id)),
             Statement::Assert(_) => None,
             Statement::Set { .. } => None,
+            Statement::WalTrace(_, _) => None,
         };
         self.stmts.push(stmt);
         if let Some(name) = name {
@@ -52,6 +54,7 @@ impl StatementList {
             Statement::Constant(id, _, _) => Some(ValueName::Expr(*id)),
             Statement::Assert(_) => None,
             Statement::Set { .. } => None,
+            Statement::WalTrace(_, _) => None,
         };
         self.stmts.push(stmt);
         if let Some(name) = name {

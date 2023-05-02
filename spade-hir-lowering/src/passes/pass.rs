@@ -1,5 +1,5 @@
 use spade_common::location_info::Loc;
-use spade_hir::{ExprKind, Expression, Register, Statement, Unit};
+use spade_hir::{Binding, ExprKind, Expression, Register, Statement, Unit};
 
 use crate::Result;
 
@@ -73,7 +73,12 @@ impl Passable for Loc<Expression> {
             ExprKind::Block(block) => {
                 for statement in &mut block.statements {
                     match &mut statement.inner {
-                        Statement::Binding(_, _, expr) => expr.apply(pass)?,
+                        Statement::Binding(Binding {
+                            pattern: _,
+                            ty: _,
+                            value,
+                            wal_trace: _,
+                        }) => value.apply(pass)?,
                         Statement::Register(reg) => {
                             let Register {
                                 pattern: _,

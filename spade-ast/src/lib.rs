@@ -266,10 +266,18 @@ pub struct Block {
 impl WithLocation for Block {}
 
 #[derive(PartialEq, Debug, Clone)]
+pub struct Binding {
+    pub pattern: Loc<Pattern>,
+    pub ty: Option<Loc<TypeSpec>>,
+    pub value: Loc<Expression>,
+    pub attrs: AttributeList,
+}
+
+#[derive(PartialEq, Debug, Clone)]
 pub enum Statement {
     Label(Loc<Identifier>),
     Declaration(Vec<Loc<Identifier>>),
-    Binding(Loc<Pattern>, Option<Loc<TypeSpec>>, Loc<Expression>),
+    Binding(Binding),
     PipelineRegMarker(usize),
     Register(Loc<Register>),
     /// Sets the value of the target expression, which must be a Backward port to
@@ -282,6 +290,22 @@ pub enum Statement {
     Comptime(ComptimeCondition<Vec<Loc<Statement>>>),
 }
 impl WithLocation for Statement {}
+
+impl Statement {
+    // Creates a binding from name, type and values without any attributes.
+    pub fn binding(
+        pattern: Loc<Pattern>,
+        ty: Option<Loc<TypeSpec>>,
+        value: Loc<Expression>,
+    ) -> Self {
+        Self::Binding(Binding {
+            pattern,
+            ty,
+            value,
+            attrs: AttributeList::empty(),
+        })
+    }
+}
 
 /// A generic type parameter
 #[derive(PartialEq, Debug, Clone)]
@@ -304,6 +328,7 @@ pub enum Attribute {
     NoMangle,
     Fsm { state: Option<Loc<Identifier>> },
     WalSuffix { suffix: Identifier },
+    WalTrace,
 }
 
 impl Attribute {
@@ -312,6 +337,7 @@ impl Attribute {
             Attribute::NoMangle => "no_mangle",
             Attribute::Fsm { state: _ } => "fsm",
             Attribute::WalSuffix { suffix: _ } => "wal_suffix",
+            Attribute::WalTrace => "wal_trace",
         }
     }
 }

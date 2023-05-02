@@ -13,11 +13,11 @@ use num::{BigInt, ToPrimitive, Zero};
 use tracing::{event, Level};
 
 use spade_ast::{
-    ArgumentList, ArgumentPattern, Attribute, AttributeList, Block, CallKind, ComptimeConfig, Enum,
-    Expression, FunctionDecl, ImplBlock, IntLiteral, Item, Module, ModuleBody, NamedArgument,
-    ParameterList, Pattern, PipelineStageReference, Register, Statement, Struct, TraitDef,
-    TypeDeclKind, TypeDeclaration, TypeExpression, TypeParam, TypeSpec, Unit, UnitKind,
-    UseStatement,
+    ArgumentList, ArgumentPattern, Attribute, AttributeList, Binding, Block, CallKind,
+    ComptimeConfig, Enum, Expression, FunctionDecl, ImplBlock, IntLiteral, Item, Module,
+    ModuleBody, NamedArgument, ParameterList, Pattern, PipelineStageReference, Register, Statement,
+    Struct, TraitDef, TypeDeclKind, TypeDeclaration, TypeExpression, TypeParam, TypeSpec, Unit,
+    UnitKind, UseStatement,
 };
 use spade_common::location_info::{lspan, AsLabel, FullSpan, HasCodespan, Loc, WithLocation};
 use spade_common::name::{Identifier, Path};
@@ -689,12 +689,11 @@ impl<'a> Parser<'a> {
 
     #[trace_parser]
     pub fn binding(&mut self, attrs: &AttributeList) -> Result<Option<Loc<Statement>>> {
-        let start = peek_for!(self, &TokenKind::Let);
-        self.disallow_attributes(&attrs, &start)?;
+        peek_for!(self, &TokenKind::Let);
 
         let (pattern, start_span) = self.pattern()?.separate();
 
-        let t = if self.peek_and_eat(&TokenKind::Colon)?.is_some() {
+        let ty = if self.peek_and_eat(&TokenKind::Colon)?.is_some() {
             Some(self.type_spec()?)
         } else {
             None
@@ -703,11 +702,15 @@ impl<'a> Parser<'a> {
         self.eat(&TokenKind::Assignment)?;
         let (value, end_span) = self.expression()?.separate();
 
-        Ok(Some(Statement::Binding(pattern, t, value).between(
-            self.file_id,
-            &start_span,
-            &end_span,
-        )))
+        Ok(Some(
+            Statement::Binding(Binding {
+                pattern,
+                ty,
+                value,
+                attrs: attrs.clone(),
+            })
+            .between(self.file_id, &start_span, &end_span),
+        ))
     }
 
     #[trace_parser]
@@ -1504,6 +1507,17 @@ impl<'a> Parser<'a> {
                     Ok(Attribute::Fsm { state: None })
                 }
             }
+            "wal_trace" => Ok(Attribute::WalTrace),
+            "wal_suffix" => {
+                let (suffix, _) = self.surrounded(
+                    &TokenKind::OpenParen,
+                    Self::identifier,
+                    &TokenKind::CloseParen,
+                )?;
+                Ok(Attribute::WalSuffix {
+                    suffix: suffix.inner,
+                })
+            }
             other => Err(
                 Diagnostic::error(&start, format!("Unknown attribute '{other}'"))
                     .primary_label("Unrecognised attribute")
@@ -1989,7 +2003,7 @@ mod tests {
 
     #[test]
     fn bindings_work() {
-        let expected = Statement::Binding(
+        let expected = Statement::binding(
             Pattern::name("test"),
             None,
             Expression::int_literal(123).nowhere(),
@@ -2024,7 +2038,7 @@ mod tests {
 
     #[test]
     fn bindings_with_types_work() {
-        let expected = Statement::Binding(
+        let expected = Statement::binding(
             Pattern::name("test"),
             Some(TypeSpec::Named(ast_path("bool"), None).nowhere()),
             Expression::int_literal(123).nowhere(),
@@ -2049,13 +2063,13 @@ mod tests {
             body: Some(
                 Expression::Block(Box::new(Block {
                     statements: vec![
-                        Statement::Binding(
+                        Statement::binding(
                             Pattern::name("test"),
                             None,
                             Expression::int_literal(123).nowhere(),
                         )
                         .nowhere(),
-                        Statement::Binding(
+                        Statement::binding(
                             Pattern::name("test2"),
                             None,
                             Expression::int_literal(123).nowhere(),
@@ -2914,7 +2928,7 @@ mod tests {
                     statements: vec![
                         Statement::Label(ast_ident("s0")).nowhere(),
                         Statement::PipelineRegMarker(1).nowhere(),
-                        Statement::Binding(
+                        Statement::binding(
                             Pattern::name("b"),
                             None,
                             Expression::int_literal(0).nowhere(),
@@ -2922,7 +2936,7 @@ mod tests {
                         .nowhere(),
                         Statement::PipelineRegMarker(1).nowhere(),
                         Statement::Label(ast_ident("s2")).nowhere(),
-                        Statement::Binding(
+                        Statement::binding(
                             Pattern::name("c"),
                             None,
                             Expression::int_literal(0).nowhere(),
@@ -3341,7 +3355,7 @@ mod tests {
 
         let expected = Statement::Comptime(ComptimeCondition {
             condition: (ast_path("A"), ComptimeCondOp::Eq, 1.to_bigint().nowhere()),
-            on_true: Box::new(vec![Statement::Binding(
+            on_true: Box::new(vec![Statement::binding(
                 Pattern::name("a"),
                 None,
                 Expression::int_literal(0).nowhere(),
@@ -3365,13 +3379,13 @@ mod tests {
 
         let expected = Statement::Comptime(ComptimeCondition {
             condition: (ast_path("A"), ComptimeCondOp::Eq, 1.to_bigint().nowhere()),
-            on_true: Box::new(vec![Statement::Binding(
+            on_true: Box::new(vec![Statement::binding(
                 Pattern::name("a"),
                 None,
                 Expression::int_literal(0).nowhere(),
             )
             .nowhere()]),
-            on_false: Some(Box::new(vec![Statement::Binding(
+            on_false: Some(Box::new(vec![Statement::binding(
                 Pattern::name("b"),
                 None,
                 Expression::int_literal(0).nowhere(),

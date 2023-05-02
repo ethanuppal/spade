@@ -159,6 +159,10 @@ where
             let target = translate_val_name(target, lhs_trans, rhs_trans);
             format!("set {target} = {value}")
         }
+        Statement::WalTrace(name, suffix) => {
+            let name = translate_val_name(name, lhs_trans, rhs_trans);
+            format!("wal_trace ({name}, '{suffix}')")
+        }
     }
 }
 

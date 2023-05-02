@@ -359,13 +359,15 @@ pub fn re_visit_type_declaration(
                 hir::ExecutableItem::StructInstance,
             );
 
+            let mut wal_suffix = None;
             let attributes = s.attributes.lower(&mut |attr| match &attr.inner {
-                ast::Attribute::WalSuffix { suffix } => Ok(Some(hir::Attribute::WalSuffix {
-                    suffix: suffix.clone(),
-                })),
-                ast::Attribute::NoMangle | ast::Attribute::Fsm { .. } => {
-                    Err(attr.report_unused("struct"))
+                ast::Attribute::WalSuffix { suffix } => {
+                    wal_suffix = Some(suffix.clone().at_loc(attr));
+                    Ok(None)
                 }
+                ast::Attribute::NoMangle
+                | ast::Attribute::Fsm { .. }
+                | ast::Attribute::WalTrace => Err(attr.report_unused("struct")),
             })?;
 
             // We don't do any special processing of structs here
@@ -374,6 +376,7 @@ pub fn re_visit_type_declaration(
                     members,
                     is_port: s.is_port(),
                     attributes,
+                    wal_suffix,
                 }
                 .at_loc(s),
             )

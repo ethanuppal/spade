@@ -27,7 +27,7 @@ use spade_hir as hir;
 use crate::attributes::AttributeListExt;
 use crate::pipelines::maybe_perform_pipelining_tasks;
 use crate::types::IsPort;
-use ast::{ParameterList, UnitKind};
+use ast::{Binding, ParameterList, UnitKind};
 use hir::expression::BinaryOperator;
 use hir::symbol_table::{LookupError, SymbolTable, Thing, TypeSymbol};
 use hir::UnitHead;
@@ -828,18 +828,40 @@ fn visit_statement(s: &Loc<ast::Statement>, ctx: &mut Context) -> Result<Vec<Loc
 
             Ok(vec![hir::Statement::Declaration(names).at_loc(&s)])
         }
-        ast::Statement::Binding(pattern, t, expr) => {
-            let hir_type = if let Some(t) = t {
+        ast::Statement::Binding(Binding {
+            pattern,
+            ty,
+            value,
+            attrs,
+        }) => {
+            let hir_type = if let Some(t) = ty {
                 Some(visit_type_spec(t, &mut ctx.symtab)?)
             } else {
                 None
             };
 
-            let expr = expr.try_visit(visit_expression, ctx)?;
+            let value = value.try_visit(visit_expression, ctx)?;
 
-            let pat = pattern.try_visit(visit_pattern, ctx)?;
+            let pattern = pattern.try_visit(visit_pattern, ctx)?;
 
-            Ok(vec![hir::Statement::Binding(pat, hir_type, expr).at_loc(s)])
+            let mut wal_trace = None;
+            attrs.lower(&mut |attr| match attr.inner {
+                ast::Attribute::WalTrace => {
+                    wal_trace = Some(attr.loc());
+                    Ok(None)
+                }
+                ast::Attribute::NoMangle
+                | ast::Attribute::Fsm { .. }
+                | ast::Attribute::WalSuffix { .. } => Err(attr.report_unused("let binding")),
+            })?;
+
+            Ok(vec![hir::Statement::Binding(hir::Binding {
+                pattern,
+                ty: hir_type,
+                value,
+                wal_trace,
+            })
+            .at_loc(s)])
         }
         ast::Statement::Register(inner) => {
             let (result, span) = visit_register(&inner, ctx)?.separate_loc();
@@ -1330,7 +1352,7 @@ mod entity_visiting {
             output_type: None,
             body: Some(
                 ast::Expression::Block(Box::new(ast::Block {
-                    statements: vec![ast::Statement::Binding(
+                    statements: vec![ast::Statement::binding(
                         ast::Pattern::name("var"),
                         Some(ast::TypeSpec::Unit(().nowhere()).nowhere()),
                         ast::Expression::int_literal(0).nowhere(),
@@ -1357,7 +1379,7 @@ mod entity_visiting {
             },
             inputs: vec![((name_id(1, "a"), hir::TypeSpec::unit().nowhere()))],
             body: hir::ExprKind::Block(Box::new(hir::Block {
-                statements: vec![hir::Statement::Binding(
+                statements: vec![hir::Statement::binding(
                     hir::PatternKind::name(name_id(2, "var")).idless().nowhere(),
                     Some(hir::TypeSpec::unit().nowhere()),
                     hir::ExprKind::int_literal(0).idless().nowhere(),
@@ -1399,7 +1421,7 @@ mod entity_visiting {
         //     inputs: vec![(ast_ident("a"), ast::Type::UnitType.nowhere())],
         //     output_type: ast::Type::UnitType.nowhere(),
         //     body: ast::Expression::Block(Box::new(ast::Block {
-        //         statements: vec![ast::Statement::Binding(
+        //         statements: vec![ast::Statement::binding(
         //             ast_ident("var"),
         //             Some(ast::Type::UnitType.nowhere()),
         //             ast::Expression::IntLiteral(0).nowhere(),
@@ -1429,7 +1451,7 @@ mod entity_visiting {
         //         ],
         //     },
         //     body: hir::ExprKind::Block(Box::new(hir::Block {
-        //         statements: vec![hir::Statement::Binding(
+        //         statements: vec![hir::Statement::binding(
         //             hir_ident("var"),
         //             Some(hir::Type::Unit.nowhere()),
         //             hir::ExprKind::IntLiteral(0).idless().nowhere(),
@@ -1474,14 +1496,14 @@ mod statement_visiting {
             pipeline_ctx: None,
         };
 
-        let input = ast::Statement::Binding(
+        let input = ast::Statement::binding(
             ast::Pattern::name("a"),
             Some(ast::TypeSpec::Unit(().nowhere()).nowhere()),
             ast::Expression::int_literal(0).nowhere(),
         )
         .nowhere();
 
-        let expected = hir::Statement::Binding(
+        let expected = hir::Statement::binding(
             hir::PatternKind::name(name_id(0, "a")).idless().nowhere(),
             Some(hir::TypeSpec::unit().nowhere()),
             hir::ExprKind::int_literal(0).idless().nowhere(),
@@ -1758,7 +1780,7 @@ mod expression_visiting {
     #[test]
     fn blocks_work() {
         let input = ast::Expression::Block(Box::new(ast::Block {
-            statements: vec![ast::Statement::Binding(
+            statements: vec![ast::Statement::binding(
                 ast::Pattern::name("a"),
                 None,
                 ast::Expression::int_literal(0).nowhere(),
@@ -1767,7 +1789,7 @@ mod expression_visiting {
             result: ast::Expression::int_literal(0).nowhere(),
         }));
         let expected = hir::ExprKind::Block(Box::new(hir::Block {
-            statements: vec![hir::Statement::Binding(
+            statements: vec![hir::Statement::binding(
                 hir::PatternKind::name(name_id(0, "a")).idless().nowhere(),
                 None,
                 hir::ExprKind::int_literal(0).idless().nowhere(),

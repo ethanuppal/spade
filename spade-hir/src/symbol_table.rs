@@ -250,6 +250,16 @@ impl TypeDeclKind {
     pub fn struct_port() -> Self {
         TypeDeclKind::Struct { is_port: true }
     }
+
+    pub fn name(&self) -> String {
+        match self {
+            TypeDeclKind::Struct { is_port } => {
+                format!("struct{}", if *is_port { " port" } else { "" })
+            }
+            TypeDeclKind::Enum => "enum".to_string(),
+            TypeDeclKind::Primitive { .. } => "primitive".to_string(),
+        }
+    }
 }
 
 /// A previously declared type symbol

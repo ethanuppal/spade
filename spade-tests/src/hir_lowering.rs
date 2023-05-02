@@ -2280,6 +2280,69 @@ mod tests {
         }
         "#
     }
+
+    #[test]
+    fn wal_traced_struct_is_traced() {
+        let code = r#"
+            #[wal_suffix(__wal_suffix__)]
+            struct Test {
+                a: int<8>,
+                b: int<4>
+            }
+
+            entity main(x: Test) -> Test {
+                #[wal_trace]
+                let y = x;
+                x
+            }
+        "#;
+
+        let ty = Type::Tuple(vec![Type::int(8), Type::int(4)]);
+
+        let expected = entity!(&["main"]; (
+            "x", n(0, "x"), ty.clone(),
+        ) -> ty.clone(); {
+            (n(1, "y"); ty; Alias; n(0, "x"));
+            (wal_trace(n(1, "y"), "__wal_suffix__"))
+        } => n(0, "x"));
+
+        assert_same_mir!(&build_entity!(code), &expected);
+    }
+
+    snapshot_error! {
+        wal_trace_on_non_struct_is_error,
+        r#"
+            entity main(x: (int<8>, int<4>)) -> (int<8>, int<4>) {
+                #[wal_trace]
+                let y = x;
+                x
+            }
+        "#
+    }
+
+    snapshot_error! {
+        wal_trace_on_enum_is_error,
+        r#"
+            enum T { }
+            entity main(x: T) -> T {
+                #[wal_trace]
+                let y = x;
+                x
+            }
+        "#
+    }
+
+    snapshot_error! {
+        wal_trace_on_non_wal_suffix_is_error,
+        r#"
+            struct T { }
+            entity main(x: T) -> T {
+                #[wal_trace]
+                let y = x;
+                x
+            }
+        "#
+    }
 }
 
 #[cfg(test)]

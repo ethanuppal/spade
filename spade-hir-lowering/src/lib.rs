@@ -20,6 +20,7 @@ use hir::expression::CallKind;
 use hir::expression::LocExprExt;
 use hir::Attribute;
 use hir::Parameter;
+use hir::TypeDeclKind;
 use local_impl::local_impl;
 
 use hir::param_util::{match_args_with_params, Argument};
@@ -37,10 +38,12 @@ use pipelines::lower_pipeline;
 use spade_common::id_tracker::ExprIdTracker;
 use spade_common::location_info::WithLocation;
 use spade_common::name::{Identifier, Path};
+use spade_diagnostics::diag_anyhow;
 use spade_diagnostics::{diag_assert, diag_bail, DiagHandler, Diagnostic};
 use spade_typeinference::equation::TypeVar;
 use spade_typeinference::equation::TypedExpression;
 use spade_typeinference::GenericListToken;
+use spade_typeinference::HasType;
 use statement_list::StatementList;
 use substitution::Substitutions;
 use thiserror::Error;
@@ -542,13 +545,82 @@ impl PatternLocal for Loc<Pattern> {
     }
 }
 
+pub fn lower_wal_trace(
+    pattern: &Loc<hir::Pattern>,
+    wal_trace: &Loc<()>,
+    ctx: &mut Context,
+    result: &mut StatementList,
+) -> Result<()> {
+    let hir_ty = pattern
+        .get_type(ctx.types)
+        .map_err(|_| diag_anyhow!(pattern, "Pattern had no type during wal trace generation"))?;
+    match &hir_ty {
+        TypeVar::Known(spade_types::KnownType::Type(name), _) => {
+            let ty = ctx.item_list.types.get(name);
+
+            match ty.as_ref().map(|ty| &ty.inner.kind) {
+                Some(TypeDeclKind::Struct(s)) => {
+                    if let Some(suffix) = &s.wal_suffix {
+                        result.push_anonymous(mir::Statement::WalTrace(
+                            pattern.value_name(),
+                            suffix.inner.0.clone(),
+                        ));
+                    } else {
+                        return Err(Diagnostic::error(
+                            wal_trace,
+                            "#[wal_trace] on struct without #[wal_suffix]",
+                        )
+                        .primary_label(format!("{} does not have #[wal_suffix]", name))
+                        .secondary_label(
+                            pattern,
+                            format!("This has type {} which is not #[wal_suffix]", hir_ty),
+                        )
+                        .note("This most likely means that the struct can not be analyzed by a wal script")
+                        .into());
+                    }
+                }
+                Some(other) => {
+                    return Err(Diagnostic::error(
+                        wal_trace,
+                        "#[wal_trace] can only be applied to values of struct type",
+                    )
+                    .primary_label(format!("#[wal_trace] on {}", other.name()))
+                    .secondary_label(
+                        pattern,
+                        format!("This has type {} which is {}", hir_ty, other.name()),
+                    )
+                    .into())
+                }
+                None => {
+                    diag_bail!(wal_trace, "wal_trace on non-declared type")
+                }
+            }
+        }
+        other => {
+            return Err(Diagnostic::error(
+                wal_trace,
+                "#[wal_trace] can only be applied to values of struct type",
+            )
+            .primary_label(format!("#[wal_trace] on {}", other))
+            .secondary_label(pattern, format!("This has type {other}"))
+            .into())
+        }
+    }
+    Ok(())
+}
+
 #[local_impl]
 impl StatementLocal for Statement {
     #[tracing::instrument(name = "Statement::lower", level = "trace", skip(self, ctx))]
     fn lower(&self, ctx: &mut Context) -> Result<StatementList> {
         let mut result = StatementList::new();
         match self {
-            Statement::Binding(pattern, _t, value) => {
+            Statement::Binding(hir::Binding {
+                pattern,
+                ty: _,
+                value,
+                wal_trace,
+            }) => {
                 result.append(value.lower(ctx)?);
 
                 let refutability = pattern.is_refutable(ctx);
@@ -573,6 +645,11 @@ impl StatementLocal for Statement {
                     }),
                     pattern,
                 );
+
+                if let Some(wal_trace) = wal_trace {
+                    lower_wal_trace(pattern, wal_trace, ctx, &mut result)?;
+                }
+
                 result.append(pattern.lower(value.variable(ctx.subs)?, ctx)?);
             }
             Statement::Register(register) => {

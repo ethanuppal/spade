@@ -2,14 +2,14 @@
 // https://www.youtube.com/watch?v=xJXcZp2vgLs
 //
 // The basic idea is to go through every node in the HIR tree, for every typed thing,
-// add an equation indicating a constraint on that thing. This can only be done once
+// add an equation indicating a constraint on that thing. This can onlytydone once
 // and should be done by the visitor for that node. The visitor should then unify
 // types according to the rules of the node.
 
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use hir::{Parameter, UnitHead};
+use hir::{Binding, Parameter, UnitHead};
 use num::{BigInt, Zero};
 use serde::{Deserialize, Serialize};
 use spade_common::num_ext::InfallibleToBigInt;
@@ -783,7 +783,12 @@ impl TypeState {
         generic_list: &GenericListToken,
     ) -> Result<()> {
         match &stmt.inner {
-            Statement::Binding(pattern, t, value) => {
+            Statement::Binding(Binding {
+                pattern,
+                ty,
+                value,
+                wal_trace: _,
+            }) => {
                 trace!("Visiting `let {} = ..`", pattern.kind);
                 self.visit_expression(value, ctx, generic_list)?;
 
@@ -793,11 +798,11 @@ impl TypeState {
                     .map_normal_err(|(got, expected)| Error::PatternTypeMismatch {
                         pattern: pattern.loc(),
                         expected,
-                        reason: t.as_ref().map(|t| t.loc()).unwrap_or_else(|| value.loc()),
+                        reason: ty.as_ref().map(|t| t.loc()).unwrap_or_else(|| value.loc()),
                         got,
                     })?;
 
-                if let Some(t) = t {
+                if let Some(t) = ty {
                     let tvar = self.type_var_from_hir(&t, &generic_list);
                     self.unify(&TypedExpression::Id(pattern.id), &tvar, &ctx.symtab)
                         .map_normal_err(|(got, expected)| Error::UnspecifiedTypeError {
@@ -1861,7 +1866,7 @@ mod tests {
             kvar!(KnownType::Type(not_bool)),
         );
 
-        let input = Statement::Binding(
+        let input = Statement::binding(
             lhs,
             Some(dtype!(symtab => "bool")),
             Expression::ident(1, 1, "a").nowhere(),
@@ -2153,7 +2158,7 @@ mod tests {
         let mut symtab = SymbolTable::new();
         spade_ast_lowering::builtins::populate_symtab(&mut symtab, &mut ItemList::new());
 
-        let input = hir::Statement::Binding(
+        let input = hir::Statement::binding(
             PatternKind::name(name_id(0, "a")).with_id(10).nowhere(),
             None,
             ExprKind::IntLiteral(IntLiteral::Signed(0.to_bigint()))
@@ -2185,7 +2190,7 @@ mod tests {
         let mut symtab = SymbolTable::new();
         spade_ast_lowering::builtins::populate_symtab(&mut symtab, &mut ItemList::new());
 
-        let input = hir::Statement::Binding(
+        let input = hir::Statement::binding(
             PatternKind::name(name_id(0, "a")).with_id(10).nowhere(),
             Some(dtype!(symtab => "int"; (t_num(5)))),
             ExprKind::IntLiteral(IntLiteral::Signed(0.to_bigint()))

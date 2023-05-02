@@ -122,8 +122,18 @@ impl PartialEq for Pattern {
 }
 
 #[derive(PartialEq, Debug, Clone, Serialize, Deserialize)]
+pub struct Binding {
+    pub pattern: Loc<Pattern>,
+    pub ty: Option<Loc<TypeSpec>>,
+    pub value: Loc<Expression>,
+    // Specifies if a wal_trace mir node should be emitted for this struct. If this
+    // is present, the type is traceable
+    pub wal_trace: Option<Loc<()>>,
+}
+
+#[derive(PartialEq, Debug, Clone, Serialize, Deserialize)]
 pub enum Statement {
-    Binding(Loc<Pattern>, Option<Loc<TypeSpec>>, Loc<Expression>),
+    Binding(Binding),
     Register(Loc<Register>),
     Declaration(Vec<Loc<NameID>>),
     PipelineRegMarker,
@@ -139,11 +149,25 @@ impl WithLocation for Statement {}
 impl Statement {
     /// NOTE: For use in tests
     pub fn named_let(pattern_id: u64, name_id: Loc<NameID>, val: Expression) -> Self {
-        Self::Binding(
-            PatternKind::name(name_id).with_id(pattern_id).nowhere(),
-            None,
-            val.nowhere(),
-        )
+        Self::Binding(Binding {
+            pattern: PatternKind::name(name_id).with_id(pattern_id).nowhere(),
+            ty: None,
+            value: val.nowhere(),
+            wal_trace: None,
+        })
+    }
+
+    pub fn binding(
+        pattern: Loc<Pattern>,
+        ty: Option<Loc<TypeSpec>>,
+        value: Loc<Expression>,
+    ) -> Statement {
+        Statement::Binding(Binding {
+            pattern,
+            ty,
+            value,
+            wal_trace: None,
+        })
     }
 }
 
@@ -267,6 +291,7 @@ pub struct Struct {
     pub members: ParameterList,
     pub is_port: bool,
     pub attributes: AttributeList,
+    pub wal_suffix: Option<Loc<Identifier>>,
 }
 impl WithLocation for Struct {}
 
@@ -275,6 +300,15 @@ pub enum TypeDeclKind {
     Enum(Loc<Enum>),
     Primitive(PrimitiveType),
     Struct(Loc<Struct>),
+}
+impl TypeDeclKind {
+    pub fn name(&self) -> &str {
+        match self {
+            TypeDeclKind::Enum(_) => "enum",
+            TypeDeclKind::Primitive(_) => "primitive",
+            TypeDeclKind::Struct(_) => "struct",
+        }
+    }
 }
 
 /// A declaration of a new type

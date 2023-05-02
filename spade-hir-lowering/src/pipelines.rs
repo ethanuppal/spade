@@ -5,6 +5,7 @@ use spade_common::{location_info::Loc, name::NameID};
 use spade_diagnostics::diag_bail;
 use spade_diagnostics::Diagnostic;
 use spade_hir::expression::CallKind;
+use spade_hir::Binding;
 use spade_hir::TypeSpec;
 use spade_hir::{symbol_table::FrozenSymtab, ExprKind, Expression, ItemList, Pattern, Statement};
 use spade_mir as mir;
@@ -51,9 +52,14 @@ pub fn lower_pipeline<'a>(
 
     for statement in body_statements {
         match &statement.inner {
-            Statement::Binding(pat, _, expr) => {
-                let time = expr.inner.kind.available_in()?;
-                for name in pat.get_names() {
+            Statement::Binding(Binding {
+                pattern,
+                ty: _,
+                value,
+                wal_trace: _,
+            }) => {
+                let time = value.inner.kind.available_in()?;
+                for name in pattern.get_names() {
                     let is_port = types
                         .name_type(&name, symtab.symtab(), &item_list.types)?
                         .is_port();

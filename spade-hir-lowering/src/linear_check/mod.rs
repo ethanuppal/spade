@@ -8,7 +8,7 @@ use spade_diagnostics::{diag_bail, Diagnostic};
 use spade_hir::{
     expression::{NamedArgument, UnaryOperator},
     symbol_table::SymbolTable,
-    ArgumentList, Expression, Register, Statement, TypeList, TypeSpec,
+    ArgumentList, Binding, Expression, Register, Statement, TypeList, TypeSpec,
 };
 use spade_typeinference::TypeState;
 
@@ -168,7 +168,12 @@ fn visit_expression(
         spade_hir::ExprKind::Block(b) => {
             for statement in &b.statements {
                 match &statement.inner {
-                    Statement::Binding(pattern, _, value) => {
+                    Statement::Binding(Binding {
+                        pattern,
+                        ty: _,
+                        value,
+                        wal_trace: _,
+                    }) => {
                         visit_expression(value, linear_state, ctx)?;
                         linear_state.consume_expression(&value)?;
                         linear_state.push_pattern(pattern, ctx)?
