@@ -1,0 +1,14 @@
+---
+source: spade-tests/src/ast_lowering.rs
+---
+#[no_mangle]
+struct X {
+}
+
+error: no_mangle is not a valid attribute for struct
+  ┌─ testinput:1:1
+  │
+1 │ #[no_mangle]
+  │ ^^^^^^^^^^^^ Unrecognised attribute
+
+

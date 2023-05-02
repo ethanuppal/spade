@@ -1,0 +1,14 @@
+---
+source: spade-tests/src/ast_lowering.rs
+---
+#[fsm]
+struct X {
+}
+
+error: fsm is not a valid attribute for struct
+  ┌─ testinput:1:1
+  │
+1 │ #[fsm]
+  │ ^^^^^^ Unrecognised attribute
+
+

@@ -266,6 +266,7 @@ impl WithLocation for Enum {}
 pub struct Struct {
     pub members: ParameterList,
     pub is_port: bool,
+    pub attributes: AttributeList,
 }
 impl WithLocation for Struct {}
 
@@ -492,11 +493,13 @@ impl TraitName {
 #[derive(PartialEq, Debug, Clone, Serialize, Deserialize)]
 pub enum Attribute {
     Fsm { state: NameID },
+    WalSuffix { suffix: Identifier },
 }
 impl Attribute {
     pub fn name(&self) -> &str {
         match self {
             Attribute::Fsm { state: _ } => "fsm",
+            Attribute::WalSuffix { suffix: _ } => "suffix",
         }
     }
 }

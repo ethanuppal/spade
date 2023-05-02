@@ -930,3 +930,17 @@ snapshot_error! {
         x
     }"
 }
+
+snapshot_error! {
+    structs_can_not_be_no_mangle,
+    "#[no_mangle]
+    struct X {
+    }"
+}
+
+snapshot_error! {
+    structs_can_not_be_fsm,
+    "#[fsm]
+    struct X {
+    }"
+}

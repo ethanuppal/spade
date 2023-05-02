@@ -12,7 +12,11 @@ use spade_common::{
 use spade_diagnostics::{diag_bail, Diagnostic};
 use spade_hir as hir;
 
-use crate::{types::IsPort, visit_parameter_list, Result, SelfContext};
+use crate::{
+    attributes::{AttributeListExt, LocAttributeExt},
+    types::IsPort,
+    visit_parameter_list, Result, SelfContext,
+};
 use spade_hir::symbol_table::{GenericArg, SymbolTable, Thing, TypeSymbol};
 
 #[tracing::instrument(skip_all)]
@@ -355,11 +359,21 @@ pub fn re_visit_type_declaration(
                 hir::ExecutableItem::StructInstance,
             );
 
+            let attributes = s.attributes.lower(&mut |attr| match &attr.inner {
+                ast::Attribute::WalSuffix { suffix } => Ok(Some(hir::Attribute::WalSuffix {
+                    suffix: suffix.clone(),
+                })),
+                ast::Attribute::NoMangle | ast::Attribute::Fsm { .. } => {
+                    Err(attr.report_unused("struct"))
+                }
+            })?;
+
             // We don't do any special processing of structs here
             hir::TypeDeclKind::Struct(
                 hir::Struct {
                     members,
                     is_port: s.is_port(),
+                    attributes,
                 }
                 .at_loc(s),
             )

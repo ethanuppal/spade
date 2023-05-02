@@ -14,6 +14,7 @@ mod usefulness;
 use std::collections::HashMap;
 
 use attributes::AttributeListExt;
+use attributes::LocAttributeExt;
 use error::{expect_entity, expect_function, expect_pipeline};
 use hir::expression::CallKind;
 use hir::expression::LocExprExt;
@@ -612,6 +613,7 @@ impl StatementLocal for Statement {
                         traced = Some(state.value_name());
                         Ok(())
                     }
+                    Attribute::WalSuffix { .. } => Err(attr.report_unused("register").into()),
                 })?;
 
                 result.push_primary(

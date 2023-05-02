@@ -303,6 +303,7 @@ impl TypeParam {
 pub enum Attribute {
     NoMangle,
     Fsm { state: Option<Loc<Identifier>> },
+    WalSuffix { suffix: Identifier },
 }
 
 impl Attribute {
@@ -310,6 +311,7 @@ impl Attribute {
         match self {
             Attribute::NoMangle => "no_mangle",
             Attribute::Fsm { state: _ } => "fsm",
+            Attribute::WalSuffix { suffix: _ } => "wal_suffix",
         }
     }
 }
@@ -446,6 +448,7 @@ impl WithLocation for Enum {}
 
 #[derive(PartialEq, Debug, Clone)]
 pub struct Struct {
+    pub attributes: AttributeList,
     pub name: Loc<Identifier>,
     pub members: Loc<ParameterList>,
     pub port_keyword: Option<Loc<()>>,

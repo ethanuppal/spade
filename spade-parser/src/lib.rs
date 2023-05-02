@@ -1363,7 +1363,6 @@ impl<'a> Parser<'a> {
         attributes: &AttributeList,
     ) -> Result<Option<Loc<TypeDeclaration>>> {
         let start_token = peek_for!(self, &TokenKind::Struct);
-        self.disallow_attributes(attributes, &start_token)?;
 
         let port_keyword = self
             .peek_and_eat(&TokenKind::Port)?
@@ -1387,6 +1386,7 @@ impl<'a> Parser<'a> {
                     name,
                     members,
                     port_keyword,
+                    attributes: attributes.clone(),
                 }
                 .between(self.file_id, &start_token.span, &members_loc),
             ),
@@ -3110,6 +3110,7 @@ mod tests {
                         name: ast_ident("State"),
                         members: aparams![("a", tspec!("bool")), ("b", tspec!("bool"))],
                         port_keyword: None,
+                        attributes: AttributeList::empty(),
                     }
                     .nowhere(),
                 ),
@@ -3133,6 +3134,7 @@ mod tests {
                         name: ast_ident("State"),
                         members: aparams![("a", tspec!("bool")), ("b", tspec!("bool"))],
                         port_keyword: Some(().nowhere()),
+                        attributes: AttributeList::empty(),
                     }
                     .nowhere(),
                 ),
