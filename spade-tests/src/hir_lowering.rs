@@ -994,7 +994,7 @@ mod tests {
             }
         "#;
 
-        let mir_struct = Type::Tuple(vec![Type::Bool]);
+        let mir_struct = Type::Struct(vec![("payload".to_string(), Type::Bool)]);
 
         let expected = vec![entity!(&["test"]; (
                 "payload", n(0, "payload"), Type::Bool,
@@ -1017,15 +1017,19 @@ mod tests {
         }
         "#;
 
-        let tup_inner = vec![Type::int(16), Type::int(8)];
-        let tup_type = Type::Tuple(tup_inner.clone());
+        let struct_inner = vec![
+            ("a".to_string(), Type::int(16)),
+            ("b".to_string(), Type::int(8)),
+        ];
+        let inner_types = struct_inner.iter().map(|s| s.1.clone()).collect::<Vec<_>>();
+        let struct_type = Type::Struct(struct_inner.clone());
         let expected = vec![entity!(&["name"]; (
                 "a", n(0, "a"), Type::int(16),
                 "b", n(1, "b"), Type::int(8),
             ) -> Type::int(8); {
-                (e(1); tup_type.clone(); ConstructTuple; n(0, "a"), n(1, "b"));
-                (n(2, "compound"); tup_type; Alias; e(1));
-                (e(0); Type::int(8); IndexTuple((1, tup_inner)); n(2, "compound"));
+                (e(1); struct_type.clone(); ConstructTuple; n(0, "a"), n(1, "b"));
+                (n(2, "compound"); struct_type; Alias; e(1));
+                (e(0); Type::int(8); IndexTuple((1, inner_types)); n(2, "compound"));
             } => e(0)
         )];
 
@@ -1298,7 +1302,7 @@ mod tests {
             }
         "#;
 
-        let ty = Type::Tuple(vec![Type::Bool]);
+        let ty = Type::Struct(vec![("a".to_string(), Type::Bool)]);
 
         let expected = vec![
             entity! {&["test"]; ("x", n(0, "x"), ty.clone()) -> Type::int(10); {
@@ -1326,15 +1330,19 @@ mod tests {
         }
         "#;
 
-        let tup_inner = vec![Type::int(16), Type::int(8)];
-        let tup_type = Type::Tuple(tup_inner.clone());
+        let struct_inner = vec![
+            ("a".to_string(), Type::int(16)),
+            ("b".to_string(), Type::int(8)),
+        ];
+        let inner_types = struct_inner.iter().map(|s| s.1.clone()).collect::<Vec<_>>();
+        let struct_type = Type::Struct(struct_inner.clone());
         let expected = vec![entity! {&["name"]; (
                 "clk", n(0, "clk"), Type::Bool,
-                "a", n(1, "a"), tup_type.clone(),
+                "a", n(1, "a"), struct_type.clone(),
             ) -> Type::int(16); {
-                (reg e(0); tup_type; clock(n(0, "clk")); n(1, "a"));
-                (n(2, "x"); Type::int(16); IndexTuple((0, tup_inner.clone())); e(0));
-                (n(3, "y"); Type::int(8); IndexTuple((1, tup_inner)); e(0));
+                (reg e(0); struct_type; clock(n(0, "clk")); n(1, "a"));
+                (n(2, "x"); Type::int(16); IndexTuple((0, inner_types.clone())); e(0));
+                (n(3, "y"); Type::int(8); IndexTuple((1, inner_types)); e(0));
             } => n(2, "x")
         }];
 
@@ -1352,15 +1360,19 @@ mod tests {
         }
         "#;
 
-        let tup_inner = vec![Type::int(16), Type::int(8)];
-        let tup_type = Type::Tuple(tup_inner.clone());
+        let struct_inner = vec![
+            ("a".to_string(), Type::int(16)),
+            ("b".to_string(), Type::int(8)),
+        ];
+        let inner_types = struct_inner.iter().map(|s| s.1.clone()).collect::<Vec<_>>();
+        let struct_type = Type::Struct(struct_inner.clone());
         let expected = vec![entity! {&["name"]; (
                 "clk", n(0, "clk"), Type::Bool,
-                "a", n(1, "a"), tup_type.clone(),
+                "a", n(1, "a"), struct_type.clone(),
             ) -> Type::int(16); {
-                (reg e(0); tup_type; clock(n(0, "clk")); n(1, "a"));
-                (n(2, "x"); Type::int(16); IndexTuple((0, tup_inner.clone())); e(0));
-                (n(3, "y"); Type::int(8); IndexTuple((1, tup_inner)); e(0));
+                (reg e(0); struct_type; clock(n(0, "clk")); n(1, "a"));
+                (n(2, "x"); Type::int(16); IndexTuple((0, inner_types.clone())); e(0));
+                (n(3, "y"); Type::int(8); IndexTuple((1, inner_types)); e(0));
             } => n(2, "x")
         }];
 
@@ -1923,7 +1935,7 @@ mod tests {
 
         let inst_name = spade_mir::UnitName::_test_from_strs(&["impl_0", "a"]);
 
-        let x_type = Type::Tuple(vec![]);
+        let x_type = Type::Struct(vec![]);
         let expected = vec![
             entity! {&["test"]; (
                 "x", n(0, "x"), x_type.clone(),
@@ -1957,7 +1969,7 @@ mod tests {
 
         let inst_name = spade_mir::UnitName::_test_from_strs(&["impl_0", "a"]);
 
-        let x_type = Type::Tuple(vec![]);
+        let x_type = Type::Struct(vec![]);
         let expected = vec![
             entity! {&["test"]; (
                 "x", n(0, "x"), x_type.clone(),
@@ -2174,9 +2186,15 @@ mod tests {
 
         let result = build_entity!(code);
 
-        let intype_inner = vec![Type::Bool, Type::Backward(Box::new(Type::int(2)))];
-        let intype = Type::Tuple(intype_inner.clone());
-        let outtype = Type::Tuple(vec![Type::Backward(Box::new(Type::Bool)), Type::int(2)]);
+        let intype_inner = vec![
+            ("x".to_string(), Type::Bool),
+            ("y".to_string(), Type::Backward(Box::new(Type::int(2)))),
+        ];
+        let intype = Type::Struct(intype_inner.clone());
+        let outtype = Type::Struct(vec![
+            ("x".to_string(), Type::Backward(Box::new(Type::Bool))),
+            ("y".to_string(), Type::int(2)),
+        ]);
         let tuple_type = Type::Tuple(vec![intype.clone(), outtype.clone()]);
 
         let expected = entity!(&["x"]; () -> tuple_type.clone(); {
@@ -2297,7 +2315,10 @@ mod tests {
             }
         "#;
 
-        let ty = Type::Tuple(vec![Type::int(8), Type::int(4)]);
+        let ty = Type::Struct(vec![
+            ("a".to_string(), Type::int(8)),
+            ("b".to_string(), Type::int(4)),
+        ]);
 
         let expected = entity!(&["main"]; (
             "x", n(0, "x"), ty.clone(),

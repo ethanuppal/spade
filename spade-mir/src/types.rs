@@ -6,6 +6,7 @@ pub enum Type {
     Int(BigUint),
     Bool,
     Tuple(Vec<Type>),
+    Struct(Vec<(String, Type)>),
     Array {
         inner: Box<Type>,
         length: BigUint,
@@ -34,6 +35,7 @@ impl Type {
             Type::Int(len) => len.clone(),
             Type::Bool => 1u32.to_biguint(),
             Type::Tuple(inner) => inner.iter().map(Type::size).sum::<BigUint>(),
+            Type::Struct(inner) => inner.iter().map(|(_, t)| t.size()).sum::<BigUint>(),
             Type::Enum(inner) => {
                 let discriminant_size = (inner.len() as f32).log2().ceil() as u64;
 
@@ -73,6 +75,10 @@ impl Type {
                 BigUint::zero()
             }
             Type::Tuple(inner) => inner.iter().map(Type::backward_size).sum::<BigUint>(),
+            Type::Struct(inner) => inner
+                .iter()
+                .map(|(_, t)| t.backward_size())
+                .sum::<BigUint>(),
         }
     }
 
@@ -97,6 +103,14 @@ impl std::fmt::Display for Type {
                     .collect::<Vec<_>>()
                     .join(", ");
                 write!(f, "({})", inner)
+            }
+            Type::Struct(inner) => {
+                let inner = inner
+                    .iter()
+                    .map(|(n, t)| format!("{n}: {t}"))
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                write!(f, "{{{}}}", inner)
             }
             Type::Array { inner, length } => {
                 write!(f, "[{}; {}]", inner, length)

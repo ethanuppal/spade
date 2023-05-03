@@ -167,4 +167,36 @@ mod test {
 
         assert_same_mir!(&input, &expected);
     }
+
+    #[test]
+    fn traced_suffix_has_tracing_applied() {
+        // let ty = Type::Tuple(())
+        // let mut input = entity!(&["name"]; (
+        //     "x", n(2, "x"), Type::Bool,
+        // ) -> Type::Bool; {
+        //     (const 0; Type::Bool; ConstantValue::Bool(true));
+        //     (traced(n(1, "state"))
+        //         reg n(1, "state"); Type::int(5); clock(n(0, "clk")); n(2, "x"));
+        // } => n(2, "x"));
+
+        // let expected = entity!(&["name"]; (
+        //     "x", n(2, "x"), Type::Bool,
+        // ) -> Type::Bool; {
+        //     (const 0; Type::Bool; ConstantValue::Bool(true));
+        //     (traced(n(1, "state"))
+        //         reg n(1, "state"); Type::int(5); clock(n(0, "clk")); n(2, "x"));
+        //     (n(10, "state_n1__wal_fsm_state"); Type::int(5); Alias; n(1, "state"));
+        //     (n(11, "state_n1__wal_fsm_clk"); Type::Bool; Alias; n(0, "clk"));
+        //     (const 10; Type::Bool; ConstantValue::Bool(false));
+        //     (n(12, "state_n1__wal_fsm_rst"); Type::Bool; Alias; e(10));
+        // } => n(2, "x"));
+
+        // insert_wal_signals(
+        //     &mut input,
+        //     &mut ExprIdTracker::new_at(10),
+        //     &mut Some(&mut NameIdTracker::new_at(100)),
+        // );
+
+        // assert_same_mir!(&input, &expected);
+    }
 }

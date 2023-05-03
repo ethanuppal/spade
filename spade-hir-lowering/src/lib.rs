@@ -156,8 +156,11 @@ impl MirLowerable for ConcreteType {
                 Type::Enum(inner)
             }
             CType::Struct { name: _, members } => {
-                let members = members.iter().map(|(_, t)| t.to_mir_type()).collect();
-                Type::Tuple(members)
+                let members = members
+                    .iter()
+                    .map(|(n, t)| (n.0.clone(), t.to_mir_type()))
+                    .collect();
+                Type::Struct(members)
             }
             CType::Backward(inner) => Type::Backward(Box::new(inner.to_mir_type())),
             // At this point we no longer need to know if this is a Wire or not, it will
@@ -265,14 +268,14 @@ impl PatternLocal for Loc<Pattern> {
                     PatternableKind::Struct => {
                         let s = ctx.symtab.symtab().struct_by_id(path);
 
-                        let inner_types = if let mir::types::Type::Tuple(inner) = &ctx
+                        let mir_type = &ctx
                             .types
                             .type_of_id(self.id, ctx.symtab.symtab(), &ctx.item_list.types)
-                            .to_mir_type()
-                        {
-                            inner.clone()
+                            .to_mir_type();
+                        let inner_types = if let mir::types::Type::Struct(inner) = mir_type {
+                            inner.iter().map(|s| s.1.clone()).collect::<Vec<_>>()
                         } else {
-                            unreachable!("Struct destructuring of non-tuple");
+                            unreachable!("Struct destructuring of non-struct");
                         };
 
                         for PatternArgument {
@@ -1050,8 +1053,8 @@ impl ExprLocal for Loc<Expression> {
                         .expr_type(target, ctx.symtab.symtab(), &ctx.item_list.types)?;
 
                 let member_types =
-                    if let mir::types::Type::Tuple(members) = &ctype.clone().to_mir_type() {
-                        members.clone()
+                    if let mir::types::Type::Struct(members) = &ctype.clone().to_mir_type() {
+                        members.iter().map(|s| s.1.clone()).collect::<Vec<_>>()
                     } else {
                         unreachable!("Field access on non-struct {:?}", self_type)
                     };

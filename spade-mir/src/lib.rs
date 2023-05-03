@@ -211,7 +211,8 @@ pub enum Operator {
         variant: usize,
         member_index: usize,
     },
-    /// Get the `.0`th element of a tuple. The types of the elements are specified
+    /// Get the `.0`th element of a tuple or a type of the same representation as a tuple, for
+    /// example a Struct. The types of the elements are specified
     /// in the second argument
     IndexTuple(u64, Vec<Type>),
 
