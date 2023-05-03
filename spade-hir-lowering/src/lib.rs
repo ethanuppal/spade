@@ -553,6 +553,7 @@ pub fn lower_wal_trace(
     wal_trace: &Loc<()>,
     ctx: &mut Context,
     result: &mut StatementList,
+    mir_ty: MirType,
 ) -> Result<()> {
     let hir_ty = pattern
         .get_type(ctx.types)
@@ -567,6 +568,7 @@ pub fn lower_wal_trace(
                         result.push_anonymous(mir::Statement::WalTrace(
                             pattern.value_name(),
                             suffix.inner.0.clone(),
+                            mir_ty,
                         ));
                     } else {
                         return Err(Diagnostic::error(
@@ -635,22 +637,24 @@ impl StatementLocal for Statement {
                     });
                 }
 
+                let mir_ty = ctx
+                    .types
+                    .type_of_id(pattern.id, ctx.symtab.symtab(), &ctx.item_list.types)
+                    .to_mir_type();
+
                 result.push_primary(
                     mir::Statement::Binding(mir::Binding {
                         name: pattern.value_name(),
                         operator: mir::Operator::Alias,
                         operands: vec![value.variable(ctx.subs)?],
-                        ty: ctx
-                            .types
-                            .type_of_id(pattern.id, ctx.symtab.symtab(), &ctx.item_list.types)
-                            .to_mir_type(),
+                        ty: mir_ty.clone(),
                         loc: Some(pattern.loc()),
                     }),
                     pattern,
                 );
 
                 if let Some(wal_trace) = wal_trace {
-                    lower_wal_trace(pattern, wal_trace, ctx, &mut result)?;
+                    lower_wal_trace(pattern, wal_trace, ctx, &mut result, mir_ty)?;
                 }
 
                 result.append(pattern.lower(value.variable(ctx.subs)?, ctx)?);

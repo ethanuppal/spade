@@ -38,7 +38,7 @@ pub fn flatten_aliases(entity: &mut Entity) {
             }
             Statement::Assert(_) => {}
             Statement::Set { .. } => {}
-            Statement::WalTrace(_, _) => {}
+            Statement::WalTrace(_, _, _) => {}
         }
     }
 
@@ -94,7 +94,7 @@ pub fn flatten_aliases(entity: &mut Entity) {
             Statement::Constant(_, _, _) => {}
             Statement::Assert(_) => {}
             Statement::Set { .. } => {}
-            Statement::WalTrace(ref mut name, _) => try_rename(name, &aliases),
+            Statement::WalTrace(ref mut name, _, _) => try_rename(name, &aliases),
         }
     }
 

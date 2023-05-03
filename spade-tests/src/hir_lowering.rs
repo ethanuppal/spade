@@ -2323,8 +2323,8 @@ mod tests {
         let expected = entity!(&["main"]; (
             "x", n(0, "x"), ty.clone(),
         ) -> ty.clone(); {
-            (n(1, "y"); ty; Alias; n(0, "x"));
-            (wal_trace(n(1, "y"), "__wal_suffix__"))
+            (n(1, "y"); ty.clone(); Alias; n(0, "x"));
+            (wal_trace(n(1, "y"), "__wal_suffix__", ty))
         } => n(0, "x"));
 
         assert_same_mir!(&build_entity!(code), &expected);

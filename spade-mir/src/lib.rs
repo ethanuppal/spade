@@ -390,7 +390,7 @@ pub enum Statement {
     },
     /// Emit wal tracing signals for `ValueName`. The suffix for the struct fields of this
     /// type should be the specified string
-    WalTrace(ValueName, String),
+    WalTrace(ValueName, String, Type),
 }
 
 impl std::fmt::Display for Statement {
@@ -401,7 +401,7 @@ impl std::fmt::Display for Statement {
             Statement::Constant(id, ty, val) => write!(f, "const e{id}: {ty} = {val}"),
             Statement::Assert(val) => write!(f, "assert {val}"),
             Statement::Set { target, value } => write!(f, "set {target} = {value}"),
-            Statement::WalTrace(n, suffix) => write!(f, "wal_trace({n}, {suffix})"),
+            Statement::WalTrace(n, suffix, _) => write!(f, "wal_trace({n}, {suffix})"),
         }
     }
 }
