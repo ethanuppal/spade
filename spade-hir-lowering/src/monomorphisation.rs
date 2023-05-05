@@ -170,7 +170,7 @@ pub fn compile_items(
                 let out = generate_unit(
                     &u.inner,
                     item.new_name,
-                    &type_state,
+                    &mut type_state,
                     symtab,
                     idtracker,
                     item_list,

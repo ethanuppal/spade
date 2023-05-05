@@ -226,6 +226,23 @@ where
     }
 }
 
+impl<T> PartialOrd for Loc<T>
+where
+    T: PartialOrd,
+{
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        self.inner.partial_cmp(&other.inner)
+    }
+}
+impl<T> Ord for Loc<T>
+where
+    T: Ord,
+{
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.inner.cmp(&other.inner)
+    }
+}
+
 impl<T> Eq for Loc<T> where T: Eq {}
 
 impl<T> std::fmt::Display for Loc<T>

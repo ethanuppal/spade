@@ -582,7 +582,7 @@ impl Spade {
         let mut hir_ctx = spade_hir_lowering::Context {
             symtab: &mut symtab,
             idtracker: &mut ast_ctx.idtracker,
-            types: &self.type_state,
+            types: &mut self.type_state,
             item_list: &self.item_list,
             // NOTE: This requires changes if we end up wanting to write tests
             // for generic units

@@ -96,6 +96,7 @@ fn visit_expression(
             expr,
             "method call should have been lowered to function by this point"
         ),
+        spade_hir::ExprKind::Null => false,
     };
 
     if produces_new_resource {
@@ -279,6 +280,9 @@ fn visit_expression(
             expr,
             "method call should have been lowered to function by this point"
         ),
+        spade_hir::ExprKind::Null { .. } => {
+            diag_bail!(expr, "Null expression created before linear check")
+        }
     }
     Ok(())
 }

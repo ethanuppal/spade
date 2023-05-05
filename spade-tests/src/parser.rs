@@ -297,3 +297,26 @@ fn inverted_port_type() {
 
     build_items(code);
 }
+
+snapshot_error! {
+    wal_suffix_with_unexpected_param_is_error,
+    "
+        #[wal_suffix(a, uses_clk, this_is_not_valid)]
+        struct T {}
+    "
+}
+
+snapshot_error! {
+    wal_trace_does_not_accept_duplicate_clk,
+    "
+        #[wal_trace(clk=x, clk=x)]
+        struct T {}
+    "
+}
+snapshot_error! {
+    wal_trace_does_not_accept_bad_parameter,
+    "
+        #[wal_trace(clk=x, not_a_param=x)]
+        struct T {}
+    "
+}

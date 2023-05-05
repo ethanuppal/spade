@@ -1,8 +1,6 @@
 use spade_common::id_tracker::{ExprIdTracker, NameIdTracker};
 
-use crate::{
-    types::Type, Binding, ConstantValue, Entity, Operator, Statement, ValueName, ValueNameSource,
-};
+use crate::{types::Type, Binding, ConstantValue, Entity, Operator, Statement, ValueName};
 
 pub fn wal_alias(
     source: &ValueName,
@@ -86,40 +84,19 @@ pub fn insert_wal_signals(
                         vec![s.clone()]
                     }
                 }
-                Statement::WalTrace(name, suffix, ty) => {
-                    if let Type::Struct(fields) = ty {
-                        let inner_types =
-                            fields.iter().map(|(_, ty)| ty.clone()).collect::<Vec<_>>();
-                        fields
-                            .iter()
-                            .enumerate()
-                            .map(|(i, (field, inner_ty))| {
-                                let full_name = format!("{name}__{field}{suffix}");
-
-                                vec![Statement::Binding(Binding {
-                                    name: ValueName::Named(
-                                        name_idtracker
-                                            .as_mut()
-                                            .map(|t| t.next())
-                                            .unwrap_or_default(),
-                                        full_name,
-                                        // TODO: Expr::0 is *wrong*, this is not the actual source,
-                                        // but we also don't have a source right now
-                                        ValueNameSource::Expr(0),
-                                    ),
-                                    operator: Operator::IndexTuple(i as u64, inner_types.clone()),
-                                    operands: vec![name.clone()],
-                                    ty: inner_ty.clone(),
-                                    loc: None,
-                                })]
-                            })
-                            .flatten()
-                            .collect()
-                    } else {
-                        // NOTE: We have already made sure that the tracing is applied to
-                        // structs in previous steps, so we can just ignore this case here
-                        vec![]
-                    }
+                Statement::WalTrace {
+                    name,
+                    val,
+                    suffix,
+                    ty,
+                } => {
+                    vec![wal_alias(
+                        val,
+                        &name.unescaped_var_name(),
+                        suffix,
+                        ty,
+                        name_idtracker,
+                    )]
                 }
                 other => vec![other.clone()],
             }
@@ -218,15 +195,20 @@ mod test {
             "x", n(2, "x"), ty.clone(),
         ) -> Type::Bool; {
             (n(0, "y"); ty.clone(); Alias; n(2, "x"));
-            (wal_trace(n(0, "y"), "__wal_suffix__", ty.clone()))
+            (e(0); Type::int(4); IndexTuple((0, inner_types.clone())); n(0, "y"));
+            (wal_trace(n(0, "y"), e(0), "__a__wal_suffix__", Type::int(4)));
+            (e(1); Type::int(8); IndexTuple((1, inner_types.clone())); n(0, "y"));
+            (wal_trace(n(0, "y"), e(1), "__b__wal_suffix__", Type::int(8)))
         } => n(2, "x"));
 
         let expected = entity!(&["name"]; (
             "x", n(2, "x"), ty.clone(),
         ) -> Type::Bool; {
             (n(0, "y"); ty.clone(); Alias; n(2, "x"));
-            (n(4, "y__a__wal_suffix__"); Type::int(4); IndexTuple((0, inner_types.clone())); n(0, "y"));
-            (n(5, "y__b__wal_suffix__"); Type::int(8); IndexTuple((1, inner_types.clone())); n(0, "y"));
+            (e(0); Type::int(4); IndexTuple((0, inner_types.clone())); n(0, "y"));
+            (n(4, "y__a__wal_suffix__"); Type::int(4); Alias; e(0));
+            (e(1); Type::int(8); IndexTuple((1, inner_types.clone())); n(0, "y"));
+            (n(5, "y__b__wal_suffix__"); Type::int(8); Alias; e(1));
         } => n(2, "x"));
 
         insert_wal_signals(

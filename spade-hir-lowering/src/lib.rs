@@ -21,6 +21,7 @@ use hir::expression::LocExprExt;
 use hir::Attribute;
 use hir::Parameter;
 use hir::TypeDeclKind;
+use hir::WalTrace;
 use local_impl::local_impl;
 
 use hir::param_util::{match_args_with_params, Argument};
@@ -548,12 +549,145 @@ impl PatternLocal for Loc<Pattern> {
     }
 }
 
+pub fn do_wal_trace_lowering(
+    pattern: &Loc<hir::Pattern>,
+    main_value_name: &ValueName,
+    wal_suffix: &Loc<hir::WalSuffix>,
+    wal_trace: &Loc<WalTrace>,
+    ty: &ConcreteType,
+    result: &mut StatementList,
+    ctx: &mut Context,
+) -> Result<()> {
+    let hir::WalTrace { clk, rst } = &wal_trace.inner;
+    let hir::WalSuffix {
+        suffix,
+        uses_clk,
+        uses_rst,
+    } = &wal_suffix.inner;
+
+    // TODO: Consider breaking these out into functions
+    // Handle clock and reset
+    match (clk, uses_clk) {
+        (None, false) => {}
+        (None, true) => {
+            return Err(Diagnostic::error(
+                wal_trace,
+                "The clock signal for this trace must be provided",
+            )
+            .into())
+        }
+        (Some(clk), false) => {
+            return Err(Diagnostic::error(clk, "Unnecessary clock signal")
+                .secondary_label(
+                    wal_suffix,
+                    "This struct does not need a clock signal for tracing",
+                )
+                .into())
+        }
+        (Some(clk), true) => result.push_anonymous(mir::Statement::WalTrace {
+            name: main_value_name.clone(),
+            val: clk.variable(&ctx.subs)?,
+            suffix: format!("__clk{}", wal_suffix.suffix.clone()),
+            ty: MirType::Bool,
+        }),
+    }
+    match (rst, uses_rst) {
+        (None, false) => {}
+        (None, true) => {
+            return Err(Diagnostic::error(
+                wal_trace,
+                "The reset signal for this trace must be provided",
+            )
+            .into())
+        }
+        (Some(clk), false) => {
+            return Err(Diagnostic::error(clk, "Unnecessary reset signal")
+                .secondary_label(
+                    wal_suffix,
+                    "This struct does not need a reset signal for tracing",
+                )
+                .into())
+        }
+        (Some(clk), true) => result.push_anonymous(mir::Statement::WalTrace {
+            name: main_value_name.clone(),
+            val: clk.variable(&ctx.subs)?,
+            suffix: format!("__rst{}", suffix.clone()),
+            ty: MirType::Bool,
+        }),
+    }
+
+    if let ConcreteType::Struct { name: _, members } = ty {
+        let inner_types = members
+            .iter()
+            .map(|(_, t)| t.to_mir_type())
+            .collect::<Vec<_>>();
+        for (i, (n, ty)) in members.iter().enumerate() {
+            let new_id = ctx.idtracker.next();
+            let field_name = ValueName::Expr(new_id);
+            // Insert an indexing operation, and a wal trace on the result.
+            result.push_anonymous(mir::Statement::Binding(mir::Binding {
+                name: field_name.clone(),
+                operator: mir::Operator::IndexTuple(i as u64, inner_types.clone()),
+                operands: vec![main_value_name.clone()],
+                ty: ty.to_mir_type(),
+                loc: None,
+            }));
+
+            // Add the wal trace statement
+            result.push_anonymous(mir::Statement::WalTrace {
+                name: main_value_name.clone(),
+                val: field_name,
+                suffix: format!("__{n}{}", suffix.clone()),
+                ty: ty.to_mir_type(),
+            });
+
+            // Add the new expression to the type state so we can look it up
+            // during translation. Doing this is a messy process however, because
+            // we lost information. We'll cheat, and unify the expression with
+            // indexing for the correct field on the pattern.
+            // This is kind of a giant hack and makes quite a few assumptions about
+            // the rest of the compiler
+            // TODO: Add a test for this, and make a note that if this test fails
+            // because of another change in teh compiler, this should be done properly
+            let new_ty = ctx.types.new_generic();
+            ctx.types
+                .add_equation(TypedExpression::Id(new_id), new_ty.clone());
+            ctx.types
+                .unify_expression_generic_error(
+                    &hir::Expression {
+                        kind: ExprKind::FieldAccess(
+                            Box::new(
+                                hir::Expression {
+                                    kind: ExprKind::Null,
+                                    id: pattern.id,
+                                }
+                                .nowhere(),
+                            ),
+                            n.clone().nowhere(),
+                        ),
+                        id: new_id,
+                    }
+                    .nowhere(),
+                    &new_ty,
+                    ctx.symtab.symtab(),
+                )
+                .map_err(|_| {
+                    diag_anyhow!(wal_trace, "Unification error while laundering a struct")
+                })?;
+        }
+    } else {
+        diag_bail!(wal_trace, "Tracing on non-struct")
+    }
+
+    Ok(())
+}
+
 pub fn lower_wal_trace(
     pattern: &Loc<hir::Pattern>,
-    wal_trace: &Loc<()>,
+    wal_trace: &Loc<WalTrace>,
     ctx: &mut Context,
     result: &mut StatementList,
-    mir_ty: MirType,
+    concrete_ty: &ConcreteType,
 ) -> Result<()> {
     let hir_ty = pattern
         .get_type(ctx.types)
@@ -565,11 +699,15 @@ pub fn lower_wal_trace(
             match ty.as_ref().map(|ty| &ty.inner.kind) {
                 Some(TypeDeclKind::Struct(s)) => {
                     if let Some(suffix) = &s.wal_suffix {
-                        result.push_anonymous(mir::Statement::WalTrace(
-                            pattern.value_name(),
-                            suffix.inner.0.clone(),
-                            mir_ty,
-                        ));
+                        do_wal_trace_lowering(
+                            pattern,
+                            &pattern.value_name(),
+                            suffix,
+                            wal_trace,
+                            concrete_ty,
+                            result,
+                            ctx,
+                        )?;
                     } else {
                         return Err(Diagnostic::error(
                             wal_trace,
@@ -637,10 +775,11 @@ impl StatementLocal for Statement {
                     });
                 }
 
-                let mir_ty = ctx
-                    .types
-                    .type_of_id(pattern.id, ctx.symtab.symtab(), &ctx.item_list.types)
-                    .to_mir_type();
+                let concrete_ty =
+                    ctx.types
+                        .type_of_id(pattern.id, ctx.symtab.symtab(), &ctx.item_list.types);
+
+                let mir_ty = concrete_ty.to_mir_type();
 
                 result.push_primary(
                     mir::Statement::Binding(mir::Binding {
@@ -654,7 +793,7 @@ impl StatementLocal for Statement {
                 );
 
                 if let Some(wal_trace) = wal_trace {
-                    lower_wal_trace(pattern, wal_trace, ctx, &mut result, mir_ty)?;
+                    lower_wal_trace(pattern, wal_trace, ctx, &mut result, &concrete_ty)?;
                 }
 
                 result.append(pattern.lower(value.variable(ctx.subs)?, ctx)?);
@@ -818,6 +957,9 @@ impl ExprLocal for Loc<Expression> {
                 self,
                 "method call should have been lowered to function by this point"
             ),
+            ExprKind::Null => {
+                diag_bail!(self, "Null expression found during hir lowering")
+            }
         }
     }
 
@@ -1260,6 +1402,9 @@ impl ExprLocal for Loc<Expression> {
                     self,
                     "Method should already have been lowered at this point"
                 )
+            }
+            ExprKind::Null => {
+                diag_bail!(self, "Null expression found during hir lowering")
             }
         }
         Ok(result)
@@ -1936,7 +2081,7 @@ impl ExprLocal for Loc<Expression> {
 pub struct Context<'a> {
     pub symtab: &'a mut FrozenSymtab,
     pub idtracker: &'a mut ExprIdTracker,
-    pub types: &'a TypeState,
+    pub types: &'a mut TypeState,
     pub item_list: &'a ItemList,
     pub mono_state: &'a mut MonoState,
     pub subs: &'a mut Substitutions,
@@ -1946,7 +2091,7 @@ pub struct Context<'a> {
 pub fn generate_unit<'a>(
     unit: &Unit,
     name: UnitName,
-    types: &TypeState,
+    types: &mut TypeState,
     symtab: &mut FrozenSymtab,
     idtracker: &mut ExprIdTracker,
     item_list: &ItemList,

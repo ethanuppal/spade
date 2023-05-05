@@ -17,7 +17,7 @@ use std::collections::{HashMap, HashSet};
 use comptime::ComptimeCondExt;
 use hir::param_util::ArgumentError;
 use hir::symbol_table::DeclarationState;
-use hir::{ExecutableItem, PatternKind, TraitName};
+use hir::{ExecutableItem, PatternKind, TraitName, WalTrace};
 use spade_ast as ast;
 use spade_common::id_tracker::{ExprIdTracker, ImplIdTracker};
 use spade_common::location_info::{Loc, WithLocation};
@@ -845,9 +845,21 @@ fn visit_statement(s: &Loc<ast::Statement>, ctx: &mut Context) -> Result<Vec<Loc
             let pattern = pattern.try_visit(visit_pattern, ctx)?;
 
             let mut wal_trace = None;
-            attrs.lower(&mut |attr| match attr.inner {
-                ast::Attribute::WalTrace => {
-                    wal_trace = Some(attr.loc());
+            attrs.lower(&mut |attr| match &attr.inner {
+                ast::Attribute::WalTrace { clk, rst } => {
+                    wal_trace = Some(
+                        WalTrace {
+                            clk: clk
+                                .as_ref()
+                                .map(|x| x.try_map_ref(|x| visit_expression(x, ctx)))
+                                .transpose()?,
+                            rst: rst
+                                .as_ref()
+                                .map(|x| x.try_map_ref(|x| visit_expression(x, ctx)))
+                                .transpose()?,
+                        }
+                        .at_loc(attr),
+                    );
                     Ok(None)
                 }
                 ast::Attribute::NoMangle

@@ -649,3 +649,29 @@ fn accessing_fields_of_structs_in_inverted_ports_works() {
 
     build_items(code);
 }
+
+snapshot_error! {
+    wal_trace_clk_must_be_clock,
+    "
+        #[wal_suffix(__)]
+        struct T {}
+        fn test(t: T, x: bool) -> bool {
+            #[wal_trace(clk=x)]
+            let t = t;
+            false
+        }
+    "
+}
+
+snapshot_error! {
+    wal_trace_rst_must_be_clock,
+    "
+        #[wal_suffix(__)]
+        struct T {}
+        fn test(t: T, x: int<10>) -> bool {
+            #[wal_trace(rst=x)]
+            let t = t;
+            false
+        }
+    "
+}

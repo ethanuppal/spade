@@ -47,7 +47,7 @@ impl TypeList {
                 Statement::Set { .. } => {
                     // No new types introduced
                 }
-                Statement::WalTrace(_, _, _) => {}
+                Statement::WalTrace { .. } => {}
             }
         }
     }

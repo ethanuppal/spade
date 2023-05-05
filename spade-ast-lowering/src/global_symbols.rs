@@ -2,7 +2,7 @@ use std::collections::HashSet;
 
 use hir::{
     symbol_table::{EnumVariant, StructCallable},
-    ItemList, TypeExpression,
+    ItemList, TypeExpression, WalSuffix,
 };
 use spade_ast as ast;
 use spade_common::{
@@ -361,13 +361,24 @@ pub fn re_visit_type_declaration(
 
             let mut wal_suffix = None;
             let attributes = s.attributes.lower(&mut |attr| match &attr.inner {
-                ast::Attribute::WalSuffix { suffix } => {
-                    wal_suffix = Some(suffix.clone().at_loc(attr));
+                ast::Attribute::WalSuffix {
+                    suffix,
+                    uses_rst,
+                    uses_clk,
+                } => {
+                    wal_suffix = Some(
+                        WalSuffix {
+                            suffix: suffix.clone(),
+                            uses_clk: uses_clk.clone(),
+                            uses_rst: uses_rst.clone(),
+                        }
+                        .at_loc(attr),
+                    );
                     Ok(None)
                 }
                 ast::Attribute::NoMangle
                 | ast::Attribute::Fsm { .. }
-                | ast::Attribute::WalTrace => Err(attr.report_unused("struct")),
+                | ast::Attribute::WalTrace { .. } => Err(attr.report_unused("struct")),
             })?;
 
             // We don't do any special processing of structs here

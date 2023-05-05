@@ -326,9 +326,18 @@ impl TypeParam {
 #[derive(PartialEq, Debug, Clone)]
 pub enum Attribute {
     NoMangle,
-    Fsm { state: Option<Loc<Identifier>> },
-    WalSuffix { suffix: Identifier },
-    WalTrace,
+    Fsm {
+        state: Option<Loc<Identifier>>,
+    },
+    WalSuffix {
+        suffix: Identifier,
+        uses_clk: bool,
+        uses_rst: bool,
+    },
+    WalTrace {
+        clk: Option<Loc<Expression>>,
+        rst: Option<Loc<Expression>>,
+    },
 }
 
 impl Attribute {
@@ -336,8 +345,8 @@ impl Attribute {
         match self {
             Attribute::NoMangle => "no_mangle",
             Attribute::Fsm { state: _ } => "fsm",
-            Attribute::WalSuffix { suffix: _ } => "wal_suffix",
-            Attribute::WalTrace => "wal_trace",
+            Attribute::WalSuffix { .. } => "wal_suffix",
+            Attribute::WalTrace { .. } => "wal_trace",
         }
     }
 }

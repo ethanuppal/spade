@@ -1,0 +1,19 @@
+---
+source: spade-tests/src/typeinference.rs
+---
+#[wal_suffix(__)]
+struct T {}
+fn test(t: T, x: bool) -> bool {
+    #[wal_trace(clk=x)]
+    let t = t;
+    false
+}
+
+
+error: Expected type clock, got bool
+  ┌─ testinput:4:21
+  │
+4 │     #[wal_trace(clk=x)]
+  │                     ^ Expected clock here
+
+

@@ -94,8 +94,13 @@ macro_rules! statement {
     ) => {
         spade_mir::Statement::Assert(spade_mir::value_name!($name_kind $name).nowhere())
     };
-    (wal_trace ($kind:ident $name:tt, $suffix:expr, $ty:expr) ) => {
-        spade_mir::Statement::WalTrace(spade_mir::value_name!($kind $name), $suffix.into(), $ty)
+    (wal_trace ($name_kind:ident $name_name:tt, $val_kind:ident $val_name:tt, $suffix:expr, $ty:expr) ) => {
+        spade_mir::Statement::WalTrace{
+            name: spade_mir::value_name!($name_kind $name_name),
+            val: spade_mir::value_name!($val_kind $val_name),
+            suffix: $suffix.into(),
+            ty: $ty
+        }
     }
 }
 

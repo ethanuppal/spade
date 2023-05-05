@@ -5,6 +5,8 @@ mod expression;
 pub mod item_type;
 pub mod lexer;
 
+use std::collections::BTreeMap;
+
 use colored::*;
 use error::{ExpectedArgumentList, SuggestBraceEnumVariant};
 use local_impl::local_impl;
@@ -1490,6 +1492,31 @@ impl<'a> Parser<'a> {
         ))
     }
 
+    // Parses `<identifier>=<subtree>` if `identifier` matches the specified identifier
+    #[trace_parser]
+    #[tracing::instrument(skip(self, value))]
+    pub fn attribute_key_value<T>(
+        &mut self,
+        key: &str,
+        value: impl Fn(&mut Self) -> Result<T>,
+    ) -> Result<Option<(Loc<String>, T)>> {
+        let next = self.peek()?;
+        if next.kind == TokenKind::Identifier(key.to_string()) {
+            self.eat_unconditional()?;
+
+            self.eat(&TokenKind::Assignment)?;
+
+            Ok(Some((
+                key.to_string().at(self.file_id, &next),
+                value(self)?,
+            )))
+        } else {
+            Ok(None)
+        }
+    }
+
+    #[trace_parser]
+    #[tracing::instrument(skip(self))]
     pub fn attribute_inner(&mut self) -> Result<Attribute> {
         let start = self.identifier()?;
 
@@ -1507,15 +1534,100 @@ impl<'a> Parser<'a> {
                     Ok(Attribute::Fsm { state: None })
                 }
             }
-            "wal_trace" => Ok(Attribute::WalTrace),
+            "wal_trace" => {
+                if self.peek_kind(&TokenKind::OpenParen)? {
+                    let (args, _) = self.surrounded(
+                        &TokenKind::OpenParen,
+                        |s| {
+                            s.comma_separated(
+                                |s| {
+                                    s.first_successful(vec![
+                                        &|s| s.attribute_key_value("clk", Self::expression),
+                                        &|s| s.attribute_key_value("rst", Self::expression),
+                                    ])
+                                },
+                                &TokenKind::CloseParen,
+                            )
+                            .extra_expected(vec!["clk", "rst"])
+                        },
+                        &TokenKind::CloseParen,
+                    )?;
+
+                    let mut unique = BTreeMap::new();
+                    for (key, val) in args.into_iter().filter_map(|x| x) {
+                        if let Some(prev) = unique.get(&key) {
+                            return Err(Diagnostic::error(
+                                &key,
+                                format!("{key} specified multiple times"),
+                            )
+                            .primary_label("Duplicate key")
+                            .secondary_label(prev, "Previously specified here")
+                            .into());
+                        }
+                        if key.inner != "clk" && key.inner != "rst" {
+                            return Err(Diagnostic::error(
+                                &key,
+                                format!("Invalid parameter {key} for wal_trace attribute"),
+                            )
+                            .into());
+                        }
+                        unique.insert(key, val);
+                    }
+
+                    Ok(Attribute::WalTrace {
+                        clk: unique.get(&"clk".to_string().nowhere()).cloned(),
+                        rst: unique.get(&"rst".to_string().nowhere()).cloned(),
+                    })
+                } else {
+                    Ok(Attribute::WalTrace {
+                        clk: None,
+                        rst: None,
+                    })
+                }
+            }
             "wal_suffix" => {
-                let (suffix, _) = self.surrounded(
+                let ((suffix, uses_clk, uses_rst), _) = self.surrounded(
                     &TokenKind::OpenParen,
-                    Self::identifier,
+                    |s| {
+                        let suffix = s.identifier()?;
+
+                        let (req_clk, req_rst) = if s.peek_and_eat(&TokenKind::Comma)?.is_some() {
+                            // Parse extra parameters
+                            let (relevant, extra): (Vec<_>, Vec<_>) = s
+                                .comma_separated(Self::identifier, &TokenKind::CloseParen)
+                                .extra_expected(vec!["Identifier"])?
+                                .into_iter()
+                                .partition(|i| i.inner.0 == "uses_clk" || i.inner.0 == "uses_rst");
+
+                            if let Some(extra) = extra.first() {
+                                return Err(Diagnostic::error(
+                                    extra,
+                                    format!("{extra} is not a valid parameter for wal_suffix"),
+                                )
+                                .into());
+                            }
+
+                            let relevant = relevant
+                                .iter()
+                                .map(|ident| ident.inner.0.as_str())
+                                .collect::<Vec<_>>();
+
+                            (
+                                relevant.contains(&"uses_clk"),
+                                relevant.contains(&"uses_rst"),
+                            )
+                        } else {
+                            (false, false)
+                        };
+
+                        Ok((suffix, req_clk, req_rst))
+                    },
                     &TokenKind::CloseParen,
                 )?;
                 Ok(Attribute::WalSuffix {
                     suffix: suffix.inner,
+                    uses_clk,
+                    uses_rst,
                 })
             }
             other => Err(
@@ -1606,8 +1718,6 @@ impl<'a> Parser<'a> {
     /// Attempts to parse an inner structure surrounded by two tokens, like `( x )`.
     ///
     /// If the `start` token is not found, an error is produced.
-    ///
-    /// If the `start` token is found, but the inner parser returns `None`, `None` is returned.
     ///
     /// If the end token is not found, return a mismatch error
     #[tracing::instrument(level = "debug", skip(self, inner))]

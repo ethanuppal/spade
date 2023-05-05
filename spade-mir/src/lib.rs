@@ -388,9 +388,28 @@ pub enum Statement {
         target: Loc<ValueName>,
         value: Loc<ValueName>,
     },
-    /// Emit wal tracing signals for `ValueName`. The suffix for the struct fields of this
-    /// type should be the specified string
-    WalTrace(ValueName, String, Type),
+    /// This is a tracing signal as part of the struct value `name`
+    /// I.e. the result of
+    /// ```
+    /// #[wal_suffix(suffix) struct T {a: A, b: B}
+    ///
+    /// let x: T = ...`
+    /// ```
+    ///
+    /// Will be
+    /// (e(0); IndexStruct(0); x)
+    /// (wal_trace {name: x, val: e(0), suffix: _a_suffix, ty: A}
+    /// (e(1); IndexStruct(1); x)
+    /// (wal_trace {name: x, val: e(0), suffix: _a_suffix, ty: A}
+    ///
+    /// will be two `WalTrace` statements: `{name: x, suffix: _a_suffix} and `{name: x, suffix: _b_suffix}`
+    /// This particular tracing signal shouldh have
+    WalTrace {
+        name: ValueName,
+        val: ValueName,
+        suffix: String,
+        ty: Type,
+    },
 }
 
 impl std::fmt::Display for Statement {
@@ -401,7 +420,12 @@ impl std::fmt::Display for Statement {
             Statement::Constant(id, ty, val) => write!(f, "const e{id}: {ty} = {val}"),
             Statement::Assert(val) => write!(f, "assert {val}"),
             Statement::Set { target, value } => write!(f, "set {target} = {value}"),
-            Statement::WalTrace(n, suffix, _) => write!(f, "wal_trace({n}, {suffix})"),
+            Statement::WalTrace {
+                name,
+                val,
+                suffix,
+                ty: _,
+            } => write!(f, "wal_trace({name}, {val}, {suffix})"),
         }
     }
 }

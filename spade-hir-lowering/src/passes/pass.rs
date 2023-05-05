@@ -114,6 +114,7 @@ impl Passable for Loc<Expression> {
                 name: _,
                 declares_name: _,
             } => {}
+            ExprKind::Null => {}
         }
 
         pass.visit_expression(self)

@@ -9,7 +9,7 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use hir::{Binding, Parameter, UnitHead};
+use hir::{Binding, Parameter, UnitHead, WalTrace};
 use num::{BigInt, Zero};
 use serde::{Deserialize, Serialize};
 use spade_common::num_ext::InfallibleToBigInt;
@@ -397,6 +397,7 @@ impl TypeState {
             ExprKind::PipelineRef { .. } => {
                 self.visit_pipeline_ref(expression, ctx)?;
             }
+            ExprKind::Null => {}
         }
         Ok(())
     }
@@ -776,6 +777,29 @@ impl TypeState {
     }
 
     #[trace_typechecker]
+    pub fn visit_wal_trace(
+        &mut self,
+        trace: &Loc<WalTrace>,
+        ctx: &Context,
+        generic_list: &GenericListToken,
+    ) -> Result<()> {
+        let WalTrace { clk, rst } = &trace.inner;
+        clk.as_ref()
+            .map(|x| {
+                self.visit_expression(&x, ctx, generic_list)?;
+                self.unify_expression_generic_error(&x, &t_clock(&ctx.symtab), &ctx.symtab)
+            })
+            .transpose()?;
+        rst.as_ref()
+            .map(|x| {
+                self.visit_expression(&x, ctx, generic_list)?;
+                self.unify_expression_generic_error(&x, &t_bool(&ctx.symtab), &ctx.symtab)
+            })
+            .transpose()?;
+        Ok(())
+    }
+
+    #[trace_typechecker]
     pub fn visit_statement(
         &mut self,
         stmt: &Loc<Statement>,
@@ -787,7 +811,7 @@ impl TypeState {
                 pattern,
                 ty,
                 value,
-                wal_trace: _,
+                wal_trace,
             }) => {
                 trace!("Visiting `let {} = ..`", pattern.kind);
                 self.visit_expression(value, ctx, generic_list)?;
@@ -811,6 +835,11 @@ impl TypeState {
                             loc: value.loc(),
                         })?;
                 }
+
+                wal_trace
+                    .as_ref()
+                    .map(|wt| self.visit_wal_trace(&wt, ctx, generic_list))
+                    .transpose()?;
 
                 Ok(())
             }

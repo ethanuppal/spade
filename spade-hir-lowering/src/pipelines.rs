@@ -201,6 +201,9 @@ impl PipelineAvailability for ExprKind {
                 name,
                 "Method call should already have been lowered by this point"
             ),
+            ExprKind::Null => {
+                panic!("Null expression during pipeline lowering")
+            }
         }
     }
 }

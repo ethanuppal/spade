@@ -2315,19 +2315,132 @@ mod tests {
             }
         "#;
 
-        let ty = Type::Struct(vec![
+        let fields = vec![
             ("a".to_string(), Type::int(8)),
             ("b".to_string(), Type::int(4)),
-        ]);
+        ];
+        let ty = Type::Struct(fields.clone());
+        let inner_types = fields.iter().map(|f| f.1.clone()).collect::<Vec<_>>();
 
         let expected = entity!(&["main"]; (
             "x", n(0, "x"), ty.clone(),
         ) -> ty.clone(); {
             (n(1, "y"); ty.clone(); Alias; n(0, "x"));
-            (wal_trace(n(1, "y"), "__wal_suffix__", ty))
+            (e(0); Type::int(8); IndexTuple((0, inner_types.clone())); n(1, "y"));
+            (wal_trace(n(1, "y"), e(0), "__a__wal_suffix__", Type::int(8)));
+            (e(1); Type::int(4); IndexTuple((1, inner_types.clone())); n(1, "y"));
+            (wal_trace(n(1, "y"), e(1), "__b__wal_suffix__", Type::int(4)))
         } => n(0, "x"));
 
         assert_same_mir!(&build_entity!(code), &expected);
+    }
+
+    #[test]
+    fn wal_traced_struct_with_clk_rst_is_traced() {
+        let code = r#"
+            #[wal_suffix(__wal_suffix__, uses_clk, uses_rst)]
+            struct Test {
+                a: int<8>,
+                b: int<4>
+            }
+
+            entity main(clk: clock, rst: bool, x: Test) -> Test {
+                #[wal_trace(clk=clk, rst=rst)]
+                let y = x;
+                x
+            }
+        "#;
+
+        let fields = vec![
+            ("a".to_string(), Type::int(8)),
+            ("b".to_string(), Type::int(4)),
+        ];
+        let ty = Type::Struct(fields.clone());
+        let inner_types = fields.iter().map(|f| f.1.clone()).collect::<Vec<_>>();
+
+        let expected = entity!(&["main"]; (
+            "clk", n(10, "clk"), Type::Bool,
+            "rst", n(11, "rst"), Type::Bool,
+            "x", n(0, "x"), ty.clone(),
+        ) -> ty.clone(); {
+            (n(1, "y"); ty.clone(); Alias; n(0, "x"));
+            (wal_trace(n(1, "y"), n(10, "clk"), "__clk__wal_suffix__", Type::Bool));
+            (wal_trace(n(1, "y"), n(11, "rst"), "__rst__wal_suffix__", Type::Bool));
+            (e(0); Type::int(8); IndexTuple((0, inner_types.clone())); n(1, "y"));
+            (wal_trace(n(1, "y"), e(0), "__a__wal_suffix__", Type::int(8)));
+            (e(1); Type::int(4); IndexTuple((1, inner_types.clone())); n(1, "y"));
+            (wal_trace(n(1, "y"), e(1), "__b__wal_suffix__", Type::int(4)))
+        } => n(0, "x"));
+
+        assert_same_mir!(&build_entity!(code), &expected);
+    }
+
+    snapshot_error! {
+        wal_trace_with_missing_rst_is_error,
+        "
+            #[wal_suffix(__wal_suffix__, uses_rst)]
+            struct Test {
+                a: int<8>,
+                b: int<4>
+            }
+
+            entity main(x: Test) -> Test {
+                #[wal_trace]
+                let y = x;
+                x
+            }
+        "
+    }
+
+    snapshot_error! {
+        wal_trace_with_missing_clk_is_error,
+        "
+            #[wal_suffix(__wal_suffix__, uses_clk)]
+            struct Test {
+                a: int<8>,
+                b: int<4>
+            }
+
+            entity main(x: Test) -> Test {
+                #[wal_trace]
+                let y = x;
+                x
+            }
+        "
+    }
+
+    snapshot_error! {
+        wal_trace_with_extra_reset,
+        "
+            #[wal_suffix(__wal_suffix__)]
+            struct Test {
+                a: int<8>,
+                b: int<4>
+            }
+
+            entity main(x: Test) -> Test {
+                #[wal_trace(rst = true)]
+                let y = x;
+                x
+            }
+        "
+    }
+
+    snapshot_error! {
+        wal_trace_with_extra_clk,
+        "
+            #[wal_suffix(__wal_suffix__)]
+            struct Test {
+                a: int<8>,
+                b: int<4>
+            }
+
+            entity main(clk: clock, x: Test) -> Test {
+                #[wal_trace(clk = clk)]
+                let y = x;
+                x
+            }
+        "
     }
 
     snapshot_error! {

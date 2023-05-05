@@ -122,13 +122,20 @@ impl PartialEq for Pattern {
 }
 
 #[derive(PartialEq, Debug, Clone, Serialize, Deserialize)]
+pub struct WalTrace {
+    pub clk: Option<Loc<Expression>>,
+    pub rst: Option<Loc<Expression>>,
+}
+impl WithLocation for WalTrace {}
+
+#[derive(PartialEq, Debug, Clone, Serialize, Deserialize)]
 pub struct Binding {
     pub pattern: Loc<Pattern>,
     pub ty: Option<Loc<TypeSpec>>,
     pub value: Loc<Expression>,
     // Specifies if a wal_trace mir node should be emitted for this struct. If this
     // is present, the type is traceable
-    pub wal_trace: Option<Loc<()>>,
+    pub wal_trace: Option<Loc<WalTrace>>,
 }
 
 #[derive(PartialEq, Debug, Clone, Serialize, Deserialize)]
@@ -287,11 +294,19 @@ pub struct Enum {
 impl WithLocation for Enum {}
 
 #[derive(PartialEq, Debug, Clone, Serialize, Deserialize)]
+pub struct WalSuffix {
+    pub suffix: Identifier,
+    pub uses_clk: bool,
+    pub uses_rst: bool,
+}
+impl WithLocation for WalSuffix {}
+
+#[derive(PartialEq, Debug, Clone, Serialize, Deserialize)]
 pub struct Struct {
     pub members: ParameterList,
     pub is_port: bool,
     pub attributes: AttributeList,
-    pub wal_suffix: Option<Loc<Identifier>>,
+    pub wal_suffix: Option<Loc<WalSuffix>>,
 }
 impl WithLocation for Struct {}
 

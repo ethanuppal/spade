@@ -173,8 +173,22 @@ fn compare_statements(s1: &Statement, s2: &Statement, var_map: &mut VarMap) -> b
             check_name!(vl, vr);
             true
         }
-        (Statement::WalTrace(n1, s1, ty1), Statement::WalTrace(n2, s2, ty2)) => {
+        (
+            Statement::WalTrace {
+                name: n1,
+                val: v1,
+                suffix: s1,
+                ty: ty1,
+            },
+            Statement::WalTrace {
+                name: n2,
+                val: v2,
+                suffix: s2,
+                ty: ty2,
+            },
+        ) => {
             check_name!(n1, n2);
+            check_name!(v1, v2);
             if s1 != s2 {
                 return false;
             }
@@ -207,7 +221,7 @@ fn populate_var_map(
             (Statement::Constant(e1, _, _), Statement::Constant(e2, _, _)) => {
                 var_map.try_update_name(&ValueName::Expr(*e1), &ValueName::Expr(*e2))
             }
-            (Statement::WalTrace(_, _, _), Statement::WalTrace(_, _, _)) => Ok(()),
+            (Statement::WalTrace { .. }, Statement::WalTrace { .. }) => Ok(()),
             (Statement::Assert(_), Statement::Assert(_)) => Ok(()),
             (Statement::Set { .. }, Statement::Set { .. }) => Ok(()),
             _ => Err(Error::StatementMismatch(s1.clone(), s2.clone())),
