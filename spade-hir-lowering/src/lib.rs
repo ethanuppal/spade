@@ -565,56 +565,38 @@ pub fn do_wal_trace_lowering(
         uses_rst,
     } = &wal_suffix.inner;
 
-    // TODO: Consider breaking these out into functions
-    // Handle clock and reset
-    match (clk, uses_clk) {
-        (None, false) => {}
-        (None, true) => {
-            return Err(Diagnostic::error(
-                wal_trace,
-                "The clock signal for this trace must be provided",
-            )
-            .into())
-        }
-        (Some(clk), false) => {
-            return Err(Diagnostic::error(clk, "Unnecessary clock signal")
-                .secondary_label(
-                    wal_suffix,
-                    "This struct does not need a clock signal for tracing",
-                )
-                .into())
-        }
-        (Some(clk), true) => result.push_anonymous(mir::Statement::WalTrace {
-            name: main_value_name.clone(),
-            val: clk.variable(&ctx.subs)?,
-            suffix: format!("__clk{}", wal_suffix.suffix.clone()),
-            ty: MirType::Bool,
-        }),
-    }
-    match (rst, uses_rst) {
-        (None, false) => {}
-        (None, true) => {
-            return Err(Diagnostic::error(
-                wal_trace,
-                "The reset signal for this trace must be provided",
-            )
-            .into())
-        }
-        (Some(clk), false) => {
-            return Err(Diagnostic::error(clk, "Unnecessary reset signal")
-                .secondary_label(
-                    wal_suffix,
-                    "This struct does not need a reset signal for tracing",
-                )
-                .into())
-        }
-        (Some(clk), true) => result.push_anonymous(mir::Statement::WalTrace {
-            name: main_value_name.clone(),
-            val: clk.variable(&ctx.subs)?,
-            suffix: format!("__rst{}", suffix.clone()),
-            ty: MirType::Bool,
-        }),
-    }
+    let mut check_clk_or_rst =
+        |signal: &Option<Loc<Expression>>, uses: bool, name, suffix| -> Result<()> {
+            match (signal, uses) {
+                (None, false) => {}
+                (None, true) => {
+                    return Err(Diagnostic::error(
+                        wal_trace,
+                        format!("The {name} signal for this trace must be provided"),
+                    )
+                    .into())
+                }
+                (Some(signal), false) => {
+                    return Err(
+                        Diagnostic::error(signal, format!("Unnecessary {name} signal"))
+                            .secondary_label(
+                                wal_suffix,
+                                format!("This struct does not need a {name} signal for tracing"),
+                            )
+                            .into(),
+                    )
+                }
+                (Some(signal), true) => result.push_anonymous(mir::Statement::WalTrace {
+                    name: main_value_name.clone(),
+                    val: signal.variable(&ctx.subs)?,
+                    suffix: format!("__{suffix}{}", wal_suffix.suffix.clone()),
+                    ty: MirType::Bool,
+                }),
+            }
+            Ok(())
+        };
+    check_clk_or_rst(clk, *uses_clk, "clock", "clk")?;
+    check_clk_or_rst(rst, *uses_rst, "reset", "rst")?;
 
     if let ConcreteType::Struct { name: _, members } = ty {
         let inner_types = members
