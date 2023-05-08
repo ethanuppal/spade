@@ -3,15 +3,21 @@ use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
 use spade_common::name::NameID;
 
-use crate::{Binding, Entity, MirInput, Register, ValueName, ValueNameSource};
+use crate::{Binding, Entity, MirInput, Register, ValueName};
 
 /// Mapping from verilog name back to the corresponding NameID
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct VerilogNameMap {
     inner: HashMap<String, NameSource>,
 }
 
 impl VerilogNameMap {
+    pub fn new() -> Self {
+        Self {
+            inner: HashMap::new(),
+        }
+    }
+
     /// If from mappings contain verilog escape characters (\\<name> ), those are removed
     pub fn from_hash_map(hm: HashMap<String, NameSource>) -> Self {
         let mut result = Self {
@@ -38,7 +44,7 @@ impl VerilogNameMap {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum NameSource {
     ForwardName(NameID),
     BackwardName(NameID),
@@ -84,34 +90,6 @@ impl NameState {
             .get(name)
             .cloned()
             .unwrap_or_else(|| name.clone())
-    }
-
-    // Mapping from verilog name back to NameID
-    pub fn verilog_name_map(&self) -> VerilogNameMap {
-        let inner = self
-            .name_map
-            .iter()
-            .map(|(from, to)| match from {
-                ValueName::Named(_, _, ValueNameSource::Name(name_id)) => {
-                    vec![
-                        (to.var_name(), NameSource::ForwardName(name_id.clone())),
-                        (
-                            to.backward_var_name(),
-                            NameSource::BackwardName(name_id.clone()),
-                        ),
-                    ]
-                }
-                ValueName::Named(_, _, ValueNameSource::Expr(id)) | ValueName::Expr(id) => {
-                    vec![
-                        (to.var_name(), NameSource::ForwardExpr(*id)),
-                        (to.backward_var_name(), NameSource::ForwardExpr(*id)),
-                    ]
-                }
-            })
-            .flatten()
-            .collect();
-
-        VerilogNameMap::from_hash_map(inner)
     }
 }
 

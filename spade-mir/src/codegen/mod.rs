@@ -13,7 +13,7 @@ use spade_diagnostics::{CodeBundle, CompilationError, DiagHandler};
 use crate::aliasing::flatten_aliases;
 use crate::assertion_codegen::AssertedExpression;
 use crate::eval::eval_statements;
-use crate::renaming::{make_names_predictable, NameState};
+use crate::renaming::{make_names_predictable, VerilogNameMap};
 use crate::type_list::TypeList;
 use crate::unit_name::{InstanceMap, InstanceNameTracker};
 use crate::verilog::{self, assign, logic, size_spec};
@@ -41,12 +41,18 @@ fn source_attribute(loc: &Option<Loc<()>>, code: &Option<CodeBundle>) -> Option<
     }
 }
 
-fn statement_declaration(statement: &Statement, code: &Option<CodeBundle>) -> Code {
+fn statement_declaration(
+    statement: &Statement,
+    code: &Option<CodeBundle>,
+    name_map: &mut VerilogNameMap,
+) -> Code {
     match statement {
         Statement::Binding(binding) => {
             let name = binding.name.var_name();
 
             let forward_declaration = if binding.ty.size() != BigUint::zero() {
+                name_map.insert(&name, binding.name.verilog_name_source_fwd());
+
                 vec![match &binding.ty {
                     crate::types::Type::Memory { inner, length } => {
                         let inner_w = inner.size();
@@ -63,6 +69,8 @@ fn statement_declaration(statement: &Statement, code: &Option<CodeBundle>) -> Co
             };
 
             let backward_declaration = if binding.ty.backward_size() != BigUint::zero() {
+                name_map.insert(&name, binding.name.verilog_name_source_back());
+
                 vec![logic(
                     &binding.name.backward_var_name(),
                     &binding.ty.backward_size(),
@@ -923,21 +931,21 @@ fn statement_code_and_declaration(
         unit_nameid: &NameID(0, Path::from_strs(&["dummy"])),
     };
     code! {
-        [0] statement_declaration(statement, &Some(source_code.clone()));
+        [0] statement_declaration(statement, &Some(source_code.clone()), &mut VerilogNameMap::new());
         [0] statement_code(statement, &mut ctx);
     }
 }
 
 /// A mir entity which has had passes required for codegen performed on it
 #[derive(Clone)]
-pub struct Codegenable(pub Entity, pub NameState);
+pub struct Codegenable(pub Entity);
 
 pub fn prepare_codegen(mut entity: Entity, expr_idtracker: &mut ExprIdTracker) -> Codegenable {
     flatten_aliases(&mut entity);
-    let name_state = make_names_predictable(&mut entity);
+    make_names_predictable(&mut entity);
     insert_wal_signals(&mut entity, expr_idtracker, &mut None);
 
-    Codegenable(entity, name_state)
+    Codegenable(entity)
 }
 
 /// Source code is used for two things: mapping expressions back to their original source code
@@ -951,8 +959,10 @@ pub fn entity_code(
     entity: &Codegenable,
     instance_map: &mut InstanceMap,
     source_code: &Option<CodeBundle>,
-) -> Code {
-    let Codegenable(entity, _) = entity;
+) -> (Code, VerilogNameMap) {
+    let mut name_map = VerilogNameMap::new();
+
+    let Codegenable(entity) = entity;
 
     let types = &TypeList::from_entity(&entity);
 
@@ -970,6 +980,8 @@ pub fn entity_code(
             let size = ty.size();
             let (input_head, input_code) = if size != BigUint::zero() {
                 let name = mangle_input(no_mangle, name);
+
+                name_map.insert(&name, val_name.verilog_name_source_fwd());
 
                 // If the no_mangle attribute is set, we need to avoid clashing between the port
                 // name, and the value_name. Because the first value_name in a module has the same
@@ -994,6 +1006,7 @@ pub fn entity_code(
             let backward_size = ty.backward_size();
             let (output_head, output_code) = if backward_size != BigUint::zero() {
                 let name = mangle_output(no_mangle, name);
+                name_map.insert(&name, val_name.verilog_name_source_back());
                 (
                     format!("output{} {},", size_spec(&backward_size), name),
                     code! {
@@ -1065,7 +1078,7 @@ pub fn entity_code(
     let mut body = Code::new();
 
     for stmt in &entity.statements {
-        body.join(&statement_declaration(stmt, source_code))
+        body.join(&statement_declaration(stmt, source_code, &mut name_map))
     }
     for stmt in &entity.statements {
         body.join(&statement_code(stmt, &mut ctx))
@@ -1094,7 +1107,7 @@ pub fn entity_code(
             [1] &back_port_assignment;
         [0] &"endmodule"
     };
-    code
+    (code, name_map)
 }
 
 #[macro_export]
@@ -1260,6 +1273,7 @@ mod tests {
                 &mut InstanceMap::new(),
                 &None
             )
+            .0
             .to_string(),
             expected
         );
@@ -1307,6 +1321,7 @@ mod tests {
                 &mut InstanceMap::new(),
                 &None
             )
+            .0
             .to_string(),
             expected
         );
@@ -1356,6 +1371,7 @@ mod tests {
                 &mut InstanceMap::new(),
                 &None
             )
+            .0
             .to_string(),
             expected
         );
@@ -1398,6 +1414,7 @@ mod tests {
                 &mut InstanceMap::new(),
                 &None
             )
+            .0
             .to_string(),
             expected
         );
@@ -1442,6 +1459,7 @@ mod tests {
                 &mut InstanceMap::new(),
                 &None
             )
+            .0
             .to_string(),
             expected
         );
@@ -1480,6 +1498,7 @@ mod tests {
                 &mut InstanceMap::new(),
                 &None
             )
+            .0
             .to_string(),
             expected
         );
@@ -1557,6 +1576,7 @@ mod tests {
                 &mut InstanceMap::new(),
                 &None
             )
+            .0
             .to_string(),
             expected
         );
@@ -1596,7 +1616,7 @@ mod tests {
         );
 
         assert_same_code! {
-            &entity_code(&prepare_codegen(input.clone(), &mut ExprIdTracker::new()), &mut InstanceMap::new(), &None).to_string(),
+            &entity_code(&prepare_codegen(input.clone(), &mut ExprIdTracker::new()), &mut InstanceMap::new(), &None).0.to_string(),
             expected
         }
     }

@@ -17,6 +17,7 @@ pub fn wal_alias(
         format!("{prefix}{suffix}"),
         source.into(),
     );
+
     Statement::Binding(Binding {
         name: new_name,
         operator: Operator::Alias,

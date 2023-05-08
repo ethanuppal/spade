@@ -11,12 +11,12 @@ function check_untracked_srcs {(
 
 # Parens are there to start a new shell where we can exit early on failure
 function run_tests {(
-    cargo test && \
-    # Remember to add && \ when adding more tests
     cargo +stable fmt -- --check && \
+    cargo test && \
     sh -c "cd output_test && make" && \
     sh -c "cd swim_tests && swim test" && \
     sh -c "cd swim_tests && ./do_pytest" && \
+    # Remember to add && \ when adding more tests
     true
 )}
 

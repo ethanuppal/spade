@@ -549,6 +549,7 @@ impl PatternLocal for Loc<Pattern> {
     }
 }
 
+#[tracing::instrument(level = "trace", skip_all)]
 pub fn do_wal_trace_lowering(
     pattern: &Loc<hir::Pattern>,
     main_value_name: &ValueName,
@@ -631,31 +632,46 @@ pub fn do_wal_trace_lowering(
             // the rest of the compiler
             // TODO: Add a test for this, and make a note that if this test fails
             // because of another change in teh compiler, this should be done properly
-            let new_ty = ctx.types.new_generic();
+
+            let dummy_expr_id = ctx.idtracker.next();
+            let field_access_expr = &hir::Expression {
+                kind: ExprKind::FieldAccess(
+                    Box::new(
+                        hir::Expression {
+                            kind: ExprKind::Null,
+                            id: dummy_expr_id,
+                        }
+                        .nowhere(),
+                    ),
+                    n.clone().nowhere(),
+                ),
+                id: new_id,
+            }
+            .nowhere();
+            let generic_list = &ctx
+                .types
+                .create_generic_list(spade_typeinference::GenericListSource::Anonymous, &[]);
+            let type_ctx = spade_typeinference::Context {
+                symtab: ctx.symtab.symtab(),
+                items: &ctx.item_list,
+            };
             ctx.types
-                .add_equation(TypedExpression::Id(new_id), new_ty.clone());
+                .visit_expression(&field_access_expr, &type_ctx, generic_list)
+                .map_err(|e| {
+                    diag_anyhow!(
+                        wal_trace,
+                        "{e}\n Unification error while laundering a struct"
+                    )
+                })?;
+
             ctx.types
-                .unify_expression_generic_error(
-                    &hir::Expression {
-                        kind: ExprKind::FieldAccess(
-                            Box::new(
-                                hir::Expression {
-                                    kind: ExprKind::Null,
-                                    id: pattern.id,
-                                }
-                                .nowhere(),
-                            ),
-                            n.clone().nowhere(),
-                        ),
-                        id: new_id,
-                    }
-                    .nowhere(),
-                    &new_ty,
+                .unify(
+                    &TypedExpression::Id(pattern.id),
+                    &TypedExpression::Id(dummy_expr_id),
                     ctx.symtab.symtab(),
                 )
-                .map_err(|_| {
-                    diag_anyhow!(wal_trace, "Unification error while laundering a struct")
-                })?;
+                .unwrap(); // Unification with a completely generic expr
+            ctx.types.check_requirements(&type_ctx).unwrap();
         }
     } else {
         diag_bail!(wal_trace, "Tracing on non-struct")

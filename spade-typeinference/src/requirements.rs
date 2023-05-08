@@ -283,7 +283,7 @@ impl Requirement {
 
     /// Check if this requirement is satisfied. If so, apply the resulting replacements to the
     /// type state, otherwise add the requirement to the type state requirement list
-    #[tracing::instrument(level = "trace", skip_all)]
+    #[tracing::instrument(level = "trace", skip(type_state, ctx))]
     pub fn check_or_add(self, type_state: &mut TypeState, ctx: &Context) -> Result<()> {
         match self.check(type_state, ctx)? {
             RequirementResult::NoChange => Ok(type_state.add_requirement(self)),

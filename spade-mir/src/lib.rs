@@ -17,6 +17,7 @@ use derivative::Derivative;
 use itertools::Itertools;
 
 use num::{BigInt, BigUint};
+use renaming::NameSource;
 use spade_common::{
     location_info::{Loc, WithLocation},
     name::NameID,
@@ -97,6 +98,28 @@ pub enum ValueName {
 impl WithLocation for ValueName {}
 
 impl ValueName {
+    pub fn verilog_name_source_fwd(&self) -> NameSource {
+        match self {
+            ValueName::Named(_, _, ValueNameSource::Name(name_id)) => {
+                NameSource::ForwardName(name_id.clone())
+            }
+            ValueName::Named(_, _, ValueNameSource::Expr(id)) | ValueName::Expr(id) => {
+                NameSource::ForwardExpr(*id)
+            }
+        }
+    }
+
+    pub fn verilog_name_source_back(&self) -> NameSource {
+        match self {
+            ValueName::Named(_, _, ValueNameSource::Name(name_id)) => {
+                NameSource::BackwardName(name_id.clone())
+            }
+            ValueName::Named(_, _, ValueNameSource::Expr(id)) | ValueName::Expr(id) => {
+                NameSource::BackwardExpr(*id)
+            }
+        }
+    }
+
     pub fn _test_named(id: u64, name: String) -> Self {
         use spade_common::name::Path;
 

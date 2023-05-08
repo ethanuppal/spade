@@ -317,7 +317,7 @@ pub fn compile(
         std::fs::write(mir_output, mir_code.join("\n\n")).or_report(&mut errors);
     }
     if let Some(type_dump_file) = opts.type_dump_file {
-        match ron::to_string(&all_types) {
+        match ron::ser::to_string_pretty(&all_types, Default::default()) {
             Ok(encoded_type_info) => {
                 std::fs::write(type_dump_file, encoded_type_info).or_report(&mut errors);
             }
@@ -486,6 +486,7 @@ fn codegen(
 
             flat_mir_entities.push(codegenable.clone());
 
+            let (code, name_map) = code;
             module_code.push(code.to_string());
 
             all_types.extend(dump_types(
@@ -511,7 +512,7 @@ fn codegen(
                     // lifeguard spade#254
                     // FIXME: Insert pipeline register stuff into the type map
                     type_map: type_state.into(),
-                    verilog_name_map: codegenable.1.verilog_name_map(),
+                    verilog_name_map: name_map,
                 },
             );
         }

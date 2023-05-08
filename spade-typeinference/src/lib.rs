@@ -1325,6 +1325,12 @@ impl TypeState {
             }
 
             for constraint in new_info {
+                trace!(
+                    "Constraint replaces {} with {:?}",
+                    constraint.inner.0,
+                    constraint.inner.1
+                );
+
                 let ((var, replacement), loc) = constraint.split_loc();
 
                 self.trace_stack
@@ -1462,7 +1468,7 @@ impl TypeState {
             })
     }
 
-    fn check_requirements(&mut self, ctx: &Context) -> Result<()> {
+    pub fn check_requirements(&mut self, ctx: &Context) -> Result<()> {
         // Once we are done type checking the rest of the entity, check all requirements
         loop {
             // Walk through all the requirements, checking each one. If the requirement

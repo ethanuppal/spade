@@ -197,7 +197,7 @@ impl TypeConstraints {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct ConstraintReplacement {
     /// The actual constraint
     pub val: BigInt,
