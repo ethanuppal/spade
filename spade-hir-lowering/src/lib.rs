@@ -549,7 +549,6 @@ impl PatternLocal for Loc<Pattern> {
     }
 }
 
-#[tracing::instrument(level = "trace", skip_all)]
 pub fn do_wal_trace_lowering(
     pattern: &Loc<hir::Pattern>,
     main_value_name: &ValueName,
@@ -604,15 +603,79 @@ pub fn do_wal_trace_lowering(
             .iter()
             .map(|(_, t)| t.to_mir_type())
             .collect::<Vec<_>>();
+
+        // Sanity check that all fields are either pure input or pure output
+        for (n, ty) in members {
+            let mir_ty = ty.to_mir_type();
+            if mir_ty.backward_size() != BigUint::zero()
+                && ty.to_mir_type().size() != BigUint::zero()
+            {
+                return Err(Diagnostic::error(
+                    pattern,
+                    "wal tracing does not work on types with mixed-direction fields",
+                )
+                .primary_label(format!("Field {n} has both & and &mut wires"))
+                .into());
+            }
+        }
+
+        let inner_backward_types = members
+            .iter()
+            .map(|(_, t)| match t.to_mir_type() {
+                MirType::Backward(i) => i.as_ref().clone(),
+                other => MirType::Backward(Box::new(other.clone())),
+            })
+            .collect::<Vec<_>>();
+
+        // If we have &mut wires, we need a flipped port to read the values from because
+        // we need to work around a small bug. Create an anonymous value for this
+        let flipped_id = ctx.idtracker.next();
+        let flipped_port = mir::Statement::Binding(mir::Binding {
+            name: ValueName::Expr(flipped_id),
+            operator: mir::Operator::YoloFlipPort,
+            operands: vec![main_value_name.clone()],
+            ty: MirType::Struct(
+                members
+                    .iter()
+                    .map(|(n, ty)| {
+                        (
+                            n.clone().0.clone(),
+                            match ty.to_mir_type() {
+                                MirType::Backward(i) => i.as_ref().clone(),
+                                other => MirType::Backward(Box::new(other.clone())),
+                            },
+                        )
+                    })
+                    .collect(),
+            ),
+            loc: None,
+        });
+        result.push_anonymous(flipped_port);
+
         for (i, (n, ty)) in members.iter().enumerate() {
             let new_id = ctx.idtracker.next();
             let field_name = ValueName::Expr(new_id);
+
+            let (mir_ty, operand, operator, backwards) = match ty.to_mir_type() {
+                MirType::Backward(b) => (
+                    *b.clone(),
+                    ValueName::Expr(flipped_id),
+                    mir::Operator::IndexTuple(i as u64, inner_backward_types.clone()),
+                    true
+                ),
+                other => (
+                    other,
+                    main_value_name.clone(),
+                    mir::Operator::IndexTuple(i as u64, inner_types.clone()),
+                    false
+                ),
+            };
             // Insert an indexing operation, and a wal trace on the result.
             result.push_anonymous(mir::Statement::Binding(mir::Binding {
                 name: field_name.clone(),
-                operator: mir::Operator::IndexTuple(i as u64, inner_types.clone()),
-                operands: vec![main_value_name.clone()],
-                ty: ty.to_mir_type(),
+                operator,
+                operands: vec![operand],
+                ty: mir_ty.clone(),
                 loc: None,
             }));
 
@@ -621,7 +684,7 @@ pub fn do_wal_trace_lowering(
                 name: main_value_name.clone(),
                 val: field_name,
                 suffix: format!("__{n}{}", suffix.clone()),
-                ty: ty.to_mir_type(),
+                ty: mir_ty,
             });
 
             // Add the new expression to the type state so we can look it up

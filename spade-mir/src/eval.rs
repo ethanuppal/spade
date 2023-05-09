@@ -216,6 +216,7 @@ pub fn eval_statements(statements: &[Statement]) -> Value {
                     Operator::IndexTuple(_, _) => todo!(),
                     Operator::ReadPort => todo!(),
                     Operator::FlipPort => todo!(),
+                    Operator::YoloFlipPort => todo!(),
                     Operator::Instance(_, _) => todo!(),
                     Operator::Alias => todo!(),
                     Operator::Nop => todo!(),

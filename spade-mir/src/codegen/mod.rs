@@ -534,6 +534,10 @@ fn forward_expression_code(binding: &Binding, types: &TypeList, ops: &[ValueName
             // NOTE Dummy. Set in statement_code
             format!("")
         }
+        Operator::YoloFlipPort => {
+            // NOTE Dummy. Set in statement_code
+            format!("")
+        }
         Operator::ConstructTuple => {
             let mut members = ops
                 .iter()
@@ -648,6 +652,10 @@ fn backward_expression_code(binding: &Binding, types: &TypeList, ops: &[ValueNam
         }
         Operator::FlipPort => {
             // NOTE: Set in statement_code
+            format!("")
+        }
+        Operator::YoloFlipPort => {
+            // NOTE Dummy. Set in statement_code
             format!("")
         }
         Operator::Instance(_, _) => format!(""),
@@ -776,6 +784,14 @@ fn statement_code(statement: &Statement, ctx: &mut Context) -> Code {
                     code! {
                         [0] format!("assign {} = {};", name, back_ops[0]);
                         [0] format!("assign {} = {};", ops[0], back_name);
+                    }
+                    .to_string()
+                }
+                Operator::YoloFlipPort => {
+                    // The forward ports of the flipped port (op[0]) and and the original (self)
+                    // should be mapped to the backward ports of the opposite port
+                    code! {
+                        [0] format!("assign {} = {};", name, back_ops[0]);
                     }
                     .to_string()
                 }

@@ -242,6 +242,11 @@ pub enum Operator {
     /// Inverts the direction of all bits of a port. I.e. the forward ports
     /// become backward ports. This is only valid when converting from T to ~T
     FlipPort,
+
+    /// Creates a new struct containing only the backward portion, but flipped of this type
+    YoloFlipPort, // TODO: As the name implies, this needs a more thought out implementation
+                  // before this is merged
+
     /// Instantiation of another module with the specified name. The operands are passed
     /// positionally to the entity. The target module can only have a single output which
     /// must be the last argument.
@@ -334,6 +339,7 @@ impl std::fmt::Display for Operator {
             Operator::Instance(name, _) => write!(f, "Instance({})", name.as_verilog()),
             Operator::Alias => write!(f, "Alias"),
             Operator::FlipPort => write!(f, "FlipPort"),
+            Operator::YoloFlipPort => write!(f, "YoloFlipPort"),
             Operator::Nop => write!(f, "Nop"),
             Operator::ReadPort => write!(f, "ReadPort"),
         }
