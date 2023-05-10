@@ -656,18 +656,16 @@ pub fn do_wal_trace_lowering(
             let new_id = ctx.idtracker.next();
             let field_name = ValueName::Expr(new_id);
 
-            let (mir_ty, operand, operator, backwards) = match ty.to_mir_type() {
+            let (mir_ty, operand, operator) = match ty.to_mir_type() {
                 MirType::Backward(b) => (
                     *b.clone(),
                     ValueName::Expr(flipped_id),
                     mir::Operator::IndexTuple(i as u64, inner_backward_types.clone()),
-                    true
                 ),
                 other => (
                     other,
                     main_value_name.clone(),
                     mir::Operator::IndexTuple(i as u64, inner_types.clone()),
-                    false
                 ),
             };
             // Insert an indexing operation, and a wal trace on the result.
