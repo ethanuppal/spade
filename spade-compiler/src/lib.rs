@@ -261,8 +261,12 @@ pub fn compile(
                     .visit_entity(u, &type_inference_ctx)
                     .report(&mut errors)
                 {
-                    if let Ok(()) = wordlength_inference::infer_and_check(&mut type_state, u)
-                        .report(&mut errors)
+                    if let Ok(()) = wordlength_inference::infer_and_check(
+                        &mut type_state,
+                        &type_inference_ctx,
+                        u,
+                    )
+                    .report(&mut errors)
                     {
                         all_types.extend(dump_types(
                             &type_state,
