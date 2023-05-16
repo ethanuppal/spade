@@ -27,7 +27,7 @@ type Res = error::Result<Option<Equation>>;
 
 struct Inferer<'a> {
     mappings: HashMap<TypeVar, Var>,
-    // These are <= equations
+    // These are >= equations
     equations: Vec<(Var, Equation)>,
     var_counter: usize,
     context: &'a Context<'a>,
@@ -50,7 +50,7 @@ impl<'a> Inferer<'a> {
         Var(v)
     }
 
-    fn find_or_create(&mut self, thing: &dyn HasType) -> Option<Equation> {
+    fn find_or_create(&mut self, thing: &dyn HasType) -> Option<Var> {
         if let Ok(TypeVar::Known(t, v)) = thing.get_type(self.type_state) {
             match v.as_slice() {
                 [size] if t == t_int(self.context.symtab) => {
@@ -61,7 +61,7 @@ impl<'a> Inferer<'a> {
                         self.mappings.insert(size.clone(), q);
                         q
                     };
-                    Some(Equation::Var(p))
+                    Some(p)
                 }
                 _ => None,
             }
@@ -70,9 +70,16 @@ impl<'a> Inferer<'a> {
         }
     }
 
+    fn maybe_add_equation(&mut self, thing: &dyn HasType, maybe_eq: Option<Equation>) {
+        match (self.find_or_create(thing), maybe_eq) {
+            (Some(var), Some(eq)) => self.equations.push((var, eq)),
+            _ => {}
+        }
+    }
+
     fn expression(&mut self, expr: &Loc<Expression>) -> Res {
-        Ok(match &expr.inner.kind {
-            ExprKind::Identifier(_) => self.find_or_create(&expr.inner),
+        let maybe_eq = match &expr.inner.kind {
+            ExprKind::Identifier(_) => self.find_or_create(&expr.inner).map(|v| Equation::Var(v)),
             ExprKind::IntLiteral(literal) => {
                 let x = match literal {
                     spade_hir::expression::IntLiteral::Signed(x) => x.to_i128(),
@@ -100,11 +107,15 @@ impl<'a> Inferer<'a> {
             | ExprKind::TupleIndex(_, _)
             | ExprKind::FieldAccess(_, _)
             | ExprKind::MethodCall { .. } => None,
-        })
+        };
+
+        self.maybe_add_equation(&expr.inner, maybe_eq.clone());
+        Ok(maybe_eq)
     }
 
-    fn block(&self, block: &Block) -> Res {
-        todo!()
+    fn block(&mut self, block: &Block) -> Res {
+        // TODO: Check the statements as well!
+        self.expression(&block.result)
     }
 
     fn match_(&self, value: &Loc<Expression>, patterns: &[(Loc<Pattern>, Loc<Expression>)]) -> Res {
@@ -117,7 +128,7 @@ impl<'a> Inferer<'a> {
         r#true: &Loc<Expression>,
         r#false: &Loc<Expression>,
     ) -> Res {
-        todo!()
+        Ok(None)
     }
 
     fn binary_operator(
