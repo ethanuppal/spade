@@ -35,6 +35,7 @@ use spade_typeinference::dump::dump_types;
 use spade_typeinference::equation::TypedExpression;
 use spade_typeinference::trace_stack::format_trace_stack;
 use spade_types::ConcreteType;
+use spade_wordlength_inference as wordlength_inference;
 
 pub struct Opt<'b> {
     pub error_buffer: &'b mut Buffer,
@@ -255,19 +256,24 @@ pub fn compile(
         .filter_map(|(name, item)| match item {
             ExecutableItem::Unit(u) => {
                 let mut type_state = typeinference::TypeState::new();
-                type_state.use_aa = opts.use_aa;
 
                 if let Ok(()) = type_state
                     .visit_entity(u, &type_inference_ctx)
                     .report(&mut errors)
                 {
-                    all_types.extend(dump_types(
-                        &type_state,
-                        &item_list.types,
-                        frozen_symtab.symtab(),
-                    ));
+                    if let Ok(()) = wordlength_inference::infer_and_check(&mut type_state, u)
+                        .report(&mut errors)
+                    {
+                        all_types.extend(dump_types(
+                            &type_state,
+                            &item_list.types,
+                            frozen_symtab.symtab(),
+                        ));
 
-                    Some((name, (item, type_state)))
+                        Some((name, (item, type_state)))
+                    } else {
+                        None
+                    }
                 } else {
                     if opts.print_type_traceback {
                         type_state.print_equations();

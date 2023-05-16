@@ -324,6 +324,8 @@ impl TypeState {
             let array_size = self.new_generic();
             let (int_type, int_size) = self.new_split_generic_int(&&ctx.symtab);
 
+            // NOTE[et]: Only used for size constraints of this exact type - this can be a
+            // requirement instead, that way we remove a lot of complexity! :D
             self.add_constraint(
                 int_size,
                 bits_to_store(ce_var(&array_size) - ce_int(BigInt::one())),
@@ -469,59 +471,13 @@ impl TypeState {
             self.visit_expression(&rhs, ctx, generic_list)?;
             match *op {
                 BinaryOperator::Add
-                | BinaryOperator::Sub => {
-                    let (lhs_t, lhs_size) = self.new_split_generic_int(&ctx.symtab);
-                    let (result_t, result_size) = self.new_split_generic_int(&ctx.symtab);
-
-                    self.add_constraint(
-                        result_size.clone(),
-                        ce_var(&lhs_size) + ce_int(BigInt::one()),
-                        expression.loc(),
-                        &result_t,
-                        ConstraintSource::AdditionOutput
-                    );
-                    self.add_constraint(
-                        lhs_size.clone(),
-                        ce_var(&result_size) + -ce_int(BigInt::one()),
-                        lhs.loc(),
-                        &lhs_t,
-                        ConstraintSource::AdditionOutput
-                    );
-
-                    // FIXME: Make generic over types that can be added
+                | BinaryOperator::Sub
+                | BinaryOperator::Mul => {
+                    let lhs_t = self.new_generic_int(&ctx.symtab);
                     self.unify_expression_generic_error(&lhs, &lhs_t, &ctx.symtab)?;
-                    self.unify_expression_generic_error(&lhs, &rhs.inner, &ctx.symtab)?;
-                    self.unify_expression_generic_error(expression, &result_t, &ctx.symtab)?;
-                }
-                BinaryOperator::Mul => {
-                    let (lhs_t, lhs_size) = self.new_split_generic_int(&ctx.symtab);
-                    let (rhs_t, rhs_size) = self.new_split_generic_int(&ctx.symtab);
-                    let (result_t, result_size) = self.new_split_generic_int(&ctx.symtab);
-
-                    // Result size is sum of input sizes
-                    self.add_constraint(
-                        result_size.clone(),
-                        ce_var(&lhs_size) + ce_var(&rhs_size),
-                        expression.loc(),
-                        &result_t,
-                        ConstraintSource::MultOutput
-                    );
-                    self.add_constraint(
-                        lhs_size.clone(),
-                        ce_var(&result_size) + -ce_var(&rhs_size),
-                        lhs.loc(),
-                        &lhs_t,
-                        ConstraintSource::MultOutput
-                    );
-                    self.add_constraint(rhs_size.clone(),
-                        ce_var(&result_size) + -ce_var(&lhs_size),
-                        rhs.loc(),
-                        &rhs_t
-                        , ConstraintSource::MultOutput
-                    );
-
-                    self.unify_expression_generic_error(&lhs, &lhs_t, &ctx.symtab)?;
-                    self.unify_expression_generic_error(&rhs, &rhs_t, &ctx.symtab)?;
+                    let rhs_t = self.new_generic_int(&ctx.symtab);
+                    self.unify_expression_generic_error(&lhs, &rhs_t, &ctx.symtab)?;
+                    let result_t = self.new_generic_int(&ctx.symtab);
                     self.unify_expression_generic_error(expression, &result_t, &ctx.symtab)?;
                 }
                 // Shift operators have the same width in as they do out
