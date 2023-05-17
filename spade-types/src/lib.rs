@@ -154,7 +154,7 @@ impl std::fmt::Display for ConcreteType {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Hash, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub enum KnownType {
     Type(NameID),
     Integer(BigUint),

@@ -105,6 +105,18 @@ impl std::cmp::PartialEq for NameID {
 
 impl std::cmp::Eq for NameID {}
 
+impl std::cmp::PartialOrd for NameID {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.0.cmp(&other.0))
+    }
+}
+
+impl std::cmp::Ord for NameID {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.0.cmp(&other.0)
+    }
+}
+
 impl std::hash::Hash for NameID {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         self.0.hash(state);

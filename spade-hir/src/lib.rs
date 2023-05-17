@@ -3,7 +3,7 @@ pub mod param_util;
 pub mod symbol_table;
 pub mod testutil;
 
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 
 pub use expression::{Argument, ArgumentKind, ArgumentList, ExprKind, Expression};
 use itertools::Itertools;
@@ -577,7 +577,7 @@ pub struct ImplBlock {
 /// modules will not be present.
 #[derive(PartialEq, Debug, Clone, Serialize, Deserialize)]
 pub struct ItemList {
-    pub executables: HashMap<NameID, ExecutableItem>,
+    pub executables: BTreeMap<NameID, ExecutableItem>,
     pub types: TypeList,
     // FIXME: Support entities and pipelines as trait members.
     /// All traits in the compilation unit. Traits consist of a list of functions
@@ -590,7 +590,7 @@ pub struct ItemList {
 impl ItemList {
     pub fn new() -> Self {
         Self {
-            executables: HashMap::new(),
+            executables: BTreeMap::new(),
             types: TypeList::new(),
             traits: HashMap::new(),
             impls: HashMap::new(),

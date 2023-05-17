@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
 use num::ToPrimitive;
 use spade_common::location_info::Loc;
@@ -12,7 +12,7 @@ use spade_types::KnownType;
 
 mod error;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 struct Var(usize);
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -26,7 +26,7 @@ enum Equation {
 type Res = error::Result<Option<Equation>>;
 
 struct Inferer<'a> {
-    mappings: HashMap<TypeVar, Var>,
+    mappings: BTreeMap<TypeVar, Var>,
     // These are >= equations
     equations: Vec<(Var, Equation)>,
     var_counter: usize,
@@ -36,7 +36,7 @@ struct Inferer<'a> {
 impl<'a> Inferer<'a> {
     fn new(type_state: &'a mut TypeState, context: &'a Context<'a>) -> Self {
         Self {
-            mappings: HashMap::new(),
+            mappings: BTreeMap::new(),
             equations: Vec::new(),
             var_counter: 0,
             context,
@@ -209,7 +209,7 @@ pub fn infer_and_check(
 ) -> error::Result<()> {
     let mut inferer = Inferer::new(type_state, context);
     inferer.expression(&unit.body)?;
-    println!("Infered: {:?}", inferer.equations);
+    println!("Infered: {:+?}", inferer.equations);
 
     panic!()
 }
