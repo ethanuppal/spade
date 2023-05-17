@@ -88,12 +88,14 @@ impl Range {
     }
 
     fn to_wordlength(&self) -> Option<u32> {
-        // NOTE: This can be considerably more fancy
+        // NOTE: This can be considerably more fancy, taking into account the range and working
+        // from there - but I'm keeping things simple for now.
+
         // We take the discrete logarithm here - no sneeky floats in my program!
         // Just guessed at a large number like 128...
         for i in 1..128 {
-            let ii = 2_i128.pow(i);
-            if self.hi < ii && self.lo.abs() < ii {
+            let ii = 2_i128.pow(i - 1);
+            if self.hi < ii && self.lo.abs() < ii + 1 {
                 return Some(i);
             }
         }
@@ -341,8 +343,8 @@ pub fn infer_and_check(
     inferer.expression(&unit.body)?;
 
     let mut known = BTreeMap::new();
-    // Aren't these strict requirements? These can't change can they? Hmmm... This is where the
-    // contradictions come from!
+
+    //
     for (ty, var) in inferer.mappings.iter() {
         match &ty {
             TypeVar::Known(KnownType::Integer(size), _) => {
@@ -350,8 +352,8 @@ pub fn infer_and_check(
                 known.insert(
                     var,
                     Range {
-                        lo: 0,
-                        hi: 2_i128.pow(x) - 1,
+                        lo: -2_i128.pow(x - 1) + 1,
+                        hi: 2_i128.pow(x - 1) - 2,
                     },
                 );
             }
