@@ -2,10 +2,10 @@ use std::collections::BTreeMap;
 
 use num::ToPrimitive;
 use spade_common::location_info::Loc;
+use spade_hir::Expression;
 use spade_hir::{
     expression::{BinaryOperator, UnaryOperator},
-    ArgumentList, Block, ExprKind, Expression, ItemList, Pattern, PatternArgument, Register,
-    Statement, TypeParam, Unit,
+    ArgumentList, Block, ExprKind, Pattern, Statement, Unit,
 };
 use spade_typeinference::{equation::TypeVar, fixed_types::t_int, Context, HasType, TypeState};
 use spade_types::KnownType;
@@ -202,7 +202,22 @@ impl<'a> Inferer<'a> {
     }
 
     fn block(&mut self, block: &Block) -> Res {
-        // TODO: Check the statements as well!
+        for stmt in block.statements.iter() {
+            match &stmt.inner {
+                // TODO: Is there a currectness bug here since I discard the pattern?
+                Statement::Binding(_pattern, _, expr) => {
+                    self.expression(&expr)?;
+                }
+
+                // Nothing to be done for these
+                Statement::Register(_)
+                | Statement::Declaration(_)
+                | Statement::PipelineRegMarker
+                | Statement::Label(_)
+                | Statement::Assert(_)
+                | Statement::Set { .. } => {}
+            }
+        }
         self.expression(&block.result)
     }
 
@@ -326,11 +341,51 @@ impl<'a> Inferer<'a> {
 
     fn call(
         &self,
-        kind: &spade_hir::expression::CallKind,
-        callee: &Loc<spade_common::name::NameID>,
-        args: &Loc<ArgumentList>,
+        _kind: &spade_hir::expression::CallKind,
+        _callee: &Loc<spade_common::name::NameID>,
+        _args: &Loc<ArgumentList>,
     ) -> Res {
         Ok(None)
+    }
+
+    fn infer(
+        equations: &Vec<(Var, Equation)>,
+        known: BTreeMap<Var, Range>,
+    ) -> error::Result<BTreeMap<Var, Range>> {
+        let mut known = known;
+        // worst-case: The equations are all in reverse order and we can solve one new variable per run
+        // - after that we're stuck
+        // println!("{:?}", inferer.equations);
+        for _ in 0..equations.len() {
+            let known_at_start = known.clone();
+            for (var, body) in equations.iter() {
+                // TODO: How do we handle contradictions?
+                if let Some(guess) = evaluate(var, body, &known) {
+                    match known.entry(*var) {
+                        std::collections::btree_map::Entry::Vacant(v) => {
+                            v.insert(guess);
+                        }
+                        std::collections::btree_map::Entry::Occupied(v) => {
+                            match (v.get().to_wordlength(), guess.to_wordlength()) {
+                                (Some(current_wl), Some(guess_wl)) if current_wl != guess_wl => {
+                                    // Wasted resources, potentially quite optimization
+                                    return Err(error::Error::WordlengthMismatch(
+                                        current_wl, guess_wl,
+                                    ));
+                                }
+                                _ => {}
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Break when we got new information - I think this is a decent speedup...
+            if known_at_start == known {
+                break;
+            }
+        }
+        Ok(known)
     }
 }
 
@@ -343,14 +398,13 @@ pub fn infer_and_check(
     inferer.expression(&unit.body)?;
 
     let mut known = BTreeMap::new();
-
     //
     for (ty, var) in inferer.mappings.iter() {
         match &ty {
             TypeVar::Known(KnownType::Integer(size), _) => {
                 let x = size.to_u32().unwrap(); // This is assumed to be small
                 known.insert(
-                    var,
+                    *var,
                     Range {
                         lo: -2_i128.pow(x - 1) + 1,
                         hi: 2_i128.pow(x - 1) - 2,
@@ -370,36 +424,7 @@ pub fn infer_and_check(
         }
     }
 
-    // worst-case: The equations are all in reverse order and we can solve one new variable per run
-    // - after that we're stuck
-    // println!("{:?}", inferer.equations);
-    for _ in 0..inferer.equations.len() {
-        let known_at_start = known.clone();
-        for (var, body) in inferer.equations.iter() {
-            // TODO: How do we handle contradictions?
-            if let Some(guess) = evaluate(var, body, &known) {
-                match known.entry(var) {
-                    std::collections::btree_map::Entry::Vacant(v) => {
-                        v.insert(guess);
-                    }
-                    std::collections::btree_map::Entry::Occupied(v) => {
-                        match (v.get().to_wordlength(), guess.to_wordlength()) {
-                            (Some(current_wl), Some(guess_wl)) if current_wl != guess_wl => {
-                                // Wasted resources, potentially quite optimization
-                                return Err(error::Error::WordlengthMismatch(current_wl, guess_wl));
-                            }
-                            _ => {}
-                        }
-                    }
-                }
-            }
-        }
-
-        // Break when we got new information - I think this is a decent speedup...
-        if known_at_start == known {
-            break;
-        }
-    }
+    let known = Inferer::infer(&inferer.equations, known)?;
 
     // TODO: Location information isn't really a thing... Maybe it can be solved some other way?
     for (ty, var) in inferer.mappings.iter() {
@@ -435,7 +460,7 @@ fn to_wordlength_error<A>(
     }
 }
 
-fn evaluate(out: &Var, body: &Equation, known: &BTreeMap<&Var, Range>) -> Option<Range> {
+fn evaluate(out: &Var, body: &Equation, known: &BTreeMap<Var, Range>) -> Option<Range> {
     match &body {
         Equation::Var(var) => known.get(var).copied(),
         Equation::Constant(range) => Some(*range),
