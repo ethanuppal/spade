@@ -18,14 +18,97 @@ struct Var(usize);
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum Equation {
     Var(Var),
-    Constant { lo: i128, hi: i128 }, // Change this to IA and then to AA
+    Constant(Range),
     Add(Box<Equation>, Box<Equation>),
     Sub(Box<Equation>, Box<Equation>),
+    Mul(Box<Equation>, Box<Equation>),
+    BitManpi(Box<Equation>),
+    Neg(Box<Equation>),
+    BitManipMax(Box<Equation>, Box<Equation>),
+    Union(Box<Equation>, Box<Equation>),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct Range {
+    lo: i128,
+    hi: i128,
+}
+impl Range {
+    fn add(&self, b: &Self) -> Self {
+        let a = self;
+        Range {
+            lo: a.lo + b.lo,
+            hi: a.hi + b.hi,
+        }
+    }
+
+    fn sub(&self, b: &Self) -> Self {
+        let a = self;
+        Range {
+            lo: (a.lo - b.hi).min(a.lo - b.lo),
+            hi: (a.hi - b.hi).max(a.hi - b.lo),
+        }
+    }
+
+    fn neg(&self) -> Self {
+        Range {
+            lo: -self.hi,
+            hi: -self.lo,
+        }
+    }
+
+    fn mul(&self, b: &Self) -> Self {
+        let a = self;
+        Range {
+            lo: (a.lo * b.hi)
+                .min(a.lo * b.lo)
+                .min(a.hi * b.hi)
+                .min(a.hi * b.lo),
+            hi: (a.lo * b.hi)
+                .max(a.lo * b.lo)
+                .max(a.hi * b.hi)
+                .max(a.hi * b.lo),
+        }
+    }
+
+    fn union(&self, b: &Self) -> Self {
+        let a = self;
+        Range {
+            lo: a.lo.min(b.lo),
+            hi: a.hi.max(b.hi),
+        }
+    }
+
+    fn bit_manip(&self) -> Option<Self> {
+        // This assumes positive integers
+        self.to_wordlength().map(|wl| Range {
+            lo: -2_i128.pow(wl),
+            hi: 2_i128.pow(wl),
+        })
+    }
+
+    fn to_wordlength(&self) -> Option<u32> {
+        // NOTE: This can be considerably more fancy
+        // We take the discrete logarithm here - no sneeky floats in my program!
+        // Just guessed at a large number like 128...
+        for i in 1..128 {
+            let ii = 2_i128.pow(i);
+            if self.hi < ii && self.lo.abs() < ii {
+                return Some(i);
+            }
+        }
+        None
+    }
+
+    fn zero() -> Range {
+        Range { lo: 0, hi: 0 }
+    }
 }
 
 type Res = error::Result<Option<Equation>>;
 
 struct Inferer<'a> {
+    source: BTreeMap<TypeVar, Expression>,
     mappings: BTreeMap<TypeVar, Var>,
     // These are >= equations
     equations: Vec<(Var, Equation)>,
@@ -36,6 +119,7 @@ struct Inferer<'a> {
 impl<'a> Inferer<'a> {
     fn new(type_state: &'a mut TypeState, context: &'a Context<'a>) -> Self {
         Self {
+            source: BTreeMap::new(),
             mappings: BTreeMap::new(),
             equations: Vec::new(),
             var_counter: 0,
@@ -54,10 +138,12 @@ impl<'a> Inferer<'a> {
         if let Ok(TypeVar::Known(t, v)) = thing.get_type(self.type_state) {
             match v.as_slice() {
                 [size] if t == t_int(self.context.symtab) => {
+                    // TODO[et]: Inject where the variable came from so we can put it back in
                     let p = if let Some(q) = self.mappings.get(size) {
                         *q
                     } else {
                         let q = self.new_var();
+                        // self.source.insert(q, );
                         self.mappings.insert(size.clone(), q);
                         q
                     };
@@ -86,7 +172,7 @@ impl<'a> Inferer<'a> {
                     spade_hir::expression::IntLiteral::Unsigned(x) => x.to_i128(),
                 }
                 .unwrap();
-                Some(Equation::Constant { lo: x, hi: x })
+                Some(Equation::Constant(Range { lo: x, hi: x }))
             }
 
             ExprKind::Call { kind, callee, args } => self.call(kind, callee, args)?,
@@ -118,17 +204,33 @@ impl<'a> Inferer<'a> {
         self.expression(&block.result)
     }
 
-    fn match_(&self, value: &Loc<Expression>, patterns: &[(Loc<Pattern>, Loc<Expression>)]) -> Res {
-        todo!()
+    fn match_(
+        &mut self,
+        _value: &Loc<Expression>,
+        patterns: &[(Loc<Pattern>, Loc<Expression>)],
+    ) -> Res {
+        // TODO: Is there a currectness bug here since I discard the pattern?
+        // NOTE: This unification works if the range contains zero - which it kinda always does
+        // here, but it can cause overestimations!
+        let mut eq = Equation::Constant(Range::zero());
+        for (_, body) in patterns {
+            if let Some(b) = self.expression(body)? {
+                eq = Equation::Union(Box::new(eq), Box::new(b));
+            }
+        }
+        Ok(Some(eq))
     }
 
     fn if_(
-        &self,
-        value: &Loc<Expression>,
-        r#true: &Loc<Expression>,
-        r#false: &Loc<Expression>,
+        &mut self,
+        _value: &Loc<Expression>,
+        true_: &Loc<Expression>,
+        false_: &Loc<Expression>,
     ) -> Res {
-        Ok(None)
+        Ok(match (self.expression(true_)?, self.expression(false_)?) {
+            (Some(true_), Some(false_)) => Some(Equation::Union(Box::new(true_), Box::new(false_))),
+            _ => None,
+        })
     }
 
     fn binary_operator(
@@ -145,24 +247,52 @@ impl<'a> Inferer<'a> {
                 Some(Equation::Add(Box::new(lhs_t), Box::new(rhs_t)))
             }
             (BinaryOperator::Add, _, _) => None,
+
             (BinaryOperator::Sub, Some(lhs_t), Some(rhs_t)) => {
                 Some(Equation::Sub(Box::new(lhs_t), Box::new(rhs_t)))
             }
             (BinaryOperator::Sub, _, _) => None,
 
-            (BinaryOperator::Mul, _, _) => todo!(),
-            (BinaryOperator::LeftShift, _, _) => todo!(),
-            (BinaryOperator::RightShift, _, _) => todo!(),
-            (BinaryOperator::ArithmeticRightShift, _, _) => todo!(),
-            (BinaryOperator::LogicalAnd, _, _) => todo!(),
-            (BinaryOperator::LogicalOr, _, _) => todo!(),
-            (BinaryOperator::LogicalXor, _, _) => todo!(),
-            (BinaryOperator::BitwiseOr, _, _) => todo!(),
-            (BinaryOperator::BitwiseAnd, _, _) => todo!(),
-            (BinaryOperator::BitwiseXor, _, _) => todo!(),
+            (BinaryOperator::Mul, Some(lhs_t), Some(rhs_t)) => {
+                Some(Equation::Mul(Box::new(lhs_t), Box::new(rhs_t)))
+            }
+            (BinaryOperator::Mul, _, _) => None,
 
             (
-                BinaryOperator::Eq
+                BinaryOperator::LeftShift
+                | BinaryOperator::RightShift
+                | BinaryOperator::ArithmeticRightShift,
+                Some(v),
+                _,
+            ) => {
+                // The left value is the one being shifted, right?
+                Some(Equation::BitManpi(Box::new(v)))
+            }
+
+            (
+                BinaryOperator::LeftShift
+                | BinaryOperator::RightShift
+                | BinaryOperator::ArithmeticRightShift,
+                _,
+                _,
+            ) => None,
+
+            (
+                BinaryOperator::BitwiseOr | BinaryOperator::BitwiseAnd | BinaryOperator::BitwiseXor,
+                Some(a),
+                Some(b),
+            ) => Some(Equation::BitManipMax(Box::new(a), Box::new(b))),
+            (
+                BinaryOperator::BitwiseOr | BinaryOperator::BitwiseAnd | BinaryOperator::BitwiseXor,
+                _,
+                _,
+            ) => None,
+
+            (
+                BinaryOperator::LogicalAnd
+                | BinaryOperator::LogicalOr
+                | BinaryOperator::LogicalXor
+                | BinaryOperator::Eq
                 | BinaryOperator::NotEq
                 | BinaryOperator::Gt
                 | BinaryOperator::Lt
@@ -177,9 +307,9 @@ impl<'a> Inferer<'a> {
     fn unary_operator(&mut self, op: UnaryOperator, v: &Loc<Expression>) -> Res {
         let v_t = self.expression(v)?;
         Ok(match (op, v_t) {
-            (UnaryOperator::Sub, Some(_)) => todo!(),
+            (UnaryOperator::Sub, Some(v)) => Some(Equation::Neg(Box::new(v))),
             (UnaryOperator::Sub, _) => None,
-            (UnaryOperator::BitwiseNot, Some(_)) => todo!(),
+            (UnaryOperator::BitwiseNot, Some(v)) => Some(Equation::BitManpi(Box::new(v))),
             (UnaryOperator::BitwiseNot, _) => None,
 
             (
@@ -198,7 +328,7 @@ impl<'a> Inferer<'a> {
         callee: &Loc<spade_common::name::NameID>,
         args: &Loc<ArgumentList>,
     ) -> Res {
-        todo!()
+        Ok(None)
     }
 }
 
@@ -209,7 +339,128 @@ pub fn infer_and_check(
 ) -> error::Result<()> {
     let mut inferer = Inferer::new(type_state, context);
     inferer.expression(&unit.body)?;
-    println!("Infered: {:+?}", inferer.equations);
 
-    panic!()
+    let mut known = BTreeMap::new();
+    // Aren't these strict requirements? These can't change can they? Hmmm... This is where the
+    // contradictions come from!
+    for (ty, var) in inferer.mappings.iter() {
+        match &ty {
+            TypeVar::Known(KnownType::Integer(size), _) => {
+                let x = size.to_u32().unwrap(); // This is assumed to be small
+                known.insert(
+                    var,
+                    Range {
+                        lo: 0,
+                        hi: 2_i128.pow(x) - 1,
+                    },
+                );
+            }
+            TypeVar::Known(KnownType::Type(n), _) => panic!("How do I handle a type? {:?}", n),
+            TypeVar::Unknown(_) => {
+                // known.insert(var, Range { lo: 0, hi: 0 });
+            }
+
+            TypeVar::Tuple(_)
+            | TypeVar::Array { .. }
+            | TypeVar::Backward(_)
+            | TypeVar::Wire(_)
+            | TypeVar::Inverted(_) => panic!("Wat? {:?} {:?}", ty, var),
+        }
+    }
+
+    // worst-case: The equations are all in reverse order and we can solve one new variable per run
+    // - after that we're stuck
+    // println!("{:?}", inferer.equations);
+    for _ in 0..inferer.equations.len() {
+        let known_at_start = known.clone();
+        for (var, body) in inferer.equations.iter() {
+            // TODO: How do we handle contradictions?
+            if let Some(guess) = evaluate(var, body, &known) {
+                match known.entry(var) {
+                    std::collections::btree_map::Entry::Vacant(v) => {
+                        v.insert(guess);
+                    }
+                    std::collections::btree_map::Entry::Occupied(v) => {
+                        match (v.get().to_wordlength(), guess.to_wordlength()) {
+                            (Some(current_wl), Some(guess_wl)) if current_wl != guess_wl => {
+                                // Wasted resources, potentially quite optimization
+                                return Err(error::Error::WordlengthMismatch(current_wl, guess_wl));
+                            }
+                            _ => {}
+                        }
+                    }
+                }
+            }
+        }
+
+        // Break when we got new information - I think this is a decent speedup...
+        if known_at_start == known {
+            break;
+        }
+    }
+
+    // TODO: Location information isn't really a thing... Maybe it can be solved some other way?
+    for (ty, var) in inferer.mappings.iter() {
+        // println!("{:?} = {:?}", var, known.get(&var));
+        // None errors are checked when mir-lowering, this isn't necessarily an error
+        if let Some(infered_wl) = known.get(&var).and_then(|guess| guess.to_wordlength()) {
+            match &ty {
+                TypeVar::Known(KnownType::Integer(size), _) => {
+                    let typechecker_wl = size.to_u32().unwrap();
+                    if typechecker_wl != infered_wl {
+                        return Err(error::Error::WordlengthMismatch(typechecker_wl, infered_wl));
+                    }
+                }
+                _ => {}
+            }
+            to_wordlength_error(inferer.type_state.unify(
+                ty,
+                &TypeVar::Known(KnownType::Integer(infered_wl.into()), Vec::new()),
+                inferer.context.symtab,
+            ))?;
+        }
+    }
+
+    Ok(())
+}
+
+fn to_wordlength_error<A>(
+    ty_err: Result<A, spade_typeinference::error::UnificationError>,
+) -> error::Result<A> {
+    match ty_err {
+        Ok(v) => Ok(v),
+        Err(e) => Err(error::Error::TypeError(e)),
+    }
+}
+
+fn evaluate(out: &Var, body: &Equation, known: &BTreeMap<&Var, Range>) -> Option<Range> {
+    match &body {
+        Equation::Var(var) => known.get(var).copied(),
+        Equation::Constant(range) => Some(*range),
+        Equation::Add(a, b) => match (evaluate(out, a, known), evaluate(out, b, known)) {
+            (Some(a), Some(b)) => Some(a.add(&b)),
+            _ => None,
+        },
+        Equation::Sub(a, b) => match (evaluate(out, a, known), evaluate(out, b, known)) {
+            (Some(a), Some(b)) => Some(a.sub(&b)),
+            _ => None,
+        },
+        Equation::Mul(a, b) => match (evaluate(out, a, known), evaluate(out, b, known)) {
+            (Some(a), Some(b)) => Some(a.mul(&b)),
+            _ => None,
+        },
+        Equation::BitManpi(a) => evaluate(out, a, known).and_then(|x| x.bit_manip()),
+        Equation::Neg(a) => evaluate(out, a, known).map(|x| x.neg()),
+        Equation::BitManipMax(a, b) => match (
+            evaluate(out, a, known).and_then(|x| x.bit_manip()),
+            evaluate(out, b, known).and_then(|x| x.bit_manip()),
+        ) {
+            (Some(a), Some(b)) => Some(a.union(&b)),
+            _ => None,
+        },
+        Equation::Union(a, b) => match (evaluate(out, a, known), evaluate(out, b, known)) {
+            (Some(a), Some(b)) => Some(a.union(&b)),
+            _ => None,
+        },
+    }
 }

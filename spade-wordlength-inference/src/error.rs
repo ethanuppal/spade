@@ -6,12 +6,31 @@ use thiserror::Error;
 pub enum Error {
     #[error("Unit")]
     Unit,
+
+    #[error("Unification Type Error")]
+    TypeError(spade_typeinference::error::UnificationError),
+    #[error("The wordlength isn't what we infered it to")]
+    WordlengthMismatch(u32, u32),
 }
 
 impl CompilationError for Error {
     fn report(&self, buffer: &mut Buffer, code: &CodeBundle, diag_handler: &mut DiagHandler) {
         let diag = match self {
             Error::Unit => Diagnostic::error().with_message(format!("This is an error!")),
+
+            Error::TypeError(_e) => Diagnostic::error().with_message(format!(
+                "Failed to unify some types while infering wordlengths"
+            )),
+
+            Error::WordlengthMismatch(ty, inf) if ty > inf => Diagnostic::error().with_message(format!(
+                "The specified wordlength is larger than it has to be (you specified {} bits), but you only need {} bits",
+                ty, inf
+            )),
+            Error::WordlengthMismatch(ty, inf) if ty < inf => Diagnostic::error().with_message(format!(
+                "The specified wordlength is too small (you specified {} bits), but it needs to hold {} bits",
+                ty, inf
+            )),
+            Error::WordlengthMismatch(ty, inf) => panic!("Invalid error, these are the same size! {}, {}", ty, inf),
         };
 
         codespan_reporting::term::emit(
