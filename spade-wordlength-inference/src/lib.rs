@@ -23,7 +23,7 @@ pub fn infer_and_check(
     let mut known = BTreeMap::new();
     //
     for (ty, var) in inferer.mappings.iter() {
-        match &ty {
+        match &ty.inner {
             TypeVar::Known(KnownType::Integer(size), _) => {
                 let x = size.to_u32().unwrap(); // This is assumed to be small
                 known.insert(
@@ -55,14 +55,16 @@ pub fn infer_and_check(
         // None errors are checked when mir-lowering, this isn't necessarily an error
         if let Some(infered_wl) = known.get(&var).and_then(|guess| guess.to_wordlength()) {
             let loc = inferer.locs.get(var).cloned().unwrap_or(Loc::nowhere(()));
-            match &ty {
+            match &ty.inner {
                 TypeVar::Known(KnownType::Integer(size), _) => {
-                    let typechecker_wl = size.to_u32().unwrap();
-                    if typechecker_wl != infered_wl {
+                    let typechecker_wl = loc.map(|_| size.to_u32().unwrap());
+                    if typechecker_wl.inner != infered_wl {
+                        // NOTE: To make these types better, the known types need to have a Loc on
+                        // them, something I really don't feel like doing right now.
+                        // TODO: Print the actual ranges of values, since that's nice!
                         return Err(error::Error::WordlengthMismatch(
-                            typechecker_wl,
-                            infered_wl,
-                            loc,
+                            ty.give_loc(*typechecker_wl),
+                            loc.give_loc(infered_wl),
                         ));
                     }
                 }

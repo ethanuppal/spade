@@ -140,9 +140,9 @@ fn evaluate(out: &Var, body: &Equation, known: &BTreeMap<Var, Range>) -> Option<
 
 pub struct Inferer<'a> {
     pub(crate) locs: BTreeMap<Var, Loc<()>>,
-    pub(crate) mappings: BTreeMap<TypeVar, Var>,
+    pub(crate) mappings: BTreeMap<Loc<TypeVar>, Var>,
     // These are >= equations
-    pub(crate) equations: Vec<(Var, Equation)>,
+    pub(crate) equations: Vec<(Var, Loc<Equation>)>,
     pub(crate) var_counter: usize,
     pub(crate) context: &'a Context<'a>,
     pub(crate) type_state: &'a mut TypeState,
@@ -171,11 +171,11 @@ impl<'a> Inferer<'a> {
             match v.as_slice() {
                 [size] if t == t_int(self.context.symtab) => {
                     // TODO[et]: Inject where the variable came from so we can put it back in
-                    let p = if let Some(q) = self.mappings.get(size) {
+                    let p = if let Some(q) = self.mappings.get(&Loc::nowhere(size.clone())) {
                         *q
                     } else {
                         let q = self.new_var(loc);
-                        self.mappings.insert(size.clone(), q);
+                        self.mappings.insert(loc.map(|_| size.clone()), q);
                         q
                     };
                     Some(p)
@@ -187,14 +187,12 @@ impl<'a> Inferer<'a> {
         }
     }
 
-    fn maybe_add_equation(
-        &mut self,
-        thing: &dyn HasType,
-        loc: Loc<()>,
-        maybe_eq: Option<Equation>,
-    ) {
-        match (self.find_or_create(thing, loc), maybe_eq) {
-            (Some(var), Some(eq)) => self.equations.push((var, eq)),
+    fn maybe_add_equation(&mut self, thing: &dyn HasType, maybe_eq: Loc<Option<Equation>>) {
+        match (
+            self.find_or_create(thing, maybe_eq.loc()),
+            maybe_eq.inner.clone(),
+        ) {
+            (Some(var), Some(eq)) => self.equations.push((var, maybe_eq.give_loc(eq))),
             _ => {}
         }
     }
@@ -233,7 +231,7 @@ impl<'a> Inferer<'a> {
             | ExprKind::MethodCall { .. } => None,
         };
 
-        self.maybe_add_equation(&expr.inner, expr.loc(), maybe_eq.clone());
+        self.maybe_add_equation(&expr.inner, expr.loc().give_loc(maybe_eq.clone()));
         Ok(maybe_eq)
     }
 
@@ -385,7 +383,7 @@ impl<'a> Inferer<'a> {
     }
 
     pub fn infer(
-        equations: &Vec<(Var, Equation)>,
+        equations: &Vec<(Var, Loc<Equation>)>,
         known: BTreeMap<Var, Range>,
         locs: &BTreeMap<Var, Loc<()>>,
     ) -> error::Result<BTreeMap<Var, Range>> {
@@ -408,7 +406,8 @@ impl<'a> Inferer<'a> {
                                 (Some(current_wl), Some(guess_wl)) if current_wl != guess_wl => {
                                     // Wasted resources, potentially quite optimization
                                     return Err(error::Error::WordlengthMismatch(
-                                        current_wl, guess_wl, loc,
+                                        body.give_loc(current_wl),
+                                        loc.give_loc(guess_wl),
                                     ));
                                 }
                                 _ => {}

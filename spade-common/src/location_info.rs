@@ -137,6 +137,10 @@ impl<T> Loc<T> {
         Self::new(inner, Span::new(0, 0), 0)
     }
 
+    pub fn give_loc<Q>(&self, inner: Q) -> Loc<Q> {
+        Loc::new(inner, self.span, self.file_id)
+    }
+
     pub fn strip(self) -> T {
         self.inner
     }
@@ -168,6 +172,10 @@ impl<T> Loc<T> {
     pub fn split_loc_ref(&self) -> (&T, Loc<()>) {
         let loc = self.loc();
         (&self.inner, loc)
+    }
+
+    pub fn is_same_loc<R>(&self, other: &Loc<R>) -> bool {
+        self.loc() == other.loc()
     }
 
     pub fn map<Y>(self, mut op: impl FnMut(T) -> Y) -> Loc<Y> {
@@ -244,6 +252,24 @@ where
 }
 
 impl<T> Eq for Loc<T> where T: Eq {}
+
+impl<T> PartialOrd for Loc<T>
+where
+    T: PartialOrd,
+{
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        self.inner.partial_cmp(&other.inner)
+    }
+}
+
+impl<T> Ord for Loc<T>
+where
+    T: Ord,
+{
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.inner.cmp(&other.inner)
+    }
+}
 
 impl<T> std::fmt::Display for Loc<T>
 where

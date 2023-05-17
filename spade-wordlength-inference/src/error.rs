@@ -11,7 +11,7 @@ pub enum Error {
     #[error("Unification Type Error")]
     TypeError(Loc<spade_typeinference::error::UnificationError>),
     #[error("The wordlength isn't what we infered it to")]
-    WordlengthMismatch(u32, u32, Loc<()>),
+    WordlengthMismatch(Loc<u32>, Loc<u32>),
 }
 
 impl CompilationError for Error {
@@ -23,35 +23,20 @@ impl CompilationError for Error {
                 "Failed to unify some types while infering wordlengths"
             )),
 
-            Error::WordlengthMismatch(ty, inf, loc) if ty > inf => Diagnostic::error()
-                    .with_message(format!(
-                "The specified wordlength is larger than it has to be (you specified {} bits), but you only need {} bits",
-                ty, inf
-            ))
-                .with_labels(vec![loc
-                    .primary_label()
-                    .with_message(format!("This expression requires {} bits", ty))]),
+            Error::WordlengthMismatch(ty, inf) if ty.is_same_loc(inf) => Diagnostic::error()
+                .with_labels(vec![ty.primary_label().with_message(format!(
+                    "This expression requires {} bits but claims to need {} bits",
+                    ty.inner, inf.inner
+                ))]),
 
-            Error::WordlengthMismatch(ty, inf, loc) if ty < inf => Diagnostic::error().with_message(format!(
-                "The specified wordlength is too small (you specified {} bits), but it needs to hold {} bits",
-                ty, inf
-            ))
-                .with_labels(vec![loc
-                    .primary_label()
-                    .with_message(format!("This expression requires {} bits", inf))]),
-
-            Error::WordlengthMismatch(ty, inf, loc) => Diagnostic::error()
-
-                .with_message(format!(
-                "This error is very special and most likely incorrect, please post this error to the compiler people so they can fix it!",
-            ))
-                .with_message(format!("There's something off with the sizes here, you specified {} bits, and spade thinks you need {}, but those are equal!?!?"
-                ,ty, inf
-                ))
-                .with_labels(vec![loc
-                    .primary_label()
-                    .with_message(format!("Kinda here?"))]),
-
+            Error::WordlengthMismatch(ty, inf) => Diagnostic::error()
+                .with_message(format!("The size of these ints does not add up"))
+                .with_labels(vec![
+                    ty.primary_label()
+                        .with_message(format!("Here we require {} bits", ty.inner)),
+                    inf.primary_label()
+                        .with_message(format!("And here we require {} bits", inf.inner)),
+                ]),
         };
 
         codespan_reporting::term::emit(
