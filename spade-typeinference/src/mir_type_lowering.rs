@@ -350,7 +350,6 @@ impl TypeState {
         if let Some(t) = Self::ungenerify_type(&t, symtab, types) {
             Ok(t)
         } else {
-            panic!();
             Err(
                 Diagnostic::error(expr, "Type of expression is not fully known")
                     .primary_label("The type of this expression is not fully known")

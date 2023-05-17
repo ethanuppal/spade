@@ -15,7 +15,7 @@ pub enum Error {
 }
 
 impl CompilationError for Error {
-    fn report(&self, buffer: &mut Buffer, code: &CodeBundle, diag_handler: &mut DiagHandler) {
+    fn report(&self, buffer: &mut Buffer, code: &CodeBundle, _diag_handler: &mut DiagHandler) {
         let diag = match self {
             Error::Unit => Diagnostic::error().with_message(format!("This is an error!")),
 
