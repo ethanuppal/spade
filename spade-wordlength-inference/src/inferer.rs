@@ -139,7 +139,7 @@ fn evaluate(out: &Var, body: &Equation, known: &BTreeMap<Var, Range>) -> Option<
 }
 
 pub struct Inferer<'a> {
-    pub(crate) source: BTreeMap<TypeVar, Expression>,
+    pub(crate) locs: BTreeMap<Var, Loc<()>>,
     pub(crate) mappings: BTreeMap<TypeVar, Var>,
     // These are >= equations
     pub(crate) equations: Vec<(Var, Equation)>,
@@ -150,7 +150,7 @@ pub struct Inferer<'a> {
 impl<'a> Inferer<'a> {
     pub fn new(type_state: &'a mut TypeState, context: &'a Context<'a>) -> Self {
         Self {
-            source: BTreeMap::new(),
+            locs: BTreeMap::new(),
             mappings: BTreeMap::new(),
             equations: Vec::new(),
             var_counter: 0,
@@ -159,13 +159,14 @@ impl<'a> Inferer<'a> {
         }
     }
 
-    fn new_var(&mut self) -> Var {
-        let v = self.var_counter;
+    fn new_var(&mut self, loc: Loc<()>) -> Var {
+        let v = Var(self.var_counter);
+        self.locs.insert(v, loc);
         self.var_counter += 1;
-        Var(v)
+        v
     }
 
-    fn find_or_create(&mut self, thing: &dyn HasType) -> Option<Var> {
+    fn find_or_create(&mut self, thing: &dyn HasType, loc: Loc<()>) -> Option<Var> {
         if let Ok(TypeVar::Known(t, v)) = thing.get_type(self.type_state) {
             match v.as_slice() {
                 [size] if t == t_int(self.context.symtab) => {
@@ -173,8 +174,7 @@ impl<'a> Inferer<'a> {
                     let p = if let Some(q) = self.mappings.get(size) {
                         *q
                     } else {
-                        let q = self.new_var();
-                        // self.source.insert(q, );
+                        let q = self.new_var(loc);
                         self.mappings.insert(size.clone(), q);
                         q
                     };
@@ -187,8 +187,13 @@ impl<'a> Inferer<'a> {
         }
     }
 
-    fn maybe_add_equation(&mut self, thing: &dyn HasType, maybe_eq: Option<Equation>) {
-        match (self.find_or_create(thing), maybe_eq) {
+    fn maybe_add_equation(
+        &mut self,
+        thing: &dyn HasType,
+        loc: Loc<()>,
+        maybe_eq: Option<Equation>,
+    ) {
+        match (self.find_or_create(thing, loc), maybe_eq) {
             (Some(var), Some(eq)) => self.equations.push((var, eq)),
             _ => {}
         }
@@ -196,7 +201,9 @@ impl<'a> Inferer<'a> {
 
     pub fn expression(&mut self, expr: &Loc<Expression>) -> Res {
         let maybe_eq = match &expr.inner.kind {
-            ExprKind::Identifier(_) => self.find_or_create(&expr.inner).map(|v| Equation::Var(v)),
+            ExprKind::Identifier(_) => self
+                .find_or_create(&expr.inner, expr.loc())
+                .map(|v| Equation::Var(v)),
             ExprKind::IntLiteral(literal) => {
                 let x = match literal {
                     spade_hir::expression::IntLiteral::Signed(x) => x.to_i128(),
@@ -226,7 +233,7 @@ impl<'a> Inferer<'a> {
             | ExprKind::MethodCall { .. } => None,
         };
 
-        self.maybe_add_equation(&expr.inner, maybe_eq.clone());
+        self.maybe_add_equation(&expr.inner, expr.loc(), maybe_eq.clone());
         Ok(maybe_eq)
     }
 
@@ -380,6 +387,7 @@ impl<'a> Inferer<'a> {
     pub fn infer(
         equations: &Vec<(Var, Equation)>,
         known: BTreeMap<Var, Range>,
+        locs: &BTreeMap<Var, Loc<()>>,
     ) -> error::Result<BTreeMap<Var, Range>> {
         let mut known = known;
         // worst-case: The equations are all in reverse order and we can solve one new variable per run
@@ -389,6 +397,7 @@ impl<'a> Inferer<'a> {
             let known_at_start = known.clone();
             for (var, body) in equations.iter() {
                 // TODO: How do we handle contradictions?
+                let loc = locs.get(var).cloned().unwrap_or(Loc::nowhere(()));
                 if let Some(guess) = evaluate(var, body, &known) {
                     match known.entry(*var) {
                         std::collections::btree_map::Entry::Vacant(v) => {
@@ -399,7 +408,7 @@ impl<'a> Inferer<'a> {
                                 (Some(current_wl), Some(guess_wl)) if current_wl != guess_wl => {
                                     // Wasted resources, potentially quite optimization
                                     return Err(error::Error::WordlengthMismatch(
-                                        current_wl, guess_wl,
+                                        current_wl, guess_wl, loc,
                                     ));
                                 }
                                 _ => {}

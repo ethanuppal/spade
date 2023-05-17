@@ -2,6 +2,7 @@ use std::collections::BTreeMap;
 
 use inferer::{Equation, Inferer, Range};
 use num::ToPrimitive;
+use spade_common::location_info::Loc;
 use spade_hir::Unit;
 use spade_typeinference::{equation::TypeVar, Context, TypeState};
 use spade_types::KnownType;
@@ -46,27 +47,35 @@ pub fn infer_and_check(
         }
     }
 
-    let known = Inferer::infer(&inferer.equations, known)?;
+    let known = Inferer::infer(&inferer.equations, known, &inferer.locs)?;
 
     // TODO: Location information isn't really a thing... Maybe it can be solved some other way?
     for (ty, var) in inferer.mappings.iter() {
         // println!("{:?} = {:?}", var, known.get(&var));
         // None errors are checked when mir-lowering, this isn't necessarily an error
         if let Some(infered_wl) = known.get(&var).and_then(|guess| guess.to_wordlength()) {
+            let loc = inferer.locs.get(var).cloned().unwrap_or(Loc::nowhere(()));
             match &ty {
                 TypeVar::Known(KnownType::Integer(size), _) => {
                     let typechecker_wl = size.to_u32().unwrap();
                     if typechecker_wl != infered_wl {
-                        return Err(error::Error::WordlengthMismatch(typechecker_wl, infered_wl));
+                        return Err(error::Error::WordlengthMismatch(
+                            typechecker_wl,
+                            infered_wl,
+                            loc,
+                        ));
                     }
                 }
                 _ => {}
             }
-            to_wordlength_error(inferer.type_state.unify(
-                ty,
-                &TypeVar::Known(KnownType::Integer(infered_wl.into()), Vec::new()),
-                inferer.context.symtab,
-            ))?;
+            to_wordlength_error(
+                inferer.type_state.unify(
+                    ty,
+                    &TypeVar::Known(KnownType::Integer(infered_wl.into()), Vec::new()),
+                    inferer.context.symtab,
+                ),
+                loc,
+            )?;
         }
     }
 
@@ -75,9 +84,10 @@ pub fn infer_and_check(
 
 fn to_wordlength_error<A>(
     ty_err: Result<A, spade_typeinference::error::UnificationError>,
+    loc: Loc<()>,
 ) -> error::Result<A> {
     match ty_err {
         Ok(v) => Ok(v),
-        Err(e) => Err(error::Error::TypeError(e)),
+        Err(e) => Err(error::Error::TypeError(loc.map(|_| e.clone()))),
     }
 }
