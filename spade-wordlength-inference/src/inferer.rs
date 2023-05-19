@@ -18,7 +18,7 @@ pub struct Var(usize);
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Equation {
-    Var(Var),
+    V(Var),
     Constant(Range),
     Add(Box<Equation>, Box<Equation>),
     Sub(Box<Equation>, Box<Equation>),
@@ -92,7 +92,7 @@ impl<'a> Inferer<'a> {
         let maybe_eq = match &expr.inner.kind {
             ExprKind::Identifier(_) => self
                 .find_or_create(&expr.inner, expr.loc())
-                .map(|v| Equation::Var(v)),
+                .map(|v| Equation::V(v)),
             ExprKind::IntLiteral(literal) => {
                 let x = match literal {
                     spade_hir::expression::IntLiteral::Signed(x) => x.to_i128(),
@@ -102,16 +102,22 @@ impl<'a> Inferer<'a> {
                 Some(Equation::Constant(Range { lo: x, hi: x }))
             }
 
-            ExprKind::Call { kind, callee, args } => self.call(kind, callee, args)?,
             ExprKind::BinaryOperator(lhs, op, rhs) => self.binary_operator(lhs, *op, rhs)?,
             ExprKind::UnaryOperator(op, v) => self.unary_operator(*op, v)?,
             ExprKind::Match(value, patterns) => self.match_(value, patterns)?,
             ExprKind::Block(block) => self.block(block)?,
             ExprKind::If(value, true_, false_) => self.if_(value, true_, false_)?,
 
-            // There's a case to be made for these being valuable to implement, but I'm not gonna
-            // do that right now since I can test this without implementing these
+            // There's a case to be made for these being valuable to implement. Implementing these
+            // is bound to be simple and give value to the language, but it requires figuring out
+            // where their return types are stored - which is less interesting.
+            //
+            // They also don't add more complexity to the problem, so from a research point of view
+            // I've avoided adding them. Though these cases are a good argument for a more extreme
+            // approach where each value is traced so we can understand code like: `[1, 2, 3][1]`
+            // Though I leave this as a fun extension someone else can add to this method.
             ExprKind::BoolLiteral(_)
+            | ExprKind::Call { .. }
             | ExprKind::PipelineRef { .. }
             | ExprKind::CreatePorts
             | ExprKind::TupleLiteral(_)
@@ -264,15 +270,6 @@ impl<'a> Inferer<'a> {
         })
     }
 
-    fn call(
-        &self,
-        _kind: &spade_hir::expression::CallKind,
-        _callee: &Loc<spade_common::name::NameID>,
-        _args: &Loc<ArgumentList>,
-    ) -> Res {
-        Ok(None)
-    }
-
     pub fn infer(
         infer_method: InferMethod,
         equations: &Vec<(Var, Loc<Equation>)>,
@@ -321,5 +318,261 @@ impl<'a> Inferer<'a> {
             }
         }
         Ok(known)
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use std::collections::{BTreeMap, BTreeSet};
+
+    use spade_common::location_info::Loc;
+
+    use super::{
+        Equation::{self, *},
+        Inferer, Var,
+    };
+
+    use crate::{range::Range, InferMethod};
+
+    fn check_infer(
+        infer_method: InferMethod,
+        equations: Vec<(Var, Equation)>,
+        expected: Vec<(Var, Range)>,
+    ) {
+        let vars = equations
+            .clone()
+            .into_iter()
+            .map(|(v, _)| (v, Loc::nowhere(())))
+            .collect();
+        let infered = Inferer::infer(
+            infer_method,
+            &equations
+                .clone()
+                .into_iter()
+                .map(|(v, e)| (v, Loc::nowhere(e)))
+                .collect(),
+            BTreeMap::new(),
+            &vars,
+        )
+        .map(|e| e.into_iter().collect::<BTreeSet<(Var, Range)>>());
+        let expected = Ok(expected.into_iter().collect::<BTreeSet<(Var, Range)>>());
+        assert_eq!(
+            infered, expected,
+            "The infered values don't match the given values, check the values carefully\nEQ: {:+?}", equations
+        );
+    }
+
+    fn r(lo: i128, hi: i128) -> Range {
+        Range { lo, hi }
+    }
+    fn c(lo: i128, hi: i128) -> Equation {
+        Equation::Constant(Range { lo, hi })
+    }
+    fn v(x: usize) -> Equation {
+        Equation::V(Var(x))
+    }
+    fn add(a: Equation, b: Equation) -> Equation {
+        Equation::Add(Box::new(a), Box::new(b))
+    }
+    fn n(a: Equation) -> Equation {
+        Equation::Neg(Box::new(a))
+    }
+    fn sub(a: Equation, b: Equation) -> Equation {
+        Equation::Sub(Box::new(a), Box::new(b))
+    }
+    fn mul(a: Equation, b: Equation) -> Equation {
+        Equation::Mul(Box::new(a), Box::new(b))
+    }
+    fn bit(a: Equation) -> Equation {
+        Equation::BitManpi(Box::new(a))
+    }
+    fn u(a: Equation, b: Equation) -> Equation {
+        Equation::Union(Box::new(a), Box::new(b))
+    }
+
+    // AA
+    #[test]
+    fn range_aa() {
+        check_infer(
+            InferMethod::AA,
+            vec![(Var(0), c(10, 10))],
+            vec![(Var(0), r(10, 10))],
+        )
+    }
+
+    #[test]
+    fn odd_range_aa() {
+        check_infer(
+            InferMethod::AA,
+            vec![(Var(0), c(1, 2))],
+            vec![(Var(0), r(0, 2))],
+        )
+    }
+
+    #[test]
+    fn add_aa() {
+        check_infer(
+            InferMethod::AA,
+            vec![(Var(0), c(0, 10)), (Var(1), add(v(0), v(0)))],
+            vec![(Var(0), r(0, 10)), (Var(1), r(0, 20))],
+        )
+    }
+
+    #[test]
+    fn sub_aa() {
+        check_infer(
+            InferMethod::AA,
+            vec![(Var(0), c(0, 10)), (Var(1), sub(v(0), v(0)))],
+            vec![(Var(0), r(0, 10)), (Var(1), r(0, 0))],
+        )
+    }
+
+    #[test]
+    fn mul_aa() {
+        check_infer(
+            InferMethod::AA,
+            vec![
+                (Var(0), c(0, 10)),
+                (Var(1), c(-2, 2)),
+                (Var(2), mul(v(0), v(1))),
+                (Var(3), mul(v(1), v(0))),
+            ],
+            vec![
+                (Var(0), r(0, 10)),
+                (Var(1), r(-2, 2)),
+                (Var(2), r(-20, 20)),
+                (Var(3), r(-20, 20)),
+            ],
+        )
+    }
+
+    #[test]
+    fn bit_manip_aa() {
+        check_infer(
+            InferMethod::AA,
+            vec![(Var(0), c(0, 10)), (Var(1), bit(v(0)))],
+            // AA can't handle odd-ranges due to how they're stored, this can
+            // easily be solved by using a different structure but... Yeah...
+            vec![(Var(0), r(0, 10)), (Var(1), r(-16, 16))],
+        )
+    }
+
+    #[test]
+    fn neg_aa() {
+        check_infer(
+            InferMethod::AA,
+            vec![(Var(0), n(c(0, 10)))],
+            vec![(Var(0), r(-10, 0))],
+        )
+    }
+
+    #[test]
+    fn union_aa() {
+        check_infer(
+            InferMethod::AA,
+            vec![(Var(0), u(c(0, 10), c(-5, 5)))],
+            // Union of AAF doesn't make a lot of sense, it's the biggest weakness of the form
+            // since we have to either throw away information, or accumulate a lot of error.
+            vec![(Var(0), r(-5, 15))],
+        )
+    }
+
+    #[test]
+    fn some_expression_aa() {
+        check_infer(
+            InferMethod::AA,
+            vec![
+                (Var(0), c(0, 10)),
+                (
+                    Var(1),
+                    u(add(sub(v(0), c(10, 10)), mul(c(-1, 1), v(0))), c(-50, 0)),
+                ),
+            ],
+            vec![(Var(0), r(0, 10)), (Var(1), r(-70, 10))],
+        )
+    }
+
+    // IA
+    #[test]
+    fn range_ia() {
+        check_infer(
+            InferMethod::IA,
+            vec![(Var(0), c(10, 10))],
+            vec![(Var(0), r(10, 10))],
+        )
+    }
+
+    #[test]
+    fn add_ia() {
+        check_infer(
+            InferMethod::IA,
+            vec![(Var(0), c(0, 10)), (Var(1), add(v(0), v(0)))],
+            vec![(Var(0), r(0, 10)), (Var(1), r(0, 20))],
+        )
+    }
+
+    #[test]
+    fn sub_ia() {
+        check_infer(
+            InferMethod::IA,
+            vec![(Var(0), c(0, 10)), (Var(1), sub(v(0), v(0)))],
+            vec![(Var(0), r(0, 10)), (Var(1), r(-10, 10))],
+        )
+    }
+
+    #[test]
+    fn mul_ia() {
+        check_infer(
+            InferMethod::IA,
+            vec![
+                (Var(0), c(0, 10)),
+                (Var(1), c(-2, 2)),
+                (Var(2), mul(v(0), v(1))),
+                (Var(3), mul(v(1), v(0))),
+            ],
+            vec![
+                (Var(0), r(0, 10)),
+                (Var(1), r(-2, 2)),
+                (Var(2), r(-20, 20)),
+                (Var(3), r(-20, 20)),
+            ],
+        )
+    }
+
+    #[test]
+    fn bit_manip_ia() {
+        check_infer(
+            InferMethod::IA,
+            vec![(Var(0), c(0, 10)), (Var(1), bit(v(0)))],
+            vec![(Var(0), r(0, 10)), (Var(1), r(-16, 15))],
+        )
+    }
+
+    #[test]
+    fn neg_ia() {
+        check_infer(
+            InferMethod::IA,
+            vec![(Var(0), n(c(0, 10)))],
+            vec![(Var(0), r(-10, 0))],
+        )
+    }
+
+    #[test]
+    fn union_ia() {
+        check_infer(
+            InferMethod::IA,
+            vec![(Var(0), u(c(0, 10), c(-5, 5)))],
+            vec![(Var(0), r(-5, 10))],
+        )
+    }
+
+    #[test]
+    fn some_expression_ia() {
+        let e = u(add(sub(v(0), c(10, 10)), mul(c(-1, 1), v(0))), c(-50, 0));
+        check_infer(
+            InferMethod::IA,
+            vec![(Var(0), c(0, 10)), (Var(1), e)],
+            vec![(Var(0), r(0, 10)), (Var(1), r(-50, 10))],
+        )
     }
 }

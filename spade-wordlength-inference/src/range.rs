@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 
 use crate::inferer::{Equation, Var};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Range {
     pub lo: i128,
     pub hi: i128,
@@ -56,8 +56,8 @@ impl Range {
     pub fn bit_manip(&self) -> Option<Self> {
         // This assumes positive integers
         self.to_wordlength().map(|wl| Range {
-            lo: -2_i128.pow(wl),
-            hi: 2_i128.pow(wl),
+            lo: -2_i128.pow(wl - 1),
+            hi: 2_i128.pow(wl - 1) - 1,
         })
     }
 
@@ -83,7 +83,7 @@ impl Range {
 
 pub fn evaluate_ia(body: &Equation, known: &BTreeMap<Var, Range>) -> Option<Range> {
     match &body {
-        Equation::Var(var) => known.get(var).copied(),
+        Equation::V(var) => known.get(var).copied(),
         Equation::Constant(range) => Some(*range),
         Equation::Add(a, b) => match (evaluate_ia(a, known), evaluate_ia(b, known)) {
             (Some(a), Some(b)) => Some(a.add(&b)),

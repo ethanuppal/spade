@@ -1,4 +1,4 @@
-use std::collections::{btree_map::Entry, BTreeMap};
+use std::collections::{btree_map::Entry, BTreeMap, BTreeSet};
 
 use crate::{
     inferer::{Equation, Var},
@@ -12,15 +12,27 @@ enum AffineVar {
     Const,
 }
 
+#[derive(Eq, PartialEq, Clone, Debug, Ord, PartialOrd)]
 pub struct AAF(BTreeMap<AffineVar, i128>);
+
+#[derive(Eq, PartialEq, Clone, Debug, Ord, PartialOrd)]
+struct H {
+    rad: i128,
+    mid: i128,
+}
+
+fn range_helper(r: Range) -> H {
+    let mid = (r.hi + r.lo) / 2;
+    let rad = (mid - r.lo).max(r.hi - mid);
+    H { mid, rad }
+}
 
 impl AAF {
     fn from_range(counter: &mut usize, r: Range) -> AAF {
         // NOTE: Rounding errors?
-        let rad = (r.hi - r.lo) / 2;
-        let mid = (r.hi + r.lo) / 2;
+        let h = dbg!(range_helper(dbg!(r)));
         let new_var = AAF::new_var(counter);
-        AAF([(AffineVar::Const, mid), (new_var, rad)]
+        AAF([(AffineVar::Const, h.mid), (new_var, h.rad)]
             .into_iter()
             .collect())
     }
@@ -33,10 +45,9 @@ impl AAF {
 
     fn from_var(var: Var, r: Range) -> AAF {
         // NOTE: Rounding errors?
-        let rad = (r.hi - r.lo) / 2;
-        let mid = (r.hi + r.lo) / 2;
+        let h = range_helper(r);
         let new_var = AffineVar::Var(var);
-        AAF([(AffineVar::Const, mid), (new_var, rad)]
+        AAF([(AffineVar::Const, h.mid), (new_var, h.rad)]
             .into_iter()
             .collect())
     }
@@ -56,7 +67,10 @@ impl AAF {
     }
 
     fn rad(&self) -> i128 {
-        self.0.values().map(|x| x.abs()).sum()
+        self.0
+            .iter()
+            .map(|(v, x)| if v == &AffineVar::Const { 0 } else { x.abs() })
+            .sum()
     }
 
     fn mid(&self) -> i128 {
@@ -72,22 +86,47 @@ impl AAF {
             .unwrap_or(0)
     }
 
-    fn mul(&self, counter: &mut usize, other: &Self) -> Self {
-        let s_rad = self.rad();
-        let o_rad = other.rad();
-        let aa_mul = AAF::from_range(
-            counter,
-            Range {
-                lo: s_rad,
-                hi: s_rad,
-            }
-            .mul(&Range {
-                lo: o_rad,
-                hi: o_rad,
-            }),
-        );
+    // Computes alpha * x + beta * y + gamma (where delta is extra noise)
+    fn affine(
+        counter: &mut usize,
+        x: &AAF,
+        y: &AAF,
+        alpha: i128,
+        beta: i128,
+        gamma: i128,
+        delta: i128,
+    ) -> AAF {
+        let mut delta = delta;
+        let mut z = BTreeMap::new();
 
-        self.add(other).add(&aa_mul)
+        for i in x.vars().union(&y.vars()) {
+            let xi = x.0.get(i).unwrap_or(&0);
+            let yi = y.0.get(i).unwrap_or(&0);
+            let zi = alpha * xi + beta * yi + if i == &AffineVar::Const { gamma } else { 0 };
+            z.insert(*i, zi);
+
+            // We're always allowed to add error, but since we're using ints all of this is
+            // correct. It's a poor use of AA but, I mean, it gives results!
+            delta += 0;
+        }
+        let d = Self::new_var(counter);
+        z.insert(d, delta);
+        AAF(z)
+    }
+
+    fn vars(&self) -> BTreeSet<AffineVar> {
+        self.0.keys().cloned().collect()
+    }
+
+    fn mul(&self, counter: &mut usize, other: &Self) -> Self {
+        let x0 = self.mid();
+        let y0 = other.mid();
+
+        let p = range_helper(Range { lo: x0, hi: x0 }.mul(&Range { lo: y0, hi: y0 }));
+        let gamma = -p.mid;
+        let delta = self.rad() * other.rad() + p.rad;
+
+        Self::affine(counter, self, other, y0, x0, gamma, delta)
     }
 
     fn add(&self, other: &Self) -> Self {
@@ -106,14 +145,20 @@ impl AAF {
     }
 
     fn union(&self, other: &Self) -> Self {
+        // Union of AAF doesn't make a lot of sense, it's the biggest weakness of the form
+        // since we have to either throw away information, or accumulate a lot of error.
         let mut out = self.0.clone();
         for (var, value) in other.0.iter() {
-            match out.entry(*var) {
-                Entry::Vacant(v) => {
-                    v.insert(*value);
-                }
-                Entry::Occupied(mut v) => {
-                    *v.get_mut() = *v.get().max(value);
+            if var == &AffineVar::Const {
+                out.insert(*var, self.mid() + other.mid());
+            } else {
+                match out.entry(*var) {
+                    Entry::Vacant(v) => {
+                        v.insert(*value);
+                    }
+                    Entry::Occupied(mut v) => {
+                        *v.get_mut() = *v.get().max(value);
+                    }
                 }
             }
         }
@@ -127,7 +172,7 @@ impl AAF {
 
 fn evaluate_aa(counter: &mut usize, body: &Equation, known: &BTreeMap<Var, Range>) -> Option<AAF> {
     match body {
-        Equation::Var(var) => known.get(&var).map(|r| AAF::from_var(*var, *r)),
+        Equation::V(var) => known.get(&var).map(|r| AAF::from_var(*var, *r)),
         Equation::Constant(r) => Some(AAF::from_range(counter, *r)),
         Equation::Add(a, b) => match (
             evaluate_aa(counter, a, known),
@@ -175,11 +220,12 @@ pub fn evaluate_aa_and_simplify_to_range(
     known: &BTreeMap<Var, Range>,
 ) -> Option<Range> {
     if let Some(aa_expr) = evaluate_aa(&mut 0, body, known) {
+        println!("{:?}", aa_expr);
         let mid = aa_expr.mid();
         let rad = aa_expr.rad();
         Some(Range {
-            lo: rad - mid,
-            hi: rad + mid,
+            lo: mid - rad,
+            hi: mid + rad,
         })
     } else {
         None
