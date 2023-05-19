@@ -1,3 +1,4 @@
+use std::collections::btree_map::Entry;
 use std::collections::BTreeMap;
 
 use num::ToPrimitive;
@@ -9,7 +10,8 @@ use spade_hir::{
 };
 use spade_typeinference::{equation::TypeVar, fixed_types::t_int, Context, HasType, TypeState};
 
-use crate::{error, Res};
+use crate::range::Range;
+use crate::{error, InferMethod, Res};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Var(usize);
@@ -25,117 +27,6 @@ pub enum Equation {
     Neg(Box<Equation>),
     BitManipMax(Box<Equation>, Box<Equation>),
     Union(Box<Equation>, Box<Equation>),
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct Range {
-    pub lo: i128,
-    pub hi: i128,
-}
-impl Range {
-    pub fn add(&self, b: &Self) -> Self {
-        let a = self;
-        Range {
-            lo: a.lo + b.lo,
-            hi: a.hi + b.hi,
-        }
-    }
-
-    pub fn sub(&self, b: &Self) -> Self {
-        let a = self;
-        Range {
-            lo: (a.lo - b.hi).min(a.lo - b.lo),
-            hi: (a.hi - b.hi).max(a.hi - b.lo),
-        }
-    }
-
-    pub fn neg(&self) -> Self {
-        Range {
-            lo: -self.hi,
-            hi: -self.lo,
-        }
-    }
-
-    pub fn mul(&self, b: &Self) -> Self {
-        let a = self;
-        Range {
-            lo: (a.lo * b.hi)
-                .min(a.lo * b.lo)
-                .min(a.hi * b.hi)
-                .min(a.hi * b.lo),
-            hi: (a.lo * b.hi)
-                .max(a.lo * b.lo)
-                .max(a.hi * b.hi)
-                .max(a.hi * b.lo),
-        }
-    }
-
-    pub fn union(&self, b: &Self) -> Self {
-        let a = self;
-        Range {
-            lo: a.lo.min(b.lo),
-            hi: a.hi.max(b.hi),
-        }
-    }
-
-    pub fn bit_manip(&self) -> Option<Self> {
-        // This assumes positive integers
-        self.to_wordlength().map(|wl| Range {
-            lo: -2_i128.pow(wl),
-            hi: 2_i128.pow(wl),
-        })
-    }
-
-    pub fn to_wordlength(&self) -> Option<u32> {
-        // NOTE: This can be considerably more fancy, taking into account the range and working
-        // from there - but I'm keeping things simple for now.
-
-        // We take the discrete logarithm here - no sneeky floats in my program!
-        // Just guessed at a large number like 128...
-        for i in 1..128 {
-            let ii = 2_i128.pow(i - 1);
-            if self.hi < ii && self.lo.abs() < ii + 1 {
-                return Some(i);
-            }
-        }
-        None
-    }
-
-    pub fn zero() -> Range {
-        Range { lo: 0, hi: 0 }
-    }
-}
-
-fn evaluate(out: &Var, body: &Equation, known: &BTreeMap<Var, Range>) -> Option<Range> {
-    match &body {
-        Equation::Var(var) => known.get(var).copied(),
-        Equation::Constant(range) => Some(*range),
-        Equation::Add(a, b) => match (evaluate(out, a, known), evaluate(out, b, known)) {
-            (Some(a), Some(b)) => Some(a.add(&b)),
-            _ => None,
-        },
-        Equation::Sub(a, b) => match (evaluate(out, a, known), evaluate(out, b, known)) {
-            (Some(a), Some(b)) => Some(a.sub(&b)),
-            _ => None,
-        },
-        Equation::Mul(a, b) => match (evaluate(out, a, known), evaluate(out, b, known)) {
-            (Some(a), Some(b)) => Some(a.mul(&b)),
-            _ => None,
-        },
-        Equation::BitManpi(a) => evaluate(out, a, known).and_then(|x| x.bit_manip()),
-        Equation::Neg(a) => evaluate(out, a, known).map(|x| x.neg()),
-        Equation::BitManipMax(a, b) => match (
-            evaluate(out, a, known).and_then(|x| x.bit_manip()),
-            evaluate(out, b, known).and_then(|x| x.bit_manip()),
-        ) {
-            (Some(a), Some(b)) => Some(a.union(&b)),
-            _ => None,
-        },
-        Equation::Union(a, b) => match (evaluate(out, a, known), evaluate(out, b, known)) {
-            (Some(a), Some(b)) => Some(a.union(&b)),
-            _ => None,
-        },
-    }
 }
 
 pub struct Inferer<'a> {
@@ -383,25 +274,30 @@ impl<'a> Inferer<'a> {
     }
 
     pub fn infer(
+        infer_method: InferMethod,
         equations: &Vec<(Var, Loc<Equation>)>,
         known: BTreeMap<Var, Range>,
         locs: &BTreeMap<Var, Loc<()>>,
     ) -> error::Result<BTreeMap<Var, Range>> {
         let mut known = known;
-        // worst-case: The equations are all in reverse order and we can solve one new variable per run
-        // - after that we're stuck
-        // println!("{:?}", inferer.equations);
+        // worst-case: The equations are all in reverse order and we can solve one new
+        // variable per run, but maybe this is untrue and we can grantee something like
+        // finishes in a fixed number of cycles?
         for _ in 0..equations.len() {
             let known_at_start = known.clone();
             for (var, body) in equations.iter() {
-                // TODO: How do we handle contradictions?
                 let loc = locs.get(var).cloned().unwrap_or(Loc::nowhere(()));
-                if let Some(guess) = evaluate(var, body, &known) {
+                if let Some(guess) = match infer_method {
+                    InferMethod::IA => crate::range::evaluate_ia(body, &known),
+                    InferMethod::AA => {
+                        crate::affine::evaluate_aa_and_simplify_to_range(body, &known)
+                    }
+                } {
                     match known.entry(*var) {
-                        std::collections::btree_map::Entry::Vacant(v) => {
+                        Entry::Vacant(v) => {
                             v.insert(guess);
                         }
-                        std::collections::btree_map::Entry::Occupied(v) => {
+                        Entry::Occupied(v) => {
                             match (v.get().to_wordlength(), guess.to_wordlength()) {
                                 (Some(current_wl), Some(guess_wl)) if current_wl != guess_wl => {
                                     // Wasted resources, potentially quite optimization

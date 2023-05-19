@@ -262,6 +262,11 @@ pub fn compile(
                     .report(&mut errors)
                 {
                     if let Ok(()) = wordlength_inference::infer_and_check(
+                        if opts.use_aa {
+                            wordlength_inference::InferMethod::AA
+                        } else {
+                            wordlength_inference::InferMethod::IA
+                        },
                         &mut type_state,
                         &type_inference_ctx,
                         &u,

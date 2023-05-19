@@ -1,18 +1,27 @@
 use std::collections::BTreeMap;
 
-use inferer::{Equation, Inferer, Range};
+use inferer::{Equation, Inferer};
 use num::ToPrimitive;
+use range::Range;
 use spade_common::location_info::Loc;
 use spade_hir::Unit;
 use spade_typeinference::{equation::TypeVar, Context, TypeState};
 use spade_types::KnownType;
 
+pub enum InferMethod {
+    IA,
+    AA,
+}
+
+mod affine;
 mod error;
 mod inferer;
+mod range;
 
 pub type Res = error::Result<Option<Equation>>;
 
 pub fn infer_and_check(
+    infer_method: InferMethod,
     type_state: &mut TypeState,
     context: &Context,
     unit: &Unit,
@@ -47,7 +56,7 @@ pub fn infer_and_check(
         }
     }
 
-    let known = Inferer::infer(&inferer.equations, known, &inferer.locs)?;
+    let known = Inferer::infer(infer_method, &inferer.equations, known, &inferer.locs)?;
 
     // TODO: Location information isn't really a thing... Maybe it can be solved some other way?
     for (ty, var) in inferer.mappings.iter() {
