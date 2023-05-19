@@ -12,6 +12,16 @@ enum AffineVar {
     Const,
 }
 
+// I've taken the liberty of using integers here - this is quite weird since AA uses a lot of
+// tricks (and rounding details) to be as accurate as possible. That said, the error will be
+// restrained to within 1.0 for most numbers close to 0. This means we add a bit of error in the
+// cases of `v = <0, 1>` since the radius cannot be represented as an integer, instead we get
+// <0 + 1x>, which gives us the range `<-1, 1>`.
+//
+// This gives us some potential problems if we were to implement unsigned integers, but this would
+// also be the case for floating point numbers since we potentially could accumulate an error
+// larger than 1.0. However, the rounding for floating point forms should be towards the direction
+// which gives the smallest range (right?) and therefore should yield better results in general.
 #[derive(Eq, PartialEq, Clone, Debug, Ord, PartialOrd)]
 pub struct AAF(BTreeMap<AffineVar, i128>);
 
@@ -30,7 +40,7 @@ fn range_helper(r: Range) -> H {
 impl AAF {
     fn from_range(counter: &mut usize, r: Range) -> AAF {
         // NOTE: Rounding errors?
-        let h = dbg!(range_helper(dbg!(r)));
+        let h = range_helper(r);
         let new_var = AAF::new_var(counter);
         AAF([(AffineVar::Const, h.mid), (new_var, h.rad)]
             .into_iter()
@@ -106,7 +116,7 @@ impl AAF {
             z.insert(*i, zi);
 
             // We're always allowed to add error, but since we're using ints all of this is
-            // correct. It's a poor use of AA but, I mean, it gives results!
+            // correct. It's a poor use of AA, but it gives results!
             delta += 0;
         }
         let d = Self::new_var(counter);
@@ -119,6 +129,10 @@ impl AAF {
     }
 
     fn mul(&self, counter: &mut usize, other: &Self) -> Self {
+        // This code is quite complicated and I got a myriad of bugs here. The idea is to over
+        // estimate using: |(a * b)| <= |(|b| * a + |a| * b + mid(a) * mid(b) + rad(a) * rad(b))|
+        // It's a pretty correct way of estimating and it works decently well, for ints it's even
+        // better though since we can safely ignore all rounding.
         let x0 = self.mid();
         let y0 = other.mid();
 

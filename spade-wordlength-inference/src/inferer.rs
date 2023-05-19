@@ -404,8 +404,8 @@ mod test {
     fn odd_range_aa() {
         check_infer(
             InferMethod::AA,
-            vec![(Var(0), c(1, 2))],
-            vec![(Var(0), r(0, 2))],
+            vec![(Var(0), c(0, 1))],
+            vec![(Var(0), r(-1, 1))],
         )
     }
 
