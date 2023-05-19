@@ -401,6 +401,15 @@ mod test {
     }
 
     #[test]
+    fn large_range_aa() {
+        check_infer(
+            InferMethod::AA,
+            vec![(Var(0), c(-16, 15))],
+            vec![(Var(0), r(-16, 16))],
+        )
+    }
+
+    #[test]
     fn odd_range_aa() {
         check_infer(
             InferMethod::AA,
