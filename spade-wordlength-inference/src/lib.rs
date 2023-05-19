@@ -71,10 +71,10 @@ pub fn infer_and_check(
                         // NOTE: To make these types better, the known types need to have a Loc on
                         // them, something I really don't feel like doing right now.
                         // TODO: Print the actual ranges of values, since that's nice!
-                        return Err(error::Error::WordlengthMismatch(
-                            ty.give_loc(*typechecker_wl),
-                            loc.give_loc(infered_wl),
-                        ));
+                        return Err(error::Error::WordlengthMismatch {
+                            typechecked: ty.give_loc(*typechecker_wl),
+                            infered: loc.give_loc(infered_wl),
+                        });
                     }
                 }
                 _ => {}

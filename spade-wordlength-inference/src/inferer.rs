@@ -300,11 +300,13 @@ impl<'a> Inferer<'a> {
                         Entry::Occupied(v) => {
                             match (v.get().to_wordlength(), guess.to_wordlength()) {
                                 (Some(current_wl), Some(guess_wl)) if current_wl != guess_wl => {
-                                    // Wasted resources, potentially quite optimization
-                                    return Err(error::Error::WordlengthMismatch(
-                                        body.give_loc(current_wl),
-                                        loc.give_loc(guess_wl),
-                                    ));
+                                    // I'm not sure this is the same kind of error as it's being
+                                    // used as in both places - sure it's a contradiction, but here
+                                    // we might have inferred an incorrect or contradicting conclusion.
+                                    return Err(error::Error::WordlengthMismatch {
+                                        typechecked: body.give_loc(current_wl),
+                                        infered: loc.give_loc(guess_wl),
+                                    });
                                 }
                                 _ => {}
                             }

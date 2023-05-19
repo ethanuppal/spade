@@ -11,7 +11,10 @@ pub enum Error {
     #[error("Unification Type Error")]
     TypeError(Loc<spade_typeinference::error::UnificationError>),
     #[error("The wordlength isn't what we infered it to")]
-    WordlengthMismatch(Loc<u32>, Loc<u32>),
+    WordlengthMismatch {
+        infered: Loc<u32>,
+        typechecked: Loc<u32>,
+    },
 }
 
 impl CompilationError for Error {
@@ -23,19 +26,30 @@ impl CompilationError for Error {
                 "Failed to unify some types while infering wordlengths"
             )),
 
-            Error::WordlengthMismatch(ty, inf) if ty.is_same_loc(inf) => Diagnostic::error()
-                .with_labels(vec![ty.primary_label().with_message(format!(
-                    "This expression requires {} bits but claims to need {} bits",
-                    ty.inner, inf.inner
-                ))]),
+            Error::WordlengthMismatch {
+                infered,
+                typechecked,
+            } if infered.is_same_loc(typechecked) => {
+                Diagnostic::error().with_labels(vec![typechecked.primary_label().with_message(
+                    format!(
+                        "This expression requires {} bits but claims to typechecker claims {} bits",
+                        infered.inner, typechecked.inner
+                    ),
+                )])
+            }
 
-            Error::WordlengthMismatch(ty, inf) => Diagnostic::error()
+            Error::WordlengthMismatch {
+                infered,
+                typechecked,
+            } => Diagnostic::error()
                 .with_message(format!("The size of these ints does not add up"))
                 .with_labels(vec![
-                    ty.primary_label()
-                        .with_message(format!("Here we require {} bits", ty.inner)),
-                    inf.primary_label()
-                        .with_message(format!("And here we require {} bits", inf.inner)),
+                    typechecked
+                        .primary_label()
+                        .with_message(format!("Here we require {} bits", typechecked.inner)),
+                    infered
+                        .primary_label()
+                        .with_message(format!("But the compiler infered {} bits", infered.inner)),
                 ]),
         };
 
