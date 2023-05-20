@@ -405,7 +405,7 @@ mod test {
         check_infer(
             InferMethod::AA,
             vec![(Var(0), c(-16, 15))],
-            vec![(Var(0), r(-16, 16))],
+            vec![(Var(0), r(-16, 15))],
         )
     }
 
@@ -414,7 +414,7 @@ mod test {
         check_infer(
             InferMethod::AA,
             vec![(Var(0), c(0, 1))],
-            vec![(Var(0), r(-1, 1))],
+            vec![(Var(0), r(0, 1))],
         )
     }
 
@@ -462,7 +462,7 @@ mod test {
             vec![(Var(0), c(0, 10)), (Var(1), bit(v(0)))],
             // AA can't handle odd-ranges due to how they're stored, this can
             // easily be solved by using a different structure but... Yeah...
-            vec![(Var(0), r(0, 10)), (Var(1), r(-16, 16))],
+            vec![(Var(0), r(0, 10)), (Var(1), r(-16, 15))],
         )
     }
 

@@ -1,4 +1,7 @@
-use std::collections::{btree_map::Entry, BTreeMap, BTreeSet};
+use std::{
+    collections::{btree_map::Entry, BTreeMap, BTreeSet},
+    f64::EPSILON,
+};
 
 use crate::{
     inferer::{Equation, Var},
@@ -12,28 +15,20 @@ enum AffineVar {
     Const,
 }
 
-// I've taken the liberty of using integers here - this is quite weird since AA uses a lot of
-// tricks (and rounding details) to be as accurate as possible. That said, the error will be
-// restrained to within 1.0 for most numbers close to 0. This means we add a bit of error in the
-// cases of `v = <0, 1>` since the radius cannot be represented as an integer, instead we get
-// <0 + 1x>, which gives us the range `<-1, 1>`.
-//
-// This gives us some potential problems if we were to implement unsigned integers, but this would
-// also be the case for floating point numbers since we potentially could accumulate an error
-// larger than 1.0. However, the rounding for floating point forms should be towards the direction
-// which gives the smallest range (right?) and therefore should yield better results in general.
-#[derive(Eq, PartialEq, Clone, Debug, Ord, PartialOrd)]
-pub struct AAF(BTreeMap<AffineVar, i128>);
+// I've made the bold assumption that `x + EPSILON` is the same or equal to `^ x ^` (the larger floating point number).
+// Another way of phrasing it is: `b > 0 => a + b > a` when using floating point arithmatic.
+#[derive(PartialEq, Clone, Debug, PartialOrd)]
+pub struct AAF(BTreeMap<AffineVar, f64>);
 
-#[derive(Eq, PartialEq, Clone, Debug, Ord, PartialOrd)]
+#[derive(PartialEq, Clone, Debug, PartialOrd)]
 struct H {
-    rad: i128,
-    mid: i128,
+    rad: f64,
+    mid: f64,
 }
 
 fn range_helper(r: Range) -> H {
-    let mid = (r.hi + r.lo) / 2;
-    let rad = (mid - r.lo).max(r.hi - mid);
+    let mid = (r.hi + r.lo) as f64 / 2.0;
+    let rad = (mid - r.lo as f64).max(r.hi as f64 - mid);
     H { mid, rad }
 }
 
@@ -68,22 +63,22 @@ impl AAF {
         AAF::from_range(
             counter,
             Range {
-                lo: mid - rad,
-                hi: mid + rad,
+                lo: (mid - rad) as i128,
+                hi: (mid + rad) as i128,
             }
             .bit_manip()
             .unwrap(),
         )
     }
 
-    fn rad(&self) -> i128 {
+    fn rad(&self) -> f64 {
         self.0
             .iter()
-            .map(|(v, x)| if v == &AffineVar::Const { 0 } else { x.abs() })
+            .map(|(v, x)| if v == &AffineVar::Const { 0.0 } else { x.abs() })
             .sum()
     }
 
-    fn mid(&self) -> i128 {
+    fn mid(&self) -> f64 {
         self.0
             .iter()
             .find_map(|(var, value)| {
@@ -93,7 +88,7 @@ impl AAF {
                     None
                 }
             })
-            .unwrap_or(0)
+            .unwrap_or(0.0)
     }
 
     // Computes alpha * x + beta * y + gamma (where delta is extra noise)
@@ -101,23 +96,24 @@ impl AAF {
         counter: &mut usize,
         x: &AAF,
         y: &AAF,
-        alpha: i128,
-        beta: i128,
-        gamma: i128,
-        delta: i128,
+        alpha: f64,
+        beta: f64,
+        gamma: f64,
+        delta: f64,
     ) -> AAF {
         let mut delta = delta;
         let mut z = BTreeMap::new();
 
         for i in x.vars().union(&y.vars()) {
-            let xi = x.0.get(i).unwrap_or(&0);
-            let yi = y.0.get(i).unwrap_or(&0);
-            let zi = alpha * xi + beta * yi + if i == &AffineVar::Const { gamma } else { 0 };
+            let xi = x.0.get(i).unwrap_or(&0.0);
+            let yi = y.0.get(i).unwrap_or(&0.0);
+            let zi = alpha * xi + beta * yi + if i == &AffineVar::Const { gamma } else { 0.0 };
             z.insert(*i, zi);
 
-            // We're always allowed to add error, but since we're using ints all of this is
-            // correct. It's a poor use of AA, but it gives results!
-            delta += 0;
+            // / Hope the compiler doesn't optimize this away...
+            let a = zi + EPSILON;
+            let b = zi - EPSILON;
+            delta += (a - zi).max(zi - b);
         }
         let d = Self::new_var(counter);
         z.insert(d, delta);
@@ -131,14 +127,22 @@ impl AAF {
     fn mul(&self, counter: &mut usize, other: &Self) -> Self {
         // This code is quite complicated and I got a myriad of bugs here. The idea is to over
         // estimate using: |(a * b)| <= |(|b| * a + |a| * b + mid(a) * mid(b) + rad(a) * rad(b))|
-        // It's a pretty correct way of estimating and it works decently well, for ints it's even
-        // better though since we can safely ignore all rounding.
+        // It's a pretty correct way of estimating and it works decently well.
         let x0 = self.mid();
         let y0 = other.mid();
 
-        let p = range_helper(Range { lo: x0, hi: x0 }.mul(&Range { lo: y0, hi: y0 }));
+        let p = range_helper(
+            Range {
+                lo: x0 as i128,
+                hi: x0 as i128,
+            }
+            .mul(&Range {
+                lo: y0 as i128,
+                hi: y0 as i128,
+            }),
+        );
         let gamma = -p.mid;
-        let delta = self.rad() * other.rad() + p.rad;
+        let delta = (self.rad() * other.rad() + EPSILON) + p.rad + EPSILON;
 
         Self::affine(counter, self, other, y0, x0, gamma, delta)
     }
@@ -171,7 +175,7 @@ impl AAF {
                         v.insert(*value);
                     }
                     Entry::Occupied(mut v) => {
-                        *v.get_mut() = *v.get().max(value);
+                        *v.get_mut() = v.get().max(*value);
                     }
                 }
             }
@@ -234,12 +238,11 @@ pub fn evaluate_aa_and_simplify_to_range(
     known: &BTreeMap<Var, Range>,
 ) -> Option<Range> {
     if let Some(aa_expr) = evaluate_aa(&mut 0, body, known) {
-        println!("{:?}", aa_expr);
         let mid = aa_expr.mid();
         let rad = aa_expr.rad();
         Some(Range {
-            lo: mid - rad,
-            hi: mid + rad,
+            lo: (mid - rad).ceil() as i128,
+            hi: (mid + rad).floor() as i128,
         })
     } else {
         None
