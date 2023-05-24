@@ -68,8 +68,8 @@ impl Range {
 
         for i in 1..2048 {
             let n = BigInt::from(2).pow(i);
-            if self.hi.abs() < n && self.lo.abs() < (n + BigInt::from(1)) {
-                return Some(i);
+            if self.hi.abs() < n && self.lo.abs() < n + BigInt::from(1) {
+                return Some(i + 1);
             }
         }
         None
