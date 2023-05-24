@@ -3,11 +3,12 @@ use std::collections::BTreeMap;
 
 use num::BigInt;
 use spade_common::location_info::Loc;
-use spade_hir::Expression;
+use spade_hir::expression::NamedArgument;
 use spade_hir::{
     expression::{BinaryOperator, UnaryOperator},
     Block, ExprKind, Pattern, Statement,
 };
+use spade_hir::{ArgumentList, Expression};
 use spade_typeinference::{equation::TypeVar, fixed_types::t_int, Context, HasType, TypeState};
 
 use crate::range::Range;
@@ -109,24 +110,48 @@ impl<'a> Inferer<'a> {
             ExprKind::Block(block) => self.block(block)?,
             ExprKind::If(value, true_, false_) => self.if_(value, true_, false_)?,
 
+            // These are all opaque types, they say nothing of the structure of integers (well,
+            // they might but we don't have that kind of information). The inference will
+            // replace these with the largest possible value and go from there. So, code like:
+            // 1 + [0, 1000][0]
+            //
+            // Will realize we have a signed integer in the list with a max size of 1024, and give
+            // us the estimate: 1 +- 1024, though a programmer could easily infer 1 + 0. This is
+            // still better than what was before but not the best solution - extending this to
+            // infer more complicated relationships might be a fun extension (but out of scope for
+            // this thesis)
+            ExprKind::TupleLiteral(exprs) | ExprKind::ArrayLiteral(exprs) => {
+                self.tuple_or_array_literal(exprs)?;
+                None
+            }
+            ExprKind::Index(target, index) => {
+                self.expression(target)?;
+                self.expression(index)?;
+                None
+            }
+            ExprKind::TupleIndex(target, _) => {
+                self.expression(target)?;
+                None
+            }
+
+            ExprKind::FieldAccess(target, _) => {
+                self.expression(target)?;
+                None
+            }
+            ExprKind::Call { args, .. } => {
+                self.visit_args(args)?;
+                None
+            }
+            ExprKind::MethodCall { target, args, .. } => {
+                self.expression(target)?;
+                self.visit_args(args)?;
+                None
+            }
+
             // There's a case to be made for these being valuable to implement. Implementing these
             // is bound to be simple and give value to the language, but it requires figuring out
             // where their return types are stored - which is less interesting.
-            //
-            // They also don't add more complexity to the problem, so from a research point of view
-            // I've avoided adding them. Though these cases are a good argument for a more extreme
-            // approach where each value is traced so we can understand code like: `[1, 2, 3][1]`
-            // Though I leave this as a fun extension someone else can add to this method.
-            ExprKind::BoolLiteral(_)
-            | ExprKind::Call { .. }
-            | ExprKind::PipelineRef { .. }
-            | ExprKind::CreatePorts
-            | ExprKind::TupleLiteral(_)
-            | ExprKind::ArrayLiteral(_)
-            | ExprKind::Index(_, _)
-            | ExprKind::TupleIndex(_, _)
-            | ExprKind::FieldAccess(_, _)
-            | ExprKind::MethodCall { .. } => None,
+            ExprKind::BoolLiteral(_) | ExprKind::PipelineRef { .. } | ExprKind::CreatePorts => None,
         };
 
         self.maybe_add_equation(&expr.inner, expr.loc().give_loc(maybe_eq.clone()));
@@ -136,18 +161,28 @@ impl<'a> Inferer<'a> {
     fn block(&mut self, block: &Block) -> Res {
         for stmt in block.statements.iter() {
             match &stmt.inner {
-                // TODO: Is there a currectness bug here since I discard the pattern?
-                Statement::Binding(_pattern, _, expr) => {
+                Statement::Binding(_, _, expr) | Statement::Assert(expr) => {
                     self.expression(&expr)?;
                 }
 
-                // Nothing to be done for these
-                Statement::Register(_)
-                | Statement::Declaration(_)
-                | Statement::PipelineRegMarker
-                | Statement::Label(_)
-                | Statement::Assert(_)
-                | Statement::Set { .. } => {}
+                Statement::Set { target, value } => {
+                    self.expression(&target)?;
+                    self.expression(&value)?;
+                }
+
+                Statement::Register(register) => {
+                    let register = &register.inner;
+                    self.expression(&register.clock)?;
+                    if let Some((left, right)) = &register.reset {
+                        self.expression(&left)?;
+                        self.expression(&right)?;
+                    }
+                    self.expression(&register.value)?;
+                }
+
+                // Nothing to be done for these since they contain no expressions and thus no
+                // integer operations.
+                Statement::Declaration(_) | Statement::PipelineRegMarker | Statement::Label(_) => {}
             }
         }
         self.expression(&block.result)
@@ -188,7 +223,8 @@ impl<'a> Inferer<'a> {
         op: BinaryOperator,
         rhs: &Loc<Expression>,
     ) -> Res {
-        // These unwraps are safe, right?
+        // These would be None if we have something that is opaque to the wordlength inferer, they
+        // might signal an error in the typechecker or in the wordlength inferer.
         let lhs_t = self.expression(lhs)?;
         let rhs_t = self.expression(rhs)?;
         Ok(match (op, lhs_t, rhs_t) {
@@ -214,7 +250,7 @@ impl<'a> Inferer<'a> {
                 Some(v),
                 _,
             ) => {
-                // The left value is the one being shifted, right?
+                // The left value is the one being shifted
                 Some(Equation::BitManpi(Box::new(v)))
             }
 
@@ -227,21 +263,28 @@ impl<'a> Inferer<'a> {
             ) => None,
 
             (
-                BinaryOperator::BitwiseOr | BinaryOperator::BitwiseAnd | BinaryOperator::BitwiseXor,
+                BinaryOperator::BitwiseOr
+                | BinaryOperator::BitwiseAnd
+                | BinaryOperator::BitwiseXor
+                | BinaryOperator::LogicalAnd
+                | BinaryOperator::LogicalOr
+                | BinaryOperator::LogicalXor,
                 Some(a),
                 Some(b),
             ) => Some(Equation::BitManipMax(Box::new(a), Box::new(b))),
             (
-                BinaryOperator::BitwiseOr | BinaryOperator::BitwiseAnd | BinaryOperator::BitwiseXor,
+                BinaryOperator::BitwiseOr
+                | BinaryOperator::BitwiseAnd
+                | BinaryOperator::BitwiseXor
+                | BinaryOperator::LogicalAnd
+                | BinaryOperator::LogicalOr
+                | BinaryOperator::LogicalXor,
                 _,
                 _,
             ) => None,
 
             (
-                BinaryOperator::LogicalAnd
-                | BinaryOperator::LogicalOr
-                | BinaryOperator::LogicalXor
-                | BinaryOperator::Eq
+                BinaryOperator::Eq
                 | BinaryOperator::NotEq
                 | BinaryOperator::Gt
                 | BinaryOperator::Lt
@@ -319,6 +362,31 @@ impl<'a> Inferer<'a> {
             }
         }
         Ok(known)
+    }
+
+    fn tuple_or_array_literal(&mut self, exprs: &[Loc<Expression>]) -> Res {
+        for expr in exprs.iter() {
+            self.expression(expr)?;
+        }
+        // Tuples/Arrays aren't numbers!
+        Ok(None)
+    }
+
+    fn visit_args(&mut self, args: &Loc<ArgumentList>) -> Res {
+        let exprs = match &args.inner {
+            ArgumentList::Named(named) => named
+                .iter()
+                .map(|x| match x {
+                    NamedArgument::Full(_, expr) => expr.clone(),
+                    NamedArgument::Short(_, expr) => expr.clone(),
+                })
+                .collect(),
+            ArgumentList::Positional(expr) => expr.clone(),
+        };
+        for expr in exprs.iter() {
+            self.expression(&expr)?;
+        }
+        Ok(None)
     }
 }
 
