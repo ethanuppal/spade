@@ -17,6 +17,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - [!168][!168] Add `port` expression for creating a `(T, ~T)`. [Documentation][doc_inverted_ports]
 - [!189][!189] Add `#[no_mangle]` attribute to unit parameters to avoid appending `_i` or `_o`
 - [!191][!191] Add `translate_value` method to spade-python
+- [!200][!200] Add more sophisticated wordlength inference logic hidden behind a feature flag.
 
 ### Fixed
 
