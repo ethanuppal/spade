@@ -317,10 +317,9 @@ impl<'a> Inferer<'a> {
     pub fn infer(
         infer_method: InferMethod,
         equations: &Vec<(Var, Loc<Equation>)>,
-        known: BTreeMap<Var, Range>,
+        mut known: BTreeMap<Var, Range>,
         locs: &BTreeMap<Var, Loc<()>>,
     ) -> error::Result<BTreeMap<Var, Range>> {
-        let mut known = known;
         // worst-case: The equations are all in reverse order and we can solve one new
         // variable per run, but maybe this is untrue and we can grantee something like
         // finishes in a fixed number of cycles?
@@ -328,7 +327,7 @@ impl<'a> Inferer<'a> {
             let known_at_start = known.clone();
             for (var, body) in equations.iter() {
                 let loc = locs.get(var).cloned().unwrap_or(Loc::nowhere(()));
-                if let Some(guess) = match infer_method {
+                if let Some(infer) = match infer_method {
                     InferMethod::IA => crate::range::evaluate_ia(body, &known),
                     InferMethod::AA => {
                         crate::affine::evaluate_aa_and_simplify_to_range(body, &known)
@@ -336,17 +335,21 @@ impl<'a> Inferer<'a> {
                 } {
                     match known.entry(*var) {
                         Entry::Vacant(v) => {
-                            v.insert(guess);
+                            v.insert(infer);
                         }
                         Entry::Occupied(v) => {
-                            match (v.get().to_wordlength(), guess.to_wordlength()) {
-                                (Some(current_wl), Some(guess_wl)) if current_wl != guess_wl => {
+                            match (v.get().to_wordlength(), infer.to_wordlength()) {
+                                // NOTE: I had to weaken this check to `<` (from `!=`) since it gave false
+                                // positives for cases like: f(0) if the constant wasn't large
+                                // enough. Maybe this is a signal of a special rule or something
+                                // else, but it does signal potential optimization potential.
+                                (Some(typecheck_wl), Some(infer_wl)) if typecheck_wl < infer_wl => {
                                     // I'm not sure this is the same kind of error as it's being
                                     // used as in both places - sure it's a contradiction, but here
                                     // we might have inferred an incorrect or contradicting conclusion.
                                     return Err(error::Error::WordlengthMismatch {
-                                        typechecked: body.give_loc(current_wl),
-                                        infered: loc.give_loc(guess_wl),
+                                        typechecked: body.give_loc(typecheck_wl),
+                                        infered: loc.give_loc(infer_wl),
                                     });
                                 }
                                 _ => {}
