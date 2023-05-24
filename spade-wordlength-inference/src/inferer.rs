@@ -79,12 +79,11 @@ impl<'a> Inferer<'a> {
     }
 
     fn maybe_add_equation(&mut self, thing: &dyn HasType, maybe_eq: Loc<Option<Equation>>) {
-        match (
+        if let (Some(var), Some(eq)) = (
             self.find_or_create(thing, maybe_eq.loc()),
             maybe_eq.inner.clone(),
         ) {
-            (Some(var), Some(eq)) => self.equations.push((var, maybe_eq.give_loc(eq))),
-            _ => {}
+            self.equations.push((var, maybe_eq.give_loc(eq)))
         }
     }
 
