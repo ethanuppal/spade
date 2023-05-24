@@ -22,9 +22,12 @@ mod ports_integration;
 mod suggestions;
 #[cfg(test)]
 mod typeinference;
+#[cfg(test)]
 mod usefulness;
 #[cfg(test)]
 mod wal_tracing;
+#[cfg(test)]
+mod wordlength_inference;
 
 pub trait ResultExt<T> {
     fn report_failure(self, code: &str) -> T;
@@ -88,6 +91,76 @@ macro_rules! snapshot_error {
                 print_type_traceback: false,
                 print_parse_traceback: false,
                 infer_method: None,
+            };
+
+            let files = vec![(
+                    spade::ModuleNamespace {
+                        namespace: spade_common::name::Path(vec![]),
+                        base_namespace: spade_common::name::Path(vec![]),
+                    },
+                    "testinput".to_string(),
+                    source.to_string(),
+                )];
+
+            let _ = spade::compile(
+                files,
+                true,
+                opts,
+                spade_diagnostics::DiagHandler::new(Box::new(
+                    spade_diagnostics::emitter::CodespanEmitter,
+                )),
+            );
+
+            insta::with_settings!({
+                // FIXME: Why can't we set 'description => source' here?
+                omit_expression => true,
+            }, {
+                insta::assert_snapshot!(format!(
+                    "{}\n\n{}",
+                    source,
+                    std::str::from_utf8(buffer.as_slice()).expect("error contains invalid utf-8")
+                ));
+            });
+        }
+    };
+}
+
+#[macro_export]
+macro_rules! snapshot_inference_error {
+    ($fn:ident, $kind:literal, $src:literal) => {
+        #[test]
+        fn $fn() {
+            use tracing_subscriber::filter::{EnvFilter, LevelFilter};
+            use tracing_subscriber::prelude::*;
+            use tracing_tree::HierarchicalLayer;
+            let env_filter = EnvFilter::builder()
+                .with_default_directive(LevelFilter::OFF.into())
+                .with_env_var("SPADE_LOG")
+                .from_env_lossy();
+            let layer = HierarchicalLayer::new(2)
+                .with_targets(true)
+                .with_writer(tracing_subscriber::fmt::TestWriter::new())
+                .with_filter(env_filter);
+
+            tracing_subscriber::registry().with(layer).try_init().ok();
+
+            let source = unindent::unindent($src);
+            let mut buffer = codespan_reporting::term::termcolor::Buffer::no_color();
+            let opts = spade::Opt {
+                error_buffer: &mut buffer,
+                outfile: None,
+                mir_output: None,
+                type_dump_file: None,
+                state_dump_file: None,
+                item_list_file: None,
+                print_type_traceback: false,
+                print_parse_traceback: false,
+                infer_method: match $kind {
+                    "AA" => Some(InferMethod::AA),
+                    "IA" => Some(InferMethod::IA),
+                    "ONE" => None,
+                    _ => panic!("Not a valid inference kind: {:?}", $kind),
+                },
             };
 
             let files = vec![(

@@ -36,7 +36,9 @@ pub fn infer_and_check(
     for (ty, var) in inferer.mappings.iter() {
         match &ty.inner {
             TypeVar::Known(KnownType::Integer(size), _) => {
-                let x = (size.to_u128().unwrap() - 1).try_into().unwrap(); // This is assumed to be small
+                let x = (size.to_u128().unwrap().checked_sub(1).unwrap_or(0))
+                    .try_into()
+                    .unwrap(); // This is assumed to be small
                 known.insert(
                     *var,
                     Range {

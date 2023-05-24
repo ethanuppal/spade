@@ -227,8 +227,8 @@ impl Requirement {
                                 let (contained_range, unsigned) = match value {
                                     IntLiteral::Signed(_) => (
                                         (
-                                            -(&two).pow(size_u32 - 1),
-                                            &two.pow(size_u32 - 1) - 1.to_bigint(),
+                                            -(&two).pow(size_u32.checked_sub(1).unwrap_or(0)),
+                                            two.pow(size_u32.checked_sub(1).unwrap_or(0)).checked_sub(&1.to_bigint()).unwrap_or(0.to_bigint()),
                                         ),
                                         false,
                                     ),
