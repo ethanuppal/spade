@@ -348,10 +348,13 @@ impl<'a> Inferer<'a> {
                                     // I'm not sure this is the same kind of error as it's being
                                     // used as in both places - sure it's a contradiction, but here
                                     // we might have inferred an incorrect or contradicting conclusion.
-                                    return Err(error::Error::WordlengthMismatch {
-                                        typechecked: body.give_loc(typecheck_wl),
-                                        infered: loc.give_loc(infer_wl),
-                                    });
+                                    return Err(error::WordlengthMismatch {
+                                        typechecked: typecheck_wl,
+                                        typechecked_at: body.loc(),
+                                        infered: infer_wl,
+                                        infered_at: loc,
+                                    }
+                                    .into());
                                 }
                                 _ => {}
                             }

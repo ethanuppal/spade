@@ -1,61 +1,26 @@
-use codespan_reporting::{diagnostic::Diagnostic, term::termcolor::Buffer};
-use spade_common::location_info::{AsLabel, Loc};
-use spade_diagnostics::{CodeBundle, CompilationError, DiagHandler};
-use thiserror::Error;
+use spade_common::location_info::Loc;
+use spade_diagnostics::Diagnostic;
+use spade_macros::IntoDiagnostic;
 
-#[derive(Debug, Error, PartialEq, Clone)]
-pub enum Error {
-    #[error("Unification Type Error")]
-    TypeError(Loc<spade_typeinference::error::UnificationError>),
-    #[error("The wordlength isn't what we infered it to")]
-    WordlengthMismatch {
-        infered: Loc<u32>,
-        typechecked: Loc<u32>,
-    },
+#[derive(IntoDiagnostic)]
+#[diagnostic(
+    error,
+    "Got a type-error while doing wordlength inference - please report this!"
+)]
+pub struct UnificationError {
+    #[diagnostic(primary, "This place is somehow related")]
+    pub at: Loc<()>,
 }
 
-impl CompilationError for Error {
-    fn report(&self, buffer: &mut Buffer, code: &CodeBundle, _diag_handler: &mut DiagHandler) {
-        let diag = match self {
-            Error::TypeError(_e) => Diagnostic::error().with_message(format!(
-                "Failed to unify some types while infering wordlengths"
-            )),
-
-            Error::WordlengthMismatch {
-                infered,
-                typechecked,
-            } if infered.is_same_loc(typechecked) => {
-                Diagnostic::error().with_labels(vec![typechecked.primary_label().with_message(
-                    format!(
-                    "This expression requires {} bits but the typechecker claims it needs {} bits",
-                    infered.inner, typechecked.inner
-                ),
-                )])
-            }
-
-            Error::WordlengthMismatch {
-                infered,
-                typechecked,
-            } => Diagnostic::error()
-                .with_message(format!("The size of these ints does not add up"))
-                .with_labels(vec![
-                    typechecked
-                        .primary_label()
-                        .with_message(format!("Here we require {} bits", typechecked.inner)),
-                    infered
-                        .primary_label()
-                        .with_message(format!("But the compiler infered {} bits", infered.inner)),
-                ]),
-        };
-
-        codespan_reporting::term::emit(
-            buffer,
-            &spade_diagnostics::emitter::codespan_config(),
-            &code.files,
-            &diag,
-        )
-        .unwrap()
-    }
+#[derive(IntoDiagnostic)]
+#[diagnostic(error, "The wordlength isn't what we infered it to - inference got {} bits and you claimed {} bits", diag.infered, diag.typechecked)]
+pub struct WordlengthMismatch {
+    pub infered: u32,
+    #[diagnostic(primary, "Here {} bits were infered", diag.infered)]
+    pub infered_at: Loc<()>,
+    pub typechecked: u32,
+    #[diagnostic(primary, "Here you said {} bits", diag.typechecked)]
+    pub typechecked_at: Loc<()>,
 }
 
-pub type Result<T> = std::result::Result<T, Error>;
+pub type Result<T> = std::result::Result<T, Diagnostic>;

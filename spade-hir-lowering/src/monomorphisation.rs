@@ -173,7 +173,7 @@ pub fn compile_items(
                     let infer_result =
                         wordlength_inference::infer_and_check(method, &mut type_state, &symtab, &u);
                     if let Err(e) = infer_result {
-                        result.push(Err(Error::WordlengthError(e)));
+                        result.push(Err(Error::SpadeDiagnostic(e)));
                         continue;
                     }
                 }
