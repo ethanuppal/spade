@@ -1,0 +1,16 @@
+---
+source: spade-tests/src/wordlength_inference.rs
+---
+fn f<a, b>(q: bool, a: int<0>, b: int<4>) -> int<0> {
+    if q { a } else { a * b + b - b + 1 }
+}
+entity main(clk: clock, rst: bool) -> int<0> { f(false, 0, 0) }
+
+
+error: 
+  ┌─ testinput:4:57
+  │
+4 │ entity main(clk: clock, rst: bool) -> int<0> { f(false, 0, 0) }
+  │                                                         ^ This expression requires 2 bits but the typechecker claims it needs 0 bits
+
+

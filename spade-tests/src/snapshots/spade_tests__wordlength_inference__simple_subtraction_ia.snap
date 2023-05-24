@@ -1,0 +1,22 @@
+---
+source: spade-tests/src/wordlength_inference.rs
+---
+fn f(a: int<4>) -> int<0> {
+  a - a + 1
+}
+entity main(clk: clock, rst: bool) -> int<0> { f(1) }
+
+
+error: 
+  ┌─ testinput:2:3
+  │
+2 │   a - a + 1
+  │   ^^^^^^^^^ This expression requires 5 bits but the typechecker claims it needs 2 bits
+
+error: 
+  ┌─ testinput:4:48
+  │
+4 │ entity main(clk: clock, rst: bool) -> int<0> { f(1) }
+  │                                                ^^^^ This expression requires 2 bits but the typechecker claims it needs 0 bits
+
+
