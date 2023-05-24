@@ -8,8 +8,11 @@ use crate::{
 
 #[derive(Eq, PartialEq, Clone, Copy, Debug, Ord, PartialOrd)]
 enum AffineVar {
+    /// A variable coming from the actual program source code.
     Var(Var),
+    /// A generated variable when we need to add uncertainty to the calculations.
     Gen(usize),
+    /// A constant which has no noise.
     Const,
 }
 
