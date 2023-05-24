@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 
 use inferer::{Equation, Inferer};
-use num::ToPrimitive;
+use num::{BigInt, ToPrimitive};
 use range::Range;
 use spade_common::location_info::Loc;
 use spade_hir::Unit;
@@ -34,12 +34,12 @@ pub fn infer_and_check(
     for (ty, var) in inferer.mappings.iter() {
         match &ty.inner {
             TypeVar::Known(KnownType::Integer(size), _) => {
-                let x = size.to_u32().unwrap(); // This is assumed to be small
+                let x = (size.to_u128().unwrap() - 1).try_into().unwrap(); // This is assumed to be small
                 known.insert(
                     *var,
                     Range {
-                        lo: -2_i128.pow(x - 1) + 1,
-                        hi: 2_i128.pow(x - 1) - 2,
+                        lo: -BigInt::from(2).pow(x) + 1,
+                        hi: BigInt::from(2).pow(x) - 2,
                     },
                 );
             }

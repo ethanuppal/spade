@@ -5,9 +5,6 @@ use thiserror::Error;
 
 #[derive(Debug, Error, PartialEq, Clone)]
 pub enum Error {
-    #[error("Unit")]
-    Unit,
-
     #[error("Unification Type Error")]
     TypeError(Loc<spade_typeinference::error::UnificationError>),
     #[error("The wordlength isn't what we infered it to")]
@@ -20,8 +17,6 @@ pub enum Error {
 impl CompilationError for Error {
     fn report(&self, buffer: &mut Buffer, code: &CodeBundle, _diag_handler: &mut DiagHandler) {
         let diag = match self {
-            Error::Unit => Diagnostic::error().with_message(format!("This is an error!")),
-
             Error::TypeError(_e) => Diagnostic::error().with_message(format!(
                 "Failed to unify some types while infering wordlengths"
             )),
@@ -32,9 +27,9 @@ impl CompilationError for Error {
             } if infered.is_same_loc(typechecked) => {
                 Diagnostic::error().with_labels(vec![typechecked.primary_label().with_message(
                     format!(
-                        "This expression requires {} bits but claims to typechecker claims {} bits",
-                        infered.inner, typechecked.inner
-                    ),
+                    "This expression requires {} bits but the typechecker claims it needs {} bits",
+                    infered.inner, typechecked.inner
+                ),
                 )])
             }
 

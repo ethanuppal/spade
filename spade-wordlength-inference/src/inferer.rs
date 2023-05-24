@@ -1,12 +1,12 @@
 use std::collections::btree_map::Entry;
 use std::collections::BTreeMap;
 
-use num::ToPrimitive;
+use num::BigInt;
 use spade_common::location_info::Loc;
 use spade_hir::Expression;
 use spade_hir::{
     expression::{BinaryOperator, UnaryOperator},
-    ArgumentList, Block, ExprKind, Pattern, Statement,
+    Block, ExprKind, Pattern, Statement,
 };
 use spade_typeinference::{equation::TypeVar, fixed_types::t_int, Context, HasType, TypeState};
 
@@ -95,11 +95,13 @@ impl<'a> Inferer<'a> {
                 .map(|v| Equation::V(v)),
             ExprKind::IntLiteral(literal) => {
                 let x = match literal {
-                    spade_hir::expression::IntLiteral::Signed(x) => x.to_i128(),
-                    spade_hir::expression::IntLiteral::Unsigned(x) => x.to_i128(),
-                }
-                .unwrap();
-                Some(Equation::Constant(Range { lo: x, hi: x }))
+                    spade_hir::expression::IntLiteral::Signed(x) => x.clone(),
+                    spade_hir::expression::IntLiteral::Unsigned(x) => BigInt::from(x.clone()),
+                };
+                Some(Equation::Constant(Range {
+                    lo: x.clone(),
+                    hi: x.clone(),
+                }))
             }
 
             ExprKind::BinaryOperator(lhs, op, rhs) => self.binary_operator(lhs, *op, rhs)?,
@@ -325,12 +327,11 @@ impl<'a> Inferer<'a> {
 mod test {
     use std::collections::{BTreeMap, BTreeSet};
 
+    use num::BigInt;
     use spade_common::location_info::Loc;
 
-    use super::{
-        Equation::{self, *},
-        Inferer, Var,
-    };
+    use super::Equation;
+    use super::{Inferer, Var};
 
     use crate::{range::Range, InferMethod};
 
@@ -363,10 +364,16 @@ mod test {
     }
 
     fn r(lo: i128, hi: i128) -> Range {
-        Range { lo, hi }
+        Range {
+            lo: BigInt::from(lo),
+            hi: BigInt::from(hi),
+        }
     }
     fn c(lo: i128, hi: i128) -> Equation {
-        Equation::Constant(Range { lo, hi })
+        Equation::Constant(Range {
+            lo: BigInt::from(lo),
+            hi: BigInt::from(hi),
+        })
     }
     fn v(x: usize) -> Equation {
         Equation::V(Var(x))

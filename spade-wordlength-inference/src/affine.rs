@@ -1,7 +1,5 @@
-use std::{
-    collections::{btree_map::Entry, BTreeMap, BTreeSet},
-    f64::EPSILON,
-};
+use num::{BigInt, BigRational, Signed};
+use std::collections::{btree_map::Entry, BTreeMap, BTreeSet};
 
 use crate::{
     inferer::{Equation, Var},
@@ -17,29 +15,46 @@ enum AffineVar {
 
 // I've made the bold assumption that `x + EPSILON` is the same or equal to `^ x ^` (the larger floating point number).
 // Another way of phrasing it is: `b > 0 => a + b > a` when using floating point arithmatic.
+//
+// AAForm or Affine Arithmetic Form is a way for computers to do Affine Arithmetic.
+// The form is a sum of "noise" variables (variables holding a value between -1 and 1), here
+// denoted as `x_i` where each `i` uniquely identifies a variable. This naturally gives you the
+// AAForm:
+// K + A_0 * x_0 + A_1 + x_1 ...
+// where we can add any new kind of variable to the end. We also have a constant term K that
+// offsets the potential values. In this program we store the constant as a variable which
+// simplifies some parts of the implementation while making other parts more complex.
+// A noise variable originate from one of 3 things:
+//  - A constant, which is treated specially - `AffineVar::Const`
+//  - An actual variable, in case we identify it using that variables ID - `AffineVar::Var(Var)`
+//  - A generated variable which is used to make sure the AAForm is overestimating - `AffineVar::Gen(usize)`
+//
+// For more details see Self-Validated Numerical Methods and Applications
+// by Jorge Stolfi and Luiz Henrique de Figueiredo
 #[derive(PartialEq, Clone, Debug, PartialOrd)]
-pub struct AAF(BTreeMap<AffineVar, f64>);
+pub struct AAForm(BTreeMap<AffineVar, BigRational>);
 
 #[derive(PartialEq, Clone, Debug, PartialOrd)]
-struct H {
-    rad: f64,
-    mid: f64,
+struct RadAndMid {
+    rad: BigRational,
+    mid: BigRational,
 }
 
-fn range_helper(r: Range) -> H {
-    let mid = (r.hi + r.lo) as f64 / 2.0;
-    let rad = (mid - r.lo as f64).max(r.hi as f64 - mid);
-    H { mid, rad }
+fn range_helper(r: Range) -> RadAndMid {
+    let mid = BigRational::from(r.hi.clone() + r.lo.clone()) / BigInt::from(2);
+    let rad = (mid.clone() - r.lo.clone()).max(BigRational::from(r.hi.clone()) - mid.clone());
+    RadAndMid { mid, rad }
 }
 
-impl AAF {
-    fn from_range(counter: &mut usize, r: Range) -> AAF {
-        // NOTE: Rounding errors?
+impl AAForm {
+    fn from_range(counter: &mut usize, r: Range) -> AAForm {
         let h = range_helper(r);
-        let new_var = AAF::new_var(counter);
-        AAF([(AffineVar::Const, h.mid), (new_var, h.rad)]
-            .into_iter()
-            .collect())
+        let new_var = AAForm::new_var(counter);
+        AAForm(
+            [(AffineVar::Const, h.mid), (new_var, h.rad)]
+                .into_iter()
+                .collect(),
+        )
     }
 
     fn new_var(counter: &mut usize) -> AffineVar {
@@ -48,76 +63,88 @@ impl AAF {
         x
     }
 
-    fn from_var(var: Var, r: Range) -> AAF {
-        // NOTE: Rounding errors?
+    fn from_var(var: Var, r: Range) -> AAForm {
         let h = range_helper(r);
         let new_var = AffineVar::Var(var);
-        AAF([(AffineVar::Const, h.mid), (new_var, h.rad)]
-            .into_iter()
-            .collect())
+        AAForm(
+            [(AffineVar::Const, h.mid), (new_var, h.rad)]
+                .into_iter()
+                .collect(),
+        )
     }
 
-    fn bit_manip(&self, counter: &mut usize) -> AAF {
+    fn bit_manip(&self, counter: &mut usize) -> AAForm {
         let mid = self.mid();
         let rad = self.rad();
-        AAF::from_range(
+        AAForm::from_range(
             counter,
             Range {
-                lo: (mid - rad) as i128,
-                hi: (mid + rad) as i128,
+                lo: (mid.clone() - rad.clone()).to_integer(),
+                hi: (mid.clone() + rad.clone()).to_integer(),
             }
             .bit_manip()
             .unwrap(),
         )
     }
 
-    fn rad(&self) -> f64 {
+    fn rad(&self) -> BigRational {
         self.0
             .iter()
-            .map(|(v, x)| if v == &AffineVar::Const { 0.0 } else { x.abs() })
+            .map(|(v, x)| {
+                if v == &AffineVar::Const {
+                    BigRational::from_integer(BigInt::from(0))
+                } else {
+                    x.abs()
+                }
+            })
             .sum()
     }
 
-    fn mid(&self) -> f64 {
+    fn mid(&self) -> BigRational {
         self.0
             .iter()
             .find_map(|(var, value)| {
                 if var == &AffineVar::Const {
-                    Some(*value)
+                    Some(value.clone())
                 } else {
                     None
                 }
             })
-            .unwrap_or(0.0)
+            .unwrap_or(BigRational::from_integer(BigInt::from(0)))
     }
 
     // Computes alpha * x + beta * y + gamma (where delta is extra noise)
     fn affine(
         counter: &mut usize,
-        x: &AAF,
-        y: &AAF,
-        alpha: f64,
-        beta: f64,
-        gamma: f64,
-        delta: f64,
-    ) -> AAF {
-        let mut delta = delta;
-        let mut z = BTreeMap::new();
+        x: &AAForm,
+        y: &AAForm,
+        alpha: BigRational,
+        beta: BigRational,
+        gamma: BigRational,
+        delta: BigRational,
+    ) -> AAForm {
+        let zero = BigRational::from_integer(BigInt::from(0));
 
+        let mut z = BTreeMap::new();
         for i in x.vars().union(&y.vars()) {
-            let xi = x.0.get(i).unwrap_or(&0.0);
-            let yi = y.0.get(i).unwrap_or(&0.0);
-            let zi = alpha * xi + beta * yi + if i == &AffineVar::Const { gamma } else { 0.0 };
+            let xi = x.0.get(i).unwrap_or(&zero);
+            let yi = y.0.get(i).unwrap_or(&zero);
+            let zi = alpha.clone() * xi
+                + beta.clone() * yi
+                + if i == &AffineVar::Const {
+                    gamma.clone()
+                } else {
+                    zero.clone()
+                };
             z.insert(*i, zi);
 
+            // We get no rounding errors when using BigRational
             // / Hope the compiler doesn't optimize this away...
-            let a = zi + EPSILON;
-            let b = zi - EPSILON;
-            delta += (a - zi).max(zi - b);
+            // delta += (a - zi).max(zi - b);
         }
         let d = Self::new_var(counter);
         z.insert(d, delta);
-        AAF(z)
+        AAForm(z)
     }
 
     fn vars(&self) -> BTreeSet<AffineVar> {
@@ -133,16 +160,16 @@ impl AAF {
 
         let p = range_helper(
             Range {
-                lo: x0 as i128,
-                hi: x0 as i128,
+                lo: BigRational::to_integer(&BigRational::ceil(&x0)),
+                hi: BigRational::to_integer(&BigRational::ceil(&x0)),
             }
             .mul(&Range {
-                lo: y0 as i128,
-                hi: y0 as i128,
+                lo: BigRational::to_integer(&BigRational::ceil(&y0)),
+                hi: BigRational::to_integer(&BigRational::ceil(&y0)),
             }),
         );
         let gamma = -p.mid;
-        let delta = (self.rad() * other.rad() + EPSILON) + p.rad + EPSILON;
+        let delta = (self.rad() * other.rad()) + p.rad;
 
         Self::affine(counter, self, other, y0, x0, gamma, delta)
     }
@@ -152,18 +179,18 @@ impl AAF {
         for (var, value) in other.0.iter() {
             match out.entry(*var) {
                 Entry::Vacant(v) => {
-                    v.insert(*value);
+                    v.insert(value.clone());
                 }
                 Entry::Occupied(mut v) => {
                     *v.get_mut() += value;
                 }
             }
         }
-        AAF(out)
+        AAForm(out)
     }
 
     fn union(&self, other: &Self) -> Self {
-        // Union of AAF doesn't make a lot of sense, it's the biggest weakness of the form
+        // Union of AAForm doesn't make a lot of sense, it's the biggest weakness of the form
         // since we have to either throw away information, or accumulate a lot of error.
         let mut out = self.0.clone();
         for (var, value) in other.0.iter() {
@@ -172,26 +199,30 @@ impl AAF {
             } else {
                 match out.entry(*var) {
                     Entry::Vacant(v) => {
-                        v.insert(*value);
+                        v.insert(value.clone());
                     }
                     Entry::Occupied(mut v) => {
-                        *v.get_mut() = v.get().max(*value);
+                        *v.get_mut() = v.get().max(value).clone();
                     }
                 }
             }
         }
-        AAF(out)
+        AAForm(out)
     }
 
     fn neg(&self) -> Self {
-        AAF(self.0.clone().into_iter().map(|(v, s)| (v, -s)).collect())
+        AAForm(self.0.clone().into_iter().map(|(v, s)| (v, -s)).collect())
     }
 }
 
-fn evaluate_aa(counter: &mut usize, body: &Equation, known: &BTreeMap<Var, Range>) -> Option<AAF> {
+fn evaluate_aa(
+    counter: &mut usize,
+    body: &Equation,
+    known: &BTreeMap<Var, Range>,
+) -> Option<AAForm> {
     match body {
-        Equation::V(var) => known.get(&var).map(|r| AAF::from_var(*var, *r)),
-        Equation::Constant(r) => Some(AAF::from_range(counter, *r)),
+        Equation::V(var) => known.get(&var).map(|r| AAForm::from_var(*var, r.clone())),
+        Equation::Constant(r) => Some(AAForm::from_range(counter, r.clone())),
         Equation::Add(a, b) => match (
             evaluate_aa(counter, a, known),
             evaluate_aa(counter, b, known),
@@ -241,8 +272,8 @@ pub fn evaluate_aa_and_simplify_to_range(
         let mid = aa_expr.mid();
         let rad = aa_expr.rad();
         Some(Range {
-            lo: (mid - rad).ceil() as i128,
-            hi: (mid + rad).floor() as i128,
+            lo: BigRational::to_integer(&(mid.clone() - rad.clone()).floor()),
+            hi: BigRational::to_integer(&(mid.clone() + rad.clone()).ceil()),
         })
     } else {
         None

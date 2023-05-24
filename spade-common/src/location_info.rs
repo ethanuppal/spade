@@ -175,7 +175,7 @@ impl<T> Loc<T> {
     }
 
     pub fn is_same_loc<R>(&self, other: &Loc<R>) -> bool {
-        self.loc() == other.loc()
+        self.span == other.span && self.file_id == other.file_id
     }
 
     pub fn map<Y>(self, mut op: impl FnMut(T) -> Y) -> Loc<Y> {

@@ -258,7 +258,7 @@ pub fn compile(
                 let mut type_state = typeinference::TypeState::new();
 
                 if let Ok(()) = type_state
-                    .visit_entity(&u, &type_inference_ctx)
+                    .visit_entity(u, &type_inference_ctx)
                     .report(&mut errors)
                 {
                     if let Ok(()) = wordlength_inference::infer_and_check(
