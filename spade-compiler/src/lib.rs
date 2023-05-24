@@ -35,7 +35,17 @@ use spade_typeinference::dump::dump_types;
 use spade_typeinference::equation::TypedExpression;
 use spade_typeinference::trace_stack::format_trace_stack;
 use spade_types::ConcreteType;
-use spade_wordlength_inference as wordlength_inference;
+
+pub fn wordlength_inference_method(
+    arg: &str,
+) -> Result<Option<spade_wordlength_inference::InferMethod>, String> {
+    Ok(match arg {
+        "aa" | "affine" => Some(spade_wordlength_inference::InferMethod::AA),
+        "ia" | "interval" => Some(spade_wordlength_inference::InferMethod::IA),
+        "one" | "naive" => None,
+        _ => return Err(format!("Expected one of: \"aa\", \"ia\" or \"one\"")),
+    })
+}
 
 pub struct Opt<'b> {
     pub error_buffer: &'b mut Buffer,
@@ -46,7 +56,7 @@ pub struct Opt<'b> {
     pub item_list_file: Option<PathBuf>,
     pub print_type_traceback: bool,
     pub print_parse_traceback: bool,
-    pub use_aa: bool,
+    pub infer_method: Option<spade_wordlength_inference::InferMethod>,
 }
 
 #[derive(Error, Debug)]
@@ -255,34 +265,20 @@ pub fn compile(
         .iter()
         .filter_map(|(name, item)| match item {
             ExecutableItem::Unit(u) => {
-                let mut type_state = typeinference::TypeState::new();
+                let mut type_state = typeinference::TypeState::new()
+                    .set_wordlength_inferece(opts.infer_method.is_some());
 
                 if let Ok(()) = type_state
                     .visit_entity(u, &type_inference_ctx)
                     .report(&mut errors)
                 {
-                    if let Ok(()) = wordlength_inference::infer_and_check(
-                        if opts.use_aa {
-                            wordlength_inference::InferMethod::AA
-                        } else {
-                            wordlength_inference::InferMethod::IA
-                        },
-                        &mut type_state,
-                        &type_inference_ctx,
-                        &u,
-                    )
-                    .report(&mut errors)
-                    {
-                        all_types.extend(dump_types(
-                            &type_state,
-                            &item_list.types,
-                            frozen_symtab.symtab(),
-                        ));
+                    all_types.extend(dump_types(
+                        &type_state,
+                        &item_list.types,
+                        frozen_symtab.symtab(),
+                    ));
 
-                        Some((name, (item, type_state)))
-                    } else {
-                        None
-                    }
+                    Some((name, (item, type_state)))
                 } else {
                     if opts.print_type_traceback {
                         type_state.print_equations();
@@ -309,6 +305,7 @@ pub fn compile(
         &mut name_source_map,
         &item_list,
         &mut errors.diag_handler,
+        opts.infer_method,
     );
 
     let CodegenArtefacts {

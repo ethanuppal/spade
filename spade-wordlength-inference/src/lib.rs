@@ -4,17 +4,19 @@ use inferer::{Equation, Inferer};
 use num::{BigInt, ToPrimitive};
 use range::Range;
 use spade_common::location_info::Loc;
-use spade_hir::Unit;
-use spade_typeinference::{equation::TypeVar, Context, TypeState};
+use spade_hir::{symbol_table::FrozenSymtab, Unit};
+use spade_typeinference::{equation::TypeVar, TypeState};
 use spade_types::KnownType;
 
+#[derive(Copy, Clone, Debug)]
 pub enum InferMethod {
     IA,
     AA,
 }
 
+pub mod error;
+
 mod affine;
-mod error;
 mod inferer;
 mod range;
 
@@ -23,10 +25,10 @@ pub type Res = error::Result<Option<Equation>>;
 pub fn infer_and_check(
     infer_method: InferMethod,
     type_state: &mut TypeState,
-    context: &Context,
+    frozen_symtab: &FrozenSymtab,
     unit: &Unit,
 ) -> error::Result<()> {
-    let mut inferer = inferer::Inferer::new(type_state, context);
+    let mut inferer = inferer::Inferer::new(type_state, frozen_symtab.symtab());
     inferer.expression(&unit.body)?;
 
     let mut known = BTreeMap::new();
@@ -58,7 +60,6 @@ pub fn infer_and_check(
 
     let known = Inferer::infer(infer_method, &inferer.equations, known, &inferer.locs)?;
 
-    // TODO: Location information isn't really a thing... Maybe it can be solved some other way?
     for (ty, var) in inferer.mappings.iter() {
         // println!("{:?} = {:?}", var, known.get(&var));
         // None errors are checked when mir-lowering, this isn't necessarily an error
@@ -83,7 +84,7 @@ pub fn infer_and_check(
                 inferer.type_state.unify(
                     ty,
                     &TypeVar::Known(KnownType::Integer(infered_wl.into()), Vec::new()),
-                    inferer.context.symtab,
+                    inferer.symtab,
                 ),
                 loc,
             )?;

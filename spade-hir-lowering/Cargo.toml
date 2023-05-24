@@ -28,6 +28,7 @@ spade-hir = {path = "../spade-hir"}
 spade-mir = {path = "../spade-mir"}
 spade-typeinference = {path = "../spade-typeinference"}
 spade-types = {path = "../spade-types"}
+spade-wordlength-inference = {path = "../spade-wordlength-inference"}
 
 [dev-dependencies]
 prettydiff.workspace = true

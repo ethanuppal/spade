@@ -40,11 +40,15 @@ impl CompilationError for Error {
                 underlying.report(buffer, code, diag_handler);
                 return;
             }
+            Error::WordlengthError(underlying) => {
+                underlying.report(buffer, code, diag_handler);
+                return;
+            }
             _ => {}
         }
 
         let diag = match self {
-            Error::UnificationError(_) => unreachable!(),
+            Error::UnificationError(_) | Error::WordlengthError(_) => unreachable!(),
             Error::ConcatSizeMismatch {
                 lhs,
                 rhs,

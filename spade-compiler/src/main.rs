@@ -13,7 +13,7 @@ use tracing_tree::HierarchicalLayer;
 
 use spade::{
     namespaced_file::{namespaced_file, NamespacedFile},
-    ModuleNamespace,
+    wordlength_inference_method, ModuleNamespace,
 };
 
 #[derive(Parser)]
@@ -34,8 +34,8 @@ pub struct Opt {
 
     /// Use (currently experimental) affine arithmetic to check integer bounds stricter than
     /// previously possible.
-    #[structopt(long)]
-    pub use_aa: bool,
+    #[structopt(long = "infer_method", value_parser(wordlength_inference_method))]
+    pub infer_method: Option<spade_wordlength_inference::InferMethod>,
 
     /// Write a mapping between expression ids/names and the types of the values
     /// formatted in ron https://github.com/ron-rs/ron
@@ -115,7 +115,7 @@ fn main() -> Result<()> {
         item_list_file: opts.item_list,
         print_type_traceback: opts.print_type_traceback,
         print_parse_traceback: opts.print_parse_traceback,
-        use_aa: opts.use_aa,
+        infer_method: opts.infer_method,
     };
 
     let diag_handler = DiagHandler::new(Box::new(CodespanEmitter));

@@ -106,8 +106,9 @@ pub struct TypeState {
 
     pub trace_stack: Arc<TraceStack>,
 
-    /// (Experimental) Use Affine- and Interval-Arithmetic to bounds check integers.
-    pub use_aa: bool,
+    /// (Experimental) Use Affine- or Interval-Arithmetic to bounds check integers in a separate
+    /// module.
+    pub use_wordlenght_inference: bool,
 }
 
 impl TypeState {
@@ -120,7 +121,14 @@ impl TypeState {
             requirements: vec![],
             replacements: HashMap::new(),
             generic_lists: HashMap::new(),
-            use_aa: false,
+            use_wordlenght_inference: false,
+        }
+    }
+
+    pub fn set_wordlength_inferece(self, use_wordlenght_inference: bool) -> Self {
+        Self {
+            use_wordlenght_inference,
+            ..self
         }
     }
 

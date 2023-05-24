@@ -4,12 +4,13 @@ use std::collections::BTreeMap;
 use num::BigInt;
 use spade_common::location_info::Loc;
 use spade_hir::expression::NamedArgument;
+use spade_hir::symbol_table::SymbolTable;
 use spade_hir::{
     expression::{BinaryOperator, UnaryOperator},
     Block, ExprKind, Pattern, Statement,
 };
 use spade_hir::{ArgumentList, Expression};
-use spade_typeinference::{equation::TypeVar, fixed_types::t_int, Context, HasType, TypeState};
+use spade_typeinference::{equation::TypeVar, fixed_types::t_int, HasType, TypeState};
 
 use crate::range::Range;
 use crate::{error, InferMethod, Res};
@@ -36,17 +37,17 @@ pub struct Inferer<'a> {
     // These are >= equations
     pub(crate) equations: Vec<(Var, Loc<Equation>)>,
     pub(crate) var_counter: usize,
-    pub(crate) context: &'a Context<'a>,
+    pub(crate) symtab: &'a SymbolTable,
     pub(crate) type_state: &'a mut TypeState,
 }
 impl<'a> Inferer<'a> {
-    pub fn new(type_state: &'a mut TypeState, context: &'a Context<'a>) -> Self {
+    pub fn new(type_state: &'a mut TypeState, symtab: &'a SymbolTable) -> Self {
         Self {
             locs: BTreeMap::new(),
             mappings: BTreeMap::new(),
             equations: Vec::new(),
             var_counter: 0,
-            context,
+            symtab,
             type_state,
         }
     }
@@ -61,7 +62,7 @@ impl<'a> Inferer<'a> {
     fn find_or_create(&mut self, thing: &dyn HasType, loc: Loc<()>) -> Option<Var> {
         if let Ok(TypeVar::Known(t, v)) = thing.get_type(self.type_state) {
             match v.as_slice() {
-                [size] if t == t_int(self.context.symtab) => {
+                [size] if t == t_int(self.symtab) => {
                     // TODO[et]: Inject where the variable came from so we can put it back in
                     let p = if let Some(q) = self.mappings.get(&Loc::nowhere(size.clone())) {
                         *q

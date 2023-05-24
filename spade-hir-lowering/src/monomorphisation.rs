@@ -7,6 +7,7 @@ use spade_mir as mir;
 use spade_typeinference::equation::TypeVar;
 use spade_typeinference::error::UnificationErrorExt;
 use spade_typeinference::{GenericListToken, TypeState};
+use spade_wordlength_inference as wordlength_inference;
 
 use crate::error::{Error, Result};
 use crate::generate_unit;
@@ -101,6 +102,7 @@ pub fn compile_items(
     name_source_map: &mut NameSourceMap,
     item_list: &ItemList,
     diag_handler: &mut DiagHandler,
+    wordlength_inference_method: Option<wordlength_inference::InferMethod>,
 ) -> Vec<Result<MirOutput>> {
     // Build a map of items to use for compilation later. Also push all non
     // generic items to the compilation queue
@@ -165,6 +167,15 @@ pub fn compile_items(
                 if let Err(e) = pass_result {
                     result.push(Err(e));
                     continue;
+                }
+
+                if let Some(method) = wordlength_inference_method {
+                    let infer_result =
+                        wordlength_inference::infer_and_check(method, &mut type_state, &symtab, &u);
+                    if let Err(e) = infer_result {
+                        result.push(Err(Error::WordlengthError(e)));
+                        continue;
+                    }
                 }
 
                 let out = generate_unit(

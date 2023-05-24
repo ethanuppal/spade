@@ -24,7 +24,6 @@ num.workspace = true
 spade-ast = {path = "../spade-ast"}
 spade-common = {path = "../spade-common"}
 spade-hir = {path = "../spade-hir"}
-spade-hir-lowering = {path = "../spade-hir-lowering"}
 spade-macros = {path = "../spade-macros"}
 spade-parser = {path = "../spade-parser"}
 spade-typeinference = {path = "../spade-typeinference"}

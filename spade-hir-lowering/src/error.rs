@@ -52,6 +52,9 @@ pub enum Error {
     #[error("Unification error")]
     UnificationError(#[source] spade_typeinference::error::Error),
 
+    #[error("Wordlength inference error")]
+    WordlengthError(#[source] spade_wordlength_inference::error::Error),
+
     #[error("Spade diagnostic")]
     SpadeDiagnostic(#[from] Diagnostic),
 }
