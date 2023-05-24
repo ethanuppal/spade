@@ -38,12 +38,15 @@ use spade_types::ConcreteType;
 
 pub fn wordlength_inference_method(
     arg: &str,
-) -> Result<Option<spade_wordlength_inference::InferMethod>, String> {
-    Ok(match arg {
-        "aa" | "affine" => Some(spade_wordlength_inference::InferMethod::AA),
-        "ia" | "interval" => Some(spade_wordlength_inference::InferMethod::IA),
-        "one" | "naive" => None,
-        _ => return Err(format!("Expected one of: \"aa\", \"ia\" or \"one\"")),
+) -> Result<spade_wordlength_inference::InferMethod, String> {
+    Ok(match arg.to_lowercase().as_str() {
+        "aa" => spade_wordlength_inference::InferMethod::AA,
+        "ia" => spade_wordlength_inference::InferMethod::IA,
+        _ => {
+            return Err(format!(
+                "Expected one of: \"AA\" or \"IA\" - leave empty for old method"
+            ))
+        }
     })
 }
 

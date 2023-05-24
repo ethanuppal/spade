@@ -33,8 +33,9 @@ pub struct Opt {
     pub no_color: bool,
 
     /// Use (currently experimental) affine arithmetic to check integer bounds stricter than
-    /// previously possible.
-    #[structopt(long = "infer_method", value_parser(wordlength_inference_method))]
+    /// previously possible. Expects either "IA", "AA" or "ONE" - leave empty for a sane default
+    /// value.
+    #[structopt(long = "infer-method", value_parser(wordlength_inference_method))]
     pub infer_method: Option<spade_wordlength_inference::InferMethod>,
 
     /// Write a mapping between expression ids/names and the types of the values

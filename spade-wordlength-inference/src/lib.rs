@@ -8,7 +8,7 @@ use spade_hir::{symbol_table::FrozenSymtab, Unit};
 use spade_typeinference::{equation::TypeVar, TypeState};
 use spade_types::KnownType;
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum InferMethod {
     IA,
     AA,
