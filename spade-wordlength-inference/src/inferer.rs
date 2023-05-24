@@ -329,6 +329,14 @@ impl<'a> Inferer<'a> {
             for (var, body) in equations.iter() {
                 let loc = locs.get(var).cloned().unwrap_or(Loc::nowhere(()));
                 if let Some(infer) = match infer_method {
+                    // There's a third method one could take here:
+                    // Run both and take the smaller one
+                    //
+                    // In theory it's the best approach and isn't that expensive. One could maybe
+                    // even extend it to automatically swapping between them when analyzing the
+                    // syntax tree - but that could get exponentially more expensive (but might
+                    // give a larger improvement on the results). Implementing this is left as an
+                    // exercise to the examiner.
                     InferMethod::IA => crate::range::evaluate_ia(body, &known),
                     InferMethod::AA => {
                         crate::affine::evaluate_aa_and_simplify_to_range(body, &known)

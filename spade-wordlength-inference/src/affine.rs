@@ -192,9 +192,13 @@ impl AAForm {
         AAForm(out)
     }
 
+    /// Takes two AAForms and tries to compute the smallest AAForm that is bigger than both of
+    /// them. Think union for set, but for AAForm.
     fn union(&self, other: &Self) -> Self {
         // Union of AAForm doesn't make a lot of sense, it's the biggest weakness of the form
-        // since we have to either throw away information, or accumulate a lot of error.
+        // since we have to either throw away information, or accumulate a lot of error. This
+        // approach accumulates error and might add unnecessary noise and I hope it's the better
+        // one.
         let mut out = self.0.clone();
         for (var, value) in other.0.iter() {
             if var == &AffineVar::Const {
