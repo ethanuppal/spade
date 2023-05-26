@@ -39,3 +39,4 @@ macro_rules! def_id_tracker {
 def_id_tracker!(NameIdTracker);
 def_id_tracker!(ExprIdTracker);
 def_id_tracker!(ImplIdTracker);
+def_id_tracker!(AAVarTracker);

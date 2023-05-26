@@ -1,4 +1,5 @@
 use num::{BigInt, BigRational, Signed};
+use spade_common::id_tracker::AAVarTracker;
 use std::collections::{btree_map::Entry, BTreeMap, BTreeSet};
 
 use crate::{
@@ -11,7 +12,7 @@ enum AffineVar {
     /// A variable coming from the actual program source code.
     Var(Var),
     /// A generated variable when we need to add uncertainty to the calculations.
-    Gen(usize),
+    Gen(u64),
     /// A constant which has no noise.
     Const,
 }
@@ -50,9 +51,9 @@ fn range_helper(r: Range) -> RadAndMid {
 }
 
 impl AAForm {
-    fn from_range(counter: &mut usize, r: Range) -> AAForm {
+    fn from_range(tracker: &mut AAVarTracker, r: Range) -> AAForm {
         let h = range_helper(r);
-        let new_var = AAForm::new_var(counter);
+        let new_var = AAForm::new_var(tracker);
         AAForm(
             [(AffineVar::Const, h.mid), (new_var, h.rad)]
                 .into_iter()
@@ -60,10 +61,8 @@ impl AAForm {
         )
     }
 
-    fn new_var(counter: &mut usize) -> AffineVar {
-        let x = AffineVar::Gen(*counter);
-        *counter += 1;
-        x
+    fn new_var(tracker: &mut AAVarTracker) -> AffineVar {
+        AffineVar::Gen(tracker.next())
     }
 
     fn from_var(var: Var, r: Range) -> AAForm {
@@ -76,11 +75,11 @@ impl AAForm {
         )
     }
 
-    fn bit_manip(&self, counter: &mut usize) -> AAForm {
+    fn bit_manip(&self, tracker: &mut AAVarTracker) -> AAForm {
         let mid = self.mid();
         let rad = self.rad();
         AAForm::from_range(
-            counter,
+            tracker,
             Range {
                 lo: (mid.clone() - rad.clone()).to_integer(),
                 hi: (mid.clone() + rad.clone()).to_integer(),
@@ -118,7 +117,7 @@ impl AAForm {
 
     // Computes alpha * x + beta * y + gamma (where delta is extra noise)
     fn affine(
-        counter: &mut usize,
+        tracker: &mut AAVarTracker,
         x: &AAForm,
         y: &AAForm,
         alpha: BigRational,
@@ -145,7 +144,7 @@ impl AAForm {
             // / Hope the compiler doesn't optimize this away...
             // delta += (a - zi).max(zi - b);
         }
-        let d = Self::new_var(counter);
+        let d = Self::new_var(tracker);
         z.insert(d, delta);
         AAForm(z)
     }
@@ -154,7 +153,7 @@ impl AAForm {
         self.0.keys().cloned().collect()
     }
 
-    fn mul(&self, counter: &mut usize, other: &Self) -> Self {
+    fn mul(&self, tracker: &mut AAVarTracker, other: &Self) -> Self {
         // This code is quite complicated and I got a myriad of bugs here. The idea is to over
         // estimate using: |(a * b)| <= |(|b| * a + |a| * b + mid(a) * mid(b) + rad(a) * rad(b))|
         // It's a pretty correct way of estimating and it works decently well.
@@ -174,7 +173,7 @@ impl AAForm {
         let gamma = -p.mid;
         let delta = (self.rad() * other.rad()) + p.rad;
 
-        Self::affine(counter, self, other, y0, x0, gamma, delta)
+        Self::affine(tracker, self, other, y0, x0, gamma, delta)
     }
 
     fn add(&self, other: &Self) -> Self {
@@ -194,7 +193,7 @@ impl AAForm {
 
     /// Takes two AAForms and tries to compute the smallest AAForm that is bigger than both of
     /// them. Think union for set, but for AAForm.
-    fn union(&self, counter: &mut usize, other: &Self) -> Self {
+    fn union(&self, tracker: &mut AAVarTracker, other: &Self) -> Self {
         // Union of AAForm doesn't make a lot of sense, it's the biggest weakness of the form
         // since we have to either throw away information, or accumulate a lot of error.
         //
@@ -226,7 +225,7 @@ impl AAForm {
             lo: (other.mid() - other.rad()).to_integer(),
             hi: (other.mid() + other.rad()).to_integer(),
         };
-        AAForm::from_range(counter, a.union(&b))
+        AAForm::from_range(tracker, a.union(&b))
     }
 
     fn neg(&self) -> Self {
@@ -235,52 +234,52 @@ impl AAForm {
 }
 
 fn evaluate_aa(
-    counter: &mut usize,
+    tracker: &mut AAVarTracker,
     body: &Equation,
     known: &BTreeMap<Var, Range>,
 ) -> Option<AAForm> {
     match body {
         Equation::V(var) => known.get(&var).map(|r| AAForm::from_var(*var, r.clone())),
-        Equation::Constant(r) => Some(AAForm::from_range(counter, r.clone())),
+        Equation::Constant(r) => Some(AAForm::from_range(tracker, r.clone())),
         Equation::Add(a, b) => match (
-            evaluate_aa(counter, a, known),
-            evaluate_aa(counter, b, known),
+            evaluate_aa(tracker, a, known),
+            evaluate_aa(tracker, b, known),
         ) {
             (Some(a), Some(b)) => Some(a.add(&b)),
             _ => None,
         },
         Equation::Sub(a, b) => match (
-            evaluate_aa(counter, a, known),
-            evaluate_aa(counter, b, known),
+            evaluate_aa(tracker, a, known),
+            evaluate_aa(tracker, b, known),
         ) {
             (Some(a), Some(b)) => Some(a.add(&b.neg())),
             _ => None,
         },
 
         Equation::Mul(a, b) => match (
-            evaluate_aa(counter, a, known),
-            evaluate_aa(counter, b, known),
+            evaluate_aa(tracker, a, known),
+            evaluate_aa(tracker, b, known),
         ) {
-            (Some(a), Some(b)) => Some(a.mul(counter, &b)),
+            (Some(a), Some(b)) => Some(a.mul(tracker, &b)),
             _ => None,
         },
-        Equation::Neg(a) => evaluate_aa(counter, a, known).map(|a| a.neg()),
-        Equation::BitManpi(a) => evaluate_aa(counter, a, known).map(|x| x.bit_manip(counter)),
+        Equation::Neg(a) => evaluate_aa(tracker, a, known).map(|a| a.neg()),
+        Equation::BitManpi(a) => evaluate_aa(tracker, a, known).map(|x| x.bit_manip(tracker)),
         Equation::BitManipMax(a, b) => match (
-            evaluate_aa(counter, a, known),
-            evaluate_aa(counter, b, known),
+            evaluate_aa(tracker, a, known),
+            evaluate_aa(tracker, b, known),
         ) {
             (Some(a), Some(b)) => {
-                let b = b.bit_manip(counter);
-                Some(a.bit_manip(counter).union(counter, &b))
+                let b = b.bit_manip(tracker);
+                Some(a.bit_manip(tracker).union(tracker, &b))
             }
             _ => None,
         },
         Equation::Union(a, b) => match (
-            evaluate_aa(counter, a, known),
-            evaluate_aa(counter, b, known),
+            evaluate_aa(tracker, a, known),
+            evaluate_aa(tracker, b, known),
         ) {
-            (Some(a), Some(b)) => Some(a.union(counter, &b)),
+            (Some(a), Some(b)) => Some(a.union(tracker, &b)),
             _ => None,
         },
     }
@@ -290,7 +289,7 @@ pub fn evaluate_aa_and_simplify_to_range(
     body: &Equation,
     known: &BTreeMap<Var, Range>,
 ) -> Option<Range> {
-    if let Some(aa_expr) = evaluate_aa(&mut 0, body, known) {
+    if let Some(aa_expr) = evaluate_aa(&mut AAVarTracker::new(), body, known) {
         let mid = aa_expr.mid();
         let rad = aa_expr.rad();
         Some(Range {
