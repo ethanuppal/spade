@@ -36,7 +36,10 @@ pub fn infer_and_check(
     for (ty, var) in inferer.mappings.iter() {
         match &ty.inner {
             TypeVar::Known(KnownType::Integer(size), _) => {
-                let x = (size.to_u128().unwrap().checked_sub(1).unwrap_or(0))
+                let x = size
+                    .to_u128()
+                    .unwrap()
+                    .saturating_sub(1)
                     .try_into()
                     .unwrap(); // This is assumed to be small
                 known.insert(
@@ -65,7 +68,7 @@ pub fn infer_and_check(
     for (ty, var) in inferer.mappings.iter() {
         // println!("{:?} = {:?}", var, known.get(&var));
         // None errors are checked when mir-lowering, this isn't necessarily an error
-        if let Some(infered_wl) = known.get(&var).and_then(|guess| guess.to_wordlength()) {
+        if let Some(infered_wl) = known.get(var).and_then(|guess| guess.to_wordlength()) {
             let loc = inferer.locs.get(var).cloned().unwrap_or(Loc::nowhere(()));
             match &ty.inner {
                 TypeVar::Known(KnownType::Integer(size), _) => {

@@ -119,8 +119,7 @@ fn main() -> Result<()> {
         infer_method: opts.infer_method.or_else(|| {
             std::env::var("SPADE_INFER_METHOD")
                 .ok()
-                .map(|x| wordlength_inference_method(&x).ok())
-                .flatten()
+                .and_then(|x| wordlength_inference_method(&x).ok())
         }),
     };
 

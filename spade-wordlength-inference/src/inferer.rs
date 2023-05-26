@@ -83,14 +83,14 @@ impl<'a> Inferer<'a> {
     }
 
     fn maybe_add_equation(&mut self, thing: &Loc<Expression>, maybe_eq: Option<Equation>) {
-        if let (Some(var), Some(eq)) = (self.find_or_create(thing), maybe_eq.clone()) {
+        if let (Some(var), Some(eq)) = (self.find_or_create(thing), maybe_eq) {
             self.equations.push((var, eq.at_loc(thing)))
         }
     }
 
     pub fn expression(&mut self, expr: &Loc<Expression>) -> Res {
         let maybe_eq = match &expr.inner.kind {
-            ExprKind::Identifier(_) => self.find_or_create(expr).map(|v| Equation::V(v)),
+            ExprKind::Identifier(_) => self.find_or_create(expr).map(Equation::V),
             ExprKind::IntLiteral(literal) => {
                 let x = match literal {
                     spade_hir::expression::IntLiteral::Signed(x) => x.clone(),
@@ -98,7 +98,7 @@ impl<'a> Inferer<'a> {
                 };
                 Some(Equation::Constant(Range {
                     lo: x.clone(),
-                    hi: x.clone(),
+                    hi: x,
                 }))
             }
 
@@ -152,9 +152,9 @@ impl<'a> Inferer<'a> {
             ExprKind::BoolLiteral(_) | ExprKind::PipelineRef { .. } | ExprKind::CreatePorts => None,
         };
 
-        let maybe_eq = maybe_eq.or_else(|| self.find_or_create(&expr).map(|v| Equation::V(v)));
+        let maybe_eq = maybe_eq.or_else(|| self.find_or_create(expr).map(Equation::V));
 
-        self.maybe_add_equation(&expr, maybe_eq.clone());
+        self.maybe_add_equation(expr, maybe_eq.clone());
         Ok(maybe_eq)
     }
 
@@ -162,20 +162,20 @@ impl<'a> Inferer<'a> {
         for stmt in block.statements.iter() {
             match &stmt.inner {
                 Statement::Binding(_, _, expr) | Statement::Assert(expr) => {
-                    self.expression(&expr)?;
+                    self.expression(expr)?;
                 }
 
                 Statement::Set { target, value } => {
-                    self.expression(&target)?;
-                    self.expression(&value)?;
+                    self.expression(target)?;
+                    self.expression(value)?;
                 }
 
                 Statement::Register(register) => {
                     let register = &register.inner;
                     self.expression(&register.clock)?;
                     if let Some((left, right)) = &register.reset {
-                        self.expression(&left)?;
-                        self.expression(&right)?;
+                        self.expression(left)?;
+                        self.expression(right)?;
                     }
                     self.expression(&register.value)?;
                 }
@@ -396,7 +396,7 @@ impl<'a> Inferer<'a> {
             ArgumentList::Positional(expr) => expr.clone(),
         };
         for expr in exprs.iter() {
-            self.expression(&expr)?;
+            self.expression(expr)?;
         }
         Ok(None)
     }

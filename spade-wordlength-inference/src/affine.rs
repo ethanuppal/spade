@@ -46,7 +46,7 @@ struct RadAndMid {
 
 fn range_helper(r: Range) -> RadAndMid {
     let mid = BigRational::from(r.hi.clone() + r.lo.clone()) / BigInt::from(2);
-    let rad = (mid.clone() - r.lo.clone()).max(BigRational::from(r.hi.clone()) - mid.clone());
+    let rad = (mid.clone() - r.lo.clone()).max(BigRational::from(r.hi) - mid.clone());
     RadAndMid { mid, rad }
 }
 
@@ -148,7 +148,7 @@ impl AAForm {
             tracker,
             Range {
                 lo: (mid.clone() - rad.clone()).to_integer(),
-                hi: (mid.clone() + rad.clone()).to_integer(),
+                hi: (mid + rad).to_integer(),
             }
             .bit_manip()
             .unwrap(),
@@ -243,7 +243,7 @@ fn evaluate_aa(
     known: &BTreeMap<Var, Range>,
 ) -> Option<AAForm> {
     match body {
-        Equation::V(var) => known.get(&var).map(|r| AAForm::from_var(*var, r.clone())),
+        Equation::V(var) => known.get(var).map(|r| AAForm::from_var(*var, r.clone())),
         Equation::Constant(r) => Some(AAForm::from_range(tracker, r.clone())),
         Equation::Add(a, b) => match (
             evaluate_aa(tracker, a, known),
@@ -298,7 +298,7 @@ pub fn evaluate_aa_and_simplify_to_range(
         let rad = aa_expr.rad();
         Some(Range {
             lo: BigRational::to_integer(&(mid.clone() - rad.clone()).floor()),
-            hi: BigRational::to_integer(&(mid.clone() + rad.clone()).ceil()),
+            hi: BigRational::to_integer(&(mid + rad).ceil()),
         })
     } else {
         None
