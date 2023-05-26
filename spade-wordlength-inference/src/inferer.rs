@@ -571,7 +571,7 @@ mod test {
             vec![(Var(0), u(c(0, 10), c(-5, 5)))],
             // Union of AAF doesn't make a lot of sense, it's the biggest weakness of the form
             // since we have to either throw away information, or accumulate a lot of error.
-            vec![(Var(0), r(-5, 15))],
+            vec![(Var(0), r(-5, 10))],
         )
     }
 
@@ -586,7 +586,16 @@ mod test {
                     u(add(sub(v(0), c(10, 10)), mul(c(-1, 1), v(0))), c(-50, 0)),
                 ),
             ],
-            vec![(Var(0), r(0, 10)), (Var(1), r(-70, 10))],
+            vec![(Var(0), r(0, 10)), (Var(1), r(-50, 10))],
+        )
+    }
+
+    #[test]
+    fn bit_manip_10_and_1() {
+        check_infer(
+            InferMethod::AA,
+            vec![(Var(0), c(-1024, 1023)), (Var(1), bit(v(0)))],
+            vec![(Var(0), r(-1024, 1023)), (Var(1), r(-1024, 1023))],
         )
     }
 
