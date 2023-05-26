@@ -137,10 +137,6 @@ impl<T> Loc<T> {
         Self::new(inner, Span::new(0, 0), 0)
     }
 
-    pub fn give_loc<Q>(&self, inner: Q) -> Loc<Q> {
-        Loc::new(inner, self.span, self.file_id)
-    }
-
     pub fn strip(self) -> T {
         self.inner
     }

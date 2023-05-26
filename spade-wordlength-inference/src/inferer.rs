@@ -2,7 +2,7 @@ use std::collections::btree_map::Entry;
 use std::collections::BTreeMap;
 
 use num::BigInt;
-use spade_common::location_info::Loc;
+use spade_common::location_info::{Loc, WithLocation};
 use spade_hir::expression::NamedArgument;
 use spade_hir::symbol_table::SymbolTable;
 use spade_hir::{
@@ -31,6 +31,8 @@ pub enum Equation {
     Union(Box<Equation>, Box<Equation>),
 }
 
+impl WithLocation for Equation {}
+
 pub struct Inferer<'a> {
     pub(crate) locs: BTreeMap<Var, Loc<()>>,
     pub(crate) mappings: BTreeMap<Loc<TypeVar>, Var>,
@@ -52,14 +54,14 @@ impl<'a> Inferer<'a> {
         }
     }
 
-    fn new_var(&mut self, loc: Loc<()>) -> Var {
+    fn new_var<A>(&mut self, loc: &Loc<A>) -> Var {
         let v = Var(self.var_counter);
-        self.locs.insert(v, loc);
+        self.locs.insert(v, loc.loc());
         self.var_counter += 1;
         v
     }
 
-    fn find_or_create(&mut self, thing: &dyn HasType, loc: Loc<()>) -> Option<Var> {
+    fn find_or_create(&mut self, thing: &Loc<Expression>) -> Option<Var> {
         if let Ok(TypeVar::Known(t, v)) = thing.get_type(self.type_state) {
             match v.as_slice() {
                 [size] if t == t_int(self.symtab) => {
@@ -67,8 +69,8 @@ impl<'a> Inferer<'a> {
                     let p = if let Some(q) = self.mappings.get(&Loc::nowhere(size.clone())) {
                         *q
                     } else {
-                        let q = self.new_var(loc);
-                        self.mappings.insert(loc.map(|_| size.clone()), q);
+                        let q = self.new_var(thing);
+                        self.mappings.insert(size.clone().at_loc(thing), q);
                         q
                     };
                     Some(p)
@@ -80,20 +82,15 @@ impl<'a> Inferer<'a> {
         }
     }
 
-    fn maybe_add_equation(&mut self, thing: &dyn HasType, maybe_eq: Loc<Option<Equation>>) {
-        if let (Some(var), Some(eq)) = (
-            self.find_or_create(thing, maybe_eq.loc()),
-            maybe_eq.inner.clone(),
-        ) {
-            self.equations.push((var, maybe_eq.give_loc(eq)))
+    fn maybe_add_equation(&mut self, thing: &Loc<Expression>, maybe_eq: Option<Equation>) {
+        if let (Some(var), Some(eq)) = (self.find_or_create(thing), maybe_eq.clone()) {
+            self.equations.push((var, eq.at_loc(thing)))
         }
     }
 
     pub fn expression(&mut self, expr: &Loc<Expression>) -> Res {
         let maybe_eq = match &expr.inner.kind {
-            ExprKind::Identifier(_) => self
-                .find_or_create(&expr.inner, expr.loc())
-                .map(|v| Equation::V(v)),
+            ExprKind::Identifier(_) => self.find_or_create(expr).map(|v| Equation::V(v)),
             ExprKind::IntLiteral(literal) => {
                 let x = match literal {
                     spade_hir::expression::IntLiteral::Signed(x) => x.clone(),
@@ -155,12 +152,9 @@ impl<'a> Inferer<'a> {
             ExprKind::BoolLiteral(_) | ExprKind::PipelineRef { .. } | ExprKind::CreatePorts => None,
         };
 
-        let maybe_eq = maybe_eq.or_else(|| {
-            self.find_or_create(&expr.inner, expr.loc())
-                .map(|v| Equation::V(v))
-        });
+        let maybe_eq = maybe_eq.or_else(|| self.find_or_create(&expr).map(|v| Equation::V(v)));
 
-        self.maybe_add_equation(&expr.inner, expr.loc().give_loc(maybe_eq.clone()));
+        self.maybe_add_equation(&expr, maybe_eq.clone());
         Ok(maybe_eq)
     }
 
