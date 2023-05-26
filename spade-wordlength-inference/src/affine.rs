@@ -51,6 +51,8 @@ fn range_helper(r: Range) -> RadAndMid {
 }
 
 impl AAForm {
+    // Helpers
+
     fn from_range(tracker: &mut AAVarTracker, r: Range) -> AAForm {
         let h = range_helper(r);
         let new_var = AAForm::new_var(tracker);
@@ -72,20 +74,6 @@ impl AAForm {
             [(AffineVar::Const, h.mid), (new_var, h.rad)]
                 .into_iter()
                 .collect(),
-        )
-    }
-
-    fn bit_manip(&self, tracker: &mut AAVarTracker) -> AAForm {
-        let mid = self.mid();
-        let rad = self.rad();
-        AAForm::from_range(
-            tracker,
-            Range {
-                lo: (mid.clone() - rad.clone()).to_integer(),
-                hi: (mid.clone() + rad.clone()).to_integer(),
-            }
-            .bit_manip()
-            .unwrap(),
         )
     }
 
@@ -152,6 +140,22 @@ impl AAForm {
     fn vars(&self) -> BTreeSet<AffineVar> {
         self.0.keys().cloned().collect()
     }
+
+    fn bit_manip(&self, tracker: &mut AAVarTracker) -> AAForm {
+        let mid = self.mid();
+        let rad = self.rad();
+        AAForm::from_range(
+            tracker,
+            Range {
+                lo: (mid.clone() - rad.clone()).to_integer(),
+                hi: (mid.clone() + rad.clone()).to_integer(),
+            }
+            .bit_manip()
+            .unwrap(),
+        )
+    }
+
+    // Operations
 
     fn mul(&self, tracker: &mut AAVarTracker, other: &Self) -> Self {
         // This code is quite complicated and I got a myriad of bugs here. The idea is to over
