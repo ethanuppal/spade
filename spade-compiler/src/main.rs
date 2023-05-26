@@ -116,7 +116,12 @@ fn main() -> Result<()> {
         item_list_file: opts.item_list,
         print_type_traceback: opts.print_type_traceback,
         print_parse_traceback: opts.print_parse_traceback,
-        infer_method: opts.infer_method,
+        infer_method: opts.infer_method.or_else(|| {
+            std::env::var("SPADE_INFER_METHOD")
+                .ok()
+                .map(|x| wordlength_inference_method(&x).ok())
+                .flatten()
+        }),
     };
 
     let diag_handler = DiagHandler::new(Box::new(CodespanEmitter));
