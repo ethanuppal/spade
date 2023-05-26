@@ -1,0 +1,15 @@
+---
+source: spade-tests/src/wordlength_inference.rs
+---
+fn p<N>(x: int<N>) -> int<N> { x }
+
+fn f(a: int<5>) -> int<7> {
+  1 * p(a) + 1
+}
+
+entity main(clk: clock, rst: bool) -> int<7> {
+  f(3)
+}
+
+
+

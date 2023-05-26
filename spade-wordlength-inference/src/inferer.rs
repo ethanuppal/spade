@@ -155,6 +155,11 @@ impl<'a> Inferer<'a> {
             ExprKind::BoolLiteral(_) | ExprKind::PipelineRef { .. } | ExprKind::CreatePorts => None,
         };
 
+        let maybe_eq = maybe_eq.or_else(|| {
+            self.find_or_create(&expr.inner, expr.loc())
+                .map(|v| Equation::V(v))
+        });
+
         self.maybe_add_equation(&expr.inner, expr.loc().give_loc(maybe_eq.clone()));
         Ok(maybe_eq)
     }
@@ -232,17 +237,14 @@ impl<'a> Inferer<'a> {
             (BinaryOperator::Add, Some(lhs_t), Some(rhs_t)) => {
                 Some(Equation::Add(Box::new(lhs_t), Box::new(rhs_t)))
             }
-            (BinaryOperator::Add, _, _) => None,
 
             (BinaryOperator::Sub, Some(lhs_t), Some(rhs_t)) => {
                 Some(Equation::Sub(Box::new(lhs_t), Box::new(rhs_t)))
             }
-            (BinaryOperator::Sub, _, _) => None,
 
             (BinaryOperator::Mul, Some(lhs_t), Some(rhs_t)) => {
                 Some(Equation::Mul(Box::new(lhs_t), Box::new(rhs_t)))
             }
-            (BinaryOperator::Mul, _, _) => None,
 
             (
                 BinaryOperator::LeftShift
@@ -256,14 +258,6 @@ impl<'a> Inferer<'a> {
             }
 
             (
-                BinaryOperator::LeftShift
-                | BinaryOperator::RightShift
-                | BinaryOperator::ArithmeticRightShift,
-                _,
-                _,
-            ) => None,
-
-            (
                 BinaryOperator::BitwiseOr
                 | BinaryOperator::BitwiseAnd
                 | BinaryOperator::BitwiseXor
@@ -273,13 +267,22 @@ impl<'a> Inferer<'a> {
                 Some(a),
                 Some(b),
             ) => Some(Equation::BitManipMax(Box::new(a), Box::new(b))),
+
+            // We shouldn't reach this state, yet we do. In some places we just don't know enough,
+            // though this is enough for most things to work properly.
             (
                 BinaryOperator::BitwiseOr
                 | BinaryOperator::BitwiseAnd
                 | BinaryOperator::BitwiseXor
                 | BinaryOperator::LogicalAnd
                 | BinaryOperator::LogicalOr
-                | BinaryOperator::LogicalXor,
+                | BinaryOperator::LogicalXor
+                | BinaryOperator::LeftShift
+                | BinaryOperator::RightShift
+                | BinaryOperator::ArithmeticRightShift
+                | BinaryOperator::Add
+                | BinaryOperator::Sub
+                | BinaryOperator::Mul,
                 _,
                 _,
             ) => None,

@@ -7,16 +7,16 @@ fn f(a: int<4>) -> int<0> {
 entity main(clk: clock, rst: bool) -> int<0> { f(1) }
 
 
-error: 
+error: The wordlength isn't what we infered it to - inference got 5 bits and you claimed 2 bits
   ┌─ testinput:2:3
   │
 2 │   a - a + 1
-  │   ^^^^^^^^^ This expression requires 5 bits but the typechecker claims it needs 2 bits
+  │   ^^^^^^^^^ Here 5 bits were infered
 
-error: 
+error: The wordlength isn't what we infered it to - inference got 2 bits and you claimed 0 bits
   ┌─ testinput:4:48
   │
 4 │ entity main(clk: clock, rst: bool) -> int<0> { f(1) }
-  │                                                ^^^^ This expression requires 2 bits but the typechecker claims it needs 0 bits
+  │                                                ^^^^ Here 2 bits were infered
 
 

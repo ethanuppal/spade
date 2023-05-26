@@ -12,10 +12,10 @@ entity main(clk: clock, rst: bool) -> int<0> {
 }
 
 
-error: 
+error: The wordlength isn't what we infered it to - inference got 2 bits and you claimed 0 bits
   ┌─ testinput:8:3
   │
 8 │   0
-  │   ^ This expression requires 2 bits but the typechecker claims it needs 0 bits
+  │   ^ Here 2 bits were infered
 
 

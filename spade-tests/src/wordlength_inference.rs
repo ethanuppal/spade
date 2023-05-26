@@ -144,3 +144,35 @@ snapshot_inference_error!(
         entity main(clk: clock, rst: bool) -> int<0> { f(0) }
     "#
 );
+
+snapshot_inference_error!(
+    wordlength_inference_aa,
+    "AA",
+    r#"
+        fn p<N>(x: int<N>) -> int<N> { x }
+
+        fn f(a: int<5>) -> int<7> {
+          1 * p(a) + 1
+        }
+
+        entity main(clk: clock, rst: bool) -> int<7> {
+          f(3)
+        }
+    "#
+);
+
+snapshot_inference_error!(
+    wordlength_inference_ia,
+    "IA",
+    r#"
+        fn p<N>(x: int<N>) -> int<N> { x }
+
+        fn f(a: int<5>) -> int<7> {
+          1 * p(a) + 1
+        }
+
+        entity main(clk: clock, rst: bool) -> int<7> {
+          f(3)
+        }
+    "#
+);
