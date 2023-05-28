@@ -207,10 +207,11 @@ impl<'a> Inferer<'a> {
 
     fn if_(
         &mut self,
-        _value: &Loc<Expression>,
+        value: &Loc<Expression>,
         true_: &Loc<Expression>,
         false_: &Loc<Expression>,
     ) -> Res {
+        self.expression(value)?;
         Ok(match (self.expression(true_)?, self.expression(false_)?) {
             (Some(true_), Some(false_)) => Some(Equation::Union(Box::new(true_), Box::new(false_))),
             _ => None,
