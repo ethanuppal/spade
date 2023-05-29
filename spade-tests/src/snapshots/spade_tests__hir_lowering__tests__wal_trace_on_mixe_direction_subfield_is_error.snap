@@ -1,0 +1,22 @@
+---
+source: spade-tests/src/hir_lowering.rs
+---
+#[wal_suffix(_)]
+struct port T {
+    a: (&bool, &mut bool)
+}
+
+entity test(t: T) -> T {
+    #[wal_trace]
+    let t = t;
+    t
+}
+
+
+error: wal tracing does not work on types with mixed-direction fields
+  ┌─ testinput:8:9
+  │
+8 │     let t = t;
+  │         ^ Field a has both & and &mut wires
+
+

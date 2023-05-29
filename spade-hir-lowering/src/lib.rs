@@ -623,50 +623,63 @@ pub fn do_wal_trace_lowering(
             .iter()
             .map(|(_, t)| match t.to_mir_type() {
                 MirType::Backward(i) => i.as_ref().clone(),
-                other => MirType::Backward(Box::new(other.clone())),
+                other => MirType::Backward(Box::new(other)),
             })
             .collect::<Vec<_>>();
 
         // If we have &mut wires, we need a flipped port to read the values from because
         // we need to work around a small bug. Create an anonymous value for this
         let flipped_id = ctx.idtracker.next();
+        let flipped_ty = MirType::Struct(
+            members
+                .iter()
+                .map(|(n, ty)| {
+                    (
+                        n.clone().0.clone(),
+                        match ty.to_mir_type() {
+                            MirType::Backward(i) => i.as_ref().clone(),
+                            other => MirType::Backward(Box::new(other.clone())),
+                        },
+                    )
+                })
+                .collect(),
+        );
         let flipped_port = mir::Statement::Binding(mir::Binding {
             name: ValueName::Expr(flipped_id),
-            operator: mir::Operator::YoloFlipPort,
+            operator: mir::Operator::InvertPort,
             operands: vec![main_value_name.clone()],
-            ty: MirType::Struct(
-                members
-                    .iter()
-                    .map(|(n, ty)| {
-                        (
-                            n.clone().0.clone(),
-                            match ty.to_mir_type() {
-                                MirType::Backward(i) => i.as_ref().clone(),
-                                other => MirType::Backward(Box::new(other.clone())),
-                            },
-                        )
-                    })
-                    .collect(),
-            ),
+            ty: flipped_ty.clone(),
             loc: None,
         });
-        result.push_anonymous(flipped_port);
+        if &flipped_ty.size() != &BigUint::zero() {
+            result.push_anonymous(flipped_port);
+        }
 
-        for (i, (n, ty)) in members.iter().enumerate() {
+        let mut i_forward = 0;
+        let mut i_backward = 0;
+        for (n, ty) in members.iter() {
             let new_id = ctx.idtracker.next();
             let field_name = ValueName::Expr(new_id);
 
             let (mir_ty, operand, operator) = match ty.to_mir_type() {
-                MirType::Backward(b) => (
-                    *b.clone(),
-                    ValueName::Expr(flipped_id),
-                    mir::Operator::IndexTuple(i as u64, inner_backward_types.clone()),
-                ),
-                other => (
-                    other,
-                    main_value_name.clone(),
-                    mir::Operator::IndexTuple(i as u64, inner_types.clone()),
-                ),
+                MirType::Backward(b) => {
+                    let result = (
+                        *b.clone(),
+                        ValueName::Expr(flipped_id),
+                        mir::Operator::IndexTuple(i_backward, inner_backward_types.clone()),
+                    );
+                    i_backward += 1;
+                    result
+                }
+                other => {
+                    let result = (
+                        other,
+                        main_value_name.clone(),
+                        mir::Operator::IndexTuple(i_forward, inner_types.clone()),
+                    );
+                    i_forward += 1;
+                    result
+                }
             };
             // Insert an indexing operation, and a wal trace on the result.
             result.push_anonymous(mir::Statement::Binding(mir::Binding {
@@ -692,7 +705,7 @@ pub fn do_wal_trace_lowering(
             // This is kind of a giant hack and makes quite a few assumptions about
             // the rest of the compiler
             // TODO: Add a test for this, and make a note that if this test fails
-            // because of another change in teh compiler, this should be done properly
+            // because of another change in the compiler, this should be done properly
 
             let dummy_expr_id = ctx.idtracker.next();
             let field_access_expr = &hir::Expression {

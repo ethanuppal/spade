@@ -534,7 +534,7 @@ fn forward_expression_code(binding: &Binding, types: &TypeList, ops: &[ValueName
             // NOTE Dummy. Set in statement_code
             format!("")
         }
-        Operator::YoloFlipPort => {
+        Operator::InvertPort => {
             // NOTE Dummy. Set in statement_code
             format!("")
         }
@@ -654,7 +654,7 @@ fn backward_expression_code(binding: &Binding, types: &TypeList, ops: &[ValueNam
             // NOTE: Set in statement_code
             format!("")
         }
-        Operator::YoloFlipPort => {
+        Operator::InvertPort => {
             // NOTE Dummy. Set in statement_code
             format!("")
         }
@@ -787,7 +787,7 @@ fn statement_code(statement: &Statement, ctx: &mut Context) -> Code {
                     }
                     .to_string()
                 }
-                Operator::YoloFlipPort => {
+                Operator::InvertPort => {
                     // The forward ports of the flipped port (op[0]) and and the original (self)
                     // should be mapped to the backward ports of the opposite port
                     code! {

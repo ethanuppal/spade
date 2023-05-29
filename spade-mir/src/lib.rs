@@ -243,9 +243,15 @@ pub enum Operator {
     /// become backward ports. This is only valid when converting from T to ~T
     FlipPort,
 
-    /// Creates a new struct containing only the backward portion, but flipped of this type
-    YoloFlipPort, // TODO: As the name implies, this needs a more thought out implementation
-                  // before this is merged
+    /// Given a struct or tuple consisting of mut and non-mut wires, invert the direction
+    /// without assigning anything to the mut wires. Naturally, this is only valid for reads
+    ///
+    /// As an example `(&mut T1, T2, &mut T3)` becomes `(T1, &mut T2, T3)`
+    // NOTE: For now this variant is a bit of a hack used during wal_trace_lowering
+    // A saner implementation that also solves #252 would be nice
+    // In particular, a dedicated `ReadMutTuple` might be useful
+    // lifeguard spade#252
+    InvertPort,
 
     /// Instantiation of another module with the specified name. The operands are passed
     /// positionally to the entity. The target module can only have a single output which
@@ -334,12 +340,12 @@ impl std::fmt::Display for Operator {
                 }
             ),
             Operator::IndexArray => write!(f, "IndexArray"),
-            Operator::IndexTuple(idx, _) => write!(f, "IndexTuple({})", idx),
+            Operator::IndexTuple(idx, ty) => write!(f, "IndexTuple({}, {ty:?})", idx),
             Operator::IndexMemory => write!(f, "IndexMemory"),
             Operator::Instance(name, _) => write!(f, "Instance({})", name.as_verilog()),
             Operator::Alias => write!(f, "Alias"),
             Operator::FlipPort => write!(f, "FlipPort"),
-            Operator::YoloFlipPort => write!(f, "YoloFlipPort"),
+            Operator::InvertPort => write!(f, "InvertPort"),
             Operator::Nop => write!(f, "Nop"),
             Operator::ReadPort => write!(f, "ReadPort"),
         }

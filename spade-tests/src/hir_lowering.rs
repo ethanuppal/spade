@@ -2336,6 +2336,104 @@ mod tests {
     }
 
     #[test]
+    fn wal_traced_struct_with_backward_port_is_traced() {
+        let code = r#"
+            #[wal_suffix(__wal_suffix__)]
+            struct port Test {
+                a: &int<8>,
+                b: &mut int<4>
+            }
+
+            entity main(x: Test) -> Test {
+                #[wal_trace]
+                let y = x;
+                y
+            }
+        "#;
+
+        let fields = vec![
+            ("a".to_string(), Type::int(8)),
+            ("b".to_string(), Type::Backward(Box::new(Type::int(4)))),
+        ];
+        let ty = Type::Struct(fields.clone());
+        let inner_types = fields.iter().map(|f| f.1.clone()).collect::<Vec<_>>();
+
+        let back_fields = vec![
+            ("a".to_string(), Type::Backward(Box::new(Type::int(8)))),
+            ("b".to_string(), Type::int(4)),
+        ];
+        let back_ty = Type::Struct(back_fields.clone());
+        let back_inner_types = back_fields.iter().map(|f| f.1.clone()).collect::<Vec<_>>();
+
+        let expected = entity!(&["main"]; (
+            "x", n(0, "x"), ty.clone(),
+        ) -> ty.clone(); {
+            (n(1, "y"); ty.clone(); Alias; n(0, "x"));
+            (e(10); back_ty.clone(); InvertPort; n(1, "y"));
+            (e(0); Type::int(8); IndexTuple((0, inner_types.clone())); n(1, "y"));
+            (wal_trace(n(1, "y"), e(0), "__a__wal_suffix__", Type::int(8)));
+            (e(1); Type::int(4); IndexTuple((0, back_inner_types.clone())); e(10));
+            (wal_trace(n(1, "y"), e(1), "__b__wal_suffix__", Type::int(4)))
+        } => n(1, "y"));
+
+        assert_same_mir!(&build_entity!(code), &expected);
+    }
+
+    #[test]
+    fn wal_traced_struct_with_multiple_backward_ports_is_traced() {
+        let code = r#"
+            #[wal_suffix(__wal_suffix__)]
+            struct port Test {
+                a: &int<8>,
+                b: &mut int<4>,
+                c: &int<16>,
+                d: &mut int<7>
+            }
+
+            entity main(x: Test) -> Test {
+                #[wal_trace]
+                let y = x;
+                y
+            }
+        "#;
+
+        let fields = vec![
+            ("a".to_string(), Type::int(8)),
+            ("b".to_string(), Type::Backward(Box::new(Type::int(4)))),
+            ("c".to_string(), Type::int(16)),
+            ("d".to_string(), Type::Backward(Box::new(Type::int(7)))),
+        ];
+        let ty = Type::Struct(fields.clone());
+        let inner_types = fields.iter().map(|f| f.1.clone()).collect::<Vec<_>>();
+
+        let back_fields = vec![
+            ("a".to_string(), Type::Backward(Box::new(Type::int(8)))),
+            ("b".to_string(), Type::int(4)),
+            ("c".to_string(), Type::Backward(Box::new(Type::int(16)))),
+            ("d".to_string(), Type::int(7)),
+        ];
+        let back_ty = Type::Struct(back_fields.clone());
+        let back_inner_types = back_fields.iter().map(|f| f.1.clone()).collect::<Vec<_>>();
+
+        let expected = entity!(&["main"]; (
+            "x", n(0, "x"), ty.clone(),
+        ) -> ty.clone(); {
+            (n(1, "y"); ty.clone(); Alias; n(0, "x"));
+            (e(10); back_ty.clone(); InvertPort; n(1, "y"));
+            (e(0); Type::int(8); IndexTuple((0, inner_types.clone())); n(1, "y"));
+            (wal_trace(n(1, "y"), e(0), "__a__wal_suffix__", Type::int(8)));
+            (e(1); Type::int(4); IndexTuple((0, back_inner_types.clone())); e(10));
+            (wal_trace(n(1, "y"), e(1), "__b__wal_suffix__", Type::int(4)));
+            (e(2); Type::int(16); IndexTuple((1, inner_types.clone())); n(1, "y"));
+            (wal_trace(n(1, "y"), e(2), "__c__wal_suffix__", Type::int(16)));
+            (e(3); Type::int(7); IndexTuple((1, back_inner_types.clone())); e(10));
+            (wal_trace(n(1, "y"), e(3), "__d__wal_suffix__", Type::int(7)));
+        } => n(1, "y"));
+
+        assert_same_mir!(&build_entity!(code), &expected);
+    }
+
+    #[test]
     fn wal_traced_struct_with_clk_rst_is_traced() {
         let code = r#"
             #[wal_suffix(__wal_suffix__, uses_clk, uses_rst)]
@@ -2476,6 +2574,22 @@ mod tests {
                 x
             }
         "#
+    }
+
+    snapshot_error! {
+        wal_trace_on_mixe_direction_subfield_is_error,
+        "
+            #[wal_suffix(_)]
+            struct port T {
+                a: (&bool, &mut bool)
+            }
+
+            entity test(t: T) -> T {
+                #[wal_trace]
+                let t = t;
+                t
+            }
+        "
     }
 }
 
