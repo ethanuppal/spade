@@ -12,6 +12,7 @@ use spade_types::KnownType;
 pub enum InferMethod {
     IA,
     AA,
+    AAIA,
 }
 
 pub mod error;
@@ -44,10 +45,7 @@ pub fn infer_and_check(
                     .unwrap(); // This is assumed to be small
                 known.insert(
                     *var,
-                    Range {
-                        lo: -BigInt::from(2).pow(x) + 1,
-                        hi: BigInt::from(2).pow(x) - 2,
-                    },
+                    Range::new(-BigInt::from(2).pow(x) + 1, BigInt::from(2).pow(x) - 2),
                 );
             }
             TypeVar::Known(KnownType::Type(n), _) => panic!("How do I handle a type? {:?}", n),

@@ -5,67 +5,91 @@ use std::collections::BTreeMap;
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Range {
-    pub lo: BigInt,
-    pub hi: BigInt,
+    lo: BigInt,
+    hi: BigInt,
 }
 impl Range {
+    pub fn new(a: BigInt, b: BigInt) -> Self {
+        Range {
+            lo: a.clone().min(b.clone()),
+            hi: a.max(b),
+        }
+    }
+
+    pub fn lo(&self) -> &BigInt {
+        &self.lo
+    }
+
+    pub fn hi(&self) -> &BigInt {
+        &self.hi
+    }
+
     pub fn add(&self, b: &Self) -> Self {
         let a = self;
-        Range {
-            lo: a.lo.clone() + b.lo.clone(),
-            hi: a.hi.clone() + b.hi.clone(),
-        }
+        Self::new(a.lo.clone() + b.lo.clone(), a.hi.clone() + b.hi.clone())
     }
 
     pub fn sub(&self, b: &Self) -> Self {
         let a = self;
-        Range {
-            lo: (a.lo.clone() - b.hi.clone()).min(a.lo.clone() - b.lo.clone()),
-            hi: (a.hi.clone() - b.hi.clone()).max(a.hi.clone() - b.lo.clone()),
-        }
+        Self::new(
+            (a.lo.clone() - b.hi.clone())
+                .min(a.lo.clone() - b.lo.clone())
+                .min(a.lo.clone() - b.hi.clone())
+                .min(a.lo.clone() - b.lo.clone()),
+            (a.hi.clone() - b.hi.clone())
+                .max(a.hi.clone() - b.lo.clone())
+                .max(a.lo.clone() - b.hi.clone())
+                .max(a.lo.clone() - b.lo.clone()),
+        )
     }
 
     pub fn neg(&self) -> Self {
-        Range {
-            lo: -self.hi.clone(),
-            hi: -self.lo.clone(),
-        }
+        Self::new(-self.hi.clone(), -self.lo.clone())
     }
 
     pub fn mul(&self, b: &Self) -> Self {
         let a = self;
-        Range {
-            lo: (a.lo.clone() * b.hi.clone())
+        Self::new(
+            (a.lo.clone() * b.hi.clone())
                 .min(a.lo.clone() * b.lo.clone())
                 .min(a.hi.clone() * b.hi.clone())
                 .min(a.hi.clone() * b.lo.clone()),
-            hi: (a.lo.clone() * b.hi.clone())
+            (a.lo.clone() * b.hi.clone())
                 .max(a.lo.clone() * b.lo.clone())
                 .max(a.hi.clone() * b.hi.clone())
                 .max(a.hi.clone() * b.lo.clone()),
-        }
+        )
     }
 
     pub fn union(&self, b: &Self) -> Self {
         let a = self;
-        Range {
-            lo: a.lo.clone().min(b.lo.clone()),
-            hi: a.hi.clone().max(b.hi.clone()),
-        }
+        Self::new(
+            a.lo.clone().min(b.lo.clone()),
+            a.hi.clone().max(b.hi.clone()),
+        )
+    }
+
+    pub fn subset(&self, b: &Range) -> Range {
+        let a = self;
+        Self::new(
+            a.lo.clone().max(b.lo.clone()),
+            a.hi.clone().min(b.hi.clone()),
+        )
     }
 
     pub fn bit_manip(&self) -> Option<Self> {
         // This signed integers
-        self.to_wordlength().map(|wl| Range {
-            lo: -BigInt::from(2).pow(wl - 1),
-            hi: BigInt::from(2).pow(wl - 1) - BigInt::from(1),
+        self.to_wordlength().map(|wl| {
+            let a = -BigInt::from(2).pow(wl - 1);
+            let b = BigInt::from(2).pow(wl - 1) - BigInt::from(1);
+
+            Self::new(a.clone().min(b.clone()), a.max(b))
         })
     }
 
     pub fn to_wordlength(&self) -> Option<u32> {
         // NOTE: This can be considerably more fancy, taking into account the range and working
         // from there - but I'm keeping things simple for now.
-
         for i in 1..2048 {
             let n = BigInt::from(2).pow(i);
             if self.hi.abs() < n && self.lo.abs() < n + BigInt::from(1) {
@@ -76,10 +100,7 @@ impl Range {
     }
 
     pub fn zero() -> Range {
-        Range {
-            lo: BigInt::from(0),
-            hi: BigInt::from(0),
-        }
+        Self::new(BigInt::from(0), BigInt::from(0))
     }
 }
 

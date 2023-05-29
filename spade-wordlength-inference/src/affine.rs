@@ -45,8 +45,8 @@ struct RadAndMid {
 }
 
 fn range_helper(r: Range) -> RadAndMid {
-    let mid = BigRational::from(r.hi.clone() + r.lo.clone()) / BigInt::from(2);
-    let rad = (mid.clone() - r.lo.clone()).max(BigRational::from(r.hi) - mid.clone());
+    let mid = BigRational::from(r.hi().clone() + r.lo().clone()) / BigInt::from(2);
+    let rad = (mid.clone() - r.lo().clone()).max(BigRational::from(r.hi().clone()) - mid.clone());
     RadAndMid { mid, rad }
 }
 
@@ -146,10 +146,10 @@ impl AAForm {
         let rad = self.rad();
         AAForm::from_range(
             tracker,
-            Range {
-                lo: (mid.clone() - rad.clone()).to_integer(),
-                hi: (mid + rad).to_integer(),
-            }
+            Range::new(
+                (mid.clone() - rad.clone()).to_integer(),
+                (mid + rad).to_integer(),
+            )
             .bit_manip()
             .unwrap(),
         )
@@ -165,14 +165,14 @@ impl AAForm {
         let y0 = other.mid();
 
         let p = range_helper(
-            Range {
-                lo: BigRational::to_integer(&BigRational::ceil(&x0)),
-                hi: BigRational::to_integer(&BigRational::ceil(&x0)),
-            }
-            .mul(&Range {
-                lo: BigRational::to_integer(&BigRational::ceil(&y0)),
-                hi: BigRational::to_integer(&BigRational::ceil(&y0)),
-            }),
+            Range::new(
+                BigRational::to_integer(&BigRational::ceil(&x0)),
+                BigRational::to_integer(&BigRational::ceil(&x0)),
+            )
+            .mul(&Range::new(
+                BigRational::to_integer(&BigRational::ceil(&y0)),
+                BigRational::to_integer(&BigRational::ceil(&y0)),
+            )),
         );
         let gamma = -p.mid;
         let delta = (self.rad() * other.rad()) + p.rad;
@@ -221,14 +221,14 @@ impl AAForm {
         // }
         // AAForm(out)
 
-        let a = Range {
-            lo: (self.mid() - self.rad()).to_integer(),
-            hi: (self.mid() + self.rad()).to_integer(),
-        };
-        let b = Range {
-            lo: (other.mid() - other.rad()).to_integer(),
-            hi: (other.mid() + other.rad()).to_integer(),
-        };
+        let a = Range::new(
+            (self.mid() - self.rad()).to_integer(),
+            (self.mid() + self.rad()).to_integer(),
+        );
+        let b = Range::new(
+            (other.mid() - other.rad()).to_integer(),
+            (other.mid() + other.rad()).to_integer(),
+        );
         AAForm::from_range(tracker, a.union(&b))
     }
 
@@ -296,10 +296,10 @@ pub fn evaluate_aa_and_simplify_to_range(
     if let Some(aa_expr) = evaluate_aa(&mut AAVarTracker::new(), body, known) {
         let mid = aa_expr.mid();
         let rad = aa_expr.rad();
-        Some(Range {
-            lo: BigRational::to_integer(&(mid.clone() - rad.clone()).floor()),
-            hi: BigRational::to_integer(&(mid + rad).ceil()),
-        })
+        Some(Range::new(
+            BigRational::to_integer(&(mid.clone() - rad.clone()).floor()),
+            BigRational::to_integer(&(mid + rad).ceil()),
+        ))
     } else {
         None
     }

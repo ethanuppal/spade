@@ -42,6 +42,7 @@ pub fn wordlength_inference_method(
     Ok(match arg.to_lowercase().as_str() {
         "aa" => spade_wordlength_inference::InferMethod::AA,
         "ia" => spade_wordlength_inference::InferMethod::IA,
+        "aaia" => spade_wordlength_inference::InferMethod::AAIA,
         _ => {
             return Err(format!(
                 "Expected one of: \"AA\" or \"IA\" - leave empty for old method"

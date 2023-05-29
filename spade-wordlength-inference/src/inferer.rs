@@ -1,5 +1,5 @@
 use std::collections::btree_map::Entry;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use num::BigInt;
 use spade_common::location_info::{Loc, WithLocation};
@@ -96,10 +96,7 @@ impl<'a> Inferer<'a> {
                     spade_hir::expression::IntLiteral::Signed(x) => x.clone(),
                     spade_hir::expression::IntLiteral::Unsigned(x) => BigInt::from(x.clone()),
                 };
-                Some(Equation::Constant(Range {
-                    lo: x.clone(),
-                    hi: x,
-                }))
+                Some(Equation::Constant(Range::new(x.clone(), x)))
             }
 
             ExprKind::BinaryOperator(lhs, op, rhs) => self.binary_operator(lhs, *op, rhs)?,
@@ -190,12 +187,15 @@ impl<'a> Inferer<'a> {
 
     fn match_(
         &mut self,
-        _value: &Loc<Expression>,
+        value: &Loc<Expression>,
         patterns: &[(Loc<Pattern>, Loc<Expression>)],
     ) -> Res {
-        // TODO: Is there a currectness bug here since I discard the pattern?
+        // NOTE: Conditions can contain integer operations
+        self.expression(value)?;
         // NOTE: This unification works if the range contains zero - which it kinda always does
         // here, but it can cause overestimations!
+        // NOTE: It's fine that we don't visit the pattern since there cannot be an expression in
+        // it.
         let mut eq = Equation::Constant(Range::zero());
         for (_, body) in patterns {
             if let Some(b) = self.expression(body)? {
@@ -211,6 +211,7 @@ impl<'a> Inferer<'a> {
         true_: &Loc<Expression>,
         false_: &Loc<Expression>,
     ) -> Res {
+        // NOTE: Conditions can contain integer operations
         self.expression(value)?;
         Ok(match (self.expression(true_)?, self.expression(false_)?) {
             (Some(true_), Some(false_)) => Some(Equation::Union(Box::new(true_), Box::new(false_))),
@@ -339,6 +340,14 @@ impl<'a> Inferer<'a> {
                     InferMethod::AA => {
                         crate::affine::evaluate_aa_and_simplify_to_range(body, &known)
                     }
+                    InferMethod::AAIA => match (
+                        crate::range::evaluate_ia(body, &known),
+                        crate::affine::evaluate_aa_and_simplify_to_range(body, &known),
+                    ) {
+                        (Some(a), Some(b)) => Some(a.subset(&b)),
+                        (Some(a), None) | (None, Some(a)) => Some(a),
+                        (None, None) => None,
+                    },
                 } {
                     match known.entry(*var) {
                         Entry::Vacant(v) => {
@@ -374,6 +383,14 @@ impl<'a> Inferer<'a> {
                 break;
             }
         }
+        dbg!(equations
+            .iter()
+            .map(|(v, _)| v)
+            .collect::<BTreeSet<_>>()
+            .difference(&known.keys().collect::<BTreeSet<_>>())
+            .collect::<Vec<_>>());
+        dbg!(equations);
+        dbg!(&known);
         Ok(known)
     }
 
@@ -444,16 +461,10 @@ mod test {
     }
 
     fn r(lo: i128, hi: i128) -> Range {
-        Range {
-            lo: BigInt::from(lo),
-            hi: BigInt::from(hi),
-        }
+        Range::new(BigInt::from(lo), BigInt::from(hi))
     }
     fn c(lo: i128, hi: i128) -> Equation {
-        Equation::Constant(Range {
-            lo: BigInt::from(lo),
-            hi: BigInt::from(hi),
-        })
+        Equation::Constant(Range::new(BigInt::from(lo), BigInt::from(hi)))
     }
     fn v(x: usize) -> Equation {
         Equation::V(Var(x))
@@ -597,6 +608,15 @@ mod test {
         )
     }
 
+    #[test]
+    fn sub_same_aa() {
+        check_infer(
+            InferMethod::IA,
+            vec![(Var(0), sub(c(8, 8), c(8, 8)))],
+            vec![(Var(0), r(0, 0))],
+        )
+    }
+
     // IA
     #[test]
     fn range_ia() {
@@ -678,6 +698,108 @@ mod test {
             InferMethod::IA,
             vec![(Var(0), c(0, 10)), (Var(1), e)],
             vec![(Var(0), r(0, 10)), (Var(1), r(-50, 10))],
+        )
+    }
+
+    #[test]
+    fn sub_same_ia() {
+        check_infer(
+            InferMethod::IA,
+            vec![(Var(0), sub(c(8, 8), c(8, 8)))],
+            vec![(Var(0), r(0, 0))],
+        )
+    }
+
+    // AAIA
+    #[test]
+    fn range_aaia() {
+        check_infer(
+            InferMethod::AAIA,
+            vec![(Var(0), c(10, 10))],
+            vec![(Var(0), r(10, 10))],
+        )
+    }
+
+    #[test]
+    fn add_aaia() {
+        check_infer(
+            InferMethod::AAIA,
+            vec![(Var(0), c(0, 10)), (Var(1), add(v(0), v(0)))],
+            vec![(Var(0), r(0, 10)), (Var(1), r(0, 20))],
+        )
+    }
+
+    #[test]
+    fn sub_aaia() {
+        check_infer(
+            InferMethod::AAIA,
+            vec![(Var(0), c(0, 10)), (Var(1), sub(v(0), v(0)))],
+            vec![(Var(0), r(0, 10)), (Var(1), r(0, 0))],
+        )
+    }
+
+    #[test]
+    fn mul_aaia() {
+        check_infer(
+            InferMethod::AAIA,
+            vec![
+                (Var(0), c(0, 10)),
+                (Var(1), c(-2, 2)),
+                (Var(2), mul(v(0), v(1))),
+                (Var(3), mul(v(1), v(0))),
+            ],
+            vec![
+                (Var(0), r(0, 10)),
+                (Var(1), r(-2, 2)),
+                (Var(2), r(-20, 20)),
+                (Var(3), r(-20, 20)),
+            ],
+        )
+    }
+
+    #[test]
+    fn bit_manip_aaia() {
+        check_infer(
+            InferMethod::AAIA,
+            vec![(Var(0), c(0, 10)), (Var(1), bit(v(0)))],
+            vec![(Var(0), r(0, 10)), (Var(1), r(-16, 15))],
+        )
+    }
+
+    #[test]
+    fn neg_aaia() {
+        check_infer(
+            InferMethod::AAIA,
+            vec![(Var(0), n(c(0, 10)))],
+            vec![(Var(0), r(-10, 0))],
+        )
+    }
+
+    #[test]
+    fn union_aaia() {
+        check_infer(
+            InferMethod::AAIA,
+            vec![(Var(0), u(c(0, 10), c(-5, 5)))],
+            vec![(Var(0), r(-5, 10))],
+        )
+    }
+
+    #[test]
+    fn some_expression_aaia() {
+        let e = u(add(sub(v(0), c(10, 10)), mul(c(-1, 1), v(0))), c(-50, 0));
+        check_infer(
+            InferMethod::AAIA,
+            vec![(Var(0), c(0, 10)), (Var(1), e)],
+            vec![(Var(0), r(0, 10)), (Var(1), r(-50, 10))],
+        )
+    }
+
+    #[test]
+    fn sub_same_aaia() {
+        check_infer(
+            InferMethod::AAIA,
+            vec![(Var(0), sub(c(8, 8), c(8, 8)))],
+            vec![(Var(0), r(0, 0))],
         )
     }
 }
