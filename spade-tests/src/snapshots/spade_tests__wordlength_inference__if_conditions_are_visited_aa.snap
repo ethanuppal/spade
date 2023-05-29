@@ -1,0 +1,20 @@
+---
+source: spade-tests/src/wordlength_inference.rs
+---
+struct X { x: int<4>, }
+
+fn f(a: X) -> int<4> {
+  let p = a.x;
+  if 0 == trunc(p + 1) {
+    0
+  } else {
+    0
+  }
+}
+
+entity main(clk: clock, rst: bool) -> int<4> {
+  f( X$( x: 0 ) )
+}
+
+
+

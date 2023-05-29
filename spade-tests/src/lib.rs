@@ -158,6 +158,7 @@ macro_rules! snapshot_inference_error {
                 infer_method: match $kind {
                     "AA" => Some(InferMethod::AA),
                     "IA" => Some(InferMethod::IA),
+                    "AAIA" => Some(InferMethod::AAIA),
                     "ONE" => None,
                     _ => panic!("Not a valid inference kind: {:?}", $kind),
                 },
