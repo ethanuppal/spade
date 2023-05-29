@@ -383,14 +383,6 @@ impl<'a> Inferer<'a> {
                 break;
             }
         }
-        dbg!(equations
-            .iter()
-            .map(|(v, _)| v)
-            .collect::<BTreeSet<_>>()
-            .difference(&known.keys().collect::<BTreeSet<_>>())
-            .collect::<Vec<_>>());
-        dbg!(equations);
-        dbg!(&known);
         Ok(known)
     }
 
