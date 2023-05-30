@@ -64,37 +64,41 @@ pub fn infer_and_check(
     let known = Inferer::infer(wl_infer_method, &inferer.equations, known, &inferer.locs)?;
 
     for (ty, var) in inferer.mappings.iter() {
-        // println!("{:?} = {:?}", var, known.get(&var));
         // None errors are checked when mir-lowering, this isn't necessarily an error
-        if let Some(infered_wl) = known.get(var).and_then(|guess| guess.to_wordlength()) {
-            let loc = inferer.locs.get(var).cloned().unwrap_or(Loc::nowhere(()));
-            match &ty.inner {
-                TypeVar::Known(KnownType::Integer(size), _) => {
-                    let typechecker_wl = loc.map(|_| size.to_u32().unwrap());
-                    if typechecker_wl.inner != infered_wl {
-                        // NOTE: To make these types better, the known types need to have a Loc on
-                        // them, something I really don't feel like doing right now.
-                        // TODO: Print the actual ranges of values, since that's nice!
-                        return Err(error::WordlengthMismatch {
-                            typechecked: *typechecker_wl,
-                            typechecked_at: ty.loc(),
-                            infered: infered_wl,
-                            infered_at: loc,
-                        }
-                        .into());
-                    }
-                }
-                _ => {}
+        let infered_wl =
+            if let Some(infered_wl) = known.get(var).and_then(|guess| guess.to_wordlength()) {
+                infered_wl
+            } else {
+                continue;
+            };
+        let typechecker_wl =
+            if let TypeVar::Known(KnownType::Integer(typechecker_wl), _) = &ty.inner {
+                // 2^32 bits should be enough for anyone - right?
+                typechecker_wl.to_u32().unwrap()
+            } else {
+                continue;
+            };
+        let loc = inferer.locs.get(var).cloned().unwrap_or(Loc::nowhere(()));
+        if typechecker_wl != infered_wl {
+            // NOTE: To make these types better, the known types need to have a Loc on
+            // them, something I really don't feel like doing right now.
+            // TODO: Print the actual ranges of values, since that's nice!
+            return Err(error::WordlengthMismatch {
+                typechecked: typechecker_wl,
+                typechecked_at: ty.loc(),
+                infered: infered_wl,
+                infered_at: loc,
             }
-            to_wordlength_error(
-                inferer.type_state.unify(
-                    ty,
-                    &TypeVar::Known(KnownType::Integer(infered_wl.into()), Vec::new()),
-                    inferer.symtab,
-                ),
-                loc,
-            )?;
+            .into());
         }
+        to_wordlength_error(
+            inferer.type_state.unify(
+                ty,
+                &TypeVar::Known(KnownType::Integer(infered_wl.into()), Vec::new()),
+                inferer.symtab,
+            ),
+            loc,
+        )?;
     }
 
     Ok(())
