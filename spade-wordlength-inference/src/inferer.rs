@@ -65,7 +65,8 @@ impl<'a> Inferer<'a> {
         if let Ok(TypeVar::Known(t, v)) = thing.get_type(self.type_state) {
             match v.as_slice() {
                 [size] if t == t_int(self.symtab) => {
-                    // TODO[et]: Inject where the variable came from so we can put it back in
+                    // NOTE: Here we should inject where the variable came from so we can point to
+                    // it later in an error.
                     let p = if let Some(q) = self.mappings.get(&Loc::nowhere(size.clone())) {
                         *q
                     } else {
@@ -384,8 +385,8 @@ impl<'a> Inferer<'a> {
                                     // we might have inferred an incorrect or contradicting conclusion.
                                     return Err(error::WordlengthMismatch {
                                         typechecked: typecheck_wl,
-                                        infered: infer_wl,
-                                        infered_at: loc,
+                                        inferred: infer_wl,
+                                        inferred_at: loc,
                                     }
                                     .into());
                                 }
@@ -452,7 +453,7 @@ mod tests {
             .into_iter()
             .map(|(v, _)| (v, Loc::nowhere(())))
             .collect();
-        let infered = Inferer::infer(
+        let inferred = Inferer::infer(
             wl_infer_method,
             &equations
                 .clone()
@@ -465,8 +466,8 @@ mod tests {
         .map(|e| e.into_iter().collect::<BTreeSet<(Var, Range)>>());
         let expected = Ok(expected.into_iter().collect::<BTreeSet<(Var, Range)>>());
         assert_eq!(
-            infered, expected,
-            "The infered values don't match the given values, check the values carefully\nEQ: {:+?}", equations
+            inferred, expected,
+            "The inferred values don't match the given values, check the values carefully\nEQ: {:+?}", equations
         );
     }
 

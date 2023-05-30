@@ -13,11 +13,11 @@ pub struct UnificationError {
 }
 
 #[derive(IntoDiagnostic)]
-#[diagnostic(error, "Word length mismatch. Got {} bits but expected {} bits", diag.infered, diag.typechecked)]
+#[diagnostic(error, "Word length mismatch. Got {} bits but expected {} bits", diag.inferred, diag.typechecked)]
 pub struct WordlengthMismatch {
-    #[diagnostic(primary, "Got {} bits, expected {}", diag.infered, diag.typechecked)]
-    pub infered_at: Loc<()>,
-    pub infered: u32,
+    #[diagnostic(primary, "Got {} bits, expected {}", diag.inferred, diag.typechecked)]
+    pub inferred_at: Loc<()>,
+    pub inferred: u32,
     pub typechecked: u32,
 }
 

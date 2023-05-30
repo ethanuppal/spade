@@ -65,9 +65,9 @@ pub fn infer_and_check(
 
     for (ty, var) in inferer.mappings.iter() {
         // None errors are checked when mir-lowering, this isn't necessarily an error
-        let infered_wl =
-            if let Some(infered_wl) = known.get(var).and_then(|guess| guess.to_wordlength()) {
-                infered_wl
+        let inferred_wl =
+            if let Some(inferred_wl) = known.get(var).and_then(|guess| guess.to_wordlength()) {
+                inferred_wl
             } else {
                 continue;
             };
@@ -79,21 +79,21 @@ pub fn infer_and_check(
                 continue;
             };
         let loc = inferer.locs.get(var).cloned().unwrap_or(Loc::nowhere(()));
-        if typechecker_wl != infered_wl {
+        if typechecker_wl != inferred_wl {
             // NOTE: To make these types better, the known types need to have a Loc on
             // them, something I really don't feel like doing right now.
-            // TODO: Print the actual ranges of values, since that's nice!
+            // NOTE: Printing the actual ranges of values would be nice!
             return Err(error::WordlengthMismatch {
                 typechecked: typechecker_wl,
-                infered: infered_wl,
-                infered_at: loc,
+                inferred: inferred_wl,
+                inferred_at: loc,
             }
             .into());
         }
         to_wordlength_error(
             inferer.type_state.unify(
                 ty,
-                &TypeVar::Known(KnownType::Integer(infered_wl.into()), Vec::new()),
+                &TypeVar::Known(KnownType::Integer(inferred_wl.into()), Vec::new()),
                 inferer.symtab,
             ),
             loc,
@@ -109,7 +109,6 @@ fn to_wordlength_error<A>(
 ) -> error::Result<A> {
     match ty_err {
         Ok(v) => Ok(v),
-        // TODO: Format the error properly
         Err(_err) => Err(error::UnificationError { at: loc }.into()),
     }
 }

@@ -18,7 +18,7 @@ enum AffineVar {
 }
 
 // I've made the bold assumption that `x + EPSILON` is the same or equal to `^ x ^` (the larger floating point number).
-// Another way of phrasing it is: `b > 0 => a + b > a` when using floating point arithmatic.
+// Another way of phrasing it is: `b > 0 => a + b > a` when using floating point arithmetic.
 //
 // AAForm or Affine Arithmetic Form is a way for computers to do Affine Arithmetic.
 // The form is a sum of "noise" variables (variables holding a value between -1 and 1), here
