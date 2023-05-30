@@ -17,7 +17,7 @@ impl StatementList {
         }
     }
 
-    /// Pushes a statemnt which has no associated name or id. Currently used for asserts and
+    /// Pushes a statement which has no associated name or id. Currently used for asserts and
     /// wal_tracing statements
     pub fn push_anonymous(&mut self, stmt: Statement) {
         self.stmts.push(stmt)
