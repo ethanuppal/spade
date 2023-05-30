@@ -146,7 +146,10 @@ impl<'a> Inferer<'a> {
             // There's a case to be made for these being valuable to implement. Implementing these
             // is bound to be simple and give value to the language, but it requires figuring out
             // where their return types are stored - which is less interesting.
-            ExprKind::BoolLiteral(_) | ExprKind::PipelineRef { .. } | ExprKind::CreatePorts => None,
+            ExprKind::Null
+            | ExprKind::BoolLiteral(_)
+            | ExprKind::PipelineRef { .. }
+            | ExprKind::CreatePorts => None,
         };
 
         let maybe_eq = maybe_eq.or_else(|| self.find_or_create(expr).map(Equation::V));
@@ -158,7 +161,23 @@ impl<'a> Inferer<'a> {
     fn block(&mut self, block: &Block) -> Res {
         for stmt in block.statements.iter() {
             match &stmt.inner {
-                Statement::Binding(_, _, expr) | Statement::Assert(expr) => {
+                Statement::Binding(spade_hir::Binding {
+                    pattern: _,
+                    ty: _,
+                    value,
+                    wal_trace,
+                }) => {
+                    if let Some(wal_trace) = wal_trace {
+                        if let Some(expr) = &wal_trace.rst {
+                            self.expression(expr)?;
+                        }
+                        if let Some(expr) = &wal_trace.clk {
+                            self.expression(expr)?;
+                        }
+                    }
+                    self.expression(value)?;
+                }
+                Statement::Assert(expr) => {
                     self.expression(expr)?;
                 }
 
