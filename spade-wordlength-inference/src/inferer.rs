@@ -413,7 +413,7 @@ impl<'a> Inferer<'a> {
 }
 
 #[cfg(test)]
-mod test {
+mod tests {
     use std::collections::{BTreeMap, BTreeSet};
 
     use num::BigInt;
