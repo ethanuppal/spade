@@ -21,6 +21,6 @@ error: Unnecessary clock signal
   │ ----------------------------- This struct does not need a clock signal for tracing
   ·
 8 │     #[wal_trace(clk = clk)]
-  │                       ^^^
+  │                       ^^^ Unnecessary clock signal
 
 

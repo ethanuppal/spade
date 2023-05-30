@@ -162,7 +162,7 @@ pub enum ExprKind {
         name: Loc<NameID>,
         declares_name: bool,
     },
-    // This is a special case exception which is never created in user code, but which can be used
+    // This is a special case expression which is never created in user code, but which can be used
     // in type inferecne to create virtual expressions with specific IDs
     Null,
 }

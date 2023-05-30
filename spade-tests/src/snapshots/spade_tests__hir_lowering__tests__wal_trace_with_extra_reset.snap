@@ -21,6 +21,6 @@ error: Unnecessary reset signal
   │ ----------------------------- This struct does not need a reset signal for tracing
   ·
 8 │     #[wal_trace(rst = true)]
-  │                       ^^^^
+  │                       ^^^^ Unnecessary reset signal
 
 

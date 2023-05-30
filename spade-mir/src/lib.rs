@@ -243,15 +243,15 @@ pub enum Operator {
     /// become backward ports. This is only valid when converting from T to ~T
     FlipPort,
 
-    /// Given a struct or tuple consisting of mut and non-mut wires, invert the direction
-    /// without assigning anything to the mut wires. Naturally, this is only valid for reads
+    /// Given a struct or tuple consisting of mut and non-mut wires, create a new
+    /// struct or tuple with the non-mut copies of the mut wires
     ///
-    /// As an example `(&mut T1, T2, &mut T3)` becomes `(T1, &mut T2, T3)`
+    /// As an example `(&mut T1, T2, &mut T3)` becomes `(T1, T3)`
     // NOTE: For now this variant is a bit of a hack used during wal_trace_lowering
     // A saner implementation that also solves #252 would be nice
     // In particular, a dedicated `ReadMutTuple` might be useful
     // lifeguard spade#252
-    InvertPort,
+    ReadMutWires,
 
     /// Instantiation of another module with the specified name. The operands are passed
     /// positionally to the entity. The target module can only have a single output which
@@ -345,7 +345,7 @@ impl std::fmt::Display for Operator {
             Operator::Instance(name, _) => write!(f, "Instance({})", name.as_verilog()),
             Operator::Alias => write!(f, "Alias"),
             Operator::FlipPort => write!(f, "FlipPort"),
-            Operator::InvertPort => write!(f, "InvertPort"),
+            Operator::ReadMutWires => write!(f, "ReadMutWires"),
             Operator::Nop => write!(f, "Nop"),
             Operator::ReadPort => write!(f, "ReadPort"),
         }
@@ -436,9 +436,6 @@ pub enum Statement {
     /// (wal_trace {name: x, val: e(0), suffix: _a_suffix, ty: A}
     /// (e(1); IndexStruct(1); x)
     /// (wal_trace {name: x, val: e(0), suffix: _a_suffix, ty: A}
-    ///
-    /// will be two `WalTrace` statements: `{name: x, suffix: _a_suffix} and `{name: x, suffix: _b_suffix}`
-    /// This particular tracing signal shouldh have
     WalTrace {
         name: ValueName,
         val: ValueName,

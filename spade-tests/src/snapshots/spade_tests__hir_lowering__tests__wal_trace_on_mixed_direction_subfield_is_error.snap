@@ -13,10 +13,10 @@ entity test(t: T) -> T {
 }
 
 
-error: wal tracing does not work on types with mixed-direction fields
+error: Wal tracing does not work on types with mixed-direction fields
   ┌─ testinput:8:9
   │
 8 │     let t = t;
-  │         ^ Field a has both & and &mut wires
+  │         ^ The field 'a' of the struct has both & and &mut wires
 
 

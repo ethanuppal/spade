@@ -2370,7 +2370,7 @@ mod tests {
             "x", n(0, "x"), ty.clone(),
         ) -> ty.clone(); {
             (n(1, "y"); ty.clone(); Alias; n(0, "x"));
-            (e(10); back_ty.clone(); InvertPort; n(1, "y"));
+            (e(10); back_ty.clone(); ReadMutWires; n(1, "y"));
             (e(0); Type::int(8); IndexTuple((0, inner_types.clone())); n(1, "y"));
             (wal_trace(n(1, "y"), e(0), "__a__wal_suffix__", Type::int(8)));
             (e(1); Type::int(4); IndexTuple((0, back_inner_types.clone())); e(10));
@@ -2427,7 +2427,7 @@ mod tests {
             "x", n(0, "x"), ty.clone(),
         ) -> ty.clone(); {
             (n(1, "y"); ty.clone(); Alias; n(0, "x"));
-            (e(10); back_ty.clone(); InvertPort; n(1, "y"));
+            (e(10); back_ty.clone(); ReadMutWires; n(1, "y"));
             (e(0); Type::int(8); IndexTuple((0, inner_types.clone())); n(1, "y"));
             (wal_trace(n(1, "y"), e(0), "__a__wal_suffix__", Type::int(8)));
             (e(1); Type::int(4); IndexTuple((0, back_inner_types.clone())); e(10));
@@ -2591,7 +2591,7 @@ mod tests {
     }
 
     snapshot_error! {
-        wal_trace_on_mixe_direction_subfield_is_error,
+        wal_trace_on_mixed_direction_subfield_is_error,
         "
             #[wal_suffix(_)]
             struct port T {

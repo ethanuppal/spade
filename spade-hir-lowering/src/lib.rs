@@ -580,6 +580,7 @@ pub fn do_wal_trace_lowering(
                 (Some(signal), false) => {
                     return Err(
                         Diagnostic::error(signal, format!("Unnecessary {name} signal"))
+                            .primary_label(format!("Unnecessary {name} signal"))
                             .secondary_label(
                                 wal_suffix,
                                 format!("This struct does not need a {name} signal for tracing"),
@@ -613,9 +614,11 @@ pub fn do_wal_trace_lowering(
             {
                 return Err(Diagnostic::error(
                     pattern,
-                    "wal tracing does not work on types with mixed-direction fields",
+                    "Wal tracing does not work on types with mixed-direction fields",
                 )
-                .primary_label(format!("Field {n} has both & and &mut wires"))
+                .primary_label(format!(
+                    "The field '{n}' of the struct has both & and &mut wires"
+                ))
                 .into());
             }
         }
@@ -630,6 +633,7 @@ pub fn do_wal_trace_lowering(
 
         // If we have &mut wires, we need a flipped port to read the values from because
         // we need to work around a small bug. Create an anonymous value for this
+        // lifeguard spade#252
         let flipped_id = ctx.idtracker.next();
         let flipped_ty = MirType::Struct(
             members
@@ -647,7 +651,7 @@ pub fn do_wal_trace_lowering(
         );
         let flipped_port = mir::Statement::Binding(mir::Binding {
             name: ValueName::Expr(flipped_id),
-            operator: mir::Operator::InvertPort,
+            operator: mir::Operator::ReadMutWires,
             operands: vec![main_value_name.clone()],
             ty: flipped_ty.clone(),
             loc: None,
@@ -707,6 +711,8 @@ pub fn do_wal_trace_lowering(
             // indexing for the correct field on the pattern.
             // This is kind of a giant hack and makes quite a few assumptions about
             // the rest of the compiler
+            // If problems occur in this code, it is probably a good idea to start
+            // looking at refactoring this into a more sane state
 
             let dummy_expr_id = ctx.idtracker.next();
             let dummy_expr = if is_backward {
@@ -824,7 +830,7 @@ pub fn lower_wal_trace(
                         .primary_label(format!("{} does not have #[wal_suffix]", name))
                         .secondary_label(
                             pattern,
-                            format!("This has type {} which is not #[wal_suffix]", hir_ty),
+                            format!("This has type {} which does not have #[wal_suffix]", hir_ty),
                         )
                         .note("This most likely means that the struct can not be analyzed by a wal script")
                         .into());
