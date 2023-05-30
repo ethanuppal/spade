@@ -18,6 +18,7 @@ use attributes::LocAttributeExt;
 use error::{expect_entity, expect_function, expect_pipeline};
 use hir::expression::CallKind;
 use hir::expression::LocExprExt;
+use hir::ArgumentList;
 use hir::Attribute;
 use hir::Parameter;
 use hir::TypeDeclKind;
@@ -661,10 +662,11 @@ pub fn do_wal_trace_lowering(
             let new_id = ctx.idtracker.next();
             let field_name = ValueName::Expr(new_id);
 
-            let (mir_ty, operand, operator) = match ty.to_mir_type() {
+            let (is_backward, mir_ty, operand, operator) = match ty.to_mir_type() {
                 MirType::Backward(b) => {
                     let result = (
-                        *b.clone(),
+                        true,
+                        *b,
                         ValueName::Expr(flipped_id),
                         mir::Operator::IndexTuple(i_backward, inner_backward_types.clone()),
                     );
@@ -673,6 +675,7 @@ pub fn do_wal_trace_lowering(
                 }
                 other => {
                     let result = (
+                        false,
                         other,
                         main_value_name.clone(),
                         mir::Operator::IndexTuple(i_forward, inner_types.clone()),
@@ -704,24 +707,57 @@ pub fn do_wal_trace_lowering(
             // indexing for the correct field on the pattern.
             // This is kind of a giant hack and makes quite a few assumptions about
             // the rest of the compiler
-            // TODO: Add a test for this, and make a note that if this test fails
-            // because of another change in the compiler, this should be done properly
 
             let dummy_expr_id = ctx.idtracker.next();
-            let field_access_expr = &hir::Expression {
-                kind: ExprKind::FieldAccess(
-                    Box::new(
-                        hir::Expression {
-                            kind: ExprKind::Null,
-                            id: dummy_expr_id,
+            let dummy_expr = if is_backward {
+                hir::Expression {
+                    id: new_id,
+                    kind: ExprKind::Call {
+                        kind: CallKind::Entity(().nowhere()),
+                        callee: ctx
+                            .symtab
+                            .symtab()
+                            .lookup_unit(
+                                &Path::from_strs(&["std", "ports", "read_mut_wire"]).nowhere(),
+                            )
+                            .expect("did not find std::ports::read_mut_wire in symtab")
+                            .0
+                            .nowhere(),
+                        args: ArgumentList::Positional(vec![hir::Expression {
+                            kind: ExprKind::FieldAccess(
+                                Box::new(
+                                    hir::Expression {
+                                        kind: ExprKind::Null,
+                                        id: dummy_expr_id,
+                                    }
+                                    .nowhere(),
+                                ),
+                                n.clone().nowhere(),
+                            ),
+                            id: ctx.idtracker.next(),
                         }
+                        .nowhere()])
                         .nowhere(),
+                    },
+                }
+                .nowhere()
+            } else {
+                hir::Expression {
+                    kind: ExprKind::FieldAccess(
+                        Box::new(
+                            hir::Expression {
+                                kind: ExprKind::Null,
+                                id: dummy_expr_id,
+                            }
+                            .nowhere(),
+                        ),
+                        n.clone().nowhere(),
                     ),
-                    n.clone().nowhere(),
-                ),
-                id: new_id,
-            }
-            .nowhere();
+                    id: new_id,
+                }
+                .nowhere()
+            };
+
             let generic_list = &ctx
                 .types
                 .create_generic_list(spade_typeinference::GenericListSource::Anonymous, &[]);
@@ -730,7 +766,7 @@ pub fn do_wal_trace_lowering(
                 items: &ctx.item_list,
             };
             ctx.types
-                .visit_expression(&field_access_expr, &type_ctx, generic_list)
+                .visit_expression(&dummy_expr, &type_ctx, generic_list)
                 .map_err(|e| {
                     diag_anyhow!(
                         wal_trace,

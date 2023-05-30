@@ -2,6 +2,7 @@ use std::io::Write;
 
 use codespan_reporting::term::termcolor::Buffer;
 
+use spade::Artefacts;
 use spade_diagnostics::emitter::CodespanEmitter;
 use spade_diagnostics::{CodeBundle, CompilationError, DiagHandler};
 
@@ -22,6 +23,8 @@ mod suggestions;
 #[cfg(test)]
 mod typeinference;
 mod usefulness;
+#[cfg(test)]
+mod wal_tracing;
 
 pub trait ResultExt<T> {
     fn report_failure(self, code: &str) -> T;
@@ -141,6 +144,10 @@ fn build_items_with_stdlib(code: &str) -> Vec<spade_mir::Entity> {
 /// Returns all MIR entities in unflattened format
 #[cfg(test)]
 fn build_items_inner(code: &str, with_stdlib: bool) -> Vec<spade_mir::Entity> {
+    build_artifacts(code, with_stdlib).bumpy_mir_entities
+}
+
+pub fn build_artifacts(code: &str, with_stdlib: bool) -> Artefacts {
     let source = unindent::unindent(code);
     let mut buffer = codespan_reporting::term::termcolor::BufferWriter::stdout(
         codespan_reporting::term::termcolor::ColorChoice::Never,
@@ -172,7 +179,7 @@ fn build_items_inner(code: &str, with_stdlib: bool) -> Vec<spade_mir::Entity> {
         opts,
         spade_diagnostics::DiagHandler::new(Box::new(spade_diagnostics::emitter::CodespanEmitter)),
     ) {
-        Ok(artefacts) => artefacts.bumpy_mir_entities,
+        Ok(artefacts) => artefacts,
         Err(_) => {
             // I'm not 100% sure why this is needed. The bufferwriter should output
             // to stdout and buffer.flush() should be enough. Unfortunately, that does

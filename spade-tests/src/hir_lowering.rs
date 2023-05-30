@@ -2365,7 +2365,8 @@ mod tests {
         let back_ty = Type::Struct(back_fields.clone());
         let back_inner_types = back_fields.iter().map(|f| f.1.clone()).collect::<Vec<_>>();
 
-        let expected = entity!(&["main"]; (
+        let unit_name = spade_mir::UnitName::_test_from_strs(&["main"]);
+        let expected = entity!(&unit_name; (
             "x", n(0, "x"), ty.clone(),
         ) -> ty.clone(); {
             (n(1, "y"); ty.clone(); Alias; n(0, "x"));
@@ -2376,7 +2377,13 @@ mod tests {
             (wal_trace(n(1, "y"), e(1), "__b__wal_suffix__", Type::int(4)))
         } => n(1, "y"));
 
-        assert_same_mir!(&build_entity!(code), &expected);
+        assert_same_mir!(
+            &build_items_with_stdlib(code)
+                .into_iter()
+                .find(|e| e.name == unit_name)
+                .unwrap(),
+            &expected
+        );
     }
 
     #[test]
@@ -2415,7 +2422,8 @@ mod tests {
         let back_ty = Type::Struct(back_fields.clone());
         let back_inner_types = back_fields.iter().map(|f| f.1.clone()).collect::<Vec<_>>();
 
-        let expected = entity!(&["main"]; (
+        let unit_name = spade_mir::UnitName::_test_from_strs(&["main"]);
+        let expected = entity!(&unit_name; (
             "x", n(0, "x"), ty.clone(),
         ) -> ty.clone(); {
             (n(1, "y"); ty.clone(); Alias; n(0, "x"));
@@ -2430,7 +2438,13 @@ mod tests {
             (wal_trace(n(1, "y"), e(3), "__d__wal_suffix__", Type::int(7)));
         } => n(1, "y"));
 
-        assert_same_mir!(&build_entity!(code), &expected);
+        assert_same_mir!(
+            &build_items_with_stdlib(code)
+                .into_iter()
+                .find(|e| e.name == unit_name)
+                .unwrap(),
+            &expected
+        );
     }
 
     #[test]

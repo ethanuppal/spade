@@ -28,9 +28,9 @@ spade-mir = {path = "../spade-mir"}
 spade-hir-lowering = {path = "../spade-hir-lowering"}
 spade-typeinference = {path = "../spade-typeinference"}
 spade = {path = "../spade-compiler"}
+unindent = "0.2.1"
 
 [dev-dependencies]
-unindent = "0.2.1"
 colored.workspace = true
 insta.workspace = true
 prettydiff.workspace = true

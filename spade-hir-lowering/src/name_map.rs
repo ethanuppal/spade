@@ -64,7 +64,7 @@ impl std::fmt::Display for NamedValue {
     }
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct NameSourceMap {
     pub inner: HashMap<ValueName, NamedValue>,
 }

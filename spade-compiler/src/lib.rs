@@ -120,6 +120,7 @@ pub struct Artefacts {
     pub bumpy_mir_entities: Vec<spade_mir::Entity>,
     // MIR entities after flattening
     pub flat_mir_entities: Vec<Codegenable>,
+    pub state: CompilerState,
 }
 
 /// Like [Artefacts], but if the compiler didn't finish due to errors.
@@ -310,6 +311,17 @@ pub fn compile(
         &mut idtracker,
     );
 
+    let state = CompilerState {
+        code: code.read().unwrap().dump_files(),
+        symtab: frozen_symtab,
+        idtracker,
+        impl_idtracker,
+        item_list: item_list.clone(),
+        name_source_map,
+        instance_map,
+        mir_context,
+    };
+
     if let Some(outfile) = opts.outfile {
         std::fs::write(outfile, module_code.join("\n\n")).or_report(&mut errors);
     }
@@ -339,16 +351,6 @@ pub fn compile(
         }
     }
     if let Some(state_dump_file) = opts.state_dump_file {
-        let state = CompilerState {
-            code: code.read().unwrap().dump_files(),
-            symtab: frozen_symtab,
-            idtracker,
-            impl_idtracker,
-            item_list: item_list.clone(),
-            name_source_map,
-            instance_map,
-            mir_context,
-        };
         match ron::ser::to_string_pretty(&state, PrettyConfig::default()) {
             Ok(encoded) => {
                 std::fs::write(state_dump_file, encoded).or_report(&mut errors);
@@ -367,6 +369,7 @@ pub fn compile(
             flat_mir_entities,
             code: code.read().unwrap().clone(),
             item_list,
+            state,
         })
     }
 }
