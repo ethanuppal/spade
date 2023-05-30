@@ -9,7 +9,7 @@ use ron::ser::PrettyConfig;
 use spade_ast_lowering::id_tracker::ExprIdTracker;
 use spade_mir::codegen::{prepare_codegen, Codegenable};
 use spade_mir::unit_name::InstanceMap;
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::RwLock;
@@ -295,7 +295,7 @@ pub fn compile(
             ExecutableItem::StructInstance { .. } => None,
             ExecutableItem::BuiltinUnit(_, _) => None,
         })
-        .collect::<HashMap<_, _>>();
+        .collect::<BTreeMap<_, _>>();
 
     if errors.failed {
         return Err(unfinished_artefacts);

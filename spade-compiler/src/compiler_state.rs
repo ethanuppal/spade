@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 
 use serde::{Deserialize, Serialize};
 use spade_ast_lowering::id_tracker::{ExprIdTracker, ImplIdTracker};
@@ -15,7 +15,7 @@ use spade_typeinference::TypeMap;
 pub struct MirContext {
     /// Mapping to concrete types for this instantiation of the entity
     pub type_map: TypeMap,
-    pub reg_name_map: HashMap<NameID, NameID>,
+    pub reg_name_map: BTreeMap<NameID, NameID>,
     pub verilog_name_map: VerilogNameMap,
 }
 
