@@ -1,5 +1,5 @@
 use std::collections::btree_map::Entry;
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 
 use num::BigInt;
 use spade_common::location_info::{Loc, WithLocation};
