@@ -17,4 +17,12 @@ entity main(clk: clock, rst: bool) -> int<4> {
 }
 
 
+error: Type of expression is not fully known
+  ┌─ testinput:5:6
+  │
+5 │   if 0 == trunc(p + 1) {
+  │      ^ The type of this expression is not fully known
+  │
+  = note: Found incomplete type: int<_>
+
 

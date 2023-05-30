@@ -13,14 +13,12 @@ pub struct UnificationError {
 }
 
 #[derive(IntoDiagnostic)]
-#[diagnostic(error, "The wordlength isn't what we infered it to - inference got {} bits and you claimed {} bits", diag.infered, diag.typechecked)]
+#[diagnostic(error, "Word length mismatch. Got {} bits but expected {} bits", diag.infered, diag.typechecked)]
 pub struct WordlengthMismatch {
-    pub infered: u32,
-    #[diagnostic(primary, "Here {} bits were infered", diag.infered)]
+    #[diagnostic(primary, "Got {} bits, expected {}", diag.infered, diag.typechecked)]
     pub infered_at: Loc<()>,
+    pub infered: u32,
     pub typechecked: u32,
-    #[diagnostic(primary, "Here you said {} bits", diag.typechecked)]
-    pub typechecked_at: Loc<()>,
 }
 
 pub type Result<T> = std::result::Result<T, Diagnostic>;

@@ -12,4 +12,12 @@ entity main(clk: clock, rst: bool) -> int<7> {
 }
 
 
+error: Type of expression is not fully known
+  ┌─ testinput:4:3
+  │
+4 │   1 * p(a) + 1
+  │   ^^^^^^^^ The type of this expression is not fully known
+  │
+  = note: Found incomplete type: int<_>
+
 

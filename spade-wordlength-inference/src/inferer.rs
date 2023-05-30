@@ -365,7 +365,6 @@ impl<'a> Inferer<'a> {
                                     // we might have inferred an incorrect or contradicting conclusion.
                                     return Err(error::WordlengthMismatch {
                                         typechecked: typecheck_wl,
-                                        typechecked_at: body.loc(),
                                         infered: infer_wl,
                                         infered_at: loc,
                                     }

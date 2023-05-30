@@ -85,7 +85,6 @@ pub fn infer_and_check(
             // TODO: Print the actual ranges of values, since that's nice!
             return Err(error::WordlengthMismatch {
                 typechecked: typechecker_wl,
-                typechecked_at: ty.loc(),
                 infered: infered_wl,
                 infered_at: loc,
             }

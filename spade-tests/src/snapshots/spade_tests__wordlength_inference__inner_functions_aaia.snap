@@ -8,10 +8,10 @@ fn f<a, b>(a: int<2>) -> int<0> {
 entity main(clk: clock, rst: bool) -> int<0> { f(0) }
 
 
-error: The wordlength isn't what we infered it to - inference got 2 bits and you claimed 0 bits
+error: Word length mismatch. Got 2 bits but expected 0 bits
   ┌─ testinput:5:48
   │
 5 │ entity main(clk: clock, rst: bool) -> int<0> { f(0) }
-  │                                                ^^^^ Here 2 bits were infered
+  │                                                ^^^^ Got 2 bits, expected 0
 
 
