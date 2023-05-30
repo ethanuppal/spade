@@ -315,7 +315,7 @@ impl<'a> Inferer<'a> {
     }
 
     pub fn infer(
-        infer_method: InferMethod,
+        wl_infer_method: InferMethod,
         equations: &Vec<(Var, Loc<Equation>)>,
         mut known: BTreeMap<Var, Range>,
         locs: &BTreeMap<Var, Loc<()>>,
@@ -327,7 +327,7 @@ impl<'a> Inferer<'a> {
             let known_at_start = known.clone();
             for (var, body) in equations.iter() {
                 let loc = locs.get(var).cloned().unwrap_or(Loc::nowhere(()));
-                if let Some(infer) = match infer_method {
+                if let Some(infer) = match wl_infer_method {
                     // There's a third method one could take here:
                     // Run both and take the smaller one
                     //
@@ -425,7 +425,7 @@ mod test {
     use crate::{range::Range, InferMethod};
 
     fn check_infer(
-        infer_method: InferMethod,
+        wl_infer_method: InferMethod,
         equations: Vec<(Var, Equation)>,
         expected: Vec<(Var, Range)>,
     ) {
@@ -435,7 +435,7 @@ mod test {
             .map(|(v, _)| (v, Loc::nowhere(())))
             .collect();
         let infered = Inferer::infer(
-            infer_method,
+            wl_infer_method,
             &equations
                 .clone()
                 .into_iter()

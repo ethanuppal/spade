@@ -24,7 +24,7 @@ mod range;
 pub type Res = error::Result<Option<Equation>>;
 
 pub fn infer_and_check(
-    infer_method: InferMethod,
+    wl_infer_method: InferMethod,
     type_state: &mut TypeState,
     frozen_symtab: &FrozenSymtab,
     unit: &Unit,
@@ -61,7 +61,7 @@ pub fn infer_and_check(
         }
     }
 
-    let known = Inferer::infer(infer_method, &inferer.equations, known, &inferer.locs)?;
+    let known = Inferer::infer(wl_infer_method, &inferer.equations, known, &inferer.locs)?;
 
     for (ty, var) in inferer.mappings.iter() {
         // println!("{:?} = {:?}", var, known.get(&var));

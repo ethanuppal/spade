@@ -45,7 +45,7 @@ pub fn wordlength_inference_method(
         "aaia" => spade_wordlength_inference::InferMethod::AAIA,
         _ => {
             return Err(format!(
-                "Expected one of: \"AA\" or \"IA\" - leave empty for old method"
+                "Expected one of: \"AA\", \"IA\" or \"AAIA\" - leave empty for old method"
             ))
         }
     })
@@ -60,7 +60,7 @@ pub struct Opt<'b> {
     pub item_list_file: Option<PathBuf>,
     pub print_type_traceback: bool,
     pub print_parse_traceback: bool,
-    pub infer_method: Option<spade_wordlength_inference::InferMethod>,
+    pub wl_infer_method: Option<spade_wordlength_inference::InferMethod>,
 }
 
 #[derive(Error, Debug)]
@@ -270,7 +270,7 @@ pub fn compile(
         .filter_map(|(name, item)| match item {
             ExecutableItem::Unit(u) => {
                 let mut type_state = typeinference::TypeState::new()
-                    .set_wordlength_inferece(opts.infer_method.is_some());
+                    .set_wordlength_inferece(opts.wl_infer_method.is_some());
 
                 if let Ok(()) = type_state
                     .visit_entity(u, &type_inference_ctx)
@@ -309,7 +309,7 @@ pub fn compile(
         &mut name_source_map,
         &item_list,
         &mut errors.diag_handler,
-        opts.infer_method,
+        opts.wl_infer_method,
     );
 
     let CodegenArtefacts {

@@ -33,10 +33,10 @@ pub struct Opt {
     pub no_color: bool,
 
     /// Use (currently experimental) affine arithmetic to check integer bounds stricter than
-    /// previously possible. Expects either "IA", "AA" or "ONE" - leave empty for a sane default
-    /// value.
-    #[structopt(long = "infer-method", value_parser(wordlength_inference_method))]
-    pub infer_method: Option<spade_wordlength_inference::InferMethod>,
+    /// previously possible. Expects either "IA", "AA" or "AAIA" - leave empty for a sane default
+    /// value. This flag overwrites the `SPADE_INFER_METHOD` environment variable.
+    #[structopt(long = "wl-infer-method", value_parser(wordlength_inference_method))]
+    pub wl_infer_method: Option<spade_wordlength_inference::InferMethod>,
 
     /// Write a mapping between expression ids/names and the types of the values
     /// formatted in ron https://github.com/ron-rs/ron
@@ -116,7 +116,7 @@ fn main() -> Result<()> {
         item_list_file: opts.item_list,
         print_type_traceback: opts.print_type_traceback,
         print_parse_traceback: opts.print_parse_traceback,
-        infer_method: opts.infer_method.or_else(|| {
+        wl_infer_method: opts.wl_infer_method.or_else(|| {
             std::env::var("SPADE_INFER_METHOD")
                 .ok()
                 .and_then(|x| wordlength_inference_method(&x).ok())

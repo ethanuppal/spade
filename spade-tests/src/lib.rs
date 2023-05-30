@@ -90,7 +90,7 @@ macro_rules! snapshot_error {
                 item_list_file: None,
                 print_type_traceback: false,
                 print_parse_traceback: false,
-                infer_method: None,
+                wl_infer_method: None,
             };
 
             let files = vec![(
@@ -155,7 +155,7 @@ macro_rules! snapshot_inference_error {
                 item_list_file: None,
                 print_type_traceback: false,
                 print_parse_traceback: false,
-                infer_method: match $kind {
+                wl_infer_method: match $kind {
                     "AA" => Some(InferMethod::AA),
                     "IA" => Some(InferMethod::IA),
                     "AAIA" => Some(InferMethod::AAIA),
@@ -237,7 +237,7 @@ pub fn build_artifacts(code: &str, with_stdlib: bool) -> Artefacts {
         item_list_file: None,
         print_type_traceback: false,
         print_parse_traceback: false,
-        infer_method: None,
+        wl_infer_method: None,
     };
 
     let files = vec![(
