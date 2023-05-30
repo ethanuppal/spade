@@ -340,6 +340,10 @@ pub fn compile(
         mir_context,
     };
 
+    if errors.failed {
+        return Err(unfinished_artefacts);
+    }
+
     if let Some(outfile) = opts.outfile {
         std::fs::write(outfile, module_code.join("\n\n")).or_report(&mut errors);
     }

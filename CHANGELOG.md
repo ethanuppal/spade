@@ -23,6 +23,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 - [!178][!178] `sext` and `zext` now error when trying to reduce the width
 - [!188][!188] Fix codegen bug when indexing structs or tuples which are 1 bit wide.
+- [!201][!201] Stop producing `spade.sv` when monomorphisation fails
 
 ### Changed
 
@@ -42,6 +43,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 [!189]: https://gitlab.com/spade-lang/spade/-/merge_requests/189
 [!191]: https://gitlab.com/spade-lang/spade/-/merge_requests/191
 [!195]: https://gitlab.com/spade-lang/spade/-/merge_requests/195
+[!201]: https://gitlab.com/spade-lang/spade/-/merge_requests/201
 
 [doc_inverted_ports]: https://docs.spade-lang.org/language_reference/type_system/inverted_ports.html
 
