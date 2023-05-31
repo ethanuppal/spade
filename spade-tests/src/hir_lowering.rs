@@ -1013,7 +1013,7 @@ mod tests {
 
                 // Stage conditions are generated at the end in reverse order
                 (e(210); Type::Bool; Alias; e(310));
-                (e(200); Type::Bool; Alias; e(310));
+                (e(200); Type::Bool; Alias; e(210));
 
                 (reg e(501); Type::Bool; clock(n(3, "clk")); e(310));
                 (reg e(502); Type::Bool; clock(n(3, "clk")); e(501));
@@ -1058,7 +1058,7 @@ mod tests {
 
                 // Stage conditions are generated at the end in reverse order
                 (e(210); Type::Bool; Alias; e(310));
-                (e(200); Type::Bool; LogicalAnd; e(300), e(310));
+                (e(200); Type::Bool; LogicalAnd; e(300), e(210));
 
                 (reg e(500); Type::Bool; clock(n(3, "clk")); e(300));
                 (e(511); Type::Bool; LogicalAnd; e(310), e(500));
@@ -1219,7 +1219,7 @@ mod tests {
 
                 // Stage conditions are generated at the end in reverse order
                 (e(210); Type::Bool; Alias; e(310));
-                (e(200); Type::Bool; Alias; e(310));
+                (e(200); Type::Bool; Alias; e(210));
 
                 // Stage valid signals
                 (reg e(501); Type::Bool; clock(n(3, "clk")); e(310));
@@ -1269,7 +1269,7 @@ mod tests {
 
                 // Stage conditions are generated at the end in reverse order
                 (e(210); Type::Bool; Alias; e(310));
-                (e(200); Type::Bool; Alias; e(310));
+                (e(200); Type::Bool; Alias; e(210));
 
                 (reg e(501); Type::Bool; clock(n(3, "clk")); e(310));
                 (reg e(502); Type::Bool; clock(n(3, "clk")); e(501));
@@ -1277,6 +1277,76 @@ mod tests {
 
                 // Output
                 (const 3; Type::Bool; ConstantValue::Bool(true))
+            } => e(3)
+        );
+
+        let result = build_entity!(code);
+
+        assert_same_mir!(&result, &expected);
+    }
+
+    #[test]
+    fn pipeline_ready_with_multiple_stages_works() {
+        let code = r#"
+            pipeline(3) pl(clk: clock, a: int<16>) -> int<17> {
+                    let s0 = &stage.ready;
+                reg[false];
+                    let s1 = &stage.ready;
+                reg[false];
+                    let s2 = &stage.ready;
+                reg[false];
+                    let s3 = &stage.ready;
+                    a+a
+            }
+        "#;
+
+        let expected = entity!(&["pl"]; (
+                "clk", n(3, "clk"), Type::Bool,
+                "a", n(0, "a"), Type::int(16),
+            ) -> Type::int(17); {
+                (const 300; Type::Bool; ConstantValue::Bool(false));
+                (e(100); Type::int(16); Select; e(200), n(0, "a"), n(2, "s1_a"));
+                (reg n(2, "s1_a"); Type::int(16); clock(n(3, "clk")); e(100));
+
+                (const 310; Type::Bool; ConstantValue::Bool(false));
+                (e(110); Type::int(16); Select; e(210), n(2, "s1_a"), n(22, "s2_a"));
+                (reg n(22, "s2_a"); Type::int(16); clock(n(3, "clk")); e(110));
+
+                // Stage 3
+                (const 320; Type::Bool; ConstantValue::Bool(false));
+                (e(120); Type::int(16); Select; e(220), n(22, "s2_a"), n(32, "s3_a"));
+                (reg n(32, "s3_a"); Type::int(16); clock(n(3, "clk")); e(120));
+
+                // Stage conditions are generated at the end in reverse order
+                (e(220); Type::Bool; Alias; e(320));
+                (e(210); Type::Bool; LogicalAnd; e(310), e(220));
+                (e(200); Type::Bool; LogicalAnd; e(300), e(210));
+
+                // Stage valid signals
+                (reg e(500); Type::Bool; clock(n(3, "clk")); e(300));
+                (e(410); Type::Bool; LogicalAnd; e(310), e(500));
+                (reg e(501); Type::Bool; clock(n(3, "clk")); e(410));
+                (e(420); Type::Bool; LogicalAnd; e(320), e(501));
+                (reg e(502); Type::Bool; clock(n(3, "clk")); e(420));
+
+                (e(800); Type::Bool; Alias; e(200));
+                (e(801); Type::Bool; Alias; e(800));
+                (n(800, "s0"); Type::Bool; Alias; e(801));
+
+                (e(810); Type::Bool; Alias; e(210));
+                (e(811); Type::Bool; Alias; e(810));
+                (n(810, "s1"); Type::Bool; Alias; e(811));
+
+                (e(820); Type::Bool; Alias; e(220));
+                (e(821); Type::Bool; Alias; e(820));
+                (n(820, "s2"); Type::Bool; Alias; e(821));
+
+                (const 830; Type::Bool; ConstantValue::Bool(true));
+                (e(831); Type::Bool; Alias; e(830));
+                (n(830, "s3"); Type::Bool; Alias; e(831));
+
+                // Output
+                (e(3); Type::int(17); Add; n(32, "s3_a"), n(32, "s3_a"));
             } => e(3)
         );
 

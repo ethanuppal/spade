@@ -1,0 +1,43 @@
+struct Output {
+    s0_valid: bool,
+    s1_valid: bool,
+    s2_valid: bool,
+    s3_valid: bool,
+    s4_valid: bool,
+
+    s0_ready: bool,
+    s1_ready: bool,
+    s2_ready: bool,
+    s3_ready: bool,
+    s4_ready: bool,
+
+    val: int<8>
+}
+
+
+pipeline(4) ready_valid_pipeline(clk: clock, val: int<8>, enables: &[bool; 4]) -> Output {
+        let s0 = &(stage.valid, stage.ready);
+    reg[(*enables)[0]];
+        let s1 = &(stage.valid, stage.ready);
+    reg[(*enables)[1]];
+        let s2 = &(stage.valid, stage.ready);
+    reg[(*enables)[2u]];
+        let s3 = &(stage.valid, stage.ready);
+    reg[(*enables)[3u]];
+        let s4 = &(stage.valid, stage.ready);
+        Output $(
+            s0_valid: (*s0)#0,
+            s1_valid: (*s1)#0,
+            s2_valid: (*s2)#0,
+            s3_valid: (*s3)#0,
+            s4_valid: (*s4)#0,
+
+            s0_ready: (*s0)#1,
+            s1_ready: (*s1)#1,
+            s2_ready: (*s2)#1,
+            s3_ready: (*s3)#1,
+            s4_ready: (*s4)#1,
+
+            val 
+        )
+}

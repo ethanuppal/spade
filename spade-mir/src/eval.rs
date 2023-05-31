@@ -174,7 +174,9 @@ pub fn eval_statements(statements: &[Statement]) -> Value {
                     Operator::Concat => todo!(),
                     Operator::Select => todo!(),
                     Operator::Match => todo!(),
-                    Operator::ConstructArray => todo!(),
+                    Operator::ConstructArray => {
+                        Value::Concat(ops.iter().rev().map(|op| name_vals[op].clone()).collect())
+                    }
                     Operator::DeclClockedMemory { .. } => todo!(),
                     Operator::IndexArray => todo!(),
                     Operator::IndexMemory => todo!(),
@@ -218,7 +220,7 @@ pub fn eval_statements(statements: &[Statement]) -> Value {
                     Operator::FlipPort => todo!(),
                     Operator::ReadMutWires => todo!(),
                     Operator::Instance(_, _) => todo!(),
-                    Operator::Alias => todo!(),
+                    Operator::Alias => name_vals[&ops[0]].clone(),
                     Operator::Nop => todo!(),
                 };
 

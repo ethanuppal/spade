@@ -63,7 +63,12 @@ pub fn handle_statement(
     current_stage: &mut usize,
 ) -> Result<()> {
     match &statement.inner {
-        Statement::Binding(Binding{pattern: pat, value: expr, wal_trace: _, ty: _}) => {
+        Statement::Binding(Binding {
+            pattern: pat,
+            value: expr,
+            wal_trace: _,
+            ty: _,
+        }) => {
             let time = expr.inner.kind.available_in()?;
             for name in pat.get_names() {
                 let is_port = ctx
@@ -248,21 +253,20 @@ pub fn lower_pipeline<'a>(
     // in reverse order because upstream enables depend on downstream
     let mut current_enable = None;
     for (local_cond, enable_name) in local_conds.iter().zip(stage_enable_names.iter()).rev() {
-        match (local_cond, current_enable) {
+        match (local_cond, &current_enable) {
             // First time we find a condition, alias it to the enable name for the current stage
             (Some(local), None) => {
                 let name = enable_name
                     .clone()
                     .expect("No enable name for first stage that needs one");
                 statements.push_anonymous(mir::Statement::Binding(mir::Binding {
-                    // NOTE: Diagnostic::bug here?
-                    name,
+                    name: name.clone(),
                     operator: mir::Operator::Alias,
                     operands: vec![local.clone()],
                     ty: mir::types::Type::Bool,
                     loc: None,
                 }));
-                current_enable = Some(local)
+                current_enable = Some(name.clone());
             }
             (None, Some(prev)) => {
                 let name = enable_name
@@ -271,26 +275,26 @@ pub fn lower_pipeline<'a>(
                 // Since we have no new conditions, we can just alias the one from the previous
                 // stage
                 statements.push_anonymous(mir::Statement::Binding(mir::Binding {
-                    // NOTE: Diagnostic::bug here?
-                    name,
+                    name: name.clone(),
                     operator: mir::Operator::Alias,
                     operands: vec![prev.clone()],
                     ty: mir::types::Type::Bool,
                     loc: None,
                 }));
+                current_enable = Some(name.clone());
             }
             (Some(local), Some(prev)) => {
                 let name = enable_name
                     .clone()
                     .expect("No enable name for first stage that needs one");
                 statements.push_anonymous(mir::Statement::Binding(mir::Binding {
-                    // NOTE: Diagnostic::bug here?
-                    name,
+                    name: name.clone(),
                     operator: mir::Operator::LogicalAnd,
                     operands: vec![local.clone(), prev.clone()],
                     ty: mir::types::Type::Bool,
                     loc: None,
                 }));
+                current_enable = Some(name.clone());
             }
             (None, None) => {}
         }
@@ -345,7 +349,7 @@ pub fn lower_pipeline<'a>(
         valid_signals.push(last_cond.clone());
     }
 
-    let mut ready_signals = stage_enable_names.into_iter().rev().collect::<Vec<_>>();
+    let mut ready_signals = stage_enable_names.into_iter().collect::<Vec<_>>();
     // NOTE: The last stage needs a ready signal because you *can* use `stagel.ready`
     // after the last `reg` in the final output expression, but it will be `None` because
     // there is no way to for it to be disabled

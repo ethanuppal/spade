@@ -71,7 +71,12 @@ pub fn visit_statement(
     ctx: &LinearCtx,
 ) -> Result<()> {
     match &stmt.inner {
-        Statement::Binding(Binding{pattern, ty: _, value, wal_trace: _}) => {
+        Statement::Binding(Binding {
+            pattern,
+            ty: _,
+            value,
+            wal_trace: _,
+        }) => {
             visit_expression(value, linear_state, ctx)?;
             linear_state.consume_expression(&value)?;
             linear_state.push_pattern(pattern, ctx)?
@@ -83,7 +88,7 @@ pub fn visit_statement(
                 reset,
                 value,
                 value_type: _,
-                attributes: _
+                attributes: _,
             } = &reg.inner;
 
             linear_state.push_pattern(&pattern, ctx)?;

@@ -23,7 +23,12 @@ impl Passable for Loc<Statement> {
             };
         }
         match &mut self.inner {
-            Statement::Binding(Binding{pattern: _, ty: _, value: expr, wal_trace: _} ) => expr.apply(pass)?,
+            Statement::Binding(Binding {
+                pattern: _,
+                ty: _,
+                value: expr,
+                wal_trace: _,
+            }) => expr.apply(pass)?,
             Statement::Register(reg) => {
                 let Register {
                     pattern: _,
@@ -31,7 +36,7 @@ impl Passable for Loc<Statement> {
                     reset,
                     value,
                     value_type: _,
-                    attributes: _
+                    attributes: _,
                 } = &mut reg.inner;
 
                 match reset {
