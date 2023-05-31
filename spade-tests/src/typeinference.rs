@@ -693,3 +693,12 @@ snapshot_error! {
             true
     }"
 }
+
+snapshot_error! {
+    pipelines_must_have_clock,
+    "
+    pipeline(4) test(not_a_clock: bool) -> bool {
+        reg*4;
+            true
+    }"
+}

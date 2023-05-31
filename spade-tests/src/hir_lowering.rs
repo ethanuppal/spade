@@ -2008,13 +2008,13 @@ mod tests {
     #[test]
     fn instantiating_builtin_generic_pipeline_which_is_non_intrinsic_is_error() {
         let code = "
-            pipeline(1) a<T>(t: T) -> T {
+            pipeline(1) a<T>(clk: clock, t: T) -> T {
                 reg;
                     t
             }
 
-            entity main() -> int<32> {
-                inst(1) a(0)
+            entity main(clk: clock) -> int<32> {
+                inst(1) a(clk, 0)
             }
         ";
         build_items(code);

@@ -483,6 +483,10 @@ impl UnitKind {
             UnitKind::Pipeline(_) => "pipeline",
         }
     }
+
+    pub fn is_pipeline(&self) -> bool {
+        matches!(self, UnitKind::Pipeline(_))
+    }
 }
 
 #[derive(PartialEq, Debug, Clone, Serialize, Deserialize)]

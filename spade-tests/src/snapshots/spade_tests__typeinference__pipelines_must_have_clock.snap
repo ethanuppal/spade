@@ -1,0 +1,15 @@
+---
+source: spade-tests/src/typeinference.rs
+---
+pipeline(4) test(not_a_clock: bool) -> bool {
+    reg*4;
+        true
+}
+
+error: First pipeline argument must be a clock. Got bool
+  ┌─ testinput:1:31
+  │
+1 │ pipeline(4) test(not_a_clock: bool) -> bool {
+  │                               ^^^^ Expected clock
+
+

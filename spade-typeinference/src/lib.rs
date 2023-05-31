@@ -259,6 +259,18 @@ impl TypeState {
             self.add_equation(TypedExpression::Name(name.inner.clone()), tvar)
         }
 
+        if entity.head.unit_kind.is_pipeline() {
+            self.unify(
+                &TypedExpression::Name(entity.inputs[0].0.clone().inner),
+                &t_clock(&ctx.symtab),
+                &ctx.symtab,
+            )
+            .map_normal_err(|(got, expected)| Error::FirstPipelineArgNotClock {
+                expected,
+                spec: got.at_loc(&entity.inputs[0].1.loc()),
+            })?;
+        }
+
         self.visit_expression(&entity.body, ctx, &generic_list)?;
 
         // Ensure that the output type matches what the user specified, and unit otherwise
