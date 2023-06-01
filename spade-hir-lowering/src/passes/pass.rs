@@ -55,11 +55,6 @@ impl Passable for Loc<Statement> {
             Statement::Label(_) => {}
             Statement::Assert(expr) => expr.apply(pass)?,
             Statement::Set { target, value } => subnodes!(target, value),
-            Statement::Substatements(statements) => {
-                for stmt in statements {
-                    stmt.apply(pass)?;
-                }
-            }
         }
         Ok(())
     }

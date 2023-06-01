@@ -886,7 +886,7 @@ fn visit_statement(s: &Loc<ast::Statement>, ctx: &mut Context) -> Result<Vec<Loc
                         if count.inner != 1 {
                             return Err(Diagnostic::error(
                                 count,
-                                "Multiple registers with conditions can not defined",
+                                "Multiple registers with conditions can not be defined",
                             )
                             .primary_label("Multiple registers not allowed")
                             .secondary_label(cond, "Condition specified here")

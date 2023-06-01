@@ -206,12 +206,6 @@ impl<'a> Inferer<'a> {
                 self.expression(&register.value)?;
             }
 
-            Statement::Substatements(stmts) => {
-                for stmt in stmts {
-                    self.handle_statement(stmt)?;
-                }
-            }
-
             // Nothing to be done for these since they contain no expressions and thus no
             // integer operations.
             Statement::Declaration(_) | Statement::PipelineRegMarker(_) | Statement::Label(_) => {}

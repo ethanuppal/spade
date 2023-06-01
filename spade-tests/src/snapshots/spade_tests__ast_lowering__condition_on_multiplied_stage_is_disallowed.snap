@@ -7,7 +7,7 @@ pipeline(3) x(clk: clock) -> bool {
 }
 
 
-error: Multiple registers with conditions can not defined
+error: Multiple registers with conditions can not be defined
   ┌─ testinput:2:16
   │
 2 │     reg[false]*3;

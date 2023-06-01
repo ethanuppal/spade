@@ -78,7 +78,7 @@ pub fn visit_statement(
             wal_trace: _,
         }) => {
             visit_expression(value, linear_state, ctx)?;
-            linear_state.consume_expression(&value)?;
+            linear_state.consume_expression(value)?;
             linear_state.push_pattern(pattern, ctx)?
         }
         Statement::Register(reg) => {
@@ -91,7 +91,7 @@ pub fn visit_statement(
                 attributes: _,
             } = &reg.inner;
 
-            linear_state.push_pattern(&pattern, ctx)?;
+            linear_state.push_pattern(pattern, ctx)?;
 
             visit_expression(clock, linear_state, ctx)?;
             if let Some((trig, val)) = &reset {
@@ -101,7 +101,7 @@ pub fn visit_statement(
 
             visit_expression(value, linear_state, ctx)?;
 
-            linear_state.consume_expression(&value)?;
+            linear_state.consume_expression(value)?;
         }
         Statement::Declaration(names) => {
             for name in names {
@@ -120,11 +120,6 @@ pub fn visit_statement(
             visit_expression(value, linear_state, ctx)?;
             linear_state.consume_expression(target)?;
             linear_state.consume_expression(value)?;
-        }
-        Statement::Substatements(stmts) => {
-            for stmt in stmts {
-                visit_statement(stmt, linear_state, ctx)?;
-            }
         }
     }
     Ok(())

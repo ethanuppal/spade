@@ -150,7 +150,6 @@ pub enum Statement {
         target: Loc<Expression>,
         value: Loc<Expression>,
     },
-    Substatements(Vec<Loc<Statement>>),
 }
 impl WithLocation for Statement {}
 

@@ -1002,11 +1002,6 @@ impl StatementLocal for Statement {
                     value: value.variable(ctx.subs)?.at_loc(value),
                 })
             }
-            Statement::Substatements(statements) => {
-                for stmt in statements {
-                    result.append(stmt.lower(ctx)?);
-                }
-            }
         }
         Ok(result)
     }

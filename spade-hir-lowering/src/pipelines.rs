@@ -155,20 +155,6 @@ pub fn handle_statement(
             }
             *current_stage += 1;
         }
-        Statement::Substatements(sub) => {
-            for statement in sub {
-                handle_statement(
-                    statement,
-                    ctx,
-                    name_map,
-                    statements,
-                    clock,
-                    local_conds,
-                    stage_enable_names,
-                    current_stage,
-                )?;
-            }
-        }
         Statement::Label(_) => {
             // Labels have no effect on codegen
         }
