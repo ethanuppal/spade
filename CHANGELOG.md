@@ -9,7 +9,18 @@ released as a new version.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
-## [Unreleased]
+
+### Added
+
+### Fixed
+
+### Changed
+
+### Removed
+
+### Internal
+
+## [0.3.0]
 
 ### Added
 
@@ -25,10 +36,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - [!178][!178] `sext` and `zext` now error when trying to reduce the width
 - [!188][!188] Fix codegen bug when indexing structs or tuples which are 1 bit wide.
 - [!201][!201] Stop producing `spade.sv` when monomorphisation fails
-
-### Changed
-
-### Removed
 
 ### Internal
 
@@ -86,6 +93,7 @@ Initial numbered version
 
 [Associated Swim release](https://gitlab.com/spade-lang/swim/-/tree/v0.1.0)
 
-[Unreleased]: https://gitlab.com/spade-lang/spade/-/compare/v0.2.0...master
+[Unreleased]: https://gitlab.com/spade-lang/spade/-/compare/v0.3.0...master
+[0.3.0]: https://gitlab.com/spade-lang/spade/-/compare/v0.2.0...v0.3.0
 [0.2.0]: https://gitlab.com/spade-lang/spade/-/compare/v0.1.0...v0.2.0
 [0.1.0]: https://gitlab.com/spade-lang/spade/-/tree/v0.1.0
