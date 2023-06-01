@@ -55,7 +55,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ### Added
 
 - [!155][!155] Support for specifying initial content of memories.
-- [!155][!155] Support for specifying initial content of memories.
 - [!154][!154] Add unsigned literals, for example `let x: int<8> 255u` as a
   stop gap solution until proper unsigned types are implemented
 - [!169][!169] Add `!=` operator

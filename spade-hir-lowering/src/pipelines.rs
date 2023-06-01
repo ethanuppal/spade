@@ -17,10 +17,10 @@ use crate::ExprLocal;
 use crate::{error::Error, statement_list::StatementList, MirLowerable, NameIDExt, Result};
 
 pub struct PipelineContext {
-    // NOTE: Current stage is being kept track of by [Context::Substitutions]
     /// Mapping from stage index to the corresponding enable signal, i.e. what
     /// `stage.ready` should map to. If the stage is unconditionally enabled,
     /// the corresponding value is `None`
+    // NOTE: Current stage is being kept track of by [Context::Substitutions]
     pub ready_signals: Vec<Option<ValueName>>,
     /// Mapping from stage index to the corresponding valid signal. I.e. what
     /// `stage.valid` should map to. If the stage is always valid, the corresponding
@@ -336,7 +336,7 @@ pub fn lower_pipeline<'a>(
     }
 
     let mut ready_signals = stage_enable_names.into_iter().collect::<Vec<_>>();
-    // NOTE: The last stage needs a ready signal because you *can* use `stagel.ready`
+    // NOTE: The last stage needs a ready signal because you *can* use `stage.ready`
     // after the last `reg` in the final output expression, but it will be `None` because
     // there is no way to for it to be disabled
     ready_signals.push(None);

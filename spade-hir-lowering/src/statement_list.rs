@@ -17,8 +17,8 @@ impl StatementList {
         }
     }
 
-    /// Pushes a statemnt which has no associated name or id. Currently used for asserts
-    /// , wal_tracing, and pipeline enable signals
+    /// Pushes a statemnt which has no associated name or id. Currently used for asserts,
+    /// wal_tracing, and pipeline enable signals
     pub fn push_anonymous(&mut self, stmt: Statement) {
         self.stmts.push(stmt)
     }
