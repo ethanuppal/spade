@@ -2976,6 +2976,26 @@ mod tests {
             }
         "
     }
+
+    #[test]
+    fn method_in_pipeline_works() {
+        let code = "
+            struct X {x: bool}
+            impl X {
+                fn a(self) -> bool {
+                    true
+                }
+            }
+
+            pipeline(1) test(clk: clock, x: X) -> bool {
+                reg;
+                    let result = x.a();
+                    result
+            }
+        ";
+
+        build_items(code);
+    }
 }
 
 #[cfg(test)]

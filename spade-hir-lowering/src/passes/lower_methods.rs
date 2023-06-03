@@ -5,7 +5,6 @@ use spade_common::{
 use spade_diagnostics::Diagnostic;
 use spade_hir::{
     expression::NamedArgument, symbol_table::FrozenSymtab, ArgumentList, Expression, ItemList,
-    Statement,
 };
 use spade_typeinference::{method_resolution::select_method, HasType, TypeState};
 
@@ -84,10 +83,6 @@ impl<'a> Pass for LowerMethods<'a> {
             Some(new) => expression.kind = new,
             None => {}
         }
-        Ok(())
-    }
-
-    fn visit_statement(&mut self, _statement: &mut Loc<Statement>) -> crate::error::Result<()> {
         Ok(())
     }
 }

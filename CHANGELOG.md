@@ -14,11 +14,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Fixed
 
+- [!205][!205] Fix panic on method calls in let bindings
+
 ### Changed
 
 ### Removed
 
 ### Internal
+
+
+[!205]: https://gitlab.com/spade-lang/spade/-/merge_requests/205
 
 ## [0.3.0]
 
