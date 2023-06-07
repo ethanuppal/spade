@@ -1,13 +1,9 @@
-use std::collections::HashMap;
-
 use num::{
     bigint::{Sign, ToBigUint},
     BigInt, BigUint, ToPrimitive, Zero,
 };
 use spade_common::num_ext::InfallibleToBigUint;
-use spade_hir_lowering::{MirLowerable, NameIDExt};
-use spade_mir::{codegen::escape_path, ValueName};
-use spade_typeinference::equation::TypedExpression;
+use spade_hir_lowering::MirLowerable;
 use spade_types::{ConcreteType, PrimitiveType};
 use vcd::Value;
 
@@ -21,21 +17,6 @@ impl BigUintExt for BigUint {
         self.to_usize()
             .expect(&format!("Bit counts > {} are unsupported", usize::MAX))
     }
-}
-
-pub fn translate_names(
-    input: HashMap<TypedExpression, Option<ConcreteType>>,
-) -> HashMap<String, Option<ConcreteType>> {
-    input
-        .into_iter()
-        .map(|(key, value)| {
-            let name = match key {
-                TypedExpression::Id(id) => ValueName::Expr(id).var_name(),
-                TypedExpression::Name(name_id) => escape_path(&name_id.value_name().var_name()),
-            };
-            (name, value)
-        })
-        .collect()
 }
 
 #[derive(Debug, PartialEq, Hash, Eq)]
@@ -297,19 +278,11 @@ pub fn inner_translate_value(result: &mut String, in_value: &[Value], t: &Concre
     }
 }
 
-pub fn translate_value(
-    name: &str,
-    value: &[Value],
-    types: &HashMap<String, Option<ConcreteType>>,
-) -> Option<String> {
+pub fn translate_value(ty: &ConcreteType, value: &[Value]) -> String {
     let mut result = String::new();
     // Try to translate the name back into a name_id
-    if let Some(Some(t)) = types.get(name) {
-        inner_translate_value(&mut result, value, t);
-        Some(result)
-    } else {
-        None
-    }
+    inner_translate_value(&mut result, value, ty);
+    result
 }
 
 // Translates a string of `01XZ` characters into the corresponding

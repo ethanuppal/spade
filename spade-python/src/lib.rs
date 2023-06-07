@@ -9,7 +9,7 @@ use logos::Logos;
 use num::{BigUint, ToPrimitive, Zero};
 use pyo3::prelude::*;
 
-use ::spade::compiler_state::{CompilerState, MirContext};
+use ::spade::compiler_state::{type_of_hierarchical_value, CompilerState, MirContext};
 use spade_ast_lowering::id_tracker::{ExprIdTracker, ImplIdTracker};
 use spade_common::location_info::{Loc, WithLocation};
 use spade_common::name::{Identifier, NameID, Path as SpadePath};
@@ -24,7 +24,6 @@ use spade_hir_lowering::substitution::Substitutions;
 use spade_hir_lowering::{expr_to_mir, MirLowerable};
 use spade_mir::codegen::mangle_input;
 use spade_mir::eval::eval_statements;
-use spade_mir::renaming::NameSource;
 use spade_mir::unit_name::InstanceMap;
 use spade_parser::lexer;
 use spade_parser::Parser;
@@ -406,82 +405,22 @@ impl Spade {
 
     // Translate a value from a verilog instance path into a string value
     fn translate_value(&self, path: &str, value: &str) -> PyResult<String> {
-        let mut hierarchy = path.split(".").collect::<Vec<_>>();
+        let hierarchy = path.split(".").map(str::to_string).collect::<Vec<_>>();
         if hierarchy.len() == 0 {
             return Err(anyhow!("{path} is not a hierarchy path").into());
         };
 
-        // NOTE: Safe unwrap, we already checked that there is at least one item
-        // in the hierarchy
-        let value_name = hierarchy.pop().unwrap();
-
-        // Lookup the name_id of the instance we want to query for the value_name in
-        let mut current_unit = &self.uut_nameid;
-        let mut path_so_far = vec![format!("{}", self.uut_nameid)];
-        while let Some(next_instance_name) = hierarchy.pop() {
-            let next = self
-                .instance_map
-                .inner
-                .get(&current_unit.clone())
-                .ok_or_else(|| {
-                    let candidates = self
-                        .instance_map
-                        .inner
-                        .keys()
-                        .map(|v| format!("{v:?}"))
-                        .join("\n     ");
-                    anyhow!(
-                        "(internal) Did not find a unit named {:?}\nCandidates:\n    {candidates}",
-                        &current_unit
-                    )
-                })?
-                .get(next_instance_name);
-            if let Some(next) = next {
-                current_unit = next;
-            } else {
-                return Err(anyhow!(
-                    "{} has no spade unit instance named {next_instance_name}",
-                    path_so_far.join(".")
-                )
-                .into());
-            };
-            path_so_far.push(next_instance_name.to_string());
-        }
-
-        // Look up the mir context of the unit we are observing
-        let mir_ctx = self
-            .mir_context
-            .get(current_unit)
-            .ok_or_else(|| anyhow!("Did not find information a unit named {current_unit}"))?;
-
-        let source = mir_ctx
-            .verilog_name_map
-            .lookup_name(value_name)
-            .ok_or_else(|| {
-                anyhow!(
-                    "Did not find spade variable for verilog identifier '{value_name}' in '{path}'"
-                )
-            })?;
-
-        let typed_expr = match source {
-            NameSource::ForwardName(n) => TypedExpression::Name(n.clone()),
-            NameSource::ForwardExpr(id) => TypedExpression::Id(*id),
-            NameSource::BackwardName(_) | NameSource::BackwardExpr(_) => {
-                return Err(anyhow!("Translation of backward port types is unsupported").into())
-            }
-        };
-
-        let ty = mir_ctx
-            .type_map
-            .type_of(&typed_expr)
-            .ok_or_else(|| anyhow!("Did not find a type for {typed_expr}"))?;
-
-        let concrete = TypeState::ungenerify_type(
-            ty,
-            self.owned.as_ref().unwrap().symtab.symtab(),
-            &self.item_list.types,
-        )
-        .ok_or_else(|| anyhow!("Tried to ungenerify generic type {ty}"))?;
+        let concrete = type_of_hierarchical_value(
+            &self.uut_nameid,
+            &hierarchy,
+            &self.instance_map,
+            &self.mir_context,
+            self.owned
+                .as_ref()
+                .map(|state| state.symtab.symtab())
+                .unwrap(),
+            &self.item_list,
+        )?;
 
         Ok(val_to_spade(value, concrete))
     }

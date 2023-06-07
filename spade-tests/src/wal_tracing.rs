@@ -1,7 +1,7 @@
 use spade::Artefacts;
 use spade_common::{location_info::WithLocation, name::Path, num_ext::InfallibleToBigUint};
 use spade_hir_lowering::MirLowerable;
-use spade_mir::{renaming::NameSource, types::Type};
+use spade_mir::{renaming::VerilogNameSource, types::Type};
 use spade_typeinference::{equation::TypedExpression, TypeState};
 
 use crate::build_artifacts;
@@ -29,9 +29,9 @@ fn get_field_type(artefacts: &Artefacts, target_name: &str) -> Type {
         ));
 
     let typed_expr = match source {
-        NameSource::ForwardName(n) => TypedExpression::Name(n.clone()),
-        NameSource::ForwardExpr(id) => TypedExpression::Id(*id),
-        NameSource::BackwardName(_) | NameSource::BackwardExpr(_) => {
+        VerilogNameSource::ForwardName(n) => TypedExpression::Name(n.clone()),
+        VerilogNameSource::ForwardExpr(id) => TypedExpression::Id(*id),
+        VerilogNameSource::BackwardName(_) | VerilogNameSource::BackwardExpr(_) => {
             panic!("Translation of backward port types is unsupported")
         }
     };

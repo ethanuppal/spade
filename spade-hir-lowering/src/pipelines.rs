@@ -3,6 +3,7 @@ use std::collections::BTreeMap;
 use local_impl::local_impl;
 use mir::Register;
 use mir::ValueName;
+use mir::ValueNameSource;
 use spade_common::{location_info::Loc, name::NameID};
 use spade_diagnostics::diag_bail;
 use spade_diagnostics::Diagnostic;
@@ -139,7 +140,11 @@ pub fn handle_statement(
 
                 statements.push_secondary(
                     mir::Statement::Register(mir::Register {
-                        name: reg.new.value_name(),
+                        name: reg
+                            .new
+                            .value_name_with_alternate_source(ValueNameSource::Name(
+                                reg.original.inner.clone(),
+                            )),
                         ty: reg_type,
                         clock: clock.value_name(),
                         reset: None,

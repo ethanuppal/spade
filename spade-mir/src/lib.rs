@@ -17,7 +17,7 @@ use derivative::Derivative;
 use itertools::Itertools;
 
 use num::{BigInt, BigUint};
-use renaming::NameSource;
+use renaming::VerilogNameSource;
 use spade_common::{
     location_info::{Loc, WithLocation},
     name::NameID,
@@ -77,7 +77,8 @@ impl From<&ValueName> for ValueNameSource {
 
 /// A name of a value. Can either come from the NameID of the underlying
 /// variable, or the id of the underlying expression
-#[derive(Clone, PartialEq, Debug, Hash, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(Derivative, Clone, Debug, serde::Serialize, serde::Deserialize)]
+#[derivative(Hash, Eq, PartialEq)]
 pub enum ValueName {
     /// A named value in the code with with an index to make that name locally unique
     Named(
@@ -87,8 +88,8 @@ pub enum ValueName {
         // to the current module, the id will be appended
         String,
         // The original name ID from which this name originates
-        // NOTE: Not checked by MIR diff
-        ValueNameSource,
+        // NOTE: Not checked by MIR diff because it is only a metadata field
+        #[derivative(Hash = "ignore", PartialEq = "ignore")] ValueNameSource,
     ),
     // FIXME: Consider renaming this since it's now used for both patterns and expressions
     /// An un-named expression. In the resulting verilog, this is called _e_$id
@@ -98,24 +99,24 @@ pub enum ValueName {
 impl WithLocation for ValueName {}
 
 impl ValueName {
-    pub fn verilog_name_source_fwd(&self) -> NameSource {
+    pub fn verilog_name_source_fwd(&self) -> VerilogNameSource {
         match self {
             ValueName::Named(_, _, ValueNameSource::Name(name_id)) => {
-                NameSource::ForwardName(name_id.clone())
+                VerilogNameSource::ForwardName(name_id.clone())
             }
             ValueName::Named(_, _, ValueNameSource::Expr(id)) | ValueName::Expr(id) => {
-                NameSource::ForwardExpr(*id)
+                VerilogNameSource::ForwardExpr(*id)
             }
         }
     }
 
-    pub fn verilog_name_source_back(&self) -> NameSource {
+    pub fn verilog_name_source_back(&self) -> VerilogNameSource {
         match self {
             ValueName::Named(_, _, ValueNameSource::Name(name_id)) => {
-                NameSource::BackwardName(name_id.clone())
+                VerilogNameSource::BackwardName(name_id.clone())
             }
             ValueName::Named(_, _, ValueNameSource::Expr(id)) | ValueName::Expr(id) => {
-                NameSource::BackwardExpr(*id)
+                VerilogNameSource::BackwardExpr(*id)
             }
         }
     }

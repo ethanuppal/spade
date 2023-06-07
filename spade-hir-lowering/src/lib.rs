@@ -176,12 +176,18 @@ impl MirLowerable for ConcreteType {
 pub trait NameIDExt {
     /// Return the corresponding MIR value name for this NameID
     fn value_name(&self) -> mir::ValueName;
+
+    fn value_name_with_alternate_source(&self, source: ValueNameSource) -> mir::ValueName;
 }
 
 impl NameIDExt for NameID {
     fn value_name(&self) -> mir::ValueName {
+        self.value_name_with_alternate_source(ValueNameSource::Name(self.clone()))
+    }
+
+    fn value_name_with_alternate_source(&self, source: ValueNameSource) -> mir::ValueName {
         let mangled = format!("{}", self.1.tail());
-        mir::ValueName::Named(self.0, mangled, ValueNameSource::Name(self.clone()))
+        mir::ValueName::Named(self.0, mangled, source)
     }
 }
 

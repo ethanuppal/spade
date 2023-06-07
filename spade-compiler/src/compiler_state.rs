@@ -1,15 +1,24 @@
 use std::collections::{BTreeMap, HashMap};
 
+use color_eyre::eyre::anyhow;
+use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 use spade_ast_lowering::id_tracker::{ExprIdTracker, ImplIdTracker};
 use spade_common::name::NameID;
-use spade_hir::{symbol_table::FrozenSymtab, ItemList};
+use spade_hir::{
+    symbol_table::{FrozenSymtab, SymbolTable},
+    ItemList,
+};
 use spade_hir_lowering::{
     name_map::{NameSource, NamedValue},
     NameSourceMap,
 };
-use spade_mir::{renaming::VerilogNameMap, unit_name::InstanceMap};
-use spade_typeinference::TypeMap;
+use spade_mir::{
+    renaming::{VerilogNameMap, VerilogNameSource},
+    unit_name::InstanceMap,
+};
+use spade_typeinference::{equation::TypedExpression, TypeMap, TypeState};
+use spade_types::ConcreteType;
 
 #[derive(Serialize, Deserialize)]
 pub struct MirContext {
@@ -70,4 +79,97 @@ impl CompilerState {
             }
         }
     }
+
+    pub fn type_of_hierarchical_value(
+        &self,
+        top_module: &NameID,
+        hierarchy: &[String],
+    ) -> color_eyre::Result<ConcreteType> {
+        type_of_hierarchical_value(
+            top_module,
+            hierarchy,
+            &self.instance_map,
+            &self.mir_context,
+            &self.symtab.symtab(),
+            &self.item_list,
+        )
+    }
+}
+
+pub fn type_of_hierarchical_value(
+    top_module: &NameID,
+    hierarchy: &[String],
+    instance_map: &InstanceMap,
+    mir_contexts: &HashMap<NameID, MirContext>,
+    symtab: &SymbolTable,
+    item_list: &ItemList,
+) -> color_eyre::Result<ConcreteType> {
+    // NOTE: Safe unwrap, we already checked that there is at least one item
+    // in the hierarchy
+    let mut hierarchy = Vec::from(hierarchy).clone();
+    let value_name = hierarchy.pop().unwrap();
+
+    // Lookup the name_id of the instance we want to query for the value_name in
+    let mut current_unit = top_module;
+    let mut path_so_far = vec![format!("{}", top_module)];
+    while let Some(next_instance_name) = hierarchy.pop() {
+        let next = instance_map
+            .inner
+            .get(&current_unit.clone())
+            .ok_or_else(|| {
+                let candidates = instance_map
+                    .inner
+                    .keys()
+                    .map(|v| format!("{v:?}"))
+                    .join("\n     ");
+                anyhow!(
+                    "(internal) Did not find a unit named {:?}\nCandidates:\n    {candidates}",
+                    &current_unit
+                )
+            })?
+            .get(&next_instance_name);
+        if let Some(next) = next {
+            current_unit = next;
+        } else {
+            return Err(anyhow!(
+                "{} has no spade unit instance named {next_instance_name}",
+                path_so_far.join(".")
+            )
+            .into());
+        };
+        path_so_far.push(next_instance_name.to_string());
+    }
+
+    // Look up the mir context of the unit we are observing
+    let mir_ctx = mir_contexts
+        .get(current_unit)
+        .ok_or_else(|| anyhow!("Did not find information a unit named {current_unit}"))?;
+
+    let source = mir_ctx
+        .verilog_name_map
+        .lookup_name(&value_name)
+        .ok_or_else(|| {
+            anyhow!(
+                "Did not find spade variable for verilog identifier '{value_name}' in '{path}'",
+                path = path_so_far.join(".")
+            )
+        })?;
+
+    let typed_expr = match source {
+        VerilogNameSource::ForwardName(n) => TypedExpression::Name(n.clone()),
+        VerilogNameSource::ForwardExpr(id) => TypedExpression::Id(*id),
+        VerilogNameSource::BackwardName(_) | VerilogNameSource::BackwardExpr(_) => {
+            return Err(anyhow!("Translation of backward port types is unsupported").into())
+        }
+    };
+
+    let ty = mir_ctx
+        .type_map
+        .type_of(&typed_expr)
+        .ok_or_else(|| anyhow!("Did not find a type for {typed_expr}"))?;
+
+    let concrete = TypeState::ungenerify_type(ty, symtab, &item_list.types)
+        .ok_or_else(|| anyhow!("Tried to ungenerify generic type {ty}"))?;
+
+    Ok(concrete)
 }

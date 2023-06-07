@@ -8,7 +8,7 @@ use crate::{Binding, Entity, MirInput, Register, ValueName};
 /// Mapping from verilog name back to the corresponding NameID
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct VerilogNameMap {
-    inner: HashMap<String, NameSource>,
+    inner: HashMap<String, VerilogNameSource>,
 }
 
 impl VerilogNameMap {
@@ -19,7 +19,7 @@ impl VerilogNameMap {
     }
 
     /// If from mappings contain verilog escape characters (\\<name> ), those are removed
-    pub fn from_hash_map(hm: HashMap<String, NameSource>) -> Self {
+    pub fn from_hash_map(hm: HashMap<String, VerilogNameSource>) -> Self {
         let mut result = Self {
             inner: HashMap::new(),
         };
@@ -30,7 +30,7 @@ impl VerilogNameMap {
     }
     /// Insert the specified string into the name map. If the string contains
     /// verilog escape characters (\\<name> ), those are removed
-    pub fn insert(&mut self, from: &str, to: NameSource) {
+    pub fn insert(&mut self, from: &str, to: VerilogNameSource) {
         self.inner.insert(
             from.trim_start_matches("\\")
                 .trim_end_matches(" ")
@@ -39,13 +39,13 @@ impl VerilogNameMap {
         );
     }
 
-    pub fn lookup_name(&self, name: &str) -> Option<&NameSource> {
+    pub fn lookup_name(&self, name: &str) -> Option<&VerilogNameSource> {
         self.inner.get(&name.to_string())
     }
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
-pub enum NameSource {
+pub enum VerilogNameSource {
     ForwardName(NameID),
     BackwardName(NameID),
     ForwardExpr(u64),

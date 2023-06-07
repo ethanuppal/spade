@@ -15,6 +15,7 @@ use crate::assertion_codegen::AssertedExpression;
 use crate::eval::eval_statements;
 use crate::renaming::{make_names_predictable, VerilogNameMap};
 use crate::type_list::TypeList;
+use crate::types::Type;
 use crate::unit_name::{InstanceMap, InstanceNameTracker};
 use crate::verilog::{self, assign, logic, size_spec};
 use crate::wal::insert_wal_signals;
@@ -41,6 +42,15 @@ fn source_attribute(loc: &Option<Loc<()>>, code: &Option<CodeBundle>) -> Option<
     }
 }
 
+fn add_to_name_map(name_map: &mut VerilogNameMap, name: &ValueName, ty: &Type) {
+    if ty.size() != BigUint::zero() {
+        name_map.insert(&name.var_name(), name.verilog_name_source_fwd());
+    }
+    if ty.backward_size() != BigUint::zero() {
+        name_map.insert(&name.backward_var_name(), name.verilog_name_source_back());
+    }
+}
+
 fn statement_declaration(
     statement: &Statement,
     code: &Option<CodeBundle>,
@@ -48,11 +58,10 @@ fn statement_declaration(
 ) -> Code {
     match statement {
         Statement::Binding(binding) => {
+            add_to_name_map(name_map, &binding.name, &binding.ty);
             let name = binding.name.var_name();
 
             let forward_declaration = if binding.ty.size() != BigUint::zero() {
-                name_map.insert(&name, binding.name.verilog_name_source_fwd());
-
                 vec![match &binding.ty {
                     crate::types::Type::Memory { inner, length } => {
                         let inner_w = inner.size();
@@ -69,8 +78,6 @@ fn statement_declaration(
             };
 
             let backward_declaration = if binding.ty.backward_size() != BigUint::zero() {
-                name_map.insert(&name, binding.name.verilog_name_source_back());
-
                 vec![logic(
                     &binding.name.backward_var_name(),
                     &binding.ty.backward_size(),
@@ -108,6 +115,7 @@ fn statement_declaration(
             if reg.ty.backward_size() != BigUint::zero() {
                 panic!("Attempting to put value with a backward_size != 0 in a register")
             }
+            add_to_name_map(name_map, &reg.name, &reg.ty);
             let name = reg.name.var_name();
             let declaration = verilog::reg(&name, &reg.ty.size());
             code! {
@@ -1062,6 +1070,9 @@ pub fn entity_code(
             [0] format!("output{} output__{comma}", size_spec(&output_size))
         };
         let assignment = code! {[0] assign("output__", &entity.output.var_name())};
+
+        name_map.insert("output__", entity.output.verilog_name_source_fwd());
+
         (Some(def), Some(assignment))
     } else {
         (None, None)
