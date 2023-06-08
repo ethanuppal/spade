@@ -38,11 +38,6 @@ pub struct Opt {
     #[structopt(long = "wl-infer-method", value_parser(wordlength_inference_method))]
     pub wl_infer_method: Option<spade_wordlength_inference::InferMethod>,
 
-    /// Write a mapping between expression ids/names and the types of the values
-    /// formatted in ron https://github.com/ron-rs/ron
-    #[structopt(long)]
-    pub type_dump: Option<PathBuf>,
-
     /// Write the compiler state required to continue adding modules to the project
     /// formatted in ron https://github.com/ron-rs/ron
     #[structopt(long)]
@@ -111,7 +106,6 @@ fn main() -> Result<()> {
         error_buffer: &mut buffer,
         outfile: Some(opts.outfile),
         mir_output: opts.mir_output,
-        type_dump_file: opts.type_dump,
         state_dump_file: opts.state_dump,
         item_list_file: opts.item_list,
         print_type_traceback: opts.print_type_traceback,
