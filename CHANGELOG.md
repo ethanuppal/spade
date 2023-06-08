@@ -15,15 +15,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ### Fixed
 
 - [!205][!205] Fix panic on method calls in let bindings
+- [!206][!206] Re-add working VCD translation. It now also translates more values
 
 ### Changed
 
 ### Removed
 
+- [!206][!206] Remove type dump file. This information was redundant and can be recovered from `CompilerState` instead
+
 ### Internal
 
 
 [!205]: https://gitlab.com/spade-lang/spade/-/merge_requests/205
+[!206]: https://gitlab.com/spade-lang/spade/-/merge_requests/206
 
 ## [0.3.0]
 
