@@ -64,7 +64,7 @@ fn add_new_vars(
                     &scope.children,
                     writer,
                     &new_path,
-                    &state,
+                    state,
                 )?;
                 writer.upscope()?;
             }
@@ -85,10 +85,7 @@ fn add_new_vars(
                 // we know we won't be able to find types for some values, so we'll silently skip those
                 let info = match state.type_of_hierarchical_value(top_module, &full_path) {
                     Ok(ty) => Some(VarInfo { parsed, ty }),
-                    Err(_e) => {
-                        // eprintln!("{full_path:?}: {e}");
-                        None
-                    }
+                    Err(_e) => None,
                 };
 
                 let new_map = MappedVar { raw, info };
@@ -128,10 +125,10 @@ fn main() -> Result<()> {
     }
 
     let state_file = std::fs::read_to_string(&args.state_file)
-        .with_context(|| format!("Failed to read type file {:?}", args.state_file))?;
+        .with_context(|| format!("Failed to read state file {:?}", args.state_file))?;
 
     let compiler_state: CompilerState = ron::from_str(&state_file)
-        .with_context(|| format!("failed to decode types in {:?}", args.state_file))?;
+        .with_context(|| format!("failed to decode compiler state in {:?}", args.state_file))?;
 
     let top_path = Path::from_strs(&args.top.split("::").collect::<Vec<_>>()).nowhere();
     let (top, _) = compiler_state

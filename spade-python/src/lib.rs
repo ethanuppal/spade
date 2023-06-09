@@ -406,7 +406,7 @@ impl Spade {
     // Translate a value from a verilog instance path into a string value
     fn translate_value(&self, path: &str, value: &str) -> PyResult<String> {
         let hierarchy = path.split(".").map(str::to_string).collect::<Vec<_>>();
-        if hierarchy.len() == 0 {
+        if hierarchy.is_empty() {
             return Err(anyhow!("{path} is not a hierarchy path").into());
         };
 

@@ -18,16 +18,6 @@ impl VerilogNameMap {
         }
     }
 
-    /// If from mappings contain verilog escape characters (\\<name> ), those are removed
-    pub fn from_hash_map(hm: HashMap<String, VerilogNameSource>) -> Self {
-        let mut result = Self {
-            inner: HashMap::new(),
-        };
-        for (k, v) in hm {
-            result.insert(&k, v)
-        }
-        result
-    }
     /// Insert the specified string into the name map. If the string contains
     /// verilog escape characters (\\<name> ), those are removed
     pub fn insert(&mut self, from: &str, to: VerilogNameSource) {

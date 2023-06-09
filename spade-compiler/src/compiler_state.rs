@@ -89,7 +89,7 @@ impl CompilerState {
             hierarchy,
             &self.instance_map,
             &self.mir_context,
-            &self.symtab.symtab(),
+            self.symtab.symtab(),
             &self.item_list,
         )
     }
