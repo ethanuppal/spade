@@ -1,0 +1,16 @@
+---
+source: spade-tests/src/compiler_state.rs
+---
+
+        fn sub() -> bool {
+            false
+        }
+
+        pipeline(1) main(clk: clock) -> bool {
+                let x: int<10> = 0;
+            reg;
+                false
+        }
+    
+
+Did not find spade variable for verilog identifier 's1_y' in 'main'

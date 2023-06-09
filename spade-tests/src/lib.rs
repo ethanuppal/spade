@@ -9,6 +9,8 @@ use spade_diagnostics::{CodeBundle, CompilationError, DiagHandler};
 #[cfg(test)]
 mod ast_lowering;
 #[cfg(test)]
+mod compiler_state;
+#[cfg(test)]
 mod hir_lowering;
 #[cfg(test)]
 mod integration;

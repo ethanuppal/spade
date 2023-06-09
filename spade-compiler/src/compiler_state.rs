@@ -1,7 +1,6 @@
 use std::collections::{BTreeMap, HashMap};
 
 use color_eyre::eyre::anyhow;
-use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 use spade_ast_lowering::id_tracker::{ExprIdTracker, ImplIdTracker};
 use spade_common::name::NameID;
@@ -106,7 +105,7 @@ pub fn type_of_hierarchical_value(
 ) -> color_eyre::Result<ConcreteType> {
     // NOTE: Safe unwrap, we already checked that there is at least one item
     // in the hierarchy
-    let mut hierarchy = Vec::from(hierarchy).clone();
+    let mut hierarchy = Vec::from(hierarchy);
     let value_name = hierarchy.pop().unwrap();
 
     // Lookup the name_id of the instance we want to query for the value_name in
@@ -120,11 +119,19 @@ pub fn type_of_hierarchical_value(
                 let candidates = instance_map
                     .inner
                     .keys()
-                    .map(|v| format!("{v:?}"))
-                    .join("\n     ");
+                    .map(|n| format!("    {n}"))
+                    .collect::<Vec<_>>();
+
+                let candidates_msg = if candidates.is_empty() {
+                    format!("")
+                } else {
+                    format!("  candidates\n    {}", candidates.join("    \n"))
+                };
+
                 anyhow!(
-                    "(internal) Did not find a unit named {:?}\nCandidates:\n    {candidates}",
-                    &current_unit
+                    "Did not find a unit named {} in {}\n{candidates_msg}",
+                    &next_instance_name,
+                    path_so_far.join(".")
                 )
             })?
             .get(&next_instance_name);
@@ -134,8 +141,7 @@ pub fn type_of_hierarchical_value(
             return Err(anyhow!(
                 "{} has no spade unit instance named {next_instance_name}",
                 path_so_far.join(".")
-            )
-            .into());
+            ));
         };
         path_so_far.push(next_instance_name.to_string());
     }
@@ -159,7 +165,7 @@ pub fn type_of_hierarchical_value(
         VerilogNameSource::ForwardName(n) => TypedExpression::Name(n.clone()),
         VerilogNameSource::ForwardExpr(id) => TypedExpression::Id(*id),
         VerilogNameSource::BackwardName(_) | VerilogNameSource::BackwardExpr(_) => {
-            return Err(anyhow!("Translation of backward port types is unsupported").into())
+            return Err(anyhow!("Translation of backward port types is unsupported"))
         }
     };
 

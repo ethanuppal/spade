@@ -1309,6 +1309,7 @@ dependencies = [
  "spade-mir",
  "spade-parser",
  "spade-typeinference",
+ "spade-types",
  "spade-wordlength-inference",
  "tracing",
  "tracing-subscriber",
