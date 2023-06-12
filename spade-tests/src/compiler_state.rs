@@ -128,7 +128,7 @@ test_hierarchical_lookup! { type_of_hierarchical_pipeline_value_is_found,
     }
 }
 
-snapshot_hierarchical_lookup_error! { type_of_non_existant_value,
+snapshot_hierarchical_lookup_error! { type_of_non_existent_value,
     r#"
         fn sub() -> bool {
             false
@@ -143,7 +143,7 @@ snapshot_hierarchical_lookup_error! { type_of_non_existant_value,
     ["s1_y"]
 }
 
-snapshot_hierarchical_lookup_error! { type_of_non_existant_module,
+snapshot_hierarchical_lookup_error! { type_of_non_existent_module,
     r#"
         fn sub() -> bool {
             false
@@ -158,7 +158,7 @@ snapshot_hierarchical_lookup_error! { type_of_non_existant_module,
     ["not_a_module", "s1_y"]
 }
 
-snapshot_hierarchical_lookup_error! { type_of_non_existant_module_with_candidates,
+snapshot_hierarchical_lookup_error! { type_of_non_existent_module_with_candidates,
     r#"
         fn sub() -> bool {
             false
