@@ -5,10 +5,10 @@ source: spade-tests/src/parser.rs
 struct T {}
 
 
-error: Unexpected `identifier`, expected `clk`, `rst`, `,`, or `)`
+error: Invalid paremter
   ┌─ testinput:1:20
   │
 1 │ #[wal_trace(clk=x, not_a_param=x)]
-  │                    ^^^^^^^^^^^ expected `clk`, `rst`, `,`, or `)`
+  │                    ^^^^^^^^^^^ Invalid parameter
 
 

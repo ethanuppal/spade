@@ -5,11 +5,11 @@ source: spade-tests/src/parser.rs
 struct T {}
 
 
-error: clk specified multiple times
+error: clk specified more than once
   ┌─ testinput:1:20
   │
 1 │ #[wal_trace(clk=x, clk=x)]
-  │                 -  ^^^ Duplicate key
+  │                 -  ^^^ Specified multiple times
   │                 │   
   │                 Previously specified here
 

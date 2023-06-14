@@ -11,7 +11,7 @@ use num::{BigInt, BigUint};
 use serde::{Deserialize, Serialize};
 use spade_common::{
     location_info::{Loc, WithLocation},
-    name::{Identifier, NameID},
+    name::{Identifier, NameID, Path},
     num_ext::InfallibleToBigInt,
 };
 use spade_types::PrimitiveType;
@@ -295,7 +295,7 @@ impl WithLocation for Enum {}
 
 #[derive(PartialEq, Debug, Clone, Serialize, Deserialize)]
 pub struct WalSuffix {
-    pub suffix: Identifier,
+    pub suffix: Path,
     pub uses_clk: bool,
     pub uses_rst: bool,
 }

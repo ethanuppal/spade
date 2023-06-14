@@ -366,6 +366,11 @@ pub fn re_visit_type_declaration(
                     uses_rst,
                     uses_clk,
                 } => {
+                    let suffix = if let Some(suffix) = suffix {
+                        Path(vec![suffix.clone()])
+                    } else {
+                        declaration_id.1.clone()
+                    };
                     wal_suffix = Some(
                         WalSuffix {
                             suffix: suffix.clone(),

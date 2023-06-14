@@ -334,7 +334,7 @@ pub enum Attribute {
         state: Option<Loc<Identifier>>,
     },
     WalSuffix {
-        suffix: Identifier,
+        suffix: Option<Loc<Identifier>>,
         uses_clk: bool,
         uses_rst: bool,
     },

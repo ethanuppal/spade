@@ -5,8 +5,6 @@ mod expression;
 pub mod item_type;
 pub mod lexer;
 
-use std::collections::BTreeMap;
-
 use colored::*;
 use error::{ExpectedArgumentList, SuggestBraceEnumVariant};
 use local_impl::local_impl;
@@ -113,6 +111,81 @@ macro_rules! peek_for {
             return Ok(None);
         }
     };
+}
+
+macro_rules! bool_or_payload {
+    ($name:ident default) => {
+        let mut $name = false;
+    };
+    ($name:ident $rest:tt) => {
+        let mut $name = None;
+    };
+}
+macro_rules! rhs_or_present {
+    ($name:ident, $tok:expr, $s:ident, default) => {
+        $name = true
+    };
+    ($name:ident, $tok:expr, $s:ident, $subparser:tt) => {{
+        if let Some(prev) = &$name {
+            return Err(Diagnostic::error(
+                $tok,
+                format!("{} specified more than once", stringify!($name)),
+            )
+            .primary_label("Specified multiple times")
+            .secondary_label(prev, "Previously specified here")
+            .into());
+        }
+
+        $s.peek_and_eat(&TokenKind::Assignment)?;
+        $name = Some($subparser?)
+    }};
+}
+
+macro_rules! attribute_arg_parser {
+    ($self:expr, $s:ident, $result_struct:path: $($name:ident: $assignment:tt),*) => {
+        {
+            $( bool_or_payload!($name $assignment) );*;
+
+            $self.surrounded(
+                &TokenKind::OpenParen, |$s| {
+                    loop {
+                        let next = $s.peek()?;
+                        match &next.kind {
+                            $(
+                                TokenKind::Identifier(ident) if ident == stringify!($name) => {
+                                    $s.eat_unconditional()?;
+                                    rhs_or_present!($name, next, $s, $assignment);
+                                }
+                            ),*
+                            TokenKind::Identifier(_) => {
+                                return Err(Diagnostic::error(next, "Invalid paremter")
+                                    .primary_label("Invalid parameter").into())
+                            }
+                            TokenKind::Comma => {
+                                $s.eat_unconditional()?;
+                            }
+                            TokenKind::CloseParen => {
+                                break
+                            },
+                            _ => {
+                                return Err(Error::UnexpectedToken {
+                                    got: next,
+                                    expected: vec!["identifier", ",", ")"],
+                                })
+                            }
+                        }
+                    }
+
+                    Ok(())
+                },
+                &TokenKind::CloseParen
+            )?;
+
+            $result_struct {
+                $($name),*
+            }
+        }
+    }
 }
 
 // Actual parsing functions
@@ -1609,48 +1682,10 @@ impl<'a> Parser<'a> {
             }
             "wal_trace" => {
                 if self.peek_kind(&TokenKind::OpenParen)? {
-                    let (args, _) = self.surrounded(
-                        &TokenKind::OpenParen,
-                        |s| {
-                            s.comma_separated(
-                                |s| {
-                                    s.first_successful(vec![
-                                        &|s| s.attribute_key_value("clk", Self::expression),
-                                        &|s| s.attribute_key_value("rst", Self::expression),
-                                    ])
-                                },
-                                &TokenKind::CloseParen,
-                            )
-                            .extra_expected(vec!["clk", "rst"])
-                        },
-                        &TokenKind::CloseParen,
-                    )?;
-
-                    let mut unique = BTreeMap::new();
-                    for (key, val) in args.into_iter().filter_map(|x| x) {
-                        if let Some(prev) = unique.get(&key) {
-                            return Err(Diagnostic::error(
-                                &key,
-                                format!("{key} specified multiple times"),
-                            )
-                            .primary_label("Duplicate key")
-                            .secondary_label(prev, "Previously specified here")
-                            .into());
-                        }
-                        if key.inner != "clk" && key.inner != "rst" {
-                            return Err(Diagnostic::error(
-                                &key,
-                                format!("Invalid parameter {key} for wal_trace attribute"),
-                            )
-                            .into());
-                        }
-                        unique.insert(key, val);
-                    }
-
-                    Ok(Attribute::WalTrace {
-                        clk: unique.get(&"clk".to_string().nowhere()).cloned(),
-                        rst: unique.get(&"rst".to_string().nowhere()).cloned(),
-                    })
+                    Ok(attribute_arg_parser!(self, s, Attribute::WalTrace:
+                        clk: {s.expression()},
+                        rst: {s.expression()}
+                    ))
                 } else {
                     Ok(Attribute::WalTrace {
                         clk: None,
@@ -1659,6 +1694,11 @@ impl<'a> Parser<'a> {
                 }
             }
             "wal_suffix" => {
+                // Ok(attribute_arg_parser!(self, s, Attribute::WalSuffix:
+                //     suffix: {s.identifier()},
+                //     uses_clk: default,
+                //     uses_rst: default
+                // ))
                 let ((suffix, uses_clk, uses_rst), _) = self.surrounded(
                     &TokenKind::OpenParen,
                     |s| {
@@ -1698,7 +1738,7 @@ impl<'a> Parser<'a> {
                     &TokenKind::CloseParen,
                 )?;
                 Ok(Attribute::WalSuffix {
-                    suffix: suffix.inner,
+                    suffix: Some(suffix),
                     uses_clk,
                     uses_rst,
                 })
@@ -1797,7 +1837,7 @@ impl<'a> Parser<'a> {
     fn surrounded<T>(
         &mut self,
         start: &TokenKind,
-        inner: impl Fn(&mut Self) -> Result<T>,
+        mut inner: impl FnMut(&mut Self) -> Result<T>,
         end_kind: &TokenKind,
     ) -> Result<(T, Loc<()>)> {
         let opener = self.eat(start)?;
