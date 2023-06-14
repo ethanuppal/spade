@@ -1,7 +1,7 @@
 ---
 source: spade-tests/src/hir_lowering.rs
 ---
-#[wal_suffix(_)]
+#[wal_traceable()]
 struct port T {
     a: (&bool, &mut bool)
 }

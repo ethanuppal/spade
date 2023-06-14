@@ -57,7 +57,7 @@ fn get_field_type(artefacts: &Artefacts, target_name: &str) -> Type {
 #[test]
 fn wal_traced_struct_with_multiple_backward_ports_has_type_information() {
     let code = r#"
-        #[wal_suffix(__wal_suffix__)]
+        #[wal_traceable(suffix = __wal_suffix__)]
         struct port Test {
             a: &int<8>,
             b: &mut int<4>,

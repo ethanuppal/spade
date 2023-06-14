@@ -1,7 +1,7 @@
 ---
 source: spade-tests/src/typeinference.rs
 ---
-#[wal_suffix(__)]
+#[wal_traceable(suffix = __)]
 struct T {}
 fn test(t: T, x: bool) -> bool {
     #[wal_trace(clk=x)]

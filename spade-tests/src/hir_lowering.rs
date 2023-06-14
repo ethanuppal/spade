@@ -2673,7 +2673,7 @@ mod tests {
     #[test]
     fn wal_traced_struct_is_traced() {
         let code = r#"
-            #[wal_suffix(__wal_suffix__)]
+            #[wal_traceable(suffix = __wal_suffix__)]
             struct Test {
                 a: int<8>,
                 b: int<4>
@@ -2709,7 +2709,7 @@ mod tests {
     #[test]
     fn wal_traced_struct_with_backward_port_is_traced() {
         let code = r#"
-            #[wal_suffix(__wal_suffix__)]
+            #[wal_traceable(suffix = __wal_suffix__)]
             struct port Test {
                 a: &int<8>,
                 b: &mut int<4>
@@ -2760,7 +2760,7 @@ mod tests {
     #[test]
     fn wal_traced_struct_with_multiple_backward_ports_is_traced() {
         let code = r#"
-            #[wal_suffix(__wal_suffix__)]
+            #[wal_traceable(suffix = __wal_suffix__)]
             struct port Test {
                 a: &int<8>,
                 b: &mut int<4>,
@@ -2821,7 +2821,7 @@ mod tests {
     #[test]
     fn wal_traced_struct_with_clk_rst_is_traced() {
         let code = r#"
-            #[wal_suffix(__wal_suffix__, uses_clk, uses_rst)]
+            #[wal_traceable(suffix = __wal_suffix__, uses_clk, uses_rst)]
             struct Test {
                 a: int<8>,
                 b: int<4>
@@ -2861,7 +2861,7 @@ mod tests {
     snapshot_error! {
         wal_trace_with_missing_rst_is_error,
         "
-            #[wal_suffix(__wal_suffix__, uses_rst)]
+            #[wal_traceable(suffix = __wal_suffix__, uses_rst)]
             struct Test {
                 a: int<8>,
                 b: int<4>
@@ -2878,7 +2878,7 @@ mod tests {
     snapshot_error! {
         wal_trace_with_missing_clk_is_error,
         "
-            #[wal_suffix(__wal_suffix__, uses_clk)]
+            #[wal_traceable(suffix = __wal_suffix__, uses_clk)]
             struct Test {
                 a: int<8>,
                 b: int<4>
@@ -2895,7 +2895,7 @@ mod tests {
     snapshot_error! {
         wal_trace_with_extra_reset,
         "
-            #[wal_suffix(__wal_suffix__)]
+            #[wal_traceable(suffix = __wal_suffix__)]
             struct Test {
                 a: int<8>,
                 b: int<4>
@@ -2912,7 +2912,7 @@ mod tests {
     snapshot_error! {
         wal_trace_with_extra_clk,
         "
-            #[wal_suffix(__wal_suffix__)]
+            #[wal_traceable(suffix = __wal_suffix__)]
             struct Test {
                 a: int<8>,
                 b: int<4>
@@ -2964,7 +2964,7 @@ mod tests {
     snapshot_error! {
         wal_trace_on_mixed_direction_subfield_is_error,
         "
-            #[wal_suffix(_)]
+            #[wal_traceable()]
             struct port T {
                 a: (&bool, &mut bool)
             }

@@ -653,7 +653,7 @@ fn accessing_fields_of_structs_in_inverted_ports_works() {
 snapshot_error! {
     wal_trace_clk_must_be_clock,
     "
-        #[wal_suffix(__)]
+        #[wal_traceable(suffix = __)]
         struct T {}
         fn test(t: T, x: bool) -> bool {
             #[wal_trace(clk=x)]
@@ -666,7 +666,7 @@ snapshot_error! {
 snapshot_error! {
     wal_trace_rst_must_be_clock,
     "
-        #[wal_suffix(__)]
+        #[wal_traceable(suffix = __)]
         struct T {}
         fn test(t: T, x: int<10>) -> bool {
             #[wal_trace(rst=x)]

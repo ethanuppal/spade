@@ -7,6 +7,7 @@ pub mod lexer;
 
 use colored::*;
 use error::{ExpectedArgumentList, SuggestBraceEnumVariant};
+use itertools::Itertools;
 use local_impl::local_impl;
 use logos::Lexer;
 use num::{BigInt, ToPrimitive, Zero};
@@ -111,81 +112,6 @@ macro_rules! peek_for {
             return Ok(None);
         }
     };
-}
-
-macro_rules! bool_or_payload {
-    ($name:ident default) => {
-        let mut $name = false;
-    };
-    ($name:ident $rest:tt) => {
-        let mut $name = None;
-    };
-}
-macro_rules! rhs_or_present {
-    ($name:ident, $tok:expr, $s:ident, default) => {
-        $name = true
-    };
-    ($name:ident, $tok:expr, $s:ident, $subparser:tt) => {{
-        if let Some(prev) = &$name {
-            return Err(Diagnostic::error(
-                $tok,
-                format!("{} specified more than once", stringify!($name)),
-            )
-            .primary_label("Specified multiple times")
-            .secondary_label(prev, "Previously specified here")
-            .into());
-        }
-
-        $s.peek_and_eat(&TokenKind::Assignment)?;
-        $name = Some($subparser?)
-    }};
-}
-
-macro_rules! attribute_arg_parser {
-    ($self:expr, $s:ident, $result_struct:path: $($name:ident: $assignment:tt),*) => {
-        {
-            $( bool_or_payload!($name $assignment) );*;
-
-            $self.surrounded(
-                &TokenKind::OpenParen, |$s| {
-                    loop {
-                        let next = $s.peek()?;
-                        match &next.kind {
-                            $(
-                                TokenKind::Identifier(ident) if ident == stringify!($name) => {
-                                    $s.eat_unconditional()?;
-                                    rhs_or_present!($name, next, $s, $assignment);
-                                }
-                            ),*
-                            TokenKind::Identifier(_) => {
-                                return Err(Diagnostic::error(next, "Invalid paremter")
-                                    .primary_label("Invalid parameter").into())
-                            }
-                            TokenKind::Comma => {
-                                $s.eat_unconditional()?;
-                            }
-                            TokenKind::CloseParen => {
-                                break
-                            },
-                            _ => {
-                                return Err(Error::UnexpectedToken {
-                                    got: next,
-                                    expected: vec!["identifier", ",", ")"],
-                                })
-                            }
-                        }
-                    }
-
-                    Ok(())
-                },
-                &TokenKind::CloseParen
-            )?;
-
-            $result_struct {
-                $($name),*
-            }
-        }
-    }
 }
 
 // Actual parsing functions
@@ -1666,6 +1592,104 @@ impl<'a> Parser<'a> {
     pub fn attribute_inner(&mut self) -> Result<Attribute> {
         let start = self.identifier()?;
 
+        macro_rules! bool_or_payload {
+            ($name:ident bool) => {
+                let mut $name = false;
+            };
+            ($name:ident $rest:tt) => {
+                let mut $name = None;
+            };
+        }
+        macro_rules! rhs_or_present {
+            ($name:ident, $tok:expr, $s:ident, bool) => {
+                $name = true
+            };
+            ($name:ident, $tok:expr, $s:ident, $subparser:tt) => {{
+                if let Some(prev) = &$name {
+                    return Err(Diagnostic::error(
+                        $tok,
+                        format!("{} specified more than once", stringify!($name)),
+                    )
+                    .primary_label("Specified multiple times")
+                    .secondary_label(prev, "Previously specified here")
+                    .into());
+                }
+
+                $s.peek_and_eat(&TokenKind::Assignment)?;
+                $name = Some($subparser?)
+            }};
+        }
+
+        macro_rules! attribute_arg_parser {
+            ($attr:ident, $self:expr, $s:ident, $result_struct:path: $($name:ident: $assignment:tt),*) => {
+                {
+                $( bool_or_payload!($name $assignment) );*;
+
+                let params = vec![$(stringify!($name)),*];
+
+                $self.surrounded(
+                    &TokenKind::OpenParen, |$s| {
+                        loop {
+                            let next = $s.peek()?;
+                            match &next.kind {
+                                $(
+                                    TokenKind::Identifier(ident) if ident == stringify!($name) => {
+                                        $s.eat_unconditional()?;
+                                        rhs_or_present!($name, next, $s, $assignment);
+                                    }
+                                ),*
+                                TokenKind::Identifier(_) => {
+                                    return Err(Diagnostic::error(next, format!("Invalid paremter for {}", stringify!($attr)))
+                                        .primary_label("Invalid parameter")
+                                        .note(if params.is_empty() {
+                                            format!(
+                                                "{} does not take any parameters",
+                                                stringify!($attr)
+                                            )
+                                        } else if params.len() == 1 {
+                                            format!(
+                                                "{} only takes the parameter {}",
+                                                stringify!($attr),
+                                                params[0]
+                                            )
+                                        } else {
+                                            format!(
+                                                "{} only takes the parameters {} or {}",
+                                                stringify!($attr),
+                                                params.iter().take(params.len()-1).join(", "),
+                                                params[params.len() - 1]
+                                            )
+                                        })
+                                        .into()
+                                    )
+                                }
+                                TokenKind::Comma => {
+                                    $s.eat_unconditional()?;
+                                }
+                                TokenKind::CloseParen => {
+                                    break
+                                },
+                                _ => {
+                                    return Err(Error::UnexpectedToken {
+                                        got: next,
+                                        expected: vec!["identifier", ",", ")"],
+                                    })
+                                }
+                            }
+                        }
+
+                        Ok(())
+                    },
+                    &TokenKind::CloseParen
+                )?;
+
+                $result_struct {
+                    $($name),*
+                }
+            }
+            }
+        }
+
         match start.inner.0.as_str() {
             "no_mangle" => Ok(Attribute::NoMangle),
             "fsm" => {
@@ -1682,10 +1706,12 @@ impl<'a> Parser<'a> {
             }
             "wal_trace" => {
                 if self.peek_kind(&TokenKind::OpenParen)? {
-                    Ok(attribute_arg_parser!(self, s, Attribute::WalTrace:
-                        clk: {s.expression()},
-                        rst: {s.expression()}
-                    ))
+                    Ok(
+                        attribute_arg_parser!(wal_trace, self, s, Attribute::WalTrace:
+                            clk: {s.expression()},
+                            rst: {s.expression()}
+                        ),
+                    )
                 } else {
                     Ok(Attribute::WalTrace {
                         clk: None,
@@ -1693,56 +1719,13 @@ impl<'a> Parser<'a> {
                     })
                 }
             }
-            "wal_suffix" => {
-                // Ok(attribute_arg_parser!(self, s, Attribute::WalSuffix:
-                //     suffix: {s.identifier()},
-                //     uses_clk: default,
-                //     uses_rst: default
-                // ))
-                let ((suffix, uses_clk, uses_rst), _) = self.surrounded(
-                    &TokenKind::OpenParen,
-                    |s| {
-                        let suffix = s.identifier()?;
-
-                        let (req_clk, req_rst) = if s.peek_and_eat(&TokenKind::Comma)?.is_some() {
-                            // Parse extra parameters
-                            let (relevant, extra): (Vec<_>, Vec<_>) = s
-                                .comma_separated(Self::identifier, &TokenKind::CloseParen)
-                                .extra_expected(vec!["Identifier"])?
-                                .into_iter()
-                                .partition(|i| i.inner.0 == "uses_clk" || i.inner.0 == "uses_rst");
-
-                            if let Some(extra) = extra.first() {
-                                return Err(Diagnostic::error(
-                                    extra,
-                                    format!("{extra} is not a valid parameter for wal_suffix"),
-                                )
-                                .into());
-                            }
-
-                            let relevant = relevant
-                                .iter()
-                                .map(|ident| ident.inner.0.as_str())
-                                .collect::<Vec<_>>();
-
-                            (
-                                relevant.contains(&"uses_clk"),
-                                relevant.contains(&"uses_rst"),
-                            )
-                        } else {
-                            (false, false)
-                        };
-
-                        Ok((suffix, req_clk, req_rst))
-                    },
-                    &TokenKind::CloseParen,
-                )?;
-                Ok(Attribute::WalSuffix {
-                    suffix: Some(suffix),
-                    uses_clk,
-                    uses_rst,
-                })
-            }
+            "wal_traceable" => Ok(
+                attribute_arg_parser!(wal_traceable, self, s, Attribute::WalSuffix:
+                    suffix: {s.identifier()},
+                    uses_clk: bool,
+                    uses_rst: bool
+                ),
+            ),
             other => Err(
                 Diagnostic::error(&start, format!("Unknown attribute '{other}'"))
                     .primary_label("Unrecognised attribute")
