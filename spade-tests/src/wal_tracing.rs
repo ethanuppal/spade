@@ -4,7 +4,7 @@ use spade_hir_lowering::MirLowerable;
 use spade_mir::{renaming::VerilogNameSource, types::Type};
 use spade_typeinference::{equation::TypedExpression, TypeState};
 
-use crate::build_artifacts;
+use crate::{build_artifacts, snapshot_error};
 
 fn get_field_type(artefacts: &Artefacts, target_name: &str) -> Type {
     let (name, _) = artefacts
@@ -131,4 +131,48 @@ fn wal_suffixed_struct_does_not_expand() {
         get_field_type(&artefacts, "y__wal_suffix__"),
         Type::Struct(vec![(String::from("a"), Type::Int(8u64.to_biguint()))])
     );
+}
+
+#[test]
+fn wal_suffix_on_register_works() {
+    let code = r#"
+        entity main(clk: clock, x: int<8>) -> int<8> {
+            #[wal_suffix(suffix=__wal_suffix__)]
+            reg(clk) y = x;
+            y
+        }
+    "#;
+
+    let artefacts = build_artifacts(code, true);
+
+    assert_eq!(
+        get_field_type(&artefacts, "y__wal_suffix__"),
+        Type::Int(8u64.to_biguint())
+    );
+}
+
+#[test]
+fn wal_suffix_on_unit_works() {
+    let code = r#"
+        #[wal_suffix(suffix=__wal_suffix__)]
+        entity main(clk: clock, x: int<8>) -> int<8> {
+            x
+        }
+    "#;
+
+    let artefacts = build_artifacts(code, true);
+
+    assert_eq!(get_field_type(&artefacts, "clk__wal_suffix__"), Type::Bool);
+    assert_eq!(
+        get_field_type(&artefacts, "x__wal_suffix__"),
+        Type::Int(8u64.to_biguint())
+    );
+}
+
+snapshot_error! {
+    wal_suffix_on_builtin_unit_is_error,
+    r#"
+        #[wal_suffix(suffix=__wal_suffix__)]
+        entity main(clk: clock, x: int<8>) -> int<8> __builtin__
+    "#
 }

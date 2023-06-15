@@ -9,6 +9,6 @@ error: fsm is not a valid attribute for struct
   ┌─ testinput:1:1
   │
 1 │ #[fsm]
-  │ ^^^^^^ Unrecognised attribute
+  │ ^^^^^^ Unsupported attribute for struct
 
 

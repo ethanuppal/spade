@@ -11,6 +11,6 @@ error: no_mangle is not a valid attribute for a register
   ┌─ testinput:2:5
   │
 2 │     #[no_mangle]
-  │     ^^^^^^^^^^^^ Unrecognised attribute
+  │     ^^^^^^^^^^^^ Unsupported attribute for a register
 
 

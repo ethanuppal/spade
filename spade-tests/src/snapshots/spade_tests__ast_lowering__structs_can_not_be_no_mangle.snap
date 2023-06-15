@@ -9,6 +9,6 @@ error: no_mangle is not a valid attribute for struct
   ┌─ testinput:1:1
   │
 1 │ #[no_mangle]
-  │ ^^^^^^^^^^^^ Unrecognised attribute
+  │ ^^^^^^^^^^^^ Unsupported attribute for struct
 
 

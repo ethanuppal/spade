@@ -9,7 +9,7 @@ pub mod types;
 use attributes::LocAttributeExt;
 use num::{BigInt, ToPrimitive, Zero};
 use pipelines::{int_literal_to_pipeline_stages, PipelineContext};
-use spade_diagnostics::Diagnostic;
+use spade_diagnostics::{diag_bail, Diagnostic};
 use tracing::{event, info, Level};
 
 use std::collections::{HashMap, HashSet};
@@ -406,8 +406,43 @@ pub fn visit_unit(
         .expect("Attempting to lower an entity that has not been added to the symtab previously");
     let head = head.clone(); // An offering to the borrow checker. May ferris have mercy on us all
 
-    let mut attributes = attributes.clone();
-    let unit_name = attributes.unit_name(&id.at_loc(name), name, type_params)?;
+    let mut unit_name = if !type_params.is_empty() {
+        hir::UnitName::WithID(id.clone().at_loc(name))
+    } else {
+        hir::UnitName::FullPath(id.clone().at_loc(name))
+    };
+    let mut wal_suffix = None;
+
+    attributes.lower(&mut |attr: &Loc<ast::Attribute>| match &attr.inner {
+        ast::Attribute::NoMangle => {
+            if !type_params.is_empty() {
+                let generic_list =
+                    ().between_locs(type_params.first().unwrap(), type_params.last().unwrap());
+                Err(
+                    Diagnostic::error(attr, "no_mangle is not allowed on generic units")
+                        .primary_label("no_mangle not allowed here")
+                        .secondary_label(generic_list, "Because this unit is generic")
+                        .into(),
+                )
+            } else {
+                unit_name = hir::UnitName::Unmangled(name.0.clone(), id.clone().at_loc(name));
+                Ok(None)
+            }
+        }
+        ast::Attribute::WalSuffix { suffix } => {
+            if body.is_none() {
+                return Err(Diagnostic::error(
+                    attr,
+                    "wal_suffix is not allowed on __builtin__ units",
+                )
+                .primary_label("Not allowed on __builtin__ units"));
+            }
+
+            wal_suffix = Some(suffix.clone());
+            Ok(None)
+        }
+        _ => Err(attr.report_unused("a unit").into()),
+    })?;
 
     // If this is a builtin entity
     if body.is_none() {
@@ -432,16 +467,35 @@ pub fn visit_unit(
                 )
             },
         )
-        .collect();
+        .collect::<Vec<_>>();
 
     ctx.pipeline_ctx = maybe_perform_pipelining_tasks(&unit, &head, ctx)?;
 
-    let body = body.as_ref().unwrap().try_visit(visit_expression, ctx)?;
+    let mut body = body.as_ref().unwrap().try_visit(visit_expression, ctx)?;
+
+    // Add wal_suffixes for the signals if requested. This creates new statements
+    // which we'll add to the end of the body
+    if let Some(suffix) = wal_suffix {
+        match &mut body.kind {
+            hir::ExprKind::Block(block) => {
+                block.statements.append(
+                    &mut inputs
+                        .iter()
+                        .map(|(name, _)| {
+                            hir::Statement::WalSuffixed {
+                                suffix: suffix.inner.clone(),
+                                target: name.clone(),
+                            }
+                            .at_loc(&suffix)
+                        })
+                        .collect(),
+                );
+            }
+            _ => diag_bail!(body, "Unit body was not block"),
+        }
+    }
 
     ctx.symtab.close_scope();
-
-    // Any remaining attributes are unused and will have an error reported
-    attributes.report_unused("a unit")?;
 
     info!("Checked all function arguments");
 
@@ -893,10 +947,7 @@ fn visit_statement(s: &Loc<ast::Statement>, ctx: &mut Context) -> Result<Vec<Loc
             );
             Ok(stmts)
         }
-        ast::Statement::Register(inner) => {
-            let (result, span) = visit_register(&inner, ctx)?.separate_loc();
-            Ok(vec![hir::Statement::Register(result).at_loc(&span)])
-        }
+        ast::Statement::Register(inner) => visit_register(&inner, ctx),
         ast::Statement::PipelineRegMarker(count, cond) => {
             let cond = match cond {
                 Some(cond) => {
@@ -1279,7 +1330,7 @@ fn visit_block(b: &ast::Block, ctx: &mut Context) -> Result<hir::Block> {
     Ok(hir::Block { statements, result })
 }
 
-fn visit_register(reg: &Loc<ast::Register>, ctx: &mut Context) -> Result<Loc<hir::Register>> {
+fn visit_register(reg: &Loc<ast::Register>, ctx: &mut Context) -> Result<Vec<Loc<hir::Statement>>> {
     let (reg, loc) = reg.split_loc_ref();
 
     let pattern = reg.pattern.try_visit(visit_pattern, ctx)?;
@@ -1302,6 +1353,8 @@ fn visit_register(reg: &Loc<ast::Register>, ctx: &mut Context) -> Result<Loc<hir
     } else {
         None
     };
+
+    let mut stmts = vec![];
 
     let attributes = reg.attributes.lower(&mut |attr| match &attr.inner {
         ast::Attribute::Fsm { state } => {
@@ -1327,18 +1380,38 @@ fn visit_register(reg: &Loc<ast::Register>, ctx: &mut Context) -> Result<Loc<hir
 
             Ok(Some(hir::Attribute::Fsm { state: name_id }))
         }
+        ast::Attribute::WalSuffix { suffix } => {
+            // All names in the pattern should have the suffix applied to them
+            for name in pattern.get_names() {
+                stmts.push(
+                    hir::Statement::WalSuffixed {
+                        suffix: suffix.inner.clone(),
+                        target: name.clone(),
+                    }
+                    .at_loc(suffix),
+                );
+            }
+            Ok(None)
+        }
         _ => Err(attr.report_unused("a register").into()),
     })?;
 
-    Ok(hir::Register {
-        pattern,
-        clock,
-        reset,
-        value,
-        value_type,
-        attributes,
-    }
-    .at_loc(&loc))
+    stmts.push(
+        hir::Statement::Register(
+            hir::Register {
+                pattern,
+                clock,
+                reset,
+                value,
+                value_type,
+                attributes,
+            }
+            .at_loc(&loc),
+        )
+        .at_loc(&loc),
+    );
+
+    Ok(stmts)
 }
 
 /// Ensures that there are no functions in anonymous trait impls that have conflicting
@@ -2513,7 +2586,7 @@ mod register_visiting {
                     pipeline_ctx: None
                 }
             ),
-            Ok(expected)
+            Ok(vec![hir::Statement::Register(expected).nowhere()])
         );
     }
 }
