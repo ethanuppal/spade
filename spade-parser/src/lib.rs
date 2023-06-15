@@ -1639,7 +1639,7 @@ impl<'a> Parser<'a> {
                                     }
                                 ),*
                                 TokenKind::Identifier(_) => {
-                                    return Err(Diagnostic::error(next, format!("Invalid paremter for {}", stringify!($attr)))
+                                    return Err(Diagnostic::error(next, format!("Invalid parameter for {}", stringify!($attr)))
                                         .primary_label("Invalid parameter")
                                         .note(if params.is_empty() {
                                             format!(
@@ -1720,7 +1720,7 @@ impl<'a> Parser<'a> {
                 }
             }
             "wal_traceable" => Ok(
-                attribute_arg_parser!(wal_traceable, self, s, Attribute::WalSuffix:
+                attribute_arg_parser!(wal_traceable, self, s, Attribute::WalTraceable:
                     suffix: {s.identifier()},
                     uses_clk: bool,
                     uses_rst: bool

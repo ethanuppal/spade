@@ -299,7 +299,7 @@ fn inverted_port_type() {
 }
 
 snapshot_error! {
-    wal_suffix_with_unexpected_param_is_error,
+    wal_traceable_with_unexpected_param_is_error,
     "
         #[wal_traceable(a, uses_clk, this_is_not_valid)]
         struct T {}

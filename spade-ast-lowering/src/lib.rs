@@ -864,7 +864,7 @@ fn visit_statement(s: &Loc<ast::Statement>, ctx: &mut Context) -> Result<Vec<Loc
                 }
                 ast::Attribute::NoMangle
                 | ast::Attribute::Fsm { .. }
-                | ast::Attribute::WalSuffix { .. } => Err(attr.report_unused("let binding")),
+                | ast::Attribute::WalTraceable { .. } => Err(attr.report_unused("let binding")),
             })?;
 
             Ok(vec![hir::Statement::Binding(hir::Binding {

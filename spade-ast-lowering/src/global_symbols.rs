@@ -2,7 +2,7 @@ use std::collections::HashSet;
 
 use hir::{
     symbol_table::{EnumVariant, StructCallable},
-    ItemList, TypeExpression, WalSuffix,
+    ItemList, TypeExpression, WalTraceable,
 };
 use spade_ast as ast;
 use spade_common::{
@@ -359,9 +359,9 @@ pub fn re_visit_type_declaration(
                 hir::ExecutableItem::StructInstance,
             );
 
-            let mut wal_suffix = None;
+            let mut wal_traceable = None;
             let attributes = s.attributes.lower(&mut |attr| match &attr.inner {
-                ast::Attribute::WalSuffix {
+                ast::Attribute::WalTraceable {
                     suffix,
                     uses_rst,
                     uses_clk,
@@ -371,8 +371,8 @@ pub fn re_visit_type_declaration(
                     } else {
                         declaration_id.1.clone()
                     };
-                    wal_suffix = Some(
-                        WalSuffix {
+                    wal_traceable = Some(
+                        WalTraceable {
                             suffix: suffix.clone(),
                             uses_clk: uses_clk.clone(),
                             uses_rst: uses_rst.clone(),
@@ -392,7 +392,7 @@ pub fn re_visit_type_declaration(
                     members,
                     is_port: s.is_port(),
                     attributes,
-                    wal_suffix,
+                    wal_traceable,
                 }
                 .at_loc(s),
             )

@@ -294,19 +294,19 @@ pub struct Enum {
 impl WithLocation for Enum {}
 
 #[derive(PartialEq, Debug, Clone, Serialize, Deserialize)]
-pub struct WalSuffix {
+pub struct WalTraceable {
     pub suffix: Path,
     pub uses_clk: bool,
     pub uses_rst: bool,
 }
-impl WithLocation for WalSuffix {}
+impl WithLocation for WalTraceable {}
 
 #[derive(PartialEq, Debug, Clone, Serialize, Deserialize)]
 pub struct Struct {
     pub members: ParameterList,
     pub is_port: bool,
     pub attributes: AttributeList,
-    pub wal_suffix: Option<Loc<WalSuffix>>,
+    pub wal_traceable: Option<Loc<WalTraceable>>,
 }
 impl WithLocation for Struct {}
 
@@ -542,13 +542,13 @@ impl TraitName {
 #[derive(PartialEq, Debug, Clone, Serialize, Deserialize)]
 pub enum Attribute {
     Fsm { state: NameID },
-    WalSuffix { suffix: Identifier },
+    WalTraceable { suffix: Identifier },
 }
 impl Attribute {
     pub fn name(&self) -> &str {
         match self {
             Attribute::Fsm { state: _ } => "fsm",
-            Attribute::WalSuffix { suffix: _ } => "suffix",
+            Attribute::WalTraceable { suffix: _ } => "suffix",
         }
     }
 }

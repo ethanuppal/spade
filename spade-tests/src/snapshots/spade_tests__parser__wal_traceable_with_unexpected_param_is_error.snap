@@ -5,7 +5,7 @@ source: spade-tests/src/parser.rs
 struct T {}
 
 
-error: Invalid paremter for wal_traceable
+error: Invalid parameter for wal_traceable
   ┌─ testinput:1:17
   │
 1 │ #[wal_traceable(a, uses_clk, this_is_not_valid)]

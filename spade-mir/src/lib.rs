@@ -427,7 +427,7 @@ pub enum Statement {
     /// This is a tracing signal as part of the struct value `name`
     /// I.e. the result of
     /// ```
-    /// #[wal_suffix(suffix) struct T {a: A, b: B}
+    /// #[wal_traceable(suffix) struct T {a: A, b: B}
     ///
     /// let x: T = ...`
     /// ```

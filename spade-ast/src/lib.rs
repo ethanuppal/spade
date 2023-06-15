@@ -333,7 +333,7 @@ pub enum Attribute {
     Fsm {
         state: Option<Loc<Identifier>>,
     },
-    WalSuffix {
+    WalTraceable {
         suffix: Option<Loc<Identifier>>,
         uses_clk: bool,
         uses_rst: bool,
@@ -349,7 +349,7 @@ impl Attribute {
         match self {
             Attribute::NoMangle => "no_mangle",
             Attribute::Fsm { state: _ } => "fsm",
-            Attribute::WalSuffix { .. } => "wal_suffix",
+            Attribute::WalTraceable { .. } => "wal_traceable",
             Attribute::WalTrace { .. } => "wal_trace",
         }
     }

@@ -560,18 +560,18 @@ impl PatternLocal for Loc<Pattern> {
 pub fn do_wal_trace_lowering(
     pattern: &Loc<hir::Pattern>,
     main_value_name: &ValueName,
-    wal_suffix: &Loc<hir::WalSuffix>,
+    wal_traceable: &Loc<hir::WalTraceable>,
     wal_trace: &Loc<WalTrace>,
     ty: &ConcreteType,
     result: &mut StatementList,
     ctx: &mut Context,
 ) -> Result<()> {
     let hir::WalTrace { clk, rst } = &wal_trace.inner;
-    let hir::WalSuffix {
+    let hir::WalTraceable {
         suffix,
         uses_clk,
         uses_rst,
-    } = &wal_suffix.inner;
+    } = &wal_traceable.inner;
 
     let mut check_clk_or_rst =
         |signal: &Option<Loc<Expression>>, uses: bool, name, suffix| -> Result<()> {
@@ -589,7 +589,7 @@ pub fn do_wal_trace_lowering(
                         Diagnostic::error(signal, format!("Unnecessary {name} signal"))
                             .primary_label(format!("Unnecessary {name} signal"))
                             .secondary_label(
-                                wal_suffix,
+                                wal_traceable,
                                 format!("This struct does not need a {name} signal for tracing"),
                             )
                             .into(),
@@ -598,7 +598,7 @@ pub fn do_wal_trace_lowering(
                 (Some(signal), true) => result.push_anonymous(mir::Statement::WalTrace {
                     name: main_value_name.clone(),
                     val: signal.variable(&ctx.subs)?,
-                    suffix: format!("__{suffix}__{}", wal_suffix.suffix.clone()),
+                    suffix: format!("__{suffix}__{}", wal_traceable.suffix.clone()),
                     ty: MirType::Bool,
                 }),
             }
@@ -819,7 +819,7 @@ pub fn lower_wal_trace(
 
             match ty.as_ref().map(|ty| &ty.inner.kind) {
                 Some(TypeDeclKind::Struct(s)) => {
-                    if let Some(suffix) = &s.wal_suffix {
+                    if let Some(suffix) = &s.wal_traceable {
                         do_wal_trace_lowering(
                             pattern,
                             &pattern.value_name(),
@@ -832,12 +832,12 @@ pub fn lower_wal_trace(
                     } else {
                         return Err(Diagnostic::error(
                             wal_trace,
-                            "#[wal_trace] on struct without #[wal_suffix]",
+                            "#[wal_trace] on struct without #[wal_traceable]",
                         )
-                        .primary_label(format!("{} does not have #[wal_suffix]", name))
+                        .primary_label(format!("{} does not have #[wal_traceable]", name))
                         .secondary_label(
                             pattern,
-                            format!("This has type {} which does not have #[wal_suffix]", hir_ty),
+                            format!("This has type {} which does not have #[wal_traceable]", hir_ty),
                         )
                         .note("This most likely means that the struct can not be analyzed by a wal script")
                         .into());
@@ -957,7 +957,7 @@ impl StatementLocal for Statement {
                         traced = Some(state.value_name());
                         Ok(())
                     }
-                    Attribute::WalSuffix { .. } => Err(attr.report_unused("register").into()),
+                    Attribute::WalTraceable { .. } => Err(attr.report_unused("register").into()),
                 })?;
 
                 result.push_primary(
