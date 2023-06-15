@@ -19,6 +19,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Changed
 
+- [!207][!207] Rename `wal_suffix` attribute to `wal_traceable`. It now defaults to the struct name as a suffix, but can override that using the `suffix` parameter to the attribute.
+
 ### Removed
 
 - [!206][!206] Remove type dump file. This information was redundant and can be recovered from `CompilerState` instead
@@ -28,6 +30,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 [!205]: https://gitlab.com/spade-lang/spade/-/merge_requests/205
 [!206]: https://gitlab.com/spade-lang/spade/-/merge_requests/206
+[!207]: https://gitlab.com/spade-lang/spade/-/merge_requests/207
 
 ## [0.3.0]
 
