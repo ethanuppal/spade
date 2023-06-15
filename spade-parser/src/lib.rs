@@ -1620,8 +1620,24 @@ impl<'a> Parser<'a> {
             }};
         }
 
+        macro_rules! check_required {
+            ($attr_token:expr, $name:ident) => {};
+            ($attr_token:expr, $name:ident $required:ident) => {
+                let $name = if let Some(inner) = $name {
+                    inner
+                } else {
+                    return Err(Diagnostic::error(
+                        $attr_token,
+                        format!("Missing argument '{}'", stringify!($name)),
+                    )
+                    .primary_label(format!("Missing argument '{}'", stringify!($name)))
+                    .into());
+                };
+            };
+        }
+
         macro_rules! attribute_arg_parser {
-            ($attr:ident, $self:expr, $s:ident, $result_struct:path: $($name:ident: $assignment:tt),*) => {
+            ($attr:expr, $self:expr, $s:ident, $result_struct:path{ $($name:ident $([$required:ident])?:  $assignment:tt),* }) => {
                 {
                 $( bool_or_payload!($name $assignment) );*;
 
@@ -1639,23 +1655,23 @@ impl<'a> Parser<'a> {
                                     }
                                 ),*
                                 TokenKind::Identifier(_) => {
-                                    return Err(Diagnostic::error(next, format!("Invalid parameter for {}", stringify!($attr)))
+                                    return Err(Diagnostic::error(next, format!("Invalid parameter for {}", $attr))
                                         .primary_label("Invalid parameter")
                                         .note(if params.is_empty() {
                                             format!(
                                                 "{} does not take any parameters",
-                                                stringify!($attr)
+                                                $attr
                                             )
                                         } else if params.len() == 1 {
                                             format!(
                                                 "{} only takes the parameter {}",
-                                                stringify!($attr),
+                                                $attr,
                                                 params[0]
                                             )
                                         } else {
                                             format!(
                                                 "{} only takes the parameters {} or {}",
-                                                stringify!($attr),
+                                                $attr,
                                                 params.iter().take(params.len()-1).join(", "),
                                                 params[params.len() - 1]
                                             )
@@ -1683,6 +1699,8 @@ impl<'a> Parser<'a> {
                     &TokenKind::CloseParen
                 )?;
 
+                $(check_required!($attr, $name $($required)?);)*
+
                 $result_struct {
                     $($name),*
                 }
@@ -1706,12 +1724,15 @@ impl<'a> Parser<'a> {
             }
             "wal_trace" => {
                 if self.peek_kind(&TokenKind::OpenParen)? {
-                    Ok(
-                        attribute_arg_parser!(wal_trace, self, s, Attribute::WalTrace:
-                            clk: {s.expression()},
-                            rst: {s.expression()}
-                        ),
-                    )
+                    Ok(attribute_arg_parser!(
+                        start,
+                        self,
+                        s,
+                        Attribute::WalTrace {
+                            clk: { s.expression() },
+                            rst: { s.expression() }
+                        }
+                    ))
                 } else {
                     Ok(Attribute::WalTrace {
                         clk: None,
@@ -1719,13 +1740,19 @@ impl<'a> Parser<'a> {
                     })
                 }
             }
-            "wal_traceable" => Ok(
-                attribute_arg_parser!(wal_traceable, self, s, Attribute::WalTraceable:
-                    suffix: {s.identifier()},
+            "wal_traceable" => Ok(attribute_arg_parser!(
+                start,
+                self,
+                s,
+                Attribute::WalTraceable {
+                    suffix: { s.identifier() },
                     uses_clk: bool,
                     uses_rst: bool
-                ),
-            ),
+                }
+            )),
+            "wal_suffix" => Ok(attribute_arg_parser!(start, self, s, Attribute::WalSuffix {
+                suffix [required]: {s.identifier()}
+            })),
             other => Err(
                 Diagnostic::error(&start, format!("Unknown attribute '{other}'"))
                     .primary_label("Unrecognised attribute")

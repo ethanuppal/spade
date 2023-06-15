@@ -103,6 +103,7 @@ impl Passable for Loc<Expression> {
                             }
                         }
                         Statement::Label(_) => {}
+                        Statement::WalSuffixed { .. } => {}
                         Statement::Assert(expr) => expr.apply(pass)?,
                         Statement::Set { target, value } => subnodes!(target, value),
                     }

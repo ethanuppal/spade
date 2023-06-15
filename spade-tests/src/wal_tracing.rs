@@ -91,3 +91,44 @@ fn wal_traced_struct_with_multiple_backward_ports_has_type_information() {
         Type::Int(7u64.to_biguint())
     );
 }
+
+#[test]
+fn wal_suffixed_variable_has_type_info() {
+    let code = r#"
+        entity main(x: int<8>) -> int<8> {
+            #[wal_suffix(suffix=__wal_suffix__)]
+            let y = x;
+            y
+        }
+    "#;
+
+    let artefacts = build_artifacts(code, true);
+
+    assert_eq!(
+        get_field_type(&artefacts, "y__wal_suffix__"),
+        Type::Int(8u64.to_biguint())
+    );
+}
+
+#[test]
+fn wal_suffixed_struct_does_not_expand() {
+    let code = r#"
+        #[wal_traceable()]
+        struct Test {
+            a: int<8>,
+        }
+
+        entity main(x: Test) -> Test {
+            #[wal_suffix(suffix=__wal_suffix__)]
+            let y = x;
+            y
+        }
+    "#;
+
+    let artefacts = build_artifacts(code, true);
+
+    assert_eq!(
+        get_field_type(&artefacts, "y__wal_suffix__"),
+        Type::Struct(vec![(String::from("a"), Type::Int(8u64.to_biguint()))])
+    );
+}

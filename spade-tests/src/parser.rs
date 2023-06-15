@@ -320,3 +320,14 @@ snapshot_error! {
         struct T {}
     "
 }
+
+snapshot_error! {
+    required_parameter_message_is_helpful,
+    "
+        fn main() -> bool {
+            #[wal_suffix()]
+            let x = 0;
+            x
+        }
+    "
+}

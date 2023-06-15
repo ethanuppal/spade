@@ -150,6 +150,10 @@ pub enum Statement {
         target: Loc<Expression>,
         value: Loc<Expression>,
     },
+    WalSuffixed {
+        suffix: Identifier,
+        target: Loc<NameID>,
+    },
 }
 impl WithLocation for Statement {}
 

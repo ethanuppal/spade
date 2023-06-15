@@ -834,6 +834,8 @@ fn visit_statement(s: &Loc<ast::Statement>, ctx: &mut Context) -> Result<Vec<Loc
             value,
             attrs,
         }) => {
+            let mut stmts = vec![];
+
             let hir_type = if let Some(t) = ty {
                 Some(visit_type_spec(t, &mut ctx.symtab)?)
             } else {
@@ -862,18 +864,34 @@ fn visit_statement(s: &Loc<ast::Statement>, ctx: &mut Context) -> Result<Vec<Loc
                     );
                     Ok(None)
                 }
+                ast::Attribute::WalSuffix { suffix } => {
+                    // All names in the pattern should have the suffix applied to them
+                    for name in pattern.get_names() {
+                        stmts.push(
+                            hir::Statement::WalSuffixed {
+                                suffix: suffix.inner.clone(),
+                                target: name.clone(),
+                            }
+                            .at_loc(suffix),
+                        );
+                    }
+                    Ok(None)
+                }
                 ast::Attribute::NoMangle
                 | ast::Attribute::Fsm { .. }
                 | ast::Attribute::WalTraceable { .. } => Err(attr.report_unused("let binding")),
             })?;
 
-            Ok(vec![hir::Statement::Binding(hir::Binding {
-                pattern,
-                ty: hir_type,
-                value,
-                wal_trace,
-            })
-            .at_loc(s)])
+            stmts.push(
+                hir::Statement::Binding(hir::Binding {
+                    pattern,
+                    ty: hir_type,
+                    value,
+                    wal_trace,
+                })
+                .at_loc(s),
+            );
+            Ok(stmts)
         }
         ast::Statement::Register(inner) => {
             let (result, span) = visit_register(&inner, ctx)?.separate_loc();

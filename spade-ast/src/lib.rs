@@ -342,6 +342,10 @@ pub enum Attribute {
         clk: Option<Loc<Expression>>,
         rst: Option<Loc<Expression>>,
     },
+    /// Create a copy of the marked signal with the specified suffix applied
+    WalSuffix {
+        suffix: Loc<Identifier>,
+    },
 }
 
 impl Attribute {
@@ -351,6 +355,7 @@ impl Attribute {
             Attribute::Fsm { state: _ } => "fsm",
             Attribute::WalTraceable { .. } => "wal_traceable",
             Attribute::WalTrace { .. } => "wal_trace",
+            Attribute::WalSuffix { .. } => "wal_suffix",
         }
     }
 }

@@ -875,6 +875,7 @@ impl TypeState {
             }
             // This statement have no effect on the types
             Statement::Label(_) => Ok(()),
+            Statement::WalSuffixed { .. } => Ok(()),
             Statement::Assert(expr) => {
                 self.visit_expression(expr, ctx, generic_list)?;
                 self.unify_expression_generic_error(expr, &t_bool(&ctx.symtab), &ctx.symtab)?;

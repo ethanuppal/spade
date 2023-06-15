@@ -424,6 +424,7 @@ pub enum Statement {
         target: Loc<ValueName>,
         value: Loc<ValueName>,
     },
+    // TODO: Update this documentation
     /// This is a tracing signal as part of the struct value `name`
     /// I.e. the result of
     /// ```

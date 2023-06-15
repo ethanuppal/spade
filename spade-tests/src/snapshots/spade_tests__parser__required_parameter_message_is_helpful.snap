@@ -1,0 +1,17 @@
+---
+source: spade-tests/src/parser.rs
+---
+fn main() -> bool {
+    #[wal_suffix()]
+    let x = 0;
+    x
+}
+
+
+error: Missing argument 'suffix'
+  ┌─ testinput:2:7
+  │
+2 │     #[wal_suffix()]
+  │       ^^^^^^^^^^ Missing argument 'suffix'
+
+

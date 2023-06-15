@@ -1000,6 +1000,19 @@ impl StatementLocal for Statement {
                     expr.variable(ctx.subs)?.at_loc(expr),
                 ))
             }
+            Statement::WalSuffixed { suffix, target } => {
+                let ty = ctx
+                    .types
+                    .name_type(target, ctx.symtab.symtab(), &ctx.item_list.types)?
+                    .to_mir_type();
+
+                result.push_anonymous(mir::Statement::WalTrace {
+                    name: target.value_name(),
+                    val: target.value_name(),
+                    suffix: suffix.0.clone(),
+                    ty,
+                })
+            }
             Statement::Set { target, value } => {
                 result.append(target.lower(ctx)?);
                 result.append(value.lower(ctx)?);

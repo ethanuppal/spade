@@ -208,7 +208,10 @@ impl<'a> Inferer<'a> {
 
             // Nothing to be done for these since they contain no expressions and thus no
             // integer operations.
-            Statement::Declaration(_) | Statement::PipelineRegMarker(_) | Statement::Label(_) => {}
+            Statement::Declaration(_)
+            | Statement::PipelineRegMarker(_)
+            | Statement::Label(_)
+            | Statement::WalSuffixed { .. } => {}
         }
 
         Ok(())
