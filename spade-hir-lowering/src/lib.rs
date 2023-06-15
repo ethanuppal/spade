@@ -598,7 +598,7 @@ pub fn do_wal_trace_lowering(
                 (Some(signal), true) => result.push_anonymous(mir::Statement::WalTrace {
                     name: main_value_name.clone(),
                     val: signal.variable(&ctx.subs)?,
-                    suffix: format!("__{suffix}{}", wal_suffix.suffix.clone()),
+                    suffix: format!("__{suffix}__{}", wal_suffix.suffix.clone()),
                     ty: MirType::Bool,
                 }),
             }
@@ -708,7 +708,7 @@ pub fn do_wal_trace_lowering(
             result.push_anonymous(mir::Statement::WalTrace {
                 name: main_value_name.clone(),
                 val: field_name,
-                suffix: format!("__{n}{}", suffix.clone()),
+                suffix: format!("__{n}__{}", suffix.clone()),
                 ty: mir_ty,
             });
 

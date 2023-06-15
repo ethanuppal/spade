@@ -2673,7 +2673,7 @@ mod tests {
     #[test]
     fn wal_traced_struct_is_traced() {
         let code = r#"
-            #[wal_traceable(suffix = __wal_suffix__)]
+            #[wal_traceable(suffix = wal_suffix__)]
             struct Test {
                 a: int<8>,
                 b: int<4>
@@ -2707,9 +2707,47 @@ mod tests {
     }
 
     #[test]
+    fn wal_traced_struct_with_inferred_name_is_traced() {
+        let code = r#"
+            mod m {
+                #[wal_traceable()]
+                struct Test {
+                    a: int<8>,
+                    b: int<4>
+                }
+            }
+
+            entity main(x: m::Test) -> m::Test {
+                #[wal_trace]
+                let y = x;
+                x
+            }
+        "#;
+
+        let fields = vec![
+            ("a".to_string(), Type::int(8)),
+            ("b".to_string(), Type::int(4)),
+        ];
+        let ty = Type::Struct(fields.clone());
+        let inner_types = fields.iter().map(|f| f.1.clone()).collect::<Vec<_>>();
+
+        let expected = entity!(&["main"]; (
+            "x", n(0, "x"), ty.clone(),
+        ) -> ty.clone(); {
+            (n(1, "y"); ty.clone(); Alias; n(0, "x"));
+            (e(0); Type::int(8); IndexTuple((0, inner_types.clone())); n(1, "y"));
+            (wal_trace(n(1, "y"), e(0), "__a__m::Test", Type::int(8)));
+            (e(1); Type::int(4); IndexTuple((1, inner_types.clone())); n(1, "y"));
+            (wal_trace(n(1, "y"), e(1), "__b__m::Test", Type::int(4)))
+        } => n(0, "x"));
+
+        assert_same_mir!(&build_entity!(code), &expected);
+    }
+
+    #[test]
     fn wal_traced_struct_with_backward_port_is_traced() {
         let code = r#"
-            #[wal_traceable(suffix = __wal_suffix__)]
+            #[wal_traceable(suffix = wal_suffix__)]
             struct port Test {
                 a: &int<8>,
                 b: &mut int<4>
@@ -2760,7 +2798,7 @@ mod tests {
     #[test]
     fn wal_traced_struct_with_multiple_backward_ports_is_traced() {
         let code = r#"
-            #[wal_traceable(suffix = __wal_suffix__)]
+            #[wal_traceable(suffix = wal_suffix__)]
             struct port Test {
                 a: &int<8>,
                 b: &mut int<4>,
@@ -2821,7 +2859,7 @@ mod tests {
     #[test]
     fn wal_traced_struct_with_clk_rst_is_traced() {
         let code = r#"
-            #[wal_traceable(suffix = __wal_suffix__, uses_clk, uses_rst)]
+            #[wal_traceable(suffix = wal_suffix__, uses_clk, uses_rst)]
             struct Test {
                 a: int<8>,
                 b: int<4>
@@ -2861,7 +2899,7 @@ mod tests {
     snapshot_error! {
         wal_trace_with_missing_rst_is_error,
         "
-            #[wal_traceable(suffix = __wal_suffix__, uses_rst)]
+            #[wal_traceable(suffix = wal_suffix__, uses_rst)]
             struct Test {
                 a: int<8>,
                 b: int<4>
@@ -2878,7 +2916,7 @@ mod tests {
     snapshot_error! {
         wal_trace_with_missing_clk_is_error,
         "
-            #[wal_traceable(suffix = __wal_suffix__, uses_clk)]
+            #[wal_traceable(suffix = wal_suffix__, uses_clk)]
             struct Test {
                 a: int<8>,
                 b: int<4>
@@ -2895,7 +2933,7 @@ mod tests {
     snapshot_error! {
         wal_trace_with_extra_reset,
         "
-            #[wal_traceable(suffix = __wal_suffix__)]
+            #[wal_traceable(suffix = wal_suffix__)]
             struct Test {
                 a: int<8>,
                 b: int<4>
@@ -2912,7 +2950,7 @@ mod tests {
     snapshot_error! {
         wal_trace_with_extra_clk,
         "
-            #[wal_traceable(suffix = __wal_suffix__)]
+            #[wal_traceable(suffix = wal_suffix__)]
             struct Test {
                 a: int<8>,
                 b: int<4>
