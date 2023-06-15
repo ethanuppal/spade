@@ -7,29 +7,29 @@ take the opportunity to highlight other stuff that normally doesn't fit in a blo
 
 ## Pre release procedure
 
-- [ ] Spade
-    - [ ] Update changelog
-        - [ ] Bump [unreleased] to [x.y.z].
-        - [ ] Update unreleased compare link to latest version
-        - [ ] Make sure the version header links to the diff between this and the previous version
-    - [ ] Bump cargo.toml version
-- [ ] Swim
-    - [ ] Update changelog
-        - [ ] Bump [unreleased] to [x.y.z].
-        - [ ] Make sure the version header links to the diff between this and the previous version
-    - [ ] Bump cargo.toml version
+- [x] Spade
+    - [x] Update changelog
+        - [x] Bump [unreleased] to [x.y.z].
+        - [x] Update unreleased compare link to latest version
+        - [x] Make sure the version header links to the diff between this and the previous version
+    - [x] Bump cargo.toml version
+- [x] Swim
+    - [x] Update changelog
+        - [x] Bump [unreleased] to [x.y.z].
+        - [x] Make sure the version header links to the diff between this and the previous version
+    - [x] Bump cargo.toml version
 
 ## Release
 
-- [ ] Merge changelog update MRs
-    - [ ] Spade
-    - [ ] Swim
-- [ ] Tag resulting commit as `vX.Y.Z`
-    - [ ] Spade
-    - [ ] Swim
-- [ ] Push tags
-    - [ ] Spade
-    - [ ] Swim
+- [x] Merge changelog update MRs
+    - [x] Spade
+    - [x] Swim
+- [x] Tag resulting commit as `vX.Y.Z`
+    - [x] Spade
+    - [x] Swim
+- [x] Push tags
+    - [x] Spade
+    - [x] Swim
 - [ ] Do a release on gitlab
 - [ ] Upload Spade release to zenodo
 - [ ] Update release blog post MR with link to relevant changelog section. Merge blog

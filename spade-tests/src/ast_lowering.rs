@@ -964,3 +964,13 @@ snapshot_error! {
         }
     "
 }
+
+#[test]
+fn no_mangle_compiles_on_builtin() {
+    let code = r#"
+        #[no_mangle]
+        entity drum_v(a: int<16>, b: int<16>) -> int<32> __builtin__
+    "#;
+
+    build_items(code);
+}

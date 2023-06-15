@@ -446,7 +446,6 @@ pub fn visit_unit(
 
     // If this is a builtin entity
     if body.is_none() {
-        attributes.report_unused("a unit")?;
         return Ok(hir::Item::Builtin(unit_name, head));
     }
 
