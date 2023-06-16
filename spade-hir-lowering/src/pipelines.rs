@@ -167,7 +167,7 @@ pub fn handle_statement(
             // Assertions have no effect on pipeline state
         }
         Statement::WalSuffixed { .. } => {
-            // Assertions have no effect on pipeline state
+            // Wal suffixes have no effect on pipeline state
         }
         Statement::Set { .. } => {
             // Set have no effect on pipeline state

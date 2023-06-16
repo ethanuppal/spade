@@ -424,8 +424,9 @@ pub enum Statement {
         target: Loc<ValueName>,
         value: Loc<ValueName>,
     },
-    // TODO: Update this documentation
-    /// This is a tracing signal as part of the struct value `name`
+    /// This is a tracing signal as part of the value `name`. It is used for
+    /// both individual fields if `#[wal_traceable]` and `#[wal_trace]` is used,
+    /// and whole signals if `#[wal_suffix]` is used
     /// I.e. the result of
     /// ```
     /// #[wal_traceable(suffix) struct T {a: A, b: B}
