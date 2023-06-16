@@ -632,9 +632,9 @@ pub fn do_wal_trace_lowering(
 
         let inner_backward_types = members
             .iter()
-            .map(|(_, t)| match t.to_mir_type() {
-                MirType::Backward(i) => i.as_ref().clone(),
-                other => MirType::Backward(Box::new(other)),
+            .filter_map(|(_, t)| match t.to_mir_type() {
+                MirType::Backward(i) => Some(i.as_ref().clone()),
+                _ => None,
             })
             .collect::<Vec<_>>();
 
@@ -645,14 +645,9 @@ pub fn do_wal_trace_lowering(
         let flipped_ty = MirType::Struct(
             members
                 .iter()
-                .map(|(n, ty)| {
-                    (
-                        n.clone().0.clone(),
-                        match ty.to_mir_type() {
-                            MirType::Backward(i) => i.as_ref().clone(),
-                            other => MirType::Backward(Box::new(other.clone())),
-                        },
-                    )
+                .filter_map(|(n, ty)| match ty.to_mir_type() {
+                    MirType::Backward(i) => Some((n.clone().0, i.as_ref().clone())),
+                    _ => None,
                 })
                 .collect(),
         );
@@ -667,7 +662,10 @@ pub fn do_wal_trace_lowering(
             result.push_anonymous(flipped_port);
         }
 
-        let mut i_forward = 0;
+        // The forward port has the backward variants included, so extracting `(a, &mut b, c)` will
+        // be index at 0 and 2.
+        // The backward copy only has the mut wire, so it will only be [0]
+        let mut i_all = 0;
         let mut i_backward = 0;
         for (n, ty) in members.iter() {
             let new_id = ctx.idtracker.next();
@@ -682,6 +680,7 @@ pub fn do_wal_trace_lowering(
                         mir::Operator::IndexTuple(i_backward, inner_backward_types.clone()),
                     );
                     i_backward += 1;
+                    i_all += 1;
                     result
                 }
                 other => {
@@ -689,9 +688,9 @@ pub fn do_wal_trace_lowering(
                         false,
                         other,
                         main_value_name.clone(),
-                        mir::Operator::IndexTuple(i_forward, inner_types.clone()),
+                        mir::Operator::IndexTuple(i_all, inner_types.clone()),
                     );
-                    i_forward += 1;
+                    i_all += 1;
                     result
                 }
             };

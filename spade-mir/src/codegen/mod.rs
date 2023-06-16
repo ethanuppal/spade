@@ -151,12 +151,15 @@ fn compute_tuple_index(idx: u64, sizes: &[BigUint]) -> TupleIndex {
     }
 
     let target_width = &sizes[idx as usize];
+
     let end_bit = &start_bit + target_width;
 
     let total_width: BigUint = sizes.iter().sum();
 
     // Check if this is a single bit, if so, index using just it
-    if sizes.iter().sum::<BigUint>() == 1u32.to_biguint() {
+    if target_width == &0u32.to_biguint() {
+        TupleIndex::ZeroWidth
+    } else if sizes.iter().sum::<BigUint>() == 1u32.to_biguint() {
         TupleIndex::None
     } else if target_width == &1u32.to_biguint() {
         TupleIndex::Single(total_width - start_bit - 1u32.to_biguint())
@@ -344,8 +347,8 @@ fn forward_expression_code(binding: &Binding, types: &TypeList, ops: &[ValueName
             format!("{} ? {} : {}", op_names[0], op_names[1], op_names[2])
         }
         Operator::IndexTuple(idx, ref types) => {
-            let idx =
-                compute_tuple_index(*idx, &types.iter().map(|t| t.size()).collect::<Vec<_>>());
+            let sizes = types.iter().map(|t| t.size()).collect::<Vec<_>>();
+            let idx = compute_tuple_index(*idx, &sizes);
             format!("{}{}", op_names[0], idx.verilog_code())
         }
         Operator::ConstructArray { .. } => {
@@ -2884,5 +2887,23 @@ mod expression_tests {
             .to_string(),
             expected
         );
+    }
+
+    #[test]
+    #[should_panic]
+    fn compute_index_regression() {
+        let result = compute_tuple_index(
+            2,
+            &[
+                24u32.to_biguint(),
+                17u32.to_biguint(),
+                0u32.to_biguint(),
+                2u32.to_biguint(),
+                1u32.to_biguint(),
+                1u32.to_biguint(),
+            ],
+        );
+
+        result.verilog_code();
     }
 }

@@ -77,10 +77,14 @@ pub fn mangle_output(no_mangle: &Option<Loc<()>>, input: &str) -> String {
     }
 }
 
+#[derive(PartialEq, Debug)]
 pub enum TupleIndex {
     /// The indexee is a 1 bit scalar, so no indexing should be performed.
     /// Codegens as empty string
     None,
+    /// The indexee is zer width, this is most likely caused by a a mir lowering bug
+    /// where a 0 sized type is indexed
+    ZeroWidth,
     /// The index is a single bit, i.e. codegens as [val]
     Single(BigUint),
     /// The index is a range of bits, codegens as [left:right]
@@ -91,6 +95,7 @@ impl TupleIndex {
     pub fn verilog_code(&self) -> String {
         match self {
             TupleIndex::None => format!(""),
+            TupleIndex::ZeroWidth => panic!("Computed a 0 width tuple index"),
             TupleIndex::Single(i) => format!("[{i}]"),
             TupleIndex::Range { left, right } => format!("[{left}:{right}]"),
         }

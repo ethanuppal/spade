@@ -2767,10 +2767,7 @@ mod tests {
         let ty = Type::Struct(fields.clone());
         let inner_types = fields.iter().map(|f| f.1.clone()).collect::<Vec<_>>();
 
-        let back_fields = vec![
-            ("a".to_string(), Type::Backward(Box::new(Type::int(8)))),
-            ("b".to_string(), Type::int(4)),
-        ];
+        let back_fields = vec![("b".to_string(), Type::int(4))];
         let back_ty = Type::Struct(back_fields.clone());
         let back_inner_types = back_fields.iter().map(|f| f.1.clone()).collect::<Vec<_>>();
 
@@ -2823,9 +2820,7 @@ mod tests {
         let inner_types = fields.iter().map(|f| f.1.clone()).collect::<Vec<_>>();
 
         let back_fields = vec![
-            ("a".to_string(), Type::Backward(Box::new(Type::int(8)))),
             ("b".to_string(), Type::int(4)),
-            ("c".to_string(), Type::Backward(Box::new(Type::int(16)))),
             ("d".to_string(), Type::int(7)),
         ];
         let back_ty = Type::Struct(back_fields.clone());
@@ -2841,7 +2836,7 @@ mod tests {
             (wal_trace(n(1, "y"), e(0), "__a__wal_suffix__", Type::int(8)));
             (e(1); Type::int(4); IndexTuple((0, back_inner_types.clone())); e(10));
             (wal_trace(n(1, "y"), e(1), "__b__wal_suffix__", Type::int(4)));
-            (e(2); Type::int(16); IndexTuple((1, inner_types.clone())); n(1, "y"));
+            (e(2); Type::int(16); IndexTuple((2, inner_types.clone())); n(1, "y"));
             (wal_trace(n(1, "y"), e(2), "__c__wal_suffix__", Type::int(16)));
             (e(3); Type::int(7); IndexTuple((1, back_inner_types.clone())); e(10));
             (wal_trace(n(1, "y"), e(3), "__d__wal_suffix__", Type::int(7)));
