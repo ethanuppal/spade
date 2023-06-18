@@ -1,6 +1,7 @@
 use std::collections::{BTreeMap, HashMap};
 
 use color_eyre::eyre::anyhow;
+use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 use spade_ast_lowering::id_tracker::{ExprIdTracker, ImplIdTracker};
 use spade_common::name::NameID;
@@ -107,12 +108,13 @@ pub fn type_of_hierarchical_value(
     // in the hierarchy
     let mut hierarchy = Vec::from(hierarchy);
     let value_name = hierarchy.pop().unwrap();
+    hierarchy.reverse();
 
     // Lookup the name_id of the instance we want to query for the value_name in
     let mut current_unit = top_module;
     let mut path_so_far = vec![format!("{}", top_module)];
     while let Some(next_instance_name) = hierarchy.pop() {
-        let next = instance_map
+        let local_map = instance_map
             .inner
             .get(&current_unit.clone())
             .ok_or_else(|| {
@@ -133,13 +135,19 @@ pub fn type_of_hierarchical_value(
                     &next_instance_name,
                     path_so_far.join(".")
                 )
-            })?
-            .get(&next_instance_name);
+            })?;
+        let next = local_map.get(&next_instance_name);
         if let Some(next) = next {
             current_unit = next;
         } else {
+            let candidates_msg = if local_map.is_empty() {
+                format!("")
+            } else {
+                format!("\n  candidates:\n    {}", local_map.keys().join("    \n"))
+            };
+
             return Err(anyhow!(
-                "{} has no spade unit instance named {next_instance_name}",
+                "{} has no spade unit instance named {next_instance_name}{candidates_msg}",
                 path_so_far.join(".")
             ));
         };

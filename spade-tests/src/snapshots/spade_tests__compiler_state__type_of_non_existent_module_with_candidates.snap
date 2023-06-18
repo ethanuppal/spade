@@ -15,3 +15,5 @@ source: spade-tests/src/compiler_state.rs
     
 
 main has no spade unit instance named not_a_module
+  candidates:
+    sub_0

@@ -72,6 +72,30 @@ macro_rules! snapshot_hierarchical_lookup_error {
     };
 }
 
+
+test_hierarchical_lookup! { type_of_hierarchical_sub_sub_value_is_found,
+    r#"
+        fn sub_sub() -> bool {
+            let x: int<10> = 0;
+            false
+        }
+
+        fn sub() -> bool {
+            sub_sub()
+        }
+
+        fn main() -> bool {
+            let inner = sub();
+            inner
+        }
+    "#,
+    ["sub_0", "sub_sub_0", "x"],
+    ConcreteType::Single {
+        base: PrimitiveType::Int,
+        params: vec![ConcreteType::Integer(10u32.to_biguint())],
+    }
+}
+
 test_hierarchical_lookup! { type_of_hierarchical_sub_value_is_found,
     r#"
         fn sub() -> bool {
