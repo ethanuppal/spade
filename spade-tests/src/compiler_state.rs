@@ -72,7 +72,6 @@ macro_rules! snapshot_hierarchical_lookup_error {
     };
 }
 
-
 test_hierarchical_lookup! { type_of_hierarchical_sub_sub_value_is_found,
     r#"
         fn sub_sub() -> bool {
