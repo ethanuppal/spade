@@ -662,9 +662,9 @@ pub fn do_wal_trace_lowering(
             result.push_anonymous(flipped_port);
         }
 
-        // The forward port has the backward variants included, so extracting `(a, &mut b, c)` will
-        // be index at 0 and 2.
-        // The backward copy only has the mut wire, so it will only be [0]
+        // The forward port has the backward variants included, so extracting `(a, &mut b, c)` so
+        // the forward fields will be [0] and [2]
+        // The backward copy only has the mut wire, so it is (&mut b) and the index is [0]
         let mut i_all = 0;
         let mut i_backward = 0;
         for (n, ty) in members.iter() {

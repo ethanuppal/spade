@@ -82,7 +82,7 @@ pub enum TupleIndex {
     /// The indexee is a 1 bit scalar, so no indexing should be performed.
     /// Codegens as empty string
     None,
-    /// The indexee is zer width, this is most likely caused by a a mir lowering bug
+    /// The indexee is zero width, this is most likely caused by a a mir lowering bug
     /// where a 0 sized type is indexed
     ZeroWidth,
     /// The index is a single bit, i.e. codegens as [val]
