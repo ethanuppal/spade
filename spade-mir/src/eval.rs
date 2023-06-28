@@ -363,4 +363,16 @@ mod test {
             Value::Concat(vec![Value::uint(2, 1), Value::int(3, 5), Value::undef(13)])
         )
     }
+
+    #[test]
+    fn enum_construction_to_string_works() {
+        let enum_t = Type::Enum(vec![vec![Type::int(8)], vec![]]);
+
+        let mir = vec![
+            statement!(const 0; Type::int(8); ConstantValue::int(0b1010)),
+            statement!(e(1); enum_t; ConstructEnum({variant: 0, variant_count: 2}); e(0)),
+        ];
+
+        assert_eq!("000001010", eval_statements(&mir).as_string())
+    }
 }

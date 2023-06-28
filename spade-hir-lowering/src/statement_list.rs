@@ -1,3 +1,4 @@
+use itertools::Itertools;
 use spade_mir::Statement;
 use spade_mir::ValueName;
 
@@ -85,5 +86,15 @@ impl StatementList {
     }
     pub fn to_vec_no_source_map(self) -> Vec<Statement> {
         self.stmts
+    }
+}
+
+impl std::fmt::Display for StatementList {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "\n{}\n",
+            self.stmts.iter().map(|s| s.to_string()).join("\n")
+        )
     }
 }

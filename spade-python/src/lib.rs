@@ -518,6 +518,12 @@ impl Spade {
         self.type_state
             .unify_expression_generic_error(&hir, ty, &symtab.symtab())
             .report_and_convert(&mut self.error_buffer, &self.code, &mut self.diag_handler)?;
+        self.type_state
+            .check_requirements(&spade_typeinference::Context {
+                items: &self.item_list,
+                symtab: symtab.symtab(),
+            })
+            .report_and_convert(&mut self.error_buffer, &self.code, &mut self.diag_handler)?;
 
         let mut hir_ctx = spade_hir_lowering::Context {
             symtab: &mut symtab,

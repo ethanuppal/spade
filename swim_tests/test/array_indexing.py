@@ -10,7 +10,7 @@ async def test(dut):
     s = SpadeExt(dut)
     s.i.a = "[0, 1, 2, 3]"
     for i in range(0, 4):
-        s.i.i = f"{i}";
+        s.i.i = f"{i}u";
         await Timer(1, units='ns')
-        s.o.assert_eq(f"{i}")
+        s.o.assert_eq(f"{i}u")
 
