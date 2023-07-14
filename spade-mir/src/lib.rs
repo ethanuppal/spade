@@ -31,6 +31,7 @@ pub use unit_name::UnitName;
 pub enum ConstantValue {
     Int(BigInt),
     Bool(bool),
+    HighImp,
 }
 
 impl ConstantValue {
@@ -44,6 +45,7 @@ impl std::fmt::Display for ConstantValue {
         match self {
             ConstantValue::Int(val) => write!(f, "{val}"),
             ConstantValue::Bool(val) => write!(f, "{val}"),
+            ConstantValue::HighImp => write!(f, "HIGHIMP"),
         }
     }
 }

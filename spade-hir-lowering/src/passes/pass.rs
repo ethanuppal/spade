@@ -25,6 +25,7 @@ impl Passable for Loc<Expression> {
             ExprKind::Identifier(_) => {}
             ExprKind::IntLiteral(_) => {}
             ExprKind::BoolLiteral(_) => {}
+            ExprKind::BitLiteral(_) => {}
             ExprKind::CreatePorts => {}
             ExprKind::StageReady | ExprKind::StageValid => {}
             ExprKind::TupleLiteral(inner) => {

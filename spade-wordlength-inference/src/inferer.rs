@@ -153,6 +153,7 @@ impl<'a> Inferer<'a> {
             ExprKind::Null
             | ExprKind::BoolLiteral(_)
             | ExprKind::PipelineRef { .. }
+            | ExprKind::BitLiteral(_)
             | ExprKind::CreatePorts => None,
         };
 

@@ -233,23 +233,12 @@ pub fn inner_translate_value(result: &mut String, in_value: &[Value], t: &Concre
             }
         }
         ConcreteType::Single {
-            base: PrimitiveType::Bool,
+            base: PrimitiveType::Bool | PrimitiveType::Bit | PrimitiveType::Clock,
             params: _,
         } => {
             *result += match value[0] {
                 Value::V0 => "false",
                 Value::V1 => "true",
-                Value::X => "UNDEF",
-                Value::Z => "HIGHIMP",
-            }
-        }
-        ConcreteType::Single {
-            base: PrimitiveType::Clock,
-            params: _,
-        } => {
-            *result += match value[0] {
-                Value::V0 => "0",
-                Value::V1 => "1",
                 Value::X => "UNDEF",
                 Value::Z => "HIGHIMP",
             }

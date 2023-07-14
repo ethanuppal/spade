@@ -6,3 +6,5 @@ use std::conv::trunc;
 use std::conv::sext;
 use std::conv::zext;
 use std::conv::concat;
+
+use std::conv::bit_to_bool;

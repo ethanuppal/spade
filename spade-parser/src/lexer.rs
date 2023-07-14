@@ -52,6 +52,13 @@ pub enum TokenKind {
     #[token("false")]
     False,
 
+    #[token("LOW")]
+    Low,
+    #[token("HIGH")]
+    High,
+    #[token("HIGHIMP")]
+    HighImp,
+
     // Keywords
     #[token("reg")]
     Reg,
@@ -220,6 +227,9 @@ impl TokenKind {
             TokenKind::BinInteger(_) => "binary integer",
             TokenKind::True => "true",
             TokenKind::False => "false",
+            TokenKind::Low => "LOW",
+            TokenKind::High => "HIGH",
+            TokenKind::HighImp => "HIGHIMP",
 
             TokenKind::Let => "let",
             TokenKind::Reg => "reg",

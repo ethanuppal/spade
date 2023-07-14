@@ -14,3 +14,7 @@ fn zext<#N, #M>(x: int<N>) -> int<M> __builtin__
 // checked, but not inferred by the built in handling. Once we get type constraints
 // implemented, this should be changed
 fn concat<#N, #M, #K>(x: int<N>, y: int<M>) -> int<K> __builtin__
+
+// Casts a `bit` to a `bool`. low maps to false, high maps to true, but HIGHIMP is undefined.
+// In practice, in a simulator, it will map to Z
+fn bit_to_bool(b: bit) -> bool __builtin__

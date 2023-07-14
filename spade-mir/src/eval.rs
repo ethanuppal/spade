@@ -234,6 +234,7 @@ pub fn eval_statements(statements: &[Statement]) -> Value {
                         val: i.clone(),
                     },
                     crate::ConstantValue::Bool(v) => Value::Bit(*v),
+                    crate::ConstantValue::HighImp => todo!(),
                 };
                 let name = ValueName::Expr(*id);
                 name_types.insert(name.clone(), ty.clone());

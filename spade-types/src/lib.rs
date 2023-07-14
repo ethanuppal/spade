@@ -11,6 +11,7 @@ pub enum PrimitiveType {
     Uint,
     Clock,
     Bool,
+    Bit,
     Memory,
     Void,
 }
@@ -22,6 +23,7 @@ impl std::fmt::Display for PrimitiveType {
             PrimitiveType::Uint => write!(f, "uint"),
             PrimitiveType::Clock => write!(f, "clk"),
             PrimitiveType::Bool => write!(f, "bool"),
+            PrimitiveType::Bit => write!(f, "bit"),
             PrimitiveType::Memory => write!(f, "Memory"),
             PrimitiveType::Void => write!(f, "()"),
         }

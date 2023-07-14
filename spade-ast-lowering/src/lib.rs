@@ -1092,6 +1092,14 @@ pub fn visit_expression(e: &ast::Expression, ctx: &mut Context) -> Result<hir::E
             Ok(hir::ExprKind::IntLiteral(result.clone()))
         },
         ast::Expression::BoolLiteral(val) => Ok(hir::ExprKind::BoolLiteral(*val)),
+        ast::Expression::BitLiteral(lit) => {
+            let result = match lit {
+                ast::BitLiteral::Low => hir::expression::BitLiteral::Low,
+                ast::BitLiteral::High => hir::expression::BitLiteral::High,
+                ast::BitLiteral::HighImp => hir::expression::BitLiteral::HighImp,
+            };
+            Ok(hir::ExprKind::BitLiteral(result))
+        },
         ast::Expression::CreatePorts => Ok(hir::ExprKind::CreatePorts),
         ast::Expression::BinaryOperator(lhs, tok, rhs) => {
             let lhs = lhs.try_visit(visit_expression, ctx)?;

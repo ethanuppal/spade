@@ -1906,7 +1906,7 @@ mod tests {
                 // this needs to be incremented. If we end up with more tests
                 // like this, we should do smarter comparison
                 // lifeguard spade#224
-                name: "identity[72]".to_string(),
+                name: "identity[74]".to_string(),
                 path: vec!["identity".to_string()],
             },
             source: NameID(0, Path::from_strs(&["identity"])),
@@ -3068,6 +3068,53 @@ mod tests {
                 x
             }
         "
+    }
+
+    #[test]
+    fn bit_literals_work() {
+        let code = r#"
+            entity main() -> bit {
+                let low = LOW;
+                let high = HIGH;
+                let z = HIGHIMP;
+                z
+            }
+        "#;
+
+        let expected = entity!(&["main"]; (
+        ) -> Type::Bool; {
+            (const 0; Type::Bool; ConstantValue::Bool(false));
+            (n(0, "low"); Type::Bool; Alias; e(0));
+            (const 1; Type::Bool; ConstantValue::Bool(true));
+            (n(1, "high"); Type::Bool; Alias; e(1));
+            (const 2; Type::Bool; ConstantValue::HighImp);
+            (n(2, "z"); Type::Bool; Alias; e(2));
+        } => n(2, "z"));
+
+        assert_same_mir!(&build_entity!(code), &expected);
+    }
+
+    #[test]
+    fn bit_to_bool_is_alias() {
+        let code = r#"
+            fn main(b: bit) -> bool {
+                bit_to_bool(b)
+            }
+        "#;
+
+        let expected = entity!(&["main"]; (
+            "b", n(0, "b"), Type::Bool
+        ) -> Type::Bool; {
+            (e(0); Type::Bool; Alias; n(0, "b"))
+        } => e(0));
+
+        assert_same_mir!(
+            &build_items_with_stdlib(code)
+                .into_iter()
+                .find(|e| e.name == UnitName::_test_from_strs(&["main"]))
+                .unwrap(),
+            &expected
+        );
     }
 }
 

@@ -12,7 +12,7 @@ use crate::constraints::{bits_to_store, ce_int, ce_var, ConstraintSource};
 use crate::equation::{TypeVar, TypedExpression};
 use crate::error::{Error, UnificationErrorExt};
 use crate::error_reporting::LocExt;
-use crate::fixed_types::{t_bool, t_void};
+use crate::fixed_types::{t_bool, t_void, t_bit};
 use crate::requirements::Requirement;
 use crate::{kvar, Context, GenericListToken, HasType, Result, TraceStackEntry, TypeState};
 
@@ -91,6 +91,15 @@ impl TypeState {
     ) -> Result<()> {
         assuming_kind!(ExprKind::BoolLiteral(_) = &expression => {
             self.unify_expression_generic_error(&expression, &t_bool(&ctx.symtab), &ctx.symtab)?;
+        });
+        Ok(())
+    }
+
+    #[trace_typechecker]
+    #[tracing::instrument(level = "trace", skip_all)]
+    pub fn visit_bit_literal(&mut self, expression: &Loc<Expression>, ctx: &Context) -> Result<()> {
+        assuming_kind!(ExprKind::BitLiteral(_) = &expression => {
+            self.unify_expression_generic_error(&expression, &t_bit(&ctx.symtab), &ctx.symtab)?;
         });
         Ok(())
     }

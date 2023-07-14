@@ -16,6 +16,7 @@ use std::collections::BTreeMap;
 use attributes::AttributeListExt;
 use attributes::LocAttributeExt;
 use error::{expect_entity, expect_function, expect_pipeline};
+use hir::expression::BitLiteral;
 use hir::expression::CallKind;
 use hir::expression::LocExprExt;
 use hir::ArgumentList;
@@ -117,11 +118,7 @@ impl MirLowerable for ConcreteType {
                 length: size.clone(),
             },
             CType::Single {
-                base: PrimitiveType::Bool,
-                params: _,
-            } => Type::Bool,
-            CType::Single {
-                base: PrimitiveType::Clock,
+                base: PrimitiveType::Bool | PrimitiveType::Clock | PrimitiveType::Bit,
                 params: _,
             } => Type::Bool,
             CType::Single {
@@ -1082,6 +1079,7 @@ impl ExprLocal for Loc<Expression> {
             },
             ExprKind::IntLiteral(_) => Ok(None),
             ExprKind::BoolLiteral(_) => Ok(None),
+            ExprKind::BitLiteral(_) => Ok(None),
             ExprKind::TupleLiteral(_) => Ok(None),
             ExprKind::TupleIndex(_, _) => Ok(None),
             ExprKind::FieldAccess(_, _) => Ok(None),
@@ -1173,6 +1171,15 @@ impl ExprLocal for Loc<Expression> {
                     mir::Statement::Constant(self.id, ty, mir::ConstantValue::Bool(*value)),
                     self,
                 );
+            }
+            ExprKind::BitLiteral(value) => {
+                let ty = self_type;
+                let cv = match value {
+                    BitLiteral::Low => mir::ConstantValue::Bool(false),
+                    BitLiteral::High => mir::ConstantValue::Bool(true),
+                    BitLiteral::HighImp => mir::ConstantValue::HighImp,
+                };
+                result.push_primary(mir::Statement::Constant(self.id, ty, cv), self);
             }
             ExprKind::BinaryOperator(lhs, op, rhs) => {
                 let binop_builder = |op| -> Result<()> {
@@ -1705,6 +1712,7 @@ impl ExprLocal for Loc<Expression> {
             ["std", "conv", "sext"] => handle_sext,
             ["std", "conv", "zext"] => handle_zext,
             ["std", "conv", "concat"] => handle_concat,
+            ["std", "conv", "bit_to_bool"] => handle_bit_to_bool,
             ["std", "ops", "div_pow2"] => handle_div_pow2,
             ["std", "ports", "new_mut_wire"] => handle_new_mut_wire,
             ["std", "ports", "read_mut_wire"] => handle_read_mut_wire
@@ -2170,6 +2178,36 @@ impl ExprLocal for Loc<Expression> {
             mir::Statement::Binding(mir::Binding {
                 name: self.variable(ctx.subs)?,
                 operator: mir::Operator::ZeroExtend { extra_bits },
+                operands: vec![args[0].value.variable(ctx.subs)?],
+                ty: self_type,
+                loc: None,
+            }),
+            self,
+        );
+
+        Ok(result)
+    }
+
+    fn handle_bit_to_bool(
+        &self,
+        _path: &Loc<NameID>,
+        result: StatementList,
+        args: &[Argument],
+        ctx: &mut Context,
+    ) -> Result<StatementList> {
+        let mut result = result;
+
+        assert_eq!(args.len(), 1);
+
+        let self_type = ctx
+            .types
+            .expr_type(self, ctx.symtab.symtab(), &ctx.item_list.types)?
+            .to_mir_type();
+
+        result.push_primary(
+            mir::Statement::Binding(mir::Binding {
+                name: self.variable(ctx.subs)?,
+                operator: mir::Operator::Alias,
                 operands: vec![args[0].value.variable(ctx.subs)?],
                 ty: self_type,
                 loc: None,

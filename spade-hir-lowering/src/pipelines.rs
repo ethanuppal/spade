@@ -389,6 +389,7 @@ impl PipelineAvailability for ExprKind {
             ExprKind::Identifier(_) => Ok(0),
             ExprKind::IntLiteral(_) => Ok(0),
             ExprKind::BoolLiteral(_) => Ok(0),
+            ExprKind::BitLiteral(_) => Ok(0),
             ExprKind::CreatePorts => Ok(0),
             ExprKind::StageReady | ExprKind::StageValid => Ok(0),
             ExprKind::TupleLiteral(inner) => try_compute_availability(inner),

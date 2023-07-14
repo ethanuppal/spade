@@ -127,10 +127,18 @@ pub enum CallKind {
 impl WithLocation for CallKind {}
 
 #[derive(PartialEq, Debug, Clone, Serialize, Deserialize)]
+pub enum BitLiteral {
+    Low,
+    High,
+    HighImp,
+}
+
+#[derive(PartialEq, Debug, Clone, Serialize, Deserialize)]
 pub enum ExprKind {
     Identifier(NameID),
     IntLiteral(IntLiteral),
     BoolLiteral(bool),
+    BitLiteral(BitLiteral),
     CreatePorts,
     TupleLiteral(Vec<Loc<Expression>>),
     ArrayLiteral(Vec<Loc<Expression>>),
@@ -230,6 +238,7 @@ impl LocExprExt for Loc<Expression> {
             ExprKind::Identifier(_) => Some(self.clone()),
             ExprKind::IntLiteral(_) => None,
             ExprKind::BoolLiteral(_) => None,
+            ExprKind::BitLiteral(_) => Some(self.clone()),
             ExprKind::TupleLiteral(inner) => {
                 inner.iter().find_map(Self::runtime_requirement_witness)
             }

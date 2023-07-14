@@ -185,6 +185,8 @@ impl<'a> Parser<'a> {
             Ok(instance)
         } else if let Some(val) = self.bool_literal()? {
             Ok(val.map(Expression::BoolLiteral))
+        } else if let Some(val) = self.bit_literal()? {
+            Ok(val.map(Expression::BitLiteral))
         } else if let Some(val) = self.int_literal()? {
             Ok(val.map(Expression::IntLiteral))
         } else if let Some(block) = self.block(false)? {

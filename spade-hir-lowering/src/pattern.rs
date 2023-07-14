@@ -96,6 +96,8 @@ pub(crate) fn split_wildcard(
             spade_types::PrimitiveType::Bool => {
                 vec![Constructor::Bool(false), Constructor::Bool(true)]
             }
+            // Bit literals can't be matched on because you can't compare against z in hardware
+            spade_types::PrimitiveType::Bit => vec![],
             // Special types for which there are no constructors which makes matching
             // on them impossible
             spade_types::PrimitiveType::Clock

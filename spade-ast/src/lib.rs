@@ -126,10 +126,19 @@ pub enum CallKind {
 impl WithLocation for CallKind {}
 
 #[derive(PartialEq, Debug, Clone)]
+pub enum BitLiteral {
+    Low,
+    High,
+    HighImp,
+}
+impl WithLocation for BitLiteral {}
+
+#[derive(PartialEq, Debug, Clone)]
 pub enum Expression {
     Identifier(Loc<Path>),
     IntLiteral(IntLiteral),
     BoolLiteral(bool),
+    BitLiteral(BitLiteral),
     ArrayLiteral(Vec<Loc<Expression>>),
     Index(Box<Loc<Expression>>, Box<Loc<Expression>>),
     TupleLiteral(Vec<Loc<Expression>>),
@@ -201,6 +210,7 @@ impl Expression {
             Expression::Identifier(_) => "identifier",
             Expression::IntLiteral(_) => "int literal",
             Expression::BoolLiteral(_) => "bool literal",
+            Expression::BitLiteral(_) => "bit literal",
             Expression::ArrayLiteral(_) => "array literal",
             Expression::CreatePorts => "port",
             Expression::Index(_, _) => "index",

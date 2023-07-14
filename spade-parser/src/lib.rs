@@ -14,7 +14,7 @@ use num::{BigInt, ToPrimitive, Zero};
 use tracing::{event, Level};
 
 use spade_ast::{
-    ArgumentList, ArgumentPattern, Attribute, AttributeList, Binding, Block, CallKind,
+    ArgumentList, ArgumentPattern, Attribute, AttributeList, Binding, BitLiteral, Block, CallKind,
     ComptimeConfig, Enum, Expression, FunctionDecl, ImplBlock, IntLiteral, Item, Module,
     ModuleBody, NamedArgument, ParameterList, Pattern, PipelineStageReference, Register, Statement,
     Struct, TraitDef, TypeDeclKind, TypeDeclaration, TypeExpression, TypeParam, TypeSpec, Unit,
@@ -346,6 +346,19 @@ impl<'a> Parser<'a> {
             Ok(Some(true.at(self.file_id, &tok.span)))
         } else if let Some(tok) = self.peek_and_eat(&TokenKind::False)? {
             Ok(Some(false.at(self.file_id, &tok.span)))
+        } else {
+            Ok(None)
+        }
+    }
+
+    #[trace_parser]
+    fn bit_literal(&mut self) -> Result<Option<Loc<BitLiteral>>> {
+        if let Some(tok) = self.peek_and_eat(&TokenKind::Low)? {
+            Ok(Some(BitLiteral::Low.at(self.file_id, &tok.span)))
+        } else if let Some(tok) = self.peek_and_eat(&TokenKind::High)? {
+            Ok(Some(BitLiteral::High.at(self.file_id, &tok.span)))
+        } else if let Some(tok) = self.peek_and_eat(&TokenKind::HighImp)? {
+            Ok(Some(BitLiteral::HighImp.at(self.file_id, &tok.span)))
         } else {
             Ok(None)
         }
