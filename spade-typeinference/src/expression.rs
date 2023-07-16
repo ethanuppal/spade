@@ -12,7 +12,7 @@ use crate::constraints::{bits_to_store, ce_int, ce_var, ConstraintSource};
 use crate::equation::{TypeVar, TypedExpression};
 use crate::error::{Error, UnificationErrorExt};
 use crate::error_reporting::LocExt;
-use crate::fixed_types::{t_bool, t_void, t_bit};
+use crate::fixed_types::{t_bit, t_bool, t_void};
 use crate::requirements::Requirement;
 use crate::{kvar, Context, GenericListToken, HasType, Result, TraceStackEntry, TypeState};
 
