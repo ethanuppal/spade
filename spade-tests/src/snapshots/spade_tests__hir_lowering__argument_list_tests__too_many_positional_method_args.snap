@@ -1,0 +1,27 @@
+---
+source: spade-tests/src/hir_lowering.rs
+---
+struct X {}
+
+impl X {
+    fn function(self, a: bool, b: bool) -> bool {a}
+}
+
+fn main(x: X) -> bool {
+    x.function(true, true, true)
+}
+
+
+error: Too many arguments. Expected 2, got 3
+  ┌─ testinput:8:16
+  │
+4 │     fn function(self, a: bool, b: bool) -> bool {a}
+  │     ----------------------------------------------- function defined here
+  ·
+8 │     x.function(true, true, true)
+  │                ^^^^^^^^^^^^^^^^
+  │                │           │
+  │                │           Unexpected argument
+  │                Expected 2 arguments
+
+

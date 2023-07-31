@@ -14,6 +14,9 @@ fn main(x: X) -> bool {
 error: No such argument: y
   ┌─ testinput:7:13
   │
+3 │     fn test(self, x: bool) -> bool {true}
+  │     ------------------------------------- function defined here
+  ·
 7 │     x.test$(y: 1)
   │             ^ No such argument
 

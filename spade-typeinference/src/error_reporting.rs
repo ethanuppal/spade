@@ -43,14 +43,19 @@ pub fn type_mismatch_notes(got: &UnificationTrace, expected: &UnificationTrace) 
 impl CompilationError for Error {
     fn report(&self, buffer: &mut Buffer, code: &CodeBundle, diag_handler: &mut DiagHandler) {
         match self {
-            Error::ArgumentError(inner) => {
-                diag_handler.emit(&inner.clone().into(), buffer, code);
+            Error::ArgumentError { source, unit } => {
+                let base: SpadeDiagnostic = source.clone().into();
+                let diag = base.secondary_label(
+                    unit,
+                    format!("{kind} defined here", kind = unit.unit_kind.name()),
+                );
+                diag_handler.emit(&diag, buffer, code);
                 return;
             }
             _ => {}
         };
         let diag = match self {
-            Error::ArgumentError(_) => unreachable!(),
+            Error::ArgumentError { .. } => unreachable!(),
             Error::GenericTypeInstantiation => todo![],
             Error::UnknownType(expr) => Diagnostic::error()
                 .with_message(format!(

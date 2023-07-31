@@ -14,6 +14,9 @@ fn main(x: X) -> bool {
 error: self specified multiple times
   ┌─ testinput:7:5
   │
+3 │     fn test(self, x: bool) -> bool {true}
+  │     ------------------------------------- function defined here
+  ·
 7 │     x.test$(self: X())
   │     ^       ---- First specified here
   │     │        

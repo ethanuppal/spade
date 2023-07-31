@@ -1,4 +1,4 @@
-use codespan::Span;
+use codespan::{ByteOffset, Span};
 use codespan_reporting::diagnostic::Label;
 use num::{BigInt, BigUint};
 use serde::{Deserialize, Serialize};
@@ -204,6 +204,48 @@ impl<T> Loc<T> {
             inner: (),
             span: self.span,
             file_id: self.file_id,
+        }
+    }
+
+    /// Shrinks a Loc on the left size by the width of the specified string.
+    /// For example (( abc ))
+    ///             ^^^^^^^^^ .shrink_left("((")
+    /// results in
+    /// For example (( abc ))
+    ///               ^^^^^^^
+    ///
+    /// Note that this is only valid if the loc actually points to the specified string,
+    /// otherwise the behaviour is undefined
+    ///
+    /// If the span is empty, does nothing
+    pub fn shrink_left(&self, s: &str) -> Loc<()> {
+        if self.span.start() == self.span.end() {
+            self.loc()
+        } else {
+            Loc {
+                inner: (),
+                span: Span::new(
+                    self.span.start() + ByteOffset::from_str_len(s),
+                    self.span.end(),
+                ),
+                file_id: self.file_id,
+            }
+        }
+    }
+
+    /// See [shrink_right]
+    pub fn shrink_right(&self, s: &str) -> Loc<()> {
+        if self.span.start() == self.span.end() {
+            self.loc()
+        } else {
+            Loc {
+                inner: (),
+                span: Span::new(
+                    self.span.start(),
+                    self.span.end() - ByteOffset::from_str_len(s),
+                ),
+                file_id: self.file_id,
+            }
         }
     }
 }

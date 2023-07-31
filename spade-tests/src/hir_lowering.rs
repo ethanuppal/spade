@@ -3205,4 +3205,64 @@ mod argument_list_tests {
         }
         "
     }
+
+    snapshot_error! {
+        too_many_positional_method_args,
+        "
+        struct X {}
+
+        impl X {
+            fn function(self, a: bool, b: bool) -> bool {a}
+        }
+
+        fn main(x: X) -> bool {
+            x.function(true, true, true)
+        }
+        "
+    }
+
+    snapshot_error! {
+        far_too_many_positional_method_args,
+        "
+        struct X {}
+
+        impl X {
+            fn function(self, a: bool, b: bool) -> bool {a}
+        }
+
+        fn main(x: X) -> bool {
+            x.function(true, true, true, true)
+        }
+        "
+    }
+
+    snapshot_error! {
+        too_few_positional_method_args,
+        "
+        struct X {}
+
+        impl X {
+            fn function(self, a: bool, b: bool) -> bool {a}
+        }
+
+        fn main(x: X) -> bool {
+            x.function()
+        }
+        "
+    }
+
+    snapshot_error! {
+        far_too_few_positional_method_args,
+        "
+        struct X {}
+
+        impl X {
+            fn function(self, a: bool, b: bool) -> bool {a}
+        }
+
+        fn main(x: X) -> bool {
+            x.function()
+        }
+        "
+    }
 }

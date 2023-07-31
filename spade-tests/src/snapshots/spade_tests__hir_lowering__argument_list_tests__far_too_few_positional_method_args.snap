@@ -1,0 +1,29 @@
+---
+source: spade-tests/src/hir_lowering.rs
+---
+struct X {}
+
+impl X {
+    fn function(self, a: bool, b: bool) -> bool {a}
+}
+
+fn main(x: X) -> bool {
+    x.function()
+}
+
+
+error: Too few arguments. Expected 2, got 0
+  ┌─ testinput:8:16
+  │
+4 │     fn function(self, a: bool, b: bool) -> bool {a}
+  │     ----------------------------------------------- function defined here
+  ·
+8 │     x.function()
+  │                ^ Missing 2 arguments
+  │
+  = Consider providing the arguments
+  │
+8 │     x.function(a, b)
+  │                ++++
+
+

@@ -11,10 +11,16 @@ fn main(x: X) -> bool {
 }
 
 
-error: Expected 0 arguments, got 1
-  ┌─ testinput:7:11
+error: Too many arguments. Expected 0, got 1
+  ┌─ testinput:7:12
   │
+3 │     fn test(self) -> bool {true}
+  │     ---------------------------- function defined here
+  ·
 7 │     x.test(1)
-  │           ^^^ Expected 0 arguments
+  │            ^
+  │            │
+  │            Expected 0 arguments
+  │            Unexpected argument
 
 

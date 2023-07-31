@@ -7,10 +7,16 @@ fn main() -> bool {
 }
 
 
-error: Expected 2 arguments, got 3
-  ┌─ testinput:3:9
+error: Too many arguments. Expected 2, got 3
+  ┌─ testinput:3:10
   │
+1 │ fn test(a: bool, b: bool) -> bool __builtin__
+  │ --------------------------------------------- function defined here
+2 │ fn main() -> bool {
 3 │     test(true, true, true)
-  │         ^^^^^^^^^^^^^^^^^^ Expected 2 arguments
+  │          ^^^^^^^^^^^^^^^^
+  │          │           │
+  │          │           Unexpected argument
+  │          Expected 2 arguments
 
 

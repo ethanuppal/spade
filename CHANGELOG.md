@@ -23,6 +23,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 - [!207][!207] Rename `wal_suffix` attribute to `wal_traceable`. It now defaults to the struct name as a suffix, but can override that using the `suffix` parameter to the attribute.
 - [!208][!208] Add a new `#[wal_suffix]` attribute which emits a copy of the marked signal with a specific suffix. Can also be applied to units to add `#[wal_suffix]` to all inputs.
+- [!214][!214] Improve the error messages for positional arguments
 
 ### Removed
 
@@ -36,6 +37,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 [!206]: https://gitlab.com/spade-lang/spade/-/merge_requests/206
 [!207]: https://gitlab.com/spade-lang/spade/-/merge_requests/207
 [!209]: https://gitlab.com/spade-lang/spade/-/merge_requests/209
+[!214]: https://gitlab.com/spade-lang/spade/-/merge_requests/214
 [!215]: https://gitlab.com/spade-lang/spade/-/merge_requests/215
 
 ## [0.3.0]

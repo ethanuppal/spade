@@ -411,7 +411,7 @@ impl TypeState {
                     expression.map_ref(|e| e.id),
                     &expression.get_type(self)?,
                     &callee.inner,
-                    &head.inner,
+                    &head,
                     args,
                     ctx,
                     true,
@@ -437,7 +437,7 @@ impl TypeState {
         expression_id: Loc<u64>,
         expression_type: &TypeVar,
         name: &NameID,
-        head: &UnitHead,
+        head: &Loc<UnitHead>,
         args: &Loc<ArgumentList>,
         ctx: &Context,
         // Whether or not to visit the argument expressions passed to the function here. This
@@ -484,7 +484,12 @@ impl TypeState {
             };
         }
 
-        let matched_args = match_args_with_params(args, &head.inputs, is_method)?;
+        let matched_args = match_args_with_params(args, &head.inputs, is_method).map_err(|e| {
+            Error::ArgumentError {
+                source: e,
+                unit: head.clone(),
+            }
+        })?;
 
         handle_special_functions! {
             ["std", "conv", "concat"] => {

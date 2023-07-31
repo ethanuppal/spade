@@ -186,7 +186,7 @@ impl Requirement {
                         expr_id.clone(),
                         &expr.inner,
                         &implementor,
-                        &fn_head.inner,
+                        &fn_head,
                         args,
                         ctx,
                         false,

@@ -11,6 +11,9 @@ fn main() -> bool {
 error: Missing argument: b
   ┌─ testinput:4:10
   │
+1 │ fn test(a: bool, b: bool) -> bool __builtin__
+  │ --------------------------------------------- function defined here
+  ·
 4 │     test$(a)
   │          ^^^ Missing argument: b
 

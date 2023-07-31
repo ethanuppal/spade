@@ -1,6 +1,6 @@
 use num::BigInt;
 use spade_diagnostics::Diagnostic;
-use spade_hir::param_util::ArgumentError;
+use spade_hir::{param_util::ArgumentError, UnitHead};
 use thiserror::Error;
 
 use crate::constraints::ConstraintSource;
@@ -261,7 +261,10 @@ pub enum Error {
     GenericTypeInstantiation,
 
     #[error("Argument error")]
-    ArgumentError(#[from] ArgumentError),
+    ArgumentError {
+        source: ArgumentError,
+        unit: Loc<UnitHead>,
+    },
 
     #[error("(internal)No entry in generic list")]
     InternalNoEntryInGenericList(Loc<NameID>),

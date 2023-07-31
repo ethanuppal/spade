@@ -4,6 +4,7 @@
 
 use std::collections::HashSet;
 
+use itertools::Itertools;
 use spade_diagnostics::Diagnostic;
 use thiserror::Error;
 
@@ -14,10 +15,18 @@ use crate::{ArgumentList, Expression, Parameter, ParameterList, TypeSpec};
 
 #[derive(Error, Debug, PartialEq, Clone)]
 pub enum ArgumentError {
-    #[error("Argument list length mismatch, expected {expected} got {got}")]
-    ArgumentListLengthMismatch {
-        expected: usize,
+    #[error("Too few arguments")]
+    TooFewArguments {
         got: usize,
+        expected: usize,
+        missing: Vec<Identifier>,
+        at: Loc<()>,
+    },
+    #[error("Too many arguments")]
+    TooManyArguments {
+        got: usize,
+        expected: usize,
+        extra: Vec<Loc<Expression>>,
         at: Loc<()>,
     },
     #[error("No argument named {name}")]
@@ -37,13 +46,51 @@ pub enum ArgumentError {
 impl From<ArgumentError> for Diagnostic {
     fn from(error: ArgumentError) -> Self {
         match error {
-            ArgumentError::ArgumentListLengthMismatch { expected, got, at } => {
+            ArgumentError::TooManyArguments {
+                expected,
+                got,
+                extra,
+                at,
+            } => {
                 let plural = if expected == 1 { "" } else { "s" };
+                let mut base = Diagnostic::error(
+                    at,
+                    format!("Too many arguments. Expected {expected}, got {got}"),
+                )
+                .primary_label(format!("Expected {expected} argument{plural}"));
+
+                for e in extra {
+                    base = base.secondary_label(e, format!("Unexpected argument"))
+                }
+                base
+            }
+            ArgumentError::TooFewArguments {
+                expected,
+                got,
+                missing,
+                at,
+            } => {
+                let missing_plural = if missing.len() == 1 { "" } else { "s" };
+
+                let leading_comma = if got == 0 { "" } else { ", " };
+                let suggestion = format!(
+                    "{leading_comma}{}",
+                    missing.iter().map(|p| format!("{p}")).join(", ")
+                );
+
                 Diagnostic::error(
                     at,
-                    format!("Expected {expected} argument{plural}, got {got}"),
+                    format!("Too few arguments. Expected {expected}, got {got}"),
                 )
-                .primary_label(format!("Expected {expected} argument{plural}"))
+                .primary_label(format!(
+                    "Missing {count} argument{missing_plural}",
+                    count = missing.len()
+                ))
+                .span_suggest_insert_after(
+                    format!("Consider providing the argument{missing_plural}"),
+                    at,
+                    suggestion,
+                )
             }
             ArgumentError::NoSuchArgument { name } => {
                 Diagnostic::error(&name, format!("No such argument: {name}"))
@@ -96,11 +143,28 @@ pub fn match_args_with_params<'a>(
 ) -> Result<Vec<Argument<'a>>, ArgumentError> {
     match &arg_list.inner {
         ArgumentList::Positional(inner) => {
-            if inner.len() != params.0.len() {
-                return Err(ArgumentError::ArgumentListLengthMismatch {
-                    expected: params.0.len() - if is_method { 1 } else { 0 },
+            let inner_loc = arg_list.shrink_left("(").shrink_right(")");
+
+            if inner.len() < params.0.len() {
+                return Err(ArgumentError::TooFewArguments {
                     got: inner.len() - if is_method { 1 } else { 0 },
-                    at: arg_list.loc(),
+                    expected: params.0.len() - if is_method { 1 } else { 0 },
+                    missing: params
+                        .0
+                        .iter()
+                        .skip(inner.len())
+                        .map(|p| p.name.clone().inner)
+                        .collect(),
+                    at: inner_loc,
+                });
+            }
+
+            if inner.len() > params.0.len() {
+                return Err(ArgumentError::TooManyArguments {
+                    got: inner.len() - if is_method { 1 } else { 0 },
+                    expected: params.0.len() - if is_method { 1 } else { 0 },
+                    extra: inner.iter().skip(params.0.len()).cloned().collect(),
+                    at: inner_loc,
                 });
             }
 
