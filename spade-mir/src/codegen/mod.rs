@@ -1112,7 +1112,6 @@ pub fn entity_code(
             [3]     format!("$dumpfile (__vcd_file);");
             [3]     format!("$dumpvars (0, {entity_name});");
             [2]   "end";
-            [2]  "#1;";
             [1] "end";
             [1] "`endif";
             [1] &input_assignments;
@@ -1270,7 +1269,6 @@ mod tests {
                         $dumpfile (__vcd_file);
                         $dumpvars (0, \pong );
                     end
-                    #1;
                 end
                 `endif
                 logic[5:0] \op ;
@@ -1322,7 +1320,6 @@ mod tests {
                         $dumpfile (__vcd_file);
                         $dumpvars (0, test);
                     end
-                    #1;
                 end
                 `endif
                 assign output__ = _e_0;
@@ -1370,7 +1367,6 @@ mod tests {
                         $dumpfile (__vcd_file);
                         $dumpvars (0, test);
                     end
-                    #1;
                 end
                 `endif
                 logic \a_mut ;
@@ -1411,7 +1407,6 @@ mod tests {
                         $dumpfile (__vcd_file);
                         $dumpvars (0, \test );
                     end
-                    #1;
                 end
                 `endif
                 logic[2:0] \a_mut ;
@@ -1454,7 +1449,6 @@ mod tests {
                         $dumpfile (__vcd_file);
                         $dumpvars (0, \test );
                     end
-                    #1;
                 end
                 `endif
                 logic[3:0] \a ;
@@ -1498,7 +1492,6 @@ mod tests {
                         $dumpfile (__vcd_file);
                         $dumpvars (0, test);
                     end
-                    #1;
                 end
                 `endif
                 assign output__ = _e_0;
@@ -1569,7 +1562,6 @@ mod tests {
                         $dumpfile (__vcd_file);
                         $dumpvars (0, \pl );
                     end
-                    #1;
                 end
                 `endif
                 logic \clk ;
@@ -1618,7 +1610,6 @@ mod tests {
                         $dumpfile (__vcd_file);
                         $dumpvars (0, \pl );
                     end
-                    #1;
                 end
                 `endif
                 logic[15:0] \x ;

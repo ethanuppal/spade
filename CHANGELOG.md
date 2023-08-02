@@ -17,6 +17,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - [!202][!202] Re-add missing requirement for the first argument of a pipeline to be a clock
 - [!205][!205] Fix panic on method calls in let bindings
 - [!206][!206] Re-add working VCD translation. It now also translates more values
+- [!215][!215] Make generated code compile out of the box with verilator
 
 ### Changed
 
@@ -35,6 +36,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 [!206]: https://gitlab.com/spade-lang/spade/-/merge_requests/206
 [!207]: https://gitlab.com/spade-lang/spade/-/merge_requests/207
 [!209]: https://gitlab.com/spade-lang/spade/-/merge_requests/209
+[!215]: https://gitlab.com/spade-lang/spade/-/merge_requests/215
 
 ## [0.3.0]
 
