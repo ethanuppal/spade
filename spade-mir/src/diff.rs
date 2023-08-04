@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use thiserror::Error;
 
-use crate::{Entity, MirInput, Statement, ValueName};
+use crate::{Entity, MirInput, Register, Statement, ValueName};
 
 macro_rules! check {
     ($cond:expr) => {
@@ -128,17 +128,47 @@ fn compare_statements(s1: &Statement, s2: &Statement, var_map: &mut VarMap) -> b
             true
         }
         (Statement::Register(r1), Statement::Register(r2)) => {
-            if r1.ty != r2.ty {
+            let Register {
+                name: _,
+                ty: ty1,
+                clock: clock1,
+                reset: reset1,
+                initial: initial1,
+                value: value1,
+                loc: _,
+                traced: _,
+            } = &r1;
+            let Register {
+                name: _,
+                ty: ty2,
+                clock: clock2,
+                reset: reset2,
+                initial: initial2,
+                value: value2,
+                loc: _,
+                traced: _,
+            } = &r2;
+            if ty1 != ty2 {
                 return false;
             }
 
-            check_name!(&r1.value, &r2.value);
-            check_name!(&r1.clock, &r2.clock);
+            check_name!(value1, value2);
+            check_name!(clock1, clock2);
 
-            match (&r1.reset, &r2.reset) {
+            match (reset1, reset2) {
                 (Some((t1, v1)), Some((t2, v2))) => {
                     check_name!(t1, t2);
                     check_name!(v1, v2);
+                }
+                (None, None) => {}
+                _ => return false,
+            }
+
+            match (initial1, initial2) {
+                (Some(l), Some(r)) => {
+                    if l != r {
+                        return false;
+                    }
                 }
                 (None, None) => {}
                 _ => return false,
@@ -498,6 +528,40 @@ mod statement_comparison_tests {
 
         let lhs = statement!(reg e(0); Type::int(5); clock(e(2)); reset(e(3), e(4)); e(1));
         let rhs = statement!(reg e(0); Type::int(5); clock(e(2)); reset(e(3), e(4)); e(2));
+
+        populate_var_map(&vec![lhs.clone()], &vec![rhs.clone()], &mut map).unwrap();
+
+        assert!(!compare_statements(&lhs, &rhs, &mut map));
+    }
+
+    #[test]
+    fn identical_registers_with_mismatched_initial_diff() {
+        let mut map = VarMap::new();
+
+        map.map_expr(1, 1);
+        map.map_expr(2, 2);
+        map.map_expr(3, 3);
+        map.map_expr(4, 4);
+
+        let lhs = statement!(reg e(0); Type::int(5); clock(e(2)); reset(e(3), e(4)) initial(vec![statement!(e(0); Type::Bool; Alias; e(3))]); e(1));
+        let rhs = statement!(reg e(0); Type::int(5); clock(e(2)); reset(e(3), e(4)) initial(vec![statement!(e(0); Type::Bool; Alias; e(2))]); e(1));
+
+        populate_var_map(&vec![lhs.clone()], &vec![rhs.clone()], &mut map).unwrap();
+
+        assert!(!compare_statements(&lhs, &rhs, &mut map));
+    }
+
+    #[test]
+    fn identical_registers_with_initial_is_different_from_without() {
+        let mut map = VarMap::new();
+
+        map.map_expr(1, 1);
+        map.map_expr(2, 2);
+        map.map_expr(3, 3);
+        map.map_expr(4, 4);
+
+        let lhs = statement!(reg e(0); Type::int(5); clock(e(2)); reset(e(3), e(4)); e(1));
+        let rhs = statement!(reg e(0); Type::int(5); clock(e(2)); reset(e(3), e(4)) initial(vec![statement!(e(0); Type::Bool; Alias; e(2))]); e(1));
 
         populate_var_map(&vec![lhs.clone()], &vec![rhs.clone()], &mut map).unwrap();
 

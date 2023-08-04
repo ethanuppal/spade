@@ -1,0 +1,21 @@
+---
+source: spade-tests/src/hir_lowering.rs
+---
+entity inner() -> bool {true}
+
+entity test(clk: clock) -> bool {
+    reg(clk) x initial(true && inst inner()) = x;
+    x
+}
+
+
+error: Register initial values must be known at compile time
+  ┌─ testinput:4:24
+  │
+4 │     reg(clk) x initial(true && inst inner()) = x;
+  │                        ^^^^^^^^^^^^^^^^^^^^
+  │                        │       │
+  │                        │       This subexpression cannot be computed at compile time
+  │                        Value not known at compile time
+
+

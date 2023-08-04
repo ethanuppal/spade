@@ -173,6 +173,12 @@ impl CompilationError for Error {
                     .primary_label()
                     .with_message(format!("Found type {}", got))])
                 .with_notes(type_mismatch_notes(got, expected)),
+            Error::RegisterInitialMismatch { expected, got, loc } => Diagnostic::error()
+                .with_message("Register initial value mismatch")
+                .with_labels(vec![loc
+                    .primary_label()
+                    .with_message(format!("Found type {}", got))])
+                .with_notes(type_mismatch_notes(got, expected)),
             Error::RegisterResetMismatch { expected, got, loc } => Diagnostic::error()
                 .with_message("Register reset value mismatch")
                 .with_labels(vec![loc

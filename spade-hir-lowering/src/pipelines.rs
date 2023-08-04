@@ -148,6 +148,7 @@ pub fn handle_statement(
                         ty: reg_type,
                         clock: clock.value_name(),
                         reset: None,
+                        initial: None,
                         value: next,
                         traced: None,
                         // NOTE: Do we/can we also want to point to the declaration
@@ -332,6 +333,7 @@ pub fn lower_pipeline<'a>(
                 clock: clock.value_name(),
                 // FIXME: We should probably handle resets here, but I don't know how
                 reset: None,
+                initial: None,
                 value: cond_name,
                 traced: None,
                 loc: None,

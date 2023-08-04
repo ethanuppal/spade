@@ -970,6 +970,17 @@ impl TypeState {
                 })?;
         }
 
+        if let Some(initial) = &reg.initial {
+            self.visit_expression(initial, ctx, generic_list)?;
+
+            self.unify(&initial.inner, &reg.value.inner, &ctx.symtab)
+                .map_normal_err(|(got, expected)| Error::RegisterInitialMismatch {
+                    expected,
+                    got,
+                    loc: initial.loc(),
+                })?;
+        }
+
         self.unify(&reg.clock, &t_clock(&ctx.symtab), &ctx.symtab)
             .map_normal_err(|(got, expected)| Error::NonClockClock {
                 expected,
@@ -2104,6 +2115,7 @@ mod tests {
                 .with_id(3)
                 .nowhere(),
             reset: None,
+            initial: None,
             value: ExprKind::int_literal(0).with_id(0).nowhere(),
             value_type: None,
             attributes: AttributeList::empty(),
@@ -2146,6 +2158,7 @@ mod tests {
                 .with_id(3)
                 .nowhere(),
             reset: None,
+            initial: None,
             value: ExprKind::Identifier(name_id(0, "a").inner)
                 .with_id(0)
                 .nowhere(),
@@ -2190,6 +2203,7 @@ mod tests {
                 ExprKind::Identifier(rst_cond.clone()).with_id(1).nowhere(),
                 ExprKind::Identifier(rst_value.clone()).with_id(2).nowhere(),
             )),
+            initial: None,
             value: ExprKind::int_literal(0).with_id(0).nowhere(),
             value_type: None,
             attributes: hir::AttributeList::empty(),
@@ -2303,6 +2317,7 @@ mod tests {
                 .with_id(0)
                 .nowhere(),
             reset: None,
+            initial: None,
             value: ExprKind::TupleLiteral(vec![
                 ExprKind::IntLiteral(IntLiteral::Signed(5.to_bigint()))
                     .with_id(1)

@@ -84,6 +84,7 @@ impl Passable for Loc<Expression> {
                                 pattern: _,
                                 clock,
                                 reset,
+                                initial,
                                 value,
                                 value_type: _,
                                 attributes: _,
@@ -91,6 +92,11 @@ impl Passable for Loc<Expression> {
 
                             match reset {
                                 Some((trig, val)) => subnodes!(trig, val),
+                                None => {}
+                            }
+
+                            match initial {
+                                Some(initial) => subnodes!(initial),
                                 None => {}
                             }
 

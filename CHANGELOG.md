@@ -12,6 +12,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Added
 
+- [!216][!216] Support initial values for registers
+
 ### Fixed
 
 - [!202][!202] Re-add missing requirement for the first argument of a pipeline to be a clock
@@ -39,6 +41,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 [!209]: https://gitlab.com/spade-lang/spade/-/merge_requests/209
 [!214]: https://gitlab.com/spade-lang/spade/-/merge_requests/214
 [!215]: https://gitlab.com/spade-lang/spade/-/merge_requests/215
+[!216]: https://gitlab.com/spade-lang/spade/-/merge_requests/216
 
 ## [0.3.0]
 

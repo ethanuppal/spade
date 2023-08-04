@@ -86,6 +86,7 @@ pub fn visit_statement(
                 pattern,
                 clock,
                 reset,
+                initial,
                 value,
                 value_type: _,
                 attributes: _,
@@ -98,6 +99,10 @@ pub fn visit_statement(
                 visit_expression(trig, linear_state, ctx)?;
                 visit_expression(val, linear_state, ctx)?;
             }
+            initial
+                .as_ref()
+                .map(|i| visit_expression(i, linear_state, ctx))
+                .transpose()?;
 
             visit_expression(value, linear_state, ctx)?;
 

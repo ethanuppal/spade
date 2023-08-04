@@ -919,16 +919,29 @@ impl StatementLocal for Statement {
                 result.append(pattern.lower(value.variable(ctx.subs)?, ctx)?);
             }
             Statement::Register(register) => {
-                result.append(register.clock.lower(ctx)?);
+                let hir::Register {
+                    clock,
+                    reset,
+                    initial,
+                    pattern,
+                    value,
+                    value_type: _,
+                    attributes,
+                } = &register.inner;
+                result.append(clock.lower(ctx)?);
 
-                if let Some((trig, value)) = &register.reset {
+                if let Some((trig, value)) = &reset {
                     result.append(trig.lower(ctx)?);
                     result.append(value.lower(ctx)?);
                 }
 
-                result.append(register.value.lower(ctx)?);
+                if let Some(initial) = initial {
+                    result.append(initial.lower(ctx)?);
+                }
 
-                let refutability = register.pattern.is_refutable(ctx);
+                result.append(value.lower(ctx)?);
+
+                let refutability = pattern.is_refutable(ctx);
                 if refutability.is_useful() {
                     return Err(Error::RefutablePattern {
                         pattern: register.pattern.loc(),
@@ -937,21 +950,19 @@ impl StatementLocal for Statement {
                     });
                 }
 
-                let ty = ctx.types.type_of_id(
-                    register.pattern.id,
-                    ctx.symtab.symtab(),
-                    &ctx.item_list.types,
-                );
+                let ty =
+                    ctx.types
+                        .type_of_id(pattern.id, ctx.symtab.symtab(), &ctx.item_list.types);
 
                 if ty.is_port() {
                     return Err(Error::PortInRegister {
-                        loc: register.value.loc(),
+                        loc: value.loc(),
                         ty,
                     });
                 }
 
                 let mut traced = None;
-                register.attributes.lower(&mut |attr| match &attr.inner {
+                attributes.lower(&mut |attr| match &attr.inner {
                     Attribute::Fsm { state } => {
                         traced = Some(state.value_name());
                         Ok(())
@@ -959,33 +970,48 @@ impl StatementLocal for Statement {
                     Attribute::WalTraceable { .. } => Err(attr.report_unused("register").into()),
                 })?;
 
+                let initial = if let Some(init) = initial {
+                    if let Some(witness) = init.runtime_requirement_witness() {
+                        return Err(Diagnostic::error(
+                            init,
+                            "Register initial values must be known at compile time",
+                        )
+                        .primary_label("Value not known at compile time")
+                        .secondary_label(
+                            witness,
+                            "This subexpression cannot be computed at compile time",
+                        )
+                        .into());
+                    };
+
+                    Some(init.lower(ctx)?.to_vec_no_source_map())
+                } else {
+                    None
+                };
+
                 result.push_primary(
                     mir::Statement::Register(mir::Register {
-                        name: register.pattern.value_name(),
+                        name: pattern.value_name(),
                         ty: ctx
                             .types
-                            .type_of_id(
-                                register.pattern.id,
-                                ctx.symtab.symtab(),
-                                &ctx.item_list.types,
-                            )
+                            .type_of_id(pattern.id, ctx.symtab.symtab(), &ctx.item_list.types)
                             .to_mir_type(),
-                        clock: register.clock.variable(ctx.subs)?,
-                        reset: register
-                            .reset
+                        clock: clock.variable(ctx.subs)?,
+                        reset: reset
                             .as_ref()
                             .map::<Result<_>, _>(|(value, trig)| {
                                 Ok((value.variable(ctx.subs)?, trig.variable(ctx.subs)?))
                             })
                             .transpose()?,
-                        value: register.value.variable(ctx.subs)?,
-                        loc: Some(register.pattern.loc()),
+                        initial,
+                        value: value.variable(ctx.subs)?,
+                        loc: Some(pattern.loc()),
                         traced,
                     }),
-                    &register.pattern,
+                    pattern,
                 );
 
-                result.append(register.pattern.lower(register.pattern.value_name(), ctx)?);
+                result.append(pattern.lower(pattern.value_name(), ctx)?);
             }
             Statement::Declaration(_) => {}
             Statement::PipelineRegMarker(_cond) => {

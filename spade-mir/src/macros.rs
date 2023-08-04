@@ -18,6 +18,27 @@ macro_rules! if_tracing {
 }
 
 #[macro_export]
+macro_rules! optional_reset {
+    () => {None};
+    (($rst_trig_kind:ident $rst_trig_name:tt, $rst_val_kind:ident $rst_val_name:tt)) => {
+        Some((
+            spade_mir::value_name!($rst_trig_kind $rst_trig_name),
+            spade_mir::value_name!($rst_val_kind $rst_val_name)
+        ))
+    }
+}
+
+#[macro_export]
+macro_rules! optional_initial {
+    () => {
+        None
+    };
+    (($val:expr)) => {
+        Some($val)
+    };
+}
+
+#[macro_export]
 macro_rules! statement {
     // Normal constants
     (
@@ -48,17 +69,16 @@ macro_rules! statement {
         reg $name_kind:ident $name:tt;
         $type:expr;
         clock ($clk_name_kind:ident $clk_name:tt);
-        reset ($rst_trig_kind:ident $rst_trig_name:tt, $rst_val_kind:ident $rst_val_name:tt);
+        $(reset $reset:tt)?
+        $(initial $initial:tt)?;
         $val_kind:ident $val_name:tt
     ) => {
         spade_mir::Statement::Register(spade_mir::Register {
             name: spade_mir::value_name!($name_kind $name),
             ty: $type,
             clock: spade_mir::value_name!($clk_name_kind $clk_name),
-            reset: Some((
-                spade_mir::value_name!($rst_trig_kind $rst_trig_name),
-                spade_mir::value_name!($rst_val_kind $rst_val_name)
-            )),
+            reset: spade_mir::optional_reset!($($reset)?),
+            initial: spade_mir::optional_initial!($($initial)?),
             value: spade_mir::value_name!($val_kind $val_name),
             loc: None,
             traced: spade_mir::if_tracing!($($traced_kind $traced_name)?)
@@ -77,6 +97,7 @@ macro_rules! statement {
             ty: $type,
             clock: spade_mir::value_name!($clk_name_kind $clk_name),
             reset: None,
+            initial: None,
             value: spade_mir::value_name!($val_kind $val_name),
             loc: None,
             traced: spade_mir::if_tracing!($($traced_kind $traced_name)?)
@@ -233,6 +254,7 @@ mod tests {
             ty: Type::int(5),
             clock: ValueName::_test_named(1, "clk".into()),
             reset: None,
+            initial: None,
             value: ValueName::Expr(0),
             loc: None,
             traced: Some(ValueName::Expr(2)),
@@ -251,6 +273,7 @@ mod tests {
             ty: Type::int(5),
             clock: ValueName::_test_named(1, "clk".into()),
             reset: Some((ValueName::Expr(1), ValueName::Expr(2))),
+            initial: None,
             value: ValueName::Expr(0),
             loc: None,
             traced: None,

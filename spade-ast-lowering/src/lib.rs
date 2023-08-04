@@ -1345,6 +1345,12 @@ fn visit_register(reg: &Loc<ast::Register>, ctx: &mut Context) -> Result<Vec<Loc
         None
     };
 
+    let initial = reg
+        .initial
+        .as_ref()
+        .map(|i| i.try_visit(visit_expression, ctx))
+        .transpose()?;
+
     let value = reg.value.try_visit(visit_expression, ctx)?;
 
     let value_type = if let Some(value_type) = &reg.value_type {
@@ -1401,6 +1407,7 @@ fn visit_register(reg: &Loc<ast::Register>, ctx: &mut Context) -> Result<Vec<Loc
                 pattern,
                 clock,
                 reset,
+                initial,
                 value,
                 value_type,
                 attributes,
@@ -1651,6 +1658,7 @@ mod statement_visiting {
                 pattern: ast::Pattern::name("regname"),
                 clock: ast::Expression::Identifier(ast_path("clk")).nowhere(),
                 reset: None,
+                initial: None,
                 value: ast::Expression::int_literal(0).nowhere(),
                 value_type: None,
                 attributes: ast::AttributeList::empty(),
@@ -1668,6 +1676,7 @@ mod statement_visiting {
                     .with_id(0)
                     .nowhere(),
                 reset: None,
+                initial: None,
                 value: hir::ExprKind::int_literal(0).idless().nowhere(),
                 value_type: None,
                 attributes: hir::AttributeList::empty(),
@@ -2544,6 +2553,7 @@ mod register_visiting {
                 ast::Expression::Identifier(ast_path("rst")).nowhere(),
                 ast::Expression::int_literal(0).nowhere(),
             )),
+            initial: Some(ast::Expression::int_literal(0).nowhere()),
             value: ast::Expression::int_literal(1).nowhere(),
             value_type: Some(ast::TypeSpec::Unit(().nowhere()).nowhere()),
             attributes: ast::AttributeList::empty(),
@@ -2563,6 +2573,7 @@ mod register_visiting {
                     .nowhere(),
                 hir::ExprKind::int_literal(0).idless().nowhere(),
             )),
+            initial: Some(hir::ExprKind::int_literal(0).idless().nowhere()),
             value: hir::ExprKind::int_literal(1).idless().nowhere(),
             value_type: Some(hir::TypeSpec::unit().nowhere()),
             attributes: hir::AttributeList::empty(),

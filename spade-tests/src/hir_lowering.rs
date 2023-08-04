@@ -532,6 +532,34 @@ mod tests {
     }
 
     #[test]
+    fn registers_with_initial_work() {
+        let code = r#"
+        entity name(clk: clock, rst: bool, a: int<16>) -> int<16> {
+            reg(clk) res initial (0) = a;
+            res
+        }
+        "#;
+
+        let initial_value = vec![statement!(const 3; Type::int(16); ConstantValue::int(0))];
+
+        let expected = entity! {&["name"]; (
+                "clk", n(0, "clk"), Type::Bool,
+                "rst", n(2, "rst"), Type::Bool,
+                "a", n(1, "a"), Type::int(16),
+            ) -> Type::int(16); {
+                (const 0; Type::int(16); ConstantValue::int(0));
+                (reg n(0, "res");
+                    Type::int(16);
+                    clock(n(0, "clk"));
+                    initial (initial_value);
+                    n(1, "a"))
+            } => n(0, "res")
+        };
+
+        assert_same_mir!(&build_entity!(code), &expected);
+    }
+
+    #[test]
     fn untyped_let_bindings_work() {
         let code = r#"
         entity name(clk: clock, a: int<16>) -> int<16> {
@@ -3028,6 +3056,18 @@ mod tests {
         ";
 
         build_items(code);
+    }
+
+    snapshot_error! {
+        non_constant_initial_value_is_error,
+        "
+            entity inner() -> bool {true}
+
+            entity test(clk: clock) -> bool {
+                reg(clk) x initial(true && inst inner()) = x;
+                x
+            }
+        "
     }
 }
 

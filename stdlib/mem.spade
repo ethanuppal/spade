@@ -13,12 +13,12 @@ entity clocked_memory<#NumElements, #WritePorts, #AddrWidth, D>(
     __builtin__
 
 
-/// Same as `clocked_memory` but initializes the memory with the values specified in `initial`.
+/// Same as `clocked_memory` but initializes the memory with the values specified in `initial_values`.
 /// The initial values must be evaluatable at compile time, otherwise an error is thrown
 entity clocked_memory_init<#NumElements, #WritePorts, #AddrWidth, D>(
     clk: clock,
     writes: [(bool, int<AddrWidth>, D); WritePorts],
-    initial: [D; NumElements]
+    initial_values: [D; NumElements]
 ) -> Memory<D, NumElements>
     __builtin__
 

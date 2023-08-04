@@ -6,6 +6,8 @@
 /// to either look up names in a hash map, or just use the given name.
 use std::collections::HashMap;
 
+use itertools::Itertools;
+
 use crate::{diff::VarMap, Entity};
 use crate::{Binding, MirInput, Register, Statement, ValueName};
 
@@ -116,6 +118,7 @@ where
             ty,
             clock,
             reset,
+            initial,
             value,
             loc: _,
             traced,
@@ -130,6 +133,15 @@ where
                     format!(" reset ({}, {})", trig, val)
                 })
                 .unwrap_or_else(|| "".to_string());
+            let initial = initial
+                .as_ref()
+                .map(|i| {
+                    format!(
+                        " initial ({})",
+                        i.iter().map(|v| format!("{v}").to_string()).join("; ")
+                    )
+                })
+                .unwrap_or_else(|| "".to_string());
             let value = translate_val_name(value, lhs_trans, rhs_trans);
             let traced = if let Some(traced) = traced {
                 format!(
@@ -140,10 +152,7 @@ where
                 "".to_string()
             };
 
-            format!(
-                "{traced}reg {}: {} clock {}{} {}",
-                name, ty, clock, reset, value
-            )
+            format!("{traced}reg {name}: {ty} clock {clock}{reset}{initial} {value}",)
         }
         Statement::Constant(name, ty, value) => {
             let name = translate_expr(*name, &lhs_trans.expr, &rhs_trans.expr);

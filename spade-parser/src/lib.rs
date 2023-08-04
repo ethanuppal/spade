@@ -771,6 +771,29 @@ impl<'a> Parser<'a> {
     }
 
     #[trace_parser]
+    pub fn register_reset(&mut self) -> Result<Option<(Loc<Expression>, Loc<Expression>)>> {
+        peek_for!(self, &TokenKind::Reset);
+        let (reset, _) = self.surrounded(
+            &TokenKind::OpenParen,
+            |s| s.register_reset_definition().map(Some),
+            &TokenKind::CloseParen,
+        )?;
+        // NOTE: Safe unwrap, register_reset_definition can not fail
+        Ok(Some(reset.unwrap()))
+    }
+
+    #[trace_parser]
+    pub fn register_initial(&mut self) -> Result<Option<Loc<Expression>>> {
+        peek_for!(self, &TokenKind::Initial);
+        let (reset, _) = self.surrounded(
+            &TokenKind::OpenParen,
+            Self::expression,
+            &TokenKind::CloseParen,
+        )?;
+        Ok(Some(reset))
+    }
+
+    #[trace_parser]
     pub fn register(&mut self, attributes: &AttributeList) -> Result<Option<Loc<Statement>>> {
         let start_token = peek_for!(self, &TokenKind::Reg);
 
@@ -856,15 +879,22 @@ impl<'a> Parser<'a> {
         };
 
         // Optional reset
-        let reset = if self.peek_and_eat(&TokenKind::Reset)?.is_some() {
-            let (reset, _) = self.surrounded(
-                &TokenKind::OpenParen,
-                |s| s.register_reset_definition().map(Some),
-                &TokenKind::CloseParen,
-            )?;
-            reset
-        } else {
-            None
+        let reset = self.register_reset()?;
+        let initial = self.register_initial()?;
+        // Try parsing reset again, if we find two resets, error out
+        let reset = match (reset, self.register_reset()?) {
+            (Some(first), None) => Some(first),
+            (None, Some(second)) => Some(second),
+            (Some(first), Some(second)) => {
+                return Err(Diagnostic::error(
+                    ().between_locs(&second.0, &second.1),
+                    "Multiple resets specified",
+                )
+                .primary_label("Second reset")
+                .secondary_label(().between_locs(&first.0, &first.1), "First reset")
+                .into())
+            }
+            (None, None) => None,
         };
 
         // Value
@@ -877,6 +907,7 @@ impl<'a> Parser<'a> {
                 pattern,
                 clock,
                 reset,
+                initial,
                 value,
                 value_type,
                 attributes: attributes.clone(),
@@ -2378,6 +2409,7 @@ mod tests {
                 pattern: Pattern::name("name"),
                 clock: Expression::Identifier(ast_path("clk")).nowhere(),
                 reset: None,
+                initial: None,
                 value: Expression::int_literal(1).nowhere(),
                 value_type: None,
                 attributes: ast::AttributeList::empty(),
@@ -2406,6 +2438,7 @@ mod tests {
                     Expression::Identifier(ast_path("rst")).nowhere(),
                     Expression::int_literal(0).nowhere(),
                 )),
+                initial: None,
                 value: Expression::int_literal(1).nowhere(),
                 value_type: None,
                 attributes: ast::AttributeList::empty(),
@@ -2434,6 +2467,7 @@ mod tests {
                     Expression::Identifier(ast_path("rst")).nowhere(),
                     Expression::int_literal(0).nowhere(),
                 )),
+                initial: None,
                 value: Expression::int_literal(1).nowhere(),
                 value_type: Some(TypeSpec::Named(ast_path("Type"), None).nowhere()),
                 attributes: ast::AttributeList::empty(),
@@ -3018,6 +3052,7 @@ mod tests {
                                 pattern: Pattern::Path(ast_path("state")).nowhere(),
                                 clock: Expression::Identifier(ast_path("clk")).nowhere(),
                                 reset: None,
+                                initial: None,
                                 value: Expression::BoolLiteral(false).nowhere(),
                                 value_type: None,
                                 attributes: AttributeList::from_vec(vec![Attribute::Fsm {

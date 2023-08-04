@@ -63,6 +63,8 @@ pub enum TokenKind {
     Instance,
     #[token("reset")]
     Reset,
+    #[token("initial")]
+    Initial,
     #[token("if")]
     If,
     #[token("else")]
@@ -227,6 +229,7 @@ impl TokenKind {
             TokenKind::Stage => "stage",
             TokenKind::Instance => "inst",
             TokenKind::Reset => "reset",
+            TokenKind::Initial => "initial",
             TokenKind::If => "if",
             TokenKind::Else => "else",
             TokenKind::Match => "match",

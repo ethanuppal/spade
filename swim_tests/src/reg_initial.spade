@@ -1,0 +1,4 @@
+entity uut(clk: clock) -> int<8> {
+    reg(clk) x initial(123) = x;
+    x
+}

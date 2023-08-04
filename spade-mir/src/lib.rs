@@ -385,6 +385,7 @@ pub struct Register {
     pub ty: Type,
     pub clock: ValueName,
     pub reset: Option<(ValueName, ValueName)>,
+    pub initial: Option<Vec<Statement>>,
     pub value: ValueName,
     pub loc: Option<Loc<()>>,
     /// True if this register corresponds to an fsm with the specified ValueName
@@ -399,6 +400,7 @@ impl std::fmt::Display for Register {
             ty,
             clock,
             reset,
+            initial,
             value,
             loc: _,
             traced: _,
@@ -409,7 +411,12 @@ impl std::fmt::Display for Register {
             .map(|(trig, val)| format!("({trig}, {val})"))
             .unwrap_or_else(String::new);
 
-        write!(f, "reg({clock}) {name}: {ty}{reset} = {value}")
+        let initial = initial
+            .as_ref()
+            .map(|i| format!("initial({})", i.iter().map(|s| format!("{s}")).join("; ")))
+            .unwrap_or_else(String::new);
+
+        write!(f, "reg({clock}) {name}: {ty}{reset}{initial} = {value}")
     }
 }
 

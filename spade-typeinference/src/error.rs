@@ -185,6 +185,12 @@ pub enum Error {
         got: UnificationTrace,
         loc: Loc<()>,
     },
+    #[error("Initial value must match register type")]
+    RegisterInitialMismatch {
+        expected: UnificationTrace,
+        got: UnificationTrace,
+        loc: Loc<()>,
+    },
 
     #[error("Named argument mismatch")]
     NamedArgumentMismatch {

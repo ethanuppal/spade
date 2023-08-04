@@ -1,0 +1,15 @@
+---
+source: spade-tests/src/parser.rs
+---
+entity main() -> bool {
+    reg(clk) a reset(true: 0) initial(true) initial(true) = true;
+    true
+}
+
+error: Unexpected `initial`, expected `=`
+  ┌─ testinput:2:45
+  │
+2 │     reg(clk) a reset(true: 0) initial(true) initial(true) = true;
+  │                                             ^^^^^^^ expected `=`
+
+

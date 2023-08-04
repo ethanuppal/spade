@@ -702,3 +702,13 @@ snapshot_error! {
             true
     }"
 }
+
+snapshot_error! {
+    register_initial_value_error,
+    "
+        entity t(clk: clock) -> bool {
+            reg(clk) x initial(0) = true;
+            true
+        }
+    "
+}

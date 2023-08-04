@@ -331,3 +331,42 @@ snapshot_error! {
         }
     "
 }
+
+snapshot_error! {
+    multiple_resets_triggers_error,
+    "
+    entity main() -> bool {
+        reg(clk) a reset(true: 0) reset(true: 0) = true;
+        true
+    }"
+}
+
+snapshot_error! {
+    multiple_resets_triggers_error_with_initial,
+    "
+    entity main() -> bool {
+        reg(clk) a reset(true: 0) initial(true) reset(true: 0) = true;
+        true
+    }"
+}
+
+snapshot_error! {
+    multiple_initial_does_not_pass_compiler,
+    "
+    entity main() -> bool {
+        reg(clk) a reset(true: 0) initial(true) initial(true) = true;
+        true
+    }"
+}
+
+#[test]
+fn reset_and_initial_in_either_order_is_valid() {
+    let code = r#"
+    entity main(clk: clock) -> bool {
+        reg(clk) a reset(true: false) initial(true) = true;
+        reg(clk) a initial(true) reset(true: false) = true;
+        true
+    }"#;
+
+    build_items(code);
+}

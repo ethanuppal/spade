@@ -811,9 +811,8 @@ fn statement_code(statement: &Statement, ctx: &mut Context) -> Code {
             }
         }
         Statement::Register(reg) => {
-            if let Some((rst_trig, rst_val)) = &reg.reset {
-                let name = reg.name.var_name();
-
+            let name = reg.name.var_name();
+            let main_body = if let Some((rst_trig, rst_val)) = &reg.reset {
                 code! {
                     [0] &format!("always @(posedge {}, posedge {}) begin", reg.clock.var_name(), rst_trig.var_name());
                     [1]     &format!("if ({}) begin", rst_trig.var_name());
@@ -825,13 +824,26 @@ fn statement_code(statement: &Statement, ctx: &mut Context) -> Code {
                     [0] &"end"
                 }
             } else {
-                let name = reg.name.var_name();
-
                 code! {
                     [0] &format!("always @(posedge {}) begin", reg.clock.var_name());
                     [1]     &format!("{} <= {};", name, reg.value.var_name());
                     [0] &"end"
                 }
+            };
+
+            let initial_block = if let Some(initial) = reg.initial.as_ref() {
+                code! {
+                    [0] "initial begin";
+                    [1]     format!("{} = 'b{};", name, eval_statements(initial).as_string());
+                    [0] "end";
+                }
+            } else {
+                code![]
+            };
+
+            code! {
+                [0] initial_block;
+                [0] main_body
             }
         }
         Statement::Constant(id, t, value) => {
@@ -1235,6 +1247,37 @@ mod tests {
                     else begin
                         \r  <= _e_1;
                     end
+                end"#
+        );
+
+        assert_same_code!(
+            &statement_code_and_declaration(
+                &reg,
+                &TypeList::empty(),
+                &CodeBundle::new("".to_string())
+            )
+            .to_string(),
+            expected
+        );
+    }
+
+    #[test]
+    fn registers_with_initial_values_work() {
+        let initial_value = vec![
+            statement!(const 4; Type::int(7); ConstantValue::int(0b10_1100)),
+            statement!(e(5); Type::int(7); Alias; e(4)),
+        ];
+        let reg =
+            statement!(reg n(0, "r"); Type::int(7); clock (e(0)); initial (initial_value); e(1));
+
+        let expected = indoc!(
+            r#"
+                reg[6:0] \r ;
+                initial begin
+                    \r  = 'b0101100;
+                end
+                always @(posedge _e_0) begin
+                    \r  <= _e_1;
                 end"#
         );
 
