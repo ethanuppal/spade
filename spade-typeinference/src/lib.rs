@@ -13,6 +13,7 @@ use hir::{Binding, Parameter, UnitHead, WalTrace};
 use num::{BigInt, Zero};
 use serde::{Deserialize, Serialize};
 use spade_common::num_ext::InfallibleToBigInt;
+use spade_diagnostics::Diagnostic;
 use spade_macros::trace_typechecker;
 use trace_stack::TraceStack;
 use tracing::{info, trace};
@@ -36,6 +37,9 @@ use error::{Error, Result, UnificationError, UnificationErrorExt, UnificationTra
 use fixed_types::{t_bool, t_clock, t_int};
 use requirements::{Replacement, Requirement};
 use trace_stack::{format_trace_stack, TraceStackEntry};
+
+use crate::error_reporting::type_mismatch_notes;
+use crate::fixed_types::t_void;
 
 mod constraints;
 pub mod dump;
@@ -275,29 +279,37 @@ impl TypeState {
 
         // Ensure that the output type matches what the user specified, and unit otherwise
         if let Some(output_type) = &entity.head.output_type {
-            let tvar = self.type_var_from_hir(&output_type, &generic_list);
+            let tvar = self.type_var_from_hir(output_type, &generic_list);
             self.unify(
                 &TypedExpression::Id(entity.body.inner.id),
                 &tvar,
-                &ctx.symtab,
+                ctx.symtab,
             )
-            .map_normal_err(|(got, expected)| Error::EntityOutputTypeMismatch {
-                expected,
-                got,
-                type_spec: output_type.loc(),
-                output_expr: entity.body.loc(),
+            .map_normal_err(|(got, expected)| {
+                // FIXME: Might want to check if there is no return value in the block
+                // and in that case suggest adding it.
+                Diagnostic::error(&entity.body, "Type error")
+                    .primary_label(format!("Found type {got}"))
+                    .secondary_label(output_type, format!("{expected} type specified here"))
+                    .note(type_mismatch_notes(&got, &expected).join("\n      "))
+                    .into()
             })?;
         } else {
-            todo!("Support unit types")
-            // self.unify_types(
-            //     &TypedExpression::Id(entity.body.inner.id),
-            //     &TypeVar::Known(KnownType::Type(BaseType::Unit), vec![], None),
-            // )
-            // .map_err(|(got, expected)| Error::UnspecedEntityOutputTypeMismatch {
-            //     expected,
-            //     got,
-            //     output_expr: entity.body.loc(),
-            // })?;
+            // No output type, so unify with the unit type.
+            self.unify(
+                &TypedExpression::Id(entity.body.inner.id),
+                &t_void(ctx.symtab),
+                ctx.symtab,
+            )
+            .map_normal_err(|(got, _expected)| {
+                Diagnostic::error(&entity.body, "Output type mismatch")
+                    .primary_label(format!("Found type {got}"))
+                    .note(format!(
+                        "The {} does not specify a return type.\n      Add a return type, or remove the return value.",
+                        entity.head.unit_kind.name()
+                    ))
+                    .into()
+            })?;
         }
 
         self.check_requirements(ctx)?;
@@ -542,12 +554,11 @@ impl TypeState {
             }
         };
 
-        let return_type = self.type_var_from_hir(
-            head.output_type
-                .as_ref()
-                .expect("Unit return type from entity is unsupported"),
-            &generic_list,
-        );
+        let return_type = head
+            .output_type
+            .as_ref()
+            .map(|o| self.type_var_from_hir(o, &generic_list))
+            .unwrap_or_else(|| TypeVar::Known(t_void(ctx.symtab), vec![]));
 
         // Unify the types of the arguments
         self.type_check_argument_list(&matched_args, ctx, &generic_list)?;
@@ -669,7 +680,9 @@ impl TypeState {
         for statement in &block.statements {
             self.visit_statement(statement, ctx, generic_list)?;
         }
-        self.visit_expression(&block.result, ctx, generic_list)?;
+        if let Some(result) = &block.result {
+            self.visit_expression(result, ctx, generic_list)?;
+        }
         Ok(())
     }
 
@@ -1979,7 +1992,7 @@ mod tests {
 
         let input = ExprKind::Block(Box::new(Block {
             statements: vec![],
-            result: ExprKind::int_literal(5).with_id(0).nowhere(),
+            result: Some(ExprKind::int_literal(5).with_id(0).nowhere()),
         }))
         .with_id(1)
         .nowhere();

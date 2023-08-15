@@ -1,0 +1,55 @@
+---
+source: spade-tests/src/typeinference.rs
+---
+fn empty(a: bool) {
+    a
+}
+
+entity empty2(clk: clock, b: bool) {
+    b
+}
+
+pipeline(4) empty3(clk: clock, c: bool) {
+    reg*4;
+        c
+}
+
+
+error: Output type mismatch
+  ┌─ testinput:1:19
+  │  
+1 │   fn empty(a: bool) {
+  │ ╭───────────────────^
+2 │ │     a
+3 │ │ }
+  │ ╰─^ Found type bool
+  │  
+  = note: The function does not specify a return type.
+          Add a return type, or remove the return value.
+
+error: Output type mismatch
+  ┌─ testinput:5:36
+  │  
+5 │   entity empty2(clk: clock, b: bool) {
+  │ ╭────────────────────────────────────^
+6 │ │     b
+7 │ │ }
+  │ ╰─^ Found type bool
+  │  
+  = note: The entity does not specify a return type.
+          Add a return type, or remove the return value.
+
+error: Output type mismatch
+   ┌─ testinput:9:41
+   │  
+ 9 │   pipeline(4) empty3(clk: clock, c: bool) {
+   │ ╭─────────────────────────────────────────^
+10 │ │     reg*4;
+11 │ │         c
+12 │ │ }
+   │ ╰─^ Found type bool
+   │  
+   = note: The pipeline does not specify a return type.
+           Add a return type, or remove the return value.
+
+

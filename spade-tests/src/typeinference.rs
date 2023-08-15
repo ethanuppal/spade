@@ -87,6 +87,42 @@ fn type_inference_works_for_bools_with_not_operator() {
     build_items(code);
 }
 
+#[test]
+fn entities_without_return_type_typechecks() {
+    // NOTE: instantiating an entity without a return type is still a type error,
+    // see 'instantiating_entities_without_return_type_errors'.
+    let code = r#"
+    entity no_output(clk: clock) {}
+    "#;
+
+    build_items(code);
+}
+
+#[test]
+fn entities_with_void_return_type_typechecks() {
+    // NOTE: instantiating an entity without a return type is still a type error,
+    // see 'instantiating_entities_without_return_type_errors'.
+    let code = r#"
+    entity no_output(clk: clock) -> void {}
+    "#;
+
+    build_items(code);
+}
+
+#[test]
+fn entities_without_return_type_can_be_instantiated() {
+    let code = r#"
+    entity no_output(clk: clock) {}
+
+    entity e(clk: clock) -> bool {
+        let _ = inst no_output(clk);
+        true
+    }
+    "#;
+
+    build_items(code);
+}
+
 snapshot_error!(
     backward_tuple_indexing_with_type_error_errors_nicely,
     "entity name(x: &mut (bool, bool)) -> int<32> {
@@ -711,4 +747,45 @@ snapshot_error! {
             true
         }
     "
+}
+
+snapshot_error! {
+    unit_omitting_return_type,
+    "
+    fn empty(a: bool) {
+        a
+    }
+
+    entity empty2(clk: clock, b: bool) {
+        b
+    }
+
+    pipeline(4) empty3(clk: clock, c: bool) {
+        reg*4;
+            c
+    }
+    "
+}
+
+snapshot_error! {
+    unit_omitting_return_value,
+    "
+    fn empty(a: bool) -> bool {
+    }
+
+    entity empty2(clk: clock, b: bool) -> bool {
+    }
+
+    pipeline(4) empty3(clk: clock, c: bool) -> bool {
+        reg*4;
+    }
+    "
+}
+
+snapshot_error! {
+    unit_return_expressionless_block,
+    "
+    fn f() -> bool {
+        {}
+    }"
 }

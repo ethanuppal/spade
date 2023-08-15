@@ -22,9 +22,9 @@ error: Type error
 6 │ │ }
   │ ╰─^ Found type int<9>
   │  
-  = Expected: 8
-  =       in: int<8>
-  =      Got: 9
-  =       in: int<9>
+  = note: Expected: 8
+                in: int<8>
+               Got: 9
+                in: int<9>
 
 

@@ -16,7 +16,7 @@ error: Type error
 3 │ │ }
   │ ╰─^ Found type bool
   │  
-  = Expected: int<8>
-  =      Got: bool
+  = note: Expected: int<8>
+               Got: bool
 
 

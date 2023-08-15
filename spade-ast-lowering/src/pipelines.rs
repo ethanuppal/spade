@@ -229,8 +229,10 @@ mod pipeline_visiting {
                         )
                         .nowhere(),
                     ],
-                    result: ast::Expression::IntLiteral(ast::IntLiteral::Signed(0.to_bigint()))
-                        .nowhere(),
+                    result: Some(
+                        ast::Expression::IntLiteral(ast::IntLiteral::Signed(0.to_bigint()))
+                            .nowhere(),
+                    ),
                 }))
                 .nowhere(),
             ),
@@ -324,8 +326,10 @@ mod pipeline_visiting {
                         )
                         .nowhere(),
                     ],
-                    result: ast::Expression::IntLiteral(ast::IntLiteral::Signed(0.to_bigint()))
-                        .nowhere(),
+                    result: Some(
+                        ast::Expression::IntLiteral(ast::IntLiteral::Signed(0.to_bigint()))
+                            .nowhere(),
+                    ),
                 }))
                 .nowhere(),
             ),

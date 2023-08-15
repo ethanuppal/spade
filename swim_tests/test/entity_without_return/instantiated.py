@@ -1,0 +1,13 @@
+# top=entity_without_return::also_no_output
+
+from cocotb import cocotb
+from cocotb.triggers import Timer
+
+@cocotb.test()
+async def test(dut):
+    dut.input.value = True
+    await Timer(1, units="ns")
+    assert dut.output_mut.value == False
+    dut.input.value = False
+    await Timer(1, units="ns")
+    assert dut.output_mut.value == True

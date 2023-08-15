@@ -98,7 +98,9 @@ pub(crate) fn split_wildcard(
             }
             // Special types for which there are no constructors which makes matching
             // on them impossible
-            spade_types::PrimitiveType::Clock | spade_types::PrimitiveType::Memory => vec![],
+            spade_types::PrimitiveType::Clock
+            | spade_types::PrimitiveType::Memory
+            | spade_types::PrimitiveType::Void => vec![],
         },
         ConcreteType::Backward(_) => vec![Constructor::Single],
         ConcreteType::Wire(_) => vec![Constructor::Single],

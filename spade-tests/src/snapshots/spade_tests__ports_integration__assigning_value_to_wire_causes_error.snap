@@ -16,7 +16,7 @@ error: Type error
 3 │ │ }
   │ ╰─^ Found type bool
   │  
-  = Expected: &bool
-  =      Got: bool
+  = note: Expected: &bool
+               Got: bool
 
 

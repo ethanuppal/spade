@@ -20,7 +20,7 @@ error: Type error
 6 │ │     }
   │ ╰─────^ Found type int<_>
   │  
-  = Expected: bool
-  =      Got: int<_>
+  = note: Expected: bool
+               Got: int<_>
 
 

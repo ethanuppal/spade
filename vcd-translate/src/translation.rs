@@ -270,6 +270,10 @@ pub fn inner_translate_value(result: &mut String, in_value: &[Value], t: &Concre
             base: PrimitiveType::Memory,
             params: _,
         } => *result += "memory",
+        ConcreteType::Single {
+            base: PrimitiveType::Void,
+            params: _,
+        } => *result += "void",
         ConcreteType::Integer(_) => {
             panic!("Found a variable with type level integer in the vcd file")
         }

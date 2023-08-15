@@ -13,6 +13,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ### Added
 
 - [!216][!216] Support initial values for registers
+- [!217][!217] Allow writing units that don't return a value.
 
 ### Fixed
 
@@ -42,6 +43,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 [!214]: https://gitlab.com/spade-lang/spade/-/merge_requests/214
 [!215]: https://gitlab.com/spade-lang/spade/-/merge_requests/215
 [!216]: https://gitlab.com/spade-lang/spade/-/merge_requests/216
+[!217]: https://gitlab.com/spade-lang/spade/-/merge_requests/217
 
 ## [0.3.0]
 

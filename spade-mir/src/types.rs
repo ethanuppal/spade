@@ -5,6 +5,8 @@ use spade_common::num_ext::InfallibleToBigUint;
 pub enum Type {
     Int(BigUint),
     Bool,
+    /// An "empty" type.
+    Void,
     Tuple(Vec<Type>),
     Struct(Vec<(String, Type)>),
     Array {
@@ -34,6 +36,7 @@ impl Type {
         match self {
             Type::Int(len) => len.clone(),
             Type::Bool => 1u32.to_biguint(),
+            Type::Void => BigUint::zero(),
             Type::Tuple(inner) => inner.iter().map(Type::size).sum::<BigUint>(),
             Type::Struct(inner) => inner.iter().map(|(_, t)| t.size()).sum::<BigUint>(),
             Type::Enum(inner) => {
@@ -56,7 +59,7 @@ impl Type {
     pub fn backward_size(&self) -> BigUint {
         match self {
             Type::Backward(inner) => inner.size(),
-            Type::Int(_) | Type::Bool => BigUint::zero(),
+            Type::Int(_) | Type::Bool | Type::Void => BigUint::zero(),
             Type::Array { inner, length } => inner.backward_size() * length,
             Type::Enum(inner) => {
                 for v in inner {
@@ -96,6 +99,7 @@ impl std::fmt::Display for Type {
         match self {
             Type::Int(val) => write!(f, "int<{}>", val),
             Type::Bool => write!(f, "bool"),
+            Type::Void => write!(f, "void"),
             Type::Tuple(inner) => {
                 let inner = inner
                     .iter()

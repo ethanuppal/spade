@@ -2,7 +2,7 @@ use num::{BigInt, One};
 use spade_common::location_info::{Loc, WithLocation};
 use spade_common::name::Identifier;
 use spade_common::num_ext::InfallibleToBigUint;
-use spade_diagnostics::Diagnostic;
+use spade_diagnostics::{diag_anyhow, Diagnostic};
 use spade_hir::expression::{BinaryOperator, NamedArgument, UnaryOperator};
 use spade_hir::{ExprKind, Expression};
 use spade_macros::trace_typechecker;
@@ -12,7 +12,7 @@ use crate::constraints::{bits_to_store, ce_int, ce_var, ConstraintSource};
 use crate::equation::{TypeVar, TypedExpression};
 use crate::error::{Error, UnificationErrorExt};
 use crate::error_reporting::LocExt;
-use crate::fixed_types::t_bool;
+use crate::fixed_types::{t_bool, t_void};
 use crate::requirements::Requirement;
 use crate::{kvar, Context, GenericListToken, HasType, Result, TraceStackEntry, TypeState};
 
@@ -359,19 +359,25 @@ impl TypeState {
         ctx: &Context,
         generic_list: &GenericListToken,
     ) -> Result<()> {
-        assuming_kind!(ExprKind::Block(block) = &expression => {
+        assuming_kind!(ExprKind::Block(block) = expression => {
             self.visit_block(block, ctx, generic_list)?;
 
-            // Unify the return type of the block with the type of this expression
-            self.unify(&expression.inner, &block.result.inner, &ctx.symtab)
-                // NOTE: We could be more specific about this error specifying
-                // that the type of the block must match the return type, though
-                // that might just be spammy.
-                .map_normal_err(|(expected, got)| Error::UnspecifiedTypeError {
-                    expected,
-                    got,
-                    loc: block.result.loc(),
-                })?;
+            if let Some(result) = &block.result {
+                // Unify the return type of the block with the type of this expression
+                self.unify(&expression.inner, &result.inner, ctx.symtab)
+                    // NOTE: We could be more specific about this error specifying
+                    // that the type of the block must match the return type, though
+                    // that might just be spammy.
+                    .map_normal_err(|(expected, got)| Error::UnspecifiedTypeError {
+                        expected,
+                        got,
+                        loc: result.loc(),
+                    })?;
+            } else {
+                // Block without return value. Unify with void type.
+                self.unify(&expression.inner, &t_void(ctx.symtab), ctx.symtab)
+                    .map_normal_err(|err| diag_anyhow!(Loc::nowhere(()), "This error shouldn't be possible: {err:?}").into())?;
+            }
         });
         Ok(())
     }

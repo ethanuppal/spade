@@ -166,7 +166,11 @@ impl<'a> Inferer<'a> {
         for stmt in block.statements.iter() {
             self.handle_statement(stmt)?;
         }
-        self.expression(&block.result)
+        if let Some(result) = &block.result {
+            self.expression(result)
+        } else {
+            Ok(None)
+        }
     }
 
     fn handle_statement(&mut self, stmt: &Statement) -> error::Result<()> {

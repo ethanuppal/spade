@@ -118,7 +118,9 @@ impl Passable for Loc<Expression> {
                     }
                 }
 
-                block.result.apply(pass)?;
+                if let Some(result) = &mut block.result {
+                    result.apply(pass)?;
+                }
             }
             ExprKind::If(cond, on_true, on_false) => subnodes!(cond, on_true, on_false),
             ExprKind::PipelineRef {

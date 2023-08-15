@@ -31,3 +31,6 @@ pub fn t_bool(symtab: &SymbolTable) -> KnownType {
 pub fn t_clock(symtab: &SymbolTable) -> KnownType {
     lookup(symtab, &["clock"])
 }
+pub fn t_void(symtab: &SymbolTable) -> KnownType {
+    lookup(symtab, &["void"])
+}

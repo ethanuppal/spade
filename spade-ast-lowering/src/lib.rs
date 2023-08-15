@@ -1308,10 +1308,13 @@ fn visit_block(b: &ast::Block, ctx: &mut Context) -> Result<hir::Block> {
         .collect::<Result<Vec<_>>>()?
         .into_iter()
         .flatten()
-        .into_iter()
         .collect::<Vec<_>>();
 
-    let result = b.result.try_visit(visit_expression, ctx)?;
+    let result = b
+        .result
+        .as_ref()
+        .map(|o| o.try_visit(visit_expression, ctx))
+        .transpose()?;
 
     if let Some(undefined) = ctx.symtab.get_undefined_declarations().first() {
         return Err(
@@ -1319,8 +1322,7 @@ fn visit_block(b: &ast::Block, ctx: &mut Context) -> Result<hir::Block> {
                 .primary_label("This variable is declared but not defined")
                 // FIXME: Suggest removing the declaration (with a diagnostic suggestion) only if the variable is unused.
                 .help(format!("Define {undefined} with a let or reg binding"))
-                .help("Or, remove the declaration if the variable is unused")
-                .into(),
+                .help("Or, remove the declaration if the variable is unused"),
         );
     }
 
@@ -1495,7 +1497,7 @@ mod entity_visiting {
                         ast::Expression::int_literal(0).nowhere(),
                     )
                     .nowhere()],
-                    result: ast::Expression::int_literal(0).nowhere(),
+                    result: Some(ast::Expression::int_literal(0).nowhere()),
                 }))
                 .nowhere(),
             ),
@@ -1522,7 +1524,7 @@ mod entity_visiting {
                     hir::ExprKind::int_literal(0).idless().nowhere(),
                 )
                 .nowhere()],
-                result: hir::ExprKind::int_literal(0).idless().nowhere(),
+                result: Some(hir::ExprKind::int_literal(0).idless().nowhere()),
             }))
             .idless()
             .nowhere(),
@@ -1925,7 +1927,7 @@ mod expression_visiting {
                 ast::Expression::int_literal(0).nowhere(),
             )
             .nowhere()],
-            result: ast::Expression::int_literal(0).nowhere(),
+            result: Some(ast::Expression::int_literal(0).nowhere()),
         }));
         let expected = hir::ExprKind::Block(Box::new(hir::Block {
             statements: vec![hir::Statement::binding(
@@ -1934,7 +1936,7 @@ mod expression_visiting {
                 hir::ExprKind::int_literal(0).idless().nowhere(),
             )
             .nowhere()],
-            result: hir::ExprKind::int_literal(0).idless().nowhere(),
+            result: Some(hir::ExprKind::int_literal(0).idless().nowhere()),
         }))
         .idless();
 
@@ -1957,14 +1959,14 @@ mod expression_visiting {
             Box::new(
                 ast::Expression::Block(Box::new(ast::Block {
                     statements: vec![],
-                    result: ast::Expression::int_literal(1).nowhere(),
+                    result: Some(ast::Expression::int_literal(1).nowhere()),
                 }))
                 .nowhere(),
             ),
             Box::new(
                 ast::Expression::Block(Box::new(ast::Block {
                     statements: vec![],
-                    result: ast::Expression::int_literal(2).nowhere(),
+                    result: Some(ast::Expression::int_literal(2).nowhere()),
                 }))
                 .nowhere(),
             ),
@@ -1974,7 +1976,7 @@ mod expression_visiting {
             Box::new(
                 hir::ExprKind::Block(Box::new(hir::Block {
                     statements: vec![],
-                    result: hir::ExprKind::int_literal(1).idless().nowhere(),
+                    result: Some(hir::ExprKind::int_literal(1).idless().nowhere()),
                 }))
                 .idless()
                 .nowhere(),
@@ -1982,7 +1984,7 @@ mod expression_visiting {
             Box::new(
                 hir::ExprKind::Block(Box::new(hir::Block {
                     statements: vec![],
-                    result: hir::ExprKind::int_literal(2).idless().nowhere(),
+                    result: Some(hir::ExprKind::int_literal(2).idless().nowhere()),
                 }))
                 .idless()
                 .nowhere(),
@@ -2623,7 +2625,7 @@ mod item_visiting {
                 body: Some(
                     ast::Expression::Block(Box::new(ast::Block {
                         statements: vec![],
-                        result: ast::Expression::int_literal(0).nowhere(),
+                        result: Some(ast::Expression::int_literal(0).nowhere()),
                     }))
                     .nowhere(),
                 ),
@@ -2647,7 +2649,7 @@ mod item_visiting {
                 inputs: vec![],
                 body: hir::ExprKind::Block(Box::new(hir::Block {
                     statements: vec![],
-                    result: hir::ExprKind::int_literal(0).idless().nowhere(),
+                    result: Some(hir::ExprKind::int_literal(0).idless().nowhere()),
                 }))
                 .idless()
                 .nowhere(),
@@ -2700,7 +2702,7 @@ mod impl_blocks {
                 body: Some(
                     ast::Expression::Block(Box::new(ast::Block {
                         statements: vec![],
-                        result: ast::Expression::int_literal(0).nowhere(),
+                        result: Some(ast::Expression::int_literal(0).nowhere()),
                     }))
                     .nowhere(),
                 ),
@@ -2752,7 +2754,7 @@ mod impl_blocks {
                 inputs: vec![(name_id(2, "self"), param_type_spec)],
                 body: hir::ExprKind::Block(Box::new(hir::Block {
                     statements: vec![],
-                    result: hir::ExprKind::int_literal(0).with_id(1).nowhere(),
+                    result: Some(hir::ExprKind::int_literal(0).with_id(1).nowhere()),
                 }))
                 .with_id(0)
                 .nowhere(),
@@ -2823,7 +2825,7 @@ mod module_visiting {
                     body: Some(
                         ast::Expression::Block(Box::new(ast::Block {
                             statements: vec![],
-                            result: ast::Expression::int_literal(0).nowhere(),
+                            result: Some(ast::Expression::int_literal(0).nowhere()),
                         }))
                         .nowhere(),
                     ),
@@ -2851,7 +2853,7 @@ mod module_visiting {
                         inputs: vec![],
                         body: hir::ExprKind::Block(Box::new(hir::Block {
                             statements: vec![],
-                            result: hir::ExprKind::int_literal(0).idless().nowhere(),
+                            result: Some(hir::ExprKind::int_literal(0).idless().nowhere()),
                         }))
                         .idless()
                         .nowhere(),

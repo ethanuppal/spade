@@ -265,7 +265,7 @@ impl IntLiteral {
 #[derive(PartialEq, Debug, Clone)]
 pub struct Block {
     pub statements: Vec<Loc<Statement>>,
-    pub result: Loc<Expression>,
+    pub result: Option<Loc<Expression>>,
 }
 impl WithLocation for Block {}
 

@@ -729,27 +729,13 @@ fn statement_code(statement: &Statement, ctx: &mut Context) -> Code {
                                 result.push(port.backward_var_name())
                             }
                             result
-                        })
-                        .join(", ");
+                        }).collect::<Vec<_>>();
 
-                    if !args.is_empty() {
-                        args += ", "
+                    if binding.ty.size() != BigUint::zero()  {
+                        args.push(name);
                     }
-
-                    let out_size = binding.ty.size();
-                    let back_size = binding.ty.backward_size();
-                    let io_comma = if out_size != BigUint::zero()  && back_size != BigUint::zero()  {
-                        ", "
-                    }
-                    else {
-                        ""
-                    };
-                    if out_size != BigUint::zero()  {
-                        args += &name;
-                    }
-                    args += io_comma;
-                    if back_size != BigUint::zero()  {
-                        args += &back_name;
+                    if binding.ty.backward_size() != BigUint::zero()  {
+                        args.push(back_name);
                     }
 
                     let instance_name = module_name.instance_name(
@@ -764,7 +750,7 @@ fn statement_code(statement: &Statement, ctx: &mut Context) -> Code {
                             "{} {}({});",
                             &module_name.as_verilog(),
                             instance_name,
-                            args
+                            args.join(", ")
                         )
                     }.to_string()
                 }
@@ -1019,7 +1005,7 @@ pub fn entity_code(
                     code! {}
                 };
                 (
-                    format!("input{} {},", size_spec(&size), name),
+                    format!("input{} {}", size_spec(&size), name),
                     alias_assignment,
                 )
             } else {
@@ -1031,7 +1017,7 @@ pub fn entity_code(
                 let name = mangle_output(no_mangle, name);
                 name_map.insert(&name, val_name.verilog_name_source_back());
                 (
-                    format!("output{} {},", size_spec(&backward_size), name),
+                    format!("output{} {}", size_spec(&backward_size), name),
                     code! {
                         [0] &logic(&val_name.backward_var_name(), &backward_size);
                         [0] &assign(&name, &val_name.backward_var_name())
@@ -1042,7 +1028,7 @@ pub fn entity_code(
             };
 
             let spacing = if !input_head.is_empty() && !output_head.is_empty() {
-                " "
+                ", "
             } else {
                 ""
             };
@@ -1076,13 +1062,8 @@ pub fn entity_code(
 
     let output_size = entity.output_type.size();
     let (output_definition, output_assignment) = if output_size != BigUint::zero() {
-        let comma = if back_port_definition.is_some() {
-            ","
-        } else {
-            ""
-        };
         let def = code! {
-            [0] format!("output{} output__{comma}", size_spec(&output_size))
+            [0] format!("output{} output__", size_spec(&output_size))
         };
         let assignment = code! {[0] assign("output__", &entity.output.var_name())};
 
@@ -1094,8 +1075,8 @@ pub fn entity_code(
     };
 
     let mut ctx = Context {
-        types: &types,
-        source_code: &source_code,
+        types,
+        source_code,
         instance_names: &mut InstanceNameTracker::new(),
         instance_map,
         unit_nameid: &entity.name.source,
@@ -1110,11 +1091,18 @@ pub fn entity_code(
         body.join(&statement_code(stmt, &mut ctx))
     }
 
+    // Collect all port definitions into an already indented code snippet
+    let port_definitions = inputs
+        .into_iter()
+        .map(|s| code! { [0] s})
+        .chain(output_definition)
+        .chain(back_port_definition)
+        .map(|code| code.to_string())
+        .join(",\n");
+
     let code = code! {
         [0] &format!("module {} (", entity_name);
-                [2] &inputs;
-                [2] &output_definition;
-                [2] &back_port_definition;
+                [2] &port_definitions;
             [1] &");";
             [1] "`ifdef COCOTB_SIM";
             [1] "string __top_module;";

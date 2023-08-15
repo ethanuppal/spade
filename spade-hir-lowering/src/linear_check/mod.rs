@@ -238,9 +238,11 @@ fn visit_expression(
             for statement in &b.statements {
                 visit_statement(statement, linear_state, ctx)?;
             }
-            visit_expression(&b.result, linear_state, ctx)?;
-            trace!("Consuming block {}", expr.id);
-            linear_state.consume_expression(&b.result)?;
+            if let Some(result) = &b.result {
+                visit_expression(result, linear_state, ctx)?;
+                trace!("Consuming block {}", expr.id);
+                linear_state.consume_expression(result)?;
+            }
         }
         spade_hir::ExprKind::Call {
             kind: _,

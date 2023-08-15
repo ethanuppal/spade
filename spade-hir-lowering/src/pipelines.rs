@@ -410,7 +410,11 @@ impl PipelineAvailability for ExprKind {
                 //      let x = inst(10) subpipe();
                 //      x // Will appear as having availability 1
                 // }
-                inner.result.kind.available_in()
+                if let Some(result) = &inner.result {
+                    result.kind.available_in()
+                } else {
+                    Ok(0)
+                }
             }
             ExprKind::Call {
                 kind: CallKind::Pipeline(_, depth),

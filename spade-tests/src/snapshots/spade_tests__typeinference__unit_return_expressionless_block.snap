@@ -1,0 +1,21 @@
+---
+source: spade-tests/src/typeinference.rs
+---
+fn f() -> bool {
+    {}
+}
+
+error: Type error
+  ┌─ testinput:1:16
+  │  
+1 │   fn f() -> bool {
+  │             ---- bool type specified here
+  │ ╭────────────────^
+2 │ │     {}
+3 │ │ }
+  │ ╰─^ Found type void
+  │  
+  = note: Expected: bool
+               Got: void
+
+

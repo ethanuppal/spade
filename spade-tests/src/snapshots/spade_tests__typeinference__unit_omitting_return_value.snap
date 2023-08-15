@@ -1,0 +1,52 @@
+---
+source: spade-tests/src/typeinference.rs
+---
+fn empty(a: bool) -> bool {
+}
+
+entity empty2(clk: clock, b: bool) -> bool {
+}
+
+pipeline(4) empty3(clk: clock, c: bool) -> bool {
+    reg*4;
+}
+
+
+error: Type error
+  ┌─ testinput:1:27
+  │  
+1 │   fn empty(a: bool) -> bool {
+  │                        ---- bool type specified here
+  │ ╭───────────────────────────^
+2 │ │ }
+  │ ╰─^ Found type void
+  │  
+  = note: Expected: bool
+               Got: void
+
+error: Type error
+  ┌─ testinput:4:44
+  │  
+4 │   entity empty2(clk: clock, b: bool) -> bool {
+  │                                         ---- bool type specified here
+  │ ╭────────────────────────────────────────────^
+5 │ │ }
+  │ ╰─^ Found type void
+  │  
+  = note: Expected: bool
+               Got: void
+
+error: Type error
+  ┌─ testinput:7:49
+  │  
+7 │   pipeline(4) empty3(clk: clock, c: bool) -> bool {
+  │                                              ---- bool type specified here
+  │ ╭─────────────────────────────────────────────────^
+8 │ │     reg*4;
+9 │ │ }
+  │ ╰─^ Found type void
+  │  
+  = note: Expected: bool
+               Got: void
+
+

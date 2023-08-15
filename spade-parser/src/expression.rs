@@ -715,14 +715,14 @@ mod test {
             Box::new(
                 Expression::Block(Box::new(Block {
                     statements: vec![],
-                    result: Expression::Identifier(ast_path("b")).nowhere(),
+                    result: Some(Expression::Identifier(ast_path("b")).nowhere()),
                 }))
                 .nowhere(),
             ),
             Box::new(
                 Expression::Block(Box::new(Block {
                     statements: vec![],
-                    result: Expression::Identifier(ast_path("c")).nowhere(),
+                    result: Some(Expression::Identifier(ast_path("c")).nowhere()),
                 }))
                 .nowhere(),
             ),
@@ -793,7 +793,7 @@ mod test {
                 Expression::int_literal(0).nowhere(),
             )
             .nowhere()],
-            result: Expression::int_literal(1).nowhere(),
+            result: Some(Expression::int_literal(1).nowhere()),
         }
         .nowhere();
 
@@ -816,7 +816,7 @@ mod test {
                 Expression::int_literal(0).nowhere(),
             )
             .nowhere()],
-            result: Expression::int_literal(1).nowhere(),
+            result: Some(Expression::int_literal(1).nowhere()),
         }))
         .nowhere();
 

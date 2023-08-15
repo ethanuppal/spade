@@ -148,6 +148,10 @@ impl MirLowerable for ConcreteType {
                 },
                 t => unreachable!("{:?} is an invalid generic parameter for a memory", t),
             },
+            CType::Single {
+                base: PrimitiveType::Void,
+                params: _,
+            } => Type::Void,
             CType::Integer(_) => {
                 unreachable!("Found an integer at the base level of a type")
             }
@@ -1084,7 +1088,13 @@ impl ExprLocal for Loc<Expression> {
             ExprKind::CreatePorts => Ok(None),
             ExprKind::ArrayLiteral { .. } => Ok(None),
             ExprKind::Index(_, _) => Ok(None),
-            ExprKind::Block(block) => block.result.variable(subs).map(Some),
+            ExprKind::Block(block) => {
+                if let Some(result) = &block.result {
+                    result.variable(subs).map(Some)
+                } else {
+                    Ok(None)
+                }
+            }
             ExprKind::If(_, _, _) => Ok(None),
             ExprKind::Match(_, _) => Ok(None),
             ExprKind::BinaryOperator(_, _, _) => Ok(None),
@@ -1442,7 +1452,9 @@ impl ExprLocal for Loc<Expression> {
                 for statement in &block.statements {
                     result.append(statement.lower(ctx)?);
                 }
-                result.append(block.result.lower(ctx)?);
+                if let Some(block_result) = &block.result {
+                    result.append(block_result.lower(ctx)?);
+                }
 
                 // Empty. The block result will always be the last expression
             }

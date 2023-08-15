@@ -12,6 +12,7 @@ pub enum PrimitiveType {
     Clock,
     Bool,
     Memory,
+    Void,
 }
 
 impl std::fmt::Display for PrimitiveType {
@@ -22,6 +23,7 @@ impl std::fmt::Display for PrimitiveType {
             PrimitiveType::Clock => write!(f, "clk"),
             PrimitiveType::Bool => write!(f, "bool"),
             PrimitiveType::Memory => write!(f, "Memory"),
+            PrimitiveType::Void => write!(f, "()"),
         }
     }
 }

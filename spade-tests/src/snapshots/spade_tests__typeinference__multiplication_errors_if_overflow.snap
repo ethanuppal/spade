@@ -16,9 +16,9 @@ error: Type error
 3 │ │ }
   │ ╰─^ Found type int<30>
   │  
-  = Expected: 32
-  =       in: int<32>
-  =      Got: 30
-  =       in: int<30>
+  = note: Expected: 32
+                in: int<32>
+               Got: 30
+                in: int<30>
 
 

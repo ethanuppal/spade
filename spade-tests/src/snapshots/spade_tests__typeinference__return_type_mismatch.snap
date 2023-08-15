@@ -18,9 +18,9 @@ error: Type error
 4 │ │ }
   │ ╰─^ Found type int<2>
   │  
-  = Expected: 1
-  =       in: int<1>
-  =      Got: 2
-  =       in: int<2>
+  = note: Expected: 1
+                in: int<1>
+               Got: 2
+                in: int<2>
 
 

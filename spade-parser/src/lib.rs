@@ -357,16 +357,20 @@ impl<'a> Parser<'a> {
         let start = peek_for!(self, &TokenKind::OpenBrace);
 
         let statements = self.statements(is_pipeline)?;
-        let output_value = self.non_comptime_expression()?;
-        let end = self.eat(&TokenKind::CloseBrace)?;
 
-        Ok(Some(
-            Block {
-                statements,
-                result: output_value,
-            }
-            .between(self.file_id, &start.span, &end.span),
-        ))
+        let (result, end) = if let Some(end) = self.peek_and_eat(&TokenKind::CloseBrace)? {
+            (None, end)
+        } else {
+            let output_value = self.non_comptime_expression()?;
+            let end = self.eat(&TokenKind::CloseBrace)?;
+            (Some(output_value), end)
+        };
+
+        Ok(Some(Block { statements, result }.between(
+            self.file_id,
+            &start.span,
+            &end.span,
+        )))
     }
 
     #[trace_parser]
@@ -2340,7 +2344,7 @@ mod tests {
                         )
                         .nowhere(),
                     ],
-                    result: Expression::Identifier(ast_path("test")).nowhere(),
+                    result: Some(Expression::Identifier(ast_path("test")).nowhere()),
                 }))
                 .nowhere(),
             ),
@@ -2363,7 +2367,7 @@ mod tests {
             body: Some(
                 Expression::Block(Box::new(Block {
                     statements: vec![],
-                    result: Expression::Identifier(ast_path("clk")).nowhere(),
+                    result: Some(Expression::Identifier(ast_path("clk")).nowhere()),
                 }))
                 .nowhere(),
             ),
@@ -2386,7 +2390,7 @@ mod tests {
             body: Some(
                 Expression::Block(Box::new(Block {
                     statements: vec![],
-                    result: Expression::Identifier(ast_path("clk")).nowhere(),
+                    result: Some(Expression::Identifier(ast_path("clk")).nowhere()),
                 }))
                 .nowhere(),
             ),
@@ -2562,7 +2566,7 @@ mod tests {
             body: Some(
                 Expression::Block(Box::new(Block {
                     statements: vec![],
-                    result: Expression::int_literal(0).nowhere(),
+                    result: Some(Expression::int_literal(0).nowhere()),
                 }))
                 .nowhere(),
             ),
@@ -2579,7 +2583,7 @@ mod tests {
             body: Some(
                 Expression::Block(Box::new(Block {
                     statements: vec![],
-                    result: Expression::int_literal(1).nowhere(),
+                    result: Some(Expression::int_literal(1).nowhere()),
                 }))
                 .nowhere(),
             ),
@@ -3063,7 +3067,7 @@ mod tests {
                             .nowhere(),
                         )
                         .nowhere()],
-                        result: Expression::BoolLiteral(false).nowhere(),
+                        result: Some(Expression::BoolLiteral(false).nowhere()),
                     }))
                     .nowhere(),
                 ),
@@ -3211,7 +3215,7 @@ mod tests {
                         )
                         .nowhere(),
                     ],
-                    result: Expression::int_literal(0).nowhere(),
+                    result: Some(Expression::int_literal(0).nowhere()),
                 }))
                 .nowhere(),
             ),
@@ -3245,7 +3249,7 @@ mod tests {
                     statements: vec![
                         Statement::PipelineRegMarker(Some(3.nowhere()), None).nowhere()
                     ],
-                    result: Expression::int_literal(0).nowhere(),
+                    result: Some(Expression::int_literal(0).nowhere()),
                 }))
                 .nowhere(),
             ),
@@ -3278,7 +3282,7 @@ mod tests {
                     body: Some(
                         Expression::Block(Box::new(Block {
                             statements: vec![],
-                            result: Expression::int_literal(0).nowhere(),
+                            result: Some(Expression::int_literal(0).nowhere()),
                         }))
                         .nowhere(),
                     ),
