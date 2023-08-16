@@ -13,7 +13,6 @@ doctest = false
 
 [dependencies]
 logos.workspace = true
-thiserror.workspace = true
 codespan.workspace = true
 codespan-reporting.workspace = true
 indoc.workspace = true

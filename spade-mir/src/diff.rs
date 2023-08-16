@@ -1,7 +1,5 @@
 use std::collections::HashMap;
 
-use thiserror::Error;
-
 use crate::{Entity, MirInput, Register, Statement, ValueName};
 
 macro_rules! check {
@@ -10,14 +8,6 @@ macro_rules! check {
             return false;
         }
     };
-}
-
-#[derive(Error, Debug, Clone)]
-enum Error {
-    #[error("Could not match {0:?} with {1:?}")]
-    StatementMismatch(Statement, Statement),
-    #[error("Could not match name {0} with {1}")]
-    NameMismatch(ValueName, ValueName),
 }
 
 /// Functions for diffing and comparing mir code while ignoring exact variable IDs
@@ -49,12 +39,12 @@ impl VarMap {
         self.name_map_rev.insert(rhs, lhs);
     }
 
-    fn try_update_name(&mut self, lhs: &ValueName, rhs: &ValueName) -> Result<(), Error> {
+    fn try_update_name(&mut self, lhs: &ValueName, rhs: &ValueName) -> Result<(), ()> {
         // Update the name if both are the same kind
         match (lhs, rhs) {
             (ValueName::Named(i1, n1, _), ValueName::Named(i2, n2, _)) => {
                 if n1 != n2 {
-                    Err(Error::NameMismatch(lhs.clone(), rhs.clone()))
+                    Err(())
                 } else {
                     self.map_name(*i1, *i2);
                     Ok(())
@@ -64,7 +54,7 @@ impl VarMap {
                 self.map_expr(*i1, *i2);
                 Ok(())
             }
-            _ => Err(Error::NameMismatch(lhs.clone(), rhs.clone())),
+            _ => Err(()),
         }
     }
 
@@ -235,7 +225,7 @@ fn populate_var_map(
     stmts1: &[Statement],
     stmts2: &[Statement],
     var_map: &mut VarMap,
-) -> Result<(), Error> {
+) -> Result<(), ()> {
     // Check if two names can be the same by comparing the string names of ValueName::Named.
     // If they are the same, merge them and return true
     stmts1
@@ -254,7 +244,7 @@ fn populate_var_map(
             (Statement::WalTrace { .. }, Statement::WalTrace { .. }) => Ok(()),
             (Statement::Assert(_), Statement::Assert(_)) => Ok(()),
             (Statement::Set { .. }, Statement::Set { .. }) => Ok(()),
-            _ => Err(Error::StatementMismatch(s1.clone(), s2.clone())),
+            _ => Err(()),
         })
 }
 
