@@ -21,6 +21,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - [!205][!205] Fix panic on method calls in let bindings
 - [!206][!206] Re-add working VCD translation. It now also translates more values
 - [!215][!215] Make generated code compile out of the box with verilator
+- [!221][!221] Fix code generation bug when matching two variant enums
 
 ### Changed
 
@@ -44,6 +45,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 [!215]: https://gitlab.com/spade-lang/spade/-/merge_requests/215
 [!216]: https://gitlab.com/spade-lang/spade/-/merge_requests/216
 [!217]: https://gitlab.com/spade-lang/spade/-/merge_requests/217
+[!211]: https://gitlab.com/spade-lang/spade/-/merge_requests/211
 
 ## [0.3.0]
 

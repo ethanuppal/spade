@@ -495,9 +495,11 @@ fn forward_expression_code(binding: &Binding, types: &TypeList, ops: &[ValueName
             let total_size = enum_type.size();
 
             let tag_end = &total_size - 1u32.to_biguint();
-            let tag_start = total_size - tag_size as u64;
+            let tag_start = &total_size - tag_size as u64;
 
-            if tag_end == tag_start {
+            if total_size == 1u32.to_biguint() {
+                format!("{} == 1'd{}", op_names[0], variant)
+            } else if tag_end == tag_start {
                 format!("{}[{}] == {}'d{}", op_names[0], tag_end, tag_size, variant)
             } else {
                 format!(
