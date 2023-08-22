@@ -1,3 +1,4 @@
+from typing import List
 from .spade import *
 
 import cocotb
@@ -49,7 +50,7 @@ class InputPorts(object):
 
 
 class OutputField(object):
-    def __init__(self, spade: SpadeExt, path: list[str], field_ref, dut):
+    def __init__(self, spade: SpadeExt, path: List[str], field_ref, dut):
         self.spade__ = spade
         self.path__ = path
         self.field_ref__ = field_ref
