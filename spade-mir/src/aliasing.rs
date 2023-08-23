@@ -26,10 +26,19 @@ pub fn flatten_aliases(entity: &mut Entity) {
         match stmt {
             Statement::Binding(binding) => {
                 if let Operator::Alias = binding.operator {
-                    aliased_by
-                        .entry(binding.operands[0].clone())
-                        .or_insert(vec![])
-                        .push(binding.name.clone());
+                    match (binding.name.clone(), binding.operands[0].clone()) {
+                        // Names should only alias expressions, not other names.
+                        (ValueName::Named(_, _, _), ValueName::Named(_, _, _)) => {}
+                        // If an expression aliases a name, flip it such that the
+                        // name aliases the expression
+                        (n @ ValueName::Named(_, _, _), e @ ValueName::Expr(_))
+                        | (e @ ValueName::Expr(_), n @ ValueName::Named(_, _, _)) => {
+                            aliased_by.entry(e).or_insert(vec![]).push(n);
+                        }
+                        (l, r) => {
+                            aliased_by.entry(r).or_insert(vec![]).push(l);
+                        }
+                    }
                 }
             }
             Statement::Register(_) => {}
@@ -43,6 +52,7 @@ pub fn flatten_aliases(entity: &mut Entity) {
     }
 
     // Filter out any aliases we shouldn't alias because they have too many aliases
+    // Also filter out any aliases which alias away an explicit name
     let mut aliases = aliased_by
         .into_iter()
         .filter_map(|(k, v)| {
@@ -58,6 +68,7 @@ pub fn flatten_aliases(entity: &mut Entity) {
     entity.statements.retain(|stmt| {
         if let Statement::Binding(binding) = stmt {
             !(binding.operator == Operator::Alias && aliases.contains_key(&binding.operands[0]))
+                && !(binding.operator == Operator::Alias && aliases.contains_key(&binding.name))
         } else {
             true
         }
@@ -113,9 +124,11 @@ pub fn flatten_aliases(entity: &mut Entity) {
 mod tests {
     use super::*;
 
+    use crate::assert_same_mir;
     use crate::entity;
     use crate::Type;
     use crate::{self as spade_mir, ConstantValue};
+    use colored::Colorize;
 
     #[test]
     fn aliasing_replaces_definitions() {
@@ -136,19 +149,43 @@ mod tests {
     #[test]
     fn three_level_aliasing_replaces_definitions() {
         let mut input = entity!("pong"; ("_i_op", n(0, "op"), Type::int(6)) -> Type::int(6); {
+            (e(1); Type::Bool; Add;); (e(10); Type::Bool; Add;); // We need some dummy signals
             (e(0); Type::int(6); Add; n(0, "op"), e(1));
-            (n(0, "a"); Type::int(6); Alias; e(0));
-            (n(2, "b"); Type::int(6); Alias; n(0, "a"));
-            (n(1, "c"); Type::int(6); Alias; n(2, "b"));
+            (e(20); Type::int(6); Alias; e(0));
+            (e(21); Type::int(6); Alias; e(20));
+            (n(1, "c"); Type::int(6); Alias; e(21));
         } => e(10));
 
         let expected = entity!("pong"; ("_i_op", n(0, "op"), Type::int(6)) -> Type::int(6); {
+            (e(1); Type::Bool; Add;);
+            (e(10); Type::Bool; Add;);
             (n(1, "c"); Type::int(6); Add; n(0, "op"), e(1))
         } => e(10));
 
         flatten_aliases(&mut input);
 
-        assert_eq!(input, expected);
+        assert_same_mir!(&input, &expected);
+    }
+
+    #[test]
+    fn three_level_aliasing_replaces_definitions_in_other_order() {
+        let mut input = entity!("pong"; ("_i_op", n(0, "op"), Type::int(6)) -> Type::int(6); {
+            (e(1); Type::Bool; Add;); (e(10); Type::Bool; Add;); // We need some dummy signals
+            (e(0); Type::int(6); Add; n(0, "op"), e(1));
+            (e(20); Type::int(6); Alias; e(0));
+            (n(1, "c"); Type::int(6); Alias; e(20));
+            (e(21); Type::int(6); Alias; n(1, "c"));
+        } => e(10));
+
+        let expected = entity!("pong"; ("_i_op", n(0, "op"), Type::int(6)) -> Type::int(6); {
+            (e(1); Type::Bool; Add;);
+            (e(10); Type::Bool; Add;);
+            (n(1, "c"); Type::int(6); Add; n(0, "op"), e(1))
+        } => e(10));
+
+        flatten_aliases(&mut input);
+
+        assert_same_mir!(&input, &expected);
     }
 
     #[test]
@@ -270,15 +307,16 @@ mod tests {
         let expected = entity!("pl"; (
                 "clk", n(3, "clk"), Type::Bool,
             ) -> Type::int(16); {
-                (reg n(10, "x__s1"); Type::int(16); clock(n(3, "clk")); n(1, "x"));
+                (reg n(10, "x__s1"); Type::int(16); clock(n(3, "clk")); n(0, "x_"));
+                (n(0, "x_"); Type::int(16); Instance((inst_name.clone(), None)););
                 // Stage 0
-                (n(1, "x"); Type::int(16); Instance((inst_name, None)););
+                (n(1, "x"); Type::int(16); Alias; n(0, "x_"));
                 // Stage 1
             } => n(1, "x")
         );
 
         flatten_aliases(&mut input);
 
-        assert_eq!(input, expected);
+        assert_same_mir!(&input, &expected);
     }
 }

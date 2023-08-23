@@ -9,6 +9,25 @@ released as a new version.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [Unreleased]
+
+### Added
+
+### Fixed
+
+- [!224][!224] `stage.valid` now does what it is supposed to
+
+### Changed
+
+- [!224][!224] Name de-aliasing now only de-aliases anonymous names
+
+### Removed
+
+### Internal
+
+
+[!224]: https://gitlab.com/spade-lang/spade/-/merge_requests/211
+
 ## [0.4.0]
 
 ### Added

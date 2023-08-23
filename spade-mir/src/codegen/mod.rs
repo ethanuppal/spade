@@ -989,6 +989,13 @@ pub fn entity_code(
              ty,
              no_mangle,
          }| {
+            if ty.size() != BigUint::zero() {
+                name_map.insert(&name, val_name.verilog_name_source_fwd());
+            }
+            if ty.backward_size() != BigUint::zero() {
+                name_map.insert(&name, val_name.verilog_name_source_back());
+            }
+
             let size = ty.size();
             let (input_head, input_code) = if size != BigUint::zero() {
                 let name = mangle_input(no_mangle, name);
@@ -1601,11 +1608,13 @@ mod tests {
                 logic \clk ;
                 assign \clk  = clk_i;
                 reg[15:0] \x__s1 ;
+                logic[15:0] \x_ ;
                 logic[15:0] \x ;
                 always @(posedge \clk ) begin
-                    \x__s1  <= \x ;
+                    \x__s1  <= \x_ ;
                 end
-                \A  A_0(\x );
+                \A  A_0(\x_ );
+                assign \x  = \x_ ;
                 assign output__ = \x ;
             endmodule"#
         );

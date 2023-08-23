@@ -34,6 +34,7 @@ use mir::MirInput;
 use mir::ValueNameSource;
 use mir::{ConstantValue, ValueName};
 use monomorphisation::MonoState;
+use name_map::NameSource;
 pub use name_map::NameSourceMap;
 use num::{BigUint, One, Zero};
 use pattern::DeconstructedPattern;
@@ -2415,6 +2416,8 @@ pub fn generate_unit<'a>(
                         .into());
                     }
                 }
+
+                name_source_map.insert_primary(&val_name, NameSource::Name(name_id.clone()));
 
                 Ok(MirInput {
                     name,

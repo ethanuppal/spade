@@ -1,9 +1,9 @@
 use std::collections::BTreeMap;
 
 use local_impl::local_impl;
-use mir::Register;
 use mir::ValueName;
 use mir::ValueNameSource;
+use spade_common::name::Path;
 use spade_common::{location_info::Loc, name::NameID};
 use spade_diagnostics::diag_bail;
 use spade_diagnostics::Diagnostic;
@@ -202,6 +202,11 @@ pub fn lower_pipeline<'a>(
         ctx.subs.set_available(name.clone(), 0, is_port)
     }
 
+    let num_stages = body_statements
+        .iter()
+        .filter(|s| matches!(&s.inner, Statement::PipelineRegMarker(_)))
+        .count();
+
     // If we have stage enable signals, we need to pre-allocate some variables
     // for the relevant stages, because the enable signal depends on downstream stages.
     // This builds a list of ValueNames which we need to fill in down the line, and
@@ -218,7 +223,11 @@ pub fn lower_pipeline<'a>(
                 }
 
                 if has_enable {
-                    stage_enable_names.push(Some(ValueName::Expr(ctx.idtracker.next())));
+                    let name = ctx.symtab.new_name(Path::from_strs(&[&format!(
+                        "#s{}_enable",
+                        num_stages - stage_enable_names.len()
+                    )]));
+                    stage_enable_names.push(Some(name.value_name()));
                 } else {
                     stage_enable_names.push(None)
                 }
@@ -295,67 +304,230 @@ pub fn lower_pipeline<'a>(
         }
     }
 
-    // Codegen valid signals
-    // The first stage, before any `reg` statement is valid, so we can initialize the vector
-    // with `None`
-    let mut valid_signals = vec![None];
-    let mut last_cond: Option<ValueName> = None;
-    for local_cond in local_conds {
-        // Generate the conditions for validity of this stage
-        let cond_name = match (local_cond, &last_cond) {
-            // Both a local and a previous condition, or them together
-            (Some(local), Some(prev)) => {
-                let new_name = ValueName::Expr(ctx.idtracker.next());
-
-                statements.push_anonymous(mir::Statement::Binding(mir::Binding {
-                    name: new_name.clone(),
-                    operator: mir::Operator::LogicalAnd,
-                    operands: vec![local, prev.clone()],
-                    ty: mir::types::Type::Bool,
-                    loc: None,
-                }));
-
-                Some(new_name)
-            }
-            // New condition but no previous, alias
-            (Some(local), None) => Some(local),
-            (None, Some(prev)) => Some(prev.clone()),
-            (None, None) => None,
-        };
-        // Register the local condition for one cycle.
-
-        if let Some(cond_name) = cond_name {
-            let new_name = ValueName::Expr(ctx.idtracker.next());
-
-            statements.push_anonymous(mir::Statement::Register(Register {
-                name: new_name.clone(),
-                ty: mir::types::Type::Bool,
-                clock: clock.value_name(),
-                // FIXME: We should probably handle resets here, but I don't know how
-                reset: None,
-                initial: None,
-                value: cond_name,
-                traced: None,
-                loc: None,
-            }));
-
-            last_cond = Some(new_name);
-        }
-
-        valid_signals.push(last_cond.clone());
-    }
-
     let mut ready_signals = stage_enable_names.into_iter().collect::<Vec<_>>();
     // NOTE: The last stage needs a ready signal because you *can* use `stage.ready`
     // after the last `reg` in the final output expression, but it will be `None` because
     // there is no way to for it to be disabled
     ready_signals.push(None);
+
+    /*
+    The full logic for a a stage's validity looks like this
+
+    decl valid;
+    let valid_mux = if enable {prev_valid} else {valid};
+
+    // If this is the most downstream stage that stalls
+    let valid_next = if downstream_enable && !local_cond {
+        false
+    } else {
+        valid_mux
+    };
+    // Simplified
+    let valid_next = !(downstream_enable && !local_cond) && valid_mux
+    reg(clk) valid = valid_next;
+
+    It corresponds to this hardware
+
+          <prev valid>
+               |
+      +----+   |               <local cond>
+      |    |   |                    |
+      |  __v___v__                  v
+      |  \ 0   1 / <---------------{&}       // valid_mux, valid_select
+      |      |                      ^        // (local_valid_select is the non-local enable)
+      |      |        <local cond>  |
+      |      |             |        |
+      |      |     +--o<|--+        |
+      |      |     v                |
+      |     {&}<-o{&}<--------------+        // valid_next, stall_here_inv, stall_here
+      |      |                      |        // downstream_inv
+      | _____v____                  |
+      | |> valid |                  |        // (valid_name) valid_signals[i]
+      |      |                      |
+      +------+                      |
+             |                      |
+        <new valid>        <downstream enable>
+    */
+
+    // Codegen valid signals
+    // The first stage, before any `reg` statement is valid, so we can initialize the vector
+    // with `None`
+    let mut valid_signals = vec![None];
+    let mut prev_valid: Option<ValueName> = None;
+    for (i, local_cond) in local_conds.into_iter().enumerate() {
+        let downstream_enable = ready_signals.get(i + 1).cloned().flatten().or_const_true();
+        let valid_select = &ready_signals[i];
+
+        let valid_name = ctx
+            .symtab
+            .new_name(Path::from_strs(&[&format!("#s{}_valid", i + 1)]))
+            .value_name();
+
+        let valid_mux = constexpr_select(
+            prev_valid.clone().or_const_true(),
+            MaybeConst::Val(valid_name.clone()),
+            valid_select.clone().or_const_true(),
+            statements,
+            ctx,
+        );
+
+        let local_cond_inv = constexpr_inv(local_cond.or_const_true(), statements, ctx);
+        let stall_here = constexpr_and(local_cond_inv, downstream_enable, statements, ctx);
+        let stall_here_inv = constexpr_inv(stall_here, statements, ctx);
+        let valid_next = constexpr_and(valid_mux, stall_here_inv, statements, ctx);
+
+        match valid_next {
+            MaybeConst::Val(next) => {
+                statements.push_anonymous(mir::Statement::Register(mir::Register {
+                    name: valid_name.clone(),
+                    ty: mir::types::Type::Bool,
+                    clock: clock.value_name(),
+                    reset: None,
+                    initial: None,
+                    value: next,
+                    loc: None,
+                    traced: None,
+                }));
+                prev_valid = Some(valid_name.clone());
+                valid_signals.push(Some(valid_name))
+            }
+            MaybeConst::Const(true) => valid_signals.push(None),
+            MaybeConst::Const(false) => {
+                diag_bail!(body, "Found a stage which is always invalid")
+            }
+        }
+    }
+
     *ctx.pipeline_context = MaybePipelineContext::Pipeline(PipelineContext {
         ready_signals,
         valid_signals,
     });
 
     Ok(())
+}
+
+pub enum MaybeConst {
+    Val(ValueName),
+    Const(bool),
+}
+
+impl MaybeConst {
+    fn to_value_name(self, statements: &mut StatementList, ctx: &mut Context) -> ValueName {
+        match self {
+            MaybeConst::Val(n) => n,
+            MaybeConst::Const(v) => {
+                let id = ctx.idtracker.next();
+                let new_name = mir::ValueName::Expr(id);
+
+                statements.push_anonymous(mir::Statement::Constant(
+                    id,
+                    mir::types::Type::Bool,
+                    mir::ConstantValue::Bool(v),
+                ));
+
+                new_name
+            }
+        }
+    }
+}
+
+trait OptionExt {
+    fn or_const_false(self) -> MaybeConst;
+    fn or_const_true(self) -> MaybeConst;
+}
+impl OptionExt for Option<ValueName> {
+    fn or_const_false(self) -> MaybeConst {
+        match self {
+            Some(v) => MaybeConst::Val(v),
+            None => MaybeConst::Const(false),
+        }
+    }
+
+    fn or_const_true(self) -> MaybeConst {
+        match self {
+            Some(v) => MaybeConst::Val(v),
+            None => MaybeConst::Const(true),
+        }
+    }
+}
+
+pub fn constexpr_and(
+    l: MaybeConst,
+    r: MaybeConst,
+    statements: &mut StatementList,
+    ctx: &mut Context,
+) -> MaybeConst {
+    match (l, r) {
+        (MaybeConst::Val(l), MaybeConst::Val(r)) => {
+            let new_name = mir::ValueName::Expr(ctx.idtracker.next());
+
+            statements.push_anonymous(mir::Statement::Binding(mir::Binding {
+                name: new_name.clone(),
+                operator: mir::Operator::LogicalAnd,
+                operands: vec![l.clone(), r.clone()],
+                ty: mir::types::Type::Bool,
+                loc: None,
+            }));
+
+            MaybeConst::Val(new_name)
+        }
+        (MaybeConst::Const(false), _) => MaybeConst::Const(false),
+        (_, MaybeConst::Const(false)) => MaybeConst::Const(false),
+        (l, MaybeConst::Const(true)) => l,
+        (MaybeConst::Const(true), r) => r,
+    }
+}
+
+pub fn constexpr_select(
+    on_true: MaybeConst,
+    on_false: MaybeConst,
+    select: MaybeConst,
+    statements: &mut StatementList,
+    ctx: &mut Context,
+) -> MaybeConst {
+    match (on_true, on_false, select) {
+        (t, f, MaybeConst::Val(sel)) => {
+            let new_name = mir::ValueName::Expr(ctx.idtracker.next());
+
+            let t = t.to_value_name(statements, ctx);
+            let f = f.to_value_name(statements, ctx);
+
+            statements.push_anonymous(mir::Statement::Binding(mir::Binding {
+                name: new_name.clone(),
+                operator: mir::Operator::Select,
+                operands: vec![sel, t, f],
+                ty: mir::types::Type::Bool,
+                loc: None,
+            }));
+
+            MaybeConst::Val(new_name)
+        }
+        (t, _, MaybeConst::Const(true)) => t,
+        (_, f, MaybeConst::Const(false)) => f,
+    }
+}
+
+pub fn constexpr_inv(
+    input: MaybeConst,
+    statements: &mut StatementList,
+    ctx: &mut Context,
+) -> MaybeConst {
+    match input {
+        MaybeConst::Val(name) => {
+            let new_name = mir::ValueName::Expr(ctx.idtracker.next());
+            statements.push_anonymous(mir::Statement::Binding(mir::Binding {
+                name: new_name.clone(),
+                operator: mir::Operator::Not,
+                operands: vec![name],
+                ty: mir::types::Type::Bool,
+                loc: None,
+            }));
+
+            MaybeConst::Val(new_name)
+        }
+        MaybeConst::Const(true) => MaybeConst::Const(false),
+        MaybeConst::Const(false) => MaybeConst::Const(true),
+    }
 }
 
 /// Computes the time at which the specified expressions will be available. If there

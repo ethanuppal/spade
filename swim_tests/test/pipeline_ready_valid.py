@@ -39,7 +39,8 @@ async def disabled_stages_result_in_deasserted_valid(dut):
 
     s = SpadeExt(dut)
 
-    await cocotb.start(Clock(clk, 1, units="ns").start())
+    await cocotb.start(Clock(clk, 5, units="ns").start())
+    await FallingEdge(clk);
 
     s.i.enables = "&[true, true, true, true]"
     # Let the enables propagate through the pipeline until the enabled
@@ -94,6 +95,7 @@ async def downstream_disables_disable_upstream(dut):
     s = SpadeExt(dut)
 
     await cocotb.start(Clock(clk, 1, units="ns").start())
+    await FallingEdge(clk);
 
     s.i.enables = "&[true, true, true, true]"
     # Let the enables propagate through the pipeline until the enabled
@@ -153,3 +155,88 @@ async def downstream_disables_disable_upstream(dut):
     s.o.s3_ready.assert_eq("false");
     s.o.s4_ready.assert_eq("true");
 
+
+async def check_valid(s, expected):
+    s.o.s0_valid.assert_eq("true" if expected[0] else "false")
+    s.o.s1_valid.assert_eq("true" if expected[1] else "false")
+    s.o.s2_valid.assert_eq("true" if expected[2] else "false")
+    s.o.s3_valid.assert_eq("true" if expected[3] else "false")
+    s.o.s4_valid.assert_eq("true" if expected[4] else "false")
+
+
+@cocotb.test()
+async def stalling_stalled_stage_does_not_produce_a_valid_signal(dut):
+    clk = dut.clk_i
+
+    s = SpadeExt(dut)
+
+    await cocotb.start(Clock(clk, 1, units="ns").start())
+    await FallingEdge(clk);
+
+    s.i.enables = "&[true, true, true, true]"
+    # Let the enables propagate through the pipeline until the enabled
+    # values have propagated
+    [await FallingEdge(clk) for _ in range(0, 4)]
+    await check_valid(s, [True, True, True, True, True])
+
+    s.i.enables = "&[true, true, true, true]"
+    await FallingEdge(clk)
+    await check_valid(s, [True, True, True, True, True])
+
+    s.i.enables = "&[false, true, true, true]"
+    await FallingEdge(clk)
+    await check_valid(s, [True, False, True, True, True])
+
+    s.i.enables = "&[true, true, true, true]"
+    await FallingEdge(clk)
+    await check_valid(s, [True, True, False, True, True])
+
+
+    s.i.enables = "&[true, true, false, true]"
+    await FallingEdge(clk)
+    await check_valid(s, [True, True, False, False, True])
+
+    s.i.enables = "&[true, true, true, true]"
+    await FallingEdge(clk)
+    await check_valid(s, [True, True, True, False, False])
+
+    s.i.enables = "&[true, true, true, true]"
+    await FallingEdge(clk)
+    await check_valid(s, [True, True, True, True, False])
+
+
+@cocotb.test()
+async def downstream_stall_stalls_valid_signal(dut):
+    clk = dut.clk_i
+
+    s = SpadeExt(dut)
+
+    await cocotb.start(Clock(clk, 1, units="ns").start())
+    await FallingEdge(clk);
+
+    s.i.enables = "&[true, true, true, true]"
+    # Let the enables propagate through the pipeline until the enabled
+    # values have propagated
+    [await FallingEdge(clk) for _ in range(0, 4)]
+    await check_valid(s, [True, True, True, True, True])
+
+    s.i.enables = "&[false, true, true, true]"
+    await FallingEdge(clk)
+    await check_valid(s, [True, False, True, True, True])
+
+    s.i.enables = "&[true, true, false, true]"
+    await FallingEdge(clk)
+    await check_valid(s, [True, False, True, False, True])
+
+
+    s.i.enables = "&[true, true, true, true]"
+    await FallingEdge(clk)
+    await check_valid(s, [True, True, False, True, False])
+
+    s.i.enables = "&[true, true, true, true]"
+    await FallingEdge(clk)
+    await check_valid(s, [True, True, True, False, True])
+
+    s.i.enables = "&[true, true, true, true]"
+    await FallingEdge(clk)
+    await check_valid(s, [True, True, True, True, False])
