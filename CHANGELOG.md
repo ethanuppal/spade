@@ -9,6 +9,7 @@ released as a new version.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [0.4.0]
 
 ### Added
 
@@ -35,6 +36,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Internal
 
+
+[Associated Swim release](https://gitlab.com/spade-lang/swim/-/tree/v0.4.0)
 
 [!202]: https://gitlab.com/spade-lang/spade/-/merge_requests/202
 [!205]: https://gitlab.com/spade-lang/spade/-/merge_requests/205
@@ -120,7 +123,8 @@ Initial numbered version
 
 [Associated Swim release](https://gitlab.com/spade-lang/swim/-/tree/v0.1.0)
 
-[Unreleased]: https://gitlab.com/spade-lang/spade/-/compare/v0.3.0...master
+[Unreleased]: https://gitlab.com/spade-lang/spade/-/compare/v0.4.0...master
+[0.4.0]: https://gitlab.com/spade-lang/spade/-/compare/v0.3.0...v0.4.0
 [0.3.0]: https://gitlab.com/spade-lang/spade/-/compare/v0.2.0...v0.3.0
 [0.2.0]: https://gitlab.com/spade-lang/spade/-/compare/v0.1.0...v0.2.0
 [0.1.0]: https://gitlab.com/spade-lang/spade/-/tree/v0.1.0
