@@ -8,7 +8,7 @@ variables:
     CARGO_HOME: $CI_PROJECT_DIR/cargo
     FF_ENABLE_BASH_EXIT_CODE_CHECK: "true"
     GIT_SUBMODULE_STRATEGY: normal
-    RUST_IMAGE: "rust:1.64"
+    RUST_IMAGE: "rust:1.70"
     # Best practices: https://archives.docs.gitlab.com/13.9/ee/ci/large_repositories/
     GIT_DEPTH: 5
     # Faster zipping helping with cache sync speeds (https://gitlab.com/gitlab-org/gitlab-runner/-/issues/1797)
@@ -70,7 +70,7 @@ output_test:
         - command -v /usr/bin/python3 || ln -s /usr/bin/python$APT_PYTHON_VERSION /usr/bin/python3
         - curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain none
         - source ./cargo/env
-        - rustup install 1.64
+        - rustup install 1.70
         - source ./cargo/env
         - cd output_test && make
 
@@ -123,7 +123,7 @@ typos-and-todos:
               find . -name "*.rs" | xargs grep -Ei "// *TODO" || echo ""
             fi
 cxx:
-    image: thezoq2/trawl
+    image: $RUST_IMAGE
     stage: test
     cache: [] # Disable cache since it takes too much space in gitlab
     variables:

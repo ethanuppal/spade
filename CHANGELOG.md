@@ -20,6 +20,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ### Changed
 
 - [!224][!224] Name de-aliasing now only de-aliases anonymous names
+- [!166][!166] **Breaking change** Bump minimum rust version to 1.70
 
 ### Removed
 
@@ -27,6 +28,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 
 [!224]: https://gitlab.com/spade-lang/spade/-/merge_requests/211
+[!166]: https://gitlab.com/spade-lang/spade/-/merge_requests/166
 
 ## [0.4.0]
 
@@ -52,8 +54,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ### Removed
 
 - [!206][!206] Remove type dump file. This information was redundant and can be recovered from `CompilerState` instead
-
-### Internal
 
 
 [Associated Swim release](https://gitlab.com/spade-lang/swim/-/tree/v0.4.0)
