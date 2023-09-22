@@ -28,6 +28,9 @@ pub struct Opt {
     /// File to output the MIR for the generated modules. Primarily for debug purposes
     #[structopt(long)]
     pub mir_output: Option<PathBuf>,
+    #[structopt(long)]
+    pub verilator_wrapper_output: Option<PathBuf>,
+
     /// Do not include color in the error report
     #[structopt(long = "no-color")]
     pub no_color: bool,
@@ -106,6 +109,7 @@ fn main() -> Result<()> {
         error_buffer: &mut buffer,
         outfile: Some(opts.outfile),
         mir_output: opts.mir_output,
+        verilator_wrapper_output: opts.verilator_wrapper_output,
         state_dump_file: opts.state_dump,
         item_list_file: opts.item_list,
         print_type_traceback: opts.print_type_traceback,

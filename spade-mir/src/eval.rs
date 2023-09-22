@@ -6,6 +6,7 @@ use num::BigInt;
 use num::BigUint;
 use num::ToPrimitive;
 use num::Zero;
+use spade_common::num_ext::InfallibleToBigUint;
 
 use crate::{enum_util, types::Type, Binding, Operator, Statement, ValueName};
 
@@ -20,7 +21,8 @@ pub enum Value {
         size: BigUint,
         val: BigUint,
     },
-    /// usize is the width of the concatenated value
+    // Concatenated values are placed left-to-right, i.e. `Concat(vec![0b11,0b00])` is
+    // 0b1100
     Concat(Vec<Value>),
     /// A number of undefined bits
     Undef(BigUint),
@@ -74,6 +76,94 @@ impl Value {
             }
             Value::Concat(inner) => inner.iter().map(|i| i.as_string()).join(""),
             Value::Undef(size) => range(0u64.into(), size.clone()).map(|_| "X").join(""),
+        }
+    }
+
+    pub fn width(&self) -> BigUint {
+        match self {
+            Value::Bit(_) => 1u32.to_biguint(),
+            Value::Int { size, val: _ } => size.clone(),
+            Value::UInt { size, val: _ } => size.clone(),
+            Value::Concat(inner) => inner.iter().map(|i| i.width()).sum(),
+            Value::Undef(size) => size.clone(),
+        }
+    }
+
+    /// Computes the value as a 64. If the type this value represents is wider than 64 bits,
+    /// the behaviour is undefined. If the value is value::Undef, 0 is returned
+    pub fn as_u64(&self) -> u64 {
+        match self {
+            Value::Bit(val) => {
+                if *val {
+                    1
+                } else {
+                    0
+                }
+            }
+            Value::Int { size, val } => {
+                if *val >= 0i64.into() {
+                    val.to_u64().unwrap()
+                } else {
+                    // Negative numbers in 2's complement are represented by all leadingdigits
+                    // being 1. That is a bit difficult to achieve when our numbers have infinite
+                    // bits (as is the case for BigInt). To fix that, we mask out the bits we do
+                    // want which gives a positive number with the correct binary representation.
+                    // https://stackoverflow.com/questions/12946116/twos-complement-binary-in-python
+                    let size_usize = size.to_usize().expect(&format!(
+                        "Variable size {size} is too large to fit in a 'usize'"
+                    ));
+                    let mask = BigInt::from((BigInt::from(1) << size_usize) - 1);
+                    (val & mask).to_u64().unwrap()
+                }
+            }
+            Value::UInt { size: _, val } => val.to_u64().unwrap(),
+            Value::Concat(inner) => {
+                let mut current = 0;
+
+                for next in inner {
+                    current = (current << next.width().to_u64().unwrap()) + next.as_u64()
+                }
+                current
+            }
+            Value::Undef(_) => 0,
+        }
+    }
+
+    pub fn as_u32_chunks(&self) -> BigUint {
+        match self {
+            Value::Bit(val) => {
+                if *val {
+                    1u32.to_biguint()
+                } else {
+                    0u32.to_biguint()
+                }
+            }
+            Value::Int { size, val } => {
+                if *val >= 0i64.into() {
+                    val.to_biguint().unwrap()
+                } else {
+                    // Negative numbers in 2's complement are represented by all leadingdigits
+                    // being 1. That is a bit difficult to achieve when our numbers have infinite
+                    // bits (as is the case for BigInt). To fix that, we mask out the bits we do
+                    // want which gives a positive number with the correct binary representation.
+                    // https://stackoverflow.com/questions/12946116/twos-complement-binary-in-python
+                    let size_usize = size.to_usize().expect(&format!(
+                        "Variable size {size} is too large to fit in a usize"
+                    ));
+                    let mask = BigInt::from((BigInt::from(1) << size_usize) - 1);
+                    (val & mask).to_biguint().unwrap()
+                }
+            }
+            Value::UInt { size: _, val } => val.clone(),
+            Value::Concat(inner) => {
+                let mut current = 0u32.to_biguint();
+
+                for next in inner {
+                    current = (current << next.width().to_u64().unwrap()) + next.as_u64()
+                }
+                current
+            }
+            Value::Undef(_) => 0u32.to_biguint(),
         }
     }
 }
@@ -315,6 +405,7 @@ mod test {
     use crate as spade_mir;
     use crate::{statement, types::Type, ConstantValue};
     use pretty_assertions::assert_eq;
+    use spade_common::num_ext::InfallibleToBigInt;
 
     use super::*;
 
@@ -375,5 +466,136 @@ mod test {
         ];
 
         assert_eq!("000001010", eval_statements(&mir).as_string())
+    }
+
+    #[test]
+    fn as_u64_works_for_bits() {
+        assert_eq!(Value::Bit(false).as_u64(), 0);
+        assert_eq!(Value::Bit(true).as_u64(), 1);
+    }
+
+    #[test]
+    fn as_u32_chunks_works_for_bits() {
+        assert_eq!(Value::Bit(false).as_u32_chunks(), 0u32.to_biguint());
+        assert_eq!(Value::Bit(true).as_u32_chunks(), 1u32.to_biguint());
+    }
+
+    #[test]
+    fn as_u64_works_for_ints() {
+        assert_eq!(
+            Value::Int {
+                size: 64u64.to_biguint(),
+                val: i64::MAX.to_bigint()
+            }
+            .as_u64(),
+            i64::MAX as u64
+        );
+        assert_eq!(
+            Value::Int {
+                size: 64u64.to_biguint(),
+                val: i64::MIN.to_bigint()
+            }
+            .as_u64(),
+            0x8000_0000_0000_0000u64
+        );
+        assert_eq!(
+            Value::Int {
+                size: 64u64.to_biguint(),
+                val: -1.to_bigint()
+            }
+            .as_u64(),
+            0xffff_ffff_ffff_ffffu64
+        );
+
+        assert_eq!(
+            Value::Int {
+                size: 8u64.to_biguint(),
+                val: -1.to_bigint()
+            }
+            .as_u64(),
+            0xffu64
+        );
+        assert_eq!(
+            Value::Int {
+                size: 8u64.to_biguint(),
+                val: -128.to_bigint()
+            }
+            .as_u64(),
+            0x80u64
+        )
+    }
+
+    #[test]
+    fn as_u32_chunks_works_for_ints() {
+        assert_eq!(
+            Value::Int {
+                size: 64u64.to_biguint(),
+                val: i64::MAX.to_bigint()
+            }
+            .as_u32_chunks(),
+            num::bigint::ToBigUint::to_biguint(&i64::MAX).unwrap()
+        );
+        assert_eq!(
+            Value::Int {
+                size: 64u64.to_biguint(),
+                val: i64::MIN.to_bigint()
+            }
+            .as_u32_chunks(),
+            0x8000_0000_0000_0000u64.to_biguint()
+        );
+        assert_eq!(
+            Value::Int {
+                size: 64u64.to_biguint(),
+                val: -1.to_bigint()
+            }
+            .as_u32_chunks(),
+            0xffff_ffff_ffff_ffffu64.to_biguint()
+        );
+        assert_eq!(
+            Value::Int {
+                size: 8u64.to_biguint(),
+                val: -1.to_bigint()
+            }
+            .as_u32_chunks(),
+            0xffu64.to_biguint()
+        );
+        assert_eq!(
+            Value::Int {
+                size: 8u64.to_biguint(),
+                val: -128.to_bigint()
+            }
+            .as_u32_chunks(),
+            0x80u64.to_biguint()
+        )
+    }
+
+    macro_rules! test_conversion {
+        ($name:ident, $value:expr, $expected_u64:expr) => {
+            #[test]
+            fn $name() {
+                assert_eq!($value.as_u64(), $expected_u64);
+                assert_eq!($value.as_u32_chunks(), $expected_u64.to_biguint());
+            }
+        };
+    }
+
+    test_conversion! {
+        concat_works,
+        Value::Concat (
+            vec![
+                Value::Int {
+                    size: 8u64.to_biguint(),
+                    val: -1.to_bigint(),
+                },
+                Value::Bit(true),
+                Value::Undef(7u64.to_biguint()),
+                Value::UInt {
+                    size: 8u64.to_biguint(),
+                    val: 3u32.to_biguint()
+                },
+                Value::Bit(true),
+            ]
+        ),
+        0b1111_1111_1000_0000_0000_0011_1u64
     }
 }

@@ -1,39 +1,36 @@
 [package]
-name = "spade-tests"
+name = "spade-simulation-ext"
 version.workspace = true
-authors = ["TheZoq2 <frans.skarman@protonmail.com>"]
-edition.workspace = true
 license.workspace = true
+edition.workspace = true
 rust-version.workspace = true
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
-[lib]
-doctest = false
-
 [dependencies]
-codespan-reporting.workspace = true
+pyo3 = { version = "0.18.0", features = ["extension-module", "eyre", "abi3-py38"], optional=true}
+spade = {path = "../spade-compiler"}
+ron.workspace = true
+color-eyre.workspace = true
 logos.workspace = true
-indoc.workspace = true
+itertools.workspace = true
+codespan-reporting.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
 tracing-tree.workspace = true
+num.workspace = true
 
+spade-ast = {path = "../spade-ast"}
 spade-ast-lowering = {path = "../spade-ast-lowering"}
-spade-parser = {path = "../spade-parser"}
 spade-common = {path = "../spade-common"}
 spade-diagnostics = {path = "../spade-diagnostics"}
 spade-hir = {path = "../spade-hir"}
-spade-mir = {path = "../spade-mir"}
 spade-hir-lowering = {path = "../spade-hir-lowering"}
+spade-mir = {path = "../spade-mir"}
+spade-parser = {path = "../spade-parser"}
 spade-typeinference = {path = "../spade-typeinference"}
 spade-types = {path = "../spade-types"}
-spade-wordlength-inference = {path = "../spade-wordlength-inference"}
-spade = {path = "../spade-compiler"}
-unindent = "0.2.1"
+vcd-translate = {path = "../vcd-translate"}
 
-[dev-dependencies]
-colored.workspace = true
-insta.workspace = true
-prettydiff.workspace = true
-pretty_assertions.workspace = true
+[features]
+python = ["pyo3"]

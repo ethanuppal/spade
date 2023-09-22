@@ -1,0 +1,4 @@
+#[no_mangle]
+fn add(a: int<8>, b: int<8>) -> int<9> {
+    a + b
+}

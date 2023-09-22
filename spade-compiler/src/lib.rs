@@ -9,6 +9,7 @@ use ron::ser::PrettyConfig;
 use spade_ast_lowering::id_tracker::ExprIdTracker;
 use spade_mir::codegen::{prepare_codegen, Codegenable};
 use spade_mir::unit_name::InstanceMap;
+use spade_mir::verilator_wrapper::verilator_wrappers;
 use std::collections::{BTreeMap, HashMap};
 use std::path::PathBuf;
 use std::rc::Rc;
@@ -52,6 +53,7 @@ pub struct Opt<'b> {
     pub error_buffer: &'b mut Buffer,
     pub outfile: Option<PathBuf>,
     pub mir_output: Option<PathBuf>,
+    pub verilator_wrapper_output: Option<PathBuf>,
     pub state_dump_file: Option<PathBuf>,
     pub item_list_file: Option<PathBuf>,
     pub print_type_traceback: bool,
@@ -327,6 +329,11 @@ pub fn compile(
 
     if let Some(outfile) = opts.outfile {
         std::fs::write(outfile, module_code.join("\n\n")).or_report(&mut errors);
+    }
+    if let Some(cpp_file) = opts.verilator_wrapper_output {
+        let cpp_code =
+            verilator_wrappers(&flat_mir_entities.iter().map(|e| &e.0).collect::<Vec<_>>());
+        std::fs::write(cpp_file, cpp_code).or_report(&mut errors);
     }
     if let Some(mir_output) = opts.mir_output {
         std::fs::write(mir_output, mir_code.join("\n\n")).or_report(&mut errors);

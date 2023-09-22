@@ -10,6 +10,7 @@ pub mod renaming;
 mod type_list;
 pub mod types;
 pub mod unit_name;
+pub mod verilator_wrapper;
 mod verilog;
 mod wal;
 

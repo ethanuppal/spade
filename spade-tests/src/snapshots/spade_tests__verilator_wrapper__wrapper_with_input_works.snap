@@ -1,0 +1,64 @@
+---
+source: spade-tests/src/verilator_wrapper.rs
+---
+#include <Vno_mangle.h>
+class no_mangle_spade_t;
+class no_mangle_spade_t_i;
+no_mangle_spade_t_i* init_no_mangle_spade_t_i(no_mangle_spade_t& t);
+class no_mangle_spade_t {
+    public:
+        no_mangle_spade_t(std::string spade_state, std::string spade_top, Vno_mangle* top)
+            : s_ext(spade::setup_spade(spade_top, spade_state))
+            , top(top)
+            , i(init_no_mangle_spade_t_i(*this))
+        {
+        }
+        no_mangle_spade_t_i* i;
+        rust::Box<spade::SimulationExt> s_ext;
+        Vno_mangle* top;
+};
+class no_mangle_spade_t_i_short {
+    public:
+        no_mangle_spade_t_i_short(no_mangle_spade_t& parent)
+            : parent(parent)
+        {}
+        no_mangle_spade_t_i_short& operator=(std::string const& val) {
+            auto value = parent.s_ext->port_value("short", val);
+            parent.top->short_i = value->as_u64();
+            return *this;
+        }
+    private:
+        no_mangle_spade_t& parent;
+};
+class no_mangle_spade_t_i_wide {
+    public:
+        no_mangle_spade_t_i_wide(no_mangle_spade_t& parent)
+            : parent(parent)
+        {}
+        no_mangle_spade_t_i_wide& operator=(std::string const& val) {
+            auto value = parent.s_ext->port_value("wide", val);
+            auto value_split = value->as_u32_chunks();
+            parent.top->wide_i[0] = value_split[0];
+            parent.top->wide_i[1] = value_split[1];
+            parent.top->wide_i[2] = value_split[2];
+            parent.top->wide_i[3] = value_split[3];
+            return *this;
+        }
+    private:
+        no_mangle_spade_t& parent;
+};
+class no_mangle_spade_t_i {
+    public:
+        no_mangle_spade_t_i(no_mangle_spade_t& parent)
+            : parent(parent)
+            , short(parent)
+            , wide(parent)
+        {}
+        no_mangle_spade_t_i_short short;
+        no_mangle_spade_t_i_wide wide;
+    private:
+        no_mangle_spade_t& parent;
+};
+no_mangle_spade_t_i* init_no_mangle_spade_t_i(no_mangle_spade_t& t) {
+    return new no_mangle_spade_t_i(t);
+}

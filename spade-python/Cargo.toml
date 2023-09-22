@@ -32,6 +32,7 @@ spade-hir = {path = "../spade-hir"}
 spade-hir-lowering = {path = "../spade-hir-lowering"}
 spade-mir = {path = "../spade-mir"}
 spade-parser = {path = "../spade-parser"}
+spade-simulation-ext = {path = "../spade-simulation-ext", features = ["python"]}
 spade-typeinference = {path = "../spade-typeinference"}
 spade-types = {path = "../spade-types"}
 vcd-translate = {path = "../vcd-translate"}

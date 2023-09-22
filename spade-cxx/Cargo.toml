@@ -14,6 +14,8 @@ ron.workspace = true
 cxx = "1.0"
 
 spade = {path = "../spade-compiler"}
+spade-mir = {path = "../spade-mir"}
+spade-simulation-ext = {path = "../spade-simulation-ext"}
 
 [build-dependencies]
 cxx-build = "1.0"

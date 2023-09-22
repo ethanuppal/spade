@@ -3,6 +3,7 @@
 set -e
 
 source build/.env/bin/activate
+cd pytest || exit 1
 # Explicit pytest binary installed by swim is required because a system pytest
 # seems to override the venv pytest, and not run in that venv
-./build/.env/bin/pytest
+python3 -m pytest

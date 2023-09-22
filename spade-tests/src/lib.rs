@@ -27,6 +27,8 @@ mod typeinference;
 #[cfg(test)]
 mod usefulness;
 #[cfg(test)]
+mod verilator_wrapper;
+#[cfg(test)]
 mod wal_tracing;
 #[cfg(test)]
 mod wordlength_inference;
@@ -87,6 +89,7 @@ macro_rules! snapshot_error {
                 error_buffer: &mut buffer,
                 outfile: None,
                 mir_output: None,
+                verilator_wrapper_output: None,
                 state_dump_file: None,
                 item_list_file: None,
                 print_type_traceback: false,
@@ -151,6 +154,7 @@ macro_rules! snapshot_inference_error {
                 error_buffer: &mut buffer,
                 outfile: None,
                 mir_output: None,
+                verilator_wrapper_output: None,
                 state_dump_file: None,
                 item_list_file: None,
                 print_type_traceback: false,
@@ -232,6 +236,7 @@ pub fn build_artifacts(code: &str, with_stdlib: bool) -> Artefacts {
         error_buffer: &mut buffer,
         outfile: None,
         mir_output: None,
+        verilator_wrapper_output: None,
         state_dump_file: None,
         item_list_file: None,
         print_type_traceback: false,

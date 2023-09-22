@@ -1149,6 +1149,8 @@ dependencies = [
  "cxx-build",
  "ron",
  "spade",
+ "spade-mir",
+ "spade-simulation-ext",
 ]
 
 [[package]]
@@ -1283,6 +1285,35 @@ dependencies = [
  "spade-hir-lowering",
  "spade-mir",
  "spade-parser",
+ "spade-simulation-ext",
+ "spade-typeinference",
+ "spade-types",
+ "tracing",
+ "tracing-subscriber",
+ "tracing-tree",
+ "vcd-translate",
+]
+
+[[package]]
+name = "spade-simulation-ext"
+version = "0.4.0"
+dependencies = [
+ "codespan-reporting 0.12.0",
+ "color-eyre",
+ "itertools",
+ "logos",
+ "num",
+ "pyo3",
+ "ron",
+ "spade",
+ "spade-ast",
+ "spade-ast-lowering",
+ "spade-common",
+ "spade-diagnostics",
+ "spade-hir",
+ "spade-hir-lowering",
+ "spade-mir",
+ "spade-parser",
  "spade-typeinference",
  "spade-types",
  "tracing",
@@ -1300,6 +1331,7 @@ dependencies = [
  "indoc 2.0.1",
  "insta",
  "logos",
+ "pretty_assertions",
  "prettydiff",
  "spade",
  "spade-ast-lowering",
