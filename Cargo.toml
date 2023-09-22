@@ -5,6 +5,8 @@ members = [
     "vcd-translate",
 ]
 
+resolver = "2"
+
 # Shared between internal crates. Can be overridden per-crate if needed.
 
 [workspace.package]
