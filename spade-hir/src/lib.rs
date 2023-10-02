@@ -517,7 +517,7 @@ impl UnitHead {
         match &self.output_type {
             Some(t) => t.clone(),
             None => {
-                // TODO: We should point to the end of the argument list here
+                // FIXME: We should point to the end of the argument list here
                 TypeSpec::Unit(self.name.loc()).at_loc(&self.name.loc())
             }
         }
@@ -633,7 +633,7 @@ pub struct ItemList {
     /// All traits in the compilation unit. Traits consist of a list of functions
     /// by name. Anonymous impl blocks are also members here, but their name is never
     /// visible to the user.
-    traits: HashMap<TraitName, HashMap<Identifier, UnitHead>>,
+    pub traits: HashMap<TraitName, HashMap<Identifier, UnitHead>>,
     pub impls: HashMap<NameID, HashMap<TraitName, ImplBlock>>,
 }
 

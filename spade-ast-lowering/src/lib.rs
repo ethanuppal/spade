@@ -732,7 +732,7 @@ pub fn visit_impl(
                     no_mangle: _,
                 }) => {
                     return Err(Diagnostic::error(
-                        // TODO: Head.name is not optimal, we should point
+                        // FIXME: Head.name is not optimal, we should point
                         // to the argument list, but that LOC is not available
                         // right now
                         &impl_head.inputs,
@@ -3027,21 +3027,20 @@ mod impl_blocks {
 
 #[cfg(test)]
 mod module_visiting {
-    // use std::collections::HashMap;
+    use std::collections::HashMap;
 
-    // use super::*;
+    use super::*;
 
-    // use hir::ItemList;
-    // use spade_ast::testutil::ast_ident;
-    // use spade_common::location_info::WithLocation;
-    // use spade_common::name::testutil::name_id;
+    use hir::{hparams, ItemList};
+    use spade_ast::testutil::ast_ident;
+    use spade_common::location_info::WithLocation;
+    use spade_common::name::testutil::name_id;
 
-    // use pretty_assertions::assert_eq;
+    use pretty_assertions::assert_eq;
 
     #[test]
     fn visiting_module_with_one_entity_works() {
         // TODO: Rewrite or verify that this test is no longer needed
-        /*
         let input = ast::ModuleBody {
             members: vec![ast::Item::Unit(
                 ast::Unit {
@@ -3071,10 +3070,10 @@ mod module_visiting {
                 hir::ExecutableItem::Unit(
                     hir::Unit {
                         name: hir::UnitName::FullPath(name_id(0, "test")),
-                        head: UnitHead {
+                        head: hir::UnitHead {
                             name: Identifier("test".to_string()).nowhere(),
                             output_type: None,
-                            inputs: hir::ParameterList(vec![]),
+                            inputs: hparams!().nowhere(),
                             type_params: vec![],
                             unit_kind: hir::UnitKind::Entity.nowhere(),
                         },
@@ -3116,6 +3115,5 @@ mod module_visiting {
         );
 
         assert_eq!(item_list, expected);
-        */
     }
 }
