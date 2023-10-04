@@ -784,11 +784,31 @@ pub fn visit_impl(
         );
     }
 
-    items
+    let prev = items
         .impls
-        .entry(target_name.0)
+        .entry(target_name.0.clone())
         .or_insert(HashMap::new())
-        .insert(trait_name, hir::ImplBlock { fns: trait_impl });
+        .insert(
+            trait_name.clone(),
+            hir::ImplBlock { fns: trait_impl }.at_loc(block),
+        );
+
+    if let Some(prev) = prev {
+        let name = match &trait_name {
+            TraitName::Named(n) => n,
+            TraitName::Anonymous(_) => {
+                diag_bail!(block, "Found multiple impls of anonymous trait")
+            }
+        };
+        return Err(Diagnostic::error(
+            block,
+            format!(
+                "Multiple implementations of {} for {}",
+                name, &target_name.0
+            ),
+        )
+        .secondary_label(prev, "Previous impl here"));
+    }
 
     Ok(result)
 }
@@ -3021,6 +3041,7 @@ mod impl_blocks {
                 .into_iter()
                 .collect()
             }
+            .nowhere()
         )
     }
 }

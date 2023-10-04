@@ -276,6 +276,26 @@ mod trait_tests {
     }
 
     snapshot_error! {
+        multiple_impls_of_same_trait_is_error,
+        "
+            trait A {
+                fn a(self);
+            }
+            struct X {}
+            impl A for X {
+                fn a(self) {}
+            }
+            impl A for X {
+                fn a(self) {}
+            }
+
+            fn main(x: X) -> bool {
+                true
+            }
+        "
+    }
+
+    snapshot_error! {
         calling_methods_with_the_wrong_number_of_params_errors,
         "
             struct X {}

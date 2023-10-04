@@ -276,7 +276,7 @@ impl std::fmt::Display for TypeSpec {
                             .iter()
                             .map(|g| format!("{g}"))
                             .collect::<Vec<_>>()
-                            .join(",")
+                            .join(", ")
                     )
                 };
                 write!(f, "{name}{type_params}",)
@@ -619,6 +619,7 @@ pub struct ImplBlock {
     /// for the specified function
     pub fns: HashMap<Identifier, (NameID, Loc<()>)>,
 }
+impl WithLocation for ImplBlock {}
 
 /// A list of all the items present in the whole AST, flattened to remove module
 /// hirearchies.
@@ -634,7 +635,7 @@ pub struct ItemList {
     /// by name. Anonymous impl blocks are also members here, but their name is never
     /// visible to the user.
     pub traits: HashMap<TraitName, HashMap<Identifier, UnitHead>>,
-    pub impls: HashMap<NameID, HashMap<TraitName, ImplBlock>>,
+    pub impls: HashMap<NameID, HashMap<TraitName, Loc<ImplBlock>>>,
 }
 
 impl ItemList {
