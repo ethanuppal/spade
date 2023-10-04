@@ -285,7 +285,7 @@ impl Spade {
     }
 
     #[tracing::instrument(level = "trace", skip(self))]
-    fn output_as_field_ref(&mut self) -> Result<FieldRef> {
+    pub fn output_as_field_ref(&mut self) -> Result<FieldRef> {
         let output_type = self.output_type()?;
         let generic_list = self
             .type_state
@@ -316,7 +316,7 @@ impl Spade {
 
     /// Access a field of the DUT output or its subfields
     #[tracing::instrument(level = "trace", skip(self))]
-    fn output_field(&mut self, path: Vec<String>) -> Result<FieldRef> {
+    pub fn output_field(&mut self, path: Vec<String>) -> Result<FieldRef> {
         let output_type = self.output_type()?;
 
         // Create a new variable which is guaranteed to have the output type
@@ -427,7 +427,7 @@ impl Spade {
     }
 
     // Translate a value from a verilog instance path into a string value
-    fn translate_value(&self, path: &str, value: &str) -> Result<String> {
+    pub fn translate_value(&self, path: &str, value: &str) -> Result<String> {
         let hierarchy = path.split(".").map(str::to_string).collect::<Vec<_>>();
         if hierarchy.is_empty() {
             return Err(anyhow!("{path} is not a hierarchy path").into());
