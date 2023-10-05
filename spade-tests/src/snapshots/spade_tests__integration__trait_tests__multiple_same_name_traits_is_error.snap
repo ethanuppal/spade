@@ -1,0 +1,18 @@
+---
+source: spade-tests/src/integration.rs
+---
+trait A {}
+trait A {}
+
+fn main() {}
+
+
+error: Multiple items with the same name
+  ┌─ testinput:2:7
+  │
+1 │ trait A {}
+  │       - Previous definition here
+2 │ trait A {}
+  │       ^ A is defined multiple times
+
+

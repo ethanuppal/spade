@@ -1,0 +1,32 @@
+---
+source: spade-tests/src/integration.rs
+---
+trait A {
+    fn a(self);
+}
+struct X {}
+impl A for X {
+    fn a(self) {}
+}
+impl A for X {
+    fn a(self) {}
+}
+
+fn main(x: X) -> bool {
+    true
+}
+
+
+error: Multiple implementations of A for X
+   ┌─ testinput:8:1
+   │    
+ 5 │   ╭ impl A for X {
+ 6 │   │     fn a(self) {}
+ 7 │   │ }
+   │   ╰─' Previous impl here
+ 8 │ ╭   impl A for X {
+ 9 │ │       fn a(self) {}
+10 │ │   }
+   │ ╰───^
+
+

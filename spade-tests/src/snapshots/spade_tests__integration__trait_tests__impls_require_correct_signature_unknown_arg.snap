@@ -17,6 +17,9 @@ impl X for A {
 error: Trait method does not have this argument
   ┌─ testinput:8:16
   │
+2 │     fn a(self) -> bool;
+  │        - Method defined here
+  ·
 8 │     fn a(self, x: bool) -> bool{
   │                ^ Extra argument
 

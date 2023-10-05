@@ -700,7 +700,7 @@ pub fn visit_impl(
                             .primary_label(format!("Expected `{t_name}`"))
                             .secondary_label(
                                 t_name,
-                                format!("Because argument `{i}` is named `{t_name}` in the trait"),
+                                format!("Because argument {i} is named `{t_name}` in the trait"),
                             )
                             .into());
                     }
@@ -723,6 +723,7 @@ pub fn visit_impl(
                     return Err(
                         Diagnostic::error(name, "Trait method does not have this argument")
                             .primary_label("Extra argument")
+                            .secondary_label(&target_method.name, "Method defined here")
                             .into(),
                     )
                 }
@@ -3061,7 +3062,6 @@ mod module_visiting {
 
     #[test]
     fn visiting_module_with_one_entity_works() {
-        // TODO: Rewrite or verify that this test is no longer needed
         let input = ast::ModuleBody {
             members: vec![ast::Item::Unit(
                 ast::Unit {

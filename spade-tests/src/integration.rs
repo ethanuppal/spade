@@ -296,6 +296,16 @@ mod trait_tests {
     }
 
     snapshot_error! {
+        multiple_same_name_traits_is_error,
+        "
+            trait A {}
+            trait A {}
+
+            fn main() {}
+        "
+    }
+
+    snapshot_error! {
         calling_methods_with_the_wrong_number_of_params_errors,
         "
             struct X {}
