@@ -48,16 +48,12 @@ pub fn infer_and_check(
                     Range::new(-BigInt::from(2).pow(x) + 1, BigInt::from(2).pow(x) - 2),
                 );
             }
-            TypeVar::Known(KnownType::Type(n), _) => panic!("How do I handle a type? {:?}", n),
+            TypeVar::Known(KnownType::Named(n), _) => panic!("How do I handle a type? {:?}", n),
             TypeVar::Unknown(_) => {
                 // known.insert(var, Range { lo: 0, hi: 0 });
             }
 
-            TypeVar::Tuple(_)
-            | TypeVar::Array { .. }
-            | TypeVar::Backward(_)
-            | TypeVar::Wire(_)
-            | TypeVar::Inverted(_) => panic!("Wat? {:?} {:?}", ty, var),
+            TypeVar::Known(other, params) => panic!("Wat? {:?} {:?}", other, params),
         }
     }
 

@@ -178,7 +178,7 @@ impl TypeState {
                     .map(|e| self.hir_type_expr_to_var(&e, generic_list_token))
                     .collect();
 
-                TypeVar::Known(KnownType::Type(base.inner.clone()), params)
+                TypeVar::Known(KnownType::Named(base.inner.clone()), params)
             }
             hir::TypeSpec::Generic(name) => match generic_list.get(&name.inner) {
                 Some(t) => t.clone(),
@@ -195,28 +195,25 @@ impl TypeState {
                     .iter()
                     .map(|t| self.type_var_from_hir(t, generic_list_token))
                     .collect();
-                TypeVar::Tuple(inner)
+                TypeVar::tuple(inner)
             }
             hir::TypeSpec::Array { inner, size } => {
                 let inner = self.type_var_from_hir(&inner, generic_list_token);
                 let size = self.hir_type_expr_to_var(&size, generic_list_token);
 
-                TypeVar::Array {
-                    inner: Box::new(inner),
-                    size: Box::new(size),
-                }
+                TypeVar::array(inner, size)
             }
             hir::TypeSpec::Unit(_) => {
                 todo!("Support unit type in type inference")
             }
             hir::TypeSpec::Backward(inner) => {
-                TypeVar::Backward(Box::new(self.type_var_from_hir(inner, generic_list_token)))
+                TypeVar::backward(self.type_var_from_hir(inner, generic_list_token))
             }
             hir::TypeSpec::Wire(inner) => {
-                TypeVar::Wire(Box::new(self.type_var_from_hir(inner, generic_list_token)))
+                TypeVar::wire(self.type_var_from_hir(inner, generic_list_token))
             }
             hir::TypeSpec::Inverted(inner) => {
-                TypeVar::Inverted(Box::new(self.type_var_from_hir(inner, generic_list_token)))
+                TypeVar::inverted(self.type_var_from_hir(inner, generic_list_token))
             }
             hir::TypeSpec::TraitSelf(_) => {
                 panic!("Trying to convert TraitSelf to type inference type var")
@@ -585,14 +582,10 @@ impl TypeState {
         ctx: &Context,
     ) -> Result<()> {
         let (addr_type, addr_size) = self.new_split_generic_int(ctx.symtab);
-        let port_type = TypeVar::Array {
-            inner: Box::new(TypeVar::Tuple(vec![
-                self.new_generic(),
-                addr_type,
-                self.new_generic(),
-            ])),
-            size: Box::new(self.new_generic()),
-        };
+        let port_type = TypeVar::array(
+            TypeVar::tuple(vec![self.new_generic(), addr_type, self.new_generic()]),
+            self.new_generic(),
+        );
 
         self.add_constraint(
             addr_size.clone(),
@@ -731,7 +724,7 @@ impl TypeState {
                 for pattern in subpatterns {
                     self.visit_pattern(pattern, ctx, generic_list)?;
                 }
-                let tuple_type = TypeVar::Tuple(
+                let tuple_type = TypeVar::tuple(
                     subpatterns
                         .iter()
                         .map(|pattern| {
@@ -920,7 +913,7 @@ impl TypeState {
                 self.visit_expression(value, ctx, generic_list)?;
 
                 let inner_type = self.new_generic();
-                let outer_type = TypeVar::Backward(Box::new(inner_type.clone()));
+                let outer_type = TypeVar::backward(inner_type.clone());
                 self.unify_expression_generic_error(target, &outer_type, &ctx.symtab)?;
                 self.unify_expression_generic_error(value, &inner_type, &ctx.symtab)?;
 
@@ -1041,23 +1034,6 @@ impl TypeState {
                     .map(|p| self.check_var_for_replacement(p))
                     .collect(),
             ),
-            TypeVar::Tuple(inner) => TypeVar::Tuple(
-                inner
-                    .into_iter()
-                    .map(|p| self.check_var_for_replacement(p))
-                    .collect(),
-            ),
-            TypeVar::Array { inner, size } => TypeVar::Array {
-                inner: Box::new(self.check_var_for_replacement(*inner)),
-                size: Box::new(self.check_var_for_replacement(*size)),
-            },
-            TypeVar::Backward(inner) => {
-                TypeVar::Backward(Box::new(self.check_var_for_replacement(*inner)))
-            }
-            TypeVar::Wire(inner) => TypeVar::Wire(Box::new(self.check_var_for_replacement(*inner))),
-            TypeVar::Inverted(inner) => {
-                TypeVar::Inverted(Box::new(self.check_var_for_replacement(*inner)))
-            }
             u @ TypeVar::Unknown(_) => u,
         }
     }
@@ -1223,112 +1199,70 @@ impl TypeState {
         // Figure out the most general type, and take note if we need to
         // do any replacement of the types in the rest of the state
         let result = match (&v1, &v2) {
-            (TypeVar::Known(t1, p1), TypeVar::Known(t2, p2)) => match (t1, t2) {
-                (KnownType::Integer(val1), KnownType::Integer(val2)) => {
-                    unify_if!(val1 == val2, v1, None)
-                }
-                (KnownType::Type(n1), KnownType::Type(n2)) => {
-                    match (
-                        &symtab.type_symbol_by_id(&n1).inner,
-                        &symtab.type_symbol_by_id(&n2).inner,
-                    ) {
-                        (TypeSymbol::Declared(_, _), TypeSymbol::Declared(_, _)) => {
-                            if n1 != n2 {
-                                return Err(err_producer!());
-                            }
-                            if p1.len() != p2.len() {
-                                return Err(err_producer!());
-                            }
-
-                            for (t1, t2) in p1.iter().zip(p2.iter()) {
-                                try_with_context!(self.unify_inner(t1, t2, symtab));
-                            }
-
-                            let new_ts1 = symtab.type_symbol_by_id(&n1).inner;
-                            let new_ts2 = symtab.type_symbol_by_id(&n2).inner;
-                            let new_v1 = e1
-                                .get_type(self)
-                                .expect("Tried to unify types but the lhs was not found");
-                            unify_if!(new_ts1 == new_ts2, new_v1, None)
+            (TypeVar::Known(t1, p1), TypeVar::Known(t2, p2)) => {
+                macro_rules! unify_params {
+                    () => {
+                        if p1.len() != p2.len() {
+                            return Err(err_producer!());
                         }
-                        (TypeSymbol::Declared(_, _), TypeSymbol::GenericArg) => Ok((v1, Some(v2))),
-                        (TypeSymbol::GenericArg, TypeSymbol::Declared(_, _)) => Ok((v2, Some(v1))),
-                        (TypeSymbol::GenericArg, TypeSymbol::GenericArg) => Ok((v1, Some(v2))),
-                        (TypeSymbol::Declared(_, _), TypeSymbol::GenericInt) => todo!(),
-                        (TypeSymbol::GenericArg, TypeSymbol::GenericInt) => todo!(),
-                        (TypeSymbol::GenericInt, TypeSymbol::Declared(_, _)) => todo!(),
-                        (TypeSymbol::GenericInt, TypeSymbol::GenericArg) => todo!(),
-                        (TypeSymbol::GenericInt, TypeSymbol::GenericInt) => todo!(),
+
+                        for (t1, t2) in p1.iter().zip(p2.iter()) {
+                            try_with_context!(self.unify_inner(t1, t2, symtab));
+                        }
+                    };
+                }
+
+                match (t1, t2) {
+                    (KnownType::Integer(val1), KnownType::Integer(val2)) => {
+                        unify_if!(val1 == val2, v1, None)
                     }
+                    (KnownType::Named(n1), KnownType::Named(n2)) => {
+                        match (
+                            &symtab.type_symbol_by_id(&n1).inner,
+                            &symtab.type_symbol_by_id(&n2).inner,
+                        ) {
+                            (TypeSymbol::Declared(_, _), TypeSymbol::Declared(_, _)) => {
+                                if n1 != n2 {
+                                    return Err(err_producer!());
+                                }
+
+                                let new_ts1 = symtab.type_symbol_by_id(&n1).inner;
+                                let new_ts2 = symtab.type_symbol_by_id(&n2).inner;
+                                let new_v1 = e1
+                                    .get_type(self)
+                                    .expect("Tried to unify types but the lhs was not found");
+                                unify_params!();
+                                unify_if!(new_ts1 == new_ts2, new_v1, None)
+                            }
+                            (TypeSymbol::Declared(_, _), TypeSymbol::GenericArg) => {
+                                Ok((v1, Some(v2)))
+                            }
+                            (TypeSymbol::GenericArg, TypeSymbol::Declared(_, _)) => {
+                                Ok((v2, Some(v1)))
+                            }
+                            (TypeSymbol::GenericArg, TypeSymbol::GenericArg) => Ok((v1, Some(v2))),
+                            (TypeSymbol::Declared(_, _), TypeSymbol::GenericInt) => todo!(),
+                            (TypeSymbol::GenericArg, TypeSymbol::GenericInt) => todo!(),
+                            (TypeSymbol::GenericInt, TypeSymbol::Declared(_, _)) => todo!(),
+                            (TypeSymbol::GenericInt, TypeSymbol::GenericArg) => todo!(),
+                            (TypeSymbol::GenericInt, TypeSymbol::GenericInt) => todo!(),
+                        }
+                    }
+                    (KnownType::Array, KnownType::Array)
+                    | (KnownType::Tuple, KnownType::Tuple)
+                    | (KnownType::Wire, KnownType::Wire)
+                    | (KnownType::Backward, KnownType::Backward)
+                    | (KnownType::Inverted, KnownType::Inverted) => {
+                        unify_params!();
+                        Ok((self.check_var_for_replacement(v2), Some(v1)))
+                    }
+                    (_, _) => Err(err_producer!()),
                 }
-                (KnownType::Integer(_), KnownType::Type(_)) => Err(err_producer!()),
-                (KnownType::Type(_), KnownType::Integer(_)) => Err(err_producer!()),
-            },
-            (TypeVar::Tuple(i1), TypeVar::Tuple(i2)) => {
-                if i1.len() != i2.len() {
-                    return Err(err_producer!());
-                }
-
-                for (t1, t2) in i1.iter().zip(i2.iter()) {
-                    try_with_context!(self.unify_inner(t1, t2, symtab));
-                }
-
-                Ok((self.check_var_for_replacement(v1), None))
-            }
-            (
-                TypeVar::Array {
-                    inner: i1,
-                    size: s1,
-                },
-                TypeVar::Array {
-                    inner: i2,
-                    size: s2,
-                },
-            ) => {
-                let inner = try_with_context!(self.unify_inner(i1.as_ref(), i2.as_ref(), symtab));
-                let size = try_with_context!(self.unify_inner(s1.as_ref(), s2.as_ref(), symtab));
-
-                Ok((
-                    TypeVar::Array {
-                        inner: Box::new(inner),
-                        size: Box::new(size),
-                    },
-                    None,
-                ))
-            }
-            (TypeVar::Backward(i1), TypeVar::Backward(i2)) => {
-                let new_inner =
-                    try_with_context!(self.unify_inner(i1.as_ref(), i2.as_ref(), symtab));
-
-                Ok((TypeVar::Backward(Box::new(new_inner)), None))
-            }
-            (TypeVar::Wire(i1), TypeVar::Wire(i2)) => {
-                let new_inner =
-                    try_with_context!(self.unify_inner(i1.as_ref(), i2.as_ref(), symtab));
-
-                Ok((TypeVar::Wire(Box::new(new_inner)), None))
-            }
-            (TypeVar::Inverted(i1), TypeVar::Inverted(i2)) => {
-                let new_inner =
-                    try_with_context!(self.unify_inner(i1.as_ref(), i2.as_ref(), symtab));
-
-                Ok((TypeVar::Wire(Box::new(new_inner)), None))
             }
             // Unknown with other
             (TypeVar::Unknown(_), TypeVar::Unknown(_)) => Ok((v1, Some(v2))),
             (_other, TypeVar::Unknown(_)) => Ok((v1, Some(v2))),
             (TypeVar::Unknown(_), _other) => Ok((v2, Some(v1))),
-            // Incompatibilities
-            (TypeVar::Known(_, _), _other) => Err(err_producer!()),
-            (_other, TypeVar::Known(_, _)) => Err(err_producer!()),
-            (TypeVar::Tuple(_), _other) => Err(err_producer!()),
-            (_other, TypeVar::Tuple(_)) => Err(err_producer!()),
-            (TypeVar::Backward(_), _other) => Err(err_producer!()),
-            (_other, TypeVar::Backward(_)) => Err(err_producer!()),
-            (TypeVar::Wire(_), _other) => Err(err_producer!()),
-            (_other, TypeVar::Wire(_)) => Err(err_producer!()),
-            (TypeVar::Inverted(_), _other) => Err(err_producer!()),
-            (_other, TypeVar::Inverted(_)) => Err(err_producer!()),
         };
 
         let (new_type, replaced_type) = result?;
@@ -1463,19 +1397,7 @@ impl TypeState {
                     Self::replace_type_var(param, from, replacement)
                 }
             }
-            TypeVar::Tuple(inner) => {
-                for t in inner {
-                    Self::replace_type_var(t, from, replacement)
-                }
-            }
-            TypeVar::Array { inner, size } => {
-                Self::replace_type_var(inner, from, replacement);
-                Self::replace_type_var(size, from, replacement);
-            }
             TypeVar::Unknown(_) => {}
-            TypeVar::Backward(inner) => Self::replace_type_var(inner, from, replacement),
-            TypeVar::Wire(inner) => Self::replace_type_var(inner, from, replacement),
-            TypeVar::Inverted(inner) => Self::replace_type_var(inner, from, replacement),
         }
 
         if in_var == from {
@@ -1944,7 +1866,7 @@ mod tests {
             )
             .unwrap();
 
-        let expected_type = TVar::Tuple(vec![kvar!(t_bool(&symtab)), kvar!(t_bool(&symtab))]);
+        let expected_type = TVar::tuple(vec![kvar!(t_bool(&symtab)), kvar!(t_bool(&symtab))]);
 
         // Ensure patterns have same type as each other, and as the expression
         ensure_same_type!(state, expr_a, expected_type);
@@ -1966,7 +1888,7 @@ mod tests {
 
         state.add_eq_from_tvar(
             TExpr::Name(name_id(1, "a").inner),
-            kvar!(KnownType::Type(not_bool)),
+            kvar!(KnownType::Named(not_bool)),
         );
 
         let input = Statement::binding(
@@ -2111,10 +2033,7 @@ mod tests {
         ensure_same_type!(
             state,
             &expr_a,
-            TVar::Array {
-                inner: Box::new(TVar::Unknown(0)),
-                size: Box::new(TVar::Unknown(4))
-            }
+            TVar::array(TVar::Unknown(0), TVar::Unknown(4))
         );
 
         // The result should be the inner type
@@ -2372,7 +2291,7 @@ mod tests {
 
         let ttup = get_type!(state, &TExpr::Id(3));
         let reg = get_type!(state, &TExpr::Name(name_id(0, "test").inner));
-        let expected = TypeVar::Tuple(vec![
+        let expected = TypeVar::tuple(vec![
             sized_int(5, &symtab),
             TypeVar::Known(t_bool(&symtab), vec![]),
         ]);

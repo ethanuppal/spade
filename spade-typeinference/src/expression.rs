@@ -127,7 +127,7 @@ impl TypeState {
 
             self.unify_expression_generic_error(
                 &expression,
-                &TypeVar::Tuple(inner_types),
+                &TypeVar::Known(KnownType::Tuple, inner_types),
                 &ctx.symtab,
             )?;
         });
@@ -147,10 +147,8 @@ impl TypeState {
             let t = self.type_of(&TypedExpression::Id(tup.id))?;
 
             let inner_types = match t {
-                TypeVar::Tuple(inner) => {
-                    inner
-                }
-                t @ TypeVar::Known(_, _) | t @ TypeVar::Array { .. } | t @ TypeVar::Backward(_) | t @ TypeVar::Wire(_) | t @ TypeVar::Inverted(_) => {
+                TypeVar::Known(KnownType::Tuple, inner) => inner,
+                t @ TypeVar::Known(_, _) => {
                     return Err(Diagnostic::error(tup.loc(), "Attempt to use tuple indexing on non-tuple")
                         .primary_label("expected tuple")
                         .secondary_label(index, "Because this is a tuple index")
@@ -280,10 +278,10 @@ impl TypeState {
             };
 
             let size_type = kvar!(KnownType::Integer(members.len().to_biguint()));
-            let result_type = TypeVar::Array {
-                inner: Box::new(inner_type),
-                size: Box::new(size_type),
-            };
+            let result_type = TypeVar::array(
+                inner_type,
+                size_type,
+            );
 
             self.unify_expression_generic_error(expression, &result_type, &ctx.symtab)?;
         });
@@ -300,8 +298,8 @@ impl TypeState {
     ) -> Result<()> {
         assuming_kind!(ExprKind::CreatePorts = &expression => {
             let inner_type = self.new_generic();
-            let inverted = TypeVar::Inverted(Box::new(inner_type.clone()));
-            let compound = TypeVar::Tuple(vec![inner_type, inverted]);
+            let inverted = TypeVar::Known(KnownType::Inverted, vec![inner_type.clone()]);
+            let compound = TypeVar::tuple(vec![inner_type, inverted]);
             self.unify_expression_generic_error(expression, &compound, ctx.symtab)?;
         });
         Ok(())
@@ -348,10 +346,10 @@ impl TypeState {
                     Error::IndexMustBeInteger{got, loc: index.loc()}
                 })?;
 
-            let array_type = TypeVar::Array{
-                inner: Box::new(expression.get_type(self)?),
-                size: Box::new(array_size)
-            };
+            let array_type = TypeVar::array(
+                expression.get_type(self)?,
+                array_size
+            );
             self.unify(&target.inner, &array_type, &ctx.symtab)
                 .map_normal_err(|(got, _)| {
                     Error::IndexeeMustBeArray{got, loc: target.loc()}
@@ -611,19 +609,19 @@ impl TypeState {
                 }
                 UnaryOperator::Dereference => {
                     let result_type = self.new_generic();
-                    let reference_type = TypeVar::Wire(Box::new(result_type.clone()));
+                    let reference_type = TypeVar::wire(result_type.clone());
                     self.unify_expression_generic_error(operand, &reference_type, &ctx.symtab)?;
                     self.unify_expression_generic_error(expression, &result_type, &ctx.symtab)?
                 }
                 UnaryOperator::Reference => {
                     let result_type = self.new_generic();
-                    let reference_type = TypeVar::Wire(Box::new(result_type.clone()));
+                    let reference_type = TypeVar::wire(result_type.clone());
                     self.unify_expression_generic_error(operand, &result_type, &ctx.symtab)?;
                     self.unify_expression_generic_error(expression, &reference_type, &ctx.symtab)?
                 }
                 UnaryOperator::FlipPort => {
                     let inner_type = self.new_generic();
-                    let inverted_type = TypeVar::Inverted(Box::new(inner_type.clone()));
+                    let inverted_type = TypeVar::inverted(inner_type.clone());
                     self.unify_expression_generic_error(operand, &inner_type, &ctx.symtab)?;
                     self.unify_expression_generic_error(expression, &inverted_type, &ctx.symtab)?
                 }

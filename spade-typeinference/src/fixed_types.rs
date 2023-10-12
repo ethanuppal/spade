@@ -11,7 +11,7 @@ fn lookup(symtab: &SymbolTable, name: &[&str]) -> KnownType {
             .map(|s| Identifier(s.to_string()).nowhere())
             .collect(),
     );
-    KnownType::Type(
+    KnownType::Named(
         symtab
             .lookup_type_symbol(&path.clone().nowhere())
             .expect(&format!(

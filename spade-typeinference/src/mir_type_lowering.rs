@@ -219,7 +219,7 @@ impl TypeState {
         invert: bool,
     ) -> Option<ConcreteType> {
         match var {
-            TypeVar::Known(KnownType::Type(t), params) => {
+            TypeVar::Known(KnownType::Named(t), params) => {
                 let params = params
                     .iter()
                     .map(|v| Self::inner_ungenerify_type(v, symtab, type_list, invert))
@@ -237,9 +237,9 @@ impl TypeState {
 
                 Some(ConcreteType::Integer(size.clone()))
             }
-            TypeVar::Array { inner, size } => {
-                let inner = Self::inner_ungenerify_type(inner, symtab, type_list, invert);
-                let size = Self::inner_ungenerify_type(size, symtab, type_list, invert).map(|t| {
+            TypeVar::Known(KnownType::Array, inner) => {
+                let value = Self::inner_ungenerify_type(&inner[0], symtab, type_list, invert);
+                let size = Self::ungenerify_type(&inner[1], symtab, type_list).map(|t| {
                     if let ConcreteType::Integer(size) = t {
                         size
                     } else {
@@ -247,41 +247,41 @@ impl TypeState {
                     }
                 });
 
-                match (inner, size) {
-                    (Some(inner), Some(size)) => Some(ConcreteType::Array {
-                        inner: Box::new(inner),
+                match (value, size) {
+                    (Some(value), Some(size)) => Some(ConcreteType::Array {
+                        inner: Box::new(value),
                         size,
                     }),
                     _ => None,
                 }
             }
-            TypeVar::Tuple(inner) => {
+            TypeVar::Known(KnownType::Tuple, inner) => {
                 let inner = inner
                     .iter()
                     .map(|v| Self::inner_ungenerify_type(v, symtab, type_list, invert))
                     .collect::<Option<Vec<_>>>()?;
                 Some(ConcreteType::Tuple(inner))
             }
-            TypeVar::Backward(inner) => {
+            TypeVar::Known(KnownType::Backward, inner) => {
                 if invert {
-                    Self::inner_ungenerify_type(inner, symtab, type_list, invert)
+                    Self::inner_ungenerify_type(&inner[0], symtab, type_list, invert)
                         .map(|t| ConcreteType::Wire(Box::new(t)))
                 } else {
-                    Self::inner_ungenerify_type(inner, symtab, type_list, invert)
+                    Self::inner_ungenerify_type(&inner[0], symtab, type_list, invert)
                         .map(|t| ConcreteType::Backward(Box::new(t)))
                 }
             }
-            TypeVar::Wire(inner) => {
+            TypeVar::Known(KnownType::Wire, inner) => {
                 if invert {
-                    Self::inner_ungenerify_type(inner, symtab, type_list, invert)
+                    Self::inner_ungenerify_type(&inner[0], symtab, type_list, invert)
                         .map(|t| ConcreteType::Backward(Box::new(t)))
                 } else {
-                    Self::inner_ungenerify_type(inner, symtab, type_list, invert)
+                    Self::inner_ungenerify_type(&inner[0], symtab, type_list, invert)
                         .map(|t| ConcreteType::Wire(Box::new(t)))
                 }
             }
-            TypeVar::Inverted(inner) => {
-                Self::inner_ungenerify_type(inner, symtab, type_list, !invert)
+            TypeVar::Known(KnownType::Inverted, inner) => {
+                Self::inner_ungenerify_type(&inner[0], symtab, type_list, !invert)
             }
             TypeVar::Unknown(_) => None,
         }

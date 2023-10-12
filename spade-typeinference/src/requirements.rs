@@ -8,6 +8,7 @@ use spade_diagnostics::{diag_anyhow, diag_assert, diag_bail, Diagnostic};
 use spade_hir::expression::IntLiteral;
 use spade_hir::symbol_table::{TypeDeclKind, TypeSymbol};
 use spade_hir::ArgumentList;
+use spade_types::KnownType;
 
 use crate::equation::TypeVar;
 use crate::error::{Error, Result, UnificationErrorExt};
@@ -143,14 +144,18 @@ impl Requirement {
                             type_state.type_var_from_hir(&field_spec, &generic_list);
                         let field_type = if inverted {
                             match raw_field_type {
-                                TypeVar::Backward(inner) => TypeVar::Wire(inner),
-                                TypeVar::Wire(inner) => TypeVar::Backward(inner),
-                                TypeVar::Inverted(inner) => *inner,
+                                TypeVar::Known(KnownType::Backward, inner) => {
+                                    TypeVar::wire(inner[0].clone())
+                                }
+                                TypeVar::Known(KnownType::Wire, inner) => {
+                                    TypeVar::backward(inner[0].clone())
+                                }
+                                TypeVar::Known(KnownType::Inverted, _) => raw_field_type,
                                 // If we were in an inverted context and we find
                                 // a type which is not a wire, we need to invert
                                 // it.
                                 // This means that `a.b` if b is `T` is `~T`
-                                other => TypeVar::Inverted(Box::new(other)),
+                                other => TypeVar::inverted(other),
                             }
                         } else {
                             raw_field_type

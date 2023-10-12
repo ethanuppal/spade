@@ -160,25 +160,17 @@ impl std::fmt::Display for ConcreteType {
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub enum KnownType {
-    Type(NameID),
+    Named(NameID),
     Integer(BigUint),
+    Tuple,
+    Array,
+    Backward,
+    Wire,
+    Inverted,
 }
 
 impl KnownType {
     pub fn integer(val: u64) -> Self {
         Self::Integer(val.to_biguint())
-    }
-}
-
-impl std::fmt::Display for KnownType {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            KnownType::Type(t) => {
-                write!(f, "{}", t)
-            }
-            KnownType::Integer(v) => {
-                write!(f, "{}", v)
-            }
-        }
     }
 }
