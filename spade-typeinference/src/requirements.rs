@@ -107,7 +107,7 @@ impl Requirement {
                                     actual_type: type_name.clone(),
                                 })
                             }
-                            TypeSymbol::GenericArg | TypeSymbol::GenericInt => {
+                            TypeSymbol::GenericArg { traits: _ } | TypeSymbol::GenericInt => {
                                 return Err(Error::FieldAccessOnGeneric {
                                     loc: target_type.loc(),
                                     name: type_name.clone(),

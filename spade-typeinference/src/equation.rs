@@ -1,5 +1,7 @@
 use std::collections::HashMap;
 
+use itertools::Itertools;
+
 use num::BigUint;
 use serde::{Deserialize, Serialize};
 use spade_common::{location_info::WithLocation, name::NameID};
@@ -176,6 +178,9 @@ impl std::fmt::Debug for TypeVar {
             TypeVar::Known(KnownType::Backward, params) => write!(f, "&mut {:?}", params[0]),
             TypeVar::Known(KnownType::Wire, params) => write!(f, "&{:?}", params[0]),
             TypeVar::Known(KnownType::Inverted, params) => write!(f, "~{:?}", params[0]),
+            TypeVar::Known(KnownType::Traits(inner), _) => {
+                write!(f, "{}", inner.iter().map(|t| format!("{t}")).join(" + "))
+            }
             TypeVar::Unknown(id) => write!(f, "t{id}"),
         }
     }
@@ -219,6 +224,11 @@ impl std::fmt::Display for TypeVar {
             TypeVar::Known(KnownType::Backward, params) => write!(f, "&mut {}", params[0]),
             TypeVar::Known(KnownType::Wire, params) => write!(f, "&{}", params[0]),
             TypeVar::Known(KnownType::Inverted, params) => write!(f, "~{}", params[0]),
+            TypeVar::Known(KnownType::Traits(traits), _) => write!(
+                f,
+                "impl {}",
+                traits.iter().map(|t| format!("{t}")).join("+")
+            ),
             TypeVar::Unknown(_) => write!(f, "_"),
         }
     }

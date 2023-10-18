@@ -1,0 +1,16 @@
+---
+source: spade-tests/src/typeinference.rs
+---
+struct A {}
+fn test<T: A>(x: T) {}
+
+
+error: Expected A to be a trait
+  ┌─ testinput:2:12
+  │
+1 │ struct A {}
+  │ ----------- A is a struct
+2 │ fn test<T: A>(x: T) {}
+  │            ^ Expected a trait
+
+

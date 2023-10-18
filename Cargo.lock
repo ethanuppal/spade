@@ -1355,6 +1355,7 @@ dependencies = [
  "codespan",
  "codespan-reporting 0.12.0",
  "colored",
+ "itertools",
  "local-impl",
  "num",
  "serde",

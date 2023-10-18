@@ -167,6 +167,7 @@ pub enum KnownType {
     Backward,
     Wire,
     Inverted,
+    Traits(Vec<NameID>),
 }
 
 impl KnownType {

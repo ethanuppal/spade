@@ -844,3 +844,29 @@ fn second_integer_resolves_correctly() {
     ";
     build_items_with_stdlib(code);
 }
+
+#[test]
+fn impl_trait_works() {
+    let code = "
+        trait Trait {}
+
+        fn test<T: Trait>(x: T) {}
+    ";
+
+    build_items(code);
+}
+
+snapshot_error! {
+    impl_of_missing_trait_is_error,
+    "
+        fn test<T: Trait>(x: T) {}
+    "
+}
+
+snapshot_error! {
+    impl_of_non_trait_is_error,
+    "
+        struct A {}
+        fn test<T: A>(x: T) {}
+    "
+}

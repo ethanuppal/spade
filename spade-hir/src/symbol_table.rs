@@ -241,7 +241,10 @@ impl WithLocation for Patternable {}
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub enum GenericArg {
-    TypeName(Identifier),
+    TypeName {
+        name: Identifier,
+        traits: Vec<Loc<Path>>,
+    },
     Number(Identifier),
 }
 impl WithLocation for GenericArg {}
@@ -279,7 +282,9 @@ pub enum TypeSymbol {
     /// specified generic arguments
     Declared(Vec<Loc<GenericArg>>, TypeDeclKind),
     /// A generic type present in the current scope
-    GenericArg,
+    GenericArg {
+        traits: Vec<Loc<NameID>>,
+    },
     GenericInt,
 }
 impl WithLocation for TypeSymbol {}

@@ -1238,17 +1238,35 @@ impl TypeState {
                                     None
                                 )
                             }
-                            (TypeSymbol::Declared(_, _), TypeSymbol::GenericArg) => {
+                            (TypeSymbol::Declared(_, _), TypeSymbol::GenericArg { traits }) => {
+                                if !traits.is_empty() {
+                                    todo!("Implement trait unifictaion");
+                                }
                                 Ok((v1, Some(v2)))
                             }
-                            (TypeSymbol::GenericArg, TypeSymbol::Declared(_, _)) => {
+                            (TypeSymbol::GenericArg { traits }, TypeSymbol::Declared(_, _)) => {
+                                if !traits.is_empty() {
+                                    todo!("Implement trait unifictaion");
+                                }
                                 Ok((v2, Some(v1)))
                             }
-                            (TypeSymbol::GenericArg, TypeSymbol::GenericArg) => Ok((v1, Some(v2))),
+                            (
+                                TypeSymbol::GenericArg { traits: ltraits },
+                                TypeSymbol::GenericArg { traits: rtraits },
+                            ) => {
+                                if !ltraits.is_empty() || !rtraits.is_empty() {
+                                    todo!("Implement trait unifictaion");
+                                }
+                                Ok((v1, Some(v2)))
+                            }
                             (TypeSymbol::Declared(_, _), TypeSymbol::GenericInt) => todo!(),
-                            (TypeSymbol::GenericArg, TypeSymbol::GenericInt) => todo!(),
+                            (TypeSymbol::GenericArg { traits: _ }, TypeSymbol::GenericInt) => {
+                                todo!()
+                            }
                             (TypeSymbol::GenericInt, TypeSymbol::Declared(_, _)) => todo!(),
-                            (TypeSymbol::GenericInt, TypeSymbol::GenericArg) => todo!(),
+                            (TypeSymbol::GenericInt, TypeSymbol::GenericArg { traits: _ }) => {
+                                todo!()
+                            }
                             (TypeSymbol::GenericInt, TypeSymbol::GenericInt) => todo!(),
                         }
                     }

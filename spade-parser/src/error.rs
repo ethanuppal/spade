@@ -159,22 +159,32 @@ pub type Result<T> = std::result::Result<T, Error>;
 // Error returned by the comma_separated function. Must be explicitly converted
 // to the general Error using one of the member methods
 #[derive(Error, Debug, Clone)]
-pub enum CommaSeparatedError {
+pub enum TokenSeparatedError {
     #[error("Inner")]
     Inner(#[from] Error),
     #[error("Unexpected token")]
-    UnexpectedToken { got: Token, end_token: TokenKind },
+    UnexpectedToken {
+        got: Token,
+        separator: TokenKind,
+        end_tokens: Vec<TokenKind>,
+    },
 }
 
-pub type CommaSeparatedResult<T> = std::result::Result<T, CommaSeparatedError>;
+pub type CommaSeparatedResult<T> = std::result::Result<T, TokenSeparatedError>;
 
-impl CommaSeparatedError {
+impl TokenSeparatedError {
     pub fn extra_expected(self, mut extra: Vec<&'static str>) -> Error {
         match self {
-            CommaSeparatedError::Inner(inner) => inner,
-            CommaSeparatedError::UnexpectedToken { got, end_token } => {
-                extra.push(",");
-                extra.push(end_token.as_str());
+            TokenSeparatedError::Inner(inner) => inner,
+            TokenSeparatedError::UnexpectedToken {
+                got,
+                separator,
+                end_tokens,
+            } => {
+                extra.push(separator.as_str());
+                for tok in end_tokens {
+                    extra.push(tok.as_str())
+                }
                 Error::UnexpectedToken {
                     got,
                     expected: extra,
@@ -189,7 +199,7 @@ impl CommaSeparatedError {
 }
 
 #[local_impl]
-impl<T> CSErrorTransformations for std::result::Result<T, CommaSeparatedError> {
+impl<T> CSErrorTransformations for std::result::Result<T, TokenSeparatedError> {
     fn extra_expected(self, extra: Vec<&'static str>) -> Result<T> {
         self.map_err(|e| e.extra_expected(extra))
     }

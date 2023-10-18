@@ -13,6 +13,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Added
 
+- [!232][!232] Support for implementing traits
+
 ### Fixed
 
 - [!224][!224] `stage.valid` now does what it is supposed to

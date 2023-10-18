@@ -324,14 +324,17 @@ impl Statement {
 /// A generic type parameter
 #[derive(PartialEq, Debug, Clone)]
 pub enum TypeParam {
-    TypeName(Loc<Identifier>),
+    TypeName {
+        name: Loc<Identifier>,
+        traits: Vec<Loc<Path>>,
+    },
     Integer(Loc<Identifier>),
 }
 impl WithLocation for TypeParam {}
 impl TypeParam {
     pub fn name(&self) -> &Loc<Identifier> {
         match self {
-            TypeParam::TypeName(n) => n,
+            TypeParam::TypeName { name, traits: _ } => name,
             TypeParam::Integer(n) => n,
         }
     }

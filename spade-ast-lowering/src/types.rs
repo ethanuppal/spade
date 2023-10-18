@@ -28,7 +28,7 @@ impl IsPort for ast::TypeSpec {
                         TypeDeclKind::Enum => Ok(false),
                         TypeDeclKind::Primitive { is_port } => Ok(*is_port),
                     },
-                    TypeSymbol::GenericArg => Ok(false),
+                    TypeSymbol::GenericArg { traits: _ } => Ok(false),
                     TypeSymbol::GenericInt => Ok(false),
                 }
             }

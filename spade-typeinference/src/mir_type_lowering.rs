@@ -283,6 +283,11 @@ impl TypeState {
             TypeVar::Known(KnownType::Inverted, inner) => {
                 Self::inner_ungenerify_type(&inner[0], symtab, type_list, !invert)
             }
+            TypeVar::Known(KnownType::Traits(_), inner) => {
+                assert!(inner.is_empty(), "Traits cannot have generic parameters");
+
+                None
+            }
             TypeVar::Unknown(_) => None,
         }
     }

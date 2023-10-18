@@ -66,10 +66,23 @@ pub fn visit_type_param(
     symtab: &mut SymbolTable,
 ) -> Result<hir::TypeParam> {
     match &param {
-        ast::TypeParam::TypeName(ident) => {
+        ast::TypeParam::TypeName {
+            name: ident,
+            traits,
+        } => {
+            let traits = traits
+                .iter()
+                .map(|t| {
+                    symtab
+                        .lookup_trait(t)
+                        .map(|(name, _)| name.at_loc(t))
+                        .map_err(|e| e.into())
+                })
+                .collect::<Result<_>>()?;
+
             let name_id = symtab.add_type(
                 Path::ident(ident.clone()),
-                TypeSymbol::GenericArg.at_loc(&ident),
+                TypeSymbol::GenericArg { traits }.at_loc(&ident),
             );
 
             Ok(hir::TypeParam::TypeName(ident.inner.clone(), name_id))
@@ -77,7 +90,7 @@ pub fn visit_type_param(
         ast::TypeParam::Integer(ident) => {
             let name_id = symtab.add_type(
                 Path::ident(ident.clone()),
-                TypeSymbol::GenericArg.at_loc(&ident),
+                TypeSymbol::GenericArg { traits: vec![] }.at_loc(&ident),
             );
 
             Ok(hir::TypeParam::Integer(ident.inner.clone(), name_id))
@@ -124,7 +137,7 @@ pub fn visit_type_spec(
 
                     Ok(hir::TypeSpec::Declared(base_id.at_loc(path), params))
                 }
-                TypeSymbol::GenericArg | TypeSymbol::GenericInt => {
+                TypeSymbol::GenericArg { traits: _ } | TypeSymbol::GenericInt => {
                     // If this typename refers to a generic argument we need to make
                     // sure that no generic arguments are passed, as generic names
                     // can't have generic parameters

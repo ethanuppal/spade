@@ -1,0 +1,13 @@
+---
+source: spade-tests/src/typeinference.rs
+---
+fn test<T: Trait>(x: T) {}
+
+
+error: Use of undeclared name Trait
+  ┌─ testinput:1:12
+  │
+1 │ fn test<T: Trait>(x: T) {}
+  │            ^^^^^ Undeclared name
+
+

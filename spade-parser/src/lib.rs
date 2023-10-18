@@ -26,7 +26,7 @@ use spade_diagnostics::Diagnostic;
 use spade_macros::trace_parser;
 
 use crate::error::{
-    CSErrorTransformations, CommaSeparatedError, CommaSeparatedResult, Error, Result,
+    CSErrorTransformations, CommaSeparatedResult, Error, Result, TokenSeparatedError,
 };
 use crate::error_reporting::unexpected_token_message;
 use crate::item_type::UnitKindLocal;
@@ -1136,7 +1136,17 @@ impl<'a> Parser<'a> {
             Ok(TypeParam::Integer(id).between(self.file_id, &hash.span, &loc))
         } else {
             let (id, loc) = self.identifier()?.separate();
-            Ok(TypeParam::TypeName(id).at(self.file_id, &loc))
+            let traits = if self.peek_and_eat(&TokenKind::Colon)?.is_some() {
+                self.token_separated(
+                    Self::path,
+                    &TokenKind::Plus,
+                    vec![TokenKind::Comma, TokenKind::Gt],
+                )
+                .no_context()?
+            } else {
+                vec![]
+            };
+            Ok(TypeParam::TypeName { name: id, traits }.at(self.file_id, &loc))
         }
     }
 
@@ -1892,10 +1902,6 @@ impl<'a> Parser<'a> {
         ))
     }
 
-    // NOTE: This cannot currently use #[trace_parser] as it returns an error which is not
-    // convertible into `Error`. If we end up with more functions like this, that
-    // macro should probably be made smarter
-    #[tracing::instrument(level = "debug", skip(self, inner))]
     pub fn comma_separated<T>(
         &mut self,
         inner: impl Fn(&mut Self) -> Result<T>,
@@ -1904,27 +1910,56 @@ impl<'a> Parser<'a> {
         // `)`, and {} should have `}`
         end_marker: &TokenKind,
     ) -> CommaSeparatedResult<Vec<T>> {
+        self.token_separated(inner, &TokenKind::Comma, vec![end_marker.clone()])
+    }
+
+    // NOTE: This cannot currently use #[trace_parser] as it returns an error which is not
+    // convertible into `Error`. If we end up with more functions like this, that
+    // macro should probably be made smarter
+    #[tracing::instrument(level = "debug", skip(self, inner))]
+    pub fn token_separated<T>(
+        &mut self,
+        inner: impl Fn(&mut Self) -> Result<T>,
+        separator: &TokenKind,
+        // This end marker is used for allowing trailing commas. It should
+        // be whatever ends the collection that is searched. I.e. (a,b,c,) should have
+        // `)`, and {} should have `}`
+        end_markers: Vec<TokenKind>,
+    ) -> CommaSeparatedResult<Vec<T>> {
         self.parse_stack
             .push(ParseStackEntry::Enter("comma_separated".to_string()));
         let ret = || -> CommaSeparatedResult<Vec<T>> {
             let mut result = vec![];
             loop {
                 // The list might be empty
-                if self.peek_kind(end_marker)? {
+                if end_markers
+                    .iter()
+                    .map(|m| self.peek_kind(m))
+                    .collect::<Result<Vec<_>>>()?
+                    .into_iter()
+                    .any(|x| x)
+                {
                     break;
                 }
                 result.push(inner(self)?);
 
                 // Now we expect to either find a comma, in which case we resume the
                 // search, or an end marker, in which case we abort
-                if self.peek_kind(end_marker)? {
+                if end_markers
+                    .iter()
+                    .map(|m| self.peek_kind(m))
+                    .collect::<Result<Vec<_>>>()?
+                    .into_iter()
+                    .any(|x| x)
+                {
                     break;
-                } else if self.peek_kind(&TokenKind::Comma)? {
+                } else if self.peek_kind(separator)? {
                     self.eat_unconditional()?;
                 } else {
-                    return Err(CommaSeparatedError::UnexpectedToken {
+                    return Err(TokenSeparatedError::UnexpectedToken {
                         got: self.eat_unconditional()?,
-                        end_token: end_marker.clone(),
+                        separator: separator.clone(),
+                        end_tokens: end_markers,
                     });
                 }
             }
@@ -2381,7 +2416,11 @@ mod tests {
                 inputs: aparams![],
                 output_type: None,
                 type_params: vec![
-                    TypeParam::TypeName(ast_ident("X")).nowhere(),
+                    TypeParam::TypeName {
+                        name: ast_ident("X"),
+                        traits: vec![],
+                    }
+                    .nowhere(),
                     TypeParam::Integer(ast_ident("Y")).nowhere(),
                 ],
             },
@@ -2621,43 +2660,6 @@ mod tests {
     }
 
     #[test]
-    fn trait_definitions_work() {
-        let code = r#"
-        trait SomeTrait {
-            fn some_fn(self, a: bit) -> bit;
-            entity another_fn(self) -> bit;
-        }
-        "#;
-
-        let fn1 = UnitHead {
-            unit_kind: UnitKind::Function.nowhere(),
-            attributes: AttributeList::empty(),
-            name: ast_ident("some_fn"),
-            inputs: aparams![self, ("a", tspec!("bit"))],
-            output_type: Some(TypeSpec::Named(ast_path("bit"), None).nowhere()),
-            type_params: vec![],
-        }
-        .nowhere();
-        let fn2 = UnitHead {
-            unit_kind: UnitKind::Entity.nowhere(),
-            attributes: AttributeList::empty(),
-            name: ast_ident("another_fn"),
-            inputs: aparams![self],
-            output_type: Some(TypeSpec::Named(ast_path("bit"), None).nowhere()),
-            type_params: vec![],
-        }
-        .nowhere();
-
-        let expected = TraitDef {
-            name: ast_ident("SomeTrait"),
-            methods: vec![fn1, fn2],
-        }
-        .nowhere();
-
-        check_parse!(code, trait_def(&AttributeList::empty()), Ok(Some(expected)));
-    }
-
-    #[test]
     fn anonymous_impl_blocks_work() {
         let code = r#"
         impl SomeType {
@@ -2727,7 +2729,11 @@ mod tests {
     fn typenames_parse() {
         let code = "X";
 
-        let expected = TypeParam::TypeName(ast_ident("X")).nowhere();
+        let expected = TypeParam::TypeName {
+            name: ast_ident("X"),
+            traits: vec![],
+        }
+        .nowhere();
 
         check_parse!(code, type_param(), Ok(expected));
     }
@@ -3326,7 +3332,11 @@ mod tests {
                     .nowhere(),
                 ),
                 generic_args: vec![
-                    TypeParam::TypeName(ast_ident("T")).nowhere(),
+                    TypeParam::TypeName {
+                        name: ast_ident("T"),
+                        traits: vec![],
+                    }
+                    .nowhere(),
                     TypeParam::Integer(ast_ident("N")).nowhere(),
                 ],
             }

@@ -32,11 +32,15 @@ pub fn populate_symtab(symtab: &mut SymbolTable, item_list: &mut ItemList) {
                 .iter()
                 .map(|arg| {
                     let result = match &arg.inner {
-                        GenericArg::TypeName(a) => {
+                        GenericArg::TypeName { name: a, traits: t } => {
+                            assert!(
+                                t.is_empty(),
+                                "Constrained generics are not supported on primtives"
+                            );
                             let id = symtab.add_type_with_id(
                                 id,
                                 Path(vec![a.clone().nowhere()]),
-                                TypeSymbol::GenericArg.nowhere(),
+                                TypeSymbol::GenericArg { traits: vec![] }.nowhere(),
                             );
                             TypeParam::TypeName(a.clone(), id)
                         }
@@ -75,7 +79,11 @@ pub fn populate_symtab(symtab: &mut SymbolTable, item_list: &mut ItemList) {
     add_type(
         &["Memory"],
         vec![
-            GenericArg::TypeName(Identifier("D".into())).nowhere(),
+            GenericArg::TypeName {
+                name: Identifier("D".into()),
+                traits: vec![],
+            }
+            .nowhere(),
             GenericArg::Number(Identifier("AddrWidth".into())).nowhere(),
         ],
         PrimitiveType::Memory,

@@ -146,7 +146,10 @@ pub fn visit_type_declaration(
         .iter()
         .map(|arg| {
             match &arg.inner {
-                ast::TypeParam::TypeName(n) => GenericArg::TypeName(n.inner.clone()),
+                ast::TypeParam::TypeName { name, traits } => GenericArg::TypeName {
+                    name: name.inner.clone(),
+                    traits: traits.clone(),
+                },
                 ast::TypeParam::Integer(n) => GenericArg::Number(n.inner.clone()),
             }
             .at_loc(&arg.loc())
@@ -187,7 +190,18 @@ pub fn re_visit_type_declaration(
     symtab.new_scope();
     for param in &t.generic_args {
         let (name, symbol_type) = match &param.inner {
-            ast::TypeParam::TypeName(n) => (n, TypeSymbol::GenericArg),
+            ast::TypeParam::TypeName { name: n, traits } => {
+                let resolved_traits = traits
+                    .iter()
+                    .map(|t| Ok(symtab.lookup_trait(t)?.0.at_loc(t)))
+                    .collect::<Result<Vec<_>>>()?;
+                (
+                    n,
+                    TypeSymbol::GenericArg {
+                        traits: resolved_traits,
+                    },
+                )
+            }
             ast::TypeParam::Integer(n) => (n, TypeSymbol::GenericInt),
         };
         symtab.add_type(Path::ident(name.clone()), symbol_type.at_loc(param));
@@ -204,8 +218,8 @@ pub fn re_visit_type_declaration(
         let expr = TypeExpression::TypeSpec(hir::TypeSpec::Generic(name_id.clone().at_loc(arg)))
             .at_loc(arg);
         let param = match &arg.inner {
-            ast::TypeParam::TypeName(n) => {
-                hir::TypeParam::TypeName(n.inner.clone(), name_id.clone())
+            ast::TypeParam::TypeName { name, traits: _ } => {
+                hir::TypeParam::TypeName(name.inner.clone(), name_id.clone())
             }
             ast::TypeParam::Integer(n) => hir::TypeParam::Integer(n.inner.clone(), name_id.clone()),
         };
@@ -538,7 +552,11 @@ mod tests {
                 }
                 .nowhere(),
             ),
-            generic_args: vec![TypeParam::TypeName(ast_ident("T")).nowhere()],
+            generic_args: vec![TypeParam::TypeName {
+                name: ast_ident("T"),
+                traits: vec![],
+            }
+            .nowhere()],
         }
         .nowhere();
 
