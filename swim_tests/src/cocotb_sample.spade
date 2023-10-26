@@ -1,0 +1,14 @@
+
+struct Output {
+    sum: int<9>,
+    product: int<16>
+}
+
+pipeline(1) add_mul(clk: clock, a: int<8>, b: int<8>) -> Output {
+        let result = Output$(
+            sum: a+b,
+            product: a*b
+        );
+    reg;
+        result
+}

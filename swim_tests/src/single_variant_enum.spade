@@ -1,0 +1,11 @@
+enum T {
+    A,
+    B
+}
+
+fn test(t: T) -> bool {
+    match t {
+        T::A => true,
+        T::B => false,
+    }
+}

@@ -8,7 +8,7 @@ from cocotb import cocotb
 from cocotb.clock import Clock
 import random
 
-async def test_sequence(dut, seq: Sequence[int]):
+async def test_sequence(dut, seq: Sequence):
     clk = dut.clk_i
 
     s = SpadeExt(dut)
