@@ -6,12 +6,8 @@ use crate::ValueName;
 impl ValueName {
     pub fn unescaped_var_name(&self) -> String {
         match self {
-            ValueName::Named(id, s, _) => {
-                if *id == 0 {
-                    format!("{s}")
-                } else {
-                    format!("{s}_n{id}")
-                }
+            ValueName::Named(_, _, _) => {
+                format!("{self}")
             }
             ValueName::Expr(id) => format!("_e_{id}"),
         }

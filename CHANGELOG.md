@@ -16,6 +16,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ### Fixed
 
 - [!224][!224] `stage.valid` now does what it is supposed to
+- [!235][!245] Workaround for vivado not supporting escaped identifiers called `new`
 
 ### Changed
 
@@ -68,6 +69,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 [!216]: https://gitlab.com/spade-lang/spade/-/merge_requests/216
 [!217]: https://gitlab.com/spade-lang/spade/-/merge_requests/217
 [!211]: https://gitlab.com/spade-lang/spade/-/merge_requests/211
+[!235]: https://gitlab.com/spade-lang/spade/-/merge_requests/235
 
 ## [0.3.0]
 

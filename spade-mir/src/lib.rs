@@ -139,7 +139,11 @@ impl std::fmt::Display for ValueName {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             ValueName::Named(id, s, _) => {
-                if *id == 0 {
+                // The first identifier of each name has the exact same name as the underlying
+                // spade variable.
+                // However, Vivado has a bug where it treats an escaped `new` as the `new` keyword
+                // from `SystemVerilog`, so we need to special case new here
+                if *id == 0 && s != "new" {
                     write!(f, "{s}")
                 } else {
                     write!(f, "{s}_n{id}")
