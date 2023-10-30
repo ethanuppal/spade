@@ -1226,13 +1226,17 @@ impl TypeState {
                                     return Err(err_producer!());
                                 }
 
+                                unify_params!();
                                 let new_ts1 = symtab.type_symbol_by_id(&n1).inner;
                                 let new_ts2 = symtab.type_symbol_by_id(&n2).inner;
                                 let new_v1 = e1
                                     .get_type(self)
                                     .expect("Tried to unify types but the lhs was not found");
-                                unify_params!();
-                                unify_if!(new_ts1 == new_ts2, new_v1, None)
+                                unify_if!(
+                                    new_ts1 == new_ts2,
+                                    self.check_var_for_replacement(new_v1),
+                                    None
+                                )
                             }
                             (TypeSymbol::Declared(_, _), TypeSymbol::GenericArg) => {
                                 Ok((v1, Some(v2)))
@@ -1254,7 +1258,10 @@ impl TypeState {
                     | (KnownType::Backward, KnownType::Backward)
                     | (KnownType::Inverted, KnownType::Inverted) => {
                         unify_params!();
-                        Ok((self.check_var_for_replacement(v2), Some(v1)))
+                        // Note, replacements should only occur when a variable goes from Unknown
+                        // to Known, not when the base is the same. Replacements take care
+                        // of parameters. Therefore, None is returned here
+                        Ok((self.check_var_for_replacement(v2), None))
                     }
                     (_, _) => Err(err_producer!()),
                 }
@@ -1512,7 +1519,13 @@ impl TypeState {
 impl TypeState {
     pub fn print_equations(&self) {
         for (lhs, rhs) in &self.equations {
-            println!("{}: {}", lhs, rhs);
+            println!("{}: {:?}", lhs, rhs);
+        }
+
+        println!("\nReplacments:");
+
+        for (lhs, rhs) in &self.replacements {
+            println!("{lhs:?} -> {rhs:?}")
         }
     }
 }

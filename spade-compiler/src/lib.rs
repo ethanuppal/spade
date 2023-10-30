@@ -273,6 +273,10 @@ pub fn compile(
                     .visit_entity(u, &type_inference_ctx)
                     .report(&mut errors)
                 {
+                    if opts.print_type_traceback {
+                        type_state.print_equations();
+                        println!("{}", format_trace_stack(&type_state.trace_stack));
+                    }
                     Some((name, (item, type_state)))
                 } else {
                     if opts.print_type_traceback {

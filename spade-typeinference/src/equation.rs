@@ -12,7 +12,7 @@ pub type TypeEquations = HashMap<TypedExpression, TypeVar>;
 ///
 /// When TypeVars are passed externally into TypeState, they must be checked for replacement,
 /// as the type inference process might have refined them.
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub enum TypeVar {
     /// The base type is known and has a list of parameters
     Known(KnownType, Vec<TypeVar>),
@@ -134,6 +134,49 @@ impl TypeVar {
             }
             TypeVar::Unknown(_) => on_unknown(),
             other => on_other(other),
+        }
+    }
+}
+
+impl std::fmt::Debug for TypeVar {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            TypeVar::Known(KnownType::Named(t), params) => {
+                let generics = if params.is_empty() {
+                    format!("")
+                } else {
+                    format!(
+                        "<{}>",
+                        params
+                            .iter()
+                            .map(|p| format!("{:?}", p))
+                            .collect::<Vec<_>>()
+                            .join(", ")
+                    )
+                };
+                write!(f, "{}{}", t, generics)
+            }
+            TypeVar::Known(KnownType::Integer(inner), _) => {
+                write!(f, "{inner}")
+            }
+            TypeVar::Known(KnownType::Tuple, params) => {
+                write!(
+                    f,
+                    "({})",
+                    params
+                        .iter()
+                        .map(|t| format!("{:?}", t))
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                )
+            }
+            TypeVar::Known(KnownType::Array, params) => {
+                write!(f, "[{:?}; {:?}]", params[0], params[1])
+            }
+            TypeVar::Known(KnownType::Backward, params) => write!(f, "&mut {:?}", params[0]),
+            TypeVar::Known(KnownType::Wire, params) => write!(f, "&{:?}", params[0]),
+            TypeVar::Known(KnownType::Inverted, params) => write!(f, "~{:?}", params[0]),
+            TypeVar::Unknown(id) => write!(f, "t{id}"),
         }
     }
 }

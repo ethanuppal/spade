@@ -47,15 +47,20 @@ pub fn format_trace_stack(stack: &TraceStack) -> String {
                 format!("{} `{}`", "call".white(), function.blue())
             }
             TraceStackEntry::AddingEquation(expr, t) => {
-                format!("{} {} <- {}", "eq".yellow(), expr, t)
+                format!("{} {:?} <- {:?}", "eq".yellow(), expr, t)
             }
             TraceStackEntry::Unified(lhs, rhs, result) => {
                 next_indent_amount -= 1;
-                format!("{} {}, {} -> {}", "unified".green(), lhs, rhs, result)
+                format!("{} {:?}, {:?} -> {:?}", "unified".green(), lhs, rhs, result)
             }
             TraceStackEntry::TryingUnify(lhs, rhs) => {
                 next_indent_amount += 1;
-                format!("{} of {} with {}", "trying unification".cyan(), lhs, rhs)
+                format!(
+                    "{} of {:?} with {:?}",
+                    "trying unification".cyan(),
+                    lhs,
+                    rhs
+                )
             }
             TraceStackEntry::InferringFromConstraints(lhs, rhs) => {
                 format!("{} {lhs} as {rhs} from constraints", "inferring".purple())

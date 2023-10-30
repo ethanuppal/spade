@@ -789,3 +789,58 @@ snapshot_error! {
         {}
     }"
 }
+
+#[test]
+fn tuple_match_regression_1() {
+    let code = "
+        fn accumulator_mem(
+            write: Option<(int<10>, int<40>)>
+        ) -> bool __builtin__
+
+        entity accumulators(
+            in: (int<10>, int<10>),
+        ) {
+            let write = match in {
+                (idx, 0) => Some((idx, 0)),
+                (0, idx) => Some((idx, 0)),
+                _ => None()
+            };
+
+            let _ = accumulator_mem(write);
+        }
+    ";
+    build_items_with_stdlib(code);
+}
+
+#[test]
+fn second_integer_resolves_correctly() {
+    let code = "
+        struct AccMemOut {
+            // Data from port 1
+            d1: int<40>,
+            // Data from port 2
+            d2: int<40>
+        }
+
+        fn accumulator_mem(
+            write: Option<(int<10>, int<40>)>
+        ) -> AccMemOut __builtin__
+
+        pipeline(0) accumulators(
+            clk: clock,
+            rst: bool,
+            // Clear the accumulator at the provided index. Takes precedence over
+            // new_value
+            in: (int<10>, int<10>),
+        ) {
+                let write = match in {
+                    (idx, 0) => Some((idx, 0)),
+                    (0, idx) => Some((idx, 0)),
+                    (_, _) => None()
+                };
+
+                let acc_mem_out = accumulator_mem(write);
+        }
+    ";
+    build_items_with_stdlib(code);
+}
