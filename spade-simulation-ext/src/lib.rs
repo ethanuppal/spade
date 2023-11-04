@@ -161,8 +161,7 @@ impl Spade {
 
         // FIXME: IF we start running into stackoverflows we should use serde_stacker
         let ron = ron::Options::default().without_recursion_limit();
-        let state = ron
-            .from_str::<CompilerState>(&state_str)
+        let state = ron.from_str::<CompilerState>(&state_str)
             .map_err(|e| anyhow!("Failed to deserialize compiler state {e}"))?;
 
         let code = Rc::new(RwLock::new(CodeBundle::from_files(&state.code)));
