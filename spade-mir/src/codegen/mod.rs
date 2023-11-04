@@ -62,7 +62,7 @@ fn statement_declaration(
             let name = binding.name.var_name();
 
             let forward_declaration = if binding.ty.size() != BigUint::zero() {
-                vec![match &binding.ty {
+                let inner = vec![match &binding.ty {
                     crate::types::Type::Memory { inner, length } => {
                         let inner_w = inner.size();
                         if inner_w > 1u32.to_biguint() {
@@ -72,9 +72,13 @@ fn statement_declaration(
                         }
                     }
                     _ => logic(&name, &binding.ty.size()),
-                }]
+                }];
+                code![
+                    [0] source_attribute(&binding.loc, code);
+                    [0] inner
+                ]
             } else {
-                vec![]
+                code![]
             };
 
             let backward_declaration = if binding.ty.backward_size() != BigUint::zero() {
@@ -105,7 +109,6 @@ fn statement_declaration(
             };
 
             code! {
-                [0] source_attribute(&binding.loc, code);
                 [0] &forward_declaration;
                 [0] &backward_declaration;
                 [0] &assignment;

@@ -350,16 +350,20 @@ pub fn compile(
                 std::fs::write(item_list_file, &encoded).or_report(&mut errors);
             }
             Err(e) => {
+                errors.failed = true;
                 println!("Failed to encode item list as RON {e:?}")
             }
         }
     }
     if let Some(state_dump_file) = opts.state_dump_file {
-        match ron::ser::to_string_pretty(&state, PrettyConfig::default()) {
+        let ron = ron::Options::default().without_recursion_limit();
+
+        match ron.to_string_pretty(&state, PrettyConfig::default()) {
             Ok(encoded) => {
                 std::fs::write(state_dump_file, encoded).or_report(&mut errors);
             }
             Err(e) => {
+                errors.failed = true;
                 println!("Failed to encode compiler state info as RON {:?}", e)
             }
         }
