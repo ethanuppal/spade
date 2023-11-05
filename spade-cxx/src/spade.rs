@@ -5,6 +5,7 @@ use color_eyre::eyre::Context;
 use color_eyre::eyre::Result;
 use color_eyre::owo_colors::OwoColorize;
 use cxx::CxxString;
+use num::ToPrimitive;
 
 struct CompilerState(pub spade::compiler_state::CompilerState);
 
@@ -50,7 +51,17 @@ impl SignalValue {
     }
 
     fn as_u32_chunks(&self) -> Vec<u32> {
-        self.0.as_u32_chunks().to_u32_digits()
+        let mut digits = self.0.as_u32_chunks().to_u32_digits();
+        let expected_digit_count = ((self
+            .0
+            .width()
+            .to_u64()
+            .expect("Value size does not fit in u64") as f64)
+            / 32.)
+            .ceil() as u64;
+
+        digits.extend_from_slice(&vec![0; expected_digit_count as usize - digits.len()]);
+        digits
     }
 }
 
@@ -112,9 +123,9 @@ impl SimulationExt {
             .compare_field(field.0.clone(), spade_expr, &output_bits.0)?;
 
         if cmp_result.got_bits != cmp_result.expected_bits {
-            println!("{}", "{source_loc}: assertion failed".red());
-            println!("\texpected: {}\n", cmp_result.expected_spade.green());
-            println!("\tgo:       {}\n", cmp_result.got_spade.green());
+            println!("{}", format!("{source_loc}").red());
+            println!("\texpected: {}", cmp_result.expected_spade);
+            println!("\tgot:      {}", cmp_result.got_spade);
             println!("");
             println!(
                 "\tverilog (\n\t'{}' != \n\t'{}')",

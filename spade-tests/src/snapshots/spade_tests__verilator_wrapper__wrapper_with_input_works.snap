@@ -8,26 +8,21 @@ source: spade-tests/src/verilator_wrapper.rs
 class no_mangle_spade_t;
 class no_mangle_spade_t_i;
 no_mangle_spade_t_i* init_no_mangle_spade_t_i(no_mangle_spade_t& t);
-class no_mangle_spade_t_o;
-no_mangle_spade_t_o* init_no_mangle_spade_t_o(no_mangle_spade_t* root);
+
 class no_mangle_spade_t {
     public:
         no_mangle_spade_t(std::string spade_state, std::string spade_top, Vno_mangle* top)
             : s_ext(spade::setup_spade(spade_top, spade_state))
             , top(top)
             , i(init_no_mangle_spade_t_i(*this))
-            , o(init_no_mangle_spade_t_o(this))
+            
         {
         }
         no_mangle_spade_t_i* i;
-        no_mangle_spade_t_o* o;
+        
         rust::Box<spade::SimulationExt> s_ext;
         Vno_mangle* top;
         std::string output_string_fn() {
-        std::bitset<0> bits = this->top->output___05F;
-        std::stringstream ss;
-        ss << bits;
-        return ss.str();
         }
 };
 class no_mangle_spade_t_i_short {
@@ -75,28 +70,5 @@ class no_mangle_spade_t_i {
 no_mangle_spade_t_i* init_no_mangle_spade_t_i(no_mangle_spade_t& t) {
     return new no_mangle_spade_t_i(t);
 }
-class no_mangle_spade_t_o {
-    public:
-        no_mangle_spade_t_o(no_mangle_spade_t* root)
-               : root(root) {}
-        no_mangle_spade_t* root;
-        bool operator==(std::string const& other) const {
-            auto field = root->s_ext->output_field({});
-            auto val = spade::new_bit_string(root->output_string_fn());
-            return root
-                     ->s_ext
-                     ->compare_field(*field, other, *val)
-                     ->matches();
-        }
-        void assert_eq(std::string const& expected, std::string const& source_loc) {
-            auto field = root->s_ext->output_field({});
-            auto val = spade::new_bit_string(root->output_string_fn());
-            root
-                ->s_ext
-                ->assert_eq(*field, expected, *val, source_loc);
-        }
-};
-no_mangle_spade_t_o* init_no_mangle_spade_t_o(no_mangle_spade_t* root) {
-    return new no_mangle_spade_t_o(root);
-}
+
 #endif

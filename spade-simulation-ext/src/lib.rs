@@ -255,6 +255,7 @@ impl Spade {
         )
         .unwrap();
 
+        println!("{:?}", field.range);
         let relevant_bits = &BitString(
             output_bits.inner()[field.range.0 as usize..field.range.1 as usize].to_owned(),
         );
@@ -349,7 +350,7 @@ impl Spade {
 
         // Now that we have a type which we can work with, we can create a virtual expression
         // which accesses the field in order to learn the type of the field
-        let expr = format!("o.{}", path.iter().join(","));
+        let expr = format!("o.{}", path.iter().join("."));
         let file_id = self.code.add_file("py".to_string(), expr.clone().into());
         let mut parser = Parser::new(lexer::TokenKind::lexer(&expr), file_id);
 
@@ -397,7 +398,7 @@ impl Spade {
         // Finally, we need to figure out the range of the field in in the
         // type. Since all previous steps passed, this can assume that
         // the types are good so we can do lots of unwraping
-        let concrete = self
+        let mut concrete = &self
             .type_state
             .name_type(&o_name.nowhere(), &ast_ctx.symtab, &self.item_list.types)
             .unwrap();
@@ -408,6 +409,7 @@ impl Spade {
             for (f, ty) in concrete.assume_struct().1 {
                 let self_size = ty.to_mir_type().size();
                 if f.0 == field {
+                    concrete = ty;
                     start = &start + current_offset;
                     end = &start + self_size;
                     break;

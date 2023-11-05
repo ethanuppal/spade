@@ -13,6 +13,28 @@ fn large_input(a: int<65>) -> int<65> {
     a
 }
 
+struct FieldOutSub {
+    b: int<30>,
+    c: int<70>,
+}
+struct FieldOut {
+    a: int<20>,
+    sub: FieldOutSub,
+}
+#[no_mangle]
+fn fields(a: int<20>, b: int<30>, c: int<70>) -> FieldOut {
+    FieldOut$(
+        a,
+        sub: FieldOutSub$(
+            b,
+            c
+        )
+    )
+}
+
+#[no_mangle]
+fn no_output(a: int<10>, b: int<10>) {}
+
 #[no_mangle]
 fn unused() {
 

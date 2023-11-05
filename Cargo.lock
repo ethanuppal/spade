@@ -1144,6 +1144,7 @@ dependencies = [
  "color-eyre",
  "cxx",
  "cxx-build",
+ "num",
  "ron",
  "spade",
  "spade-mir",

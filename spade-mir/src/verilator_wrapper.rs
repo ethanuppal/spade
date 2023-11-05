@@ -15,46 +15,71 @@ impl Type {
         path: Vec<&str>,
         class_name: &str,
     ) -> (String, String) {
+        if self.size() == 0u32.to_biguint() {
+            return (String::new(), String::new());
+        }
+        let (field_decls, field_impls, field_members, field_constructor_calls) = match self {
+            Type::Struct(fields) => fields
+                .iter()
+                .map(|(name, ty)| {
+                    let mut path = path.clone();
+                    path.push(name);
+                    let field_class_name = format!("{class_name}_{name}");
+                    let (decls, impls) = ty.output_wrappers(root_class, path, &field_class_name);
+
+                    let member = format!("{field_class_name}* {name};");
+
+                    let constructor = format!(", {name}(init_{field_class_name}(root))");
+
+                    (decls, impls, member, constructor)
+                })
+                .multiunzip(),
+            _ => (
+                "".to_string(),
+                "".to_string(),
+                "".to_string(),
+                "".to_string(),
+            ),
+        };
+
         let field_as_strings = path.iter().map(|p| format!(r#""{p}""#)).join(", ");
         let declaration = code! {
+            [0] field_decls;
             [0] format!("class {class_name};");
             [0] format!("{class_name}* init_{class_name}({root_class}* root);");
         }
         .to_string();
 
-        let implementation = match self {
-            Type::Struct(fields) => {
-                todo!()
-            },
-            _ => {
-                code! {
-                    [0] format!("class {class_name} {{");
-                    [1]     "public:";
-                    [2]         format!("{class_name}({root_class}* root)");
-                    [2]         format!("       : root(root) {{}}");
-                    [2]         format!("{root_class}* root;");
-                    [2]         "bool operator==(std::string const& other) const {";
-                    [3]             format!(r#"auto field = root->s_ext->output_field({{{field_as_strings}}});"#);
-                    [3]             format!("auto val = spade::new_bit_string(root->output_string_fn());");
-                    [3]             format!(r#"return root"#);
-                    [3]             format!(r#"         ->s_ext"#);
-                    [3]             format!(r#"         ->compare_field(*field, other, *val)"#);
-                    [3]             format!(r#"         ->matches();"#);
-                    [2]         "}";
-                    [2]         format!("void assert_eq(std::string const& expected, std::string const& source_loc) {{");
-                    [3]             format!(r#"auto field = root->s_ext->output_field({{{field_as_strings}}});"#);
-                    [3]             format!("auto val = spade::new_bit_string(root->output_string_fn());");
-                    [3]             format!(r#"root"#);
-                    [3]             format!(r#"    ->s_ext"#);
-                    [3]             format!(r#"    ->assert_eq(*field, expected, *val, source_loc);"#);
-                    [2]         "}";
-                    [0] "};";
-                    [0] format!("{class_name}* init_{class_name}({root_class}* root) {{");
-                    [1]     format!("return new {class_name}(root);");
-                    [0] "}";
-                }.to_string()
-            }
-        };
+        let implementation = code! {
+            [0] field_impls;
+            [0] format!("class {class_name} {{");
+            [1]     "public:";
+            [2]         format!("{class_name}({root_class}* root)");
+            [4]         format!(": root(root) ");
+            [4]         field_constructor_calls;
+            [2]         "{}";
+            [4]         format!("{root_class}* root;");
+            [2]         "bool operator==(std::string const& other) const {";
+            [3]             format!(r#"auto field = root->s_ext->output_field({{{field_as_strings}}});"#);
+            [3]             format!("auto val = spade::new_bit_string(root->output_string_fn());");
+            [3]             format!(r#"return root"#);
+            [3]             format!(r#"         ->s_ext"#);
+            [3]             format!(r#"         ->compare_field(*field, other, *val)"#);
+            [3]             format!(r#"         ->matches();"#);
+            [2]         "}";
+            [2]         format!("void assert_eq(std::string const& expected, std::string const& source_loc) {{");
+            [3]             format!(r#"auto field = root->s_ext->output_field({{{field_as_strings}}});"#);
+            [3]             format!("auto val = spade::new_bit_string(root->output_string_fn());");
+            [3]             format!(r#"root"#);
+            [3]             format!(r#"    ->s_ext"#);
+            [3]             format!(r#"    ->assert_eq(*field, expected, *val, source_loc);"#);
+            [2]         "}";
+            [2]         field_members;
+            [0] "};";
+            [0] format!("{class_name}* init_{class_name}({root_class}* root) {{");
+            [1]     format!("return new {class_name}(root);");
+            [0] "}";
+        }.to_string();
 
         (declaration, implementation)
     }
@@ -157,12 +182,14 @@ impl Entity {
         let class_name = format!("{name}_spade_t");
         let output_class_name = format!("{class_name}_o");
 
+        let has_output = self.output_type.size() != 0u32.to_biguint();
+
         let constructor = code! {
             [0] format!("{class_name}(std::string spade_state, std::string spade_top, V{name}* top)");
             [1]     ": s_ext(spade::setup_spade(spade_top, spade_state))";
             [1]     ", top(top)";
             [1]     format!(", i(init_{class_name}_i(*this))");
-            [1]     format!(", o(init_{class_name}_o(this))");
+            [1]     if has_output {format!(", o(init_{class_name}_o(this))")} else {String::new()};
             [0]  "{";
             [0] "}";
         };
@@ -177,7 +204,9 @@ impl Entity {
             .size()
             .to_u64()
             .expect("Output size does not fit in 64 bits");
-        let output_string_generator = if size <= 64u32.to_biguint() {
+        let output_string_generator = if !has_output {
+            code! {}
+        } else if size <= 64u32.to_biguint() {
             code! {
                 [0] format!("std::bitset<{size}> bits = this->top->output___05F;");
                 [0] "std::stringstream ss;";
@@ -207,7 +236,6 @@ impl Entity {
                         }.to_string()
                     })
                     .join("\n");
-                [0] "std::cout << ss.str() << std::endl;";
                 [0] "return ss.str();";
             }
         };
@@ -231,7 +259,11 @@ impl Entity {
             [1]     "public:";
             [2]         constructor;
             [2]         format!("{class_name}_i* i;");
-            [2]         format!("{class_name}_o* o;");
+            [2]         if has_output {
+                            format!("{class_name}_o* o;")
+                        } else {
+                            String::new()
+                        };
             [2]         "rust::Box<spade::SimulationExt> s_ext;";
             [2]         format!("V{name}* top;");
             [2]         output_string_fn;

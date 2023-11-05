@@ -11,6 +11,7 @@ crate-type = ["staticlib"]
 [dependencies]
 color-eyre.workspace = true
 ron.workspace = true
+num.workspace = true
 cxx = "1.0"
 
 spade = {path = "../spade-compiler"}
