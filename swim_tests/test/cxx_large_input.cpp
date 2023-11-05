@@ -1,7 +1,7 @@
-// top=cxx::top::add
+// top=cxx::top::large_input
 
 #include <cassert>
-#define TOP add
+#define TOP large_input
 
 #include <verilator_util.hpp>
 
@@ -10,8 +10,7 @@ TEST_CASE(it_works, {
     ctx->timeInc(1);
     dut->eval();
 
-    s.i->a = "5";
-    s.i->b = "10";
+    s.i->a = "0x1_0000_0002_0000_0003u";
 
     ctx->timeInc(1);
     dut->eval();
@@ -19,9 +18,7 @@ TEST_CASE(it_works, {
     ctx->timeInc(1);
     dut->eval();
 
-    assert(dut->output___05F == 15);
-
-    assert(*s.o == "15");
+    ASSERT_EQ(s.o, "0x1_0000_0002_0000_0003u");
     return 0;
 })
 

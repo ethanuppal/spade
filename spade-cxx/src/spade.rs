@@ -1,7 +1,10 @@
 use std::ops::Deref;
 
+use color_eyre::eyre::bail;
 use color_eyre::eyre::Context;
 use color_eyre::eyre::Result;
+use color_eyre::owo_colors::OwoColorize;
+use cxx::CxxString;
 
 struct CompilerState(pub spade::compiler_state::CompilerState);
 
@@ -53,7 +56,18 @@ impl SignalValue {
 
 struct SimulationExt(pub spade_simulation_ext::Spade);
 struct BitString(spade_simulation_ext::BitString);
+
+fn new_bit_string(s: &CxxString) -> Box<BitString> {
+    Box::new(BitString(spade_simulation_ext::BitString(s.to_string())))
+}
+
 struct ComparisonResult(spade_simulation_ext::ComparisonResult);
+
+impl ComparisonResult {
+    fn matches(&self) -> bool {
+        self.0.expected_bits == self.0.got_bits
+    }
+}
 struct FieldRef(spade_simulation_ext::FieldRef);
 
 fn setup_spade(uut_name: String, state_path: String) -> Result<Box<SimulationExt>> {
@@ -72,15 +86,52 @@ impl SimulationExt {
     pub fn compare_field(
         &mut self,
         // The field to compare
-        field: Box<FieldRef>,
+        field: &FieldRef,
         // The spade expression to compare against
         spade_expr: &str,
         // The bits of the whole output struct
         output_bits: &BitString,
     ) -> Result<Box<ComparisonResult>> {
         self.0
-            .compare_field(field.0, spade_expr, &output_bits.0)
+            .compare_field(field.0.clone(), spade_expr, &output_bits.0)
             .map(|o| Box::new(ComparisonResult(o)))
+    }
+
+    pub fn assert_eq(
+        &mut self,
+        // The field to compare
+        field: &FieldRef,
+        // The spade expression to compare against
+        spade_expr: &str,
+        // The bits of the whole output struct
+        output_bits: &BitString,
+        source_loc: &str,
+    ) -> Result<()> {
+        let cmp_result = self
+            .0
+            .compare_field(field.0.clone(), spade_expr, &output_bits.0)?;
+
+        if cmp_result.got_bits != cmp_result.expected_bits {
+            println!("{}", "{source_loc}: assertion failed".red());
+            println!("\texpected: {}\n", cmp_result.expected_spade.green());
+            println!("\tgo:       {}\n", cmp_result.got_spade.green());
+            println!("");
+            println!(
+                "\tverilog (\n\t'{}' != \n\t'{}')",
+                cmp_result.expected_bits.0.green(),
+                cmp_result.got_bits.0.red()
+            );
+            // message += f"\tverilog ('{colors.green(expected_bits)}' != '{colors.red(got_bits)}')"
+            // assert False, message
+            bail!("{source_loc}: assertion failed");
+        }
+        Ok(())
+    }
+
+    pub fn output_field(&mut self, path: &Vec<String>) -> Result<Box<FieldRef>> {
+        self.0
+            .output_field(path.clone())
+            .map(|o| Box::new(FieldRef(o)))
     }
 }
 
@@ -90,7 +141,16 @@ mod ffi {
     extern "Rust" {
         type FieldRef;
         type BitString;
+    }
+
+    extern "Rust" {
         type ComparisonResult;
+
+        fn matches(&self) -> bool;
+    }
+
+    extern "Rust" {
+        fn new_bit_string(s: &CxxString) -> Box<BitString>;
     }
 
     extern "Rust" {
@@ -113,15 +173,26 @@ mod ffi {
 
         fn setup_spade(uut_name: String, state_path: String) -> Result<Box<SimulationExt>>;
         fn port_value(&mut self, port: &str, expr: &str) -> Result<Box<SignalValue>>;
-        pub fn compare_field(
+        fn compare_field(
             &mut self,
             // The field to compare
-            field: Box<FieldRef>,
+            field: &FieldRef,
             // The spade expression to compare against
             spade_expr: &str,
             // The bits of the whole output struct
             output_bits: &BitString,
         ) -> Result<Box<ComparisonResult>>;
+        fn assert_eq(
+            &mut self,
+            // The field to compare
+            field: &FieldRef,
+            // The spade expression to compare against
+            spade_expr: &str,
+            // The bits of the whole output struct
+            output_bits: &BitString,
+            source_loc: &str,
+        ) -> Result<()>;
 
+        fn output_field(&mut self, path: &Vec<String>) -> Result<Box<FieldRef>>;
     }
 }

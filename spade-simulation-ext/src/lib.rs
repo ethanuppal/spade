@@ -161,7 +161,8 @@ impl Spade {
 
         // FIXME: IF we start running into stackoverflows we should use serde_stacker
         let ron = ron::Options::default().without_recursion_limit();
-        let state = ron.from_str::<CompilerState>(&state_str)
+        let state = ron
+            .from_str::<CompilerState>(&state_str)
             .map_err(|e| anyhow!("Failed to deserialize compiler state {e}"))?;
 
         let code = Rc::new(RwLock::new(CodeBundle::from_files(&state.code)));
@@ -320,6 +321,10 @@ impl Spade {
     /// Access a field of the DUT output or its subfields
     #[tracing::instrument(level = "trace", skip(self))]
     pub fn output_field(&mut self, path: Vec<String>) -> Result<FieldRef> {
+        if path.is_empty() {
+            return self.output_as_field_ref();
+        }
+
         let output_type = self.output_type()?;
 
         // Create a new variable which is guaranteed to have the output type

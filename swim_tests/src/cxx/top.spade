@@ -4,6 +4,16 @@ fn add(a: int<8>, b: int<8>) -> int<9> {
 }
 
 #[no_mangle]
+fn large_output(a: int<32>, b: int<32>, c: int<32>, d: int<8>) -> int<104> {
+    a `concat` b `concat` c `concat` d
+}
+
+#[no_mangle]
+fn large_input(a: int<65>) -> int<65> {
+    a
+}
+
+#[no_mangle]
 fn unused() {
 
 }

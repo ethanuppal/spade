@@ -6,7 +6,59 @@ use nesty::{code, Code};
 use num::ToPrimitive;
 use spade_common::num_ext::InfallibleToBigUint;
 
-use crate::{codegen::mangle_input, unit_name::UnitNameKind, Entity};
+use crate::{codegen::mangle_input, types::Type, unit_name::UnitNameKind, Entity};
+
+impl Type {
+    fn output_wrappers(
+        &self,
+        root_class: &str,
+        path: Vec<&str>,
+        class_name: &str,
+    ) -> (String, String) {
+        let field_as_strings = path.iter().map(|p| format!(r#""{p}""#)).join(", ");
+        let declaration = code! {
+            [0] format!("class {class_name};");
+            [0] format!("{class_name}* init_{class_name}({root_class}* root);");
+        }
+        .to_string();
+
+        let implementation = match self {
+            Type::Struct(fields) => {
+                todo!()
+            },
+            _ => {
+                code! {
+                    [0] format!("class {class_name} {{");
+                    [1]     "public:";
+                    [2]         format!("{class_name}({root_class}* root)");
+                    [2]         format!("       : root(root) {{}}");
+                    [2]         format!("{root_class}* root;");
+                    [2]         "bool operator==(std::string const& other) const {";
+                    [3]             format!(r#"auto field = root->s_ext->output_field({{{field_as_strings}}});"#);
+                    [3]             format!("auto val = spade::new_bit_string(root->output_string_fn());");
+                    [3]             format!(r#"return root"#);
+                    [3]             format!(r#"         ->s_ext"#);
+                    [3]             format!(r#"         ->compare_field(*field, other, *val)"#);
+                    [3]             format!(r#"         ->matches();"#);
+                    [2]         "}";
+                    [2]         format!("void assert_eq(std::string const& expected, std::string const& source_loc) {{");
+                    [3]             format!(r#"auto field = root->s_ext->output_field({{{field_as_strings}}});"#);
+                    [3]             format!("auto val = spade::new_bit_string(root->output_string_fn());");
+                    [3]             format!(r#"root"#);
+                    [3]             format!(r#"    ->s_ext"#);
+                    [3]             format!(r#"    ->assert_eq(*field, expected, *val, source_loc);"#);
+                    [2]         "}";
+                    [0] "};";
+                    [0] format!("{class_name}* init_{class_name}({root_class}* root) {{");
+                    [1]     format!("return new {class_name}(root);");
+                    [0] "}";
+                }.to_string()
+            }
+        };
+
+        (declaration, implementation)
+    }
+}
 
 impl Entity {
     fn input_wrapper(&self, parent_class_name: &str) -> (String, String) {
@@ -23,11 +75,18 @@ impl Entity {
                 let assignment = if f.ty.size() <= 64u32.to_biguint() {
                     format!("parent.top->{field_name_mangled} = value->as_u64();")
                 } else {
+                    let size_u64 = f.ty.size().to_u64().expect("Input size does not fit in u64");
                     code! {
                         [0] "auto value_split = value->as_u32_chunks();";
-                        [0] (0..(f.ty.size() / 32u32).to_u64().unwrap())
+                        [0] (0..(size_u64 / 32))
                             .map(|i| format!("parent.top->{field_name_mangled}[{i}] = value_split[{i}];"))
                             .join("\n");
+                        [0] if size_u64 % 32 != 0 {
+                                let idx = size_u64 / 32;
+                                vec![format!("parent.top->{field_name_mangled}[{idx}] = value_split[{idx}];")]
+                            } else {
+                                vec![]
+                            }
                     }.to_string()
                 };
 
@@ -96,30 +155,89 @@ impl Entity {
         };
 
         let class_name = format!("{name}_spade_t");
+        let output_class_name = format!("{class_name}_o");
 
         let constructor = code! {
             [0] format!("{class_name}(std::string spade_state, std::string spade_top, V{name}* top)");
             [1]     ": s_ext(spade::setup_spade(spade_top, spade_state))";
             [1]     ", top(top)";
             [1]     format!(", i(init_{class_name}_i(*this))");
+            [1]     format!(", o(init_{class_name}_o(this))");
             [0]  "{";
+            [0] "}";
+        };
+
+        let (output_declaration, output_impl) =
+            self.output_type
+                .output_wrappers(&class_name, vec![], &output_class_name);
+
+        let size = self.output_type.size();
+        let size_u64 = self
+            .output_type
+            .size()
+            .to_u64()
+            .expect("Output size does not fit in 64 bits");
+        let output_string_generator = if size <= 64u32.to_biguint() {
+            code! {
+                [0] format!("std::bitset<{size}> bits = this->top->output___05F;");
+                [0] "std::stringstream ss;";
+                [0] "ss << bits;";
+                [0] "return ss.str();";
+            }
+        } else {
+            code! {
+                [0] "std::bitset<32> bits;";
+                [0] "std::stringstream ss;";
+                [0] if size_u64 % 32 != 0 {
+                        code!{
+                            [0] format!("std::bitset<{}> bits_;", size_u64 % 32);
+                            [0] format!("bits_ = this->top->output___05F[{}];", size_u64 / 32);
+                            [0] format!("ss << bits_;")
+                        }
+                    }
+                    else {
+                        code!{}
+                    };
+                [0] (0..(size / 32u32).to_u64().unwrap())
+                    .rev()
+                    .map(|i| {
+                        code! {
+                            [0] format!("bits = this->top->output___05F[{i}];");
+                            [0] format!("ss << bits;")
+                        }.to_string()
+                    })
+                    .join("\n");
+                [0] "std::cout << ss.str() << std::endl;";
+                [0] "return ss.str();";
+            }
+        };
+
+        let output_string_fn = code! {
+            [0] "std::string output_string_fn() {";
+            [0]     output_string_generator;
             [0] "}";
         };
 
         let (input_pre, input_impl) = self.input_wrapper(&class_name);
         let class = code! {
+            [0] "#include <sstream>";
+            [0] "#include <bitset>";
             [0] format!("#if __has_include(<V{name}.h>)");
             [0] format!(r#"#include <V{name}.h>"#);
             [0] format!("class {class_name};");
             [0] input_pre;
+            [0] output_declaration;
             [0] format!("class {class_name} {{");
             [1]     "public:";
             [2]         constructor;
             [2]         format!("{class_name}_i* i;");
+            [2]         format!("{class_name}_o* o;");
             [2]         "rust::Box<spade::SimulationExt> s_ext;";
             [2]         format!("V{name}* top;");
+            [2]         output_string_fn;
             [0] "};";
             [0] input_impl;
+            [0] output_impl;
             [0] "#endif";
         };
 
