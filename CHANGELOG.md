@@ -20,6 +20,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - [!224][!224] `stage.valid` now does what it is supposed to
 - [!235][!245] Workaround for vivado not supporting escaped identifiers called `new`
 - [!239][!239] Codegen: Don't generate a source reference attribute for non-existent void values
+- [!241][!241] Fix panic on zero-sized-type in pipeline
 
 ### Changed
 
@@ -35,6 +36,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 [!224]: https://gitlab.com/spade-lang/spade/-/merge_requests/211
 [!235]: https://gitlab.com/spade-lang/spade/-/merge_requests/235
 [!239]: https://gitlab.com/spade-lang/spade/-/merge_requests/239
+[!241]: https://gitlab.com/spade-lang/spade/-/merge_requests/241
 
 ## [0.4.0]
 

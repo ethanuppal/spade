@@ -1,0 +1,7 @@
+fn returning_void() {}
+
+pipeline(10) uut(clk: clock) -> bool {
+        let _ = returning_void();
+    reg*10;
+        true
+}

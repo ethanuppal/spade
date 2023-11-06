@@ -72,22 +72,21 @@ pub fn handle_statement(
         }) => {
             let time = expr.inner.kind.available_in()?;
             for name in pat.get_names() {
-                let is_port = ctx
+                let ty = ctx
                     .types
-                    .name_type(&name, ctx.symtab.symtab(), &ctx.item_list.types)?
-                    .is_port();
+                    .name_type(&name, ctx.symtab.symtab(), &ctx.item_list.types)?;
 
-                ctx.subs.set_available(name, time, is_port)
+                ctx.subs.set_available(name, time, ty)
             }
         }
         Statement::Register(reg) => {
             let time = reg.inner.value.kind.available_in()?;
             for name in reg.pattern.get_names() {
-                let is_port = ctx
+                let ty = ctx
                     .types
-                    .name_type(&name, ctx.symtab.symtab(), &ctx.item_list.types)?
-                    .is_port();
-                ctx.subs.set_available(name, time, is_port)
+                    .name_type(&name, ctx.symtab.symtab(), &ctx.item_list.types)?;
+
+                ctx.subs.set_available(name, time, ty)
             }
         }
         Statement::Declaration(_) => todo!(),
@@ -194,12 +193,11 @@ pub fn lower_pipeline<'a>(
     };
 
     for (name, _) in hir_inputs {
-        let is_port = ctx
+        let ty = ctx
             .types
-            .name_type(&name, ctx.symtab.symtab(), &ctx.item_list.types)?
-            .is_port();
+            .name_type(&name, ctx.symtab.symtab(), &ctx.item_list.types)?;
 
-        ctx.subs.set_available(name.clone(), 0, is_port)
+        ctx.subs.set_available(name.clone(), 0, ty)
     }
 
     let num_stages = body_statements

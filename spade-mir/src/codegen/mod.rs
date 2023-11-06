@@ -118,12 +118,16 @@ fn statement_declaration(
             if reg.ty.backward_size() != BigUint::zero() {
                 panic!("Attempting to put value with a backward_size != 0 in a register")
             }
-            add_to_name_map(name_map, &reg.name, &reg.ty);
-            let name = reg.name.var_name();
-            let declaration = verilog::reg(&name, &reg.ty.size());
-            code! {
-                [0] source_attribute(&reg.loc, code);
-                [0] &declaration;
+            if reg.ty.size() != BigUint::zero() {
+                add_to_name_map(name_map, &reg.name, &reg.ty);
+                let name = reg.name.var_name();
+                let declaration = verilog::reg(&name, &reg.ty.size());
+                code! {
+                    [0] source_attribute(&reg.loc, code);
+                    [0] &declaration;
+                }
+            } else {
+                code! {}
             }
         }
         Statement::Constant(id, ty, _) => {

@@ -51,6 +51,7 @@ use spade_typeinference::GenericListToken;
 use spade_typeinference::HasType;
 use spade_types::KnownType;
 use statement_list::StatementList;
+use substitution::Substitution;
 use substitution::Substitutions;
 use thiserror::Error;
 use usefulness::{is_useful, PatStack, Usefulness};
@@ -1066,18 +1067,16 @@ impl ExprLocal for Loc<Expression> {
     fn alias(&self, subs: &Substitutions) -> Result<Option<mir::ValueName>> {
         match &self.kind {
             ExprKind::Identifier(ident) => match subs.lookup(ident) {
-                substitution::Substitution::Undefined => Err(Error::UndefinedVariable {
+                Substitution::Undefined => Err(Error::UndefinedVariable {
                     name: ident.clone().at_loc(self),
                 }),
-                substitution::Substitution::Waiting(available_in, name) => {
-                    Err(Error::UseBeforeReady {
-                        name: name.at_loc(self),
-                        referenced_at_stage: subs.current_stage,
-                        unavailable_for: available_in,
-                    })
-                }
-                substitution::Substitution::Available(current) => Ok(Some(current.value_name())),
-                substitution::Substitution::Port => Ok(Some(ident.value_name())),
+                Substitution::Waiting(available_in, name) => Err(Error::UseBeforeReady {
+                    name: name.at_loc(self),
+                    referenced_at_stage: subs.current_stage,
+                    unavailable_for: available_in,
+                }),
+                Substitution::Available(current) => Ok(Some(current.value_name())),
+                Substitution::Port | Substitution::ZeroSized => Ok(Some(ident.value_name())),
             },
             ExprKind::IntLiteral(_) => Ok(None),
             ExprKind::BoolLiteral(_) => Ok(None),
@@ -1105,10 +1104,8 @@ impl ExprLocal for Loc<Expression> {
                 declares_name: _,
             } => {
                 match subs.lookup_referenced(stage.inner, name) {
-                    substitution::Substitution::Undefined => {
-                        Err(Error::UndefinedVariable { name: name.clone() })
-                    }
-                    substitution::Substitution::Waiting(available_at, _) => {
+                    Substitution::Undefined => Err(Error::UndefinedVariable { name: name.clone() }),
+                    Substitution::Waiting(available_at, _) => {
                         // Available at is the amount of cycles left at the stage
                         // from which the variable is requested.
                         let referenced_at_stage = subs.current_stage - available_at;
@@ -1118,8 +1115,8 @@ impl ExprLocal for Loc<Expression> {
                             unavailable_for: available_at,
                         })
                     }
-                    substitution::Substitution::Available(name) => Ok(Some(name.value_name())),
-                    substitution::Substitution::Port => Ok(Some(name.value_name())),
+                    Substitution::Available(name) => Ok(Some(name.value_name())),
+                    Substitution::Port | Substitution::ZeroSized => Ok(Some(name.value_name())),
                 }
             }
             ExprKind::StageReady => Ok(None),

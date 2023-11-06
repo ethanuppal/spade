@@ -1,10 +1,14 @@
 use std::collections::HashMap;
 
+use num::{BigUint, Zero};
 use spade_common::{
     location_info::{Loc, WithLocation},
     name::{Identifier, NameID},
 };
 use spade_hir::symbol_table::FrozenSymtab;
+use spade_types::ConcreteType;
+
+use crate::MirLowerable;
 
 #[derive(Clone)]
 pub enum Substitution {
@@ -16,6 +20,8 @@ pub enum Substitution {
     Available(NameID),
     /// The value is a port, so it should not be registered and is always available.
     Port,
+    /// The value has size0 so it should not be registered
+    ZeroSized,
 }
 
 pub struct SubRegister {
@@ -85,6 +91,7 @@ impl Substitutions {
                     Substitution::Available(new_name)
                 }
                 Substitution::Port => Substitution::Port,
+                Substitution::ZeroSized => Substitution::ZeroSized,
             };
             new_subs.insert(original.inner.clone(), new_sub);
         }
@@ -95,26 +102,21 @@ impl Substitutions {
 
     /// Mark the variable as available in the current pipeline stage under its
     /// own name
-    pub fn set_available(&mut self, from: Loc<NameID>, time: usize, is_port: bool) {
+    pub fn set_available(&mut self, from: Loc<NameID>, time: usize, ty: ConcreteType) {
         self.live_vars.push(from.clone());
-        if is_port {
-            self.inner
-                .last_mut()
-                .unwrap()
-                .insert(from.inner.clone(), Substitution::Port);
+        let availability = if ty.is_port() {
+            Substitution::Port
+        } else if ty.to_mir_type().size() == BigUint::zero() {
+            Substitution::ZeroSized
+        } else if time == 0 {
+            Substitution::Available(from.inner.clone())
         } else {
-            if time == 0 {
-                self.inner
-                    .last_mut()
-                    .unwrap()
-                    .insert(from.inner.clone(), Substitution::Available(from.inner));
-            } else {
-                self.inner
-                    .last_mut()
-                    .unwrap()
-                    .insert(from.inner.clone(), Substitution::Waiting(time, from.inner));
-            }
-        }
+            Substitution::Waiting(time, from.inner.clone())
+        };
+        self.inner
+            .last_mut()
+            .unwrap()
+            .insert(from.inner.clone(), availability);
     }
 
     /// Return substituted name for `original` in the current pipeline stage
