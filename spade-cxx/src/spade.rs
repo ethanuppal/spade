@@ -73,12 +73,12 @@ fn new_bit_string(s: &CxxString) -> Box<BitString> {
 }
 
 struct ComparisonResult(spade_simulation_ext::ComparisonResult);
-
 impl ComparisonResult {
     fn matches(&self) -> bool {
-        self.0.expected_bits == self.0.got_bits
+        self.0.matches()
     }
 }
+
 struct FieldRef(spade_simulation_ext::FieldRef);
 
 fn setup_spade(uut_name: String, state_path: String) -> Result<Box<SimulationExt>> {
@@ -122,7 +122,7 @@ impl SimulationExt {
             .0
             .compare_field(field.0.clone(), spade_expr, &output_bits.0)?;
 
-        if cmp_result.got_bits != cmp_result.expected_bits {
+        if !cmp_result.matches() {
             println!("{}", format!("{source_loc}").red());
             println!("\texpected: {}", cmp_result.expected_spade);
             println!("\tgot:      {}", cmp_result.got_spade);
@@ -132,8 +132,6 @@ impl SimulationExt {
                 cmp_result.expected_bits.0.green(),
                 cmp_result.got_bits.0.red()
             );
-            // message += f"\tverilog ('{colors.green(expected_bits)}' != '{colors.red(got_bits)}')"
-            // assert False, message
             bail!("{source_loc}: assertion failed");
         }
         Ok(())

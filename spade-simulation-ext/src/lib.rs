@@ -69,7 +69,7 @@ where
 }
 
 #[cfg_attr(feature = "python", pyclass)]
-#[derive(PartialEq, Eq, Clone, Debug)]
+#[derive(Clone, Debug)]
 pub struct BitString(pub String);
 
 #[cfg_attr(feature = "python", pymethods)]
@@ -124,6 +124,16 @@ pub struct ComparisonResult {
     pub got_spade: String,
     #[cfg(not(feature = "python"))]
     pub got_bits: BitString,
+}
+
+impl ComparisonResult {
+    pub fn matches(&self) -> bool {
+        self.expected_bits
+            .0
+            .chars()
+            .zip(self.got_bits.0.chars())
+            .all(|(e, g)| e == 'X' || e == g)
+    }
 }
 
 #[cfg_attr(feature = "python", pyclass)]

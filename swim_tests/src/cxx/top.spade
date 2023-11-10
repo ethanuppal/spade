@@ -39,3 +39,8 @@ fn no_output(a: int<10>, b: int<10>) {}
 fn unused() {
 
 }
+
+#[no_mangle]
+fn comparison_test(in: Option<int<8>>) -> Option<int<8>> {
+    in
+}
