@@ -9,31 +9,30 @@ released as a new version.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
-## [Unreleased]
+## [0.5.0]
 
 ### Added
 
 - [!232][!232] Support for implementing traits
+- Started adding a language reference documentation section where all language
+  features will be described.
+  <https://docs.spade-lang.org/language_reference/index.html>
 
 ### Fixed
 
 - [!224][!224] `stage.valid` now does what it is supposed to
-- [!235][!245] Workaround for vivado not supporting escaped identifiers called `new`
+- [!235][!235] Workaround for vivado not supporting escaped identifiers called `new`
 - [!239][!239] Codegen: Don't generate a source reference attribute for non-existent void values
 - [!241][!241] Fix panic on zero-sized-type in pipeline
 
 ### Changed
 
 - [!224][!224] Name de-aliasing now only de-aliases anonymous names
-- [!166][!166] **Breaking change** Bump minimum rust version to 1.70
-
-### Removed
-
-### Internal
+- [!232][!232] **Breaking change** Bump minimum rust version to 1.70
 
 
-[!166]: https://gitlab.com/spade-lang/spade/-/merge_requests/166
-[!224]: https://gitlab.com/spade-lang/spade/-/merge_requests/211
+[!232]: https://gitlab.com/spade-lang/spade/-/merge_requests/232
+[!224]: https://gitlab.com/spade-lang/spade/-/merge_requests/224
 [!235]: https://gitlab.com/spade-lang/spade/-/merge_requests/235
 [!239]: https://gitlab.com/spade-lang/spade/-/merge_requests/239
 [!241]: https://gitlab.com/spade-lang/spade/-/merge_requests/241
@@ -151,7 +150,8 @@ Initial numbered version
 
 [Associated Swim release](https://gitlab.com/spade-lang/swim/-/tree/v0.1.0)
 
-[Unreleased]: https://gitlab.com/spade-lang/spade/-/compare/v0.4.0...master
+[Unreleased]: https://gitlab.com/spade-lang/spade/-/compare/v0.5.0...master
+[0.5.0]: https://gitlab.com/spade-lang/spade/-/compare/v0.4.0...v0.5.0
 [0.4.0]: https://gitlab.com/spade-lang/spade/-/compare/v0.3.0...v0.4.0
 [0.3.0]: https://gitlab.com/spade-lang/spade/-/compare/v0.2.0...v0.3.0
 [0.2.0]: https://gitlab.com/spade-lang/spade/-/compare/v0.1.0...v0.2.0
