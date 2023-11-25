@@ -25,7 +25,7 @@ use spade_hir_lowering::pipelines::MaybePipelineContext;
 use spade_hir_lowering::substitution::Substitutions;
 use spade_hir_lowering::{expr_to_mir, MirLowerable};
 use spade_mir::codegen::mangle_input;
-use spade_mir::eval::eval_statements;
+use spade_mir::eval::{eval_statements, Value};
 use spade_mir::unit_name::InstanceMap;
 use spade_parser::lexer;
 use spade_parser::Parser;
@@ -162,6 +162,9 @@ pub struct Spade {
     uut_nameid: NameID,
     instance_map: InstanceMap,
     mir_context: HashMap<NameID, MirContext>,
+
+    compilation_cache: HashMap<(TypeVar, String), Value>,
+    output_field_cache: HashMap<Vec<String>, FieldRef>,
 }
 
 impl Spade {
@@ -225,6 +228,8 @@ impl Spade {
             uut_nameid,
             instance_map: state.instance_map,
             mir_context: state.mir_context,
+            compilation_cache: HashMap::new(),
+            output_field_cache: HashMap::new(),
         })
     }
 }
@@ -265,7 +270,6 @@ impl Spade {
         )
         .unwrap();
 
-        println!("{:?}", field.range);
         let relevant_bits = &BitString(
             output_bits.inner()[field.range.0 as usize..field.range.1 as usize].to_owned(),
         );
@@ -332,6 +336,10 @@ impl Spade {
     /// Access a field of the DUT output or its subfields
     #[tracing::instrument(level = "trace", skip(self))]
     pub fn output_field(&mut self, path: Vec<String>) -> Result<FieldRef> {
+        if let Some(cached) = self.output_field_cache.get(&path) {
+            return Ok(cached.clone());
+        }
+
         if path.is_empty() {
             return self.output_as_field_ref();
         }
@@ -414,11 +422,11 @@ impl Spade {
             .unwrap();
         let (mut start, mut end) = (BigUint::zero(), concrete.to_mir_type().size());
 
-        for field in path {
+        for field in &path {
             let mut current_offset = BigUint::zero();
             for (f, ty) in concrete.assume_struct().1 {
                 let self_size = ty.to_mir_type().size();
-                if f.0 == field {
+                if f.0 == *field {
                     concrete = ty;
                     start = &start + current_offset;
                     end = &start + self_size;
@@ -434,7 +442,7 @@ impl Spade {
             impl_idtracker: ast_ctx.impl_idtracker,
         });
 
-        Ok(FieldRef {
+        let result = FieldRef {
             range: (
                 start
                     .to_u64()
@@ -443,7 +451,10 @@ impl Spade {
                     .ok_or(anyhow!("Field index exceeds {} bits", usize::MAX))?,
             ),
             ty: result_type,
-        })
+        };
+
+        self.output_field_cache.insert(path, result.clone());
+        Ok(result)
     }
 
     // Translate a value from a verilog instance path into a string value
@@ -537,6 +548,11 @@ impl Spade {
         expr: &str,
         ty: &impl HasType,
     ) -> Result<spade_mir::eval::Value> {
+        let cache_key = (ty.get_type(&self.type_state)?, expr.to_string());
+        if let Some(cached) = self.compilation_cache.get(&cache_key) {
+            return Ok(cached.clone());
+        }
+
         let file_id = self.code.add_file("py".to_string(), expr.into());
         let mut parser = Parser::new(lexer::TokenKind::lexer(&expr), file_id);
 
@@ -617,7 +633,9 @@ impl Spade {
             impl_idtracker: ast_ctx.impl_idtracker,
         });
 
-        Ok(eval_statements(&mir.to_vec_no_source_map()))
+        let result = eval_statements(&mir.to_vec_no_source_map());
+        self.compilation_cache.insert(cache_key, result.clone());
+        Ok(result)
     }
 
     /// Return the output type of uut
