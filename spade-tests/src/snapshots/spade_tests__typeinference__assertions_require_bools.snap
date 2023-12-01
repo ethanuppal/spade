@@ -10,6 +10,9 @@ error: Expected type bool, got int<32>
   ┌─ testinput:2:12
   │
 2 │     assert x;
-  │            ^ Expected bool here
+  │            ^ Expected bool
+  │
+  = note: Expected bool
+               Got int<32>
 
 

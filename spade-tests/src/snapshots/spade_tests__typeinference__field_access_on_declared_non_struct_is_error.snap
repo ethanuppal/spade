@@ -13,11 +13,8 @@ error: Field access on a primitive type
   ┌─ testinput:3:13
   │
 3 │     let a = x.a;
-  │             ^
-  │             │
-  │             Expected a struct
-  │             Expression has type int
+  │             ^ expected a struct, got int
   │
-  = Field access is only allowed on structs
+  = note: Field access is only allowed on structs
 
 

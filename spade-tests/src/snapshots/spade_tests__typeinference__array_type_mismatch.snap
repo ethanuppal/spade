@@ -1,6 +1,5 @@
 ---
 source: spade-tests/src/typeinference.rs
-assertion_line: 591
 ---
 fn x() -> bool  {
     let a = [0, true, 2];
@@ -9,14 +8,14 @@ fn x() -> bool  {
 
 
 error: Array element type mismatch. Expected int<_>
-  ┌─ testinput:2:14
+  ┌─ testinput:2:17
   │
 2 │     let a = [0, true, 2];
-  │              ^  ^^^^ Expected int<_>
+  │              -  ^^^^ Expected int<_>
   │              │   
   │              To match this
   │
-  = Expected: int<_>
-  =      Got: bool
+  = note: Expected int<_>
+               Got bool
 
 

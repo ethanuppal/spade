@@ -11,9 +11,6 @@ error: Attempt to use tuple indexing on non-tuple
 2 │     a#0#0
   │     ^^^-- Because this is a tuple index
   │     │   
-  │     expected tuple
-  │
-  = note: Expected: tuple
-  = note:      Got: bool
+  │     expected tuple, got bool
 
 

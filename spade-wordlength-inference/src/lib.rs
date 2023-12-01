@@ -4,7 +4,7 @@ use inferer::{Equation, Inferer};
 use num::{BigInt, ToPrimitive};
 use range::Range;
 use spade_common::location_info::Loc;
-use spade_hir::{symbol_table::FrozenSymtab, Unit};
+use spade_hir::Unit;
 use spade_typeinference::{equation::TypeVar, TypeState};
 use spade_types::KnownType;
 
@@ -26,10 +26,10 @@ pub type Res = error::Result<Option<Equation>>;
 pub fn infer_and_check(
     wl_infer_method: InferMethod,
     type_state: &mut TypeState,
-    frozen_symtab: &FrozenSymtab,
     unit: &Unit,
+    ctx: &spade_typeinference::Context,
 ) -> error::Result<()> {
-    let mut inferer = inferer::Inferer::new(type_state, frozen_symtab.symtab());
+    let mut inferer = inferer::Inferer::new(type_state, ctx.symtab);
     inferer.expression(&unit.body)?;
 
     let mut known = BTreeMap::new();
@@ -49,7 +49,7 @@ pub fn infer_and_check(
                 );
             }
             TypeVar::Known(KnownType::Named(n), _) => panic!("How do I handle a type? {:?}", n),
-            TypeVar::Unknown(_) => {
+            TypeVar::Unknown(_, _) => {
                 // known.insert(var, Range { lo: 0, hi: 0 });
             }
 
@@ -90,7 +90,7 @@ pub fn infer_and_check(
             inferer.type_state.unify(
                 ty,
                 &TypeVar::Known(KnownType::Integer(inferred_wl.into()), Vec::new()),
-                inferer.symtab,
+                &ctx,
             ),
             loc,
         )?;

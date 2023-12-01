@@ -10,13 +10,15 @@ entity test(clk: clock, idx: int<32>) -> int<8> {
 }
 
 
-error: Argument type mismatch
+error: Argument type mismatch. Expected int<5> got int<32>
   ┌─ testinput:6:27
   │
 6 │     inst read_memory(mem, idx)
-  │                           ^^^ Expected int<5>
+  │                           ^^^ expected int<5>
   │
-  = Expected: int<5>
-  =      Got: int<32>
+  = note: Expected 5
+                in int<5>
+               Got 32
+                in int<32>
 
 

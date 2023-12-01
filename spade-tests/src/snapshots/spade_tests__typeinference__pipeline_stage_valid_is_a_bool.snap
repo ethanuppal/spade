@@ -11,6 +11,9 @@ error: Expected type int<8>, got bool
   ┌─ testinput:2:25
   │
 2 │         let a: int<8> = stage.valid;
-  │                         ^^^^^^^^^^^ Expected int<8> here
+  │                         ^^^^^^^^^^^ Expected int<8>
+  │
+  = note: Expected int<8>
+               Got bool
 
 

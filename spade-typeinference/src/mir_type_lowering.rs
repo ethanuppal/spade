@@ -288,7 +288,7 @@ impl TypeState {
 
                 None
             }
-            TypeVar::Unknown(_) => None,
+            TypeVar::Unknown(_, _) => None,
         }
     }
 

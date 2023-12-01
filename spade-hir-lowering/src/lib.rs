@@ -794,7 +794,10 @@ pub fn do_wal_trace_lowering(
                 .unify(
                     &TypedExpression::Id(pattern.id),
                     &TypedExpression::Id(dummy_expr_id),
-                    ctx.symtab.symtab(),
+                    &spade_typeinference::Context {
+                        symtab: ctx.symtab.symtab(),
+                        items: ctx.item_list,
+                    },
                 )
                 .unwrap(); // Unification with a completely generic expr
             ctx.types.check_requirements(&type_ctx).unwrap();

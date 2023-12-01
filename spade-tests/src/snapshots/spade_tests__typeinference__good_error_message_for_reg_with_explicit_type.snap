@@ -17,6 +17,9 @@ error: Expected type (int<9>, int<16>), got bool
   │ ╭─────────────────────────────────────────────────────────^
 3 │ │         true
 4 │ │     };
-  │ ╰─────^ Expected (int<9>, int<16>) here
+  │ ╰─────^ Expected (int<9>, int<16>)
+  │  
+  = note: Expected (int<9>, int<16>)
+               Got bool
 
 

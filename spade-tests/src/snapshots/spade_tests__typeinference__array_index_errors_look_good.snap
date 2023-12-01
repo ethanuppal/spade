@@ -12,6 +12,6 @@ error: Expected type int<7>, got int<4>
 2 │     x[idx]
   │       ^^^ Expected int<7>, got int<4>
   │
-  = because the value is used as an index to an array
+  = note: because the value is used as an index to an array
 
 

@@ -12,6 +12,11 @@ error: Expected type int<10>, got int<9>
   ┌─ testinput:3:13
   │
 3 │     set p = v;
-  │             ^ Expected int<10> here
+  │             ^ Expected int<10>
+  │
+  = note: Expected 10
+                in int<10>
+               Got 9
+                in int<9>
 
 

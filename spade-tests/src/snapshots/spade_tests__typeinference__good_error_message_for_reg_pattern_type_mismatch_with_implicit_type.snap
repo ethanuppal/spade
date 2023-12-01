@@ -10,17 +10,17 @@ entity test(clk: clock) -> bool {
 }
 
 
-error: Pattern type mismatch
+error: Pattern type mismatch. Expected bool got (_, _)
   ┌─ testinput:2:14
   │  
 2 │       reg(clk) (sample_i, audio_val) = {
-  │                ^^^^^^^^^^^^^^^^^^^^^ expected bool
+  │                ^^^^^^^^^^^^^^^^^^^^^ expected bool, got (_, _)
   │ ╭──────────────────────────────────────'
 3 │ │         true
 4 │ │     };
   │ ╰─────' because this has type bool
   │  
-  = Expected: bool
-  =      Got: (_, _)
+  = note: Expected bool
+               Got (_, _)
 
 

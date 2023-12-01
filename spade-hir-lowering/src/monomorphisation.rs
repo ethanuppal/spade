@@ -129,6 +129,10 @@ pub fn compile_items(
         let mut reg_name_map = BTreeMap::new();
         match original_item {
             Some((ExecutableItem::Unit(u), old_type_state)) => {
+                let type_ctx = &spade_typeinference::Context {
+                    symtab: symtab.symtab(),
+                    items: item_list,
+                };
                 let mut type_state = old_type_state.clone();
                 if !u.head.type_params.is_empty() {
                     let generic_list = type_state
@@ -141,17 +145,12 @@ pub fn compile_items(
                         let source_var = &generic_list[&source_param.name_id()];
 
                         match type_state
-                            .unify(source_var, new, symtab.symtab())
-                            .map_normal_err(|(expected, got)| {
-                                spade_typeinference::error::Error::UnspecifiedTypeError {
-                                    expected,
-                                    got,
-                                    loc: u.loc(),
-                                }
-                            }) {
+                            .unify(new, source_var, type_ctx)
+                            .into_default_diagnostic(u)
+                        {
                             Ok(_) => {}
                             Err(e) => {
-                                result.push(Err(Error::UnificationError(e)));
+                                result.push(Err(Error::SpadeDiagnostic(e)));
                             }
                         }
                     }
@@ -170,8 +169,12 @@ pub fn compile_items(
                 }
 
                 if let Some(method) = wordlength_inference_method {
-                    let infer_result =
-                        wordlength_inference::infer_and_check(method, &mut type_state, &symtab, &u);
+                    let infer_result = wordlength_inference::infer_and_check(
+                        method,
+                        &mut type_state,
+                        &u,
+                        type_ctx,
+                    );
                     if let Err(e) = infer_result {
                         result.push(Err(Error::SpadeDiagnostic(e)));
                         continue;

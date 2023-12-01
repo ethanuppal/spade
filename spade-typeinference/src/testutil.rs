@@ -13,7 +13,7 @@ pub fn sized_int(size: u128, symtab: &SymbolTable) -> TVar {
 }
 
 pub fn unsized_int(id: u64, symtab: &SymbolTable) -> TVar {
-    TVar::Known(t_int(symtab), vec![TVar::Unknown(id)])
+    TVar::Known(t_int(symtab), vec![TVar::Unknown(id, vec![])])
 }
 
 #[macro_export]

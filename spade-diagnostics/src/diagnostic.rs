@@ -110,6 +110,12 @@ pub enum Subdiagnostic {
         level: SubdiagnosticLevel,
         message: Message,
     },
+    TypeMismatch {
+        got: String,
+        got_outer: Option<String>,
+        expected: String,
+        expected_outer: Option<String>,
+    },
     /// A longer note with additional spans and labels.
     SpannedNote {
         level: SubdiagnosticLevel,
@@ -188,6 +194,15 @@ impl Diagnostic {
     /// Report that something is wrong with the supplied code.
     pub fn error(span: impl Into<FullSpan>, message: impl Into<Message>) -> Self {
         Self::new(DiagnosticLevel::Error, span, message)
+    }
+
+    pub fn level(mut self, level: DiagnosticLevel) -> Self {
+        self.level = level;
+        self
+    }
+    pub fn message(mut self, message: impl Into<Message>) -> Self {
+        self.labels.message = message.into();
+        self
     }
 
     /// Attach a message to the primary label of this diagnostic.
@@ -353,6 +368,23 @@ impl Diagnostic {
         self.subdiagnostics.push(Subdiagnostic::Suggestion {
             parts,
             message: message.into(),
+        });
+        self
+    }
+
+    pub fn type_error(
+        mut self,
+        expected: String,
+        expected_outer: Option<String>,
+        got: String,
+        got_outer: Option<String>,
+    ) -> Self {
+        println!("Adding type error {expected}, {expected_outer:?}, {got}, {got_outer:?}");
+        self.push_subdiagnostic(Subdiagnostic::TypeMismatch {
+            got,
+            got_outer,
+            expected,
+            expected_outer,
         });
         self
     }

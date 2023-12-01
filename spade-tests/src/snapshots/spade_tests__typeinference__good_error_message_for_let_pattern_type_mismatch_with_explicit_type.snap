@@ -8,15 +8,15 @@ entity test(clk: clock) -> bool {
 }
 
 
-error: Pattern type mismatch
+error: Pattern type mismatch. Expected bool got (_, _)
   ┌─ testinput:2:9
   │
 2 │     let (x, y): bool = true;
   │         ^^^^^^  ---- because this has type bool
   │         │        
-  │         expected bool
+  │         expected bool, got (_, _)
   │
-  = Expected: bool
-  =      Got: (_, _)
+  = note: Expected bool
+               Got (_, _)
 
 

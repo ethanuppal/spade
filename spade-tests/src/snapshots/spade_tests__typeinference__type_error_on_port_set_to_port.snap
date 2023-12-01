@@ -12,6 +12,9 @@ error: Expected type int<10>, got &mut int<10>
   ┌─ testinput:3:13
   │
 3 │     set p = v;
-  │             ^ Expected int<10> here
+  │             ^ Expected int<10>
+  │
+  = note: Expected int<10>
+               Got &mut int<10>
 
 

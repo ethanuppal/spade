@@ -14,6 +14,9 @@ error: Expected type clock, got bool
   ┌─ testinput:4:21
   │
 4 │     #[wal_trace(clk=x)]
-  │                     ^ Expected clock here
+  │                     ^ Expected clock
+  │
+  = note: Expected clock
+               Got bool
 
 

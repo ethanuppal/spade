@@ -11,7 +11,7 @@ use spade_hir::ArgumentList;
 use spade_types::KnownType;
 
 use crate::equation::TypeVar;
-use crate::error::{Error, Result, UnificationErrorExt};
+use crate::error::{Result, UnificationErrorExt};
 use crate::method_resolution::select_method;
 use crate::{Context, GenericListSource, TypeState};
 
@@ -96,22 +96,28 @@ impl Requirement {
                         match ctx.symtab.type_symbol_by_id(&type_name).inner {
                             TypeSymbol::Declared(_, TypeDeclKind::Struct { is_port: _ }) => {}
                             TypeSymbol::Declared(_, TypeDeclKind::Enum) => {
-                                return Err(Error::FieldAccessOnEnum {
-                                    loc: target_type.loc(),
-                                    actual_type: type_name.clone(),
-                                })
+                                return Err(Diagnostic::error(
+                                    target_type,
+                                    "Field access on an enum type",
+                                )
+                                .primary_label(format!("expected a struct, got {}", type_name))
+                                .help("Field access is only allowed on structs"));
                             }
                             TypeSymbol::Declared(_, TypeDeclKind::Primitive { is_port: _ }) => {
-                                return Err(Error::FieldAccessOnPrimitive {
-                                    loc: target_type.loc(),
-                                    actual_type: type_name.clone(),
-                                })
+                                return Err(Diagnostic::error(
+                                    target_type,
+                                    "Field access on a primitive type",
+                                )
+                                .primary_label(format!("expected a struct, got {}", type_name))
+                                .note("Field access is only allowed on structs"));
                             }
                             TypeSymbol::GenericArg { traits: _ } | TypeSymbol::GenericInt => {
-                                return Err(Error::FieldAccessOnGeneric {
-                                    loc: target_type.loc(),
-                                    name: type_name.clone(),
-                                })
+                                return Err(Diagnostic::error(
+                                    target_type,
+                                    "Field access on a generic type",
+                                )
+                                .primary_label(format!("Expected struct found {target_type}"))
+                                .note("Field access is only allowed on structs"))
                             }
                         }
 
@@ -121,10 +127,11 @@ impl Requirement {
                         let field_spec = if let Some(spec) = s.params.try_get_arg_type(field) {
                             spec
                         } else {
-                            return Err(Error::NoSuchField {
-                                field: field.clone(),
-                                _struct: type_name.clone(),
-                            });
+                            return Err(Diagnostic::error(
+                                field,
+                                format!("{} has no field named {}", type_name, field),
+                            )
+                            .primary_label(format!("Not a field of {type_name}")));
                         };
 
                         // The generic list here refers to the generics being passed to the
@@ -167,11 +174,13 @@ impl Requirement {
                         }]))
                     },
                     || Ok(RequirementResult::NoChange),
-                    |other| {
-                        Err(Error::FieldAccessOnNonStruct {
-                            loc: expr.loc(),
-                            got: other.clone(),
-                        })
+                    |_| {
+                        Err(Diagnostic::error(
+                            target_type,
+                            format!("Field access on {} which is not a struct", target_type),
+                        )
+                        .primary_label(format!("Expected a struct, found {}", target_type))
+                        .help("Field access is only allowed on structs"))
                     },
                 )
             }
@@ -295,12 +304,8 @@ impl Requirement {
             RequirementResult::Satisfied(replacements) => {
                 for Replacement { from, to } in replacements {
                     type_state
-                        .unify(&from.inner, &to, &ctx.symtab)
-                        .map_normal_err(|(got, expected)| Error::UnspecifiedTypeError {
-                            expected,
-                            got,
-                            loc: from.loc(),
-                        })?;
+                        .unify(&from.inner, &to, ctx)
+                        .into_default_diagnostic(&from)?;
                 }
                 Ok(())
             }

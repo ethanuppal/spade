@@ -16,6 +16,6 @@ error: Expected type [(_, int<3>, _); _], got [(_, int<4>, _); _]
 5 │     let mem: Memory<int<8>, 16> = inst clocked_memory(clk, [(true, idx, 0)]);
   │                                                            ^^^^^^^^^^^^^^^^ Expected [(_, int<3>, _); _], got [(_, int<4>, _); _]
   │
-  = because the value is used as an index to a memory
+  = note: because the value is used as an index to a memory
 
 

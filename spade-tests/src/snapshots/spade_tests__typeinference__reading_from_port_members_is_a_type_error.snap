@@ -21,6 +21,8 @@ error: Field access on &mut A which is not a struct
    ┌─ testinput:11:32
    │
 11 │     let x = inst read_mut_wire(val.x);
-   │                                ^^^^^ Expected struct, found &mut A
+   │                                ^^^ Expected a struct, found &mut A
+   │
+   = help: Field access is only allowed on structs
 
 

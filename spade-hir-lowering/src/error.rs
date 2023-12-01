@@ -50,7 +50,7 @@ pub enum Error {
         actual: ConcreteType,
     },
     #[error("Unification error")]
-    UnificationError(#[source] spade_typeinference::error::Error),
+    UnificationError(#[source] Diagnostic),
 
     #[error("Spade diagnostic")]
     SpadeDiagnostic(#[from] Diagnostic),

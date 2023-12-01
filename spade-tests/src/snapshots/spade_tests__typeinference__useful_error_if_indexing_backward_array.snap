@@ -11,5 +11,8 @@ error: Index target must be an array, got &mut [bool; 10]
   │
 2 │     x[0]
   │     ^ Expected array
+  │
+  = note: Expected [_; _]
+               Got &mut [bool; 10]
 
 

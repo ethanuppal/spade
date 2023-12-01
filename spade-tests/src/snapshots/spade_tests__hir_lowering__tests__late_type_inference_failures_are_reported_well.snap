@@ -18,6 +18,9 @@ error: Expected type 32, got 16
 1 │ ╭ fn a<N>(x: int<N>, y: int<32>) -> int<33> {
 2 │ │     x + y
 3 │ │ }
-  │ ╰─^ Expected 32 here
+  │ ╰─^ Expected 32
+  │  
+  = note: Expected 32
+               Got 16
 
 

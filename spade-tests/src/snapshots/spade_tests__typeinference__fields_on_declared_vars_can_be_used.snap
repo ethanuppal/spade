@@ -15,6 +15,9 @@ error: Expected type bool, got int<32>
   ┌─ testinput:5:22
   │
 5 │     let _: int<32> = x.a;
-  │                      ^^^ Expected bool here
+  │                      ^^^ Expected bool
+  │
+  = note: Expected bool
+               Got int<32>
 
 

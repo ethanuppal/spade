@@ -15,6 +15,11 @@ error: Expected type int<8>, got int<10>
   ┌─ testinput:5:28
   │
 5 │         let rest: int<8> = shift_clock >> 2;
-  │                            ^^^^^^^^^^^^^^^^ Expected int<8> here
+  │                            ^^^^^^^^^^^^^^^^ Expected int<8>
+  │
+  = note: Expected 8
+                in int<8>
+               Got 10
+                in int<10>
 
 

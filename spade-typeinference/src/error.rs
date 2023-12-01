@@ -1,3 +1,4 @@
+use itertools::Itertools;
 use num::BigInt;
 use spade_diagnostics::Diagnostic;
 use spade_hir::{param_util::ArgumentError, UnitHead};
@@ -7,7 +8,7 @@ use crate::constraints::ConstraintSource;
 
 use super::equation::{TypeVar, TypedExpression};
 use spade_common::{
-    location_info::{Loc, WithLocation},
+    location_info::{FullSpan, Loc, WithLocation},
     name::{Identifier, NameID},
 };
 
@@ -40,22 +41,54 @@ impl UnificationTrace {
         self.inside.as_ref().unwrap_or(&self.failing)
     }
 }
-pub trait UnificationErrorExt<T> {
-    fn add_context(self, lhs: TypeVar, rhs: TypeVar) -> std::result::Result<T, UnificationError>;
+pub trait UnificationErrorExt<T>: Sized {
+    fn add_context(
+        self,
+        got: TypeVar,
+        expected: TypeVar,
+    ) -> std::result::Result<T, UnificationError>;
 
-    fn map_normal_err<F>(self, f: F) -> std::result::Result<T, Error>
+    /// Creates a diagnostic with a generic type mismatch error
+    fn into_default_diagnostic(
+        self,
+        unification_point: impl Into<FullSpan>,
+    ) -> std::result::Result<T, Diagnostic> {
+        self.into_diagnostic(unification_point, |d, _| d)
+    }
+
+    /// Creates a diagnostic from the unification error that will be emitted at the unification
+    /// point, unless the unification error was caused by constraints, at which point
+    /// the source of those constraints will be the location of the error.
+    /// If trait constraints were not met, a default message will be provided at the unification
+    /// point
+    fn into_diagnostic<F>(
+        self,
+        unification_point: impl Into<FullSpan>,
+        message: F,
+    ) -> std::result::Result<T, Diagnostic>
     where
-        F: Fn((UnificationTrace, UnificationTrace)) -> Error;
+        F: Fn(Diagnostic, TypeMismatch) -> Diagnostic;
 }
 impl<T> UnificationErrorExt<T> for std::result::Result<T, UnificationError> {
-    fn add_context(self, lhs: TypeVar, rhs: TypeVar) -> std::result::Result<T, UnificationError> {
+    fn add_context(
+        self,
+        got: TypeVar,
+        expected: TypeVar,
+    ) -> std::result::Result<T, UnificationError> {
         match self {
             Ok(val) => Ok(val),
-            Err(UnificationError::Normal((mut old_lhs, mut old_rhs))) => {
-                old_lhs.inside.replace(lhs);
-                old_rhs.inside.replace(rhs);
-                Err(UnificationError::Normal((old_lhs, old_rhs)))
+            Err(UnificationError::Normal(TypeMismatch {
+                e: mut old_e,
+                g: mut old_g,
+            })) => {
+                old_e.inside.replace(expected);
+                old_g.inside.replace(got);
+                Err(UnificationError::Normal(TypeMismatch {
+                    e: old_e,
+                    g: old_g,
+                }))
             }
+            e @ Err(UnificationError::UnsatisfiedTraits(_, _)) => e,
             Err(
                 UnificationError::FromConstraints { .. } | UnificationError::NegativeInteger { .. },
             ) => {
@@ -64,37 +97,109 @@ impl<T> UnificationErrorExt<T> for std::result::Result<T, UnificationError> {
         }
     }
 
-    fn map_normal_err<F>(self, f: F) -> std::result::Result<T, Error>
+    fn into_diagnostic<F>(
+        self,
+        unification_point: impl Into<FullSpan>,
+        message: F,
+    ) -> std::result::Result<T, Diagnostic>
     where
-        F: Fn((UnificationTrace, UnificationTrace)) -> Error,
+        F: Fn(Diagnostic, TypeMismatch) -> Diagnostic,
     {
-        match self {
-            Ok(val) => Ok(val),
-            Err(UnificationError::Normal(inner)) => Err(f(inner)),
-            Err(UnificationError::FromConstraints {
-                expected,
-                got,
-                loc,
-                source,
-            }) => Err(Error::ConstraintMismatch {
-                expected,
-                got,
-                loc,
-                source,
-            }),
-            Err(UnificationError::NegativeInteger { got, inside, loc }) => {
-                Err(Diagnostic::bug(loc, "Inferred integer <= 0")
-                    .primary_label(format!("{got} is not > 0 in {inside}"))
-                    .into())
+        self.map_err(|e| match e {
+            UnificationError::Normal(TypeMismatch { e, g }) => {
+                let msg = format!("Expected type {e}, got {g}");
+                let diag = Diagnostic::error(unification_point, msg)
+                    .primary_label(format!("Expected {e}"));
+                message(
+                    diag,
+                    TypeMismatch {
+                        e: e.clone(),
+                        g: g.clone(),
+                    },
+                )
+                .type_error(
+                    format!("{}", e.failing),
+                    e.inside.map(|o| format!("{o}")),
+                    format!("{}", g.failing),
+                    g.inside.map(|o| format!("{o}")),
+                )
             }
-        }
+            UnificationError::UnsatisfiedTraits(var, impls) => {
+                let impls_str = if impls.len() >= 2 {
+                    format!(
+                        "{} and {}",
+                        impls[0..impls.len() - 1]
+                            .iter()
+                            .map(|i| format!("{i}"))
+                            .join(", "),
+                        impls[impls.len() - 1]
+                    )
+                } else {
+                    format!("{}", impls[0])
+                };
+                let short_msg = format!("{var} does not impl {impls_str}");
+                // TODO: Secondary labels for source
+                Diagnostic::error(
+                    unification_point,
+                    format!("Unsatisfied trait requirements. {short_msg}"),
+                )
+                .primary_label(short_msg)
+            }
+            UnificationError::FromConstraints {
+                expected,
+                got,
+                source,
+                loc,
+            } => {
+                Diagnostic::error(loc, format!("Expected type {}, got {}", expected, got))
+                    .primary_label(format!("Expected {}, got {}", expected, got))
+                    .note(match source {
+                        ConstraintSource::AdditionOutput => format!(
+                            "Addition creates one more output bit than the input to avoid overflow"
+                        ),
+                        ConstraintSource::MultOutput => {
+                            format!("The size of a multiplication is the sum of the operand sizes")
+                        }
+                        ConstraintSource::ArrayIndexing => {
+                            // NOTE: This error message could probably be improved
+                            format!("because the value is used as an index to an array")
+                        }
+                        ConstraintSource::MemoryIndexing => {
+                            // NOTE: This error message could probably be improved
+                            format!("because the value is used as an index to a memory")
+                        }
+                        ConstraintSource::Concatenation => {
+                            format!("The size of a concatenation is the sum of the operand sizes")
+                        }
+                    })
+            }
+            UnificationError::NegativeInteger { got, inside, loc } => {
+                Diagnostic::bug(loc, "Inferred integer <= 0")
+                    .primary_label(format!("{got} is not > 0 in {inside}"))
+            }
+        })
+    }
+}
+
+#[derive(Debug, Error, PartialEq, Clone)]
+pub struct TypeMismatch {
+    /// Expected type
+    pub e: UnificationTrace,
+    /// Got type
+    pub g: UnificationTrace,
+}
+impl std::fmt::Display for TypeMismatch {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "expected {}, got {}", self.e, self.g)
     }
 }
 
 #[derive(Debug, Error, PartialEq, Clone)]
 pub enum UnificationError {
     #[error("Unification error")]
-    Normal((UnificationTrace, UnificationTrace)),
+    Normal(TypeMismatch),
+    #[error("Unsatisfied traits")]
+    UnsatisfiedTraits(TypeVar, Vec<NameID>),
     #[error("Unification error from constraints")]
     FromConstraints {
         expected: UnificationTrace,
@@ -149,8 +254,6 @@ pub enum Error {
         loc: Loc<()>,
     },
 
-    #[error("Int literal not compatible")]
-    IntLiteralIncompatible { got: UnificationTrace, loc: Loc<()> },
     #[error("If condition must be boolean")]
     NonBooleanCondition { got: UnificationTrace, loc: Loc<()> },
     #[error("If condition mismatch")]
@@ -276,6 +379,22 @@ pub enum Error {
     InternalNoEntryInGenericList(Loc<NameID>),
 
     #[error("Spade diagnostic")]
-    SpadeDiagnostic(#[from] spade_diagnostics::Diagnostic),
+    SpadeDiagnostic(#[from] Diagnostic),
 }
-pub type Result<T> = std::result::Result<T, Error>;
+pub type Result<T> = std::result::Result<T, Diagnostic>;
+
+pub fn error_pattern_type_mismatch(
+    reason: Loc<()>,
+) -> impl Fn(Diagnostic, TypeMismatch) -> Diagnostic {
+    move |diag,
+          TypeMismatch {
+              e: expected,
+              g: got,
+          }| {
+        diag.message(format!(
+            "Pattern type mismatch. Expected {expected} got {got}"
+        ))
+        .primary_label(format!("expected {expected}, got {got}"))
+        .secondary_label(reason, format!("because this has type {expected}"))
+    }
+}

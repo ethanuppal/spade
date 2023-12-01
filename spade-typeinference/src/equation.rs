@@ -18,8 +18,8 @@ pub type TypeEquations = HashMap<TypedExpression, TypeVar>;
 pub enum TypeVar {
     /// The base type is known and has a list of parameters
     Known(KnownType, Vec<TypeVar>),
-    /// The type is completely unknown
-    Unknown(u64),
+    /// The type is unknown, but must satisfy the specified traits
+    Unknown(u64, Vec<NameID>),
 }
 
 impl WithLocation for TypeVar {}
@@ -51,7 +51,7 @@ impl TypeVar {
         K: FnOnce(&KnownType, &[TypeVar]) -> T,
     {
         match self {
-            TypeVar::Unknown(_) => on_unknown(),
+            TypeVar::Unknown(_, _) => on_unknown(),
             TypeVar::Known(k, v) => on_known(k, v),
         }
     }
@@ -63,7 +63,7 @@ impl TypeVar {
         O: FnOnce(&TypeVar) -> T,
     {
         match self {
-            TypeVar::Unknown(_) => on_unknown(),
+            TypeVar::Unknown(_, _) => on_unknown(),
             TypeVar::Known(KnownType::Named(name), params) => on_named(name, params),
             other => on_other(other),
         }
@@ -89,7 +89,7 @@ impl TypeVar {
         O: FnOnce(&TypeVar) -> T,
     {
         match self {
-            TypeVar::Unknown(_) => on_unknown(),
+            TypeVar::Unknown(_, _) => on_unknown(),
             TypeVar::Known(KnownType::Inverted, params) => {
                 if params.len() != 1 {
                     panic!("Found wire with {} params", params.len())
@@ -114,7 +114,7 @@ impl TypeVar {
         O: FnOnce(&TypeVar) -> T,
     {
         match self {
-            TypeVar::Unknown(_) => on_unknown(),
+            TypeVar::Unknown(_, _) => on_unknown(),
             TypeVar::Known(k, v) if k == &KnownType::Named(name) => on_correct(v),
             other => on_other(other),
         }
@@ -134,7 +134,7 @@ impl TypeVar {
                 assert!(params.is_empty());
                 on_integer(size.clone())
             }
-            TypeVar::Unknown(_) => on_unknown(),
+            TypeVar::Unknown(_, _) => on_unknown(),
             other => on_other(other),
         }
     }
@@ -181,7 +181,11 @@ impl std::fmt::Debug for TypeVar {
             TypeVar::Known(KnownType::Traits(inner), _) => {
                 write!(f, "{}", inner.iter().map(|t| format!("{t}")).join(" + "))
             }
-            TypeVar::Unknown(id) => write!(f, "t{id}"),
+            TypeVar::Unknown(id, traits) => write!(
+                f,
+                "t{id}({})",
+                traits.iter().map(|t| format!("{t}")).join("+")
+            ),
         }
     }
 }
@@ -229,7 +233,10 @@ impl std::fmt::Display for TypeVar {
                 "impl {}",
                 traits.iter().map(|t| format!("{t}")).join("+")
             ),
-            TypeVar::Unknown(_) => write!(f, "_"),
+            TypeVar::Unknown(_, traits) if traits.is_empty() => write!(f, "_"),
+            TypeVar::Unknown(_, traits) => {
+                write!(f, "{}", traits.iter().map(|t| format!("{t}")).join("+"))
+            }
         }
     }
 }

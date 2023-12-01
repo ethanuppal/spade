@@ -364,7 +364,16 @@ impl Spade {
         let g = self.type_state.new_generic();
         self.type_state
             .add_equation(TypedExpression::Name(o_name.clone()), g);
-        self.type_state.unify(&o_name, &ty, &symtab).unwrap();
+        self.type_state
+            .unify(
+                &o_name,
+                &ty,
+                &spade_typeinference::Context {
+                    symtab: &symtab,
+                    items: &self.item_list,
+                },
+            )
+            .unwrap();
 
         // Now that we have a type which we can work with, we can create a virtual expression
         // which accesses the field in order to learn the type of the field
@@ -406,7 +415,14 @@ impl Spade {
 
         let g = self.type_state.new_generic();
         self.type_state
-            .unify_expression_generic_error(&hir, &g, &ast_ctx.symtab)
+            .unify_expression_generic_error(
+                &hir,
+                &g,
+                &spade_typeinference::Context {
+                    symtab: &ast_ctx.symtab,
+                    items: &self.item_list,
+                },
+            )
             .report_and_convert(&mut self.error_buffer, &self.code, &mut self.diag_handler)?;
 
         ast_ctx.symtab.close_scope();
@@ -599,7 +615,14 @@ impl Spade {
             .report_and_convert(&mut self.error_buffer, &self.code, &mut self.diag_handler)?;
 
         self.type_state
-            .unify_expression_generic_error(&hir, ty, &symtab.symtab())
+            .unify_expression_generic_error(
+                &hir,
+                ty,
+                &spade_typeinference::Context {
+                    symtab: symtab.symtab(),
+                    items: &self.item_list,
+                },
+            )
             .report_and_convert(&mut self.error_buffer, &self.code, &mut self.diag_handler)?;
         self.type_state
             .check_requirements(&spade_typeinference::Context {
