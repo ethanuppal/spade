@@ -173,6 +173,7 @@ pub enum Thing {
     },
     PipelineStage(Loc<Identifier>),
     ComptimeConfig(Loc<BigInt>),
+    Module(Loc<Identifier>),
     /// Actual trait definition is present in the item list. This is only a marker
     /// for there being a trait with the item name.
     Trait(Loc<Identifier>),
@@ -189,6 +190,7 @@ impl Thing {
             Thing::PipelineStage(_) => "pipeline stage",
             Thing::ComptimeConfig(_) => "$config",
             Thing::Trait(_) => "trait",
+            Thing::Module(_) => "module",
         }
     }
 
@@ -206,6 +208,7 @@ impl Thing {
             Thing::PipelineStage(i) => i.loc(),
             Thing::ComptimeConfig(val) => val.loc(),
             Thing::Trait(loc) => loc.loc(),
+            Thing::Module(loc) => loc.loc(),
         }
     }
 
@@ -223,6 +226,7 @@ impl Thing {
             Thing::PipelineStage(_) => todo!(),
             Thing::ComptimeConfig(_) => todo!(),
             Thing::Trait(loc) => loc.loc(),
+            Thing::Module(loc) => loc.loc(),
         }
     }
 }
@@ -346,7 +350,7 @@ impl SymbolTable {
     /// Push an identifier onto the current namespace
     #[tracing::instrument(skip_all, fields(%new_ident))]
     pub fn push_namespace(&mut self, new_ident: Loc<Identifier>) {
-        self.namespace = self.namespace.push_ident(new_ident);
+        self.namespace = self.namespace.push_ident(new_ident.clone());
     }
 
     #[tracing::instrument(skip_all)]
@@ -871,6 +875,7 @@ impl SymbolTable {
                 Thing::PipelineStage(stage) => println!("'{stage}"),
                 Thing::ComptimeConfig(val) => println!("$config {}", val),
                 Thing::Trait(name) => println!("trait {}", name),
+                Thing::Module(name) => println!("mod {name}"),
             }
         }
 

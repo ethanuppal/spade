@@ -856,7 +856,10 @@ pub fn visit_item(
             ctx.symtab.pop_namespace();
             result
         }
-        ast::Item::Use(_) => Ok((vec![], None)),
+        ast::Item::Use(s) => match ctx.symtab.lookup_id(&s.path) {
+            Ok(_) => Ok((vec![], None)),
+            Err(lookup_error) => Err(lookup_error.into()),
+        },
         ast::Item::Config(_) => Ok((vec![], None)),
     }
 }

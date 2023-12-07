@@ -27,6 +27,10 @@ pub fn gather_types(module: &ast::ModuleBody, symtab: &mut SymbolTable) -> Resul
                 visit_type_declaration(t, symtab)?;
             }
             ast::Item::Module(m) => {
+                symtab.add_unique_thing(
+                    Path::ident(m.name.clone()).at_loc(&m.name),
+                    Thing::Module(m.name.clone()),
+                )?;
                 symtab.push_namespace(m.name.clone());
                 if let Err(e) = gather_types(&m.body, symtab) {
                     symtab.pop_namespace();

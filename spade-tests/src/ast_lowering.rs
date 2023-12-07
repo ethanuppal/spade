@@ -241,6 +241,13 @@ fn use_of_namespace_works() {
     build_items(code);
 }
 
+snapshot_error! {
+    use_of_nothing_is_error,
+    "
+        use a::b;
+    "
+}
+
 #[test]
 fn global_use_statements_work_across_modules() {
     let code = r#"
