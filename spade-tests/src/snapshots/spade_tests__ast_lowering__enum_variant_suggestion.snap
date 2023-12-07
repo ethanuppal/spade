@@ -22,7 +22,7 @@ error: Expected A::V1 to be a value
   │
   = Consider specifying the arguments to the variant
   │
-7 │     A::V1(arg1, arg2)
-  │          ++++++++++++
+7 │     A::V1(/* arg1 */, /* arg2 */)
+  │          ++++++++++++++++++++++++
 
 

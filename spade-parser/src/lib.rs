@@ -2070,6 +2070,7 @@ impl<'a> Parser<'a> {
                 Err(e) => return Err(e),
             };
             self.peeked = Some(result.clone());
+
             Ok(result)
         }
     }
@@ -2102,7 +2103,7 @@ impl<'a> Parser<'a> {
     }
 
     fn next_token(&mut self) -> Result<Token> {
-        match self.lex.next() {
+        let out = match self.lex.next() {
             Some(Ok(k)) => Ok(Token::new(k, &self.lex, self.file_id)),
             Some(Err(_)) => Err(Error::LexerError(self.file_id, lspan(self.lex.span()))),
             None => Ok(match &self.last_token {
@@ -2117,6 +2118,23 @@ impl<'a> Parser<'a> {
                     file_id: self.file_id,
                 },
             }),
+        }?;
+
+        match out.kind {
+            TokenKind::BlockCommentStart => loop {
+                let next = self.next_token()?;
+                match next.kind {
+                    TokenKind::BlockCommentEnd => break self.next_token(),
+                    TokenKind::Eof => {
+                        break Err(Diagnostic::error(next, "Unterminated block comment")
+                            .primary_label("Expected */")
+                            .secondary_label(out, "to close this block comment")
+                            .into())
+                    }
+                    _ => {}
+                }
+            },
+            _ => Ok(out),
         }
     }
 }

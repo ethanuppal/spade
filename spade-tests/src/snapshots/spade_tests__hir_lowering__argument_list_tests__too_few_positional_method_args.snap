@@ -23,7 +23,7 @@ error: Too few arguments. Expected 2, got 0
   │
   = Consider providing the arguments
   │
-8 │     x.function(a, b)
-  │                ++++
+8 │     x.function(/* a */, /* b */)
+  │                ++++++++++++++++
 
 

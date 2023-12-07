@@ -13,6 +13,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ### Added
 
 [!251][!251] Allow instantiating single variant enums without `()`
+[!252][!252] Add block comments delimited by `/*` `*/`
 
 ### Fixed
 
@@ -21,6 +22,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ### Removed
 
 [!251]: https://gitlab.com/spade-lang/spade/-/merge_requests/251
+[!252]: https://gitlab.com/spade-lang/spade/-/merge_requests/252
 
 ## [0.5.0]
 

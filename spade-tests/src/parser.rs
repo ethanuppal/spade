@@ -370,3 +370,26 @@ fn reset_and_initial_in_either_order_is_valid() {
 
     build_items(code);
 }
+
+#[test]
+fn block_comment_is_ignored() {
+    let code = "
+        /* this is an error */
+    ";
+
+    build_items(code);
+}
+
+#[test]
+fn nested_block_comment_is_ignored() {
+    let code = "
+        /* /* */ this is an error after a block comment */
+    ";
+
+    build_items(code);
+}
+
+snapshot_error! {
+    unterminated_block_comment_is_error,
+    "/*/**/"
+}

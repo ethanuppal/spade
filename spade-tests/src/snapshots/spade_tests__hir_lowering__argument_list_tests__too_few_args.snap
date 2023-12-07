@@ -18,7 +18,7 @@ error: Too few arguments. Expected 2, got 1
   │
   = Consider providing the argument
   │
-3 │     test(true, b)
-  │              +++
+3 │     test(true, /* b */)
+  │              +++++++++
 
 

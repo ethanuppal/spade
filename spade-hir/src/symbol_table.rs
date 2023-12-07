@@ -90,7 +90,7 @@ impl From<LookupError> for Diagnostic {
                                     .params
                                     .0
                                     .iter()
-                                    .map(|a| format!("{}", a.name))
+                                    .map(|a| format!("/* {} */", a.name))
                                     .join(", ")
                             ),
                         ),
@@ -104,7 +104,7 @@ impl From<LookupError> for Diagnostic {
                                     .params
                                     .0
                                     .iter()
-                                    .map(|a| format!("{}", a.name))
+                                    .map(|a| format!("/*{}*/", a.name))
                                     .join(", ")
                             ),
                         ),

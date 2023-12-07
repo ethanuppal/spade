@@ -215,6 +215,11 @@ pub enum TokenKind {
     #[regex("//[^\n]*\n", logos::skip)]
     Comment,
 
+    #[token("/*")]
+    BlockCommentStart,
+    #[token("*/")]
+    BlockCommentEnd,
+
     Eof,
 }
 
@@ -310,6 +315,9 @@ impl TokenKind {
 
             TokenKind::Whitespace => "whitespace",
             TokenKind::Comment => "comment",
+
+            TokenKind::BlockCommentStart => "/*",
+            TokenKind::BlockCommentEnd => "*/",
         }
     }
 

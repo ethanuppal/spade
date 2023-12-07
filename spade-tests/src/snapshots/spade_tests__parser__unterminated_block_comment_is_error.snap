@@ -1,0 +1,15 @@
+---
+source: spade-tests/src/parser.rs
+---
+/*/**/
+
+error: Unterminated block comment
+  ┌─ testinput:1:1
+  │
+1 │ /*/**/
+  │ ^-
+  │ │
+  │ to close this block comment
+  │ Expected */
+
+

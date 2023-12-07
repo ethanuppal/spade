@@ -75,7 +75,7 @@ impl From<ArgumentError> for Diagnostic {
                 let leading_comma = if got == 0 { "" } else { ", " };
                 let suggestion = format!(
                     "{leading_comma}{}",
-                    missing.iter().map(|p| format!("{p}")).join(", ")
+                    missing.iter().map(|p| format!("/* {p} */")).join(", ")
                 );
 
                 Diagnostic::error(
