@@ -1465,12 +1465,26 @@ pub fn visit_expression(e: &ast::Expression, ctx: &mut Context) -> Result<hir::E
         }
         ast::Expression::Identifier(path) => {
             // If the identifier isn't a valid variable, report as "expected value".
-            let id = ctx.symtab.lookup_variable(path).map_err(|err| match err {
-                LookupError::NotAVariable(path, was) => LookupError::NotAValue(path, was),
-                err => err,
-            })?;
-
-            Ok(hir::ExprKind::Identifier(id))
+            match ctx.symtab.lookup_variable(path) {
+                Ok(id) => {
+                    Ok(hir::ExprKind::Identifier(id))
+                }
+                Err(LookupError::NotAVariable(path, ref was @ Thing::EnumVariant(ref v))) => {
+                    // NOTE: Safe unwrap, we just found out that this is an enum variant
+                    let callee = ctx.symtab.lookup_enum_variant(&path).unwrap().0.at_loc(&path);
+                    if v.params.0.is_empty() {
+                        // NOTE: This loc is a little bit approximate because it is unlikely
+                        // that any error will reference the empty argument list.
+                        let args = hir::ArgumentList::Positional(vec![]).at_loc(&path);
+                        Ok(hir::ExprKind::Call{kind: hir::expression::CallKind::Function, callee, args})
+                    }
+                    else {
+                        Err(LookupError::NotAValue(path, was.clone()).into())
+                    }
+                }
+                Err(LookupError::NotAVariable(path, was)) => Err(LookupError::NotAValue(path, was).into()),
+                Err(err) => Err(err.into()),
+            }
         }
         ast::Expression::PipelineReference { stage_kw_and_reference_loc, stage, name } => {
             let pipeline_ctx = ctx

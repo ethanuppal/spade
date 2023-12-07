@@ -1,0 +1,28 @@
+---
+source: spade-tests/src/ast_lowering.rs
+---
+enum A {
+    V1{arg1: bool, arg2: bool},
+    V2
+}
+
+fn a() -> A {
+    A::V1
+}
+
+
+error: Expected A::V1 to be a value
+  ┌─ testinput:7:5
+  │
+2 │     V1{arg1: bool, arg2: bool},
+  │     -- A::V1 is a enum variant
+  ·
+7 │     A::V1
+  │     ^^^^^ Expected a value
+  │
+  = Consider specifying the arguments to the variant
+  │
+7 │     A::V1(arg1, arg2)
+  │          ++++++++++++
+
+

@@ -981,3 +981,32 @@ fn no_mangle_compiles_on_builtin() {
 
     build_items(code);
 }
+
+snapshot_error! {
+    enum_variant_suggestion,
+    "
+        enum A {
+            V1{arg1: bool, arg2: bool},
+            V2
+        }
+
+        fn a() -> A {
+            A::V1
+        }
+    "
+}
+
+#[test]
+fn zero_argument_enum_variants_dont_need_args() {
+    let code = "
+        enum A {
+            V1{arg1: bool, arg2: bool},
+            V2
+        }
+
+        fn a() -> A {
+            A::V2
+        }
+    ";
+    build_items(code);
+}

@@ -16,5 +16,10 @@ error: Expected test to be a value
 2 │ fn main() -> bool {
 3 │     let x = test;
   │             ^^^^ Expected a value
+  │
+  = Consider specifying the struct parameters
+  │
+3 │     let x = test();
+  │                 ++
 
 

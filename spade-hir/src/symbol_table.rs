@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 
 use colored::Colorize;
+use itertools::Itertools;
 use num::BigInt;
 use serde::{Deserialize, Serialize};
 use tap::prelude::*;
@@ -61,7 +62,7 @@ impl From<LookupError> for Diagnostic {
                     LookupError::NotATrait(_, _) => "a trait",
                     LookupError::NoSuchSymbol(_) | LookupError::IsAType(_) => unreachable!(),
                 };
-                // FIXME: We can sometimes do suggestions depending on `got`. For example, a struct/enum variant can be initialized,
+
                 // an entity can be instantiated, ...
                 let hint = match lookup_error {
                     LookupError::NotAComptimeValue(_, _) => {
@@ -73,9 +74,42 @@ impl From<LookupError> for Diagnostic {
                     Diagnostic::error(path, format!("Expected {path} to be {expected}"))
                         .primary_label(format!("Expected {expected}"))
                         .secondary_label(got.loc(), format!("{path} is a {}", got.kind_string()));
+
                 if let Some(hint) = hint {
                     diagnostic.add_help(hint);
                 }
+
+                let diagnostic = match lookup_error {
+                    LookupError::NotAValue(path, Thing::EnumVariant(v)) => diagnostic
+                        .span_suggest_insert_after(
+                            "Consider specifying the arguments to the variant",
+                            path,
+                            format!(
+                                "({})",
+                                v.inner
+                                    .params
+                                    .0
+                                    .iter()
+                                    .map(|a| format!("{}", a.name))
+                                    .join(", ")
+                            ),
+                        ),
+                    LookupError::NotAValue(path, Thing::Struct(v)) => diagnostic
+                        .span_suggest_insert_after(
+                            "Consider specifying the struct parameters",
+                            path,
+                            format!(
+                                "({})",
+                                v.inner
+                                    .params
+                                    .0
+                                    .iter()
+                                    .map(|a| format!("{}", a.name))
+                                    .join(", ")
+                            ),
+                        ),
+                    _ => diagnostic,
+                };
                 diagnostic
             }
         }

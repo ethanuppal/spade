@@ -8,6 +8,19 @@ release cycle. Every six weeks, the current master branch is tagged and
 released as a new version.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
+## Unreleased
+
+### Added
+
+[!251][!251] Allow instantiating single variant enums without `()`
+
+### Fixed
+
+### Changed
+
+### Removed
+
+[!251]: https://gitlab.com/spade-lang/spade/-/merge_requests/251
 
 ## [0.5.0]
 
