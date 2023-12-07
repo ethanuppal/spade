@@ -379,7 +379,6 @@ impl Diagnostic {
         got: String,
         got_outer: Option<String>,
     ) -> Self {
-        println!("Adding type error {expected}, {expected_outer:?}, {got}, {got_outer:?}");
         self.push_subdiagnostic(Subdiagnostic::TypeMismatch {
             got,
             got_outer,

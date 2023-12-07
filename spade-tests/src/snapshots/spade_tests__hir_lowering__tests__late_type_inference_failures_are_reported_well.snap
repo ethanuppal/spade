@@ -20,7 +20,7 @@ error: Expected type 32, got 16
 3 │ │ }
   │ ╰─^ Expected 32
   │  
-  = note: Expected 32
-               Got 16
+  = note: Expected: 32
+               Got: 16
 
 

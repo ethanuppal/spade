@@ -13,7 +13,7 @@ error: Register reset condition must be a bool, got int<4>
 2 │     reg(clk) a reset (b: 0) = 3;
   │                       ^ expected bool
   │
-  = note: Expected bool
-               Got int<4>
+  = note: Expected: bool
+               Got: int<4>
 
 

@@ -5,7 +5,7 @@ fn f() -> bool {
     {}
 }
 
-error: Output type mismatch. Expected bool got void
+error: Output type mismatch. Expected bool, got void
   ┌─ testinput:1:16
   │  
 1 │   fn f() -> bool {
@@ -15,7 +15,7 @@ error: Output type mismatch. Expected bool got void
 3 │ │ }
   │ ╰─^ Found type void
   │  
-  = note: Expected bool
-               Got void
+  = note: Expected: bool
+               Got: void
 
 

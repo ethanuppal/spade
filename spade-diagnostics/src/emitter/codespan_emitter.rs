@@ -112,13 +112,13 @@ impl Emitter for CodespanEmitter {
                     expected_outer,
                 } => {
                     let mut note = vec![];
-                    note.push(format!("note: Expected {expected}"));
+                    note.push(format!("note: Expected: {expected}"));
                     if let Some(expected_outer) = expected_outer {
-                        note.push(format!("            in {expected_outer}"));
+                        note.push(format!("            in: {expected_outer}"));
                     }
-                    note.push(format!("           Got {got}"));
+                    note.push(format!("           Got: {got}"));
                     if let Some(got_outer) = got_outer {
-                        note.push(format!("            in {got_outer}"));
+                        note.push(format!("            in: {got_outer}"));
                     }
                     simple_notes.push(note.join("\n"))
                 }

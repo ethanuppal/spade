@@ -16,7 +16,7 @@ error: Expected type bool, got int<10>
 4 │     #[wal_trace(rst=x)]
   │                     ^ Expected bool
   │
-  = note: Expected bool
-               Got int<10>
+  = note: Expected: bool
+               Got: int<10>
 
 

@@ -16,9 +16,9 @@ error: Argument type mismatch. Expected int<5> got int<32>
 6 │     inst read_memory(mem, idx)
   │                           ^^^ expected int<5>
   │
-  = note: Expected 5
-                in int<5>
-               Got 32
-                in int<32>
+  = note: Expected: 5
+                in: int<5>
+               Got: 32
+                in: int<32>
 
 

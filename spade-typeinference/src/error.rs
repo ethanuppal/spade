@@ -138,7 +138,6 @@ impl<T> UnificationErrorExt<T> for std::result::Result<T, UnificationError> {
                     format!("{}", impls[0])
                 };
                 let short_msg = format!("{var} does not impl {impls_str}");
-                // TODO: Secondary labels for source
                 Diagnostic::error(
                     unification_point,
                     format!("Unsatisfied trait requirements. {short_msg}"),

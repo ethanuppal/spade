@@ -20,7 +20,7 @@ error: Pattern type mismatch. Expected bool got (_, _)
 4 │ │     };
   │ ╰─────' because this has type bool
   │  
-  = note: Expected bool
-               Got (_, _)
+  = note: Expected: bool
+               Got: (_, _)
 
 

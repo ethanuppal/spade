@@ -16,7 +16,7 @@ error: Expected type int<32>, got bool
 5 │     let a: int<32> = A(true).x;
   │                      ^^^^^^^^^ Expected int<32>
   │
-  = note: Expected int<32>
-               Got bool
+  = note: Expected: int<32>
+               Got: bool
 
 

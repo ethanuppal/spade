@@ -16,7 +16,7 @@ error: Pattern type mismatch. Expected bool got (_, _)
   │         │        
   │         expected bool, got (_, _)
   │
-  = note: Expected bool
-               Got (_, _)
+  = note: Expected: bool
+               Got: (_, _)
 
 

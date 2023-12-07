@@ -11,7 +11,7 @@ error: If condition must be a bool, got int<1>
 2 │     if y {3} else {5}
   │        ^ Expected boolean
   │
-  = note: Expected bool
-               Got int<1>
+  = note: Expected: bool
+               Got: int<1>
 
 

@@ -13,7 +13,7 @@ error: Expected clock, got int<4>
 2 │     reg(b) a = 3;
   │         ^ expected clock
   │
-  = note: Expected clock
-               Got int<4>
+  = note: Expected: clock
+               Got: int<4>
 
 

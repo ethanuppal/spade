@@ -12,7 +12,7 @@ error: Expected type bool, got int<32>
 2 │     assert x;
   │            ^ Expected bool
   │
-  = note: Expected bool
-               Got int<32>
+  = note: Expected: bool
+               Got: int<32>
 
 

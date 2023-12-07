@@ -301,7 +301,7 @@ impl TypeState {
                         // FIXME: Might want to check if there is no return value in the block
                         // and in that case suggest adding it.
                         diag.message(format!(
-                            "Output type mismatch. Expected {expected} got {got}"
+                            "Output type mismatch. Expected {expected}, got {got}"
                         ))
                         .primary_label(format!("Found type {got}"))
                         .secondary_label(output_type, format!("{expected} type specified here"))

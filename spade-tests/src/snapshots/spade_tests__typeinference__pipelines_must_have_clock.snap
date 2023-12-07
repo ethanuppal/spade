@@ -12,7 +12,7 @@ error: First pipeline argument must be a clock. Got bool
 1 │ pipeline(4) test(not_a_clock: bool) -> bool {
   │                               ^^^^ expected clock
   │
-  = note: Expected clock
-               Got bool
+  = note: Expected: clock
+               Got: bool
 
 

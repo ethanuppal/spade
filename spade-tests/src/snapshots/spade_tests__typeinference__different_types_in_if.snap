@@ -13,9 +13,9 @@ error: If branches have incompatible type
 2 │     let a = if b == 4 { 3 } else { true };
   │                       -----      ^^^^^^^^ But this has type bool
   │                       │           
-  │                       This brahch has type int<_>
+  │                       This branch has type int<_>
   │
-  = note: Expected bool
-               Got int<_>
+  = note: Expected: bool
+               Got: int<_>
 
 

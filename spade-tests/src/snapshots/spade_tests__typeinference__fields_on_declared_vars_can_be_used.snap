@@ -17,7 +17,7 @@ error: Expected type bool, got int<32>
 5 │     let _: int<32> = x.a;
   │                      ^^^ Expected bool
   │
-  = note: Expected bool
-               Got int<32>
+  = note: Expected: bool
+               Got: int<32>
 
 

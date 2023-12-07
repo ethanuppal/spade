@@ -15,7 +15,7 @@ error: Register initial value mismatch. Expected bool got int<_>
   │              │          
   │              because this has type int<_>
   │
-  = note: Expected bool
-               Got int<_>
+  = note: Expected: bool
+               Got: int<_>
 
 

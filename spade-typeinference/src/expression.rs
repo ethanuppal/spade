@@ -422,7 +422,7 @@ impl TypeState {
                 .into_diagnostic(on_false.as_ref(), |diag, Tm{e: expected, g: got}| {
                     diag.message("If branches have incompatible type")
                         .primary_label(format!("But this has type {expected}"))
-                        .secondary_label(on_true.as_ref(), format!("This brahch has type {got}"))
+                        .secondary_label(on_true.as_ref(), format!("This branch has type {got}"))
                 })?;
             self.unify(expression, &on_false.inner, ctx)
                 .into_default_diagnostic(expression)?;
