@@ -1782,8 +1782,6 @@ impl ExprLocal for Loc<Expression> {
             ["std", "conv", "concat"] => handle_concat,
             ["std", "conv", "unsafe", "unsafe_cast"] => handle_unsafe_cast {allow_port},
             ["std", "conv", "flip_array"] => handle_flip_array,
-            // TODO: Rewrite inside stdlib using unsafe_cast
-            ["std", "conv", "bit_to_bool"] => handle_bit_to_bool,
             ["std", "ops", "div_pow2"] => handle_div_pow2,
             ["std", "ports", "new_mut_wire"] => handle_new_mut_wire,
             ["std", "ports", "read_mut_wire"] => handle_read_mut_wire
@@ -2367,36 +2365,6 @@ impl ExprLocal for Loc<Expression> {
             mir::Statement::Binding(mir::Binding {
                 name: self.variable(ctx.subs)?,
                 operator: mir::Operator::Bitreverse,
-                operands: vec![args[0].value.variable(ctx.subs)?],
-                ty: self_type,
-                loc: None,
-            }),
-            self,
-        );
-
-        Ok(result)
-    }
-
-    fn handle_bit_to_bool(
-        &self,
-        _path: &Loc<NameID>,
-        result: StatementList,
-        args: &[Argument],
-        ctx: &mut Context,
-    ) -> Result<StatementList> {
-        let mut result = result;
-
-        assert_eq!(args.len(), 1);
-
-        let self_type = ctx
-            .types
-            .expr_type(self, ctx.symtab.symtab(), &ctx.item_list.types)?
-            .to_mir_type();
-
-        result.push_primary(
-            mir::Statement::Binding(mir::Binding {
-                name: self.variable(ctx.subs)?,
-                operator: mir::Operator::Alias,
                 operands: vec![args[0].value.variable(ctx.subs)?],
                 ty: self_type,
                 loc: None,

@@ -1,0 +1,3 @@
+entity bitreverse(a: [bool; 8]) -> [bool; 8] {
+    std::conv::flip_array(a)
+}

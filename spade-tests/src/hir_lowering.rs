@@ -1533,7 +1533,7 @@ mod tests {
                 // this needs to be incremented. If we end up with more tests
                 // like this, we should do smarter comparison
                 // lifeguard spade#224
-                name: "identity[97]".to_string(),
+                name: "identity[98]".to_string(),
                 path: vec!["identity".to_string()],
             },
             source: NameID(0, Path::from_strs(&["identity"])),
@@ -2185,8 +2185,8 @@ mod tests {
                     // them is changed, in particular, the stdlib. If we end up with
                     // more tests like this we should add them to MIR comparison
                     // lifeguard spade#225
-                    vec![statement!(const 76; Type::Int(8u32.to_biguint()); ConstantValue::Int(0.to_bigint()))],
-                    vec![statement!(const 77; Type::Int(8u32.to_biguint()); ConstantValue::Int(1.to_bigint()))],
+                    vec![statement!(const 79; Type::Int(8u32.to_biguint()); ConstantValue::Int(0.to_bigint()))],
+                    vec![statement!(const 80; Type::Int(8u32.to_biguint()); ConstantValue::Int(1.to_bigint()))],
                 ])
             }); n(0, "clk"), n(11, "ports"));
             (n(2, "mem"); mem_type; Alias; e(1));
@@ -2719,29 +2719,6 @@ mod tests {
         } => n(2, "z"));
 
         assert_same_mir!(&build_entity!(code), &expected);
-    }
-
-    #[test]
-    fn bit_to_bool_is_alias() {
-        let code = r#"
-            fn main(b: bit) -> bool {
-                bit_to_bool(b)
-            }
-        "#;
-
-        let expected = entity!(&["main"]; (
-            "b", n(0, "b"), Type::Bool
-        ) -> Type::Bool; {
-            (e(0); Type::Bool; Alias; n(0, "b"))
-        } => e(0));
-
-        assert_same_mir!(
-            &build_items_with_stdlib(code)
-                .into_iter()
-                .find(|e| e.name == spade_mir::UnitName::_test_from_strs(&["main"]))
-                .unwrap(),
-            &expected
-        );
     }
 
     #[test]

@@ -14,7 +14,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ### Added
 
 - [!251][!251] Allow instantiating single variant enums without `()`
-- [!252][!252] Add block comments delimited by `/*` `*/`
+- [!252][!252] Added block comments delimited by `/*` `*/`
+- [!254][!254] Added `std::conv::unsafe::unsafe_cast` for converting between types. Also added `std::conv::int_to_bits`, `std::conv::bits_to_int` for safe conversions.
+- [!254][!254] Added `std::conv::flip_array`
 - [!255][!255] Add range indexing to arrays. You can now access parts of arrays using `a[start:end]`
 
 ### Fixed
@@ -27,6 +29,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 [!251]: https://gitlab.com/spade-lang/spade/-/merge_requests/251
 [!252]: https://gitlab.com/spade-lang/spade/-/merge_requests/252
+[!254]: https://gitlab.com/spade-lang/spade/-/merge_requests/254
 [!255]: https://gitlab.com/spade-lang/spade/-/merge_requests/255
 [!260]: https://gitlab.com/spade-lang/spade/-/merge_requests/260
 
