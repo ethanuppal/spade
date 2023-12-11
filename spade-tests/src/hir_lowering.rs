@@ -1533,7 +1533,7 @@ mod tests {
                 // this needs to be incremented. If we end up with more tests
                 // like this, we should do smarter comparison
                 // lifeguard spade#224
-                name: "identity[80]".to_string(),
+                name: "identity[91]".to_string(),
                 path: vec!["identity".to_string()],
             },
             source: NameID(0, Path::from_strs(&["identity"])),
@@ -2185,8 +2185,8 @@ mod tests {
                     // them is changed, in particular, the stdlib. If we end up with
                     // more tests like this we should add them to MIR comparison
                     // lifeguard spade#225
-                    vec![statement!(const 64; Type::Int(8u32.to_biguint()); ConstantValue::Int(0.to_bigint()))],
-                    vec![statement!(const 65; Type::Int(8u32.to_biguint()); ConstantValue::Int(1.to_bigint()))],
+                    vec![statement!(const 70; Type::Int(8u32.to_biguint()); ConstantValue::Int(0.to_bigint()))],
+                    vec![statement!(const 71; Type::Int(8u32.to_biguint()); ConstantValue::Int(1.to_bigint()))],
                 ])
             }); n(0, "clk"), n(11, "ports"));
             (n(2, "mem"); mem_type; Alias; e(1));

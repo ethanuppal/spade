@@ -1761,6 +1761,9 @@ impl ExprLocal for Loc<Expression> {
             ["std", "conv", "sext"] => handle_sext,
             ["std", "conv", "zext"] => handle_zext,
             ["std", "conv", "concat"] => handle_concat,
+            ["std", "conv", "unsafe_cast"] => handle_unsafe_cast,
+            ["std", "conv", "bitreverse"] => handle_bitreverse,
+            // TODO: Rewrite inside stdlib using unsafe_cast
             ["std", "conv", "bit_to_bool"] => handle_bit_to_bool,
             ["std", "ops", "div_pow2"] => handle_div_pow2,
             ["std", "ports", "new_mut_wire"] => handle_new_mut_wire,
@@ -2099,15 +2102,7 @@ impl ExprLocal for Loc<Expression> {
         if self_type.size() > input_type.size() {
             let input_loc = args[0].value.loc();
             return Err(Diagnostic::error(input_loc, "Truncating to a larger value")
-                .primary_label(format!(
-                    "This value is {} bit{}",
-                    input_type.size(),
-                    if input_type.size() == One::one() {
-                        ""
-                    } else {
-                        "s"
-                    }
-                ))
+                .primary_label(format!("This value is {}", bits_str(input_type.size()),))
                 .secondary_label(
                     self,
                     format!("The value is truncated to {} bits here", self_type.size()),
@@ -2156,13 +2151,8 @@ impl ExprLocal for Loc<Expression> {
             let input_loc = args[0].value.loc();
             return Err(Diagnostic::error(self, "Sign-extending to a shorter value")
                 .primary_label(format!(
-                    "The value is sign-extended to {} bit{} here",
-                    self_type.size(),
-                    if self_type.size() == One::one() {
-                        ""
-                    } else {
-                        "s"
-                    }
+                    "The value is sign-extended to {} here",
+                    bits_str(self_type.size()),
                 ))
                 .secondary_label(
                     input_loc,
@@ -2223,17 +2213,12 @@ impl ExprLocal for Loc<Expression> {
             let input_loc = args[0].value.loc();
             return Err(Diagnostic::error(self, "Zero-extending to a shorter value")
                 .primary_label(format!(
-                    "The value is zero-extended to {} bit{} here",
-                    self_type.size(),
-                    if self_type.size() == One::one() {
-                        ""
-                    } else {
-                        "s"
-                    }
+                    "The value is zero-extended to {} here",
+                    bits_str(self_type.size()),
                 ))
                 .secondary_label(
                     input_loc,
-                    format!("This value is {} bits", input_type.size()),
+                    format!("This value is {}", bits_str(input_type.size())),
                 )
                 .span_suggest_replace(
                     "Zero-extension cannot decrease width, use trunc instead",
@@ -2253,6 +2238,97 @@ impl ExprLocal for Loc<Expression> {
             mir::Statement::Binding(mir::Binding {
                 name: self.variable(ctx.subs)?,
                 operator: mir::Operator::ZeroExtend { extra_bits },
+                operands: vec![args[0].value.variable(ctx.subs)?],
+                ty: self_type,
+                loc: None,
+            }),
+            self,
+        );
+
+        Ok(result)
+    }
+
+    fn handle_unsafe_cast(
+        &self,
+        _path: &Loc<NameID>,
+        result: StatementList,
+        args: &[Argument],
+        ctx: &mut Context,
+    ) -> Result<StatementList> {
+        let mut result = result;
+
+        let self_type = ctx
+            .types
+            .expr_type(self, ctx.symtab.symtab(), &ctx.item_list.types)?
+            .to_mir_type();
+
+        let input_type = ctx
+            .types
+            .expr_type(&args[0].value, ctx.symtab.symtab(), &ctx.item_list.types)?
+            .to_mir_type();
+
+        if self_type.size() != input_type.size() {
+            let input_loc = args[0].value.loc();
+            return Err(Diagnostic::error(
+                self,
+                format!(
+                    "Type size mismatch. Attempting to cast {} to {}",
+                    bits_str(input_type.size()),
+                    bits_str(self_type.size())
+                ),
+            )
+            .primary_label(format!(
+                "The output type has {}",
+                bits_str(self_type.size())
+            ))
+            .secondary_label(
+                input_loc,
+                format!("The source has {}", bits_str(input_type.size()),),
+            )
+            .help("unsafe_cast can only convert between types of identical size")
+            .into());
+        }
+
+        let extra_bits = if self_type.size() > input_type.size() {
+            self_type.size() - input_type.size()
+        } else {
+            BigUint::zero()
+        };
+
+        result.push_primary(
+            mir::Statement::Binding(mir::Binding {
+                name: self.variable(ctx.subs)?,
+                operator: mir::Operator::ZeroExtend { extra_bits },
+                operands: vec![args[0].value.variable(ctx.subs)?],
+                ty: self_type,
+                loc: None,
+            }),
+            self,
+        );
+
+        Ok(result)
+    }
+
+    fn handle_bitreverse(
+        &self,
+        _path: &Loc<NameID>,
+        result: StatementList,
+        args: &[Argument],
+        ctx: &mut Context,
+    ) -> Result<StatementList> {
+        let mut result = result;
+
+        assert_eq!(args.len(), 1);
+
+        let self_type = ctx
+            .types
+            .expr_type(self, ctx.symtab.symtab(), &ctx.item_list.types)?
+            .to_mir_type();
+
+        result.push_primary(
+            mir::Statement::Binding(mir::Binding {
+                name: self.variable(ctx.subs)?,
+                operator: mir::Operator::Bitreverse,
                 operands: vec![args[0].value.variable(ctx.subs)?],
                 ty: self_type,
                 loc: None,
@@ -2432,6 +2508,10 @@ impl ExprLocal for Loc<Expression> {
 
         Ok(result)
     }
+}
+
+pub fn bits_str(bits: BigUint) -> String {
+    format!("{} bit{}", bits, if bits == One::one() { "" } else { "s" })
 }
 
 pub struct Context<'a> {

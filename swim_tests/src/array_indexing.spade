@@ -1,3 +1,19 @@
 fn index_array(a: [int<8>; 4], i: int<2>) -> int<8> {
     a[i]
 }
+
+fn index_internal_array(i: int<2>) -> int<8> {
+    [0, 1, 2, 3][i]
+}
+
+
+entity index_via_mut_wire(i: int<2>) -> int<8> {
+    let a = [0, 1, 2, 3];
+
+    let a_wire = inst std::ports::new_mut_wire();
+    set a_wire = a;
+
+    let a_out = inst std::ports::read_mut_wire(a_wire);
+
+    a_out[i]
+}

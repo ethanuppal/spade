@@ -18,3 +18,34 @@ fn concat<#N, #M, #K>(x: int<N>, y: int<M>) -> int<K> __builtin__
 // Casts a `bit` to a `bool`. low maps to false, high maps to true, but HIGHIMP is undefined.
 // In practice, in a simulator, it will map to Z
 fn bit_to_bool(b: bit) -> bool __builtin__
+
+// Reinterprets a value as another value of the same size. It is up to the caller
+// to ensure that the resulting value is valid
+//
+// **NOTE**: The representation compound types is generally undefined and you should
+// not rely on it being fixed between compiler versions.
+// If you still want to use this function on compound types, the representation of types is
+// described here https://docs.spade-lang.org/internal/type_representations.html
+fn unsafe_cast<T, O>(in: T) -> O __builtin__
+
+
+// Completely reverses the order of the bits in the `in` array
+fn bitreverse<#N>(in: [bool; N]) -> [bool; N] __builtin__
+
+// Interpret an int as the raw bit values. output[0] is the lsb of the integer
+// nad output[N] is the MSB
+//
+// Note that this means that 0b1100 will be [false, false, true, true] since arrays
+// are written lsb first, while integers are written msb first
+fn int_to_bits<#N>(input: int<N>) -> [bool; N] {
+    unsafe_cast(input)
+}
+
+// Interpret an int as the raw bit values. output[0] is the lsb of the integer
+// nad output[N] is the MSB
+//
+// Note that this means that [false, false, true, true] will be 0b1100 since arrays
+// are written lsb first, while integers are written msb first
+fn bits_to_int<#N>(input: [bool; N]) -> int<N> {
+    unsafe_cast(input)
+}

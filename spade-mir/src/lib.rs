@@ -188,6 +188,7 @@ pub enum Operator {
     Not,
     ReadPort,
     BitwiseNot,
+    Bitreverse,
     // Divide op[0] by 2**op[1] rounding towards 0
     DivPow2,
     /// Sign extend the first operand with the provided amount of extra bits
@@ -329,6 +330,7 @@ impl std::fmt::Display for Operator {
             Operator::BitwiseOr => write!(f, "BitwiseOr"),
             Operator::BitwiseNot => write!(f, "BitwiseNot"),
             Operator::BitwiseXor => write!(f, "BitwiseXor"),
+            Operator::Bitreverse => write!(f, "Bitreverse"),
             Operator::USub => write!(f, "USub"),
             Operator::Not => write!(f, "Not"),
             Operator::Select => write!(f, "Select"),

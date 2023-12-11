@@ -582,9 +582,13 @@ fn forward_expression_code(binding: &Binding, types: &TypeList, ops: &[ValueName
             // NOTE: dummy. Set in the next match statement
             String::new()
         }
+        Operator::Bitreverse => {
+            // NOTE Dummy. Set in the next match statement
+            String::new()
+        }
         Operator::Alias => {
             // NOTE Dummy. Set in the next match statement
-            String::new() //format!("{}", ops[0])
+            String::new()
         }
         Operator::Nop => String::new(),
     }
@@ -616,6 +620,7 @@ fn backward_expression_code(binding: &Binding, types: &TypeList, ops: &[ValueNam
         | Operator::BitwiseAnd
         | Operator::BitwiseOr
         | Operator::BitwiseXor
+        | Operator::Bitreverse
         | Operator::USub
         | Operator::Not
         | Operator::BitwiseNot
@@ -834,6 +839,16 @@ fn statement_code(statement: &Statement, ctx: &mut Context) -> Code {
                     .to_string()
                 }
                 Operator::DeclClockedMemory { .. } => forward_expression.unwrap(),
+                Operator::Bitreverse => {
+                    let genvar = format!("{}_i", name);
+                    let type_size = binding.ty.size();
+                    code! {
+                        [0] format!("genvar {genvar};");
+                        [0] format!("for ({genvar} = 0; {genvar} < {type_size}; {genvar} = {genvar} + 1) begin");
+                        [1]     format!("assign {name}[{genvar}] = {}[{type_size} - 1 - {genvar}];", ops[0]);
+                        [0] "end";
+                    }.to_string()
+                }
                 _ => code! {
                     [0] forward_expression.map(|f| format!("assign {} = {};", name, f));
                     [0] backward_expression.map(|b| format!("assign {} = {};", b, back_name));
