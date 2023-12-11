@@ -1720,37 +1720,56 @@ impl ExprLocal for Loc<Expression> {
             result.append(param.value.lower(ctx)?);
         }
 
-        // Check if this is a standard library function which we are supposed to
-        // handle
-        macro_rules! handle_special_functions {
-            ($([$($path:expr),*] => $handler:ident),*) => {
-                $(
-                    let path = Path(vec![$(Identifier($path.to_string()).nowhere()),*]).nowhere();
-                    let final_id = ctx.symtab.symtab().try_lookup_final_id(&path);
-                    if final_id
-                        .map(|n| &n == &name.inner)
-                        .unwrap_or(false)
-                    {
-                        return self.$handler(&name, result, args, ctx);
-                    };
-                )*
-            }
-        }
-
-        // Check if this is a call to something generic. If so we need to ensure that the
-        // generic arguments were not mapped to ports
         let tok = GenericListToken::Expression(self.id);
         let instance_list = ctx.types.get_generic_list(&tok);
-        for (name, ty) in instance_list {
-            let actual = TypeState::ungenerify_type(ty, ctx.symtab.symtab(), &ctx.item_list.types);
-            if actual.as_ref().map(|t| t.is_port()).unwrap_or(false) {
-                return Err(Error::PortInGenericType {
-                    loc: self.loc(),
-                    param: name.clone(),
-                    // NOTE: Safe because we were able to run `t.is_port()` above
-                    actual: actual.unwrap().clone(),
-                });
+        let generic_port_check = || {
+            // Check if this is a call to something generic. If so we need to ensure that the
+            // generic arguments were not mapped to ports
+            for (name, ty) in instance_list {
+                let actual =
+                    TypeState::ungenerify_type(ty, ctx.symtab.symtab(), &ctx.item_list.types);
+                if actual.as_ref().map(|t| t.is_port()).unwrap_or(false) {
+                    return Err(Error::PortInGenericType {
+                        loc: self.loc(),
+                        param: name.clone(),
+                        // NOTE: Safe because we were able to run `t.is_port()` above
+                        actual: actual.unwrap().clone(),
+                    });
+                }
             }
+            Ok(())
+        };
+
+        // Check if this is a standard library function which we are supposed to
+        // handle
+        macro_rules! handle_special_function {
+            ([$($path:expr),*] $allow_port:expr => $handler:ident {allow_port}) => {
+                handle_special_function!([$($path),*] => $handler true)
+            };
+            ([$($path:expr),*] $allow_port:expr => $handler:ident) => {
+                handle_special_function!([$($path),*] => $handler false)
+            };
+            ([$($path:expr),*] => $handler:ident $allow_port:expr) => {
+                let path = Path(vec![$(Identifier($path.to_string()).nowhere()),*]).nowhere();
+                let final_id = ctx.symtab.symtab().try_lookup_final_id(&path);
+                if final_id
+                    .map(|n| &n == &name.inner)
+                    .unwrap_or(false)
+                {
+                    if !$allow_port {
+                        generic_port_check()?;
+                    }
+
+                    return self.$handler(&name, result, args, ctx);
+                };
+            }
+        }
+        macro_rules! handle_special_functions {
+            ($([$($path:expr),*] => $handler:ident $({$extra:tt})?),*) => {
+                $(
+                    handle_special_function!([$($path),*] true => $handler $({$extra})?)
+                );*
+            };
         }
 
         handle_special_functions! {
@@ -1761,14 +1780,16 @@ impl ExprLocal for Loc<Expression> {
             ["std", "conv", "sext"] => handle_sext,
             ["std", "conv", "zext"] => handle_zext,
             ["std", "conv", "concat"] => handle_concat,
-            ["std", "conv", "unsafe_cast"] => handle_unsafe_cast,
-            ["std", "conv", "bitreverse"] => handle_bitreverse,
+            ["std", "conv", "unsafe", "unsafe_cast"] => handle_unsafe_cast {allow_port},
+            ["std", "conv", "flip_array"] => handle_flip_array,
             // TODO: Rewrite inside stdlib using unsafe_cast
             ["std", "conv", "bit_to_bool"] => handle_bit_to_bool,
             ["std", "ops", "div_pow2"] => handle_div_pow2,
             ["std", "ports", "new_mut_wire"] => handle_new_mut_wire,
             ["std", "ports", "read_mut_wire"] => handle_read_mut_wire
         }
+
+        generic_port_check()?;
 
         // Look up the name in the executable list to see if this is a type instantiation
         match ctx.item_list.executables.get(name) {
@@ -2257,15 +2278,32 @@ impl ExprLocal for Loc<Expression> {
     ) -> Result<StatementList> {
         let mut result = result;
 
-        let self_type = ctx
+        let self_type_hir = ctx
             .types
-            .expr_type(self, ctx.symtab.symtab(), &ctx.item_list.types)?
-            .to_mir_type();
+            .expr_type(self, ctx.symtab.symtab(), &ctx.item_list.types)?;
+        let self_type = self_type_hir.to_mir_type();
 
-        let input_type = ctx
-            .types
-            .expr_type(&args[0].value, ctx.symtab.symtab(), &ctx.item_list.types)?
-            .to_mir_type();
+        let input_type_hir =
+            ctx.types
+                .expr_type(&args[0].value, ctx.symtab.symtab(), &ctx.item_list.types)?;
+        let input_type = input_type_hir.to_mir_type();
+
+        if self_type.backward_size() != BigUint::zero() {
+            return Err(Diagnostic::error(
+                self,
+                format!("Attempting to cast to type containing &mut value"),
+            )
+            .primary_label(format!("{self_type_hir} has a &mut wire"))
+            .into());
+        }
+        if input_type.backward_size() != BigUint::zero() {
+            return Err(Diagnostic::error(
+                args[0].value,
+                format!("Attempting to cast from type containing &mut value"),
+            )
+            .primary_label(format!("{input_type_hir} has a &mut wire"))
+            .into());
+        }
 
         if self_type.size() != input_type.size() {
             let input_loc = args[0].value.loc();
@@ -2309,7 +2347,7 @@ impl ExprLocal for Loc<Expression> {
         Ok(result)
     }
 
-    fn handle_bitreverse(
+    fn handle_flip_array(
         &self,
         _path: &Loc<NameID>,
         result: StatementList,
