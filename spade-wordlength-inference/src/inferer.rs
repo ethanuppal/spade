@@ -125,6 +125,11 @@ impl<'a> Inferer<'a> {
                 self.expression(index)?;
                 None
             }
+            ExprKind::RangeIndex {
+                target: _,
+                start: _,
+                end: _,
+            } => None,
             ExprKind::TupleIndex(target, _) => {
                 self.expression(target)?;
                 None

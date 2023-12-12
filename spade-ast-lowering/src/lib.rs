@@ -1407,6 +1407,29 @@ pub fn visit_expression(e: &ast::Expression, ctx: &mut Context) -> Result<hir::E
             let index = index.try_visit(visit_expression, ctx)?;
             Ok(hir::ExprKind::Index(Box::new(target), Box::new(index)))
         }
+        ast::Expression::RangeIndex{target, start, end} => {
+            let target = target.try_visit(visit_expression, ctx)?;
+            let start = start.try_map_ref(|s| match s {
+                ast::Expression::IntLiteral(ast::IntLiteral::Signed(v)) => if v < &BigInt::zero() {
+                    Err(Diagnostic::error(start.as_ref(), "Range indices must be positive")
+                        .primary_label("Range index must be positive"))
+                } else {
+                    Ok(v.to_biguint().unwrap())
+                },
+                ast::Expression::IntLiteral(ast::IntLiteral::Unsigned(v)) => Ok(v.clone()),
+                _ => Err(Diagnostic::error(start.as_ref(), "Range indices must be integers.").primary_label("Expected integer"))
+            })?;
+            let end = end.try_map_ref(|s| match s {
+                ast::IntLiteral::Signed(v) => if v < &BigInt::zero() {
+                    Err(Diagnostic::error(end, "Range indices must be positive")
+                        .primary_label("Range index must be positive"))
+                } else {
+                    Ok(v.to_biguint().unwrap())
+                },
+                ast::IntLiteral::Unsigned(v) => Ok(v.clone()),
+            })?;
+            Ok(hir::ExprKind::RangeIndex{target: Box::new(target), start, end})
+        }
         ast::Expression::TupleIndex(tuple, index) => Ok(hir::ExprKind::TupleIndex(
             Box::new(tuple.try_visit(visit_expression, ctx)?),
             index.clone(),

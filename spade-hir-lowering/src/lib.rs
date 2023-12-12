@@ -1090,6 +1090,7 @@ impl ExprLocal for Loc<Expression> {
             ExprKind::CreatePorts => Ok(None),
             ExprKind::ArrayLiteral { .. } => Ok(None),
             ExprKind::Index(_, _) => Ok(None),
+            ExprKind::RangeIndex { .. } => Ok(None),
             ExprKind::Block(block) => {
                 if let Some(result) = &block.result {
                     result.variable(subs).map(Some)
@@ -1451,6 +1452,52 @@ impl ExprLocal for Loc<Expression> {
                         name: self.variable(ctx.subs)?,
                         operator: mir::Operator::IndexArray,
                         operands: vec![target.variable(ctx.subs)?, index.variable(ctx.subs)?],
+                        ty: self_type,
+                        loc: Some(self.loc()),
+                    }),
+                    self,
+                )
+            }
+            ExprKind::RangeIndex { target, start, end } => {
+                result.append(target.lower(ctx)?);
+
+                match target.get_type(ctx.types)? {
+                    TypeVar::Known(KnownType::Array, inner) => match &inner[1] {
+                        TypeVar::Known(KnownType::Integer(size), _) => {
+                            if &start.inner >= size {
+                                return Err(Diagnostic::error(start, "Array index out of bounds")
+                                    .primary_label("index out of bounds")
+                                    .secondary_label(
+                                        target.as_ref(),
+                                        format!("This array only has {size} elements"),
+                                    )
+                                    .into());
+                            }
+                            if &end.inner > size {
+                                return Err(Diagnostic::error(end, "Array index out of bounds")
+                                    .primary_label("index out of bounds")
+                                    .secondary_label(
+                                        target.as_ref(),
+                                        format!("This array only has {size} elements"),
+                                    )
+                                    .into());
+                            }
+                        }
+                        _ => {
+                            diag_bail!(self, "Array size was not integer")
+                        }
+                    },
+                    _ => diag_bail!(self, "Range indexing on non-array"),
+                };
+
+                result.push_primary(
+                    mir::Statement::Binding(mir::Binding {
+                        name: self.variable(ctx.subs)?,
+                        operator: mir::Operator::RangeIndexArray {
+                            start: start.inner.clone(),
+                            end_exclusive: end.inner.clone(),
+                        },
+                        operands: vec![target.variable(ctx.subs)?],
                         ty: self_type,
                         loc: Some(self.loc()),
                     }),

@@ -321,19 +321,32 @@ impl<'a> Parser<'a> {
                 )
             }
         } else if self.peek_kind(&TokenKind::OpenBracket)? {
-            let (index, _) = self.surrounded(
+            let (inner_expr, loc) = self.surrounded(
                 &TokenKind::OpenBracket,
-                Self::expression,
+                |s| {
+                    let start = s.expression()?;
+
+                    if let Some(colon) = s.peek_and_eat(&TokenKind::Colon)? {
+                        if let Some(end) = s.int_literal()? {
+                            Ok(Expression::RangeIndex {
+                                target: Box::new(expr.clone()),
+                                start: Box::new(start),
+                                end,
+                            })
+                        } else {
+                            Err(Diagnostic::error(s.peek()?, "Expected end of range")
+                                .primary_label("expected end of range")
+                                .secondary_label(colon, "since this index is a range")
+                                .into())
+                        }
+                    } else {
+                        Ok(Expression::Index(Box::new(expr.clone()), Box::new(start)))
+                    }
+                },
                 &TokenKind::CloseBracket,
             )?;
 
-            Ok(
-                Expression::Index(Box::new(expr.clone()), Box::new(index.clone())).between(
-                    self.file_id,
-                    &expr,
-                    &index,
-                ),
-            )
+            Ok(inner_expr.between_locs(&expr, &loc))
         } else {
             return Ok(expr);
         }?;

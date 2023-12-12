@@ -224,6 +224,11 @@ pub enum Operator {
     /// Index an array with elements of the specified size
     IndexArray,
     IndexMemory,
+    /// Indexes an array to extract a range of elements
+    RangeIndexArray {
+        start: BigUint,
+        end_exclusive: BigUint,
+    },
     /// Construct a tuple from all the operand expressions
     ConstructTuple,
     /// Construct the nth enum variant with the operand expressions as the payload
@@ -349,6 +354,10 @@ impl std::fmt::Display for Operator {
             ),
             Operator::IndexArray => write!(f, "IndexArray"),
             Operator::IndexTuple(idx, ty) => write!(f, "IndexTuple({}, {ty:?})", idx),
+            Operator::RangeIndexArray {
+                start,
+                end_exclusive: end,
+            } => write!(f, "RangeIndexArray({start}, {end})"),
             Operator::IndexMemory => write!(f, "IndexMemory"),
             Operator::Instance(name, _) => write!(f, "Instance({})", name.as_verilog()),
             Operator::Alias => write!(f, "Alias"),

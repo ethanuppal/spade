@@ -565,6 +565,11 @@ impl PipelineAvailability for ExprKind {
             ExprKind::TupleLiteral(inner) => try_compute_availability(inner),
             ExprKind::ArrayLiteral(elems) => try_compute_availability(elems),
             ExprKind::Index(lhs, idx) => try_compute_availability(&[lhs.as_ref(), idx.as_ref()]),
+            ExprKind::RangeIndex {
+                target,
+                start: _,
+                end: _,
+            } => try_compute_availability(&[target.as_ref()]),
             ExprKind::TupleIndex(lhs, _) => lhs.inner.kind.available_in(),
             ExprKind::FieldAccess(lhs, _) => lhs.inner.kind.available_in(),
             ExprKind::BinaryOperator(lhs, _, rhs) => {

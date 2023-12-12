@@ -143,6 +143,14 @@ pub enum ExprKind {
     TupleLiteral(Vec<Loc<Expression>>),
     ArrayLiteral(Vec<Loc<Expression>>),
     Index(Box<Loc<Expression>>, Box<Loc<Expression>>),
+    RangeIndex {
+        target: Box<Loc<Expression>>,
+        // NOTE: In several places in the code, start and end are wildcarded away. If changing
+        // this to a node that needs visiting, it is probably best to rename the field temporarily
+        // to catch all the wildcarded matches
+        start: Loc<BigUint>,
+        end: Loc<BigUint>,
+    },
     TupleIndex(Box<Loc<Expression>>, Loc<u128>),
     FieldAccess(Box<Loc<Expression>>, Loc<Identifier>),
     MethodCall {
@@ -249,6 +257,7 @@ impl LocExprExt for Loc<Expression> {
             ExprKind::Index(l, r) => l
                 .runtime_requirement_witness()
                 .or_else(|| r.runtime_requirement_witness()),
+            ExprKind::RangeIndex { .. } => Some(self.clone()),
             ExprKind::TupleIndex(l, _) => l.runtime_requirement_witness(),
             ExprKind::FieldAccess(l, _) => l.runtime_requirement_witness(),
             // NOTE: We probably shouldn't see this here since we'll have lowered

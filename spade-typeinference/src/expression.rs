@@ -1,7 +1,7 @@
-use num::{BigInt, One};
+use num::{BigInt, One, Zero};
 use spade_common::location_info::{Loc, WithLocation};
 use spade_common::name::Identifier;
-use spade_common::num_ext::InfallibleToBigUint;
+use spade_common::num_ext::{InfallibleToBigInt, InfallibleToBigUint};
 use spade_diagnostics::diagnostic::DiagnosticLevel;
 use spade_diagnostics::{diag_anyhow, Diagnostic};
 use spade_hir::expression::{BinaryOperator, NamedArgument, UnaryOperator};
@@ -359,6 +359,60 @@ impl TypeState {
                 array_size
             );
             self.unify(&target.inner, &array_type, ctx)
+                .into_diagnostic(target.as_ref(), |diag, Tm{e: _expected, g: got}| {
+                    diag
+                        .message(format!("Index target must be an array, got {}", got))
+                        .primary_label(format!("Expected array"))
+                })?;
+        });
+        Ok(())
+    }
+
+    #[trace_typechecker]
+    #[tracing::instrument(level = "trace", skip_all)]
+    pub fn visit_range_index(
+        &mut self,
+        expression: &Loc<Expression>,
+        ctx: &Context,
+        generic_list: &GenericListToken,
+    ) -> Result<()> {
+        assuming_kind!(ExprKind::RangeIndex{target, ref start, ref end} = &expression => {
+            self.visit_expression(&target, ctx, generic_list)?;
+            // Add constraints
+            let inner_type = self.new_generic();
+
+            let size = (&end.inner).to_bigint() - (&start.inner).to_bigint();
+
+            let size = if size < BigInt::zero() {
+                return Err(Diagnostic::error(
+                    ().between_locs(start, end),
+                    "Start index must be before end index"
+                )
+                    .primary_label("Start index after end"))
+            } else if size == BigInt::zero() {
+                return Err(Diagnostic::error(
+                    ().between_locs(start, end),
+                    "Range indexing creates array with 0 elements"
+                )
+                    .primary_label("this index creates 0 elements")
+                    .help("The start of the range is inclusive but the end is not")
+                )
+            } else {
+                size.to_biguint().unwrap()
+            };
+
+
+
+            let out_array_size = TypeVar::Known(KnownType::Integer(size), vec![]);
+            let out_array_type = TypeVar::array(inner_type.clone(), out_array_size);
+
+            self.unify(&expression.inner, &out_array_type, ctx)
+                .into_default_diagnostic(expression)?;
+
+
+            let in_array_size = self.new_generic();
+            let in_array_type = TypeVar::array(inner_type, in_array_size);
+            self.unify(&target.inner, &in_array_type, ctx)
                 .into_diagnostic(target.as_ref(), |diag, Tm{e: _expected, g: got}| {
                     diag
                         .message(format!("Index target must be an array, got {}", got))

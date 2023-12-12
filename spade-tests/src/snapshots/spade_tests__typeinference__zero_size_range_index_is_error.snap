@@ -1,0 +1,17 @@
+---
+source: spade-tests/src/typeinference.rs
+---
+fn test(x: [int<8>; 6]) -> [int<8>; 1] {
+    x[7:7]
+}
+
+
+error: Range indexing creates array with 0 elements
+  ┌─ testinput:2:7
+  │
+2 │     x[7:7]
+  │       ^^^ this index creates 0 elements
+  │
+  = help: The start of the range is inclusive but the end is not
+
+

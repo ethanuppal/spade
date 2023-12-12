@@ -1,0 +1,9 @@
+fn lower_range(a: [int<8>; 4]) -> [int<8>; 2] {
+    a[0:2]
+}
+fn mid_range(a: [int<8>; 4]) -> [int<8>; 2] {
+    a[1:3]
+}
+fn upper_range_bool(a: [bool; 8]) -> [bool; 2] {
+    a[6:8]
+}

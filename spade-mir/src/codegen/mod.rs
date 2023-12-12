@@ -2,7 +2,7 @@ use codespan_reporting::term::termcolor;
 use itertools::Itertools;
 use nesty::{code, Code};
 
-use num::{BigInt, BigUint, Signed, ToPrimitive, Zero};
+use num::{BigInt, BigUint, One, Signed, ToPrimitive, Zero};
 use spade_common::id_tracker::ExprIdTracker;
 use spade_common::location_info::Loc;
 use spade_common::name::NameID;
@@ -383,6 +383,25 @@ fn forward_expression_code(binding: &Binding, types: &TypeList, ops: &[ValueName
                 format!("{}[{}+:{}]", op_names[0], end_index, offset)
             }
         }
+        Operator::RangeIndexArray {
+            start,
+            end_exclusive: end,
+        } => {
+            let member_size = match self_type {
+                Type::Array { inner, length: _ } => inner.size(),
+                _ => panic!("Range index with non-array output"),
+            };
+            let num_elems = end - start;
+            if member_size == BigUint::one() && num_elems == BigUint::one() {
+                format!("{}[{}]", op_names[0], start)
+            } else {
+                let end_index = (end * &member_size) - BigUint::one();
+                let offset = member_size * num_elems;
+
+                // Strange indexing explained here https://stackoverflow.com/questions/18067571/indexing-vectors-and-arrays-with#18068296
+                format!("{}[{}-:{}]", op_names[0], end_index, offset)
+            }
+        }
         Operator::IndexMemory => {
             format!("{}[{}]", op_names[0], op_names[1])
         }
@@ -638,6 +657,22 @@ fn backward_expression_code(binding: &Binding, types: &TypeList, ops: &[ValueNam
             } else {
                 let end_index = format!("{} * {}", op_names[1], member_size);
                 let offset = member_size;
+
+                // Strange indexing explained here https://stackoverflow.com/questions/18067571/indexing-vectors-and-arrays-with#18068296
+                format!("{}[{}+:{}]", op_names[0], end_index, offset)
+            }
+        }
+        Operator::RangeIndexArray {
+            start,
+            end_exclusive: end,
+        } => {
+            let member_size = self_type.backward_size();
+            let elems = end - start;
+            if member_size == BigUint::one() && elems == BigUint::one() {
+                format!("{}[{}]", op_names[0], start)
+            } else {
+                let end_index = format!("{} * {}", start, member_size);
+                let offset = member_size * elems;
 
                 // Strange indexing explained here https://stackoverflow.com/questions/18067571/indexing-vectors-and-arrays-with#18068296
                 format!("{}[{}+:{}]", op_names[0], end_index, offset)

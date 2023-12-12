@@ -1,0 +1,13 @@
+#top = range_indexing::mid_range
+
+from spade import SpadeExt
+from cocotb import cocotb
+from cocotb.triggers import Timer
+
+@cocotb.test()
+async def test(dut):
+    s = SpadeExt(dut)
+    s.i.a = "[0, 1, 2, 3]"
+    await Timer(1, units='ns')
+    s.o.assert_eq(f"[1, 2]")
+

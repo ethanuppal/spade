@@ -146,6 +146,7 @@ fn visit_expression(
         spade_hir::ExprKind::ArrayLiteral(_) => true,
         spade_hir::ExprKind::CreatePorts => true,
         spade_hir::ExprKind::Index(_, _) => true,
+        spade_hir::ExprKind::RangeIndex { .. } => true,
         spade_hir::ExprKind::TupleIndex(_, _) => false,
         spade_hir::ExprKind::FieldAccess(_, _) => false,
         spade_hir::ExprKind::BinaryOperator(_, _, _) => true,
@@ -201,6 +202,16 @@ fn visit_expression(
             // Since array indices are not static, we have to just consume here
             linear_state.consume_expression(target)?;
             linear_state.consume_expression(idx)?;
+        }
+        spade_hir::ExprKind::RangeIndex {
+            target,
+            start: _,
+            end: _,
+        } => {
+            visit_expression(target, linear_state, ctx)?;
+            // We don't track individual elements of arrays, so we'll have to consume the
+            // whole thing here
+            linear_state.consume_expression(target)?;
         }
         spade_hir::ExprKind::TupleIndex(base, idx) => {
             visit_expression(base, linear_state, ctx)?;
