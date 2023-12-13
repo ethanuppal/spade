@@ -8,13 +8,14 @@ release cycle. Every six weeks, the current master branch is tagged and
 released as a new version.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
+
 ## Unreleased
 
 ### Added
 
-[!251][!251] Allow instantiating single variant enums without `()`
-[!252][!252] Add block comments delimited by `/*` `*/`
-[!255][!255] Add range indexing to arrays. You can now access parts of arrays using `a[start:end]`
+- [!251][!251] Allow instantiating single variant enums without `()`
+- [!252][!252] Add block comments delimited by `/*` `*/`
+- [!255][!255] Add range indexing to arrays. You can now access parts of arrays using `a[start:end]`
 
 ### Fixed
 
@@ -26,7 +27,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 [!252]: https://gitlab.com/spade-lang/spade/-/merge_requests/252
 [!255]: https://gitlab.com/spade-lang/spade/-/merge_requests/255
 
-## [0.5.0]
+## [0.5.0] - 2023-11-17
 
 ### Added
 
@@ -47,14 +48,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - [!224][!224] Name de-aliasing now only de-aliases anonymous names
 - [!232][!232] **Breaking change** Bump minimum rust version to 1.70
 
-
 [!232]: https://gitlab.com/spade-lang/spade/-/merge_requests/232
 [!224]: https://gitlab.com/spade-lang/spade/-/merge_requests/224
 [!235]: https://gitlab.com/spade-lang/spade/-/merge_requests/235
 [!239]: https://gitlab.com/spade-lang/spade/-/merge_requests/239
 [!241]: https://gitlab.com/spade-lang/spade/-/merge_requests/241
 
-## [0.4.0]
+## [0.4.0] - 2023-08-24
 
 ### Added
 
@@ -72,7 +72,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ### Changed
 
 - [!207][!207] Rename `wal_suffix` attribute to `wal_traceable`. It now defaults to the struct name as a suffix, but can override that using the `suffix` parameter to the attribute.
-- [!208][!208] Add a new `#[wal_suffix]` attribute which emits a copy of the marked signal with a specific suffix. Can also be applied to units to add `#[wal_suffix]` to all inputs.
+- [!209][!209] Add a new `#[wal_suffix]` attribute which emits a copy of the marked signal with a specific suffix. Can also be applied to units to add `#[wal_suffix]` to all inputs.
 - [!214][!214] Improve the error messages for positional arguments
 
 ### Removed
@@ -91,10 +91,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 [!215]: https://gitlab.com/spade-lang/spade/-/merge_requests/215
 [!216]: https://gitlab.com/spade-lang/spade/-/merge_requests/216
 [!217]: https://gitlab.com/spade-lang/spade/-/merge_requests/217
-[!211]: https://gitlab.com/spade-lang/spade/-/merge_requests/211
-[!235]: https://gitlab.com/spade-lang/spade/-/merge_requests/235
+[!221]: https://gitlab.com/spade-lang/spade/-/merge_requests/221
 
-## [0.3.0]
+## [0.3.0] - 2023-06-01
 
 ### Added
 
