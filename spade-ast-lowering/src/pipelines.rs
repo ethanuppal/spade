@@ -10,7 +10,8 @@ pub fn int_literal_to_pipeline_stages(depth: &Loc<ast::IntLiteral>) -> Result<Lo
     depth
         .try_map_ref(|u| {
             u.clone().as_unsigned().ok_or_else(|| {
-                Diagnostic::error(depth, "Negative depth").primary_label("Expected positive depth")
+                Diagnostic::error(depth, "Negative depth")
+                    .primary_label("Expected non-negative depth")
             })
         })?
         .try_map_ref(|u| {

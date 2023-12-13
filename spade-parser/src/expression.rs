@@ -264,7 +264,7 @@ impl<'a> Parser<'a> {
                             .clone()
                             .as_unsigned()
                             .ok_or_else(|| {
-                                Diagnostic::error(&index, "Tuple indices must be positive")
+                                Diagnostic::error(&index, "Tuple indices must be non-negative")
                                     .primary_label("Negative tuple index")
                             })?
                             .to_u128()

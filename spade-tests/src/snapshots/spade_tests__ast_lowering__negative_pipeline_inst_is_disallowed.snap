@@ -1,5 +1,6 @@
 ---
 source: spade-tests/src/ast_lowering.rs
+assertion_line: 887
 ---
 pipeline(0) y(clk: clock) -> bool {
     true
@@ -12,6 +13,6 @@ error: Negative depth
   ┌─ testinput:5:10
   │
 5 │     inst(-1) y(clk)
-  │          ^^ Expected positive depth
+  │          ^^ Expected non-negative depth
 
 

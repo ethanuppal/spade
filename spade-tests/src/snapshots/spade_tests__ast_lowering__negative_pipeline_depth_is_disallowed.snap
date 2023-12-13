@@ -1,5 +1,6 @@
 ---
 source: spade-tests/src/ast_lowering.rs
+assertion_line: 880
 ---
 pipeline(-1) x() -> bool {
     true
@@ -9,6 +10,6 @@ error: Negative depth
   ┌─ testinput:1:10
   │
 1 │ pipeline(-1) x() -> bool {
-  │          ^^ Expected positive depth
+  │          ^^ Expected non-negative depth
 
 

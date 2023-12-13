@@ -1411,8 +1411,8 @@ pub fn visit_expression(e: &ast::Expression, ctx: &mut Context) -> Result<hir::E
             let target = target.try_visit(visit_expression, ctx)?;
             let start = start.try_map_ref(|s| match s {
                 ast::Expression::IntLiteral(ast::IntLiteral::Signed(v)) => if v < &BigInt::zero() {
-                    Err(Diagnostic::error(start.as_ref(), "Range indices must be positive")
-                        .primary_label("Range index must be positive"))
+                    Err(Diagnostic::error(start.as_ref(), "Range indices must be non-negative")
+                        .primary_label("Range index is negative"))
                 } else {
                     Ok(v.to_biguint().unwrap())
                 },
@@ -1421,8 +1421,8 @@ pub fn visit_expression(e: &ast::Expression, ctx: &mut Context) -> Result<hir::E
             })?;
             let end = end.try_map_ref(|s| match s {
                 ast::IntLiteral::Signed(v) => if v < &BigInt::zero() {
-                    Err(Diagnostic::error(end, "Range indices must be positive")
-                        .primary_label("Range index must be positive"))
+                    Err(Diagnostic::error(end, "Range indices must be non-negative")
+                        .primary_label("Range index is negative"))
                 } else {
                     Ok(v.to_biguint().unwrap())
                 },

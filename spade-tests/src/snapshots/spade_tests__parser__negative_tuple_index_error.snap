@@ -1,11 +1,12 @@
 ---
 source: spade-tests/src/parser.rs
+assertion_line: 92
 ---
 fn a() -> int<10> {
     x#-10
 }
 
-error: Tuple indices must be positive
+error: Tuple indices must be non-negative
   ┌─ testinput:2:7
   │
 2 │     x#-10
