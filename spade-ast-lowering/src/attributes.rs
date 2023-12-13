@@ -44,7 +44,7 @@ impl AttributeListExt for AttributeList {
             })
             .collect::<Result<Vec<_>>>()?
             .into_iter()
-            .filter_map(|x| x)
+            .flatten()
             .collect();
 
         Ok(hir::AttributeList(inner))

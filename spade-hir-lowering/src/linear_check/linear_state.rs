@@ -35,7 +35,7 @@ impl MutWireWitness {
     /// Array,Field => Because A<[..].a is of type &mut _>
     pub fn motivation(&self) -> String {
         match self {
-            MutWireWitness::This => format!(""),
+            MutWireWitness::This => String::new(),
             MutWireWitness::Field(ident, rest) => format!(".{}{}", ident, rest.motivation()),
             MutWireWitness::TupleIndex(idx, rest) => format!("#{}{}", idx, rest.motivation()),
         }
@@ -172,29 +172,22 @@ impl LinearTree {
                     *state = new_state.clone();
                     Ok(())
                 }
-                UsageInfo::Consumed(prev) => Err((MutWireWitness::This, prev.clone())),
+                UsageInfo::Consumed(prev) => Err((MutWireWitness::This, *prev)),
             },
             LinearTreeKind::Struct(members) => {
-                members
-                    .iter()
-                    .map(|(ident, sub)| {
-                        sub.borrow_mut().try_consume(loc).map_err(|(witness, loc)| {
-                            (MutWireWitness::Field(ident.clone(), Box::new(witness)), loc)
-                        })
+                members.iter().try_for_each(|(ident, sub)| {
+                    sub.borrow_mut().try_consume(loc).map_err(|(witness, loc)| {
+                        (MutWireWitness::Field(ident.clone(), Box::new(witness)), loc)
                     })
-                    .collect::<Result<_, ConsumptionError>>()?;
+                })?;
                 Ok(())
             }
             LinearTreeKind::Tuple(members) => {
-                members
-                    .iter()
-                    .enumerate()
-                    .map(|(i, sub)| {
-                        sub.borrow_mut().try_consume(loc).map_err(|(witness, loc)| {
-                            (MutWireWitness::TupleIndex(i, Box::new(witness)), loc)
-                        })
+                members.iter().enumerate().try_for_each(|(i, sub)| {
+                    sub.borrow_mut().try_consume(loc).map_err(|(witness, loc)| {
+                        (MutWireWitness::TupleIndex(i, Box::new(witness)), loc)
                     })
-                    .collect::<Result<_, ConsumptionError>>()?;
+                })?;
                 Ok(())
             }
         }
@@ -233,14 +226,14 @@ impl LinearTree {
 
     pub fn assume_tuple(&self) -> &Vec<Rc<RefCell<LinearTree>>> {
         match &self.kind {
-            LinearTreeKind::Tuple(inner) => &inner,
+            LinearTreeKind::Tuple(inner) => inner,
             _ => panic!("Assumed tree was tuple, got {:?}", self.kind),
         }
     }
 
     pub fn assume_struct(&self) -> &HashMap<Identifier, Rc<RefCell<LinearTree>>> {
         match &self.kind {
-            LinearTreeKind::Struct(inner) => &inner,
+            LinearTreeKind::Struct(inner) => inner,
             _ => panic!("Assumed tree was tuple, got {:?}", self.kind),
         }
     }
@@ -334,10 +327,10 @@ impl WithLocation for ItemReference {}
 
 impl ItemReference {
     fn anonymous(n: &Loc<u64>) -> Loc<Self> {
-        Self::Anonymous(n.inner.clone()).at_loc(&n)
+        Self::Anonymous(n.inner).at_loc(n)
     }
     fn name(n: &Loc<NameID>) -> Loc<Self> {
-        Self::Name(n.inner.clone()).at_loc(&n)
+        Self::Name(n.inner.clone()).at_loc(n)
     }
 }
 
@@ -409,7 +402,7 @@ impl LinearState {
             .type_state
             .try_get_type_of_id(expr_id.inner, ctx.symtab, ctx.types)
         {
-            let reference = ItemReference::Anonymous(expr_id.inner).at_loc(&expr_id);
+            let reference = ItemReference::Anonymous(expr_id.inner).at_loc(expr_id);
             self.push_type(reference, ty);
         }
     }
@@ -434,8 +427,8 @@ impl LinearState {
         lhs: Loc<ItemReference>,
         rhs: Loc<ItemReference>,
     ) -> Result<(), Diagnostic> {
-        let lhs_tree = self.trees.get(&lhs).clone();
-        let rhs_tree = self.trees.get(&rhs).clone();
+        let lhs_tree = self.trees.get(&lhs);
+        let rhs_tree = self.trees.get(&rhs);
 
         let (old_tree, new_name) = match (lhs_tree, rhs_tree) {
             (Some(l), None) => (l, rhs),

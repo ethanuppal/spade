@@ -27,8 +27,8 @@ impl ExpectedArgumentList {
     pub fn with_suggestions(self) -> Diagnostic {
         let diag: Diagnostic = self.clone().into();
         // If the next token is any kind of opening paren, we'll try to suggest changing that
-        if &self.next_token.kind == &TokenKind::OpenBrace
-            || &self.next_token.kind == &TokenKind::OpenBracket
+        if self.next_token.kind == TokenKind::OpenBrace
+            || self.next_token.kind == TokenKind::OpenBracket
         {
             diag.help("Positional argument lists start with`(`.")
                 .help("Named argument lists start with `$(`.")

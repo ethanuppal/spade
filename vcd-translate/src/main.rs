@@ -90,10 +90,7 @@ fn add_new_vars(
 
                 let new_map = MappedVar { raw, info };
 
-                result
-                    .entry(var.code)
-                    .or_insert(vec![])
-                    .push(new_map.clone());
+                result.entry(var.code).or_default().push(new_map.clone());
             }
         }
     }

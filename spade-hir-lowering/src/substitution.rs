@@ -43,6 +43,12 @@ pub struct Substitutions {
     pub current_stage: usize,
 }
 
+impl Default for Substitutions {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Substitutions {
     pub fn new() -> Self {
         Self {

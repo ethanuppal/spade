@@ -42,9 +42,10 @@ pub fn wordlength_inference_method(
         "ia" => spade_wordlength_inference::InferMethod::IA,
         "aaia" => spade_wordlength_inference::InferMethod::AAIA,
         _ => {
-            return Err(format!(
+            return Err(
                 "Expected one of: \"AA\", \"IA\" or \"AAIA\" - leave empty for old method"
-            ))
+                    .to_string(),
+            )
         }
     })
 }
@@ -347,7 +348,7 @@ pub fn compile(
 
         match ron::to_string(&list) {
             Ok(encoded) => {
-                std::fs::write(item_list_file, &encoded).or_report(&mut errors);
+                std::fs::write(item_list_file, encoded).or_report(&mut errors);
             }
             Err(e) => {
                 errors.failed = true;

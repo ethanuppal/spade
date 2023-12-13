@@ -50,7 +50,7 @@ pub fn escape_path(path: &str) -> String {
 }
 
 pub fn mangle_entity(module: &str) -> String {
-    if module.starts_with("\\") {
+    if module.starts_with('\\') {
         module.to_string()
     } else {
         format!("e_{}", escape_path(module))
@@ -90,7 +90,7 @@ pub enum TupleIndex {
 impl TupleIndex {
     pub fn verilog_code(&self) -> String {
         match self {
-            TupleIndex::None => format!(""),
+            TupleIndex::None => String::new(),
             TupleIndex::ZeroWidth => panic!("Computed a 0 width tuple index"),
             TupleIndex::Single(i) => format!("[{i}]"),
             TupleIndex::Range { left, right } => format!("[{left}:{right}]"),

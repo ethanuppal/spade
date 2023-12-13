@@ -79,7 +79,7 @@ impl From<LookupError> for Diagnostic {
                     diagnostic.add_help(hint);
                 }
 
-                let diagnostic = match lookup_error {
+                match lookup_error {
                     LookupError::NotAValue(path, Thing::EnumVariant(v)) => diagnostic
                         .span_suggest_insert_after(
                             "Consider specifying the arguments to the variant",
@@ -109,8 +109,7 @@ impl From<LookupError> for Diagnostic {
                             ),
                         ),
                     _ => diagnostic,
-                };
-                diagnostic
+                }
             }
         }
     }
@@ -357,6 +356,12 @@ pub struct SymbolTable {
     base_namespace: Path,
 }
 
+impl Default for SymbolTable {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl SymbolTable {
     pub fn new() -> Self {
         Self {
@@ -526,12 +531,12 @@ impl SymbolTable {
         // Check if a variable with this name already exists
         if let Some(id) = self.try_lookup_id(&Path(vec![ident.clone()]).at_loc(&ident)) {
             if let Some(Thing::Variable(prev)) = self.things.get(&id) {
-                return Err(declared_more_than_once(ident, prev).into());
+                return Err(declared_more_than_once(ident, prev));
             }
         }
 
         if let Some((old, _)) = self.declarations.last().unwrap().get_key_value(&ident) {
-            Err(declared_more_than_once(ident, old).into())
+            Err(declared_more_than_once(ident, old))
         } else {
             let name_id = self.add_local_variable(ident.clone());
             self.declarations
@@ -851,13 +856,11 @@ impl SymbolTable {
                                 } else {
                                     self.try_lookup_id(&full_path.at_loc(name))
                                 }
+                            } else if full_path == name.inner {
+                                self.try_lookup_id(&path_in_namespace.at_loc(name))
                             } else {
-                                if full_path == name.inner {
-                                    self.try_lookup_id(&path_in_namespace.at_loc(name))
-                                } else {
-                                    self.try_lookup_id(&path_in_namespace.at_loc(name))
-                                        .or_else(|| self.try_lookup_id(&full_path.at_loc(name)))
-                                }
+                                self.try_lookup_id(&path_in_namespace.at_loc(name))
+                                    .or_else(|| self.try_lookup_id(&full_path.at_loc(name)))
                             };
                         }
                         _ => {}
@@ -914,7 +917,7 @@ impl SymbolTable {
         }
 
         println!("Types:");
-        for (name, _) in &self.types {
+        for name in self.types.keys() {
             print!("{}: ", format!("{name:?}").purple());
             println!("type");
         }

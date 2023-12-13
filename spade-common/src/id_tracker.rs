@@ -33,6 +33,11 @@ macro_rules! def_id_tracker {
                 Self { id: self.id }
             }
         }
+        impl Default for $name {
+            fn default() -> Self {
+                Self::new()
+            }
+        }
     };
 }
 

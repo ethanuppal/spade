@@ -586,7 +586,7 @@ impl<'a> Parser<'a> {
                 None
             };
 
-            let span_end = generics.as_ref().map(|g| g.span.clone()).unwrap_or(span);
+            let span_end = generics.as_ref().map(|g| g.span).unwrap_or(span);
             TypeSpec::Named(path, generics).between(self.file_id, &span, &span_end)
         };
 
@@ -995,10 +995,9 @@ impl<'a> Parser<'a> {
     pub fn comptime_statement(&mut self, allow_stages: bool) -> Result<Option<Loc<Statement>>> {
         let inner = |s: &mut Self| s.exhaustive_statements(allow_stages, &TokenKind::CloseBrace);
 
-        let result = self.comptime_condition(&inner, &|condition, loc| {
+        self.comptime_condition(&inner, &|condition, loc| {
             Statement::Comptime(condition).at_loc(&loc)
-        });
-        result
+        })
     }
 
     #[trace_parser]
@@ -1336,7 +1335,7 @@ impl<'a> Parser<'a> {
     #[tracing::instrument(level = "debug", skip(self))]
     pub fn impl_block(&mut self, attributes: &AttributeList) -> Result<Option<Loc<ImplBlock>>> {
         let start_token = peek_for!(self, &TokenKind::Impl);
-        self.disallow_attributes(&attributes, &start_token)?;
+        self.disallow_attributes(attributes, &start_token)?;
 
         let trait_or_target = self.path()?;
 
@@ -2231,7 +2230,7 @@ pub fn format_parse_stack(stack: &[ParseStackEntry]) -> String {
             }
             ParseStackEntry::Exit => {
                 next_indent_amount -= 1;
-                format!("")
+                String::new()
             }
             ParseStackEntry::ExitWithError(err) => {
                 next_indent_amount -= 1;

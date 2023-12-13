@@ -125,7 +125,7 @@ pub fn type_of_hierarchical_value(
                     .collect::<Vec<_>>();
 
                 let candidates_msg = if candidates.is_empty() {
-                    format!("")
+                    String::new()
                 } else {
                     format!("  candidates\n    {}", candidates.join("    \n"))
                 };
@@ -141,7 +141,7 @@ pub fn type_of_hierarchical_value(
             current_unit = next;
         } else {
             let candidates_msg = if local_map.is_empty() {
-                format!("")
+                String::new()
             } else {
                 format!("\n  candidates:\n    {}", local_map.keys().join("    \n"))
             };

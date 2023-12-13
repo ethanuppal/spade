@@ -53,7 +53,7 @@ impl<T> LocExt<T> for Loc<T> {
     where
         V: Fn(&T, &mut Context) -> Result<U>,
     {
-        self.map_ref(|t| visitor(&t, context)).map_err(|e, _| e)
+        self.map_ref(|t| visitor(t, context)).map_err(|e, _| e)
     }
 }
 
@@ -82,7 +82,7 @@ pub fn visit_type_param(
 
             let name_id = symtab.add_type(
                 Path::ident(ident.clone()),
-                TypeSymbol::GenericArg { traits }.at_loc(&ident),
+                TypeSymbol::GenericArg { traits }.at_loc(ident),
             );
 
             Ok(hir::TypeParam::TypeName(ident.inner.clone(), name_id))
@@ -90,7 +90,7 @@ pub fn visit_type_param(
         ast::TypeParam::Integer(ident) => {
             let name_id = symtab.add_type(
                 Path::ident(ident.clone()),
-                TypeSymbol::GenericArg { traits: vec![] }.at_loc(&ident),
+                TypeSymbol::GenericArg { traits: vec![] }.at_loc(ident),
             );
 
             Ok(hir::TypeParam::Integer(ident.inner.clone(), name_id))
@@ -178,7 +178,6 @@ pub fn visit_type_spec(
                 .find_map(|x| x);
 
             if let Some(witness) = transitive_port_witness {
-                let witness = witness;
                 // Since this type has 1 port, all members must be ports
                 for ty in inner {
                     if !ty.is_port(symtab)? {
@@ -188,8 +187,7 @@ pub fn visit_type_spec(
                         )
                         .primary_label("This is not a port")
                         .secondary_label(witness, "This is a port")
-                        .note("A tuple must either contain only ports or no ports")
-                        .into());
+                        .note("A tuple must either contain only ports or no ports"));
                     }
                 }
             }
@@ -207,8 +205,7 @@ pub fn visit_type_spec(
                 return Err(Diagnostic::from(error::WireOfPort {
                     full_type: t.loc(),
                     inner_type: inner.loc(),
-                })
-                .into());
+                }));
             }
             Ok(hir::TypeSpec::Backward(Box::new(visit_type_spec(
                 inner, symtab,
@@ -219,8 +216,7 @@ pub fn visit_type_spec(
                 return Err(Diagnostic::from(error::WireOfPort {
                     full_type: t.loc(),
                     inner_type: inner.loc(),
-                })
-                .into());
+                }));
             }
             Ok(hir::TypeSpec::Wire(Box::new(visit_type_spec(
                 inner, symtab,
@@ -239,7 +235,7 @@ pub fn visit_type_spec(
         }
     };
 
-    Ok(result?.at_loc(&t))
+    Ok(result?.at_loc(t))
 }
 
 pub enum SelfContext {
@@ -271,7 +267,7 @@ fn visit_parameter_list(
             } else {
                 diag.span_suggest_insert_before(suggest_msg, &l.args[0].1, "self, ")
             };
-            return Err(diag.into());
+            return Err(diag);
         }
     }
 
@@ -282,8 +278,7 @@ fn visit_parameter_list(
                     self_loc,
                     "'self' cannot be used in free standing units",
                 )
-                .primary_label("not allowed here")
-                .into())
+                .primary_label("not allowed here"))
             }
             SelfContext::ImplBlock(spec) => result.push(hir::Parameter {
                 no_mangle: None,
@@ -306,8 +301,7 @@ fn visit_parameter_list(
             return Err(
                 Diagnostic::error(name, "Multiple arguments with the same name")
                     .primary_label(format!("{name} later declared here"))
-                    .secondary_label(prev, format!("{name} previously declared here"))
-                    .into(),
+                    .secondary_label(prev, format!("{name} previously declared here")),
             );
         }
         arg_names.insert(name.clone());
@@ -449,8 +443,7 @@ pub fn visit_unit(
                 Err(
                     Diagnostic::error(attr, "no_mangle is not allowed on generic units")
                         .primary_label("no_mangle not allowed here")
-                        .secondary_label(generic_list, "Because this unit is generic")
-                        .into(),
+                        .secondary_label(generic_list, "Because this unit is generic"),
                 )
             } else {
                 unit_name = hir::UnitName::Unmangled(name.0.clone(), id.clone().at_loc(name));
@@ -469,7 +462,7 @@ pub fn visit_unit(
             wal_suffix = Some(suffix.clone());
             Ok(None)
         }
-        _ => Err(attr.report_unused("a unit").into()),
+        _ => Err(attr.report_unused("a unit")),
     })?;
 
     // If this is a builtin entity
@@ -496,7 +489,7 @@ pub fn visit_unit(
         )
         .collect::<Vec<_>>();
 
-    ctx.pipeline_ctx = maybe_perform_pipelining_tasks(&unit, &head, ctx)?;
+    ctx.pipeline_ctx = maybe_perform_pipelining_tasks(unit, &head, ctx)?;
 
     let mut body = body.as_ref().unwrap().try_visit(visit_expression, ctx)?;
 
@@ -623,8 +616,7 @@ pub fn visit_impl(
             .secondary_label(
                 block.r#trait.as_ref().unwrap(),
                 format!("This is an impl for the trait `{trait_name}`"),
-            )
-            .into());
+            ));
         };
 
         if matches!(unit.head.unit_kind.inner, UnitKind::Function)
@@ -640,8 +632,7 @@ pub fn visit_impl(
                 "Consider making this an entity",
                 &unit.head.unit_kind,
                 "entity",
-            )
-            .into());
+            ));
         }
 
         let path_suffix = Some(Path(vec![
@@ -670,8 +661,7 @@ pub fn visit_impl(
             }
             hir::Item::Builtin(_, head) => {
                 return Err(Diagnostic::error(head, "Methods cannot be __builtin__")
-                    .help("Consider defining a free-standing function")
-                    .into())
+                    .help("Consider defining a free-standing function"))
             }
         }
 
@@ -684,8 +674,7 @@ pub fn visit_impl(
                 "Return type does not match trait",
             )
             .primary_label(format!("Expected {}", target_method.output_type()))
-            .secondary_label(target_method.output_type(), "To match the trait")
-            .into());
+            .secondary_label(target_method.output_type(), "To match the trait"));
         }
 
         for (i, pair) in impl_head
@@ -714,8 +703,7 @@ pub fn visit_impl(
                             .secondary_label(
                                 t_name,
                                 format!("Because argument {i} is named `{t_name}` in the trait"),
-                            )
-                            .into());
+                            ));
                     }
 
                     if !matches!(&t_spec.inner, hir::TypeSpec::TraitSelf(_)) && t_spec != i_spec {
@@ -724,8 +712,7 @@ pub fn visit_impl(
                             .secondary_label(
                                 t_spec,
                                 format!("Because of the type of {t_name} in the trait"),
-                            )
-                            .into());
+                            ));
                     }
                 }
                 EitherOrBoth::Left(Parameter {
@@ -736,8 +723,7 @@ pub fn visit_impl(
                     return Err(
                         Diagnostic::error(name, "Trait method does not have this argument")
                             .primary_label("Extra argument")
-                            .secondary_label(&target_method.name, "Method defined here")
-                            .into(),
+                            .secondary_label(&target_method.name, "Method defined here"),
                     )
                 }
                 EitherOrBoth::Right(Parameter {
@@ -753,8 +739,7 @@ pub fn visit_impl(
                         format!("Missing argument {}", name),
                     )
                     .primary_label(format!("Missing argument {}", name))
-                    .secondary_label(name, "The trait method has this argument")
-                    .into());
+                    .secondary_label(name, "The trait method has this argument"));
                 }
             }
         }
@@ -793,15 +778,14 @@ pub fn visit_impl(
 
         return Err(
             Diagnostic::error(block, format!("Missing methods {as_str}"))
-                .primary_label(format!("Missing definition of {as_str} in this impl block"))
-                .into(),
+                .primary_label(format!("Missing definition of {as_str} in this impl block")),
         );
     }
 
     let prev = items
         .impls
         .entry(target_name.0.clone())
-        .or_insert(HashMap::new())
+        .or_default()
         .insert(
             trait_name.clone(),
             hir::ImplBlock { fns: trait_impl }.at_loc(block),
@@ -914,13 +898,10 @@ pub fn visit_module_body(
             }
         }
 
-        match new_item_list {
-            Some(list) => {
-                for (name, executable) in list.executables {
-                    add_item!(item_list.executables, name.clone(), executable)
-                }
+        if let Some(list) = new_item_list {
+            for (name, executable) in list.executables {
+                add_item!(item_list.executables, name.clone(), executable)
             }
-            None => {}
         }
     }
 
@@ -979,8 +960,7 @@ pub fn visit_pattern(p: &ast::Pattern, ctx: &mut Context) -> Result<hir::Pattern
                                     .secondary_label(previous, "First defined here")
                                     .primary_label("Later defined here")
                                     .secondary_label(state.loc(), format!("{ident} declared here"))
-                                    .note("Declared variables can only be defined once")
-                                    .into());
+                                    .note("Declared variables can only be defined once"));
                                 }
                             }
                         } else {
@@ -994,7 +974,7 @@ pub fn visit_pattern(p: &ast::Pattern, ctx: &mut Context) -> Result<hir::Pattern
                         };
 
                     hir::PatternKind::Name {
-                        name: name_id.at_loc(&ident),
+                        name: name_id.at_loc(ident),
                         pre_declared,
                     }
                 }
@@ -1031,11 +1011,10 @@ pub fn visit_pattern(p: &ast::Pattern, ctx: &mut Context) -> Result<hir::Pattern
                     let mut patterns = patterns
                         .iter()
                         .map(|(target, pattern)| {
-                            let ast_pattern =
-                                pattern.as_ref().map(|i| i.clone()).unwrap_or_else(|| {
-                                    ast::Pattern::Path(Path(vec![target.clone()]).at_loc(&target))
-                                        .at_loc(&target)
-                                });
+                            let ast_pattern = pattern.as_ref().cloned().unwrap_or_else(|| {
+                                ast::Pattern::Path(Path(vec![target.clone()]).at_loc(target))
+                                    .at_loc(target)
+                            });
                             let new_pattern = visit_pattern(&ast_pattern, ctx)?;
                             // Check if this is a new binding
                             if let Some(prev) = bound.get(target) {
@@ -1047,7 +1026,7 @@ pub fn visit_pattern(p: &ast::Pattern, ctx: &mut Context) -> Result<hir::Pattern
                                 ));
                             }
                             bound.insert(target.clone());
-                            if let None = unbound.take(target) {
+                            if unbound.take(target).is_none() {
                                 return Err(Diagnostic::from(ArgumentError::NoSuchArgument {
                                     name: target.clone(),
                                 }));
@@ -1121,7 +1100,7 @@ fn visit_statement(s: &Loc<ast::Statement>, ctx: &mut Context) -> Result<Vec<Loc
                 })
                 .collect::<Result<Vec<_>>>()?;
 
-            Ok(vec![hir::Statement::Declaration(names).at_loc(&s)])
+            Ok(vec![hir::Statement::Declaration(names).at_loc(s)])
         }
         ast::Statement::Binding(Binding {
             pattern,
@@ -1188,7 +1167,7 @@ fn visit_statement(s: &Loc<ast::Statement>, ctx: &mut Context) -> Result<Vec<Loc
             );
             Ok(stmts)
         }
-        ast::Statement::Register(inner) => visit_register(&inner, ctx),
+        ast::Statement::Register(inner) => visit_register(inner, ctx),
         ast::Statement::PipelineRegMarker(count, cond) => {
             let cond = match cond {
                 Some(cond) => {
@@ -1241,7 +1220,7 @@ fn visit_statement(s: &Loc<ast::Statement>, ctx: &mut Context) -> Result<Vec<Loc
             if let Some(ast_statements) = condition.maybe_unpack(&ctx.symtab)? {
                 Ok(ast_statements
                     .iter()
-                    .map(|s| visit_statement(&s, ctx))
+                    .map(|s| visit_statement(s, ctx))
                     .collect::<Result<Vec<_>>>()?
                     .into_iter()
                     .flatten()
@@ -1307,16 +1286,13 @@ pub fn visit_call_kind(
 ) -> Result<hir::expression::CallKind> {
     Ok(match kind {
         ast::CallKind::Function => hir::expression::CallKind::Function,
-        ast::CallKind::Entity(loc) => hir::expression::CallKind::Entity(loc.clone()),
+        ast::CallKind::Entity(loc) => hir::expression::CallKind::Entity(*loc),
         ast::CallKind::Pipeline(loc, depth) => {
             let depth = depth.clone().maybe_unpack(&ctx.symtab)?.ok_or_else(|| {
                 Diagnostic::error(depth, "Expected pipeline depth")
                     .help("The current comptime branch did not specify a depth")
             })?;
-            hir::expression::CallKind::Pipeline(
-                loc.clone(),
-                int_literal_to_pipeline_stages(&depth)?,
-            )
+            hir::expression::CallKind::Pipeline(*loc, int_literal_to_pipeline_stages(&depth)?)
         }
     })
 }
@@ -1390,14 +1366,14 @@ pub fn visit_expression(e: &ast::Expression, ctx: &mut Context) -> Result<hir::E
         }
         ast::Expression::TupleLiteral(exprs) => {
             let exprs = exprs
-                .into_iter()
+                .iter()
                 .map(|e| e.try_map_ref(|e| visit_expression(e, ctx)))
                 .collect::<Result<Vec<_>>>()?;
             Ok(hir::ExprKind::TupleLiteral(exprs))
         }
         ast::Expression::ArrayLiteral(exprs) => {
             let exprs = exprs
-                .into_iter()
+                .iter()
                 .map(|e| e.try_map_ref(|e| visit_expression(e, ctx)))
                 .collect::<Result<Vec<_>>>()?;
             Ok(hir::ExprKind::ArrayLiteral(exprs))
@@ -1432,7 +1408,7 @@ pub fn visit_expression(e: &ast::Expression, ctx: &mut Context) -> Result<hir::E
         }
         ast::Expression::TupleIndex(tuple, index) => Ok(hir::ExprKind::TupleIndex(
             Box::new(tuple.try_visit(visit_expression, ctx)?),
-            index.clone(),
+            *index,
         )),
         ast::Expression::FieldAccess(target, field) => Ok(hir::ExprKind::FieldAccess(
             Box::new(target.try_visit(visit_expression, ctx)?),
@@ -1459,7 +1435,7 @@ pub fn visit_expression(e: &ast::Expression, ctx: &mut Context) -> Result<hir::E
             let e = expression.try_visit(visit_expression, ctx)?;
 
             if branches.is_empty() {
-                return Err(Diagnostic::error(branches, "Match body has no arms").primary_label("This match body has no arms").into());
+                return Err(Diagnostic::error(branches, "Match body has no arms").primary_label("This match body has no arms"));
             }
 
             let b = branches
@@ -1529,8 +1505,7 @@ pub fn visit_expression(e: &ast::Expression, ctx: &mut Context) -> Result<hir::E
                         .note(format!(
                             "Since this is at stage {current}, stage({offset}) references stage {absolute}"
                         ))
-                        .note("Pipeline stages start at 0")
-                        .into());
+                        .note("Pipeline stages start at 0"));
                     }
                     let absolute = absolute.to_usize().ok_or_else(|| {
                         Diagnostic::error(offset, "Pipeline offset overflow")
@@ -1542,7 +1517,6 @@ pub fn visit_expression(e: &ast::Expression, ctx: &mut Context) -> Result<hir::E
                             .primary_label("This references a pipeline stage beyond the pipeline depth")
                             .note(format!("Since this is at stage {current}, stage(+{offset}) references stage {absolute}"))
                             .note(format!("The pipeline has depth {}", pipeline_depth - 1))
-                            .into()
 
                         )
                     }
@@ -1655,21 +1629,19 @@ fn visit_register(reg: &Loc<ast::Register>, ctx: &mut Context) -> Result<Vec<Loc
             let name_id = if let Some(state) = state {
                 ctx.symtab
                     .lookup_variable(&Path(vec![state.clone()]).at_loc(state))?
+            } else if let PatternKind::Name { name, .. } = &pattern.inner.kind {
+                name.inner.clone()
             } else {
-                if let PatternKind::Name { name, .. } = &pattern.inner.kind {
-                    name.inner.clone()
-                } else {
-                    return Err(Diagnostic::error(
-                        attr,
-                        "#[fsm] without explicit name on non-name pattern",
-                    )
-                    .secondary_label(&pattern, "This is a pattern")
-                    .span_suggest(
-                        "Consider specifying the name of the s ignal containing the state",
-                        attr,
-                        "#[fsm(<name>)]",
-                    ));
-                }
+                return Err(Diagnostic::error(
+                    attr,
+                    "#[fsm] without explicit name on non-name pattern",
+                )
+                .secondary_label(&pattern, "This is a pattern")
+                .span_suggest(
+                    "Consider specifying the name of the s ignal containing the state",
+                    attr,
+                    "#[fsm(<name>)]",
+                ));
             };
 
             Ok(Some(hir::Attribute::Fsm { state: name_id }))
@@ -1687,7 +1659,7 @@ fn visit_register(reg: &Loc<ast::Register>, ctx: &mut Context) -> Result<Vec<Loc
             }
             Ok(None)
         }
-        _ => Err(attr.report_unused("a register").into()),
+        _ => Err(attr.report_unused("a register")),
     })?;
 
     stmts.push(
@@ -1716,7 +1688,7 @@ pub fn ensure_unique_anonymous_traits(item_list: &hir::ItemList) -> Vec<Diagnost
     item_list
         .impls
         .iter()
-        .map(|(type_name, impls)| {
+        .flat_map(|(type_name, impls)| {
             let mut fns = impls
                 .iter()
                 .filter(|(trait_name, _)| trait_name.is_anonymous())
@@ -1741,17 +1713,15 @@ pub fn ensure_unique_anonymous_traits(item_list: &hir::ItemList) -> Vec<Diagnost
                             format!("{type_name} already has a method named {f}"),
                         )
                         .primary_label("Duplicate method")
-                        .secondary_label(prev, "Previous definition here")
-                        .into(),
+                        .secondary_label(prev, "Previous definition here"),
                     );
                 } else {
-                    set.insert(f, f_loc.1.clone());
+                    set.insert(f, f_loc.1);
                 }
             }
 
             duplicate_errs
         })
-        .flatten()
         .collect::<Vec<_>>()
 }
 

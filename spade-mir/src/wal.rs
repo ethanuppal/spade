@@ -48,7 +48,7 @@ pub fn insert_wal_signals(
                             // Emit the register itself
                             s.clone(),
                             wal_alias(
-                                &traced_name,
+                                traced_name,
                                 &prefix,
                                 "__wal_fsm_state",
                                 &reg.ty,

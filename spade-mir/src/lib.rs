@@ -130,7 +130,7 @@ impl ValueName {
         Self::Named(
             id,
             name.clone(),
-            NameID(id, Path::from_strs(&vec![name.as_str()])).into(),
+            NameID(id, Path::from_strs(&[name.as_str()])).into(),
         )
     }
 }
@@ -349,7 +349,7 @@ impl std::fmt::Display for Operator {
                             .join(", ")
                     )
                 } else {
-                    format!("")
+                    String::new()
                 }
             ),
             Operator::IndexArray => write!(f, "IndexArray"),

@@ -160,6 +160,12 @@ impl Subdiagnostic {
 /// Builder for use with [Diagnostic::span_suggest_multipart].
 pub struct SuggestionParts(Vec<(FullSpan, String)>);
 
+impl Default for SuggestionParts {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl SuggestionParts {
     pub fn new() -> Self {
         Self(Vec::new())

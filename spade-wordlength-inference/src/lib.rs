@@ -90,7 +90,7 @@ pub fn infer_and_check(
             inferer.type_state.unify(
                 ty,
                 &TypeVar::Known(KnownType::Integer(inferred_wl.into()), Vec::new()),
-                &ctx,
+                ctx,
             ),
             loc,
         )?;

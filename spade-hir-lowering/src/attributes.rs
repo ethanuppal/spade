@@ -16,7 +16,7 @@ impl AttributeListExt for AttributeList {
     }
 
     fn lower(&self, handler: &mut impl FnMut(&Loc<Attribute>) -> Result<()>) -> Result<()> {
-        self.0.iter().map(handler).collect::<Result<_>>()
+        self.0.iter().try_for_each(handler)
     }
 }
 

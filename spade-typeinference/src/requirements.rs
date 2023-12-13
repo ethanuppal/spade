@@ -93,7 +93,7 @@ impl Requirement {
                     false,
                     |inverted, type_name, params| {
                         // Check if we're dealing with a struct
-                        match ctx.symtab.type_symbol_by_id(&type_name).inner {
+                        match ctx.symtab.type_symbol_by_id(type_name).inner {
                             TypeSymbol::Declared(_, TypeDeclKind::Struct { is_port: _ }) => {}
                             TypeSymbol::Declared(_, TypeDeclKind::Enum) => {
                                 return Err(Diagnostic::error(
@@ -122,7 +122,7 @@ impl Requirement {
                         }
 
                         // Get the struct, find the type of the field and unify
-                        let s = ctx.symtab.struct_by_id(&type_name);
+                        let s = ctx.symtab.struct_by_id(type_name);
 
                         let field_spec = if let Some(spec) = s.params.try_get_arg_type(field) {
                             spec
@@ -148,7 +148,7 @@ impl Requirement {
                             .add_mapped_generic_list(GenericListSource::Anonymous, mapping);
 
                         let raw_field_type =
-                            type_state.type_var_from_hir(&field_spec, &generic_list);
+                            type_state.type_var_from_hir(field_spec, &generic_list);
                         let field_type = if inverted {
                             match raw_field_type {
                                 TypeVar::Known(KnownType::Backward, inner) => {
@@ -197,7 +197,7 @@ impl Requirement {
                     let fn_head = ctx.symtab.unit_by_id(&implementor);
 
                     type_state.handle_function_like(
-                        expr_id.clone(),
+                        *expr_id,
                         &expr.inner,
                         &implementor,
                         &fn_head,
@@ -210,10 +210,10 @@ impl Requirement {
                 },
                 || Ok(RequirementResult::NoChange),
                 |other| {
-                    Err(
-                        Diagnostic::error(expr, format!("{other} does not have any methods"))
-                            .into(),
-                    )
+                    Err(Diagnostic::error(
+                        expr,
+                        format!("{other} does not have any methods"),
+                    ))
                 },
             ),
             Requirement::FitsIntLiteral { value, target_type } => {
@@ -241,8 +241,8 @@ impl Requirement {
                                 let (contained_range, unsigned) = match value {
                                     IntLiteral::Signed(_) => (
                                         (
-                                            -(&two).pow(size_u32.checked_sub(1).unwrap_or(0)),
-                                            two.pow(size_u32.checked_sub(1).unwrap_or(0)).checked_sub(&1.to_bigint()).unwrap_or(0.to_bigint()),
+                                            -two.clone().pow(size_u32.saturating_sub(1)),
+                                            two.pow(size_u32.saturating_sub(1)).checked_sub(&1.to_bigint()).unwrap_or(0.to_bigint()),
                                         ),
                                         false,
                                     ),
@@ -279,7 +279,7 @@ impl Requirement {
                                         ))
                                     };
 
-                                    Err(diagnostic.into())
+                                    Err(diagnostic)
                                 } else {
                                     Ok(RequirementResult::Satisfied(vec![]))
                                 }
@@ -300,7 +300,10 @@ impl Requirement {
     #[tracing::instrument(level = "trace", skip(type_state, ctx))]
     pub fn check_or_add(self, type_state: &mut TypeState, ctx: &Context) -> Result<()> {
         match self.check(type_state, ctx)? {
-            RequirementResult::NoChange => Ok(type_state.add_requirement(self)),
+            RequirementResult::NoChange => {
+                type_state.add_requirement(self);
+                Ok(())
+            }
             RequirementResult::Satisfied(replacements) => {
                 for Replacement { from, to } in replacements {
                     type_state

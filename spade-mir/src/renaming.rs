@@ -11,6 +11,12 @@ pub struct VerilogNameMap {
     inner: HashMap<String, VerilogNameSource>,
 }
 
+impl Default for VerilogNameMap {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl VerilogNameMap {
     pub fn new() -> Self {
         Self {
@@ -22,8 +28,8 @@ impl VerilogNameMap {
     /// verilog escape characters (\\<name> ), those are removed
     pub fn insert(&mut self, from: &str, to: VerilogNameSource) {
         self.inner.insert(
-            from.trim_start_matches("\\")
-                .trim_end_matches(" ")
+            from.trim_start_matches('\\')
+                .trim_end_matches(' ')
                 .to_string(),
             to,
         );
@@ -50,6 +56,12 @@ pub struct NameState {
     name_map: HashMap<ValueName, ValueName>,
 }
 
+impl Default for NameState {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl NameState {
     pub fn new() -> NameState {
         Self {
@@ -64,7 +76,7 @@ impl NameState {
                 let id = self
                     .names
                     .entry(name_str.clone())
-                    .and_modify(|v| *v = *v + 1)
+                    .and_modify(|v| *v += 1)
                     .or_insert(0);
 
                 ValueName::Named(*id, name_str.clone(), source.clone())

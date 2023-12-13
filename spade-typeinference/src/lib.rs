@@ -116,6 +116,12 @@ pub struct TypeState {
     pub use_wordlenght_inference: bool,
 }
 
+impl Default for TypeState {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl TypeState {
     pub fn new() -> Self {
         Self {
@@ -175,8 +181,8 @@ impl TypeState {
         match &hir_type {
             hir::TypeSpec::Declared(base, params) => {
                 let params = params
-                    .into_iter()
-                    .map(|e| self.hir_type_expr_to_var(&e, generic_list_token))
+                    .iter()
+                    .map(|e| self.hir_type_expr_to_var(e, generic_list_token))
                     .collect();
 
                 TypeVar::Known(KnownType::Named(base.inner.clone()), params)
@@ -184,7 +190,7 @@ impl TypeState {
             hir::TypeSpec::Generic(name) => match generic_list.get(&name.inner) {
                 Some(t) => t.clone(),
                 None => {
-                    for (list_source, _) in &self.generic_lists {
+                    for list_source in self.generic_lists.keys() {
                         info!("Generic lists exist for {list_source:?}");
                     }
                     info!("Current source is {generic_list_token:?}");
@@ -199,8 +205,8 @@ impl TypeState {
                 TypeVar::tuple(inner)
             }
             hir::TypeSpec::Array { inner, size } => {
-                let inner = self.type_var_from_hir(&inner, generic_list_token);
-                let size = self.hir_type_expr_to_var(&size, generic_list_token);
+                let inner = self.type_var_from_hir(inner, generic_list_token);
+                let size = self.hir_type_expr_to_var(size, generic_list_token);
 
                 TypeVar::array(inner, size)
             }
@@ -224,7 +230,7 @@ impl TypeState {
 
     /// Returns the type of the expression with the specified id. Error if no equation
     /// for the specified epxression exists
-    pub fn type_of<'a>(&'a self, expr: &TypedExpression) -> Result<TypeVar> {
+    pub fn type_of(&self, expr: &TypedExpression) -> Result<TypeVar> {
         for (e, t) in &self.equations {
             if e == expr {
                 return Ok(t.clone());
@@ -267,11 +273,11 @@ impl TypeState {
         if entity.head.unit_kind.is_pipeline() {
             self.unify(
                 &TypedExpression::Name(entity.inputs[0].0.clone().inner),
-                &t_clock(&ctx.symtab),
+                &t_clock(ctx.symtab),
                 ctx,
             )
             .into_diagnostic(
-                &entity.inputs[0].1.loc(),
+                entity.inputs[0].1.loc(),
                 |diag,
                  Tm {
                      g: got,
@@ -305,7 +311,6 @@ impl TypeState {
                         ))
                         .primary_label(format!("Found type {got}"))
                         .secondary_label(output_type, format!("{expected} type specified here"))
-                        .into()
                     },
                 )?;
         } else {
@@ -322,7 +327,6 @@ impl TypeState {
                         "The {} does not specify a return type.\n      Add a return type, or remove the return value.",
                         entity.head.unit_kind.name()
                     ))
-                    .into()
             })?;
         }
 
@@ -357,9 +361,9 @@ impl TypeState {
             target_type,
             value,
             kind,
-        } in args.into_iter()
+        } in args.iter()
         {
-            let target_type = self.type_var_from_hir(&target_type, generic_list);
+            let target_type = self.type_var_from_hir(target_type, generic_list);
 
             let loc = match kind {
                 hir::param_util::ArgumentKind::Positional => value.loc(),
@@ -602,7 +606,7 @@ impl TypeState {
 
         // NOTE: Unwrap is safe, size is still generic at this point
         self.unify(&addr_size, &addr_size_arg, ctx).unwrap();
-        self.unify_expression_generic_error(&args[1].value, &port_type, ctx)?;
+        self.unify_expression_generic_error(args[1].value, &port_type, ctx)?;
 
         Ok(())
     }
@@ -665,7 +669,11 @@ impl TypeState {
             GenericListSource::Expression(id) => GenericListToken::Expression(id),
         };
 
-        if let Some(_) = self.generic_lists.insert(reference.clone(), mapping) {
+        if self
+            .generic_lists
+            .insert(reference.clone(), mapping)
+            .is_some()
+        {
             panic!("A generic list already existed for {reference:?}");
         }
         reference
@@ -699,12 +707,12 @@ impl TypeState {
         self.add_equation(TypedExpression::Id(pattern.inner.id), new_type);
         match &pattern.inner.kind {
             hir::PatternKind::Integer(_) => {
-                let int_t = &self.new_generic_int(&ctx.symtab);
+                let int_t = &self.new_generic_int(ctx.symtab);
                 self.unify(pattern, int_t, ctx)
                     .expect("Failed to unify new_generic with int");
             }
             hir::PatternKind::Bool(_) => {
-                self.unify(pattern, &t_bool(&ctx.symtab), ctx)
+                self.unify(pattern, &t_bool(ctx.symtab), ctx)
                     .expect("Expected new_generic with boolean");
             }
             hir::PatternKind::Name { name, pre_declared } => {
@@ -788,7 +796,7 @@ impl TypeState {
                 ) in args.iter().zip(params.0.iter())
                 {
                     self.visit_pattern(pattern, ctx, &generic_list)?;
-                    let target_type = self.type_var_from_hir(&target_type, &generic_list);
+                    let target_type = self.type_var_from_hir(target_type, &generic_list);
 
                     let loc = match kind {
                         hir::ArgumentKind::Positional => pattern.loc(),
@@ -825,14 +833,14 @@ impl TypeState {
         let WalTrace { clk, rst } = &trace.inner;
         clk.as_ref()
             .map(|x| {
-                self.visit_expression(&x, ctx, generic_list)?;
-                self.unify_expression_generic_error(&x, &t_clock(&ctx.symtab), ctx)
+                self.visit_expression(x, ctx, generic_list)?;
+                self.unify_expression_generic_error(x, &t_clock(ctx.symtab), ctx)
             })
             .transpose()?;
         rst.as_ref()
             .map(|x| {
-                self.visit_expression(&x, ctx, generic_list)?;
-                self.unify_expression_generic_error(&x, &t_bool(&ctx.symtab), ctx)
+                self.visit_expression(x, ctx, generic_list)?;
+                self.unify_expression_generic_error(x, &t_bool(ctx.symtab), ctx)
             })
             .transpose()?;
         Ok(())
@@ -866,14 +874,14 @@ impl TypeState {
                     )?;
 
                 if let Some(t) = ty {
-                    let tvar = self.type_var_from_hir(&t, &generic_list);
+                    let tvar = self.type_var_from_hir(t, generic_list);
                     self.unify(&TypedExpression::Id(pattern.id), &tvar, ctx)
                         .into_default_diagnostic(value.loc())?;
                 }
 
                 wal_trace
                     .as_ref()
-                    .map(|wt| self.visit_wal_trace(&wt, ctx, generic_list))
+                    .map(|wt| self.visit_wal_trace(wt, ctx, generic_list))
                     .transpose()?;
 
                 Ok(())
@@ -889,7 +897,7 @@ impl TypeState {
             Statement::PipelineRegMarker(cond) => {
                 if let Some(cond) = cond {
                     self.visit_expression(cond, ctx, generic_list)?;
-                    self.unify_expression_generic_error(cond, &t_bool(&ctx.symtab), ctx)?;
+                    self.unify_expression_generic_error(cond, &t_bool(ctx.symtab), ctx)?;
                 }
                 Ok(())
             }
@@ -898,7 +906,7 @@ impl TypeState {
             Statement::WalSuffixed { .. } => Ok(()),
             Statement::Assert(expr) => {
                 self.visit_expression(expr, ctx, generic_list)?;
-                self.unify_expression_generic_error(expr, &t_bool(&ctx.symtab), ctx)?;
+                self.unify_expression_generic_error(expr, &t_bool(ctx.symtab), ctx)?;
                 Ok(())
             }
             Statement::Set { target, value } => {
@@ -927,7 +935,7 @@ impl TypeState {
         let type_spec_type = &reg
             .value_type
             .as_ref()
-            .map(|t| self.type_var_from_hir(&t, &generic_list).at_loc(&t));
+            .map(|t| self.type_var_from_hir(t, generic_list).at_loc(t));
 
         // We need to do this before visiting value, in case it constrains the
         // type of the identifiers in the pattern
@@ -945,10 +953,10 @@ impl TypeState {
         }
 
         if let Some((rst_cond, rst_value)) = &reg.reset {
-            self.visit_expression(&rst_cond, ctx, generic_list)?;
-            self.visit_expression(&rst_value, ctx, generic_list)?;
+            self.visit_expression(rst_cond, ctx, generic_list)?;
+            self.visit_expression(rst_value, ctx, generic_list)?;
             // Ensure cond is a boolean
-            self.unify(&rst_cond.inner, &t_bool(&ctx.symtab), ctx)
+            self.unify(&rst_cond.inner, &t_bool(ctx.symtab), ctx)
                 .into_diagnostic(
                     rst_cond.loc(),
                     |diag,
@@ -1001,7 +1009,7 @@ impl TypeState {
                 )?;
         }
 
-        self.unify(&reg.clock, &t_clock(&ctx.symtab), ctx)
+        self.unify(&reg.clock, &t_clock(ctx.symtab), ctx)
             .into_diagnostic(
                 reg.clock.loc(),
                 |diag,
@@ -1228,8 +1236,8 @@ impl TypeState {
                     }
                     (KnownType::Named(n1), KnownType::Named(n2)) => {
                         match (
-                            &ctx.symtab.type_symbol_by_id(&n1).inner,
-                            &ctx.symtab.type_symbol_by_id(&n2).inner,
+                            &ctx.symtab.type_symbol_by_id(n1).inner,
+                            &ctx.symtab.type_symbol_by_id(n2).inner,
                         ) {
                             (TypeSymbol::Declared(_, _), TypeSymbol::Declared(_, _)) => {
                                 if n1 != n2 {
@@ -1237,8 +1245,8 @@ impl TypeState {
                                 }
 
                                 unify_params!();
-                                let new_ts1 = ctx.symtab.type_symbol_by_id(&n1).inner;
-                                let new_ts2 = ctx.symtab.type_symbol_by_id(&n2).inner;
+                                let new_ts1 = ctx.symtab.type_symbol_by_id(n1).inner;
+                                let new_ts2 = ctx.symtab.type_symbol_by_id(n2).inner;
                                 let new_v1 = e1
                                     .get_type(self)
                                     .expect("Tried to unify types but the lhs was not found");
@@ -1318,7 +1326,7 @@ impl TypeState {
             self.replacements
                 .insert(replaced_type.clone(), new_type.clone());
 
-            for (_, rhs) in &mut self.equations {
+            for rhs in self.equations.values_mut() {
                 TypeState::replace_type_var(rhs, &replaced_type, &new_type)
             }
             for generic_list in &mut self.generic_lists.values_mut() {
@@ -1405,13 +1413,13 @@ impl TypeState {
                         Self::replace_type_var(
                             &mut source_lhs,
                             &replacement.context.replaces,
-                            &e.outer(),
+                            e.outer(),
                         );
                         let mut source_rhs = replacement.context.inside.clone();
                         Self::replace_type_var(
                             &mut source_rhs,
                             &replacement.context.replaces,
-                            &g.outer(),
+                            g.outer(),
                         );
                         e.inside.replace(source_lhs);
                         g.inside.replace(source_rhs);
@@ -1562,7 +1570,7 @@ impl TypeState {
 
             let replacements = replacements_option
                 .into_iter()
-                .filter_map(|x| x)
+                .flatten()
                 .flatten()
                 .collect::<Vec<_>>();
             if replacements.is_empty() {
@@ -1578,7 +1586,7 @@ impl TypeState {
             self.requirements = self
                 .requirements
                 .drain(0..)
-                .zip(retain.into_iter())
+                .zip(retain)
                 .filter_map(|(req, keep)| if keep { Some(req) } else { None })
                 .collect();
         }
@@ -1665,10 +1673,10 @@ impl TypeMap {
     }
 }
 
-impl Into<TypeMap> for TypeState {
-    fn into(self) -> TypeMap {
+impl From<TypeState> for TypeMap {
+    fn from(val: TypeState) -> Self {
         TypeMap {
-            equations: self.equations,
+            equations: val.equations,
         }
     }
 }

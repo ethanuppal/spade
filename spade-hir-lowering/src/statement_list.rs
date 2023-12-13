@@ -10,6 +10,12 @@ pub struct StatementList {
     name_map: NameSourceMap,
 }
 
+impl Default for StatementList {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl StatementList {
     pub fn new() -> StatementList {
         Self {

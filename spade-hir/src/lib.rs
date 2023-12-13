@@ -638,6 +638,12 @@ pub struct ItemList {
     pub impls: HashMap<NameID, HashMap<TraitName, Loc<ImplBlock>>>,
 }
 
+impl Default for ItemList {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ItemList {
     pub fn new() -> Self {
         Self {
@@ -658,11 +664,11 @@ impl ItemList {
                 // NOTE: unwrap here is safe *unless* we have got duplicate trait IDs which
                 // means we have bigger problems
                 Diagnostic::error(
-                    &name.name_loc().unwrap(),
+                    name.name_loc().unwrap(),
                     format!("Multiple definitions of trait {name}"),
                 )
                 .primary_label("New definition")
-                .secondary_label(&prev.name_loc().unwrap(), "Previous definition"),
+                .secondary_label(prev.name_loc().unwrap(), "Previous definition"),
             )
         } else {
             self.traits.insert(name, members.into_iter().collect());
@@ -671,7 +677,7 @@ impl ItemList {
     }
 
     pub fn get_trait(&mut self, name: &TraitName) -> Option<&HashMap<Identifier, UnitHead>> {
-        self.traits.get(&name)
+        self.traits.get(name)
     }
 
     pub fn traits(&self) -> &HashMap<TraitName, HashMap<Identifier, UnitHead>> {

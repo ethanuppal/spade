@@ -19,7 +19,7 @@ pub fn select_method(
         .impls
         .get(type_name)
         .cloned()
-        .unwrap_or_else(|| HashMap::new());
+        .unwrap_or_else(HashMap::new);
 
     // Gather all the candidate methods which we may want to call.
     let candidates = impld_traits
@@ -33,7 +33,7 @@ pub fn select_method(
                 }
             })
         })
-        .filter_map(|r| r)
+        .flatten()
         .collect::<Vec<_>>();
 
     let final_method = match candidates.as_slice() {
@@ -41,8 +41,7 @@ pub fn select_method(
         [] => {
             return Err(
                 Diagnostic::error(expr, format!("{type_name} has no method {method}"))
-                    .primary_label("No such method")
-                    .into(),
+                    .primary_label("No such method"),
             )
         }
         all_candidates => {
@@ -56,7 +55,7 @@ pub fn select_method(
                 diag = diag.secondary_label(candidate, format!("{type_name} is defined here"))
             }
 
-            return Err(diag.into());
+            return Err(diag);
         }
     };
 

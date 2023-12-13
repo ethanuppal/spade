@@ -14,10 +14,12 @@ fn lookup(symtab: &SymbolTable, name: &[&str]) -> KnownType {
     KnownType::Named(
         symtab
             .lookup_type_symbol(&path.clone().nowhere())
-            .expect(&format!(
-                "{} not found. Was the symtab not populated with builtins?",
-                path
-            ))
+            .unwrap_or_else(|_| {
+                panic!(
+                    "{} not found. Was the symtab not populated with builtins?",
+                    path
+                )
+            })
             .0,
     )
 }

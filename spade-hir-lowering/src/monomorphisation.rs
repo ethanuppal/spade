@@ -32,6 +32,12 @@ pub struct MonoState {
     translation: BTreeMap<(NameID, Vec<TypeVar>), NameID>,
 }
 
+impl Default for MonoState {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl MonoState {
     pub fn new() -> MonoState {
         MonoState {
@@ -109,7 +115,7 @@ pub fn compile_items(
 
     let mut state = MonoState::new();
 
-    for (_, (item, _)) in items {
+    for (item, _) in items.values() {
         match item {
             ExecutableItem::Unit(u) => {
                 if u.head.type_params.is_empty() {

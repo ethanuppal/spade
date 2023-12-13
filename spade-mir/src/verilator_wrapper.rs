@@ -279,7 +279,7 @@ impl Entity {
 
 pub fn verilator_wrappers(entities: &[&Entity]) -> String {
     let inner = entities
-        .into_iter()
+        .iter()
         .filter_map(|e| Entity::verilator_wrapper(e))
         .collect::<Vec<_>>();
 

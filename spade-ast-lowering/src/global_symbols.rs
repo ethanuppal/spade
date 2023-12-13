@@ -88,7 +88,7 @@ pub fn visit_item(
 ) -> Result<()> {
     match item {
         ast::Item::Unit(e) => {
-            visit_unit(&None, &e, symtab, &SelfContext::FreeStanding)?;
+            visit_unit(&None, e, symtab, &SelfContext::FreeStanding)?;
         }
         ast::Item::TraitDef(def) => {
             let name = symtab.add_unique_thing(
@@ -168,7 +168,7 @@ pub fn visit_type_declaration(
     };
 
     let new_thing = Path::ident(t.name.clone()).at_loc(&t.name.loc());
-    symtab.add_unique_type(new_thing, TypeSymbol::Declared(args, kind).at_loc(&t))?;
+    symtab.add_unique_type(new_thing, TypeSymbol::Declared(args, kind).at_loc(t))?;
 
     Ok(())
 }
@@ -242,8 +242,7 @@ pub fn re_visit_type_declaration(
                     return Err(
                         Diagnostic::error(new, format!("Multiple options called {}", new))
                             .primary_label(format!("{} occurs more than once", new))
-                            .secondary_label(prev, "Previously occurred here")
-                            .into(),
+                            .secondary_label(prev, "Previously occurred here"),
                     );
                 }
                 member_names.insert(option.0.clone());
@@ -271,8 +270,7 @@ pub fn re_visit_type_declaration(
                     if ty.is_port(symtab)? {
                         return Err(Diagnostic::error(ty, "Port in enum")
                             .primary_label("This is a port")
-                            .secondary_label(&e.name, "This is an enum")
-                            .into());
+                            .secondary_label(&e.name, "This is an enum"));
                     }
                 }
 
@@ -321,8 +319,7 @@ pub fn re_visit_type_declaration(
                 return Err(Diagnostic::bug(
                     self_,
                     "struct contains self member which was let through parser",
-                )
-                .into());
+                ));
             }
             // Disallow normal arguments if the struct is a port, and port types
             // if it is not
@@ -340,8 +337,7 @@ pub fn re_visit_type_declaration(
                                 format!("Consider making {f} a wire"),
                                 ty,
                                 "&",
-                            )
-                            .into());
+                            ));
                     }
                 }
             } else {
@@ -354,8 +350,7 @@ pub fn re_visit_type_declaration(
                                 format!("Consider making {} a port struct", s.name),
                                 &s.name,
                                 "port ",
-                            )
-                            .into());
+                            ));
                     }
                 }
             }
@@ -398,9 +393,9 @@ pub fn re_visit_type_declaration(
                     };
                     wal_traceable = Some(
                         WalTraceable {
-                            suffix: suffix.clone(),
-                            uses_clk: uses_clk.clone(),
-                            uses_rst: uses_rst.clone(),
+                            suffix,
+                            uses_clk: *uses_clk,
+                            uses_rst: *uses_rst,
                         }
                         .at_loc(attr),
                     );

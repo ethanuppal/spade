@@ -73,7 +73,7 @@ impl TypeState {
                          }| {
                             (
                                 ident.inner.clone(),
-                                Self::type_spec_to_concrete(&t, type_list, &generic_subs, invert),
+                                Self::type_spec_to_concrete(t, type_list, &generic_subs, invert),
                             )
                         },
                     )
@@ -100,7 +100,7 @@ impl TypeState {
         match expr {
             hir::TypeExpression::Integer(val) => ConcreteType::Integer(val.clone()),
             hir::TypeExpression::TypeSpec(inner) => {
-                Self::type_spec_to_concrete(&inner, type_list, generic_substitutions, invert)
+                Self::type_spec_to_concrete(inner, type_list, generic_substitutions, invert)
             }
         }
     }
@@ -121,16 +121,16 @@ impl TypeState {
                     .collect();
 
                 let actual = type_list
-                    .get(&name)
-                    .expect(&format!("Expected {:?} to be in type list", name));
+                    .get(name)
+                    .unwrap_or_else(|| panic!("Expected {:?} to be in type list", name));
 
                 Self::type_decl_to_concrete(actual, type_list, params, invert)
             }
             TypeSpec::Generic(name) => {
                 // Substitute the generic for the current substitution
                 (*generic_substitutions
-                    .get(&name)
-                    .expect(&format!("Expected a substitution for {}", name)))
+                    .get(name)
+                    .unwrap_or_else(|| panic!("Expected a substitution for {}", name)))
                 .clone()
             }
             TypeSpec::Tuple(t) => {
@@ -140,7 +140,7 @@ impl TypeState {
                         Self::type_spec_to_concrete(
                             &v.inner,
                             type_list,
-                            &generic_substitutions,
+                            generic_substitutions,
                             invert,
                         )
                     })
@@ -149,9 +149,9 @@ impl TypeState {
             }
             TypeSpec::Array { inner, size } => {
                 let size_type = Box::new(Self::type_expr_to_concrete(
-                    &size,
+                    size,
                     type_list,
-                    &generic_substitutions,
+                    generic_substitutions,
                     invert,
                 ));
 
@@ -163,9 +163,9 @@ impl TypeState {
 
                 ConcreteType::Array {
                     inner: Box::new(Self::type_spec_to_concrete(
-                        &inner,
+                        inner,
                         type_list,
-                        &generic_substitutions,
+                        generic_substitutions,
                         invert,
                     )),
                     size,
@@ -225,15 +225,12 @@ impl TypeState {
                     .map(|v| Self::inner_ungenerify_type(v, symtab, type_list, invert))
                     .collect::<Option<Vec<_>>>()?;
 
-                match type_list.get(&t) {
-                    Some(t) => Some(Self::type_decl_to_concrete(
-                        &t.inner, type_list, params, invert,
-                    )),
-                    None => None,
-                }
+                type_list
+                    .get(t)
+                    .map(|t| Self::type_decl_to_concrete(&t.inner, type_list, params, invert))
             }
             TypeVar::Known(KnownType::Integer(size), params) => {
-                assert!(params.len() == 0, "integers cannot have type parameters");
+                assert!(params.is_empty(), "integers cannot have type parameters");
 
                 Some(ConcreteType::Integer(size.clone()))
             }
@@ -361,8 +358,7 @@ impl TypeState {
             Err(
                 Diagnostic::error(expr, "Type of expression is not fully known")
                     .primary_label("The type of this expression is not fully known")
-                    .note(format!("Found incomplete type: {t}"))
-                    .into(),
+                    .note(format!("Found incomplete type: {t}")),
             )
         }
     }
@@ -388,8 +384,7 @@ impl TypeState {
             Err(
                 Diagnostic::error(name, format!("Type of {name} is not fully known"))
                     .primary_label(format!("The type of {name} is not fully known"))
-                    .note(format!("Found incomplete type: {t}"))
-                    .into(),
+                    .note(format!("Found incomplete type: {t}")),
             )
         }
     }

@@ -9,6 +9,12 @@ pub struct TraceStack {
     entries: RwLock<Vec<TraceStackEntry>>,
 }
 
+impl Default for TraceStack {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl TraceStack {
     pub fn new() -> Self {
         Self {
@@ -70,7 +76,7 @@ pub fn format_trace_stack(stack: &TraceStack) -> String {
             }
             TraceStackEntry::Exit => {
                 next_indent_amount -= 1;
-                format!("")
+                String::new()
             }
         };
         if let TraceStackEntry::Exit = entry {

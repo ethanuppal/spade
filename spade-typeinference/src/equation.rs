@@ -145,7 +145,7 @@ impl std::fmt::Debug for TypeVar {
         match self {
             TypeVar::Known(KnownType::Named(t), params) => {
                 let generics = if params.is_empty() {
-                    format!("")
+                    String::new()
                 } else {
                     format!(
                         "<{}>",
@@ -195,7 +195,7 @@ impl std::fmt::Display for TypeVar {
         match self {
             TypeVar::Known(KnownType::Named(t), params) => {
                 let generics = if params.is_empty() {
-                    format!("")
+                    String::new()
                 } else {
                     format!(
                         "<{}>",

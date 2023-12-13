@@ -131,16 +131,14 @@ impl std::fmt::Display for ConcreteType {
             }
             ConcreteType::Single { base, params } => {
                 let params_str = if params.is_empty() {
-                    format!("")
+                    String::new()
                 } else {
-                    format!(
-                        "{}",
-                        params
-                            .iter()
-                            .map(|p| format!("{}", p))
-                            .collect::<Vec<_>>()
-                            .join(", ")
-                    )
+                    params
+                        .iter()
+                        .map(|p| format!("{}", p))
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                        .to_string()
                 };
 
                 write!(f, "{}{}", base, params_str)

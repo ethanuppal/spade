@@ -16,12 +16,10 @@ pub fn int_literal_to_pipeline_stages(depth: &Loc<ast::IntLiteral>) -> Result<Lo
         })?
         .try_map_ref(|u| {
             u.clone().to_usize().ok_or_else(|| {
-                Diagnostic::bug(depth, "Too many pipeline stages")
-                    .primary_label(format!(
-                        "At most {} pipeline stages are supported",
-                        usize::MAX
-                    ))
-                    .into()
+                Diagnostic::bug(depth, "Too many pipeline stages").primary_label(format!(
+                    "At most {} pipeline stages are supported",
+                    usize::MAX
+                ))
             })
         })
 }
@@ -70,16 +68,14 @@ fn visit_pipeline_statement(
                 return Err(
                     Diagnostic::error(name, "Multiple labels for the same stage")
                         .primary_label("This stage has already been labeled")
-                        .secondary_label(previous, "Previously labeled here")
-                        .into(),
+                        .secondary_label(previous, "Previously labeled here"),
                 );
             }
 
             if let Some(prev) = pipeline_ctx.previous_def(name) {
                 return Err(Diagnostic::error(name, "Stage was already defined")
                     .primary_label(format!("'{} has already been defined", name))
-                    .secondary_label(prev, "Previously defined here")
-                    .into());
+                    .secondary_label(prev, "Previously defined here"));
             }
             pipeline_ctx.stages[*current_stage] = Some(name.clone());
         }
@@ -134,8 +130,7 @@ pub fn maybe_perform_pipelining_tasks(
                     ast_inputs.loc(),
                     "Missing clock argument for pipeline",
                 )
-                .note("All pipelines need to take at least a clock as an argument")
-                .into());
+                .note("All pipelines need to take at least a clock as an argument"));
             }
 
             let mut context = PipelineContext {
@@ -166,8 +161,7 @@ pub fn maybe_perform_pipelining_tasks(
                             depth,
                             if depth.inner == 1 { "" } else { "s" }
                         ),
-                    )
-                    .into());
+                    ));
             }
 
             Ok(Some(context))

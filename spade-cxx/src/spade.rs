@@ -123,10 +123,10 @@ impl SimulationExt {
             .compare_field(field.0.clone(), spade_expr, &output_bits.0)?;
 
         if !cmp_result.matches() {
-            println!("{}", format!("{source_loc}").red());
+            println!("{}", source_loc.to_string().red());
             println!("\texpected: {}", cmp_result.expected_spade);
             println!("\tgot:      {}", cmp_result.got_spade);
-            println!("");
+            println!();
             println!(
                 "\tverilog (\n\t'{}' != \n\t'{}')",
                 cmp_result.expected_bits.0.green(),
@@ -137,9 +137,9 @@ impl SimulationExt {
         Ok(())
     }
 
-    pub fn output_field(&mut self, path: &Vec<String>) -> Result<Box<FieldRef>> {
+    pub fn output_field(&mut self, path: &[String]) -> Result<Box<FieldRef>> {
         self.0
-            .output_field(path.clone())
+            .output_field(path.to_owned())
             .map(|o| Box::new(FieldRef(o)))
     }
 }
@@ -202,6 +202,6 @@ mod ffi {
             source_loc: &str,
         ) -> Result<()>;
 
-        fn output_field(&mut self, path: &Vec<String>) -> Result<Box<FieldRef>>;
+        fn output_field(&mut self, path: &[String]) -> Result<Box<FieldRef>>;
     }
 }

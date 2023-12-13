@@ -26,7 +26,7 @@ pub(crate) struct PatternListLengthMismatch {
         "Expected {} argument{}{}",
         diag.expected,
         if diag.expected == 1 { "" } else { "s" },
-        if let Some(for_what) = &diag.for_what { format!(" for this {for_what}") } else { format!("") },
+        if let Some(for_what) = &diag.for_what { format!(" for this {for_what}") } else { String::new() },
     )]
     pub(crate) at: Loc<()>,
     pub(crate) for_what: Option<String>,

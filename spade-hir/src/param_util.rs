@@ -60,7 +60,7 @@ impl From<ArgumentError> for Diagnostic {
                 .primary_label(format!("Expected {expected} argument{plural}"));
 
                 for e in extra {
-                    base = base.secondary_label(e, format!("Unexpected argument"))
+                    base = base.secondary_label(e, "Unexpected argument".to_string())
                 }
                 base
             }

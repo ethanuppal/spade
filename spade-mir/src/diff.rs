@@ -19,6 +19,12 @@ pub struct VarMap {
     pub name_map_rev: HashMap<u64, u64>,
 }
 
+impl Default for VarMap {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl VarMap {
     pub fn new() -> Self {
         Self {

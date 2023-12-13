@@ -58,10 +58,10 @@ impl Value {
                     // bits (as is the case for BigInt). To fix that, we mask out the bits we do
                     // want which gives a positive number with the correct binary representation.
                     // https://stackoverflow.com/questions/12946116/twos-complement-binary-in-python
-                    let size_usize = size.to_usize().expect(&format!(
-                        "Variable size {size} is too large to fit a 'usize'"
-                    ));
-                    let mask = BigInt::from((BigInt::from(1) << size_usize) - 1);
+                    let size_usize = size.to_usize().unwrap_or_else(|| {
+                        panic!("Variable size {size} is too large to fit a 'usize'")
+                    });
+                    let mask = (BigInt::from(1) << size_usize) - 1;
                     format!("{:b}", val & mask)
                 }
             }
@@ -109,10 +109,10 @@ impl Value {
                     // bits (as is the case for BigInt). To fix that, we mask out the bits we do
                     // want which gives a positive number with the correct binary representation.
                     // https://stackoverflow.com/questions/12946116/twos-complement-binary-in-python
-                    let size_usize = size.to_usize().expect(&format!(
-                        "Variable size {size} is too large to fit in a 'usize'"
-                    ));
-                    let mask = BigInt::from((BigInt::from(1) << size_usize) - 1);
+                    let size_usize = size.to_usize().unwrap_or_else(|| {
+                        panic!("Variable size {size} is too large to fit in a 'usize'")
+                    });
+                    let mask: BigInt = (BigInt::from(1) << size_usize) - 1;
                     (val & mask).to_u64().unwrap()
                 }
             }
@@ -147,10 +147,10 @@ impl Value {
                     // bits (as is the case for BigInt). To fix that, we mask out the bits we do
                     // want which gives a positive number with the correct binary representation.
                     // https://stackoverflow.com/questions/12946116/twos-complement-binary-in-python
-                    let size_usize = size.to_usize().expect(&format!(
-                        "Variable size {size} is too large to fit in a usize"
-                    ));
-                    let mask = BigInt::from((BigInt::from(1) << size_usize) - 1);
+                    let size_usize = size.to_usize().unwrap_or_else(|| {
+                        panic!("Variable size {size} is too large to fit in a usize")
+                    });
+                    let mask: BigInt = (BigInt::from(1) << size_usize) - 1;
                     (val & mask).to_biguint().unwrap()
                 }
             }
@@ -227,11 +227,11 @@ pub fn eval_statements(statements: &[Statement]) -> Value {
 
                 let val = match operator {
                     Operator::Add => Value::Int {
-                        size: ty.size().into(),
+                        size: ty.size(),
                         val: name_vals[&ops[0]].assume_int() + name_vals[&ops[1]].assume_int(),
                     },
                     Operator::Sub => Value::Int {
-                        size: ty.size().into(),
+                        size: ty.size(),
                         val: name_vals[&ops[0]].assume_int() - name_vals[&ops[1]].assume_int(),
                     },
                     Operator::Mul => todo!(),
@@ -252,7 +252,7 @@ pub fn eval_statements(statements: &[Statement]) -> Value {
                     Operator::BitwiseOr => todo!(),
                     Operator::BitwiseXor => todo!(),
                     Operator::USub => Value::Int {
-                        size: ty.size().into(),
+                        size: ty.size(),
                         val: -name_vals[&ops[0]].assume_int(),
                     },
                     Operator::Not => todo!(),
@@ -296,8 +296,7 @@ pub fn eval_statements(statements: &[Statement]) -> Value {
                         );
                         let variant_member_size =
                             ops.iter().map(|op| name_types[op].size()).sum::<BigUint>();
-                        let padding_size =
-                            BigUint::from(ty.size()) - tag_size - variant_member_size;
+                        let padding_size = ty.size() - tag_size - variant_member_size;
                         if padding_size != BigUint::zero() {
                             to_concat.push(Value::Undef(padding_size))
                         }
@@ -321,7 +320,7 @@ pub fn eval_statements(statements: &[Statement]) -> Value {
             Statement::Constant(id, ty, val) => {
                 let val = match val {
                     crate::ConstantValue::Int(i) => Value::Int {
-                        size: ty.size().into(),
+                        size: ty.size(),
                         val: i.clone(),
                     },
                     crate::ConstantValue::Bool(v) => Value::Bit(*v),

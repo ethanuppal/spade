@@ -46,7 +46,7 @@ pub fn check_linear_types(
 
     visit_expression(body, &mut linear_state, &ctx)?;
 
-    linear_state.consume_expression(&body)?;
+    linear_state.consume_expression(body)?;
 
     linear_state.check_unused().map_err(|(alias, witness)| {
         let self_description = match &alias.inner {
@@ -185,14 +185,14 @@ fn visit_expression(
             for (i, expr) in inner.iter().enumerate() {
                 visit_expression(expr, linear_state, ctx)?;
                 trace!("visited tuple literal member {i}");
-                linear_state.consume_expression(&expr)?;
+                linear_state.consume_expression(expr)?;
             }
         }
         spade_hir::ExprKind::ArrayLiteral(inner) => {
             for expr in inner {
                 visit_expression(expr, linear_state, ctx)?;
                 trace!("Consuming array literal inner");
-                linear_state.consume_expression(&expr)?;
+                linear_state.consume_expression(expr)?;
             }
         }
         spade_hir::ExprKind::CreatePorts => {}
@@ -234,7 +234,7 @@ fn visit_expression(
                 | UnaryOperator::Not
                 | UnaryOperator::BitwiseNot
                 | UnaryOperator::Reference => {
-                    linear_state.consume_expression(&operand)?;
+                    linear_state.consume_expression(operand)?;
                 }
                 UnaryOperator::Dereference => {}
                 UnaryOperator::FlipPort => {}
@@ -243,7 +243,7 @@ fn visit_expression(
         spade_hir::ExprKind::Match(cond, variants) => {
             visit_expression(cond, linear_state, ctx)?;
             for (pat, expr) in variants {
-                linear_state.push_pattern(pat, &ctx)?;
+                linear_state.push_pattern(pat, ctx)?;
                 visit_expression(expr, linear_state, ctx)?;
             }
         }
@@ -268,10 +268,8 @@ fn visit_expression(
             // doing more fancy things, we should consider getting rid of this function
             let consume = ctx
                 .symtab
-                .try_lookup_final_id(
-                    &Path::from_strs(&vec!["std", "ports", "read_mut_wire"]).nowhere(),
-                )
-                .map(|n| &n != &callee.inner)
+                .try_lookup_final_id(&Path::from_strs(&["std", "ports", "read_mut_wire"]).nowhere())
+                .map(|n| n != callee.inner)
                 .unwrap_or(true);
 
             match &list.inner {

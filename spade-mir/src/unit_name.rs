@@ -40,6 +40,12 @@ pub struct InstanceMap {
     pub inner: HashMap<NameID, BTreeMap<String, NameID>>,
 }
 
+impl Default for InstanceMap {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl InstanceMap {
     pub fn new() -> Self {
         Self {
@@ -50,6 +56,12 @@ impl InstanceMap {
 
 pub struct InstanceNameTracker {
     previous_names: HashMap<String, usize>,
+}
+
+impl Default for InstanceNameTracker {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl InstanceNameTracker {
@@ -154,8 +166,8 @@ impl UnitName {
         UnitName {
             source: NameID(0, Path::from_strs(strs)),
             kind: UnitNameKind::Escaped {
-                name: strs.into_iter().join("::"),
-                path: strs.into_iter().map(|s| s.to_string()).collect(),
+                name: strs.iter().join("::"),
+                path: strs.iter().map(|s| s.to_string()).collect(),
             },
         }
     }
@@ -173,8 +185,8 @@ impl UnitName {
         names: &mut InstanceNameTracker,
     ) -> String {
         let name = match &self.kind {
-            UnitNameKind::Escaped { name, path } => path.last().unwrap_or(&name),
-            UnitNameKind::Unescaped(name) => &name,
+            UnitNameKind::Escaped { name, path } => path.last().unwrap_or(name),
+            UnitNameKind::Unescaped(name) => name,
         };
         names.use_name(self.source.clone(), name, inside, instance_map)
     }
