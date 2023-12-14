@@ -35,7 +35,7 @@ pub fn populate_symtab(symtab: &mut SymbolTable, item_list: &mut ItemList) {
                         GenericArg::TypeName { name: a, traits: t } => {
                             assert!(
                                 t.is_empty(),
-                                "Constrained generics are not supported on primtives"
+                                "Constrained generics are not supported on primitives"
                             );
                             let id = symtab.add_type_with_id(
                                 id,

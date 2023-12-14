@@ -431,7 +431,7 @@ impl Spade {
 
         // Finally, we need to figure out the range of the field in in the
         // type. Since all previous steps passed, this can assume that
-        // the types are good so we can do lots of unwraping
+        // the types are good so we can do lots of unwrapping
         let mut concrete = &self
             .type_state
             .name_type(&o_name.nowhere(), &ast_ctx.symtab, &self.item_list.types)

@@ -22,7 +22,7 @@ pub enum Requirement {
         target_type: Loc<TypeVar>,
         /// The field which is required to exist on the struct
         field: Loc<Identifier>,
-        /// The expression from which this requirement arrises
+        /// The expression from which this requirement arises
         expr: Loc<TypeVar>,
     },
     HasMethod {
@@ -32,7 +32,7 @@ pub enum Requirement {
         target_type: Loc<TypeVar>,
         /// The method which should exist on the type
         method: Loc<Identifier>,
-        /// The expression from which this requirement arrises
+        /// The expression from which this requirement arises
         expr: Loc<TypeVar>,
         /// The argument list passed to the method. This should include the `self` expression as
         /// the appropriate argument (first positional or a non-shorthand self otherwise)
