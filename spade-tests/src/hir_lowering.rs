@@ -1533,7 +1533,7 @@ mod tests {
                 // this needs to be incremented. If we end up with more tests
                 // like this, we should do smarter comparison
                 // lifeguard spade#224
-                name: "identity[74]".to_string(),
+                name: "identity[80]".to_string(),
                 path: vec!["identity".to_string()],
             },
             source: NameID(0, Path::from_strs(&["identity"])),

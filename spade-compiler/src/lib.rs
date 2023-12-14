@@ -201,6 +201,12 @@ pub fn compile(
     }
 
     for (namespace, module_ast) in &module_asts {
+        if !namespace.namespace.0.is_empty() {
+            symtab.add_thing(
+                namespace.namespace.clone(),
+                spade_hir::symbol_table::Thing::Module(namespace.namespace.0[0].clone()),
+            );
+        }
         do_in_namespace(namespace, &mut symtab, &mut |symtab| {
             global_symbols::gather_types(module_ast, symtab).or_report(&mut errors);
         })
