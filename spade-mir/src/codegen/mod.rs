@@ -19,7 +19,9 @@ use crate::types::Type;
 use crate::unit_name::{InstanceMap, InstanceNameTracker};
 use crate::verilog::{self, assign, logic, size_spec};
 use crate::wal::insert_wal_signals;
-use crate::{enum_util, Binding, ConstantValue, Entity, MirInput, Operator, Statement, ValueName};
+use crate::{
+    enum_util, Binding, ConstantValue, Entity, MirInput, Operator, ParamName, Statement, ValueName,
+};
 
 pub mod util;
 
@@ -576,7 +578,7 @@ fn forward_expression_code(binding: &Binding, types: &TypeList, ops: &[ValueName
             // i.e. the left-most element is stored to the right in the bit vector.
             format!("{{{}}}", members.join(", "))
         }
-        Operator::Instance(_, _) => {
+        Operator::Instance { .. } => {
             // NOTE: dummy. Set in the next match statement
             String::new()
         }
@@ -701,7 +703,7 @@ fn backward_expression_code(binding: &Binding, types: &TypeList, ops: &[ValueNam
             // NOTE Dummy. Set in statement_code
             String::new()
         }
-        Operator::Instance(_, _) => String::new(),
+        Operator::Instance { .. } => String::new(),
         Operator::Alias => {
             // NOTE: Set in statement_code
             String::new()
@@ -749,31 +751,40 @@ fn statement_code(statement: &Statement, ctx: &mut Context) -> Code {
 
             // Unless this is a special operator, we just use assign value = expression
             let assignment = match &binding.operator {
-                Operator::Instance(module_name, loc) => {
+                Operator::Instance{name: module_name, params, loc} => {
                     // Input args
                     let mut args = binding
                         .operands
                         .iter()
-                        .flat_map(|port| {
+                        .zip(params)
+                        .flat_map(|(port, ParamName{name, no_mangle})| {
                             let ty = &ctx.types[port];
 
                             // Push the input and output into the result if they
                             // should be bound
                             let mut result = vec![];
                             if ty.size() != BigUint::zero()  {
-                                result.push(port.var_name())
+                                result.push(format!(
+                                    ".{}({})",
+                                    mangle_input(no_mangle, name),
+                                    port.var_name()
+                                ))
                             }
                             if ty.backward_size() != BigUint::zero()  {
-                                result.push(port.backward_var_name())
+                                result.push(format!(
+                                    ".{}({})",
+                                    mangle_output(no_mangle, name),
+                                    port.backward_var_name()
+                                ))
                             }
                             result
                         }).collect::<Vec<_>>();
 
                     if binding.ty.size() != BigUint::zero()  {
-                        args.push(name);
+                        args.push(format!(".output__({name})"));
                     }
                     if binding.ty.backward_size() != BigUint::zero()  {
-                        args.push(back_name);
+                        args.push(format!(".input__({back_name})"));
                     }
 
                     let instance_name = module_name.instance_name(
@@ -1617,7 +1628,7 @@ mod tests {
             ) -> Type::int(16); {
                 (reg n(10, "x__s1"); Type::int(16); clock(n(3, "clk")); n(0, "x_"));
                 // Stage 0
-                (e(0); Type::int(16); Instance((inst_name, None)););
+                (e(0); Type::int(16); simple_instance((inst_name, vec![])););
                 (n(0, "x_"); Type::int(16); Alias; e(0));
                 // Stage 1
                 (n(1, "x"); Type::int(16); Alias; n(0, "x_"));
@@ -1649,7 +1660,7 @@ mod tests {
                 always @(posedge \clk ) begin
                     \x__s1  <= \x_ ;
                 end
-                \A  A_0(\x_ );
+                \A  A_0(.output__(\x_ ));
                 assign \x  = \x_ ;
                 assign output__ = \x ;
             endmodule"#
@@ -1728,8 +1739,22 @@ mod tests {
             ) -> Type::int(16); {
                 (reg n(10, "x__s1"); Type::int(16); clock(n(3, "clk")); n(0, "x_"));
                 // Stage 0
-                (e(0); Type::int(16); Instance((inst1_unit_name, None)););
-                (e(0); Type::int(16); Instance((inst2_unit_name, None)););
+                (e(0); Type::int(16); Instance({
+                    name: inst1_unit_name,
+                    params: vec![
+                        ParamName{name: "a".to_string(), no_mangle: None},
+                        ParamName{name: "b".to_string(), no_mangle: None},
+                    ],
+                    loc: None
+                }););
+                (e(0); Type::int(16); Instance({
+                    name: inst2_unit_name,
+                    params: vec![
+                        ParamName{name: "a".to_string(), no_mangle: None},
+                        ParamName{name: "b".to_string(), no_mangle: None},
+                    ],
+                    loc: None
+                }););
                 (n(0, "x_"); Type::int(16); Alias; e(0));
                 // Stage 1
                 (n(1, "x"); Type::int(16); Alias; n(0, "x_"));
@@ -2407,12 +2432,23 @@ mod expression_tests {
     #[test]
     fn entity_instantiation_works() {
         let inst_name = UnitName::_test_from_strs(&["e_test"]);
-        let stmt = statement!(e(0); Type::Bool; Instance((inst_name, None)); e(1), e(2));
+        let stmt = statement!(
+            e(0); Type::Bool; Instance({
+                name: inst_name,
+                params: vec![
+                    ParamName{name: "a".to_string(), no_mangle: None},
+                    ParamName{name: "b".to_string(), no_mangle: None},
+                ],
+                loc: None
+            });
+            e(1),
+            e(2)
+        );
 
         let expected = indoc!(
             r#"
             logic _e_0;
-            \e_test  e_test_0(_e_1, _e_2, _e_0);"#
+            \e_test  e_test_0(.a_i(_e_1), .b_i(_e_2), .output__(_e_0));"#
         );
 
         assert_same_code!(
@@ -2432,13 +2468,20 @@ mod expression_tests {
     fn entity_instantiation_with_back_and_forward_ports_works() {
         let inst_name = UnitName::_test_from_strs(&["e_test"]);
         let ty = Type::Tuple(vec![Type::backward(Type::Bool), Type::Bool]);
-        let stmt = statement!(e(0); ty; Instance((inst_name, None)); e(1), e(2));
+        let stmt = statement!(e(0); ty; Instance({
+            name: inst_name,
+            params: vec![
+                ParamName{name: "a".to_string(), no_mangle: None},
+                ParamName{name: "b".to_string(), no_mangle: None},
+            ],
+            loc: None
+        }); e(1), e(2));
 
         let expected = indoc!(
             r#"
             logic _e_0;
             logic _e_0_mut;
-            \e_test  e_test_0(_e_1, _e_2, _e_0, _e_0_mut);"#
+            \e_test  e_test_0(.a_i(_e_1), .b_i(_e_2), .output__(_e_0), .input__(_e_0_mut));"#
         );
 
         assert_same_code!(
@@ -2457,12 +2500,19 @@ mod expression_tests {
     #[test]
     fn entity_instantiation_with_back_ports_works() {
         let ty = Type::backward(Type::Bool);
-        let stmt = statement!(e(0); ty; Instance((UnitName::_test_from_strs(&["e_test"]), None)); e(1), e(2));
+        let stmt = statement!(e(0); ty; Instance({
+            name:UnitName::_test_from_strs(&["e_test"]),
+            params: vec![
+                ParamName{name: "a".to_string(), no_mangle: None},
+                ParamName{name: "b".to_string(), no_mangle: None},
+            ],
+            loc: None
+        }); e(1), e(2));
 
         let expected = indoc!(
             r#"
             logic _e_0_mut;
-            \e_test  e_test_0(_e_1, _e_2, _e_0_mut);"#
+            \e_test  e_test_0(.a_i(_e_1), .b_i(_e_2), .input__(_e_0_mut));"#
         );
 
         assert_same_code!(
@@ -2481,12 +2531,19 @@ mod expression_tests {
     #[test]
     fn entity_instantiation_with_back_inputs_works() {
         let ty = Type::Bool;
-        let stmt = statement!(e(0); ty; Instance((UnitName::_test_from_strs(&["test"]), None)); e(1), e(2));
+        let stmt = statement!(e(0); ty; Instance({
+            name:UnitName::_test_from_strs(&["test"]),
+            params: vec![
+                ParamName{name: "a".to_string(), no_mangle: None},
+                ParamName{name: "b".to_string(), no_mangle: None},
+            ],
+            loc: None
+        }); e(1), e(2));
 
         let expected = indoc!(
             r#"
             logic _e_0;
-            \test  test_0(_e_1, _e_1_mut, _e_2_mut, _e_0);"#
+            \test  test_0(.a_i(_e_1), .a_o(_e_1_mut), .b_o(_e_2_mut), .output__(_e_0));"#
         );
 
         let type_list = TypeList::empty()

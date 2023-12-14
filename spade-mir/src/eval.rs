@@ -309,7 +309,7 @@ pub fn eval_statements(statements: &[Statement]) -> Value {
                     Operator::ReadPort => todo!(),
                     Operator::FlipPort => todo!(),
                     Operator::ReadMutWires => todo!(),
-                    Operator::Instance(_, _) => todo!(),
+                    Operator::Instance { .. } => todo!(),
                     Operator::Alias => name_vals[&ops[0]].clone(),
                     Operator::Nop => todo!(),
                 };

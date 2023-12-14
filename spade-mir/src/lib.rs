@@ -154,6 +154,12 @@ impl std::fmt::Display for ValueName {
     }
 }
 
+#[derive(Clone, Debug, PartialEq)]
+pub struct ParamName {
+    pub name: String,
+    pub no_mangle: Option<Loc<()>>,
+}
+
 #[derive(Derivative)]
 #[derivative(PartialEq)]
 #[derive(Clone, Debug)]
@@ -267,18 +273,38 @@ pub enum Operator {
     ReadMutWires,
 
     /// Instantiation of another module with the specified name. The operands are passed
-    /// positionally to the entity. The target module can only have a single output which
-    /// must be the last argument.
+    /// by name to the entity. The operand name mapping is decided by the params field of
+    /// this variant. The first operand gets mapped to the first param, and so on.
+    /// The target module can only have a single output which must be the last argument.
     /// The location of the instantiation is optional but can be passed to improve
     /// critical path report readability
-    Instance(
-        UnitName,
-        #[derivative(PartialEq = "ignore")] Option<Loc<()>>,
-    ),
+    Instance {
+        name: UnitName,
+        /// The names of the parameters in the same order as the operands.
+        params: Vec<ParamName>,
+        #[derivative(PartialEq = "ignore")]
+        loc: Option<Loc<()>>,
+    },
     /// Alias another named value
     Alias,
     /// Define a variable for the value but don't do anything with it. Useful for creating ports
     Nop,
+}
+
+impl Operator {
+    pub fn simple_instance(name: UnitName, params: Vec<&str>) -> Self {
+        Self::Instance {
+            name,
+            params: params
+                .iter()
+                .map(|p| ParamName {
+                    name: p.to_string(),
+                    no_mangle: None,
+                })
+                .collect(),
+            loc: None,
+        }
+    }
 }
 
 impl std::fmt::Display for Operator {
@@ -359,7 +385,11 @@ impl std::fmt::Display for Operator {
                 end_exclusive: end,
             } => write!(f, "RangeIndexArray({start}, {end})"),
             Operator::IndexMemory => write!(f, "IndexMemory"),
-            Operator::Instance(name, _) => write!(f, "Instance({})", name.as_verilog()),
+            Operator::Instance {
+                name,
+                params: _,
+                loc: _,
+            } => write!(f, "Instance({})", name.as_verilog()),
             Operator::Alias => write!(f, "Alias"),
             Operator::FlipPort => write!(f, "FlipPort"),
             Operator::ReadMutWires => write!(f, "ReadMutWires"),

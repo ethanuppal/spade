@@ -297,7 +297,7 @@ mod tests {
             ) -> Type::int(16); {
                 (reg n(10, "x__s1"); Type::int(16); clock(n(3, "clk")); n(0, "x_"));
                 // Stage 0
-                (e(0); Type::int(16); Instance((inst_name.clone(), None)););
+                (e(0); Type::int(16); simple_instance((inst_name.clone(), vec![])););
                 (n(0, "x_"); Type::int(16); Alias; e(0));
                 // Stage 1
                 (n(1, "x"); Type::int(16); Alias; n(0, "x_"));
@@ -308,7 +308,7 @@ mod tests {
                 "clk", n(3, "clk"), Type::Bool,
             ) -> Type::int(16); {
                 (reg n(10, "x__s1"); Type::int(16); clock(n(3, "clk")); n(0, "x_"));
-                (n(0, "x_"); Type::int(16); Instance((inst_name.clone(), None)););
+                (n(0, "x_"); Type::int(16); simple_instance((inst_name.clone(), vec![])););
                 // Stage 0
                 (n(1, "x"); Type::int(16); Alias; n(0, "x_"));
                 // Stage 1

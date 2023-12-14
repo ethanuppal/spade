@@ -697,7 +697,7 @@ mod tests {
             ),
             entity!(&["top"]; () -> Type::int(16); {
                 (const 1; Type::int(16); ConstantValue::int(0));
-                (e(0); Type::int(16); Instance((inst_name, None)); e(1))
+                (e(0); Type::int(16); simple_instance((inst_name, vec!["a"])); e(1))
             } => e(0)),
         ];
 
@@ -738,7 +738,7 @@ mod tests {
             ),
             entity!(&["top"]; ("clk", n(100, "clk"), Type::Bool) -> Type::int(16); {
                 (const 1; Type::int(16); ConstantValue::int(0));
-                (e(0); Type::int(16); Instance((inst_name, None)); n(100, "clk"), e(1))
+                (e(0); Type::int(16); simple_instance((inst_name, vec!["clk", "a"])); n(100, "clk"), e(1))
             } => e(0)),
         ];
 
@@ -839,7 +839,7 @@ mod tests {
                 "clk", n(3, "clk"), Type::Bool,
             ) -> Type::int(18); {
                 // Stage 0
-                (e(0); Type::int(18); Instance((inst_name, None)); n(3, "clk"));
+                (e(0); Type::int(18); simple_instance((inst_name, vec!["clk"])); n(3, "clk"));
                 (n(1, "res"); Type::int(18); Alias; e(0));
             } => n(1, "res")
         );
@@ -998,7 +998,7 @@ mod tests {
             ) -> Type::int(16); {
                 (reg n(10, "s1_x_"); Type::int(16); clock(n(3, "clk")); n(0, "x_"));
                 // Stage 0
-                (e(0); Type::int(16); Instance((inst_name, None)););
+                (e(0); Type::int(16); simple_instance((inst_name, vec![])););
                 (n(0, "x_"); Type::int(16); Alias; e(0));
                 // Stage 1
                 (n(1, "x"); Type::int(16); Alias; n(0, "x_"));
@@ -1543,7 +1543,7 @@ mod tests {
             entity! {&["x"]; (
                 "x", n(0, "x"), Type::Bool,
             ) -> Type::Bool; {
-                (e(0); Type::Bool; Instance((inst_name.clone(), None)); n(0, "x"))
+                (e(0); Type::Bool; simple_instance((inst_name.clone(), vec!["x"])); n(0, "x"))
             } => e(0)},
             // Monomorphised identity function
             entity! {&inst_name; (
@@ -1706,7 +1706,7 @@ mod tests {
             "a", n(0, "a"), Type::Bool,
             "b", n(1, "b"), Type::Bool,
         ) -> Type::Bool; {
-            (e(0); Type::Bool; Instance((inst_name, None)); n(1, "b"), n(0, "a"))
+            (e(0); Type::Bool; simple_instance((inst_name, vec!["x", "y"])); n(1, "b"), n(0, "a"))
         } => e(0)}];
 
         build_and_compare_entities!(code, expected);
@@ -1966,7 +1966,7 @@ mod tests {
             entity! {&["test"]; (
                 "x", n(0, "x"), x_type.clone(),
             ) -> Type::Bool; {
-                (e(0); Type::Bool; Instance((inst_name, None)); n(0, "x"))
+                (e(0); Type::Bool; simple_instance((inst_name, vec!["self"])); n(0, "x"))
             } => e(0)},
             entity! {&["impl_0", "a"]; (
                 "self", n(1, "self"), x_type,
@@ -2001,7 +2001,7 @@ mod tests {
                 "x", n(0, "x"), x_type.clone(),
             ) -> Type::Bool; {
                 (const 1; Type::Bool; ConstantValue::Bool(true));
-                (e(0); Type::Bool; Instance((inst_name, None)); n(0, "x"), e(1))
+                (e(0); Type::Bool; simple_instance((inst_name, vec!["self", "arg"])); n(0, "x"), e(1))
             } => e(0)},
             entity! {&["impl_0", "a"]; (
                 "self", n(1, "self"), x_type,
@@ -2771,7 +2771,7 @@ mod tests {
             entity! {&["test"]; (
                 "x", n(0, "x"), x_type.clone(),
             ) -> Type::Bool; {
-                (e(0); Type::Bool; Instance((name, None)); n(0, "x"))
+                (e(0); Type::Bool; simple_instance((name, vec!["self"])); n(0, "x"))
             } => e(0)},
             entity! {&["impl_0", "a"]; (
                 "self", n(1, "self"), x_type,

@@ -21,11 +21,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Changed
 
+- [!260][!260] Instantiation parameters are now passed by name, which makes interaction with external verilog easier.
+
 ### Removed
 
 [!251]: https://gitlab.com/spade-lang/spade/-/merge_requests/251
 [!252]: https://gitlab.com/spade-lang/spade/-/merge_requests/252
 [!255]: https://gitlab.com/spade-lang/spade/-/merge_requests/255
+[!260]: https://gitlab.com/spade-lang/spade/-/merge_requests/260
 
 ## [0.5.0] - 2023-11-17
 

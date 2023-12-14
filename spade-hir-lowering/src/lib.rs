@@ -1836,10 +1836,23 @@ impl ExprLocal for Loc<Expression> {
                     unit_name
                 };
 
+                let params = args
+                    .iter()
+                    .zip(&u.head.inputs.0)
+                    .map(|(_, input)| mir::ParamName {
+                        name: input.name.0.to_string(),
+                        no_mangle: input.no_mangle,
+                    })
+                    .collect();
+
                 result.push_primary(
                     mir::Statement::Binding(mir::Binding {
                         name: self.variable(ctx.subs)?,
-                        operator: mir::Operator::Instance(instance_name.as_mir(), Some(self.loc())),
+                        operator: mir::Operator::Instance {
+                            name: instance_name.as_mir(),
+                            params,
+                            loc: Some(self.loc()),
+                        },
                         operands: args
                             .iter()
                             .map(|arg| arg.value.variable(ctx.subs))
@@ -1866,12 +1879,25 @@ impl ExprLocal for Loc<Expression> {
                     });
                 }
 
+                let params = args
+                    .iter()
+                    .zip(&head.inputs.0)
+                    .map(|(_, input)| mir::ParamName {
+                        name: input.name.0.to_string(),
+                        no_mangle: input.no_mangle,
+                    })
+                    .collect();
+
                 // NOTE: Builtin entities are not part of the item list, but we
                 // should still emit the code for instantiating them
                 result.push_primary(
                     mir::Statement::Binding(mir::Binding {
                         name: self.variable(ctx.subs)?,
-                        operator: mir::Operator::Instance(unit_name.as_mir(), Some(self.loc())),
+                        operator: mir::Operator::Instance {
+                            name: unit_name.as_mir(),
+                            params,
+                            loc: Some(self.loc()),
+                        },
                         operands: args
                             .iter()
                             .map(|arg| arg.value.variable(ctx.subs))
