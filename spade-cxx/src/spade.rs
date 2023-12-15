@@ -137,7 +137,7 @@ impl SimulationExt {
         Ok(())
     }
 
-    pub fn output_field(&mut self, path: &[String]) -> Result<Box<FieldRef>> {
+    pub fn output_field(&mut self, path: &Vec<String>) -> Result<Box<FieldRef>> {
         self.0
             .output_field(path.to_owned())
             .map(|o| Box::new(FieldRef(o)))
@@ -202,6 +202,6 @@ mod ffi {
             source_loc: &str,
         ) -> Result<()>;
 
-        fn output_field(&mut self, path: &[String]) -> Result<Box<FieldRef>>;
+        fn output_field(&mut self, path: &Vec<String>) -> Result<Box<FieldRef>>;
     }
 }

@@ -133,15 +133,7 @@ impl PartialEq for UnitName {
 
 impl PartialOrd for UnitName {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        let Self {
-            kind: skind,
-            source: _,
-        } = self;
-        let Self {
-            kind: okind,
-            source: _,
-        } = other;
-        skind.partial_cmp(okind)
+        Some(self.cmp(other))
     }
 }
 impl Eq for UnitName {}

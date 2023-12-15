@@ -138,7 +138,6 @@ impl std::fmt::Display for ConcreteType {
                         .map(|p| format!("{}", p))
                         .collect::<Vec<_>>()
                         .join(", ")
-                        .to_string()
                 };
 
                 write!(f, "{}{}", base, params_str)
