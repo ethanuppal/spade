@@ -1,0 +1,24 @@
+---
+source: spade-tests/src/typeinference.rs
+---
+struct X {
+    b: bool,
+}
+
+entity main() -> bool {
+    decl b;
+    let x: int<8> = b;
+    let X$(b) = X(true);
+}
+
+
+error: Argument type mismatch. Expected bool got int<8>
+  ┌─ testinput:8:12
+  │
+8 │     let X$(b) = X(true);
+  │            ^ expected bool
+  │
+  = note: Expected: bool
+               Got: int<8>
+
+

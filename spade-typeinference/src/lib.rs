@@ -324,7 +324,7 @@ impl TypeState {
                 diag.message("Output type mismatch")
                     .primary_label(format!("Found type {got}"))
                     .note(format!(
-                        "The {} does not specify a return type.\n      Add a return type, or remove the return value.",
+                        "The {} does not specify a return type.\nAdd a return type, or remove the return value.",
                         entity.head.unit_kind.name()
                     ))
             })?;
@@ -1397,11 +1397,12 @@ impl TypeState {
 
                 if replacement.val < BigInt::zero() {
                     // lifeguard spade#126
-                    return Err(UnificationError::NegativeInteger {
-                        got: replacement.val,
-                        inside: replacement.context.inside,
-                        loc,
-                    });
+                    return Err(Diagnostic::bug(loc, "Inferred integer < 0")
+                        .primary_label(format!(
+                            "{} is not >= 0 in {}",
+                            replacement.val, replacement.context.inside
+                        ))
+                        .into());
                 }
 
                 // NOTE: safe unwrap. We already checked the constraint above
@@ -1432,7 +1433,7 @@ impl TypeState {
                     }
                     Err(
                         e @ UnificationError::FromConstraints { .. }
-                        | e @ UnificationError::NegativeInteger { .. }
+                        | e @ UnificationError::Specific { .. }
                         | e @ UnificationError::UnsatisfiedTraits(_, _),
                     ) => return Err(e),
                 };

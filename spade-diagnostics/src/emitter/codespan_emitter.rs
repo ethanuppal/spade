@@ -64,7 +64,29 @@ impl Emitter for CodespanEmitter {
         for subdiag in &diag.subdiagnostics {
             match subdiag {
                 Subdiagnostic::Note { level, message } => {
-                    simple_notes.push(format!("{}: {}", level.as_str(), message.as_str()))
+                    if message.as_str().contains('\n') {
+                        // For text spanning multiple lines, we want to align it.
+                        // Example:
+                        //
+                        // = note: This note contains some text that
+                        //         spans multiple lines
+                        //
+                        // Manual alignment is very hard to do otherwise, since the message
+                        // would need to know the length of the level. "= warning:" needs
+                        // more alignment than "= note:" does.
+                        let level_len = level.as_str().len() + ": ".len();
+                        simple_notes.push(format!(
+                            "{}: {}",
+                            level.as_str(),
+                            message
+                                .as_str()
+                                .lines()
+                                .collect::<Vec<_>>()
+                                .join(&("\n".to_string() + &str::repeat(" ", level_len)))
+                        ));
+                    } else {
+                        simple_notes.push(format!("{}: {}", level.as_str(), message.as_str()));
+                    }
                 }
                 Subdiagnostic::SpannedNote {
                     level,

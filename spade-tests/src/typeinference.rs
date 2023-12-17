@@ -864,10 +864,100 @@ snapshot_error! {
 }
 
 snapshot_error! {
+    argument_type_mismatch_positional,
+    "
+    entity e(clk: clock, a: bool) -> bool {
+        a
+    }
+
+    entity main(clk: clock) -> bool {
+        let a: int<3> = 0;
+        inst e(clk, a)
+    }
+    "
+}
+
+snapshot_error! {
     impl_of_non_trait_is_error,
     "
         struct A {}
         fn test<T: A>(x: T) {}
+    "
+}
+
+snapshot_error! {
+    argument_type_mismatch_named,
+    "
+    entity e(clk: clock, a: bool) -> bool {
+        a
+    }
+
+    entity main(clk: clock) -> bool {
+        let b: int<3> = 0;
+        inst e$(clk, a: b)
+    }
+    "
+}
+
+snapshot_error! {
+    argument_type_mismatch_shortnamed,
+    "
+    entity e(clk: clock, a: bool) -> bool {
+        a
+    }
+
+    entity main(clk: clock) -> bool {
+        let a: int<3> = 0;
+        inst e$(clk, a)
+    }
+    "
+}
+
+snapshot_error! {
+    type_pattern_argument_type_mismatch_positional,
+    "
+    struct X {
+        b: bool,
+    }
+
+    entity main() -> bool {
+        let x = X$(b: true);
+        match x {
+            X(0) => true,
+            _ => false,
+        }
+    }
+    "
+}
+snapshot_error! {
+    type_pattern_argument_type_mismatch_named,
+    "
+    struct X {
+        b: bool,
+    }
+
+    entity main() -> bool {
+        let x = X$(b: true);
+        match x {
+            X$(b: 0) => true,
+            _ => false,
+        }
+    }
+    "
+}
+
+snapshot_error! {
+    type_pattern_argument_type_mismatch_shortnamed,
+    "
+    struct X {
+        b: bool,
+    }
+
+    entity main() -> bool {
+        decl b;
+        let x: int<8> = b;
+        let X$(b) = X(true);
+    }
     "
 }
 

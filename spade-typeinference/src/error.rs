@@ -1,16 +1,16 @@
 use itertools::Itertools;
-use num::BigInt;
-use spade_diagnostics::Diagnostic;
-use spade_hir::{param_util::ArgumentError, UnitHead};
 use thiserror::Error;
 
-use crate::constraints::ConstraintSource;
-
-use super::equation::{TypeVar, TypedExpression};
 use spade_common::{
     location_info::{FullSpan, Loc, WithLocation},
     name::{Identifier, NameID},
 };
+use spade_diagnostics::Diagnostic;
+use spade_hir::{param_util::ArgumentError, UnitHead};
+
+use crate::constraints::ConstraintSource;
+
+use super::equation::TypeVar;
 
 /// A trace of a unification error. The `failing` field indicates which exact type failed to unify,
 /// while the `inside` is the "top level" type which failed to unify if it's not the same as
@@ -89,9 +89,7 @@ impl<T> UnificationErrorExt<T> for std::result::Result<T, UnificationError> {
                 }))
             }
             e @ Err(UnificationError::UnsatisfiedTraits(_, _)) => e,
-            Err(
-                UnificationError::FromConstraints { .. } | UnificationError::NegativeInteger { .. },
-            ) => {
+            Err(UnificationError::FromConstraints { .. } | UnificationError::Specific { .. }) => {
                 panic!("Called add_context on a constraint based unfication error")
             }
         }
@@ -175,10 +173,7 @@ impl<T> UnificationErrorExt<T> for std::result::Result<T, UnificationError> {
                         }
                     })
             }
-            UnificationError::NegativeInteger { got, inside, loc } => {
-                Diagnostic::bug(loc, "Inferred integer <= 0")
-                    .primary_label(format!("{got} is not > 0 in {inside}"))
-            }
+            UnificationError::Specific(e) => e,
         })
     }
 }
@@ -200,6 +195,8 @@ impl std::fmt::Display for TypeMismatch {
 pub enum UnificationError {
     #[error("Unification error")]
     Normal(TypeMismatch),
+    #[error("")]
+    Specific(#[from] spade_diagnostics::Diagnostic),
     #[error("Unsatisfied traits")]
     UnsatisfiedTraits(TypeVar, Vec<NameID>),
     #[error("Unification error from constraints")]
@@ -209,18 +206,10 @@ pub enum UnificationError {
         source: ConstraintSource,
         loc: Loc<()>,
     },
-    #[error("Negative integer from constraints")]
-    NegativeInteger {
-        got: BigInt,
-        inside: TypeVar,
-        loc: Loc<()>,
-    },
 }
 
 #[derive(Debug, Error, PartialEq, Clone)]
 pub enum Error {
-    #[error("The specified expression has no type information {}", 0.0)]
-    UnknownType(TypedExpression),
     #[error("Type mismatch between {0:?} and {1:?}")]
     TypeMismatch(UnificationTrace, UnificationTrace),
 
@@ -297,27 +286,6 @@ pub enum Error {
         loc: Loc<()>,
     },
 
-    #[error("Named argument mismatch")]
-    NamedArgumentMismatch {
-        name: Loc<Identifier>,
-        expr: Loc<()>,
-        expected: UnificationTrace,
-        got: UnificationTrace,
-    },
-    #[error("Named argument mismatch")]
-    ShortNamedArgumentMismatch {
-        name: Loc<Identifier>,
-        expected: UnificationTrace,
-        got: UnificationTrace,
-    },
-    #[error("Positional argument mismatch")]
-    PositionalArgumentMismatch {
-        index: usize,
-        expr: Loc<()>,
-        expected: UnificationTrace,
-        got: UnificationTrace,
-    },
-
     #[error("Tuple index of generic argument")]
     TupleIndexOfGeneric { loc: Loc<()> },
     #[error("Tuple index out of bounds")]
@@ -360,12 +328,6 @@ pub enum Error {
         reason: Loc<()>,
         expected: UnificationTrace,
         got: UnificationTrace,
-    },
-
-    #[error("The first argument of a pipeline must be a clock")]
-    FirstPipelineArgNotClock {
-        expected: UnificationTrace,
-        spec: Loc<UnificationTrace>,
     },
 
     #[error("Attempting to instantiate generic type")]

@@ -1,0 +1,23 @@
+---
+source: spade-tests/src/typeinference.rs
+---
+entity e(clk: clock, a: bool) -> bool {
+    a
+}
+
+entity main(clk: clock) -> bool {
+    let a: int<3> = 0;
+    inst e(clk, a)
+}
+
+
+error: Argument type mismatch. Expected bool got int<3>
+  ┌─ testinput:7:17
+  │
+7 │     inst e(clk, a)
+  │                 ^ expected bool
+  │
+  = note: Expected: bool
+               Got: int<3>
+
+
