@@ -25,7 +25,7 @@ cache:
         - target
         - $CARGO_HOME
 
-clippy:
+check:clippy:
     stage: test
     image: $RUST_IMAGE
     script:
@@ -67,7 +67,7 @@ test:macos-aarch64:
   script:
     - cirrus-run --github sornas/spade-cirrus-ci
 
-output_test:
+test:output-test:
     # Ubuntu 18.04 only has iverilog-10.1 but 22.04 has 11.0, which it seems like we need.
     image: ubuntu:22.04
     variables:
@@ -84,7 +84,7 @@ output_test:
         - source ./cargo/env
         - cd output_test && make
 
-swim_tests:
+test:swim-tests:
     image: $RUST_IMAGE
     stage: test
     script:
@@ -94,7 +94,50 @@ swim_tests:
         - cd swim_tests
         - $CARGO_HOME/bin/swim test
 
-coverage:
+# Build static binaries of spade and vcd-translate
+build:static:
+  image: $RUST_IMAGE-alpine
+  stage: test
+  before_script:
+    - apk add git musl-dev g++
+  script:
+    - cargo build --release --workspace --exclude spade-python --target x86_64-unknown-linux-musl
+    - strip target/release/spade
+    - strip target/release/vcd-translate
+  artifacts:
+    paths:
+      - target/x86_64-unknown-linux-musl/release/spade
+      - target/x86_64-unknown-linux-musl/release/vcd-translate
+      - target/x86_64-unknown-linux-musl/release/build/spade-cxx-*/out/cxxbridge/include/spade-cxx/src/spade.rs.*
+      - target/x86_64-unknown-linux-musl/release/build/spade-cxx-*/out/libspade-cxx.a
+
+build:wheel-manylinux:
+  image: quay.io/pypa/manylinux2014_x86_64
+  stage: test
+  before_script:
+    - curl https://sh.rustup.rs -sSf | sh -s -- -y
+    - source $CARGO_HOME/env
+    - /opt/python/cp38-cp38/bin/pip install maturin
+  script:
+    - /opt/python/cp38-cp38/bin/maturin build -i /opt/python/cp38-cp38/bin/python -m spade-python/Cargo.toml
+  artifacts:
+    paths:
+      - /builds/spade-lang/spade/target/wheels/*.whl
+
+build:wheel-musllinux:
+  image: quay.io/pypa/musllinux_1_1_x86_64
+  stage: test
+  before_script:
+    - curl https://sh.rustup.rs -sSf | sh -s -- -y
+    - source $CARGO_HOME/env
+    - /opt/python/cp38-cp38/bin/pip install maturin
+  script:
+    - /opt/python/cp38-cp38/bin/maturin build -i /opt/python/cp38-cp38/bin/python -m spade-python/Cargo.toml
+  artifacts:
+    paths:
+      - /builds/spade-lang/spade/target/wheels/*.whl
+
+test:coverage:
     image: xd009642/tarpaulin
     variables:
         APT_PYTHON_VERSION: "3"
@@ -110,7 +153,7 @@ coverage:
                 coverage_format: cobertura
                 path: cobertura.xml
 
-cargo-fmt:
+check:cargo-fmt:
     stage: test
     image: $RUST_IMAGE
     cache: [] # Disable cache since it takes too much space in gitlab
@@ -119,7 +162,7 @@ cargo-fmt:
         # pass --check to rustfmt to error if un-formatted
         - cargo fmt -- --check
 
-typos-and-todos:
+check:typos-and-todos:
     stage: test
     cache: [] # Disable cache since the spell checker finds typos in other peoples source code
     before_script:
@@ -142,14 +185,6 @@ typos-and-todos:
               ./typos || echo ""
               find . -name "*.rs" | xargs grep -Ei "// *TODO" || echo ""
             fi
-cxx:
-    image: $RUST_IMAGE
-    stage: test
-    cache: [] # Disable cache since it takes too much space in gitlab
-    variables:
-        APT_PYTHON_VERSION: "3"
-    script:
-        cargo build --workspace --package spade-cxx
 
 trawler:
     stage: trawler
