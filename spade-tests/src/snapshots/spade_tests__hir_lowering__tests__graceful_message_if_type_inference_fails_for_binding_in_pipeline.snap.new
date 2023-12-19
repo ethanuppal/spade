@@ -1,0 +1,20 @@
+---
+source: spade-tests/src/hir_lowering.rs
+assertion_line: 1725
+---
+pipeline(1) x(clk: clock) -> bool {
+        let x = 0;
+    reg;
+        true
+}
+
+
+error: Type of x is not fully known
+  ┌─ testinput:2:13
+  │
+2 │         let x = 0;
+  │             ^ The type of x is not fully known
+  │
+  = note: Found incomplete type: _
+
+

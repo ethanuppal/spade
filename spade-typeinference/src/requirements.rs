@@ -5,7 +5,7 @@ use spade_common::name::Path;
 use spade_common::num_ext::InfallibleToBigInt;
 use spade_common::{location_info::Loc, name::Identifier};
 use spade_diagnostics::{diag_anyhow, diag_assert, diag_bail, Diagnostic};
-use spade_hir::expression::IntLiteral;
+use spade_hir::expression::BinaryOperator;
 use spade_hir::symbol_table::{TypeDeclKind, TypeSymbol};
 use spade_hir::ArgumentList;
 use spade_types::KnownType;
@@ -15,8 +15,26 @@ use crate::error::{Result, UnificationErrorExt};
 use crate::method_resolution::select_method;
 use crate::{Context, GenericListSource, TypeState};
 
+/// A generic which we know has a single parameter with a constrained size, but which
+/// we don't know the concrete type of yet. Currently used for types which can be signed *or*
+/// unsigned.
+#[derive(Clone, Debug)]
+pub struct DeferredSized {
+    /// The (initially) unknown type var which will eventually be constrained to
+    /// concrete<size>
+    pub base: Loc<TypeVar>,
+    pub size: TypeVar,
+}
+
 #[derive(Clone, Debug)]
 pub enum Requirement {
+    /// Require that the outer type of an expression is either uint or int
+    IsInteger {
+        /// The operator which this constraint comes from
+        source_operator: Loc<BinaryOperator>,
+        inputs: Vec<DeferredSized>,
+        output: Option<DeferredSized>,
+    },
     HasField {
         /// The type which should have the associated field
         target_type: Loc<TypeVar>,
@@ -40,7 +58,7 @@ pub enum Requirement {
     },
     /// The type should be an integer large enough to fit the specified value
     FitsIntLiteral {
-        value: IntLiteral,
+        value: BigInt,
         target_type: Loc<TypeVar>,
     },
 }
@@ -48,6 +66,20 @@ pub enum Requirement {
 impl Requirement {
     pub fn replace_type_var(&mut self, from: &TypeVar, to: &TypeVar) {
         match self {
+            Requirement::IsInteger {
+                source_operator: _,
+                inputs,
+                output,
+            } => {
+                for DeferredSized { base, size } in inputs.iter_mut() {
+                    TypeState::replace_type_var(base, from, to);
+                    TypeState::replace_type_var(size, from, to);
+                }
+                output.as_mut().map(|DeferredSized { base, size }| {
+                    TypeState::replace_type_var(base, from, to);
+                    TypeState::replace_type_var(size, from, to);
+                });
+            }
             Requirement::HasField {
                 target_type,
                 expr,
@@ -216,16 +248,131 @@ impl Requirement {
                     ))
                 },
             ),
+            Requirement::IsInteger {
+                source_operator,
+                inputs,
+                output,
+            } => {
+                let int_type = ctx
+                    .symtab
+                    .lookup_type_symbol(&Path::from_strs(&["int"]).nowhere())
+                    .map_err(|_| {
+                        diag_anyhow!(source_operator, "The type int was not in the symtab")
+                    })?
+                    .0;
+                let uint_type = ctx
+                    .symtab
+                    .lookup_type_symbol(&Path::from_strs(&["uint"]).nowhere())
+                    .map_err(|_| {
+                        diag_anyhow!(source_operator, "The type uint was not in the symtab")
+                    })?
+                    .0;
+
+                // Walk over the inputs, finding the first type that has been concretized.
+                // if it has been concretized to an integer, work with that, otherwise
+                // return an error
+                let input_base_type = inputs
+                    .iter()
+                    .map(|DeferredSized { base, size: _ }| {
+                        base.expect_named(
+                            |name, _| Ok(Some(name.clone().at_loc(&base))),
+                            || Ok(None),
+                            |other| {
+                                Err(Diagnostic::error(
+                                    source_operator,
+                                    format!("{source_operator} does not support {other}"),
+                                )
+                                .secondary_label(base, "this has type {other}"))
+                            },
+                        )
+                    })
+                    .collect::<Result<Vec<_>>>()?
+                    .into_iter()
+                    .find_map(|x| x);
+
+                let output_type = output
+                    .as_ref()
+                    .map(|DeferredSized { base, size: _ }| {
+                        base.expect_named(
+                            |name, _| Ok(Some(name.clone().at_loc(&base))),
+                            || Ok(None),
+                            |other| {
+                                Err(Diagnostic::error(
+                                    source_operator,
+                                    format!("{source_operator} does not support {other}"),
+                                )
+                                .secondary_label(base, "this has type {other}"))
+                            },
+                        )
+                    })
+                    .transpose()?
+                    .flatten();
+
+                let base_name = input_base_type.or(output_type);
+
+                if let Some(base_name) = &base_name {
+                    if &base_name.inner != &int_type && &base_name.inner != &uint_type {
+                        return Err(Diagnostic::error(
+                            base_name,
+                            format!(
+                                "Operator `{source_operator}` requires int or uint. Got {base_name}"
+                            ),
+                        )
+                        .primary_label("expected int or uint")
+                        .secondary_label(source_operator, "required by this operator"));
+                    }
+
+                    // We have a concrete type, replace all the placeholder variables
+                    // with this concrete type combined with the original size
+
+                    Ok(RequirementResult::Satisfied(
+                        inputs
+                            .iter()
+                            .chain(output)
+                            .map(|DeferredSized { base, size }| {
+                                let new_ty = TypeVar::Known(
+                                    KnownType::Named(base_name.inner.clone()),
+                                    vec![size.clone()],
+                                );
+                                Replacement {
+                                    from: base.clone(),
+                                    to: new_ty,
+                                }
+                            })
+                            .collect(),
+                    ))
+                } else {
+                    Ok(RequirementResult::NoChange)
+                }
+            }
             Requirement::FitsIntLiteral { value, target_type } => {
                 let int_type = ctx
                     .symtab
                     .lookup_type_symbol(&Path::from_strs(&["int"]).nowhere())
                     .map_err(|_| diag_anyhow!(target_type, "The type int was not in the symtab"))?
                     .0;
+                let uint_type = ctx
+                    .symtab
+                    .lookup_type_symbol(&Path::from_strs(&["uint"]).nowhere())
+                    .map_err(|_| diag_anyhow!(target_type, "The type int was not in the symtab"))?
+                    .0;
 
-                target_type.expect_specific_named(
-                    int_type,
-                    |params| {
+                target_type.expect_named(
+                    |name, params| {
+                        let unsigned = if name == &int_type {
+                            false
+                        }
+                        else if name == &uint_type {
+                            true
+                        }
+                        else {
+                            return Err(Diagnostic::error(
+                                target_type,
+                                "Expected {target_type}, got integer literal"
+                            )
+                                .primary_label("expected {target_type}"));
+                        };
+
                         diag_assert!(target_type, params.len() == 1);
                         params[0].expect_integer(
                             |size| {
@@ -238,43 +385,42 @@ impl Requirement {
                                     )
                                     .note("How did you manage to trigger this 🤔")
                                 })?;
-                                let (contained_range, unsigned) = match value {
-                                    IntLiteral::Signed(_) => (
-                                        (
-                                            -two.clone().pow(size_u32.saturating_sub(1)),
-                                            two.pow(size_u32.saturating_sub(1)).checked_sub(&1.to_bigint()).unwrap_or(0.to_bigint()),
-                                        ),
-                                        false,
-                                    ),
-                                    IntLiteral::Unsigned(_) => {
-                                        ((BigInt::zero(), two.pow(size_u32)-1), true)
-                                    }
-                                };
 
-                                let value = value.clone().as_signed();
                                 // If the value is 0, we can fit it into any integer and
                                 // can get rid of the requirement
-                                if value == 0u32.to_bigint() {
+                                if value == &BigInt::zero() {
                                     return Ok(RequirementResult::Satisfied(vec![]));
                                 }
 
-                                if value < contained_range.0 || value > contained_range.1 {
+                                let contained_range = if unsigned {
+                                    (
+                                        BigInt::zero(),
+                                        two.pow(size_u32 - 1),
+                                    )
+                                } else {
+                                    (
+                                        -two.clone().pow(size_u32.saturating_sub(1)),
+                                        two.pow(size_u32.saturating_sub(1)).checked_sub(&1.to_bigint()).unwrap_or(0.to_bigint())
+                                    )
+                                };
+
+                                if value < &contained_range.0 || value > &contained_range.1 {
                                     let diagnostic = Diagnostic::error(
                                         target_type,
                                         format!("Integer value does not fit in int<{size}>"),
                                     )
                                     .primary_label(format!(
-                                        "{value} does not fit in an int<{size}>"
+                                        "{value} does not fit in an {name}<{size}>"
                                     ));
 
                                     let diagnostic = if unsigned {
                                         diagnostic.note(format!(
-                                            "int<{size}> fits unsigned integers in the range (0, {})",
+                                            "{name}<{size}> fits unsigned integers in the range (0, {})",
                                             contained_range.1,
                                         ))
                                     } else {
                                         diagnostic.note(format!(
-                                            "int<{size}> fits integers in the range ({}, {})",
+                                            "{name}<{size}> fits integers in the range ({}, {})",
                                             contained_range.0, contained_range.1
                                         ))
                                     };
@@ -285,7 +431,7 @@ impl Requirement {
                                 }
                             },
                             || Ok(RequirementResult::NoChange),
-                            |_| diag_bail!(target_type, "Inferred {target_type} for int"),
+                            |_| diag_bail!(target_type, "Inferred {target_type} for integer literal"),
                         )
                     },
                     || Ok(RequirementResult::NoChange),

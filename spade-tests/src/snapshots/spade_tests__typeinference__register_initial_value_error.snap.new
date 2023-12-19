@@ -1,0 +1,17 @@
+---
+source: spade-tests/src/typeinference.rs
+assertion_line: 732
+---
+entity t(clk: clock) -> bool {
+    reg(clk) x initial(0) = true;
+    true
+}
+
+
+error: Expected {target_type}, got integer literal
+  ┌─ testinput:2:24
+  │
+2 │     reg(clk) x initial(0) = true;
+  │                        ^ expected {target_type}
+
+

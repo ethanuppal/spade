@@ -71,6 +71,12 @@ pub fn populate_symtab(symtab: &mut SymbolTable, item_list: &mut ItemList) {
             );
         };
     add_type(
+        &["uint"],
+        vec![GenericArg::Number(Identifier("size".into())).nowhere()],
+        PrimitiveType::Uint,
+        false,
+    );
+    add_type(
         &["int"],
         vec![GenericArg::Number(Identifier("size".into())).nowhere()],
         PrimitiveType::Int,

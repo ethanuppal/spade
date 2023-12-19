@@ -1,0 +1,20 @@
+---
+source: spade-tests/src/typeinference.rs
+---
+fn test(x: uint<8>, y: uint<8>) -> uint<10> {
+    x + y
+}
+
+
+error: Expected type uint<10>, got uint<9>
+  ┌─ testinput:2:5
+  │
+2 │     x + y
+  │     ^^^^^ Expected uint<10>
+  │
+  = note: Expected: 10
+                in: uint<10>
+               Got: 9
+                in: uint<9>
+
+

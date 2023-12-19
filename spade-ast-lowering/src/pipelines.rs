@@ -212,8 +212,7 @@ mod pipeline_visiting {
                         ast::Statement::binding(
                             ast::Pattern::name("a"),
                             None,
-                            ast::Expression::IntLiteral(ast::IntLiteral::Signed(0.to_bigint()))
-                                .nowhere(),
+                            ast::Expression::IntLiteral(0.to_bigint()).nowhere(),
                         )
                         .nowhere(),
                         ast::Statement::PipelineRegMarker(Some(1.nowhere()), None).nowhere(),
@@ -231,10 +230,7 @@ mod pipeline_visiting {
                         )
                         .nowhere(),
                     ],
-                    result: Some(
-                        ast::Expression::IntLiteral(ast::IntLiteral::Signed(0.to_bigint()))
-                            .nowhere(),
-                    ),
+                    result: Some(ast::Expression::IntLiteral(0.to_bigint()).nowhere()),
                 }))
                 .nowhere(),
             ),
@@ -246,8 +242,7 @@ mod pipeline_visiting {
             hir::Statement::named_let(
                 2,
                 name_id(2, "a"),
-                hir::ExprKind::IntLiteral(hir::expression::IntLiteral::Signed(0.to_bigint()))
-                    .with_id(3),
+                hir::ExprKind::IntLiteral(0.to_bigint()).with_id(3),
             )
             .nowhere(),
             hir::Statement::PipelineRegMarker(None).nowhere(),
@@ -313,8 +308,7 @@ mod pipeline_visiting {
                         ast::Statement::binding(
                             ast::Pattern::name("a"),
                             None,
-                            ast::Expression::IntLiteral(ast::IntLiteral::Signed(0.to_bigint()))
-                                .nowhere(),
+                            ast::Expression::IntLiteral(0.to_bigint()).nowhere(),
                         )
                         .nowhere(),
                         ast::Statement::PipelineRegMarker(Some(1.nowhere()), None).nowhere(),
@@ -330,10 +324,7 @@ mod pipeline_visiting {
                         )
                         .nowhere(),
                     ],
-                    result: Some(
-                        ast::Expression::IntLiteral(ast::IntLiteral::Signed(0.to_bigint()))
-                            .nowhere(),
-                    ),
+                    result: Some(ast::Expression::IntLiteral(0.to_bigint()).nowhere()),
                 }))
                 .nowhere(),
             ),
@@ -346,8 +337,7 @@ mod pipeline_visiting {
             hir::Statement::named_let(
                 2,
                 name_id(2, "a"),
-                hir::ExprKind::IntLiteral(hir::expression::IntLiteral::Signed(0.to_bigint()))
-                    .with_id(3),
+                hir::ExprKind::IntLiteral(0.to_bigint()).with_id(3),
             )
             .nowhere(),
             hir::Statement::PipelineRegMarker(None).nowhere(),

@@ -4,6 +4,7 @@ use spade_common::num_ext::InfallibleToBigUint;
 #[derive(Clone, PartialEq, Debug)]
 pub enum Type {
     Int(BigUint),
+    UInt(BigUint),
     Bool,
     /// An "empty" type.
     Void,
@@ -35,6 +36,7 @@ impl Type {
     pub fn size(&self) -> BigUint {
         match self {
             Type::Int(len) => len.clone(),
+            Type::UInt(len) => len.clone(),
             Type::Bool => 1u32.to_biguint(),
             Type::Void => BigUint::zero(),
             Type::Tuple(inner) => inner.iter().map(Type::size).sum::<BigUint>(),
@@ -59,7 +61,7 @@ impl Type {
     pub fn backward_size(&self) -> BigUint {
         match self {
             Type::Backward(inner) => inner.size(),
-            Type::Int(_) | Type::Bool | Type::Void => BigUint::zero(),
+            Type::Int(_) | Type::UInt(_) | Type::Bool | Type::Void => BigUint::zero(),
             Type::Array { inner, length } => inner.backward_size() * length,
             Type::Enum(inner) => {
                 for v in inner {
@@ -98,6 +100,7 @@ impl std::fmt::Display for Type {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Type::Int(val) => write!(f, "int<{}>", val),
+            Type::UInt(val) => write!(f, "uint<{}>", val),
             Type::Bool => write!(f, "bool"),
             Type::Void => write!(f, "void"),
             Type::Tuple(inner) => {

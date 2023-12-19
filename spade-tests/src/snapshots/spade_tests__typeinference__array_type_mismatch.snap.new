@@ -1,0 +1,17 @@
+---
+source: spade-tests/src/typeinference.rs
+assertion_line: 642
+---
+fn x() -> bool  {
+    let a = [0, true, 2];
+    false
+}
+
+
+error: Expected {target_type}, got integer literal
+  ┌─ testinput:2:14
+  │
+2 │     let a = [0, true, 2];
+  │              ^ expected {target_type}
+
+

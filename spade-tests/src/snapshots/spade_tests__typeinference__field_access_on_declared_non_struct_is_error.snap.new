@@ -1,0 +1,21 @@
+---
+source: spade-tests/src/typeinference.rs
+assertion_line: 415
+---
+fn a() -> int<32> {
+    decl x;
+    let a = x.a;
+    let x = 0;
+    a
+}
+
+
+error: Type of expression is not fully known
+  ┌─ testinput:3:13
+  │
+3 │     let a = x.a;
+  │             ^ The type of this expression is not fully known
+  │
+  = note: Found incomplete type: _
+
+

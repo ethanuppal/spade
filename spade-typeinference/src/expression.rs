@@ -13,7 +13,7 @@ use crate::constraints::{bits_to_store, ce_int, ce_var, ConstraintSource};
 use crate::equation::{TypeVar, TypedExpression};
 use crate::error::{TypeMismatch as Tm, UnificationErrorExt};
 use crate::fixed_types::{t_bit, t_bool, t_void};
-use crate::requirements::Requirement;
+use crate::requirements::{DeferredSized, Requirement};
 use crate::{kvar, Context, GenericListToken, HasType, Result, TraceStackEntry, TypeState};
 
 macro_rules! assuming_kind {
@@ -68,7 +68,7 @@ impl TypeState {
     #[tracing::instrument(level = "trace", skip_all)]
     pub fn visit_int_literal(&mut self, expression: &Loc<Expression>, ctx: &Context) -> Result<()> {
         assuming_kind!(ExprKind::IntLiteral(value) = &expression => {
-            let t = self.new_generic_int(ctx.symtab);
+            let t = self.new_generic();
             self.unify(&t, &expression.inner, ctx)
                 .into_diagnostic(expression.loc(), |diag, Tm{e: _, g: _got}| {
                     diag
@@ -534,7 +534,7 @@ impl TypeState {
         assuming_kind!(ExprKind::BinaryOperator(lhs, op, rhs) = &expression => {
             self.visit_expression(lhs, ctx, generic_list)?;
             self.visit_expression(rhs, ctx, generic_list)?;
-            match *op {
+            match op.inner {
                 BinaryOperator::Add
                 | BinaryOperator::Sub | BinaryOperator::Mul if self.use_wordlenght_inference => {
                     let lhs_t = self.new_generic_int(ctx.symtab);
@@ -546,8 +546,10 @@ impl TypeState {
                 }
                 BinaryOperator::Add
                 | BinaryOperator::Sub => {
-                    let (lhs_t, lhs_size) = self.new_split_generic_int(ctx.symtab);
-                    let (result_t, result_size) = self.new_split_generic_int(ctx.symtab);
+                    let lhs_t = self.new_generic();
+                    let lhs_size = self.new_generic();
+                    let result_t = self.new_generic();
+                    let result_size = self.new_generic();
 
                     self.add_constraint(
                         result_size.clone(),
@@ -568,11 +570,23 @@ impl TypeState {
                     self.unify_expression_generic_error(lhs, &lhs_t, ctx)?;
                     self.unify_expression_generic_error(lhs, &rhs.inner, ctx)?;
                     self.unify_expression_generic_error(expression, &result_t, ctx)?;
+
+                    self.add_requirement(Requirement::IsInteger {
+                        source_operator: op.clone(),
+                        inputs: vec![DeferredSized {base: lhs_t.at_loc(lhs), size: lhs_size}],
+                        output: Some(DeferredSized {
+                            base: result_t.at_loc(expression),
+                            size: result_size
+                        }),
+                    })
                 }
                 BinaryOperator::Mul => {
-                    let (lhs_t, lhs_size) = self.new_split_generic_int(ctx.symtab);
-                    let (rhs_t, rhs_size) = self.new_split_generic_int(ctx.symtab);
-                    let (result_t, result_size) = self.new_split_generic_int(ctx.symtab);
+                    let lhs_t = self.new_generic();
+                    let lhs_size = self.new_generic();
+                    let rhs_t = self.new_generic();
+                    let rhs_size = self.new_generic();
+                    let result_t = self.new_generic();
+                    let result_size = self.new_generic();
 
                     // Result size is sum of input sizes
                     self.add_constraint(
@@ -599,6 +613,18 @@ impl TypeState {
                     self.unify_expression_generic_error(lhs, &lhs_t, ctx)?;
                     self.unify_expression_generic_error(rhs, &rhs_t, ctx)?;
                     self.unify_expression_generic_error(expression, &result_t, ctx)?;
+
+                    self.add_requirement(Requirement::IsInteger {
+                        source_operator: op.clone(),
+                        inputs: vec![
+                            DeferredSized {base: lhs_t.at_loc(lhs), size: lhs_size},
+                            DeferredSized {base: rhs_t.at_loc(lhs), size: rhs_size}
+                        ],
+                        output: Some(DeferredSized {
+                            base: result_t.at_loc(expression),
+                            size: result_size
+                        }),
+                    })
                 }
                 // Shift operators have the same width in as they do out
                 BinaryOperator::LeftShift
@@ -620,11 +646,20 @@ impl TypeState {
                 | BinaryOperator::Lt
                 | BinaryOperator::Ge
                 | BinaryOperator::Le => {
-                    let int_type = self.new_generic_int(ctx.symtab);
+                    let base = self.new_generic();
+                    let size = self.new_generic();
                     // FIXME: Make generic over types that can be compared
-                    self.unify_expression_generic_error(lhs, &int_type, ctx)?;
+                    self.unify_expression_generic_error(lhs, &base, ctx)?;
                     self.unify_expression_generic_error(lhs, &rhs.inner, ctx)?;
                     self.unify_expression_generic_error(expression, &t_bool(ctx.symtab), ctx)?;
+
+                    self.add_requirement(Requirement::IsInteger {
+                        source_operator: op.clone(),
+                        inputs: vec![
+                            DeferredSized {base: base.at_loc(lhs), size: size},
+                        ],
+                        output: None,
+                    })
                 }
                 BinaryOperator::LogicalAnd
                 | BinaryOperator::LogicalOr

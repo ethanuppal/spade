@@ -1,0 +1,19 @@
+---
+source: spade-tests/src/hir_lowering.rs
+assertion_line: 1715
+---
+entity x(clk: clock) -> bool {
+    reg(clk) x = 0;
+    true
+}
+
+
+error: Type of expression is not fully known
+  ┌─ testinput:2:18
+  │
+2 │     reg(clk) x = 0;
+  │                  ^ The type of this expression is not fully known
+  │
+  = note: Found incomplete type: _
+
+

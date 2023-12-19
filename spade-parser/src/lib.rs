@@ -3674,12 +3674,8 @@ mod tests {
         let expected = Expression::Comptime(Box::new(
             ComptimeCondition {
                 condition: (ast_path("x"), ComptimeCondOp::Eq, 0.to_bigint().nowhere()),
-                on_true: Box::new(
-                    Expression::IntLiteral(IntLiteral::Signed(1.to_bigint())).nowhere(),
-                ),
-                on_false: Some(Box::new(
-                    Expression::IntLiteral(IntLiteral::Signed(0.to_bigint())).nowhere(),
-                )),
+                on_true: Box::new(Expression::IntLiteral(1.to_bigint()).nowhere()),
+                on_false: Some(Box::new(Expression::IntLiteral(0.to_bigint()).nowhere())),
             }
             .nowhere(),
         ))

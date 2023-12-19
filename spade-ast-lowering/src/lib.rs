@@ -1303,11 +1303,7 @@ pub fn visit_expression(e: &ast::Expression, ctx: &mut Context) -> Result<hir::E
 
     match e {
         ast::Expression::IntLiteral(val) => {
-            let result = match val {
-                ast::IntLiteral::Signed(val) => hir::expression::IntLiteral::Signed(val.clone()),
-                ast::IntLiteral::Unsigned(val) => hir::expression::IntLiteral::Unsigned(val.clone()),
-            };
-            Ok(hir::ExprKind::IntLiteral(result.clone()))
+            Ok(hir::ExprKind::IntLiteral(val.clone()))
         },
         ast::Expression::BoolLiteral(val) => Ok(hir::ExprKind::BoolLiteral(*val)),
         ast::Expression::BitLiteral(lit) => {
@@ -1323,9 +1319,9 @@ pub fn visit_expression(e: &ast::Expression, ctx: &mut Context) -> Result<hir::E
             let lhs = lhs.try_visit(visit_expression, ctx)?;
             let rhs = rhs.try_visit(visit_expression, ctx)?;
 
-            let operator = |op| hir::ExprKind::BinaryOperator(Box::new(lhs), op, Box::new(rhs));
+            let operator = |op: BinaryOperator| hir::ExprKind::BinaryOperator(Box::new(lhs), op.at_loc(&tok), Box::new(rhs));
 
-            match tok {
+            match tok.inner {
                 ast::BinaryOperator::Add => Ok(operator(BinaryOperator::Add)),
                 ast::BinaryOperator::Sub => Ok(operator(BinaryOperator::Sub)),
                 ast::BinaryOperator::Mul => Ok(operator(BinaryOperator::Mul)),
@@ -1386,13 +1382,12 @@ pub fn visit_expression(e: &ast::Expression, ctx: &mut Context) -> Result<hir::E
         ast::Expression::RangeIndex{target, start, end} => {
             let target = target.try_visit(visit_expression, ctx)?;
             let start = start.try_map_ref(|s| match s {
-                ast::Expression::IntLiteral(ast::IntLiteral::Signed(v)) => if v < &BigInt::zero() {
+                ast::Expression::IntLiteral(v) => if v < &BigInt::zero() {
                     Err(Diagnostic::error(start.as_ref(), "Range indices must be non-negative")
                         .primary_label("Range index is negative"))
                 } else {
                     Ok(v.to_biguint().unwrap())
                 },
-                ast::Expression::IntLiteral(ast::IntLiteral::Unsigned(v)) => Ok(v.clone()),
                 _ => Err(Diagnostic::error(start.as_ref(), "Range indices must be integers.").primary_label("Expected integer"))
             })?;
             let end = end.try_map_ref(|s| match s {
@@ -2053,12 +2048,12 @@ mod expression_visiting {
                 let idtracker = ExprIdTracker::new();
                 let input = ast::Expression::BinaryOperator(
                     Box::new(ast::Expression::int_literal(123).nowhere()),
-                    spade_ast::BinaryOperator::$token,
+                    spade_ast::BinaryOperator::$token.nowhere(),
                     Box::new(ast::Expression::int_literal(456).nowhere()),
                 );
                 let expected = hir::ExprKind::BinaryOperator(
                     Box::new(hir::ExprKind::int_literal(123).idless().nowhere()),
-                    BinaryOperator::$op,
+                    BinaryOperator::$op.nowhere(),
                     Box::new(hir::ExprKind::int_literal(456).idless().nowhere()),
                 )
                 .idless();

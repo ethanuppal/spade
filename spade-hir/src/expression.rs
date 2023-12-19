@@ -30,6 +30,33 @@ pub enum BinaryOperator {
     BitwiseAnd,
     BitwiseXor,
 }
+
+impl std::fmt::Display for BinaryOperator {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            BinaryOperator::Add => write!(f, "+"),
+            BinaryOperator::Sub => write!(f, "-"),
+            BinaryOperator::Mul => write!(f, "*"),
+            BinaryOperator::Eq => write!(f, "=="),
+            BinaryOperator::NotEq => write!(f, "!="),
+            BinaryOperator::Gt => write!(f, ">"),
+            BinaryOperator::Lt => write!(f, "<"),
+            BinaryOperator::Ge => write!(f, ">="),
+            BinaryOperator::Le => write!(f, "<="),
+            BinaryOperator::LeftShift => write!(f, ">>"),
+            BinaryOperator::RightShift => write!(f, "<<"),
+            BinaryOperator::ArithmeticRightShift => write!(f, ">>>"),
+            BinaryOperator::LogicalAnd => write!(f, "&&"),
+            BinaryOperator::LogicalOr => write!(f, "||"),
+            BinaryOperator::LogicalXor => write!(f, "^^"),
+            BinaryOperator::BitwiseOr => write!(f, "|"),
+            BinaryOperator::BitwiseAnd => write!(f, "&"),
+            BinaryOperator::BitwiseXor => write!(f, "^"),
+        }
+    }
+}
+impl WithLocation for BinaryOperator {}
+
 #[derive(Clone, Copy, PartialEq, Debug, Serialize, Deserialize)]
 pub enum UnaryOperator {
     Sub,
@@ -99,24 +126,6 @@ pub struct Argument {
 }
 impl WithLocation for ArgumentList {}
 
-#[derive(PartialEq, Debug, Clone, Serialize, Deserialize)]
-pub enum IntLiteral {
-    Signed(BigInt),
-    Unsigned(BigUint),
-}
-impl WithLocation for IntLiteral {}
-
-impl IntLiteral {
-    /// Converts the number to a signed BigInt, throwing away the original sign/unsigned
-    /// information
-    pub fn as_signed(self) -> BigInt {
-        match self {
-            IntLiteral::Signed(v) => v,
-            IntLiteral::Unsigned(u) => u.to_bigint(),
-        }
-    }
-}
-
 // FIXME: Migrate entity, pipeline and fn instantiation to this
 #[derive(PartialEq, Debug, Clone, Serialize, Deserialize)]
 pub enum CallKind {
@@ -136,7 +145,7 @@ pub enum BitLiteral {
 #[derive(PartialEq, Debug, Clone, Serialize, Deserialize)]
 pub enum ExprKind {
     Identifier(NameID),
-    IntLiteral(IntLiteral),
+    IntLiteral(BigInt),
     BoolLiteral(bool),
     BitLiteral(BitLiteral),
     CreatePorts,
@@ -164,7 +173,11 @@ pub enum ExprKind {
         callee: Loc<NameID>,
         args: Loc<ArgumentList>,
     },
-    BinaryOperator(Box<Loc<Expression>>, BinaryOperator, Box<Loc<Expression>>),
+    BinaryOperator(
+        Box<Loc<Expression>>,
+        Loc<BinaryOperator>,
+        Box<Loc<Expression>>,
+    ),
     UnaryOperator(UnaryOperator, Box<Loc<Expression>>),
     Match(Box<Loc<Expression>>, Vec<(Loc<Pattern>, Loc<Expression>)>),
     Block(Box<Block>),
@@ -196,7 +209,7 @@ impl ExprKind {
     }
 
     pub fn int_literal(val: i32) -> Self {
-        Self::IntLiteral(IntLiteral::Signed(val.to_bigint()))
+        Self::IntLiteral(val.to_bigint())
     }
 }
 
@@ -270,7 +283,7 @@ impl LocExprExt for Loc<Expression> {
                 {
                     Some(witness)
                 } else {
-                    match &operator {
+                    match &operator.inner {
                         BinaryOperator::Add => None,
                         BinaryOperator::Sub => None,
                         BinaryOperator::Mul

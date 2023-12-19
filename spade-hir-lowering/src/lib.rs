@@ -1160,11 +1160,7 @@ impl ExprLocal for Loc<Expression> {
             ExprKind::IntLiteral(value) => {
                 let ty = self_type;
                 result.push_primary(
-                    mir::Statement::Constant(
-                        self.id,
-                        ty,
-                        mir::ConstantValue::Int(value.clone().as_signed()),
-                    ),
+                    mir::Statement::Constant(self.id, ty, mir::ConstantValue::Int(value.clone())),
                     self,
                 );
             }
@@ -1185,42 +1181,71 @@ impl ExprLocal for Loc<Expression> {
                 result.push_primary(mir::Statement::Constant(self.id, ty, cv), self);
             }
             ExprKind::BinaryOperator(lhs, op, rhs) => {
-                let binop_builder = |op| -> Result<()> {
-                    result.append(lhs.lower(ctx)?);
-                    result.append(rhs.lower(ctx)?);
+                macro_rules! binop_builder {
+                    ($op:ident) => {{
+                        result.append(lhs.lower(ctx)?);
+                        result.append(rhs.lower(ctx)?);
 
-                    result.push_primary(
-                        mir::Statement::Binding(mir::Binding {
-                            name: self.variable(ctx.subs)?,
-                            operator: op,
-                            operands: vec![lhs.variable(ctx.subs)?, rhs.variable(ctx.subs)?],
-                            ty: self_type,
-                            loc: Some(self.loc()),
-                        }),
-                        self,
-                    );
-                    Ok(())
-                };
+                        result.push_primary(
+                            mir::Statement::Binding(mir::Binding {
+                                name: self.variable(ctx.subs)?,
+                                operator: $op,
+                                operands: vec![lhs.variable(ctx.subs)?, rhs.variable(ctx.subs)?],
+                                ty: self_type,
+                                loc: Some(self.loc()),
+                            }),
+                            self,
+                        );
+                    }};
+                }
+                macro_rules! dual_binop_builder {
+                    ($sop:ident, $uop:ident) => {{
+                        result.append(lhs.lower(ctx)?);
+                        result.append(rhs.lower(ctx)?);
+
+                        let op = match &ctx
+                            .types
+                            .expr_type(lhs, ctx.symtab.symtab(), &ctx.item_list.types)?
+                            .to_mir_type()
+                        {
+                            mir::types::Type::Int(_) => $sop,
+                            mir::types::Type::UInt(_) => $uop,
+                            other => panic!("Dual binop on {other} which is not int or uint"),
+                        };
+
+                        result.push_primary(
+                            mir::Statement::Binding(mir::Binding {
+                                name: self.variable(ctx.subs)?,
+                                operator: op,
+                                operands: vec![lhs.variable(ctx.subs)?, rhs.variable(ctx.subs)?],
+                                ty: self_type,
+                                loc: Some(self.loc()),
+                            }),
+                            self,
+                        );
+                    }};
+                }
+
                 use mir::Operator::*;
-                match op {
-                    BinaryOperator::Add => binop_builder(Add)?,
-                    BinaryOperator::Sub => binop_builder(Sub)?,
-                    BinaryOperator::Mul => binop_builder(Mul)?,
-                    BinaryOperator::Eq => binop_builder(Eq)?,
-                    BinaryOperator::NotEq => binop_builder(NotEq)?,
-                    BinaryOperator::Gt => binop_builder(Gt)?,
-                    BinaryOperator::Lt => binop_builder(Lt)?,
-                    BinaryOperator::Ge => binop_builder(Ge)?,
-                    BinaryOperator::Le => binop_builder(Le)?,
-                    BinaryOperator::LogicalXor => binop_builder(LogicalXor)?,
-                    BinaryOperator::LeftShift => binop_builder(LeftShift)?,
-                    BinaryOperator::RightShift => binop_builder(RightShift)?,
-                    BinaryOperator::ArithmeticRightShift => binop_builder(ArithmeticRightShift)?,
-                    BinaryOperator::LogicalAnd => binop_builder(LogicalAnd)?,
-                    BinaryOperator::LogicalOr => binop_builder(LogicalOr)?,
-                    BinaryOperator::BitwiseAnd => binop_builder(BitwiseAnd)?,
-                    BinaryOperator::BitwiseOr => binop_builder(BitwiseOr)?,
-                    BinaryOperator::BitwiseXor => binop_builder(BitwiseXor)?,
+                match op.inner {
+                    BinaryOperator::Add => dual_binop_builder!(Add, UnsignedAdd),
+                    BinaryOperator::Sub => dual_binop_builder!(Sub, UnsignedSub),
+                    BinaryOperator::Mul => dual_binop_builder!(Mul, UnsignedMul),
+                    BinaryOperator::Eq => binop_builder!(Eq),
+                    BinaryOperator::NotEq => binop_builder!(NotEq),
+                    BinaryOperator::Gt => dual_binop_builder!(Gt, UnsignedGt),
+                    BinaryOperator::Lt => dual_binop_builder!(Lt, UnsignedLt),
+                    BinaryOperator::Ge => dual_binop_builder!(Ge, UnsignedGe),
+                    BinaryOperator::Le => dual_binop_builder!(Le, UnsignedLe),
+                    BinaryOperator::LogicalXor => binop_builder!(LogicalXor),
+                    BinaryOperator::LeftShift => binop_builder!(LeftShift),
+                    BinaryOperator::RightShift => binop_builder!(RightShift),
+                    BinaryOperator::ArithmeticRightShift => binop_builder!(ArithmeticRightShift),
+                    BinaryOperator::LogicalAnd => binop_builder!(LogicalAnd),
+                    BinaryOperator::LogicalOr => binop_builder!(LogicalOr),
+                    BinaryOperator::BitwiseAnd => binop_builder!(BitwiseAnd),
+                    BinaryOperator::BitwiseOr => binop_builder!(BitwiseOr),
+                    BinaryOperator::BitwiseXor => binop_builder!(BitwiseXor),
                 };
             }
             ExprKind::UnaryOperator(op, operand) => {

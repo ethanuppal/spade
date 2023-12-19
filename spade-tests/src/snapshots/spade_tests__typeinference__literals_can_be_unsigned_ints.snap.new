@@ -1,0 +1,10 @@
+---
+source: spade-tests/src/typeinference.rs
+assertion_line: 1112
+---
+fn test() -> uint<8> {
+    10
+}
+
+
+

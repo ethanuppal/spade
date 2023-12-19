@@ -1,0 +1,18 @@
+---
+source: spade-tests/src/typeinference.rs
+assertion_line: 1130
+---
+fn test() -> uint<8> {
+    -1
+}
+
+
+error: Integer value does not fit in int<8>
+  ┌─ testinput:2:5
+  │
+2 │     -1
+  │     ^^ -1 does not fit in an uint<8>
+  │
+  = note: uint<8> fits unsigned integers in the range (0, 128)
+
+

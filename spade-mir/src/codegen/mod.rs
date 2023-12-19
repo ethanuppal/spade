@@ -221,14 +221,21 @@ fn forward_expression_code(binding: &Binding, types: &TypeList, ops: &[ValueName
 
     match &binding.operator {
         Operator::Add => signed_binop!("+"),
+        Operator::UnsignedAdd => binop!("+"),
         Operator::Sub => signed_binop!("-"),
+        Operator::UnsignedSub => binop!("-"),
         Operator::Mul => signed_binop!("*"),
+        Operator::UnsignedMul => binop!("*"),
         Operator::Eq => binop!("=="),
         Operator::NotEq => binop!("!="),
         Operator::Gt => signed_binop!(">"),
+        Operator::UnsignedGt => binop!(">"),
         Operator::Lt => signed_binop!("<"),
+        Operator::UnsignedLt => binop!("<"),
         Operator::Ge => signed_binop!(">="),
+        Operator::UnsignedGe => binop!(">="),
         Operator::Le => signed_binop!("<="),
+        Operator::UnsignedLe => binop!("<="),
         Operator::LeftShift => binop!("<<"),
         Operator::RightShift => binop!(">>"),
         Operator::ArithmeticRightShift => signed_binop!(">>>"),
@@ -602,14 +609,21 @@ fn backward_expression_code(binding: &Binding, types: &TypeList, ops: &[ValueNam
         .collect::<Vec<_>>();
     match &binding.operator {
         Operator::Add
+        | Operator::UnsignedAdd
         | Operator::Sub
+        | Operator::UnsignedSub
         | Operator::Mul
+        | Operator::UnsignedMul
         | Operator::Eq
         | Operator::NotEq
         | Operator::Gt
+        | Operator::UnsignedGt
         | Operator::Lt
+        | Operator::UnsignedLt
         | Operator::Ge
+        | Operator::UnsignedGe
         | Operator::Le
+        | Operator::UnsignedLe
         | Operator::LeftShift
         | Operator::RightShift
         | Operator::ArithmeticRightShift

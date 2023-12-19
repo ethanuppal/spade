@@ -1,7 +1,6 @@
 use std::collections::btree_map::Entry;
 use std::collections::BTreeMap;
 
-use num::BigInt;
 use spade_common::location_info::{Loc, WithLocation};
 use spade_hir::expression::NamedArgument;
 use spade_hir::symbol_table::SymbolTable;
@@ -92,15 +91,12 @@ impl<'a> Inferer<'a> {
     pub fn expression(&mut self, expr: &Loc<Expression>) -> Res {
         let maybe_eq = match &expr.inner.kind {
             ExprKind::Identifier(_) => self.find_or_create(expr).map(Equation::V),
-            ExprKind::IntLiteral(literal) => {
-                let x = match literal {
-                    spade_hir::expression::IntLiteral::Signed(x) => x.clone(),
-                    spade_hir::expression::IntLiteral::Unsigned(x) => BigInt::from(x.clone()),
-                };
-                Some(Equation::Constant(Range::new(x.clone(), x)))
-            }
+            ExprKind::IntLiteral(literal) => Some(Equation::Constant(Range::new(
+                literal.clone(),
+                literal.clone(),
+            ))),
 
-            ExprKind::BinaryOperator(lhs, op, rhs) => self.binary_operator(lhs, *op, rhs)?,
+            ExprKind::BinaryOperator(lhs, op, rhs) => self.binary_operator(lhs, op.inner, rhs)?,
             ExprKind::UnaryOperator(op, v) => self.unary_operator(*op, v)?,
             ExprKind::Match(value, patterns) => self.match_(value, patterns)?,
             ExprKind::Block(block) => self.block(block)?,

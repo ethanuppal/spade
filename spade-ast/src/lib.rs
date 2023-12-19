@@ -100,6 +100,7 @@ pub enum BinaryOperator {
     BitwiseOr,
     BitwiseXor,
 }
+impl WithLocation for BinaryOperator {}
 
 #[derive(PartialEq, Debug, Clone)]
 pub enum UnaryOperator {
@@ -136,7 +137,7 @@ impl WithLocation for BitLiteral {}
 #[derive(PartialEq, Debug, Clone)]
 pub enum Expression {
     Identifier(Loc<Path>),
-    IntLiteral(IntLiteral),
+    IntLiteral(BigInt),
     BoolLiteral(bool),
     BitLiteral(BitLiteral),
     ArrayLiteral(Vec<Loc<Expression>>),
@@ -171,7 +172,11 @@ pub enum Expression {
         Loc<Vec<(Loc<Pattern>, Loc<Expression>)>>,
     ),
     UnaryOperator(UnaryOperator, Box<Loc<Expression>>),
-    BinaryOperator(Box<Loc<Expression>>, BinaryOperator, Box<Loc<Expression>>),
+    BinaryOperator(
+        Box<Loc<Expression>>,
+        Loc<BinaryOperator>,
+        Box<Loc<Expression>>,
+    ),
     Block(Box<Block>),
     /// E.g. `stage(-5).x`, `stage('b).y`
     PipelineReference {
@@ -199,7 +204,7 @@ impl WithLocation for Expression {}
 
 impl Expression {
     pub fn int_literal(val: i32) -> Self {
-        Self::IntLiteral(IntLiteral::Signed(val.to_bigint()))
+        Self::IntLiteral(val.to_bigint())
     }
 
     pub fn assume_block(&self) -> &Block {

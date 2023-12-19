@@ -1,3 +1,4 @@
+use num::bigint::ToBigInt;
 use num::ToPrimitive;
 use spade_ast::{ArgumentList, BinaryOperator, CallKind, Expression, UnaryOperator};
 use spade_common::location_info::{lspan, Loc, WithLocation};
@@ -163,11 +164,15 @@ impl<'a> Parser<'a> {
                 break;
             }
 
-            self.eat_unconditional()?;
+            let op_tok = self.eat_unconditional()?;
 
             let rhs = self.expr_bp(op_power)?;
-            lhs = Expression::BinaryOperator(Box::new(lhs.clone()), op, Box::new(rhs.clone()))
-                .between(self.file_id, &lhs, &rhs)
+            lhs = Expression::BinaryOperator(
+                Box::new(lhs.clone()),
+                op.at(self.file_id, &op_tok),
+                Box::new(rhs.clone()),
+            )
+            .between(self.file_id, &lhs, &rhs)
         }
 
         Ok(lhs)
@@ -188,7 +193,13 @@ impl<'a> Parser<'a> {
         } else if let Some(val) = self.bit_literal()? {
             Ok(val.map(Expression::BitLiteral))
         } else if let Some(val) = self.int_literal()? {
-            Ok(val.map(Expression::IntLiteral))
+            match &val.inner {
+                spade_ast::IntLiteral::Signed(v) => Ok(Expression::IntLiteral(v.clone())),
+                spade_ast::IntLiteral::Unsigned(v) => {
+                    Ok(Expression::IntLiteral(v.to_bigint().unwrap()))
+                }
+            }
+            .map(|v| v.at_loc(&val))
         } else if let Some(block) = self.block(false)? {
             Ok(block.map(Box::new).map(Expression::Block))
         } else if let Some(if_expr) = self.if_expression()? {
@@ -374,7 +385,7 @@ mod test {
     fn addition_operatoins_are_expressions() {
         let expected_value = Expression::BinaryOperator(
             Box::new(Expression::Identifier(ast_path("a")).nowhere()),
-            BinaryOperator::Add,
+            BinaryOperator::Add.nowhere(),
             Box::new(Expression::Identifier(ast_path("b")).nowhere()),
         )
         .nowhere();
@@ -408,7 +419,7 @@ mod test {
     fn bitwise_and_operatoins_are_expressions() {
         let expected_value = Expression::BinaryOperator(
             Box::new(Expression::Identifier(ast_path("a")).nowhere()),
-            BinaryOperator::BitwiseAnd,
+            BinaryOperator::BitwiseAnd.nowhere(),
             Box::new(Expression::Identifier(ast_path("b")).nowhere()),
         )
         .nowhere();
@@ -420,7 +431,7 @@ mod test {
     fn bitwise_or_operatoins_are_expressions() {
         let expected_value = Expression::BinaryOperator(
             Box::new(Expression::Identifier(ast_path("a")).nowhere()),
-            BinaryOperator::BitwiseOr,
+            BinaryOperator::BitwiseOr.nowhere(),
             Box::new(Expression::Identifier(ast_path("b")).nowhere()),
         )
         .nowhere();
@@ -432,7 +443,7 @@ mod test {
     fn multiplications_are_expressions() {
         let expected_value = Expression::BinaryOperator(
             Box::new(Expression::Identifier(ast_path("a")).nowhere()),
-            BinaryOperator::Mul,
+            BinaryOperator::Mul.nowhere(),
             Box::new(Expression::Identifier(ast_path("b")).nowhere()),
         )
         .nowhere();
@@ -446,12 +457,12 @@ mod test {
             Box::new(
                 Expression::BinaryOperator(
                     Box::new(Expression::Identifier(ast_path("a")).nowhere()),
-                    BinaryOperator::Mul,
+                    BinaryOperator::Mul.nowhere(),
                     Box::new(Expression::Identifier(ast_path("b")).nowhere()),
                 )
                 .nowhere(),
             ),
-            BinaryOperator::Add,
+            BinaryOperator::Add.nowhere(),
             Box::new(Expression::Identifier(ast_path("c")).nowhere()),
         )
         .nowhere();
@@ -465,12 +476,12 @@ mod test {
             Box::new(
                 Expression::BinaryOperator(
                     Box::new(Expression::Identifier(ast_path("a")).nowhere()),
-                    BinaryOperator::Add,
+                    BinaryOperator::Add.nowhere(),
                     Box::new(Expression::Identifier(ast_path("b")).nowhere()),
                 )
                 .nowhere(),
             ),
-            BinaryOperator::Equals,
+            BinaryOperator::Equals.nowhere(),
             Box::new(Expression::Identifier(ast_path("c")).nowhere()),
         )
         .nowhere();
@@ -485,12 +496,12 @@ mod test {
                 Box::new(
                     Expression::BinaryOperator(
                         Box::new(Expression::Identifier(ast_path("a")).nowhere()),
-                        BinaryOperator::Equals,
+                        BinaryOperator::Equals.nowhere(),
                         Box::new(Expression::Identifier(ast_path("b")).nowhere()),
                     )
                     .nowhere(),
                 ),
-                BinaryOperator::LogicalAnd,
+                BinaryOperator::LogicalAnd.nowhere(),
                 Box::new(Expression::Identifier(ast_path("c")).nowhere()),
             )
             .nowhere();
@@ -500,11 +511,11 @@ mod test {
         {
             let expected_value = Expression::BinaryOperator(
                 Box::new(Expression::Identifier(ast_path("a")).nowhere()),
-                BinaryOperator::LogicalAnd,
+                BinaryOperator::LogicalAnd.nowhere(),
                 Box::new(
                     Expression::BinaryOperator(
                         Box::new(Expression::Identifier(ast_path("b")).nowhere()),
-                        BinaryOperator::Equals,
+                        BinaryOperator::Equals.nowhere(),
                         Box::new(Expression::Identifier(ast_path("c")).nowhere()),
                     )
                     .nowhere(),
@@ -520,11 +531,11 @@ mod test {
     fn bracketed_expressions_are_expressions() {
         let expected_value = Expression::BinaryOperator(
             Box::new(Expression::Identifier(ast_path("a")).nowhere()),
-            BinaryOperator::Add,
+            BinaryOperator::Add.nowhere(),
             Box::new(
                 Expression::BinaryOperator(
                     Box::new(Expression::Identifier(ast_path("b")).nowhere()),
-                    BinaryOperator::Add,
+                    BinaryOperator::Add.nowhere(),
                     Box::new(Expression::Identifier(ast_path("c")).nowhere()),
                 )
                 .nowhere(),
@@ -541,12 +552,12 @@ mod test {
             Box::new(
                 Expression::BinaryOperator(
                     Box::new(Expression::Identifier(ast_path("b")).nowhere()),
-                    BinaryOperator::Add,
+                    BinaryOperator::Add.nowhere(),
                     Box::new(Expression::Identifier(ast_path("c")).nowhere()),
                 )
                 .nowhere(),
             ),
-            BinaryOperator::Add,
+            BinaryOperator::Add.nowhere(),
             Box::new(Expression::Identifier(ast_path("a")).nowhere()),
         )
         .nowhere();
@@ -873,7 +884,7 @@ mod test {
             args: ArgumentList::Positional(vec![
                 Expression::BinaryOperator(
                     Box::new(Expression::int_literal(0).nowhere()),
-                    BinaryOperator::LogicalOr,
+                    BinaryOperator::LogicalOr.nowhere(),
                     Box::new(Expression::int_literal(1).nowhere()),
                 )
                 .nowhere(),
@@ -920,7 +931,7 @@ mod test {
 
         let expected = Expression::BinaryOperator(
             Box::new(Expression::Identifier(ast_path("x")).nowhere()),
-            BinaryOperator::LogicalAnd,
+            BinaryOperator::LogicalAnd.nowhere(),
             Box::new(
                 Expression::Index(
                     Box::new(Expression::Identifier(ast_path("y")).nowhere()),
@@ -1002,12 +1013,12 @@ mod test {
             Box::new(
                 Expression::BinaryOperator(
                     Box::new(Expression::Identifier(ast_path("a")).nowhere()),
-                    BinaryOperator::Sub,
+                    BinaryOperator::Sub.nowhere(),
                     Box::new(Expression::Identifier(ast_path("b")).nowhere()),
                 )
                 .nowhere(),
             ),
-            BinaryOperator::Sub,
+            BinaryOperator::Sub.nowhere(),
             Box::new(Expression::Identifier(ast_path("c")).nowhere()),
         )
         .nowhere();
@@ -1077,7 +1088,7 @@ mod test {
                 )
                 .nowhere(),
             ),
-            BinaryOperator::Add,
+            BinaryOperator::Add.nowhere(),
             Box::new(Expression::Identifier(ast_path("b")).nowhere()),
         )
         .nowhere();

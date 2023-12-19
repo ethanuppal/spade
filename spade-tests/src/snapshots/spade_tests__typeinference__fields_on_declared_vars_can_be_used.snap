@@ -11,13 +11,13 @@ entity a() -> bool {
 }
 
 
-error: Expected type bool, got int<32>
+error: Expected type int<32>, got bool
   ┌─ testinput:5:22
   │
 5 │     let _: int<32> = x.a;
-  │                      ^^^ Expected bool
+  │                      ^^^ Expected int<32>
   │
-  = note: Expected: bool
-               Got: int<32>
+  = note: Expected: int<32>
+               Got: bool
 
 

@@ -11,8 +11,11 @@ error: Expected type int<8>, got int<9>
   ┌─ testinput:2:33
   │
 2 │     reg(clk) x reset (rst: 0) = x + 1;
-  │                                 ^^^^^ Expected int<8>, got int<9>
+  │                                 ^^^^^ Expected int<8>
   │
-  = note: Addition creates one more output bit than the input to avoid overflow
+  = note: Expected: 8
+                in: int<8>
+               Got: 9
+                in: int<9>
 
 

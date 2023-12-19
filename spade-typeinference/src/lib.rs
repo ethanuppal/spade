@@ -42,6 +42,7 @@ use trace_stack::{format_trace_stack, TraceStackEntry};
 
 use crate::error::TypeMismatch as Tm;
 use crate::fixed_types::t_void;
+use crate::requirements::DeferredSized;
 
 mod constraints;
 pub mod dump;
@@ -1107,6 +1108,13 @@ impl TypeState {
     }
 
     fn add_requirement(&mut self, requirement: Requirement) {
+        macro_rules! replace {
+            ($name:ident) => {
+                self.check_var_for_replacement($name.inner.clone())
+                    .at_loc(&$name)
+            };
+        }
+
         let replaced = match requirement {
             Requirement::HasField {
                 target_type,
@@ -1114,12 +1122,8 @@ impl TypeState {
                 expr,
             } => Requirement::HasField {
                 field,
-                target_type: self
-                    .check_var_for_replacement(target_type.inner.clone())
-                    .at_loc(&target_type),
-                expr: self
-                    .check_var_for_replacement(expr.inner.clone())
-                    .at_loc(&expr),
+                target_type: replace!(target_type),
+                expr: replace!(expr),
             },
             Requirement::HasMethod {
                 expr_id,
@@ -1129,20 +1133,32 @@ impl TypeState {
                 args,
             } => Requirement::HasMethod {
                 expr_id,
-                target_type: self
-                    .check_var_for_replacement(target_type.inner.clone())
-                    .at_loc(&target_type),
+                target_type: replace!(target_type),
                 method,
-                expr: self
-                    .check_var_for_replacement(expr.inner.clone())
-                    .at_loc(&expr),
+                expr: replace!(expr),
                 args,
             },
             Requirement::FitsIntLiteral { value, target_type } => Requirement::FitsIntLiteral {
                 value,
-                target_type: self
-                    .check_var_for_replacement(target_type.inner.clone())
-                    .at_loc(&target_type),
+                target_type: replace!(target_type),
+            },
+            Requirement::IsInteger {
+                source_operator,
+                inputs,
+                output,
+            } => Requirement::IsInteger {
+                source_operator,
+                inputs: inputs
+                    .into_iter()
+                    .map(|DeferredSized { base, size }| DeferredSized {
+                        base: replace!(base),
+                        size: self.check_var_for_replacement(size.clone()),
+                    })
+                    .collect(),
+                output: output.map(|DeferredSized { base, size }| DeferredSized {
+                    base: replace!(base),
+                    size: self.check_var_for_replacement(size.clone()),
+                }),
             },
         };
 
@@ -1579,7 +1595,7 @@ impl TypeState {
             }
 
             for Replacement { from, to } in replacements {
-                self.unify(&from, &to, ctx)
+                self.unify(&to, &from, ctx)
                     .into_default_diagnostic(from.loc())?;
             }
 
@@ -1695,7 +1711,6 @@ mod tests {
         fixed_types::t_clock,
         hir::{self, Block},
     };
-    use hir::expression::IntLiteral;
     use hir::hparams;
     use hir::symbol_table::TypeDeclKind;
     use hir::AttributeList;
@@ -2283,9 +2298,7 @@ mod tests {
         let input = hir::Statement::binding(
             PatternKind::name(name_id(0, "a")).with_id(10).nowhere(),
             None,
-            ExprKind::IntLiteral(IntLiteral::Signed(0.to_bigint()))
-                .with_id(0)
-                .nowhere(),
+            ExprKind::IntLiteral(0.to_bigint()).with_id(0).nowhere(),
         )
         .nowhere();
 
@@ -2315,9 +2328,7 @@ mod tests {
         let input = hir::Statement::binding(
             PatternKind::name(name_id(0, "a")).with_id(10).nowhere(),
             Some(dtype!(symtab => "int"; (t_num(5)))),
-            ExprKind::IntLiteral(IntLiteral::Signed(0.to_bigint()))
-                .with_id(0)
-                .nowhere(),
+            ExprKind::IntLiteral(0.to_bigint()).with_id(0).nowhere(),
         )
         .nowhere();
 
@@ -2352,9 +2363,7 @@ mod tests {
             reset: None,
             initial: None,
             value: ExprKind::TupleLiteral(vec![
-                ExprKind::IntLiteral(IntLiteral::Signed(5.to_bigint()))
-                    .with_id(1)
-                    .nowhere(),
+                ExprKind::IntLiteral(5.to_bigint()).with_id(1).nowhere(),
                 ExprKind::BoolLiteral(true).with_id(2).nowhere(),
             ])
             .with_id(3)

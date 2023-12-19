@@ -1,0 +1,18 @@
+---
+source: spade-tests/src/typeinference.rs
+---
+struct A {}
+fn test(x: A, y: A) -> A {
+    x + y
+}
+
+
+error: Operator `+` requires int or uint. Got A
+  ┌─ testinput:3:5
+  │
+3 │     x + y
+  │     ^ - required by this operator
+  │     │  
+  │     expected int or uint
+
+

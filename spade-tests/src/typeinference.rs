@@ -649,20 +649,10 @@ snapshot_error! {
     "
 }
 
-snapshot_error! {
-    // NOTE: This test should be removed once we support unsigned ints properly
-    unsigned_literals_error_on_overflow,
-    "
-        fn test() -> int<8> {
-            256u
-        }
-    "
-}
-
 #[test]
-fn unsigned_literals_fit_in_negative_region() {
-    let code = "fn test() -> int<8> {
-        255u
+fn unsigned_literals_fit() {
+    let code = "fn test() -> uint<8> {
+        255
     }";
 
     build_items(code);
@@ -882,5 +872,434 @@ snapshot_error! {
     "
         struct A {}
         fn test<T: A>(x: T) {}
+    "
+}
+
+snapshot_error! {
+    argument_type_mismatch_named,
+    "
+    entity e(clk: clock, a: bool) -> bool {
+        a
+    }
+
+    entity main(clk: clock) -> bool {
+        let b: int<3> = 0;
+        inst e$(clk, a: b)
+    }
+    "
+}
+
+snapshot_error! {
+    argument_type_mismatch_shortnamed,
+    "
+    entity e(clk: clock, a: bool) -> bool {
+        a
+    }
+
+    entity main(clk: clock) -> bool {
+        let a: int<3> = 0;
+        inst e$(clk, a)
+    }
+    "
+}
+
+snapshot_error! {
+    type_pattern_argument_type_mismatch_positional,
+    "
+    struct X {
+        b: bool,
+    }
+
+    entity main() -> bool {
+        let x = X$(b: true);
+        match x {
+            X(0) => true,
+            _ => false,
+        }
+    }
+    "
+}
+snapshot_error! {
+    type_pattern_argument_type_mismatch_named,
+    "
+    struct X {
+        b: bool,
+    }
+
+    entity main() -> bool {
+        let x = X$(b: true);
+        match x {
+            X$(b: 0) => true,
+            _ => false,
+        }
+    }
+    "
+}
+
+snapshot_error! {
+    type_pattern_argument_type_mismatch_shortnamed,
+    "
+    struct X {
+        b: bool,
+    }
+
+    entity main() -> bool {
+        decl b;
+        let x: int<8> = b;
+        let X$(b) = X(true);
+    }
+    "
+}
+
+snapshot_error! {
+    range_indexing_non_array_is_error,
+    "
+        fn test(x: int<8>) -> [int<8>; 2] {
+            x[0:3]
+        }
+    "
+}
+
+snapshot_error! {
+    range_index_too_large_is_error,
+    "
+        fn test(x: [int<8>; 6]) -> [int<8>; 2] {
+            x[0:3]
+        }
+    "
+}
+
+snapshot_error! {
+    range_index_too_small_is_error,
+    "
+        fn test(x: [int<8>; 6]) -> [int<8>; 2] {
+            x[0:1]
+        }
+    "
+}
+
+snapshot_error! {
+    inverse_order_range_index_is_error,
+    "
+        fn test(x: [int<8>; 6]) -> [int<8>; 2] {
+            x[2:0]
+        }
+    "
+}
+
+snapshot_error! {
+    end_out_of_range_range_index_is_error,
+    "
+        fn test(x: [int<8>; 6]) -> [int<8>; 2] {
+            x[5:7]
+        }
+    "
+}
+
+snapshot_error! {
+    start_out_of_range_range_index_is_error,
+    "
+        fn test(x: [int<8>; 6]) -> [int<8>; 2] {
+            x[6:8]
+        }
+    "
+}
+
+#[test]
+fn end_at_array_bound_is_allowed() {
+    let code = "
+    fn test(x: [int<8>; 6]) -> [int<8>; 2] {
+        x[4:6]
+    }";
+
+    build_items(code);
+}
+
+snapshot_error! {
+    zero_size_range_index_is_error,
+    "
+        fn test(x: [int<8>; 6]) -> [int<8>; 1] {
+            x[7:7]
+        }
+    "
+}
+
+snapshot_error! {
+    negative_range_index_is_error,
+    "
+        fn test(x: [int<8>; 6]) -> [int<8>; 1] {
+            x[-1:5]
+        }
+    "
+}
+
+snapshot_error! {
+    negative_second_range_index_is_error,
+    "
+        fn test(x: [int<8>; 6]) -> [int<8>; 1] {
+            x[1:-5]
+        }
+    "
+}
+=======
+
+snapshot_error! {
+    argument_type_mismatch_named,
+    "
+    entity e(clk: clock, a: bool) -> bool {
+        a
+    }
+
+    entity main(clk: clock) -> bool {
+        let b: int<3> = 0;
+        inst e$(clk, a: b)
+    }
+    "
+}
+
+snapshot_error! {
+    argument_type_mismatch_shortnamed,
+    "
+    entity e(clk: clock, a: bool) -> bool {
+        a
+    }
+
+    entity main(clk: clock) -> bool {
+        let a: int<3> = 0;
+        inst e$(clk, a)
+    }
+    "
+}
+
+snapshot_error! {
+    type_pattern_argument_type_mismatch_positional,
+    "
+    struct X {
+        b: bool,
+    }
+
+    entity main() -> bool {
+        let x = X$(b: true);
+        match x {
+            X(0) => true,
+            _ => false,
+        }
+    }
+    "
+}
+snapshot_error! {
+    type_pattern_argument_type_mismatch_named,
+    "
+    struct X {
+        b: bool,
+    }
+
+    entity main() -> bool {
+        let x = X$(b: true);
+        match x {
+            X$(b: 0) => true,
+            _ => false,
+        }
+    }
+    "
+}
+
+snapshot_error! {
+    type_pattern_argument_type_mismatch_shortnamed,
+    "
+    struct X {
+        b: bool,
+    }
+
+    entity main() -> bool {
+        decl b;
+        let x: int<8> = b;
+        let X$(b) = X(true);
+    }
+    "
+}
+
+snapshot_error! {
+    range_indexing_non_array_is_error,
+    "
+        fn test(x: int<8>) -> [int<8>; 2] {
+            x[0:3]
+        }
+    "
+}
+
+snapshot_error! {
+    range_index_too_large_is_error,
+    "
+        fn test(x: [int<8>; 6]) -> [int<8>; 2] {
+            x[0:3]
+        }
+    "
+}
+
+snapshot_error! {
+    range_index_too_small_is_error,
+    "
+        fn test(x: [int<8>; 6]) -> [int<8>; 2] {
+            x[0:1]
+        }
+    "
+}
+
+snapshot_error! {
+    inverse_order_range_index_is_error,
+    "
+        fn test(x: [int<8>; 6]) -> [int<8>; 2] {
+            x[2:0]
+        }
+    "
+}
+
+snapshot_error! {
+    end_out_of_range_range_index_is_error,
+    "
+        fn test(x: [int<8>; 6]) -> [int<8>; 2] {
+            x[5:7]
+        }
+    "
+}
+
+snapshot_error! {
+    start_out_of_range_range_index_is_error,
+    "
+        fn test(x: [int<8>; 6]) -> [int<8>; 2] {
+            x[6:8]
+        }
+    "
+}
+
+#[test]
+fn end_at_array_bound_is_allowed() {
+    let code = "
+    fn test(x: [int<8>; 6]) -> [int<8>; 2] {
+        x[4:6]
+    }";
+
+    build_items(code);
+}
+
+snapshot_error! {
+    zero_size_range_index_is_error,
+    "
+        fn test(x: [int<8>; 6]) -> [int<8>; 1] {
+            x[7:7]
+        }
+    "
+}
+
+snapshot_error! {
+    negative_range_index_is_error,
+    "
+        fn test(x: [int<8>; 6]) -> [int<8>; 1] {
+            x[-1:5]
+        }
+    "
+}
+
+snapshot_error! {
+    negative_second_range_index_is_error,
+    "
+        fn test(x: [int<8>; 6]) -> [int<8>; 1] {
+            x[1:-5]
+        }
+    "
+}
+
+#[test]
+fn unsigned_ints_are_addable() {
+    let code = "
+        fn test(x: uint<8>, y: uint<8>) -> uint<9> {
+            x + y
+        }";
+
+    build_items(code);
+}
+
+#[test]
+fn unsigned_ints_are_multiplyable() {
+    let code = "
+        fn test(x: uint<8>, y: uint<8>) -> uint<16> {
+            x * y
+        }";
+
+    build_items(code);
+}
+
+#[test]
+fn unsigned_ints_are_comparable() {
+    let code = "
+        fn test(x: uint<8>, y: uint<8>) -> bool {
+            x < y && x > y && x <= y && x >= y
+        }";
+
+    build_items(code);
+}
+
+snapshot_error! {
+    int_add_uint_is_disallowed,
+    "
+        fn test(x: uint<8>, y: int<8>) -> uint<9> {
+            x + y
+        }
+    "
+}
+
+snapshot_error! {
+    int_add_produces_int,
+    "
+        fn test(x: int<8>, y: int<8>) -> uint<9> {
+            x + y
+        }
+    "
+}
+
+snapshot_error! {
+    uint_addition_produces_correct_bit_length,
+    "
+        fn test(x: uint<8>, y: uint<8>) -> uint<10> {
+            x + y
+        }
+    "
+}
+
+snapshot_error! {
+    structs_are_not_addable,
+    "
+        struct A {}
+        fn test(x: A, y: A) -> A {
+            x + y
+        }
+    "
+}
+
+snapshot_error! {
+    literals_can_be_unsigned_ints,
+    "
+        fn test() -> uint<8> {
+            10
+        }
+    "
+}
+
+snapshot_error! {
+    unsigned_literal_fit_upper_range,
+    "
+        fn test() -> uint<8> {
+            200
+        }
+    "
+}
+
+snapshot_error! {
+    unsigned_literals_cannot_be_negative,
+    "
+        fn test() -> uint<8> {
+            -1
+        }
     "
 }
