@@ -6,12 +6,16 @@ fn test(x: uint<8>, y: uint<8>) -> uint<10> {
 }
 
 
-error: Expected type uint<10>, got uint<9>
-  ┌─ testinput:2:5
-  │
-2 │     x + y
-  │     ^^^^^ Expected uint<10>
-  │
+error: Output type mismatch. Expected uint<10>, got uint<9>
+  ┌─ testinput:1:45
+  │  
+1 │   fn test(x: uint<8>, y: uint<8>) -> uint<10> {
+  │                                      -------- uint<10> type specified here
+  │ ╭─────────────────────────────────────────────^
+2 │ │     x + y
+3 │ │ }
+  │ ╰─^ Found type uint<9>
+  │  
   = note: Expected: 10
                 in: uint<10>
                Got: 9

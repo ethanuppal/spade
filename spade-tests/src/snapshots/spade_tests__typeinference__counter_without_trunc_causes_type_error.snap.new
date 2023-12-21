@@ -1,0 +1,19 @@
+---
+source: spade-tests/src/typeinference.rs
+assertion_line: 226
+---
+entity counter(clk: clock, rst: bool) -> int<9> {
+    reg(clk) x = x + 1;
+    x
+}
+
+
+error: Expected type Number<9>, got Number<10>
+  ┌─ testinput:2:18
+  │
+2 │     reg(clk) x = x + 1;
+  │                  ^^^^^ Expected Number<9>, got Number<10>
+  │
+  = note: Addition creates one more output bit than the input to avoid overflow
+
+

@@ -10,7 +10,7 @@ impl X {
 }
 
 
-error: Output type mismatch. Expected bool, got int<_>
+error: Output type mismatch. Expected bool, got Number<_>
   ┌─ testinput:4:24
   │  
 4 │       fn x(self) -> bool {
@@ -18,9 +18,9 @@ error: Output type mismatch. Expected bool, got int<_>
   │ ╭────────────────────────^
 5 │ │         1
 6 │ │     }
-  │ ╰─────^ Found type int<_>
+  │ ╰─────^ Found type Number<_>
   │  
   = note: Expected: bool
-               Got: int<_>
+               Got: Number<_>
 
 

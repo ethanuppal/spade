@@ -27,6 +27,9 @@ fn lookup(symtab: &SymbolTable, name: &[&str]) -> KnownType {
 pub fn t_int(symtab: &SymbolTable) -> KnownType {
     lookup(symtab, &["int"])
 }
+pub fn t_uint(symtab: &SymbolTable) -> KnownType {
+    lookup(symtab, &["uint"])
+}
 pub fn t_bit(symtab: &SymbolTable) -> KnownType {
     lookup(symtab, &["bit"])
 }

@@ -1,6 +1,7 @@
 use num::BigUint;
 use serde::{Deserialize, Serialize};
 use spade_common::{
+    location_info::WithLocation,
     name::{Identifier, NameID},
     num_ext::InfallibleToBigUint,
 };
@@ -164,8 +165,10 @@ pub enum KnownType {
     Backward,
     Wire,
     Inverted,
-    Traits(Vec<NameID>),
+    Traits(Vec<NameID>), // TODO: What is this??
 }
+
+impl WithLocation for KnownType {}
 
 impl KnownType {
     pub fn integer(val: u64) -> Self {

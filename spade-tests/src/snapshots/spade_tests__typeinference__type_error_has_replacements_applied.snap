@@ -23,15 +23,12 @@ entity counter(clk: clock, rst: bool) -> (int<8>, int<8>) {
 }
 
 
-error: Expected type int<8>, got int<9>
+error: Expected type Number<8>, got Number<9>
    ┌─ testinput:12:13
    │
 12 │             x + 1
-   │             ^^^^^ Expected int<8>
+   │             ^^^^^ Expected Number<8>, got Number<9>
    │
-   = note: Expected: 8
-                 in: int<8>
-                Got: 9
-                 in: int<9>
+   = note: Addition creates one more output bit than the input to avoid overflow
 
 

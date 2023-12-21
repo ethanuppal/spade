@@ -92,7 +92,7 @@ macro_rules! snapshot_error {
                 verilator_wrapper_output: None,
                 state_dump_file: None,
                 item_list_file: None,
-                print_type_traceback: false,
+                print_type_traceback: std::env::var("SPADE_TRACE_TYPEINFERENCE").is_ok(),
                 print_parse_traceback: false,
                 wl_infer_method: None,
             };
@@ -239,7 +239,7 @@ pub fn build_artifacts(code: &str, with_stdlib: bool) -> Artefacts {
         verilator_wrapper_output: None,
         state_dump_file: None,
         item_list_file: None,
-        print_type_traceback: false,
+        print_type_traceback: std::env::var("SPADE_TRACE_TYPEINFERENCE").is_ok(),
         print_parse_traceback: false,
         wl_infer_method: None,
     };

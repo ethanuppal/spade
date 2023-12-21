@@ -1,9 +1,13 @@
 use std::sync::RwLock;
 
 use colored::*;
+use itertools::Itertools;
 use num::BigInt;
 
-use crate::equation::{TypeVar, TypedExpression};
+use crate::{
+    equation::{TypeVar, TypedExpression},
+    requirements::Requirement,
+};
 
 pub struct TraceStack {
     entries: RwLock<Vec<TraceStackEntry>>,
@@ -32,9 +36,11 @@ pub enum TraceStackEntry {
     /// Exited the most recent visitor and the node had the specified type
     Exit,
     TryingUnify(TypeVar, TypeVar),
-    /// Unified .0 with .1 producing .2
-    Unified(TypeVar, TypeVar, TypeVar),
+    /// Unified .0 with .1 producing .2. .3 were replaced
+    Unified(TypeVar, TypeVar, TypeVar, Vec<TypeVar>),
     AddingEquation(TypedExpression, TypeVar),
+    AddRequirement(Requirement),
+    ResolvedRequirement(Requirement),
     /// Inferring more from constraints
     InferringFromConstraints(TypeVar, BigInt),
     /// Arbitrary message
@@ -55,9 +61,16 @@ pub fn format_trace_stack(stack: &TraceStack) -> String {
             TraceStackEntry::AddingEquation(expr, t) => {
                 format!("{} {:?} <- {:?}", "eq".yellow(), expr, t)
             }
-            TraceStackEntry::Unified(lhs, rhs, result) => {
+            TraceStackEntry::Unified(lhs, rhs, result, replaced) => {
                 next_indent_amount -= 1;
-                format!("{} {:?}, {:?} -> {:?}", "unified".green(), lhs, rhs, result)
+                format!(
+                    "{} {:?}, {:?} -> {:?} (replacing {})",
+                    "unified".green(),
+                    lhs,
+                    rhs,
+                    result,
+                    replaced.iter().map(|t| format!("{t:?}")).join(",")
+                )
             }
             TraceStackEntry::TryingUnify(lhs, rhs) => {
                 next_indent_amount += 1;
@@ -78,6 +91,8 @@ pub fn format_trace_stack(stack: &TraceStack) -> String {
                 next_indent_amount -= 1;
                 String::new()
             }
+            TraceStackEntry::AddRequirement(req) => format!("{} {req:?}", "added".yellow()),
+            TraceStackEntry::ResolvedRequirement(req) => format!("{} {req:?}", "resolved".blue()),
         };
         if let TraceStackEntry::Exit = entry {
         } else {

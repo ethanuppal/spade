@@ -1,16 +1,16 @@
 ---
 source: spade-tests/src/typeinference.rs
 ---
-entity counter(x: [int<8>; 10], idx: int<7>) -> int<8> {
+entity counter(x: [int<8>; 10], idx: uint<7>) -> int<8> {
     x[idx]
 }
 
 
-error: Expected type int<7>, got int<4>
+error: Expected type uint<7>, got uint<4>
   ┌─ testinput:2:7
   │
 2 │     x[idx]
-  │       ^^^ Expected int<7>, got int<4>
+  │       ^^^ Expected uint<7>, got uint<4>
   │
   = note: because the value is used as an index to an array
 

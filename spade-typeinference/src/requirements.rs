@@ -13,28 +13,11 @@ use spade_types::KnownType;
 use crate::equation::TypeVar;
 use crate::error::{Result, UnificationErrorExt};
 use crate::method_resolution::select_method;
+use crate::trace_stack::TraceStackEntry;
 use crate::{Context, GenericListSource, TypeState};
-
-/// A generic which we know has a single parameter with a constrained size, but which
-/// we don't know the concrete type of yet. Currently used for types which can be signed *or*
-/// unsigned.
-#[derive(Clone, Debug)]
-pub struct DeferredSized {
-    /// The (initially) unknown type var which will eventually be constrained to
-    /// concrete<size>
-    pub base: Loc<TypeVar>,
-    pub size: TypeVar,
-}
 
 #[derive(Clone, Debug)]
 pub enum Requirement {
-    /// Require that the outer type of an expression is either uint or int
-    IsInteger {
-        /// The operator which this constraint comes from
-        source_operator: Loc<BinaryOperator>,
-        inputs: Vec<DeferredSized>,
-        output: Option<DeferredSized>,
-    },
     HasField {
         /// The type which should have the associated field
         target_type: Loc<TypeVar>,
@@ -61,25 +44,13 @@ pub enum Requirement {
         value: BigInt,
         target_type: Loc<TypeVar>,
     },
+    /// The provided TypeVar should all share a base type
+    SharedBase(Vec<Loc<TypeVar>>),
 }
 
 impl Requirement {
     pub fn replace_type_var(&mut self, from: &TypeVar, to: &TypeVar) {
         match self {
-            Requirement::IsInteger {
-                source_operator: _,
-                inputs,
-                output,
-            } => {
-                for DeferredSized { base, size } in inputs.iter_mut() {
-                    TypeState::replace_type_var(base, from, to);
-                    TypeState::replace_type_var(size, from, to);
-                }
-                output.as_mut().map(|DeferredSized { base, size }| {
-                    TypeState::replace_type_var(base, from, to);
-                    TypeState::replace_type_var(size, from, to);
-                });
-            }
             Requirement::HasField {
                 target_type,
                 expr,
@@ -103,6 +74,11 @@ impl Requirement {
                 target_type,
             } => {
                 TypeState::replace_type_var(target_type, from, to);
+            }
+            Requirement::SharedBase(bases) => {
+                for t in bases {
+                    TypeState::replace_type_var(t, from, to)
+                }
             }
         }
     }
@@ -248,103 +224,6 @@ impl Requirement {
                     ))
                 },
             ),
-            Requirement::IsInteger {
-                source_operator,
-                inputs,
-                output,
-            } => {
-                let int_type = ctx
-                    .symtab
-                    .lookup_type_symbol(&Path::from_strs(&["int"]).nowhere())
-                    .map_err(|_| {
-                        diag_anyhow!(source_operator, "The type int was not in the symtab")
-                    })?
-                    .0;
-                let uint_type = ctx
-                    .symtab
-                    .lookup_type_symbol(&Path::from_strs(&["uint"]).nowhere())
-                    .map_err(|_| {
-                        diag_anyhow!(source_operator, "The type uint was not in the symtab")
-                    })?
-                    .0;
-
-                // Walk over the inputs, finding the first type that has been concretized.
-                // if it has been concretized to an integer, work with that, otherwise
-                // return an error
-                let input_base_type = inputs
-                    .iter()
-                    .map(|DeferredSized { base, size: _ }| {
-                        base.expect_named(
-                            |name, _| Ok(Some(name.clone().at_loc(&base))),
-                            || Ok(None),
-                            |other| {
-                                Err(Diagnostic::error(
-                                    source_operator,
-                                    format!("{source_operator} does not support {other}"),
-                                )
-                                .secondary_label(base, "this has type {other}"))
-                            },
-                        )
-                    })
-                    .collect::<Result<Vec<_>>>()?
-                    .into_iter()
-                    .find_map(|x| x);
-
-                let output_type = output
-                    .as_ref()
-                    .map(|DeferredSized { base, size: _ }| {
-                        base.expect_named(
-                            |name, _| Ok(Some(name.clone().at_loc(&base))),
-                            || Ok(None),
-                            |other| {
-                                Err(Diagnostic::error(
-                                    source_operator,
-                                    format!("{source_operator} does not support {other}"),
-                                )
-                                .secondary_label(base, "this has type {other}"))
-                            },
-                        )
-                    })
-                    .transpose()?
-                    .flatten();
-
-                let base_name = input_base_type.or(output_type);
-
-                if let Some(base_name) = &base_name {
-                    if &base_name.inner != &int_type && &base_name.inner != &uint_type {
-                        return Err(Diagnostic::error(
-                            base_name,
-                            format!(
-                                "Operator `{source_operator}` requires int or uint. Got {base_name}"
-                            ),
-                        )
-                        .primary_label("expected int or uint")
-                        .secondary_label(source_operator, "required by this operator"));
-                    }
-
-                    // We have a concrete type, replace all the placeholder variables
-                    // with this concrete type combined with the original size
-
-                    Ok(RequirementResult::Satisfied(
-                        inputs
-                            .iter()
-                            .chain(output)
-                            .map(|DeferredSized { base, size }| {
-                                let new_ty = TypeVar::Known(
-                                    KnownType::Named(base_name.inner.clone()),
-                                    vec![size.clone()],
-                                );
-                                Replacement {
-                                    from: base.clone(),
-                                    to: new_ty,
-                                }
-                            })
-                            .collect(),
-                    ))
-                } else {
-                    Ok(RequirementResult::NoChange)
-                }
-            }
             Requirement::FitsIntLiteral { value, target_type } => {
                 let int_type = ctx
                     .symtab
@@ -368,9 +247,9 @@ impl Requirement {
                         else {
                             return Err(Diagnostic::error(
                                 target_type,
-                                "Expected {target_type}, got integer literal"
+                                format!("Expected {target_type}, got integer literal")
                             )
-                                .primary_label("expected {target_type}"));
+                                .primary_label(format!("expected {target_type}")));
                         };
 
                         diag_assert!(target_type, params.len() == 1);
@@ -395,7 +274,7 @@ impl Requirement {
                                 let contained_range = if unsigned {
                                     (
                                         BigInt::zero(),
-                                        two.pow(size_u32 - 1),
+                                        two.pow(size_u32) - 1.to_bigint(),
                                     )
                                 } else {
                                     (
@@ -438,6 +317,37 @@ impl Requirement {
                     |other| diag_bail!(target_type, "Inferred {other} for integer literal"),
                 )
             }
+            Requirement::SharedBase(types) => {
+                let first_known = types.iter().find_map(|t| match &t.inner {
+                    TypeVar::Known(base, params) => Some((base.clone().at_loc(t), params)),
+                    TypeVar::Unknown(_, _) => None,
+                });
+
+                if let Some((base, first_params)) = first_known {
+                    Ok(RequirementResult::Satisfied(
+                        types
+                            .iter()
+                            .map(|ty| {
+                                // Since we unify requirement results, we can just use placeholder
+                                // parameters here. We know that the number of parameters should
+                                // be the same as the params of the first base we found
+                                Replacement {
+                                    from: ty.clone(),
+                                    to: TypeVar::Known(
+                                        base.inner.clone(),
+                                        first_params
+                                            .iter()
+                                            .map(|_| type_state.new_generic())
+                                            .collect(),
+                                    ),
+                                }
+                            })
+                            .collect(),
+                    ))
+                } else {
+                    Ok(RequirementResult::NoChange)
+                }
+            }
         }
     }
 
@@ -451,6 +361,9 @@ impl Requirement {
                 Ok(())
             }
             RequirementResult::Satisfied(replacements) => {
+                type_state
+                    .trace_stack
+                    .push(TraceStackEntry::ResolvedRequirement(self.clone()));
                 for Replacement { from, to } in replacements {
                     type_state
                         .unify(&from.inner, &to, ctx)

@@ -11,11 +11,11 @@ error: If branches have incompatible type
   ┌─ testinput:2:34
   │
 2 │     let a = if b == 4 { 3 } else { true };
-  │                       -----      ^^^^^^^^ But this has type bool
+  │                       -----      ^^^^^^^^ But this has type Number<_>
   │                       │           
-  │                       This branch has type int<_>
+  │                       This branch has type bool
   │
-  = note: Expected: bool
-               Got: int<_>
+  = note: Expected: Number<_>
+               Got: bool
 
 

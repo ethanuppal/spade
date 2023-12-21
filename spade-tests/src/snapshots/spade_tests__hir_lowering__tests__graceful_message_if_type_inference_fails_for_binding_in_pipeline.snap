@@ -14,6 +14,6 @@ error: Type of x is not fully known
 2 │         let x = 0;
   │             ^ The type of x is not fully known
   │
-  = note: Found incomplete type: int<_>
+  = note: Found incomplete type: Number<_>
 
 

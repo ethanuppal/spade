@@ -1,0 +1,26 @@
+---
+source: spade-tests/src/typeinference.rs
+---
+fn add(a: int<8>, b: int<8>) -> int<10> {
+    let x = a + b;
+    x
+}
+
+
+error: Output type mismatch. Expected int<10>, got int<9>
+  ┌─ testinput:1:41
+  │  
+1 │   fn add(a: int<8>, b: int<8>) -> int<10> {
+  │                                   ------- int<10> type specified here
+  │ ╭─────────────────────────────────────────^
+2 │ │     let x = a + b;
+3 │ │     x
+4 │ │ }
+  │ ╰─^ Found type int<9>
+  │  
+  = note: Expected: 10
+                in: int<10>
+               Got: 9
+                in: int<9>
+
+

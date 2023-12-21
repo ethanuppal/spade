@@ -1,7 +1,7 @@
 use std::collections::{BTreeMap, VecDeque};
 
 use spade_common::{id_tracker::ExprIdTracker, location_info::WithLocation, name::NameID};
-use spade_diagnostics::DiagHandler;
+use spade_diagnostics::{diag_bail, DiagHandler, Diagnostic};
 use spade_hir::{symbol_table::FrozenSymtab, ExecutableItem, ItemList, UnitName};
 use spade_mir as mir;
 use spade_typeinference::equation::TypeVar;
@@ -160,6 +160,14 @@ pub fn compile_items(
                             }
                         }
                     }
+                }
+                if !type_state.get_constraints().inner.is_empty() {
+                    result.push(Err(Diagnostic::bug(
+                        item.new_name.name_id(),
+                        "Some type constraints remain after monomorphization",
+                    )
+                    .into()));
+                    continue;
                 }
 
                 // Apply passes to the type checked module

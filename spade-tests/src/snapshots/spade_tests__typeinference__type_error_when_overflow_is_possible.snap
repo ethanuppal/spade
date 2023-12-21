@@ -6,12 +6,16 @@ entity main(a: int<16>, b: int<16>) -> int<16> {
 }
 
 
-error: Expected type int<16>, got int<17>
-  ┌─ testinput:2:5
-  │
-2 │     a + b
-  │     ^^^^^ Expected int<16>
-  │
+error: Output type mismatch. Expected int<16>, got int<17>
+  ┌─ testinput:1:48
+  │  
+1 │   entity main(a: int<16>, b: int<16>) -> int<16> {
+  │                                          ------- int<16> type specified here
+  │ ╭────────────────────────────────────────────────^
+2 │ │     a + b
+3 │ │ }
+  │ ╰─^ Found type int<17>
+  │  
   = note: Expected: 16
                 in: int<16>
                Got: 17

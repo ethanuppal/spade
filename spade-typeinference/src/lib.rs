@@ -6,7 +6,7 @@
 // and should be done by the visitor for that node. The visitor should then unify
 // types according to the rules of the node.
 
-use std::collections::HashMap;
+use std::collections::{BTreeSet, HashMap};
 use std::sync::Arc;
 
 use hir::{Binding, Parameter, UnitHead, WalTrace};
@@ -32,17 +32,16 @@ use spade_types::KnownType;
 use constraints::{
     bits_to_store, ce_int, ce_var, ConstraintExpr, ConstraintRhs, ConstraintSource, TypeConstraints,
 };
-use equation::{TypeEquations, TypeVar, TypedExpression};
+use equation::{TraitList, TraitReq, TypeEquations, TypeVar, TypedExpression};
 use error::{
     error_pattern_type_mismatch, Result, UnificationError, UnificationErrorExt, UnificationTrace,
 };
-use fixed_types::{t_bool, t_clock, t_int};
+use fixed_types::{t_bool, t_clock, t_int, t_uint};
 use requirements::{Replacement, Requirement};
 use trace_stack::{format_trace_stack, TraceStackEntry};
 
 use crate::error::TypeMismatch as Tm;
 use crate::fixed_types::t_void;
-use crate::requirements::DeferredSized;
 
 mod constraints;
 pub mod dump;
@@ -146,6 +145,10 @@ impl TypeState {
 
     pub fn get_equations(&self) -> &TypeEquations {
         &self.equations
+    }
+
+    pub fn get_constraints(&self) -> &TypeConstraints {
+        &self.constraints
     }
 
     // Get a generic list with a safe unwrap since a token is acquired
@@ -252,9 +255,35 @@ impl TypeState {
         (full, size)
     }
 
+    pub fn new_split_generic_uint(&mut self, symtab: &SymbolTable) -> (TypeVar, TypeVar) {
+        let size = self.new_generic();
+        let full = TypeVar::Known(t_uint(symtab), vec![size.clone()]);
+        (full, size)
+    }
+
     pub fn new_generic(&mut self) -> TypeVar {
         let id = self.new_typeid();
-        TypeVar::Unknown(id, vec![])
+        TypeVar::Unknown(id, TraitList::empty())
+    }
+
+    pub fn new_generic_number(&mut self, ctx: &Context) -> (TypeVar, TypeVar) {
+        let number = ctx
+            .symtab
+            .lookup_trait(&Path::from_strs(&["Number"]).nowhere())
+            .expect("Did not find number in symtab")
+            .0;
+        let id = self.new_typeid();
+        let size = self.new_generic();
+        let t = TraitReq {
+            name: number,
+            type_params: vec![size.clone()],
+        };
+        (TypeVar::Unknown(id, TraitList::from_vec(vec![t])), size)
+    }
+
+    pub fn new_generic_with_traits(&mut self, traits: TraitList) -> TypeVar {
+        let id = self.new_typeid();
+        TypeVar::Unknown(id, traits)
     }
 
     #[trace_typechecker]
@@ -1053,7 +1082,23 @@ impl TypeState {
                     .map(|p| self.check_var_for_replacement(p))
                     .collect(),
             ),
-            u @ TypeVar::Unknown(_, _) => u,
+            TypeVar::Unknown(id, traits) => TypeVar::Unknown(
+                id,
+                TraitList::from_vec(
+                    traits
+                        .inner
+                        .iter()
+                        .map(|t| TraitReq {
+                            name: t.name.clone(),
+                            type_params: t
+                                .type_params
+                                .iter()
+                                .map(|v| self.check_var_for_replacement(v.clone()))
+                                .collect(),
+                        })
+                        .collect(),
+                ),
+            ),
         }
     }
 
@@ -1142,26 +1187,13 @@ impl TypeState {
                 value,
                 target_type: replace!(target_type),
             },
-            Requirement::IsInteger {
-                source_operator,
-                inputs,
-                output,
-            } => Requirement::IsInteger {
-                source_operator,
-                inputs: inputs
-                    .into_iter()
-                    .map(|DeferredSized { base, size }| DeferredSized {
-                        base: replace!(base),
-                        size: self.check_var_for_replacement(size.clone()),
-                    })
-                    .collect(),
-                output: output.map(|DeferredSized { base, size }| DeferredSized {
-                    base: replace!(base),
-                    size: self.check_var_for_replacement(size.clone()),
-                }),
-            },
+            Requirement::SharedBase(types) => {
+                Requirement::SharedBase(types.iter().map(|ty| replace!(ty)).collect())
+            }
         };
 
+        self.trace_stack
+            .push(TraceStackEntry::AddRequirement(replaced.clone()));
         self.requirements.push(replaced)
     }
 
@@ -1201,12 +1233,14 @@ impl TypeState {
         let v2cpy = v2.clone();
 
         macro_rules! err_producer {
-            () => {
+            () => {{
+                self.trace_stack
+                    .push(TraceStackEntry::Message("Produced error".to_string()));
                 UnificationError::Normal(Tm {
                     g: UnificationTrace::new(self.check_var_for_replacement(v1)),
                     e: UnificationTrace::new(self.check_var_for_replacement(v2)),
                 })
-            };
+            }};
         }
 
         macro_rules! unify_if {
@@ -1221,11 +1255,28 @@ impl TypeState {
 
         macro_rules! try_with_context {
             ($value: expr) => {
+                try_with_context!($value, v1, v2)
+            };
+            ($value: expr, $v1:expr, $v2:expr) => {
                 match $value {
                     Ok(result) => result,
                     e => {
-                        return e.add_context(v1.clone(), v2.clone());
+                        self.trace_stack
+                            .push(TraceStackEntry::Message("Adding context".to_string()));
+                        return e.add_context($v1.clone(), $v2.clone());
                     }
+                }
+            };
+        }
+
+        macro_rules! unify_params_ {
+            ($p1:expr, $p2:expr) => {
+                if $p1.len() != $p2.len() {
+                    return Err(err_producer!());
+                }
+
+                for (t1, t2) in $p1.iter().zip($p2.iter()) {
+                    try_with_context!(self.unify_inner(t1, t2, ctx));
                 }
             };
         }
@@ -1236,19 +1287,12 @@ impl TypeState {
             (TypeVar::Known(t1, p1), TypeVar::Known(t2, p2)) => {
                 macro_rules! unify_params {
                     () => {
-                        if p1.len() != p2.len() {
-                            return Err(err_producer!());
-                        }
-
-                        for (t1, t2) in p1.iter().zip(p2.iter()) {
-                            try_with_context!(self.unify_inner(t1, t2, ctx));
-                        }
+                        unify_params_!(p1, p2)
                     };
                 }
-
                 match (t1, t2) {
                     (KnownType::Integer(val1), KnownType::Integer(val2)) => {
-                        unify_if!(val1 == val2, v1, None)
+                        unify_if!(val1 == val2, v1, vec![])
                     }
                     (KnownType::Named(n1), KnownType::Named(n2)) => {
                         match (
@@ -1269,20 +1313,20 @@ impl TypeState {
                                 unify_if!(
                                     new_ts1 == new_ts2,
                                     self.check_var_for_replacement(new_v1),
-                                    None
+                                    vec![]
                                 )
                             }
                             (TypeSymbol::Declared(_, _), TypeSymbol::GenericArg { traits }) => {
                                 if !traits.is_empty() {
                                     todo!("Implement trait unifictaion");
                                 }
-                                Ok((v1, Some(v2)))
+                                Ok((v1, vec![v2]))
                             }
                             (TypeSymbol::GenericArg { traits }, TypeSymbol::Declared(_, _)) => {
                                 if !traits.is_empty() {
                                     todo!("Implement trait unifictaion");
                                 }
-                                Ok((v2, Some(v1)))
+                                Ok((v2, vec![v1]))
                             }
                             (
                                 TypeSymbol::GenericArg { traits: ltraits },
@@ -1291,7 +1335,7 @@ impl TypeState {
                                 if !ltraits.is_empty() || !rtraits.is_empty() {
                                     todo!("Implement trait unifictaion");
                                 }
-                                Ok((v1, Some(v2)))
+                                Ok((v1, vec![v2]))
                             }
                             (TypeSymbol::Declared(_, _), TypeSymbol::GenericInt) => todo!(),
                             (TypeSymbol::GenericArg { traits: _ }, TypeSymbol::GenericInt) => {
@@ -1313,32 +1357,112 @@ impl TypeState {
                         // Note, replacements should only occur when a variable goes from Unknown
                         // to Known, not when the base is the same. Replacements take care
                         // of parameters. Therefore, None is returned here
-                        Ok((self.check_var_for_replacement(v2), None))
+                        Ok((self.check_var_for_replacement(v2), vec![]))
                     }
                     (_, _) => Err(err_producer!()),
                 }
             }
-            // Unknown with other
+            // Unknown with unknown requires merging traits
             (TypeVar::Unknown(_, traits1), TypeVar::Unknown(_, traits2)) => {
-                if traits1 != traits2 {
-                    todo!("Unification of unknown with unknown merges trait lists. Then this unification is wrong");
-                }
-                Ok((v1, Some(v2)))
-            }
-            (other, uk @ TypeVar::Unknown(_, _traits))
-            | (uk @ TypeVar::Unknown(_, _traits), other) => {
-                // self.ensure_impls(other, traits, ctx.items)?;
+                let new_trait_names = traits1
+                    .inner
+                    .iter()
+                    .chain(traits2.inner.iter())
+                    .cloned()
+                    .map(|t| t.name)
+                    .collect::<BTreeSet<_>>()
+                    .into_iter()
+                    .collect::<Vec<_>>();
 
-                Ok((other.clone(), Some(uk.clone())))
+                let new_traits = new_trait_names
+                    .iter()
+                    .map(
+                        |name| match (traits1.get_trait(&name), traits2.get_trait(&name)) {
+                            (Some(req1), Some(req2)) => {
+                                let new_params = req1
+                                    .type_params
+                                    .iter()
+                                    .zip(req2.type_params.iter())
+                                    .map(|(p1, p2)| self.unify(p1, p2, ctx))
+                                    .collect::<std::result::Result<_, UnificationError>>()?;
+
+                                Ok(TraitReq {
+                                    name: name.clone(),
+                                    type_params: new_params,
+                                })
+                            }
+                            (Some(t), None) => Ok(t.clone()),
+                            (None, Some(t)) => Ok(t.clone()),
+                            (None, None) => panic!("Found a trait but neither side has it"),
+                        },
+                    )
+                    .collect::<std::result::Result<Vec<_>, UnificationError>>()?;
+
+                let new_t = self.new_generic_with_traits(TraitList::from_vec(new_traits));
+
+                Ok((new_t, vec![v1, v2]))
+            }
+            (other @ TypeVar::Known(base, params), uk @ TypeVar::Unknown(_, traits))
+            | (uk @ TypeVar::Unknown(_, traits), other @ TypeVar::Known(base, params)) => {
+                let lhs_is_expected = match (other, uk) {
+                    (TypeVar::Known(_, _), _) => true,
+                    _ => false,
+                };
+
+                self.ensure_impls(other, traits, lhs_is_expected, ctx)?;
+
+                let mut new_params = params.clone();
+                for t in &traits.inner {
+                    if !t.type_params.is_empty() {
+                        if t.type_params.len() != params.len() {
+                            return Err(err_producer!());
+                        }
+
+                        // If we don't cheat a bit, we'll get bad error messages in this case when
+                        // we unify, for example, `Number<10>` with `uint<9>`. Since we know the
+                        // outer types match already, we'll create a fake type for the lhs where
+                        // we preemptively crate uint<T>
+                        let fake_type = TypeVar::Known(base.clone(), t.type_params.clone());
+
+                        new_params = t
+                            .type_params
+                            .iter()
+                            .zip(new_params.iter())
+                            .map(|(t1, t2)| {
+                                if lhs_is_expected {
+                                    Ok(try_with_context!(
+                                        self.unify_inner(t1, t2, ctx),
+                                        fake_type,
+                                        other
+                                    ))
+                                } else {
+                                    Ok(try_with_context!(
+                                        self.unify_inner(t2, t1, ctx),
+                                        other,
+                                        fake_type
+                                    ))
+                                }
+                            })
+                            .collect::<std::result::Result<_, _>>()?;
+                    }
+                }
+
+                let new = TypeVar::Known(base.clone(), new_params);
+
+                Ok((new, vec![uk.clone()]))
             }
         };
 
-        let (new_type, replaced_type) = result?;
+        let (new_type, replaced_types) = result?;
 
-        self.trace_stack
-            .push(TraceStackEntry::Unified(v1cpy, v2cpy, new_type.clone()));
+        self.trace_stack.push(TraceStackEntry::Unified(
+            v1cpy,
+            v2cpy,
+            new_type.clone(),
+            replaced_types.clone(),
+        ));
 
-        if let Some(replaced_type) = replaced_type {
+        for replaced_type in replaced_types {
             self.replacements
                 .insert(replaced_type.clone(), new_type.clone());
 
@@ -1459,24 +1583,65 @@ impl TypeState {
         Ok(new_type)
     }
 
-    #[allow(unused)]
     fn ensure_impls(
-        &self,
+        &mut self,
         var: &TypeVar,
-        traits: &Vec<NameID>,
-        items: &ItemList,
+        traits: &TraitList,
+        lhs_is_expected: bool,
+        ctx: &Context,
     ) -> std::result::Result<(), UnificationError> {
+        // TODO: Don't look this up for every ensure_impls
+        let number = ctx
+            .symtab
+            .lookup_trait(&Path::from_strs(&["Number"]).nowhere())
+            .expect("Did not find number in symtab")
+            .0;
+
+        let mut error_producer = |required_traits| {
+            if lhs_is_expected {
+                Err(UnificationError::Normal(Tm {
+                    e: UnificationTrace::new(var.clone()),
+                    g: UnificationTrace::new(self.new_generic_with_traits(required_traits)),
+                }))
+            } else {
+                Err(UnificationError::Normal(Tm {
+                    e: UnificationTrace::new(self.new_generic_with_traits(required_traits)),
+                    g: UnificationTrace::new(var.clone()),
+                }))
+            }
+        };
+
         match var {
             TypeVar::Known(KnownType::Named(name), _) => {
-                let impld = items.impls.get(name);
+                let impld = ctx.items.impls.get(name);
                 let unsatisfied = traits
+                    .inner
                     .iter()
                     .filter(|t| {
-                        impld
-                            .map(|impld| {
-                                impld.contains_key(&hir::TraitName::Named((*t).clone().nowhere()))
-                            })
-                            .unwrap_or(true)
+                        // Number is special cased for now because we can't impl traits
+                        // on generic types
+                        if &t.name == &number {
+                            let int_type = &ctx
+                                .symtab
+                                .lookup_type_symbol(&Path::from_strs(&["int"]).nowhere())
+                                .expect("The type int was not in the symtab")
+                                .0;
+                            let uint_type = &ctx
+                                .symtab
+                                .lookup_type_symbol(&Path::from_strs(&["uint"]).nowhere())
+                                .expect("The type uint was not in the symtab")
+                                .0;
+
+                            !(name == int_type || name == uint_type)
+                        } else {
+                            impld
+                                .map(|impld| {
+                                    impld.contains_key(&hir::TraitName::Named(
+                                        t.name.clone().nowhere(),
+                                    ))
+                                })
+                                .unwrap_or(true)
+                        }
                     })
                     .cloned()
                     .collect::<Vec<_>>();
@@ -1484,19 +1649,19 @@ impl TypeState {
                 if unsatisfied.is_empty() {
                     Ok(())
                 } else {
-                    Err(UnificationError::UnsatisfiedTraits(
-                        var.clone(),
-                        unsatisfied,
-                    ))
+                    error_producer(TraitList::from_vec(unsatisfied.clone()))
                 }
             }
             TypeVar::Unknown(_, _) => {
                 panic!("running ensure_impls on an unknown type")
             }
-            _ => Err(UnificationError::UnsatisfiedTraits(
-                var.clone(),
-                traits.clone(),
-            )),
+            _ => {
+                if traits.inner.is_empty() {
+                    Ok(())
+                } else {
+                    error_producer(traits.clone())
+                }
+            }
         }
     }
 
@@ -1508,10 +1673,22 @@ impl TypeState {
                     Self::replace_type_var(param, from, replacement)
                 }
             }
-            TypeVar::Unknown(_, _) => {}
+            TypeVar::Unknown(_, traits) => {
+                for t in traits.inner.iter_mut() {
+                    for param in t.type_params.iter_mut() {
+                        Self::replace_type_var(param, from, replacement)
+                    }
+                }
+            }
         }
 
-        if in_var == from {
+        let is_same = match (&in_var, &from) {
+            // Traits do not matter for comparison
+            (TypeVar::Unknown(id1, _), TypeVar::Unknown(id2, _)) => id1 == id2,
+            (l, r) => l == r,
+        };
+
+        if is_same {
             *in_var = replacement.clone();
         }
     }
@@ -1578,6 +1755,8 @@ impl TypeState {
                 .map(|req| match req.check(self, ctx)? {
                     requirements::RequirementResult::NoChange => Ok((true, None)),
                     requirements::RequirementResult::Satisfied(replacement) => {
+                        self.trace_stack
+                            .push(TraceStackEntry::ResolvedRequirement(req.clone()));
                         Ok((false, Some(replacement)))
                     }
                 })
@@ -1763,9 +1942,9 @@ mod tests {
         let expr_a = TExpr::Name(name_id(0, "a").inner);
         let expr_b = TExpr::Name(name_id(1, "b").inner);
         let expr_c = TExpr::Name(name_id(2, "c").inner);
-        state.add_eq_from_tvar(expr_a.clone(), TVar::Unknown(100, vec![]));
-        state.add_eq_from_tvar(expr_b.clone(), TVar::Unknown(101, vec![]));
-        state.add_eq_from_tvar(expr_c.clone(), TVar::Unknown(102, vec![]));
+        state.add_eq_from_tvar(expr_a.clone(), TVar::Unknown(100, TraitList::empty()));
+        state.add_eq_from_tvar(expr_b.clone(), TVar::Unknown(101, TraitList::empty()));
+        state.add_eq_from_tvar(expr_c.clone(), TVar::Unknown(102, TraitList::empty()));
 
         let generic_list = state.create_generic_list(GenericListSource::Anonymous, &vec![]);
         state
@@ -1808,9 +1987,9 @@ mod tests {
         let expr_a = TExpr::Name(name_id(0, "a").inner);
         let expr_b = TExpr::Name(name_id(1, "b").inner);
         let expr_c = TExpr::Name(name_id(2, "c").inner);
-        state.add_eq_from_tvar(expr_a.clone(), TVar::Unknown(100, vec![]));
+        state.add_eq_from_tvar(expr_a.clone(), TVar::Unknown(100, TraitList::empty()));
         state.add_eq_from_tvar(expr_b.clone(), unsized_int(101, &symtab));
-        state.add_eq_from_tvar(expr_c.clone(), TVar::Unknown(102, vec![]));
+        state.add_eq_from_tvar(expr_c.clone(), TVar::Unknown(102, TraitList::empty()));
 
         let generic_list = state.create_generic_list(GenericListSource::Anonymous, &vec![]);
         state
@@ -1854,7 +2033,7 @@ mod tests {
         let expr_a = TExpr::Name(name_id(0, "a").inner);
         let expr_b = TExpr::Name(name_id(1, "b").inner);
         let expr_c = TExpr::Name(name_id(2, "c").inner);
-        state.add_eq_from_tvar(expr_a.clone(), TVar::Unknown(100, vec![]));
+        state.add_eq_from_tvar(expr_a.clone(), TVar::Unknown(100, TraitList::empty()));
         state.add_eq_from_tvar(expr_b.clone(), unsized_int(101, &symtab));
         state.add_eq_from_tvar(expr_c.clone(), TVar::Known(t_clock(&symtab), vec![]));
 
@@ -1902,9 +2081,9 @@ mod tests {
         let expr_a = TExpr::Name(name_id(0, "a").inner);
         let expr_b = TExpr::Name(name_id(1, "b").inner);
         let expr_c = TExpr::Name(name_id(2, "c").inner);
-        state.add_eq_from_tvar(expr_a.clone(), TVar::Unknown(100, vec![]));
+        state.add_eq_from_tvar(expr_a.clone(), TVar::Unknown(100, TraitList::empty()));
         state.add_eq_from_tvar(expr_b.clone(), unsized_int(101, &symtab));
-        state.add_eq_from_tvar(expr_c.clone(), TVar::Unknown(102, vec![]));
+        state.add_eq_from_tvar(expr_c.clone(), TVar::Unknown(102, TraitList::empty()));
 
         let generic_list = state.create_generic_list(GenericListSource::Anonymous, &vec![]);
         state
@@ -1958,9 +2137,9 @@ mod tests {
         let expr_a = TExpr::Name(name_id(0, "a").inner);
         let expr_b = TExpr::Name(name_id(1, "b").inner);
         let expr_c = TExpr::Name(name_id(2, "c").inner);
-        state.add_eq_from_tvar(expr_a.clone(), TVar::Unknown(100, vec![]));
-        state.add_eq_from_tvar(expr_b.clone(), TVar::Unknown(101, vec![]));
-        state.add_eq_from_tvar(expr_c.clone(), TVar::Unknown(102, vec![]));
+        state.add_eq_from_tvar(expr_a.clone(), TVar::Unknown(100, TraitList::empty()));
+        state.add_eq_from_tvar(expr_b.clone(), TVar::Unknown(101, TraitList::empty()));
+        state.add_eq_from_tvar(expr_c.clone(), TVar::Unknown(102, TraitList::empty()));
 
         let generic_list = state.create_generic_list(GenericListSource::Anonymous, &vec![]);
         state
@@ -2067,7 +2246,7 @@ mod tests {
         let expr_a = TExpr::Name(name_id(0, "a").inner);
         let expr_b = TExpr::Name(name_id(1, "b").inner);
         let expr_c = TExpr::Name(name_id(2, "c").inner);
-        state.add_eq_from_tvar(expr_a.clone(), TVar::Unknown(100, vec![]));
+        state.add_eq_from_tvar(expr_a.clone(), TVar::Unknown(100, TraitList::empty()));
         state.add_eq_from_tvar(expr_b.clone(), unsized_int(101, &symtab));
         state.add_eq_from_tvar(expr_c.clone(), sized_int(5, &symtab));
 
@@ -2119,8 +2298,8 @@ mod tests {
         // Add eqs for the literals
         let expr_a = TExpr::Name(name_id(0, "a").inner);
         let expr_b = TExpr::Name(name_id(1, "b").inner);
-        state.add_eq_from_tvar(expr_a.clone(), TVar::Unknown(100, vec![]));
-        state.add_eq_from_tvar(expr_b.clone(), TVar::Unknown(101, vec![]));
+        state.add_eq_from_tvar(expr_a.clone(), TVar::Unknown(100, TraitList::empty()));
+        state.add_eq_from_tvar(expr_b.clone(), TVar::Unknown(101, TraitList::empty()));
 
         let generic_list = state.create_generic_list(GenericListSource::Anonymous, &vec![]);
         state
@@ -2141,11 +2320,14 @@ mod tests {
         ensure_same_type!(
             state,
             &expr_a,
-            TVar::array(TVar::Unknown(0, vec![]), TVar::Unknown(4, vec![]))
+            TVar::array(
+                TVar::Unknown(0, TraitList::empty()),
+                TVar::Unknown(4, TraitList::empty())
+            )
         );
 
         // The result should be the inner type
-        ensure_same_type!(state, TExpr::Id(3), TVar::Unknown(0, vec![]));
+        ensure_same_type!(state, TExpr::Id(3), TVar::Unknown(0, TraitList::empty()));
     }
 
     #[test]
@@ -2168,7 +2350,7 @@ mod tests {
         let mut state = TypeState::new();
 
         let expr_clk = TExpr::Name(name_id(1, "clk").inner);
-        state.add_eq_from_tvar(expr_clk.clone(), TVar::Unknown(100, vec![]));
+        state.add_eq_from_tvar(expr_clk.clone(), TVar::Unknown(100, TraitList::empty()));
 
         let generic_list = state.create_generic_list(GenericListSource::Anonymous, &vec![]);
         state
@@ -2213,7 +2395,7 @@ mod tests {
         let mut state = TypeState::new();
 
         let expr_clk = TExpr::Name(name_id(1, "clk").inner);
-        state.add_eq_from_tvar(expr_clk.clone(), TVar::Unknown(100, vec![]));
+        state.add_eq_from_tvar(expr_clk.clone(), TVar::Unknown(100, TraitList::empty()));
 
         let generic_list = state.create_generic_list(GenericListSource::Anonymous, &vec![]);
         state
@@ -2230,7 +2412,7 @@ mod tests {
         ensure_same_type!(
             state,
             TExpr::Name(name_id(0, "a").inner),
-            TVar::Unknown(2, vec![])
+            TVar::Unknown(2, TraitList::empty())
         );
         ensure_same_type!(state, expr_clk, t_clock(&symtab));
     }
@@ -2262,9 +2444,15 @@ mod tests {
         let expr_clk = TExpr::Name(name_id(1, "clk").inner);
         let expr_rst_cond = TExpr::Name(name_id(2, "rst").inner);
         let expr_rst_value = TExpr::Name(name_id(3, "rst_value").inner);
-        state.add_eq_from_tvar(expr_clk.clone(), TVar::Unknown(100, vec![]));
-        state.add_eq_from_tvar(expr_rst_cond.clone(), TVar::Unknown(101, vec![]));
-        state.add_eq_from_tvar(expr_rst_value.clone(), TVar::Unknown(102, vec![]));
+        state.add_eq_from_tvar(expr_clk.clone(), TVar::Unknown(100, TraitList::empty()));
+        state.add_eq_from_tvar(
+            expr_rst_cond.clone(),
+            TVar::Unknown(101, TraitList::empty()),
+        );
+        state.add_eq_from_tvar(
+            expr_rst_value.clone(),
+            TVar::Unknown(102, TraitList::empty()),
+        );
 
         let generic_list = state.create_generic_list(GenericListSource::Anonymous, &vec![]);
         state
@@ -2381,7 +2569,7 @@ mod tests {
         let mut state = TypeState::new();
 
         let expr_clk = TExpr::Name(name_id(1, "clk").inner);
-        state.add_eq_from_tvar(expr_clk.clone(), TVar::Unknown(100, vec![]));
+        state.add_eq_from_tvar(expr_clk.clone(), TVar::Unknown(100, TraitList::empty()));
 
         let generic_list = state.create_generic_list(GenericListSource::Anonymous, &vec![]);
         state
@@ -2443,8 +2631,8 @@ mod tests {
         // Add eqs for the literals
         let expr_a = TExpr::Name(name_id(0, "a").inner);
         let expr_b = TExpr::Name(name_id(1, "b").inner);
-        state.add_eq_from_tvar(expr_a.clone(), TVar::Unknown(100, vec![]));
-        state.add_eq_from_tvar(expr_b.clone(), TVar::Unknown(101, vec![]));
+        state.add_eq_from_tvar(expr_a.clone(), TVar::Unknown(100, TraitList::empty()));
+        state.add_eq_from_tvar(expr_b.clone(), TVar::Unknown(101, TraitList::empty()));
 
         let generic_list = state.create_generic_list(GenericListSource::Anonymous, &vec![]);
         state
@@ -2527,8 +2715,8 @@ mod tests {
         // Add eqs for the literals
         let expr_a = TExpr::Name(name_id(0, "a").inner);
         let expr_b = TExpr::Name(name_id(1, "b").inner);
-        state.add_eq_from_tvar(expr_a.clone(), TVar::Unknown(100, vec![]));
-        state.add_eq_from_tvar(expr_b.clone(), TVar::Unknown(101, vec![]));
+        state.add_eq_from_tvar(expr_a.clone(), TVar::Unknown(100, TraitList::empty()));
+        state.add_eq_from_tvar(expr_b.clone(), TVar::Unknown(101, TraitList::empty()));
 
         let generic_list = state.create_generic_list(GenericListSource::Anonymous, &vec![]);
         state

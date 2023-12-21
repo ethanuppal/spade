@@ -1,6 +1,6 @@
 ---
 source: spade-tests/src/typeinference.rs
-assertion_line: 632
+assertion_line: 651
 ---
 entity test(clk: clock, rst: bool) -> int<8> {
     reg(clk) a reset (rst: true) = 3;
@@ -8,18 +8,15 @@ entity test(clk: clock, rst: bool) -> int<8> {
 }
 
 
-error: Output type mismatch. Expected int<8>, got bool
-  ┌─ testinput:1:46
-  │  
-1 │   entity test(clk: clock, rst: bool) -> int<8> {
-  │                                         ------ int<8> type specified here
-  │ ╭──────────────────────────────────────────────^
-2 │ │     reg(clk) a reset (rst: true) = 3;
-3 │ │     a
-4 │ │ }
-  │ ╰─^ Found type bool
-  │  
-  = note: Expected: int<8>
-               Got: bool
+error: Register reset value mismatch. Expected bool got Number<_>
+  ┌─ testinput:2:28
+  │
+2 │     reg(clk) a reset (rst: true) = 3;
+  │              -             ^^^^ expected bool
+  │              │              
+  │              because this has type bool
+  │
+  = note: Expected: bool
+               Got: Number<_>
 
 

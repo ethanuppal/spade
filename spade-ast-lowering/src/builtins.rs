@@ -3,7 +3,7 @@ use spade_common::{
     name::{Identifier, Path},
 };
 use spade_hir::{
-    symbol_table::{GenericArg, SymbolTable, TypeDeclKind, TypeSymbol},
+    symbol_table::{GenericArg, SymbolTable, Thing, TypeDeclKind, TypeSymbol},
     TypeDeclaration,
 };
 use spade_hir::{ItemList, TypeParam};
@@ -99,4 +99,20 @@ pub fn populate_symtab(symtab: &mut SymbolTable, item_list: &mut ItemList) {
     add_type(&["bool"], vec![], PrimitiveType::Bool, false);
     add_type(&["void"], vec![], PrimitiveType::Void, false);
     add_type(&["bit"], vec![], PrimitiveType::Bool, false);
+
+    let mut add_marker_trait = |path: &[&str]| {
+        let name = symtab
+            .add_thing_with_id(
+                id,
+                Path::from_strs(path),
+                Thing::Trait(Identifier(path.last().unwrap().to_string()).nowhere()),
+            )
+            .nowhere();
+        id -= 1;
+
+        item_list
+            .add_trait(spade_hir::TraitName::Named(name), vec![])
+            .unwrap();
+    };
+    add_marker_trait(&["Number"])
 }

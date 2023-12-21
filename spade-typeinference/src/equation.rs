@@ -7,7 +7,91 @@ use serde::{Deserialize, Serialize};
 use spade_common::{location_info::WithLocation, name::NameID};
 use spade_types::KnownType;
 
+use crate::TypeState;
+
 pub type TypeEquations = HashMap<TypedExpression, TypeVar>;
+
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+pub struct TraitReq {
+    pub name: NameID,
+    pub type_params: Vec<TypeVar>,
+}
+
+impl TraitReq {
+    fn new(name: NameID, type_params: Vec<TypeVar>) -> Self {
+        Self { name, type_params }
+    }
+}
+
+impl std::fmt::Display for TraitReq {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if self.type_params.is_empty() {
+            write!(f, "{}", self.name)
+        } else {
+            write!(
+                f,
+                "{}<{}>",
+                self.name,
+                self.type_params.iter().map(|t| format!("{t}")).join(", ")
+            )
+        }
+    }
+}
+impl std::fmt::Debug for TraitReq {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if self.type_params.is_empty() {
+            write!(f, "{}", self.name)
+        } else {
+            write!(
+                f,
+                "{}<{}>",
+                self.name,
+                self.type_params.iter().map(|t| format!("{t:?}")).join(", ")
+            )
+        }
+    }
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+pub struct TraitList {
+    pub inner: Vec<TraitReq>,
+}
+
+impl TraitList {
+    pub fn empty() -> Self {
+        Self { inner: vec![] }
+    }
+
+    pub fn from_vec(inner: Vec<TraitReq>) -> Self {
+        Self { inner }
+    }
+
+    pub fn get_trait(&self, name: &NameID) -> Option<&TraitReq> {
+        self.inner.iter().find(|t| &t.name == name)
+    }
+}
+
+// NOTE: The trait imformation is currently carried along with the type vars, but
+// the trait information should not be involved in comparisons
+impl PartialEq for TraitList {
+    fn eq(&self, _other: &Self) -> bool {
+        true
+    }
+}
+impl Eq for TraitList {}
+impl std::hash::Hash for TraitList {
+    fn hash<H: std::hash::Hasher>(&self, _state: &mut H) {}
+}
+impl PartialOrd for TraitList {
+    fn partial_cmp(&self, _other: &Self) -> Option<std::cmp::Ordering> {
+        Some(std::cmp::Ordering::Equal)
+    }
+}
+impl Ord for TraitList {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.partial_cmp(other).unwrap()
+    }
+}
 
 /// A type variable represents the type of something in the program. It is mapped
 /// to expressions by type equations in the TypeState.
@@ -18,8 +102,9 @@ pub type TypeEquations = HashMap<TypedExpression, TypeVar>;
 pub enum TypeVar {
     /// The base type is known and has a list of parameters
     Known(KnownType, Vec<TypeVar>),
-    /// The type is unknown, but must satisfy the specified traits
-    Unknown(u64, Vec<NameID>),
+    /// The type is unknown, but must satisfy the specified traits. When the generic substitution
+    /// is done, the TypeVars will be carried over to the KnownType type vars
+    Unknown(u64, TraitList),
 }
 
 impl WithLocation for TypeVar {}
@@ -184,7 +269,7 @@ impl std::fmt::Debug for TypeVar {
             TypeVar::Unknown(id, traits) => write!(
                 f,
                 "t{id}({})",
-                traits.iter().map(|t| format!("{t}")).join("+")
+                traits.inner.iter().map(|t| format!("{t}")).join("+")
             ),
         }
     }
@@ -233,9 +318,13 @@ impl std::fmt::Display for TypeVar {
                 "impl {}",
                 traits.iter().map(|t| format!("{t}")).join("+")
             ),
-            TypeVar::Unknown(_, traits) if traits.is_empty() => write!(f, "_"),
+            TypeVar::Unknown(_, traits) if traits.inner.is_empty() => write!(f, "_"),
             TypeVar::Unknown(_, traits) => {
-                write!(f, "{}", traits.iter().map(|t| format!("{t}")).join("+"))
+                write!(
+                    f,
+                    "{}",
+                    traits.inner.iter().map(|t| format!("{t}")).join("+"),
+                )
             }
         }
     }

@@ -12,6 +12,6 @@ error: Integer value does not fit in int<8>
 2 │     256u
   │     ^^^^ 256 does not fit in an int<8>
   │
-  = note: int<8> fits unsigned integers in the range (0, 255)
+  = note: int<8> fits integers in the range (-128, 127)
 
 

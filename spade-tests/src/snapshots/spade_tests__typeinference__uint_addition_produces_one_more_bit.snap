@@ -1,0 +1,24 @@
+---
+source: spade-tests/src/typeinference.rs
+---
+fn add(a: uint<8>, b: uint<8>) -> uint<10> {
+    a + b
+}
+
+
+error: Output type mismatch. Expected uint<10>, got uint<9>
+  ┌─ testinput:1:44
+  │  
+1 │   fn add(a: uint<8>, b: uint<8>) -> uint<10> {
+  │                                     -------- uint<10> type specified here
+  │ ╭────────────────────────────────────────────^
+2 │ │     a + b
+3 │ │ }
+  │ ╰─^ Found type uint<9>
+  │  
+  = note: Expected: 10
+                in: uint<10>
+               Got: 9
+                in: uint<9>
+
+

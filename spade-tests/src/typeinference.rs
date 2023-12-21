@@ -205,10 +205,29 @@ snapshot_error! {
 }
 
 snapshot_error! {
+    int_addition_produces_one_more_bit,
+    "
+        fn add(a: int<8>, b: int<8>) -> int<10> {
+            let x = a + b;
+            x
+        }
+    "
+}
+
+snapshot_error! {
+    uint_addition_produces_one_more_bit,
+    "
+        fn add(a: uint<8>, b: uint<8>) -> uint<10> {
+            a + b
+        }
+    "
+}
+
+snapshot_error! {
     counter_without_trunc_causes_type_error,
     "
-        entity counter(clk: clock, rst: bool) -> int<8> {
-            reg(clk) x reset (rst: 0) = x + 1;
+        entity counter(clk: clock, rst: bool) -> int<9> {
+            reg(clk) x = x + 1;
             x
         }
     "
@@ -243,7 +262,7 @@ snapshot_error! {
 snapshot_error! {
     array_index_errors_look_good,
     "
-        entity counter(x: [int<8>; 10], idx: int<7>) -> int<8> {
+        entity counter(x: [int<8>; 10], idx: uint<7>) -> int<8> {
             x[idx]
         }
         "
@@ -1277,22 +1296,24 @@ snapshot_error! {
     "
 }
 
-snapshot_error! {
-    literals_can_be_unsigned_ints,
-    "
+#[test]
+fn literals_can_be_unsigned_ints() {
+    let code = "
         fn test() -> uint<8> {
             10
         }
-    "
+    ";
+    build_items(code);
 }
 
-snapshot_error! {
-    unsigned_literal_fit_upper_range,
-    "
+#[test]
+fn unsigned_literal_fit_upper_range() {
+    let code = "
         fn test() -> uint<8> {
             200
         }
-    "
+    ";
+    build_items(code);
 }
 
 snapshot_error! {
@@ -1302,4 +1323,17 @@ snapshot_error! {
             -1
         }
     "
+}
+
+#[test]
+fn chained_int_operations_infer_type() {
+    let code = "
+            fn test(a: int<16>) -> int<16> {
+                // let x = a << a;
+                let y = a + a;
+                // let res = y + y;
+                a
+            }
+    ";
+    build_items(code);
 }

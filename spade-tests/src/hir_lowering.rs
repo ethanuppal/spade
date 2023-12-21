@@ -604,7 +604,7 @@ mod tests {
     fn array_indexing_works() {
         let code = r#"
             entity x(a: [int<2>; 5]) -> int<2> {
-                let idx: int<3> = 2;
+                let idx: uint<3> = 2;
                 a[idx]
             }
         "#;

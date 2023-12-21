@@ -1,5 +1,6 @@
 ---
 source: spade-tests/src/typeinference.rs
+assertion_line: 1121
 ---
 struct A {}
 fn test(x: A, y: A) -> A {
@@ -7,13 +8,13 @@ fn test(x: A, y: A) -> A {
 }
 
 
-error: Expected type Number, got A
+error: Expected type A, got Number<_>
   ┌─ testinput:3:5
   │
 3 │     x + y
-  │     ^ Expected Number
+  │     ^ Expected A
   │
-  = note: Expected: Number
-               Got: A
+  = note: Expected: A
+               Got: Number<_>
 
 
