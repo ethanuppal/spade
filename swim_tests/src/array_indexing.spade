@@ -1,4 +1,4 @@
-fn index_array(a: [int<8>; 4], i: int<2>) -> int<8> {
+fn index_array(a: [int<8>; 4], i: uint<2>) -> int<8> {
     a[i]
 }
 

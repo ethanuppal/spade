@@ -226,7 +226,7 @@ snapshot_error! {
 snapshot_error! {
     counter_without_trunc_causes_type_error,
     "
-        entity counter(clk: clock, rst: bool) -> int<9> {
+        entity counter(clk: clock, rst: bool) -> int<8> {
             reg(clk) x = x + 1;
             x
         }
@@ -1336,4 +1336,42 @@ fn chained_int_operations_infer_type() {
             }
     ";
     build_items(code);
+}
+
+#[test]
+fn uint_concat_works() {
+    let code = "
+        fn test(x: uint<16>, y: uint<8>) -> uint<24> {
+            x `concat` y
+        }
+    ";
+    build_items_with_stdlib(code);
+}
+
+snapshot_error! {uint_concat_does_not_produce_int,
+    "
+        fn test(x: uint<16>, y: uint<8>) -> int<24> {
+            x `concat` y
+        }
+    "
+}
+
+snapshot_error! {
+    the_source_of_int_uint_size_mismatches_is_clear,
+    "
+    fn test(x: uint<16>, y: uint<8>) -> int<24> {
+        let z: int<24> = x + y;
+        z
+    }
+    "
+}
+
+snapshot_error! {
+    the_source_of_int_uint_mismatches_is_clear,
+    "
+    fn test(x: uint<8>, y: uint<8>) -> int<9> {
+        let z: int<9> = x + y;
+        z
+    }
+    "
 }

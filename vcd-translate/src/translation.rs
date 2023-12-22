@@ -62,6 +62,16 @@ impl MaybeValue<BigInt> {
     }
 }
 
+impl MaybeValue<BigUint> {
+    fn write_to(&self, s: &mut String) {
+        match self {
+            MaybeValue::Value(val) => *s += &val.to_str_radix(10),
+            MaybeValue::Undef => *s += "UNDEF",
+            MaybeValue::HighImpedance => *s += "HIGHIMP",
+        }
+    }
+}
+
 fn translate_uint(value: &[Value], flip: bool) -> MaybeValue<BigUint> {
     let mut result = BigUint::new(vec![]);
     let mut accumulated_bits = 0;
@@ -113,6 +123,17 @@ fn translate_signed_int(value: &[Value]) -> MaybeValue<BigInt> {
         } else {
             uint_val.map(|uint| BigInt::from_biguint(Sign::Plus, uint))
         }
+    }
+}
+
+fn translate_unsigned_int(value: &[Value]) -> MaybeValue<BigUint> {
+    if value.contains(&Value::X) {
+        MaybeValue::Undef
+    } else if value.contains(&Value::Z) {
+        MaybeValue::HighImpedance
+    } else {
+        let uint_val = translate_uint(&value, false);
+        uint_val
     }
 }
 
@@ -253,7 +274,7 @@ pub fn inner_translate_value(result: &mut String, in_value: &[Value], t: &Concre
             base: PrimitiveType::Uint,
             params: _,
         } => {
-            *result += "X";
+            translate_unsigned_int(&value).write_to(result);
         }
         ConcreteType::Single {
             base: PrimitiveType::Memory,

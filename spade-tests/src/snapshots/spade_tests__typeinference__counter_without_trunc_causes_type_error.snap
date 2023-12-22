@@ -2,20 +2,17 @@
 source: spade-tests/src/typeinference.rs
 ---
 entity counter(clk: clock, rst: bool) -> int<8> {
-    reg(clk) x reset (rst: 0) = x + 1;
+    reg(clk) x = x + 1;
     x
 }
 
 
-error: Expected type int<8>, got int<9>
-  ┌─ testinput:2:33
+error: Expected type Number<8>, got Number<9>
+  ┌─ testinput:2:18
   │
-2 │     reg(clk) x reset (rst: 0) = x + 1;
-  │                                 ^^^^^ Expected int<8>
+2 │     reg(clk) x = x + 1;
+  │                  ^^^^^ Expected Number<8>, got Number<9>
   │
-  = note: Expected: 8
-                in: int<8>
-               Got: 9
-                in: int<9>
+  = note: Addition creates one more output bit than the input to avoid overflow
 
 

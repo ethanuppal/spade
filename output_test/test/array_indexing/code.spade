@@ -1,4 +1,4 @@
-entity uut(index: int<2>) -> int<16> {
+entity uut(index: uint<2>) -> int<16> {
     let data = [11, 12, 13, 14];
     data[index]
 }

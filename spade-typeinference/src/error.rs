@@ -56,6 +56,22 @@ pub trait UnificationErrorExt<T>: Sized {
         self.into_diagnostic(unification_point, |d, _| d)
     }
 
+    /// Creates a diagnostic with a generic type mismatch error
+    fn into_diagnostic_or_default<F>(
+        self,
+        unification_point: impl Into<FullSpan>,
+        message: Option<F>,
+    ) -> std::result::Result<T, Diagnostic>
+    where
+        F: Fn(Diagnostic, TypeMismatch) -> Diagnostic,
+    {
+        if let Some(message) = message {
+            self.into_diagnostic(unification_point, message)
+        } else {
+            self.into_diagnostic(unification_point, |d, _| d)
+        }
+    }
+
     /// Creates a diagnostic from the unification error that will be emitted at the unification
     /// point, unless the unification error was caused by constraints, at which point
     /// the source of those constraints will be the location of the error.
@@ -208,143 +224,6 @@ pub enum UnificationError {
     },
 }
 
-#[derive(Debug, Error, PartialEq, Clone)]
-pub enum Error {
-    #[error("Type mismatch between {0:?} and {1:?}")]
-    TypeMismatch(UnificationTrace, UnificationTrace),
-
-    #[error("Entity output type mismatch")]
-    EntityOutputTypeMismatch {
-        expected: UnificationTrace,
-        got: UnificationTrace,
-        // The location of the type specification
-        type_spec: Loc<()>,
-        // The location of the output expression with the offending type
-        output_expr: Loc<()>,
-    },
-    // An entity output mismatch where the output type was unspecified and defaulted
-    // to unit
-    #[error("Entity output type mismatch without spec")]
-    UnspecedEntityOutputTypeMismatch {
-        expected: UnificationTrace,
-        got: UnificationTrace,
-        // The location of the output expression with the offending type
-        output_expr: Loc<()>,
-    },
-    #[error("Type error: expected {expected}, got: {got}")]
-    UnspecifiedTypeError {
-        expected: UnificationTrace,
-        got: UnificationTrace,
-        loc: Loc<()>,
-    },
-    #[error("Type mismatch due to constraints")]
-    ConstraintMismatch {
-        expected: UnificationTrace,
-        got: UnificationTrace,
-        source: ConstraintSource,
-        loc: Loc<()>,
-    },
-
-    #[error("If condition must be boolean")]
-    NonBooleanCondition { got: UnificationTrace, loc: Loc<()> },
-    #[error("If condition mismatch")]
-    IfConditionMismatch {
-        expected: UnificationTrace,
-        got: UnificationTrace,
-        first_branch: Loc<()>,
-        incorrect_branch: Loc<()>,
-    },
-    #[error("Match branch mismatch")]
-    MatchBranchMismatch {
-        expected: UnificationTrace,
-        got: UnificationTrace,
-        first_branch: Loc<()>,
-        incorrect_branch: Loc<()>,
-    },
-    #[error("Non clock used as register clock")]
-    NonClockClock {
-        expected: UnificationTrace,
-        got: UnificationTrace,
-        loc: Loc<()>,
-    },
-    #[error("Reset condition must be a bool")]
-    NonBoolReset {
-        expected: UnificationTrace,
-        got: UnificationTrace,
-        loc: Loc<()>,
-    },
-    #[error("Reset value must match register type")]
-    RegisterResetMismatch {
-        expected: UnificationTrace,
-        got: UnificationTrace,
-        loc: Loc<()>,
-    },
-    #[error("Initial value must match register type")]
-    RegisterInitialMismatch {
-        expected: UnificationTrace,
-        got: UnificationTrace,
-        loc: Loc<()>,
-    },
-
-    #[error("Tuple index of generic argument")]
-    TupleIndexOfGeneric { loc: Loc<()> },
-    #[error("Tuple index out of bounds")]
-    TupleIndexOutOfBounds { index: Loc<u128>, actual_size: u128 },
-
-    #[error("Field access on incomplete")]
-    FieldAccessOnIncomplete { loc: Loc<()> },
-    #[error("Field access on generic")]
-    FieldAccessOnGeneric { loc: Loc<()>, name: NameID },
-    #[error("Field access on non-struct")]
-    FieldAccessOnNonStruct { loc: Loc<()>, got: TypeVar },
-    #[error("Field access on integer")]
-    FieldAccessOnInteger { loc: Loc<()> },
-    #[error("Field access on enum")]
-    FieldAccessOnEnum { loc: Loc<()>, actual_type: NameID },
-    #[error("Field access on primitive type")]
-    FieldAccessOnPrimitive { loc: Loc<()>, actual_type: NameID },
-    #[error("No such field")]
-    NoSuchField {
-        field: Loc<Identifier>,
-        _struct: NameID,
-    },
-
-    #[error("Array element mismatch")]
-    ArrayElementMismatch {
-        expected: UnificationTrace,
-        got: UnificationTrace,
-        loc: Loc<()>,
-        first_element: Loc<()>,
-    },
-
-    #[error("Index must be an integer")]
-    IndexMustBeInteger { got: UnificationTrace, loc: Loc<()> },
-    #[error("Indexee must be an array")]
-    IndexeeMustBeArray { got: UnificationTrace, loc: Loc<()> },
-
-    #[error("Pattern type mismatch")]
-    PatternTypeMismatch {
-        pattern: Loc<()>,
-        reason: Loc<()>,
-        expected: UnificationTrace,
-        got: UnificationTrace,
-    },
-
-    #[error("Attempting to instantiate generic type")]
-    GenericTypeInstantiation,
-
-    #[error("Argument error")]
-    ArgumentError {
-        source: ArgumentError,
-        unit: Loc<UnitHead>,
-    },
-
-    #[error("(internal)No entry in generic list")]
-    InternalNoEntryInGenericList(Loc<NameID>),
-
-    #[error("Spade diagnostic")]
-    SpadeDiagnostic(#[from] Diagnostic),
-}
 pub type Result<T> = std::result::Result<T, Diagnostic>;
 
 pub fn error_pattern_type_mismatch(

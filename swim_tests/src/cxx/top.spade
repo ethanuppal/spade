@@ -4,12 +4,12 @@ fn add(a: int<8>, b: int<8>) -> int<9> {
 }
 
 #[no_mangle]
-fn large_output(a: int<32>, b: int<32>, c: int<32>, d: int<8>) -> int<104> {
+fn large_output(a: uint<32>, b: uint<32>, c: uint<32>, d: uint<8>) -> uint<104> {
     a `concat` b `concat` c `concat` d
 }
 
 #[no_mangle]
-fn large_input(a: int<65>) -> int<65> {
+fn large_input(a: uint<65>) -> uint<65> {
     a
 }
 

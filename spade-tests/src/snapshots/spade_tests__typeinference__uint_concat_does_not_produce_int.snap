@@ -1,0 +1,21 @@
+---
+source: spade-tests/src/typeinference.rs
+---
+fn test(x: uint<16>, y: uint<8>) -> int<24> {
+    x `concat` y
+}
+
+
+error: Expected type int<24>, got uint<_>
+  ┌─ testinput:2:5
+  │
+2 │     x `concat` y
+  │     ^^^^^^^^^^^^
+  │     │
+  │     expected int<24>
+  │     type uint<_> inferred here
+  │
+  = note: Expected: int<24>
+               Got: uint<_>
+
+

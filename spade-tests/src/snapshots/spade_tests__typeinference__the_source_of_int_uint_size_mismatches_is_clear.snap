@@ -1,0 +1,21 @@
+---
+source: spade-tests/src/typeinference.rs
+---
+fn test(x: uint<16>, y: uint<8>) -> int<24> {
+    let z: int<24> = x + y;
+    z
+}
+
+
+error: Expected type uint<8>, got uint<16>
+  ┌─ testinput:2:22
+  │
+2 │     let z: int<24> = x + y;
+  │                      ^ Expected uint<8>
+  │
+  = note: Expected: 8
+                in: uint<8>
+               Got: 16
+                in: uint<16>
+
+

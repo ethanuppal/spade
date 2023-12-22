@@ -7,20 +7,12 @@ use serde::{Deserialize, Serialize};
 use spade_common::{location_info::WithLocation, name::NameID};
 use spade_types::KnownType;
 
-use crate::TypeState;
-
 pub type TypeEquations = HashMap<TypedExpression, TypeVar>;
 
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub struct TraitReq {
     pub name: NameID,
     pub type_params: Vec<TypeVar>,
-}
-
-impl TraitReq {
-    fn new(name: NameID, type_params: Vec<TypeVar>) -> Self {
-        Self { name, type_params }
-    }
 }
 
 impl std::fmt::Display for TraitReq {

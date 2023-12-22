@@ -916,7 +916,7 @@ fn statement_code(statement: &Statement, ctx: &mut Context) -> Code {
             let expression = match value {
                 ConstantValue::Int(val) => {
                     let size = match t {
-                        crate::types::Type::Int(size) => size,
+                        crate::types::Type::Int(size) | crate::types::Type::UInt(size) => size,
                         _ => panic!("Const integer that is not const"),
                     };
 

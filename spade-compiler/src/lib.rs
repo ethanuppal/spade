@@ -70,9 +70,6 @@ pub enum Error {
     #[error("hir lowering error")]
     HirLoweringError(#[from] spade_hir_lowering::error::Error),
 
-    #[error("type inference error")]
-    TypeInferenceError(#[from] spade_typeinference::error::Error),
-
     #[error("io error")]
     IoError(#[from] std::io::Error),
 }

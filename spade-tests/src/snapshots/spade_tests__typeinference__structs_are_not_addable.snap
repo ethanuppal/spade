@@ -7,13 +7,13 @@ fn test(x: A, y: A) -> A {
 }
 
 
-error: Expected type Number, got A
+error: Expected type Number<_>, got A
   ┌─ testinput:3:5
   │
 3 │     x + y
-  │     ^ Expected Number
+  │     ^ Expected Number<_>
   │
-  = note: Expected: Number
+  = note: Expected: Number<_>
                Got: A
 
 

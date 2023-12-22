@@ -10,7 +10,10 @@ error: Expected type uint<9>, got int<_>
   ┌─ testinput:2:5
   │
 2 │     x + y
-  │     ^^^^^ Expected uint<9>
+  │     ^^^^^
+  │     │
+  │     expected uint<9>
+  │     type int<_> inferred here
   │
   = note: Expected: uint<9>
                Got: int<_>

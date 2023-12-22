@@ -5,13 +5,12 @@ use spade_common::name::Path;
 use spade_common::num_ext::InfallibleToBigInt;
 use spade_common::{location_info::Loc, name::Identifier};
 use spade_diagnostics::{diag_anyhow, diag_assert, diag_bail, Diagnostic};
-use spade_hir::expression::BinaryOperator;
 use spade_hir::symbol_table::{TypeDeclKind, TypeSymbol};
 use spade_hir::ArgumentList;
 use spade_types::KnownType;
 
 use crate::equation::TypeVar;
-use crate::error::{Result, UnificationErrorExt};
+use crate::error::{Result, TypeMismatch, UnificationErrorExt};
 use crate::method_resolution::select_method;
 use crate::trace_stack::TraceStackEntry;
 use crate::{Context, GenericListSource, TypeState};
@@ -179,6 +178,7 @@ impl Requirement {
                         Ok(RequirementResult::Satisfied(vec![Replacement {
                             from: expr.clone(),
                             to: field_type,
+                            context: None,
                         }]))
                     },
                     || Ok(RequirementResult::NoChange),
@@ -328,6 +328,7 @@ impl Requirement {
                         types
                             .iter()
                             .map(|ty| {
+                                let base = base.clone();
                                 // Since we unify requirement results, we can just use placeholder
                                 // parameters here. We know that the number of parameters should
                                 // be the same as the params of the first base we found
@@ -340,6 +341,15 @@ impl Requirement {
                                             .map(|_| type_state.new_generic())
                                             .collect(),
                                     ),
+                                    context: Some(Box::new(move |d, TypeMismatch { e, g }| {
+                                        let base = base.clone();
+                                        d.message(format!("Expected type {e}, got {g}"))
+                                            .primary_label(format!("expected {e}"))
+                                            .secondary_label(
+                                                base,
+                                                format!("type {g} inferred here"),
+                                            )
+                                    })),
                                 }
                             })
                             .collect(),
@@ -364,10 +374,10 @@ impl Requirement {
                 type_state
                     .trace_stack
                     .push(TraceStackEntry::ResolvedRequirement(self.clone()));
-                for Replacement { from, to } in replacements {
+                for Replacement { from, to, context } in replacements {
                     type_state
                         .unify(&from.inner, &to, ctx)
-                        .into_default_diagnostic(&from)?;
+                        .into_diagnostic_or_default(&from, context)?;
                 }
                 Ok(())
             }
@@ -375,10 +385,10 @@ impl Requirement {
     }
 }
 
-#[derive(Debug)]
 pub struct Replacement {
     pub from: Loc<TypeVar>,
     pub to: TypeVar,
+    pub context: Option<Box<dyn Fn(Diagnostic, TypeMismatch) -> Diagnostic>>,
 }
 
 #[must_use]

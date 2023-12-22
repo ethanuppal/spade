@@ -8,12 +8,11 @@ fn sext<#N, #M>(x: int<N>) -> int<M> __builtin__
 
 /// Zero extend the provided integer. Gives a compiler error if the output is smaller
 /// than the input
-fn zext<#N, #M>(x: int<N>) -> int<M> __builtin__
+fn zext<#N, #M>(x: uint<N>) -> uint<M> __builtin__
 
-// Concatenate 2 integers. The resulting integer must be of length N+M, and this
-// checked, but not inferred by the built in handling. Once we get type constraints
-// implemented, this should be changed
-fn concat<#N, #M, #K>(x: int<N>, y: int<M>) -> int<K> __builtin__
+// This is special cased by the compiler. The actual type, if Spade was able to express
+// it itself would be concat<#N, #M>(x: Number<N>, y: Number<M>) -> Number<N + M>.
+fn concat<N, M, K>(x: N, y: M) -> K __builtin__
 
 // Casts a `bit` to a `bool`. low maps to false, high maps to true, but HIGHIMP is undefined.
 // In practice, in a simulator, it will map to Z

@@ -549,32 +549,14 @@ impl TypeState {
 
         handle_special_functions! {
             ["std", "conv", "concat"] => {
-
-                let lhs_size = generic_arg!(0);
-                let rhs_size = generic_arg!(1);
-                let result_size = generic_arg!(2);
-
-                // Result size is sum of input sizes
-                self.add_constraint(
-                    result_size.clone(),
-                    ce_var(&lhs_size) + ce_var(&rhs_size),
-                    expression_id.loc(),
-                    &result_size,
-                    ConstraintSource::Concatenation
-                );
-                self.add_constraint(
-                    lhs_size.clone(),
-                    ce_var(&result_size) + -ce_var(&rhs_size),
-                    matched_args[0].value.loc(),
-                    &lhs_size,
-                    ConstraintSource::Concatenation
-                );
-                self.add_constraint(rhs_size.clone(),
-                    ce_var(&result_size) + -ce_var(&lhs_size),
-                    matched_args[1].value.loc(),
-                    &rhs_size,
-                    ConstraintSource::Concatenation
-                );
+                self.handle_concat(
+                    expression_id,
+                    generic_arg!(0),
+                    generic_arg!(1),
+                    generic_arg!(2),
+                    &matched_args,
+                    ctx
+                )?
             },
             ["std", "mem", "clocked_memory"]  => {
                 let num_elements = generic_arg!(0);
@@ -610,6 +592,56 @@ impl TypeState {
         self.unify(expression_type, &return_type, ctx)
             .into_default_diagnostic(expression_id.loc())?;
 
+        Ok(())
+    }
+
+    pub fn handle_concat(
+        &mut self,
+        expression_id: Loc<u64>,
+        source_lhs_ty: TypeVar,
+        source_rhs_ty: TypeVar,
+        source_result_ty: TypeVar,
+        args: &[Argument],
+        ctx: &Context,
+    ) -> Result<()> {
+        let (lhs_type, lhs_size) = self.new_generic_number(ctx);
+        let (rhs_type, rhs_size) = self.new_generic_number(ctx);
+        let (result_type, result_size) = self.new_generic_number(ctx);
+        self.unify(&source_lhs_ty, &lhs_type, ctx)
+            .into_default_diagnostic(args[0].value.loc())?;
+        self.unify(&source_rhs_ty, &rhs_type, ctx)
+            .into_default_diagnostic(args[1].value.loc())?;
+        self.unify(&source_result_ty, &result_type, ctx)
+            .into_default_diagnostic(expression_id.loc())?;
+
+        // Result size is sum of input sizes
+        self.add_constraint(
+            result_size.clone(),
+            ce_var(&lhs_size) + ce_var(&rhs_size),
+            expression_id.loc(),
+            &result_size,
+            ConstraintSource::Concatenation,
+        );
+        self.add_constraint(
+            lhs_size.clone(),
+            ce_var(&result_size) + -ce_var(&rhs_size),
+            args[0].value.loc(),
+            &lhs_size,
+            ConstraintSource::Concatenation,
+        );
+        self.add_constraint(
+            rhs_size.clone(),
+            ce_var(&result_size) + -ce_var(&lhs_size),
+            args[1].value.loc(),
+            &rhs_size,
+            ConstraintSource::Concatenation,
+        );
+
+        self.add_requirement(Requirement::SharedBase(vec![
+            lhs_type.at_loc(&args[0].value),
+            rhs_type.at_loc(&args[1].value),
+            result_type.at_loc(&expression_id.loc()),
+        ]));
         Ok(())
     }
 
@@ -1404,12 +1436,12 @@ impl TypeState {
             }
             (other @ TypeVar::Known(base, params), uk @ TypeVar::Unknown(_, traits))
             | (uk @ TypeVar::Unknown(_, traits), other @ TypeVar::Known(base, params)) => {
-                let lhs_is_expected = match (other, uk) {
+                let trait_is_expected = match (other, uk) {
                     (TypeVar::Known(_, _), _) => true,
                     _ => false,
                 };
 
-                self.ensure_impls(other, traits, lhs_is_expected, ctx)?;
+                self.ensure_impls(other, traits, trait_is_expected, ctx)?;
 
                 let mut new_params = params.clone();
                 for t in &traits.inner {
@@ -1429,7 +1461,7 @@ impl TypeState {
                             .iter()
                             .zip(new_params.iter())
                             .map(|(t1, t2)| {
-                                if lhs_is_expected {
+                                if trait_is_expected {
                                     Ok(try_with_context!(
                                         self.unify_inner(t1, t2, ctx),
                                         fake_type,
@@ -1437,9 +1469,9 @@ impl TypeState {
                                     ))
                                 } else {
                                     Ok(try_with_context!(
-                                        self.unify_inner(t2, t1, ctx),
-                                        other,
-                                        fake_type
+                                        self.unify_inner(t1, t2, ctx),
+                                        fake_type,
+                                        other
                                     ))
                                 }
                             })
@@ -1587,7 +1619,7 @@ impl TypeState {
         &mut self,
         var: &TypeVar,
         traits: &TraitList,
-        lhs_is_expected: bool,
+        trait_is_expected: bool,
         ctx: &Context,
     ) -> std::result::Result<(), UnificationError> {
         // TODO: Don't look this up for every ensure_impls
@@ -1598,15 +1630,15 @@ impl TypeState {
             .0;
 
         let mut error_producer = |required_traits| {
-            if lhs_is_expected {
-                Err(UnificationError::Normal(Tm {
-                    e: UnificationTrace::new(var.clone()),
-                    g: UnificationTrace::new(self.new_generic_with_traits(required_traits)),
-                }))
-            } else {
+            if trait_is_expected {
                 Err(UnificationError::Normal(Tm {
                     e: UnificationTrace::new(self.new_generic_with_traits(required_traits)),
                     g: UnificationTrace::new(var.clone()),
+                }))
+            } else {
+                Err(UnificationError::Normal(Tm {
+                    e: UnificationTrace::new(var.clone()),
+                    g: UnificationTrace::new(self.new_generic_with_traits(required_traits)),
                 }))
             }
         };
@@ -1773,9 +1805,9 @@ impl TypeState {
                 break;
             }
 
-            for Replacement { from, to } in replacements {
+            for Replacement { from, to, context } in replacements {
                 self.unify(&to, &from, ctx)
-                    .into_default_diagnostic(from.loc())?;
+                    .into_diagnostic_or_default(from.loc(), context)?;
             }
 
             // Drop all replacements that have now been applied

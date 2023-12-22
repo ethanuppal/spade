@@ -7,15 +7,15 @@ fn x() -> bool  {
 }
 
 
-error: Array element type mismatch. Expected Number
+error: Array element type mismatch. Expected Number<_>
   ┌─ testinput:2:17
   │
 2 │     let a = [0, true, 2];
-  │              -  ^^^^ Expected Number
+  │              -  ^^^^ Expected Number<_>
   │              │   
   │              To match this
   │
-  = note: Expected: Number
+  = note: Expected: Number<_>
                Got: bool
 
 

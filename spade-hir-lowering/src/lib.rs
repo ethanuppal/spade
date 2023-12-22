@@ -135,7 +135,7 @@ impl MirLowerable for ConcreteType {
                 base: PrimitiveType::Uint,
                 params,
             } => match params.as_slice() {
-                [CType::Integer(val)] => Type::Int(val.clone()),
+                [CType::Integer(val)] => Type::UInt(val.clone()),
                 t => unreachable!("{:?} is an invalid generic parameter for an integer", t),
             },
             CType::Single {
