@@ -37,7 +37,7 @@ fn int_to_bits<#N>(input: int<N>) -> [bool; N] {
 }
 
 // Interpret an int as the raw bit values. output[0] is the lsb of the integer
-// nad output[N] is the MSB
+// and output[N] is the MSB
 //
 // Note that this means that [false, false, true, true] will be 0b1100 since arrays
 // are written lsb first, while integers are written msb first
@@ -49,10 +49,10 @@ mod unsafe {
     // Reinterprets a value as another value of the same size. It is up to the caller
     // to ensure that the resulting value is valid
     //
-    // **NOTE**: The representation compound types is generally undefined and you should
+    // **NOTE**: The representation of compound types is generally undefined and you should
     // not rely on it being fixed between compiler versions.
     // If you still want to use this function on compound types, the representation of types is
-    // described here https://docs.spade-lang.org/internal/type_representations.html
+    // described here: https://docs.spade-lang.org/internal/type_representations.html
     fn unsafe_cast<T, O>(in: T) -> O __builtin__
 
     // Converts a clock signal to a bool by just reinterpreting the bits. This should rarely
