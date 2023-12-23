@@ -29,6 +29,9 @@ impl Type {
     pub fn int(val: u32) -> Self {
         Self::Int(val.to_biguint())
     }
+    pub fn uint(val: u32) -> Self {
+        Self::UInt(val.to_biguint())
+    }
     pub fn backward(inner: Type) -> Self {
         Self::Backward(Box::new(inner))
     }

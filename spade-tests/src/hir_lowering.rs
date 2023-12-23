@@ -617,8 +617,8 @@ mod tests {
         let expected = entity!(&["x"]; (
                 "a", n(0, "a"), array_type,
         ) -> Type::int(2); {
-            (const 0; Type::int(3); ConstantValue::int(2));
-            (n(1, "idx"); Type::int(3); Alias; e(0));
+            (const 0; Type::uint(3); ConstantValue::int(2));
+            (n(1, "idx"); Type::uint(3); Alias; e(0));
             (e(4); Type::int(2); IndexArray; n(0, "a"), n(1, "idx"));
         } => e(4));
 
@@ -1449,15 +1449,15 @@ mod tests {
     #[test]
     fn zero_extend_works() {
         let code = r#"
-            entity name(a: int<16>) -> int<24> {
+            entity name(a: uint<16>) -> uint<24> {
                 zext(a)
             }
         "#;
 
         let expected = vec![entity! {&["name"]; (
-                "a", n(0, "a"), Type::int(16),
-            ) -> Type::int(24); {
-                (e(0); Type::int(24); ZeroExtend({extra_bits: 8u32.to_biguint()}); n(0, "a"))
+                "a", n(0, "a"), Type::uint(16),
+            ) -> Type::uint(24); {
+                (e(0); Type::uint(24); ZeroExtend({extra_bits: 8u32.to_biguint()}); n(0, "a"))
             } => e(0)
         }];
 
@@ -1533,7 +1533,7 @@ mod tests {
                 // this needs to be incremented. If we end up with more tests
                 // like this, we should do smarter comparison
                 // lifeguard spade#224
-                name: "identity[98]".to_string(),
+                name: "identity[110]".to_string(),
                 path: vec!["identity".to_string()],
             },
             source: NameID(0, Path::from_strs(&["identity"])),
@@ -2185,8 +2185,8 @@ mod tests {
                     // them is changed, in particular, the stdlib. If we end up with
                     // more tests like this we should add them to MIR comparison
                     // lifeguard spade#225
-                    vec![statement!(const 79; Type::Int(8u32.to_biguint()); ConstantValue::Int(0.to_bigint()))],
-                    vec![statement!(const 80; Type::Int(8u32.to_biguint()); ConstantValue::Int(1.to_bigint()))],
+                    vec![statement!(const 91; Type::Int(8u32.to_biguint()); ConstantValue::Int(0.to_bigint()))],
+                    vec![statement!(const 92; Type::Int(8u32.to_biguint()); ConstantValue::Int(1.to_bigint()))],
                 ])
             }); n(0, "clk"), n(11, "ports"));
             (n(2, "mem"); mem_type; Alias; e(1));
@@ -2917,9 +2917,9 @@ mod argument_list_tests {
     snapshot_error! {
         zeroextending_to_shorter_value,
         "
-        fn main() -> int<4> {
-            let a: int<8> = 0;
-            let b: int<4> = std::conv::zext(a);
+        fn main() -> uint<4> {
+            let a: uint<8> = 0;
+            let b: uint<4> = std::conv::zext(a);
             b
         }
         "
@@ -2928,9 +2928,9 @@ mod argument_list_tests {
     snapshot_error! {
         zeroextending_to_shorter_value_single_bit,
         "
-        fn main() -> int<1> {
-            let a: int<2> = 0;
-            let b: int<1> = std::conv::zext(a);
+        fn main() -> uint<1> {
+            let a: uint<2> = 0;
+            let b: uint<1> = std::conv::zext(a);
             b
         }
         "

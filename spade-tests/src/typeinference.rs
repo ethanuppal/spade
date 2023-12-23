@@ -1060,174 +1060,6 @@ snapshot_error! {
         }
     "
 }
-=======
-
-snapshot_error! {
-    argument_type_mismatch_named,
-    "
-    entity e(clk: clock, a: bool) -> bool {
-        a
-    }
-
-    entity main(clk: clock) -> bool {
-        let b: int<3> = 0;
-        inst e$(clk, a: b)
-    }
-    "
-}
-
-snapshot_error! {
-    argument_type_mismatch_shortnamed,
-    "
-    entity e(clk: clock, a: bool) -> bool {
-        a
-    }
-
-    entity main(clk: clock) -> bool {
-        let a: int<3> = 0;
-        inst e$(clk, a)
-    }
-    "
-}
-
-snapshot_error! {
-    type_pattern_argument_type_mismatch_positional,
-    "
-    struct X {
-        b: bool,
-    }
-
-    entity main() -> bool {
-        let x = X$(b: true);
-        match x {
-            X(0) => true,
-            _ => false,
-        }
-    }
-    "
-}
-snapshot_error! {
-    type_pattern_argument_type_mismatch_named,
-    "
-    struct X {
-        b: bool,
-    }
-
-    entity main() -> bool {
-        let x = X$(b: true);
-        match x {
-            X$(b: 0) => true,
-            _ => false,
-        }
-    }
-    "
-}
-
-snapshot_error! {
-    type_pattern_argument_type_mismatch_shortnamed,
-    "
-    struct X {
-        b: bool,
-    }
-
-    entity main() -> bool {
-        decl b;
-        let x: int<8> = b;
-        let X$(b) = X(true);
-    }
-    "
-}
-
-snapshot_error! {
-    range_indexing_non_array_is_error,
-    "
-        fn test(x: int<8>) -> [int<8>; 2] {
-            x[0:3]
-        }
-    "
-}
-
-snapshot_error! {
-    range_index_too_large_is_error,
-    "
-        fn test(x: [int<8>; 6]) -> [int<8>; 2] {
-            x[0:3]
-        }
-    "
-}
-
-snapshot_error! {
-    range_index_too_small_is_error,
-    "
-        fn test(x: [int<8>; 6]) -> [int<8>; 2] {
-            x[0:1]
-        }
-    "
-}
-
-snapshot_error! {
-    inverse_order_range_index_is_error,
-    "
-        fn test(x: [int<8>; 6]) -> [int<8>; 2] {
-            x[2:0]
-        }
-    "
-}
-
-snapshot_error! {
-    end_out_of_range_range_index_is_error,
-    "
-        fn test(x: [int<8>; 6]) -> [int<8>; 2] {
-            x[5:7]
-        }
-    "
-}
-
-snapshot_error! {
-    start_out_of_range_range_index_is_error,
-    "
-        fn test(x: [int<8>; 6]) -> [int<8>; 2] {
-            x[6:8]
-        }
-    "
-}
-
-#[test]
-fn end_at_array_bound_is_allowed() {
-    let code = "
-    fn test(x: [int<8>; 6]) -> [int<8>; 2] {
-        x[4:6]
-    }";
-
-    build_items(code);
-}
-
-snapshot_error! {
-    zero_size_range_index_is_error,
-    "
-        fn test(x: [int<8>; 6]) -> [int<8>; 1] {
-            x[7:7]
-        }
-    "
-}
-
-snapshot_error! {
-    negative_range_index_is_error,
-    "
-        fn test(x: [int<8>; 6]) -> [int<8>; 1] {
-            x[-1:5]
-        }
-    "
-}
-
-snapshot_error! {
-    negative_second_range_index_is_error,
-    "
-        fn test(x: [int<8>; 6]) -> [int<8>; 1] {
-            x[1:-5]
-        }
-    "
-}
 
 #[test]
 fn unsigned_ints_are_addable() {
@@ -1373,5 +1205,27 @@ snapshot_error! {
         let z: int<9> = x + y;
         z
     }
+    "
+}
+
+snapshot_error! {
+    trunc_requires_number,
+    "
+        struct A {}
+
+        fn test(a: A) -> int<8> {
+            trunc(a)
+        }
+    "
+}
+
+snapshot_error! {
+    concat_requires_number,
+    "
+        struct A {}
+
+        fn test(a: A) -> int<8> {
+            a `concat` a
+        }
     "
 }

@@ -558,6 +558,15 @@ impl TypeState {
                     ctx
                 )?
             },
+            ["std", "conv", "trunc"] => {
+                self.handle_trunc(
+                    expression_id,
+                    generic_arg!(0),
+                    generic_arg!(1),
+                    &matched_args,
+                    ctx
+                )?
+            },
             ["std", "mem", "clocked_memory"]  => {
                 let num_elements = generic_arg!(0);
                 let addr_size = generic_arg!(2);
@@ -640,6 +649,28 @@ impl TypeState {
         self.add_requirement(Requirement::SharedBase(vec![
             lhs_type.at_loc(&args[0].value),
             rhs_type.at_loc(&args[1].value),
+            result_type.at_loc(&expression_id.loc()),
+        ]));
+        Ok(())
+    }
+
+    pub fn handle_trunc(
+        &mut self,
+        expression_id: Loc<u64>,
+        source_in_ty: TypeVar,
+        source_result_ty: TypeVar,
+        args: &[Argument],
+        ctx: &Context,
+    ) -> Result<()> {
+        let (in_ty, _) = self.new_generic_number(ctx);
+        let (result_type, _) = self.new_generic_number(ctx);
+        self.unify(&source_in_ty, &in_ty, ctx)
+            .into_default_diagnostic(args[0].value.loc())?;
+        self.unify(&source_result_ty, &result_type, ctx)
+            .into_default_diagnostic(expression_id.loc())?;
+
+        self.add_requirement(Requirement::SharedBase(vec![
+            in_ty.at_loc(&args[0].value),
             result_type.at_loc(&expression_id.loc()),
         ]));
         Ok(())

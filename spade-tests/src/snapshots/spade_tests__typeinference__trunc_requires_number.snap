@@ -1,0 +1,20 @@
+---
+source: spade-tests/src/typeinference.rs
+---
+struct A {}
+
+fn test(a: A) -> int<8> {
+    trunc(a)
+}
+
+
+error: Argument type mismatch. Expected Number<_> got A
+  ┌─ testinput:4:11
+  │
+4 │     trunc(a)
+  │           ^ expected Number<_>
+  │
+  = note: Expected: Number<_>
+               Got: A
+
+

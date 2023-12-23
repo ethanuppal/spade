@@ -3,10 +3,9 @@ use thiserror::Error;
 
 use spade_common::{
     location_info::{FullSpan, Loc, WithLocation},
-    name::{Identifier, NameID},
+    name::NameID,
 };
 use spade_diagnostics::Diagnostic;
-use spade_hir::{param_util::ArgumentError, UnitHead};
 
 use crate::constraints::ConstraintSource;
 

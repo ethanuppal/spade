@@ -1,25 +1,25 @@
 ---
 source: spade-tests/src/hir_lowering.rs
 ---
-fn main() -> int<1> {
-    let a: int<2> = 0;
-    let b: int<1> = std::conv::zext(a);
+fn main() -> uint<1> {
+    let a: uint<2> = 0;
+    let b: uint<1> = std::conv::zext(a);
     b
 }
 
 
 error: Zero-extending to a shorter value
-  ┌─ testinput:3:21
+  ┌─ testinput:3:22
   │
-3 │     let b: int<1> = std::conv::zext(a);
-  │                     ^^^^^^^^^^^^^^^^^^
-  │                     │               │
-  │                     │               This value is 2 bits
-  │                     The value is zero-extended to 1 bit here
+3 │     let b: uint<1> = std::conv::zext(a);
+  │                      ^^^^^^^^^^^^^^^^^^
+  │                      │               │
+  │                      │               This value is 2 bits
+  │                      The value is zero-extended to 1 bit here
   │
   = Zero-extension cannot decrease width, use trunc instead
   │
-3 │     let b: int<1> = trunc(a);
-  │                     ~~~~~
+3 │     let b: uint<1> = trunc(a);
+  │                      ~~~~~
 
 

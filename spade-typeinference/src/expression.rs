@@ -504,10 +504,10 @@ impl TypeState {
                 if i != 0 {
                     self.unify(&branches[0].1, result, ctx).into_diagnostic(
                         result,
-                        |diag, Tm{e: _expected, g: got}| {
+                        |diag, Tm{e: expected, g: got}| {
                             diag.message("Match branches have incompatible type")
-                                .primary_label("This branch has type {}")
-                                .secondary_label(&branches[0].1, format!("But this one has type {got}"))
+                                .primary_label(format!("This branch has type {got}"))
+                                .secondary_label(&branches[0].1, format!("But this one has type {expected}"))
                         }
                     )?;
                 }
