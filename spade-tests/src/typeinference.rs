@@ -571,7 +571,7 @@ snapshot_error! {
     wrong_index_size_on_memory_write_port_is_error,
     "
         use std::mem::clocked_memory;
-        entity test(clk: clock, idx: int<32>) -> int<8> {
+        entity test(clk: clock, idx: uint<32>) -> int<8> {
             let mem: Memory<int<8>, 16> = inst clocked_memory(clk, [(true, idx, 0)]);
             0
         }
@@ -584,7 +584,7 @@ snapshot_error! {
         use std::mem::clocked_memory;
         use std::mem::read_memory;
 
-        entity test(clk: clock, idx: int<32>) -> int<8> {
+        entity test(clk: clock, idx: uint<32>) -> int<8> {
             let mem: Memory<int<8>, 32> = inst clocked_memory(clk, []);
             inst read_memory(mem, idx)
         }
@@ -597,7 +597,7 @@ snapshot_error! {
         use std::mem::clocked_memory;
         use std::mem::read_memory;
 
-        entity test(clk: clock, idx: int<3>) -> int<8> {
+        entity test(clk: clock, idx: uint<3>) -> int<8> {
             let mem: Memory<int<8>, 16> = inst clocked_memory(clk, [(true, idx, 0)]);
             0
         }
@@ -610,7 +610,7 @@ fn rom_is_describable() {
         use std::mem::clocked_memory_init;
         use std::mem::read_memory;
 
-        entity test(clk: clock, idx: int<1>) -> int<8> {
+        entity test(clk: clock, idx: uint<1>) -> int<8> {
             let mem: Memory<int<8>, 2> = inst clocked_memory_init(clk, [(true, 0, 0)], [1, 2]);
             inst read_memory(mem, idx)
         }

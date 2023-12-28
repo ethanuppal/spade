@@ -185,6 +185,15 @@ mod trait_tests {
         "
     }
 
+    snapshot_error! {
+        type_errors_are_ok_in_free_standing_functions,
+        "
+            fn x() -> bool {
+                1
+            }
+        "
+    }
+
     #[test]
     fn accessing_fields_on_self_works() {
         let code = "

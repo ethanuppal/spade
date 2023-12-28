@@ -2124,7 +2124,7 @@ mod tests {
 
             entity test(clk: clock, a: int<8>) -> int<8> {
                 // lifeguard spade#151
-                let idx: int<1> = 0;
+                let idx: uint<1> = 0;
                 let mem = inst clocked_memory_init(clk, [(false, idx, 0)], [a, a]);
                 inst read_memory(mem, 0)
             }
@@ -2139,7 +2139,7 @@ mod tests {
 
             entity test(clk: clock) -> int<8> {
                 // lifeguard spade#151
-                let ports: [(bool, int<1>, int<8>); 0] = [];
+                let ports: [(bool, uint<1>, int<8>); 0] = [];
                 let mem: Memory<int<8>, 2> = inst clocked_memory_init(clk, ports, [0, 1]);
                 0
             }
@@ -2148,7 +2148,7 @@ mod tests {
         let ports_type = Type::Array {
             inner: Box::new(Type::Tuple(vec![
                 Type::Bool,
-                Type::Int(1u32.to_biguint()),
+                Type::UInt(1u32.to_biguint()),
                 Type::Int(8u32.to_biguint()),
             ])),
             length: 0u32.to_biguint(),

@@ -683,7 +683,7 @@ impl TypeState {
         args: &[Argument],
         ctx: &Context,
     ) -> Result<()> {
-        let (addr_type, addr_size) = self.new_split_generic_int(ctx.symtab);
+        let (addr_type, addr_size) = self.new_split_generic_uint(ctx.symtab);
         let port_type = TypeVar::array(
             TypeVar::tuple(vec![self.new_generic(), addr_type, self.new_generic()]),
             self.new_generic(),
@@ -711,7 +711,7 @@ impl TypeState {
         args: &[Argument],
         ctx: &Context,
     ) -> Result<()> {
-        let (addr_type, addr_size) = self.new_split_generic_int(ctx.symtab);
+        let (addr_type, addr_size) = self.new_split_generic_uint(ctx.symtab);
 
         self.add_constraint(
             addr_size.clone(),

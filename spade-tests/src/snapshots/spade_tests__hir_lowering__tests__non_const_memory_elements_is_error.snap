@@ -6,7 +6,7 @@ use std::mem::read_memory;
 
 entity test(clk: clock, a: int<8>) -> int<8> {
     // lifeguard spade#151
-    let idx: int<1> = 0;
+    let idx: uint<1> = 0;
     let mem = inst clocked_memory_init(clk, [(false, idx, 0)], [a, a]);
     inst read_memory(mem, 0)
 }

@@ -2,17 +2,17 @@
 source: spade-tests/src/typeinference.rs
 ---
 use std::mem::clocked_memory;
-entity test(clk: clock, idx: int<32>) -> int<8> {
+entity test(clk: clock, idx: uint<32>) -> int<8> {
     let mem: Memory<int<8>, 16> = inst clocked_memory(clk, [(true, idx, 0)]);
     0
 }
 
 
-error: Expected type [(_, int<32>, _); _], got [(_, int<4>, _); _]
+error: Expected type [(_, uint<32>, _); _], got [(_, uint<4>, _); _]
   ┌─ testinput:3:60
   │
 3 │     let mem: Memory<int<8>, 16> = inst clocked_memory(clk, [(true, idx, 0)]);
-  │                                                            ^^^^^^^^^^^^^^^^ Expected [(_, int<32>, _); _], got [(_, int<4>, _); _]
+  │                                                            ^^^^^^^^^^^^^^^^ Expected [(_, uint<32>, _); _], got [(_, uint<4>, _); _]
   │
   = note: because the value is used as an index to a memory
 

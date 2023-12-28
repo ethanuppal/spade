@@ -78,7 +78,7 @@ snapshot_error! {
     memory_of_ports_is_disallowed,
     "
     entity A(clk: clock, p: &bool) -> bool {
-        let idx: int<10> = 0;
+        let idx: uint<10> = 0;
         let mem: Memory<&bool, 1024> = inst std::mem::clocked_memory(clk, [(true, idx, p)]);
 
         true

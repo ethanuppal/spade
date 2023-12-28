@@ -4,21 +4,21 @@ source: spade-tests/src/typeinference.rs
 use std::mem::clocked_memory;
 use std::mem::read_memory;
 
-entity test(clk: clock, idx: int<32>) -> int<8> {
+entity test(clk: clock, idx: uint<32>) -> int<8> {
     let mem: Memory<int<8>, 32> = inst clocked_memory(clk, []);
     inst read_memory(mem, idx)
 }
 
 
-error: Argument type mismatch. Expected int<5> got int<32>
+error: Argument type mismatch. Expected uint<5> got uint<32>
   ┌─ testinput:6:27
   │
 6 │     inst read_memory(mem, idx)
-  │                           ^^^ expected int<5>
+  │                           ^^^ expected uint<5>
   │
   = note: Expected: 5
-                in: int<5>
+                in: uint<5>
                Got: 32
-                in: int<32>
+                in: uint<32>
 
 

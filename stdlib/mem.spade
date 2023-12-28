@@ -8,7 +8,7 @@
 /// NOTE: We when possible, we should make compute AddrWidth from NumElements
 entity clocked_memory<#NumElements, #WritePorts, #AddrWidth, D>(
     clk: clock,
-    writes: [(bool, int<AddrWidth>, D); WritePorts],
+    writes: [(bool, uint<AddrWidth>, D); WritePorts],
 ) -> Memory<D, NumElements>
     __builtin__
 
@@ -17,7 +17,7 @@ entity clocked_memory<#NumElements, #WritePorts, #AddrWidth, D>(
 /// The initial values must be evaluatable at compile time, otherwise an error is thrown
 entity clocked_memory_init<#NumElements, #WritePorts, #AddrWidth, D>(
     clk: clock,
-    writes: [(bool, int<AddrWidth>, D); WritePorts],
+    writes: [(bool, uint<AddrWidth>, D); WritePorts],
     initial_values: [D; NumElements]
 ) -> Memory<D, NumElements>
     __builtin__
@@ -25,6 +25,6 @@ entity clocked_memory_init<#NumElements, #WritePorts, #AddrWidth, D>(
 /// Get the value out of a memory
 entity read_memory<#AddrWidth, D, #NumElements> (
     mem: Memory<D, NumElements>,
-    addr: int<AddrWidth>
+    addr: uint<AddrWidth>
 ) -> D
     __builtin__
