@@ -800,8 +800,8 @@ impl TypeState {
         self.add_equation(TypedExpression::Id(pattern.inner.id), new_type);
         match &pattern.inner.kind {
             hir::PatternKind::Integer(_) => {
-                let int_t = &self.new_generic_int(ctx.symtab);
-                self.unify(pattern, int_t, ctx)
+                let (num_t, _) = &self.new_generic_number(ctx);
+                self.unify(pattern, num_t, ctx)
                     .expect("Failed to unify new_generic with int");
             }
             hir::PatternKind::Bool(_) => {
