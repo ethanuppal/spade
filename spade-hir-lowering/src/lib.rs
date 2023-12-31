@@ -820,7 +820,7 @@ pub fn lower_wal_trace(
         .get_type(ctx.types)
         .map_err(|_| diag_anyhow!(pattern, "Pattern had no type during wal trace generation"))?;
     match &hir_ty {
-        TypeVar::Known(spade_types::KnownType::Named(name), _) => {
+        TypeVar::Known(_, spade_types::KnownType::Named(name), _) => {
             let ty = ctx.item_list.types.get(name);
 
             match ty.as_ref().map(|ty| &ty.inner.kind) {
@@ -1341,7 +1341,7 @@ impl ExprLocal for Loc<Expression> {
                         .unwrap_or_else(|_| panic!("Found no type for {}", self.id));
 
                     let inner_tvar = match &self_tvar {
-                        TypeVar::Known(KnownType::Tuple, inner) => {
+                        TypeVar::Known(_, KnownType::Tuple, inner) => {
                             if inner.len() != 2 {
                                 diag_bail!(self, "port type was not 2-tuple. Got {hir_type}")
                             }
@@ -1487,8 +1487,8 @@ impl ExprLocal for Loc<Expression> {
                 result.append(target.lower(ctx)?);
 
                 match target.get_type(ctx.types)? {
-                    TypeVar::Known(KnownType::Array, inner) => match &inner[1] {
-                        TypeVar::Known(KnownType::Integer(size), _) => {
+                    TypeVar::Known(_, KnownType::Array, inner) => match &inner[1] {
+                        TypeVar::Known(_, KnownType::Integer(size), _) => {
                             if &start.inner >= size {
                                 return Err(Diagnostic::error(start, "Array index out of bounds")
                                     .primary_label("index out of bounds")

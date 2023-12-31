@@ -61,7 +61,7 @@ impl<'a> Inferer<'a> {
     }
 
     fn find_or_create(&mut self, thing: &Loc<Expression>) -> Option<Var> {
-        if let Ok(TypeVar::Known(t, v)) = thing.get_type(self.type_state) {
+        if let Ok(TypeVar::Known(_, t, v)) = thing.get_type(self.type_state) {
             match v.as_slice() {
                 [size] if t == t_int(self.symtab) => {
                     // NOTE: Here we should inject where the variable came from so we can point to

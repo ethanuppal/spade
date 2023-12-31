@@ -1,3 +1,4 @@
+use spade_common::location_info::WithLocation;
 use spade_common::num_ext::InfallibleToBigUint;
 use spade_hir::symbol_table::SymbolTable;
 use spade_types::KnownType;
@@ -8,13 +9,22 @@ use crate::TypeVar as TVar;
 
 pub fn sized_int(size: u128, symtab: &SymbolTable) -> TVar {
     TVar::Known(
+        ().nowhere(),
         t_int(symtab),
-        vec![TVar::Known(KnownType::Integer(size.to_biguint()), vec![])],
+        vec![TVar::Known(
+            ().nowhere(),
+            KnownType::Integer(size.to_biguint()),
+            vec![],
+        )],
     )
 }
 
 pub fn unsized_int(id: u64, symtab: &SymbolTable) -> TVar {
-    TVar::Known(t_int(symtab), vec![TVar::Unknown(id, TraitList::empty())])
+    TVar::Known(
+        ().nowhere(),
+        t_int(symtab),
+        vec![TVar::Unknown(id, TraitList::empty())],
+    )
 }
 
 #[macro_export]
@@ -57,6 +67,6 @@ macro_rules! ensure_same_type {
 #[macro_export]
 macro_rules! kvar {
     ($base:expr $(; ( $( $params:expr ),* ) )? ) => {
-        TypeVar::Known($base, vec![ $( $($params),* )? ])
+        TypeVar::Known(().nowhere(), $base, vec![ $( $($params),* )? ])
     }
 }

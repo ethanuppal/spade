@@ -155,21 +155,21 @@ impl Requirement {
                             .add_mapped_generic_list(GenericListSource::Anonymous, mapping);
 
                         let raw_field_type =
-                            type_state.type_var_from_hir(field_spec, &generic_list);
+                            type_state.type_var_from_hir(expr.loc(), field_spec, &generic_list);
                         let field_type = if inverted {
                             match raw_field_type {
-                                TypeVar::Known(KnownType::Backward, inner) => {
-                                    TypeVar::wire(inner[0].clone())
+                                TypeVar::Known(loc, KnownType::Backward, inner) => {
+                                    TypeVar::wire(loc, inner[0].clone())
                                 }
-                                TypeVar::Known(KnownType::Wire, inner) => {
-                                    TypeVar::backward(inner[0].clone())
+                                TypeVar::Known(loc, KnownType::Wire, inner) => {
+                                    TypeVar::backward(loc, inner[0].clone())
                                 }
-                                TypeVar::Known(KnownType::Inverted, _) => raw_field_type,
+                                TypeVar::Known(_, KnownType::Inverted, _) => raw_field_type,
                                 // If we were in an inverted context and we find
                                 // a type which is not a wire, we need to invert
                                 // it.
                                 // This means that `a.b` if b is `T` is `~T`
-                                other => TypeVar::inverted(other),
+                                other => TypeVar::inverted(target_type.loc(), other),
                             }
                         } else {
                             raw_field_type
@@ -319,11 +319,13 @@ impl Requirement {
             }
             Requirement::SharedBase(types) => {
                 let first_known = types.iter().find_map(|t| match &t.inner {
-                    TypeVar::Known(base, params) => Some((base.clone().at_loc(t), params)),
+                    TypeVar::Known(loc, base, params) => {
+                        Some((loc, base.clone().at_loc(t), params))
+                    }
                     TypeVar::Unknown(_, _) => None,
                 });
 
-                if let Some((base, first_params)) = first_known {
+                if let Some((loc, base, first_params)) = first_known {
                     Ok(RequirementResult::Satisfied(
                         types
                             .iter()
@@ -335,6 +337,7 @@ impl Requirement {
                                 Replacement {
                                     from: ty.clone(),
                                     to: TypeVar::Known(
+                                        loc.clone(),
                                         base.inner.clone(),
                                         first_params
                                             .iter()

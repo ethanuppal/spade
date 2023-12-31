@@ -161,14 +161,6 @@ pub fn compile_items(
                         }
                     }
                 }
-                if !type_state.get_constraints().inner.is_empty() {
-                    result.push(Err(Diagnostic::bug(
-                        item.new_name.name_id(),
-                        "Some type constraints remain after monomorphization",
-                    )
-                    .into()));
-                    continue;
-                }
 
                 // Apply passes to the type checked module
                 let mut u = u.clone();

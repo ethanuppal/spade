@@ -1,4 +1,5 @@
 use itertools::Itertools;
+use spade_types::KnownType;
 use thiserror::Error;
 
 use spade_common::{
@@ -50,7 +51,7 @@ pub trait UnificationErrorExt<T>: Sized {
     /// Creates a diagnostic with a generic type mismatch error
     fn into_default_diagnostic(
         self,
-        unification_point: impl Into<FullSpan>,
+        unification_point: impl Into<FullSpan> + Clone,
     ) -> std::result::Result<T, Diagnostic> {
         self.into_diagnostic(unification_point, |d, _| d)
     }
@@ -58,7 +59,7 @@ pub trait UnificationErrorExt<T>: Sized {
     /// Creates a diagnostic with a generic type mismatch error
     fn into_diagnostic_or_default<F>(
         self,
-        unification_point: impl Into<FullSpan>,
+        unification_point: impl Into<FullSpan> + Clone,
         message: Option<F>,
     ) -> std::result::Result<T, Diagnostic>
     where
@@ -78,7 +79,7 @@ pub trait UnificationErrorExt<T>: Sized {
     /// point
     fn into_diagnostic<F>(
         self,
-        unification_point: impl Into<FullSpan>,
+        unification_point: impl Into<FullSpan> + Clone,
         message: F,
     ) -> std::result::Result<T, Diagnostic>
     where
@@ -112,7 +113,7 @@ impl<T> UnificationErrorExt<T> for std::result::Result<T, UnificationError> {
 
     fn into_diagnostic<F>(
         self,
-        unification_point: impl Into<FullSpan>,
+        unification_point: impl Into<FullSpan> + Clone,
         message: F,
     ) -> std::result::Result<T, Diagnostic>
     where
@@ -121,16 +122,35 @@ impl<T> UnificationErrorExt<T> for std::result::Result<T, UnificationError> {
         self.map_err(|e| match e {
             UnificationError::Normal(TypeMismatch { e, g }) => {
                 let msg = format!("Expected type {e}, got {g}");
-                let diag = Diagnostic::error(unification_point, msg)
+                let diag = Diagnostic::error(unification_point.clone(), msg)
                     .primary_label(format!("Expected {e}"));
-                message(
+                let diag = message(
                     diag,
                     TypeMismatch {
                         e: e.clone(),
                         g: g.clone(),
                     },
-                )
-                .type_error(
+                );
+
+                let diag = if let TypeVar::Known(k, _, _) = &e.failing {
+                    if FullSpan::from(k) != unification_point.clone().into() {
+                        diag.secondary_label(k, format!("Type {} inferred here", e.failing))
+                    } else {
+                        diag
+                    }
+                } else {
+                    diag
+                };
+                let diag = if let TypeVar::Known(k, _, _) = &g.failing {
+                    if FullSpan::from(k) != unification_point.into() {
+                        diag.secondary_label(k, format!("Type {} inferred here", g.failing))
+                    } else {
+                        diag
+                    }
+                } else {
+                    diag
+                };
+                diag.type_error(
                     format!("{}", e.failing),
                     e.inside.map(|o| format!("{o}")),
                     format!("{}", g.failing),

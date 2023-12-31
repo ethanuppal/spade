@@ -46,10 +46,10 @@ fn bits_to_int<#N>(input: [bool; N]) -> int<N> {
 //
 // Note that this means that 0b1100 will be [false, false, true, true] since arrays
 // are written lsb first, while integers are written msb first
-fn uint_to_bits<#N>(input: int<N>) -> [bool; N] {
+fn uint_to_bits<#N>(input: uint<N>) -> [bool; N] {
     unsafe::unsafe_cast(input)
 }
-fn bits_to_uint<#N>(input: int<N>) -> [bool; N] {
+fn bits_to_uint<#N>(input: [bool; N]) -> uint<N> {
     unsafe::unsafe_cast(input)
 }
 

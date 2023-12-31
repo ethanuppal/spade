@@ -91,7 +91,7 @@ impl TypeState {
         ctx: &Context,
     ) -> Result<()> {
         assuming_kind!(ExprKind::BoolLiteral(_) = &expression => {
-            self.unify_expression_generic_error(expression, &t_bool(ctx.symtab), ctx)?;
+            self.unify_expression_generic_error(expression, &t_bool(ctx.symtab).at_loc(expression), ctx)?;
         });
         Ok(())
     }
@@ -100,7 +100,7 @@ impl TypeState {
     #[tracing::instrument(level = "trace", skip_all)]
     pub fn visit_bit_literal(&mut self, expression: &Loc<Expression>, ctx: &Context) -> Result<()> {
         assuming_kind!(ExprKind::BitLiteral(_) = &expression => {
-            self.unify_expression_generic_error(expression, &t_bit(ctx.symtab), ctx)?;
+            self.unify_expression_generic_error(expression, &t_bit(ctx.symtab).at_loc(expression), ctx)?;
         });
         Ok(())
     }
@@ -128,7 +128,7 @@ impl TypeState {
 
             self.unify_expression_generic_error(
                 expression,
-                &TypeVar::Known(KnownType::Tuple, inner_types),
+                &TypeVar::Known(expression.loc(), KnownType::Tuple, inner_types),
                 ctx
             )?;
         });
@@ -148,11 +148,12 @@ impl TypeState {
             let t = self.type_of(&TypedExpression::Id(tup.id))?;
 
             let inner_types = match t {
-                TypeVar::Known(KnownType::Tuple, inner) => inner,
-                t @ TypeVar::Known(_, _) => {
+                TypeVar::Known(_, KnownType::Tuple, inner) => inner,
+                ref t @ TypeVar::Known(ref other_source, _, _) => {
                     return Err(Diagnostic::error(tup.loc(), "Attempt to use tuple indexing on non-tuple")
                         .primary_label(format!("expected tuple, got {t}"))
                         .secondary_label(index, "Because this is a tuple index")
+                        .secondary_label(other_source, "Type {t} inferred here")
                     );
                 }
                 TypeVar::Unknown(_, _) => {
@@ -284,6 +285,7 @@ impl TypeState {
 
             let size_type = kvar!(KnownType::Integer(members.len().to_biguint()));
             let result_type = TypeVar::array(
+                expression.loc(),
                 inner_type,
                 size_type,
             );
@@ -303,8 +305,8 @@ impl TypeState {
     ) -> Result<()> {
         assuming_kind!(ExprKind::CreatePorts = &expression => {
             let inner_type = self.new_generic();
-            let inverted = TypeVar::Known(KnownType::Inverted, vec![inner_type.clone()]);
-            let compound = TypeVar::tuple(vec![inner_type, inverted]);
+            let inverted = TypeVar::Known(expression.loc(), KnownType::Inverted, vec![inner_type.clone()]);
+            let compound = TypeVar::tuple(expression.loc(), vec![inner_type, inverted]);
             self.unify_expression_generic_error(expression, &compound, ctx)?;
         });
         Ok(())
@@ -334,7 +336,7 @@ impl TypeState {
             )?;
 
             let array_size = self.new_generic();
-            let (int_type, int_size) = self.new_split_generic_uint(ctx.symtab);
+            let (int_type, int_size) = self.new_split_generic_uint(index.loc(), ctx.symtab);
 
             // NOTE[et]: Only used for size constraints of this exact type - this can be a
             // requirement instead, that way we remove a lot of complexity! :D
@@ -354,6 +356,7 @@ impl TypeState {
                 })?;
 
             let array_type = TypeVar::array(
+                expression.loc(),
                 expression.get_type(self)?,
                 array_size
             );
@@ -402,15 +405,15 @@ impl TypeState {
 
 
 
-            let out_array_size = TypeVar::Known(KnownType::Integer(size), vec![]);
-            let out_array_type = TypeVar::array(inner_type.clone(), out_array_size);
+            let out_array_size = TypeVar::Known(expression.loc(), KnownType::Integer(size), vec![]);
+            let out_array_type = TypeVar::array(expression.loc(), inner_type.clone(), out_array_size);
 
             self.unify(&expression.inner, &out_array_type, ctx)
                 .into_default_diagnostic(expression)?;
 
 
             let in_array_size = self.new_generic();
-            let in_array_type = TypeVar::array(inner_type, in_array_size);
+            let in_array_type = TypeVar::array(expression.loc(), inner_type, in_array_size);
             self.unify(&target.inner, &in_array_type, ctx)
                 .into_diagnostic(target.as_ref(), |diag, Tm{e: _expected, g: got}| {
                     diag
@@ -441,7 +444,8 @@ impl TypeState {
                     .into_default_diagnostic(result)?;
             } else {
                 // Block without return value. Unify with void type.
-                self.unify(&expression.inner, &t_void(ctx.symtab), ctx)
+                // TODO: Bad error source
+                self.unify(&expression.inner, &t_void(ctx.symtab).at_loc(expression), ctx)
                     .into_diagnostic(Loc::nowhere(()), |err, Tm{g: _, e: _}| {
                         diag_anyhow!(
                             Loc::nowhere(()),
@@ -465,7 +469,7 @@ impl TypeState {
             self.visit_expression(on_true, ctx, generic_list)?;
             self.visit_expression(on_false, ctx, generic_list)?;
 
-            self.unify(&cond.inner, &t_bool(ctx.symtab), ctx)
+            self.unify(&cond.inner, &t_bool(ctx.symtab).at_loc(cond), ctx)
                 .into_diagnostic(cond.as_ref(), |diag, Tm{e: _expected, g: got}| {
                     diag.
                         message(format!("If condition must be a bool, got {}", got))
@@ -537,11 +541,11 @@ impl TypeState {
             match op.inner {
                 BinaryOperator::Add
                 | BinaryOperator::Sub | BinaryOperator::Mul if self.use_wordlenght_inference => {
-                    let lhs_t = self.new_generic_int(ctx.symtab);
+                    let lhs_t = self.new_generic_int(expression.loc(), ctx.symtab);
                     self.unify_expression_generic_error(lhs, &lhs_t, ctx)?;
-                    let rhs_t = self.new_generic_int(ctx.symtab);
+                    let rhs_t = self.new_generic_int(expression.loc(), ctx.symtab);
                     self.unify_expression_generic_error(rhs, &rhs_t, ctx)?;
-                    let result_t = self.new_generic_int(ctx.symtab);
+                    let result_t = self.new_generic_int(expression.loc(), ctx.symtab);
                     self.unify_expression_generic_error(expression, &result_t, ctx)?;
                 }
                 BinaryOperator::Add
@@ -635,15 +639,15 @@ impl TypeState {
                     // FIXME: Make generic over types that can be compared
                     self.unify_expression_generic_error(lhs, &base, ctx)?;
                     self.unify_expression_generic_error(lhs, &rhs.inner, ctx)?;
-                    self.unify_expression_generic_error(expression, &t_bool(ctx.symtab), ctx)?;
+                    self.unify_expression_generic_error(expression, &t_bool(ctx.symtab).at_loc(expression), ctx)?;
                 }
                 BinaryOperator::LogicalAnd
                 | BinaryOperator::LogicalOr
                 | BinaryOperator::LogicalXor => {
-                    self.unify_expression_generic_error(lhs, &t_bool(ctx.symtab), ctx)?;
+                    self.unify_expression_generic_error(lhs, &t_bool(ctx.symtab).at_loc(expression), ctx)?;
                     self.unify_expression_generic_error(lhs, &rhs.inner, ctx)?;
 
-                    self.unify_expression_generic_error(expression, &t_bool(ctx.symtab), ctx)?;
+                    self.unify_expression_generic_error(expression, &t_bool(ctx.symtab).at_loc(expression), ctx)?;
                 }
             }
         });
@@ -662,29 +666,29 @@ impl TypeState {
             self.visit_expression(operand, ctx, generic_list)?;
             match op {
                 UnaryOperator::Sub | UnaryOperator::BitwiseNot => {
-                    let int_type = self.new_generic_int(ctx.symtab);
+                    let int_type = self.new_generic_int(expression.loc(), ctx.symtab);
                     self.unify_expression_generic_error(operand, &int_type, ctx)?;
                     self.unify_expression_generic_error(expression, &int_type, ctx)?
                 }
                 UnaryOperator::Not => {
-                    self.unify_expression_generic_error(operand, &t_bool(ctx.symtab), ctx)?;
-                    self.unify_expression_generic_error(expression, &t_bool(ctx.symtab), ctx)?
+                    self.unify_expression_generic_error(operand, &t_bool(ctx.symtab).at_loc(expression), ctx)?;
+                    self.unify_expression_generic_error(expression, &t_bool(ctx.symtab).at_loc(expression), ctx)?
                 }
                 UnaryOperator::Dereference => {
                     let result_type = self.new_generic();
-                    let reference_type = TypeVar::wire(result_type.clone());
+                    let reference_type = TypeVar::wire(expression.loc(), result_type.clone());
                     self.unify_expression_generic_error(operand, &reference_type, ctx)?;
                     self.unify_expression_generic_error(expression, &result_type, ctx)?
                 }
                 UnaryOperator::Reference => {
                     let result_type = self.new_generic();
-                    let reference_type = TypeVar::wire(result_type.clone());
+                    let reference_type = TypeVar::wire(expression.loc(), result_type.clone());
                     self.unify_expression_generic_error(operand, &result_type, ctx)?;
                     self.unify_expression_generic_error(expression, &reference_type, ctx)?
                 }
                 UnaryOperator::FlipPort => {
                     let inner_type = self.new_generic();
-                    let inverted_type = TypeVar::inverted(inner_type.clone());
+                    let inverted_type = TypeVar::inverted(expression.loc(), inner_type.clone());
                     self.unify_expression_generic_error(operand, &inner_type, ctx)?;
                     self.unify_expression_generic_error(expression, &inverted_type, ctx)?
                 }

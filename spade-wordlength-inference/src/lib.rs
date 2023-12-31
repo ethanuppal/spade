@@ -3,7 +3,7 @@ use std::collections::BTreeMap;
 use inferer::{Equation, Inferer};
 use num::{BigInt, ToPrimitive};
 use range::Range;
-use spade_common::location_info::Loc;
+use spade_common::location_info::{Loc, WithLocation};
 use spade_hir::Unit;
 use spade_typeinference::{equation::TypeVar, TypeState};
 use spade_types::KnownType;
@@ -36,7 +36,7 @@ pub fn infer_and_check(
     //
     for (ty, var) in inferer.mappings.iter() {
         match &ty.inner {
-            TypeVar::Known(KnownType::Integer(size), _) => {
+            TypeVar::Known(_, KnownType::Integer(size), _) => {
                 let x = size
                     .to_u128()
                     .unwrap()
@@ -48,12 +48,12 @@ pub fn infer_and_check(
                     Range::new(-BigInt::from(2).pow(x) + 1, BigInt::from(2).pow(x) - 2),
                 );
             }
-            TypeVar::Known(KnownType::Named(n), _) => panic!("How do I handle a type? {:?}", n),
+            TypeVar::Known(_, KnownType::Named(n), _) => panic!("How do I handle a type? {:?}", n),
             TypeVar::Unknown(_, _) => {
                 // known.insert(var, Range { lo: 0, hi: 0 });
             }
 
-            TypeVar::Known(other, params) => panic!("Wat? {:?} {:?}", other, params),
+            TypeVar::Known(_, other, params) => panic!("Wat? {:?} {:?}", other, params),
         }
     }
 
@@ -68,7 +68,7 @@ pub fn infer_and_check(
                 continue;
             };
         let typechecker_wl =
-            if let TypeVar::Known(KnownType::Integer(typechecker_wl), _) = &ty.inner {
+            if let TypeVar::Known(_, KnownType::Integer(typechecker_wl), _) = &ty.inner {
                 // 2^32 bits should be enough for anyone - right?
                 typechecker_wl.to_u32().unwrap()
             } else {
@@ -89,7 +89,12 @@ pub fn infer_and_check(
         to_wordlength_error(
             inferer.type_state.unify(
                 ty,
-                &TypeVar::Known(KnownType::Integer(inferred_wl.into()), Vec::new()),
+                // FIXME: .nowhere()
+                &TypeVar::Known(
+                    ().nowhere(),
+                    KnownType::Integer(inferred_wl.into()),
+                    Vec::new(),
+                ),
                 ctx,
             ),
             loc,

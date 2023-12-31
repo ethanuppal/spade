@@ -219,7 +219,7 @@ impl TypeState {
         invert: bool,
     ) -> Option<ConcreteType> {
         match var {
-            TypeVar::Known(KnownType::Named(t), params) => {
+            TypeVar::Known(_, KnownType::Named(t), params) => {
                 let params = params
                     .iter()
                     .map(|v| Self::inner_ungenerify_type(v, symtab, type_list, invert))
@@ -229,12 +229,12 @@ impl TypeState {
                     .get(t)
                     .map(|t| Self::type_decl_to_concrete(&t.inner, type_list, params, invert))
             }
-            TypeVar::Known(KnownType::Integer(size), params) => {
+            TypeVar::Known(_, KnownType::Integer(size), params) => {
                 assert!(params.is_empty(), "integers cannot have type parameters");
 
                 Some(ConcreteType::Integer(size.clone()))
             }
-            TypeVar::Known(KnownType::Array, inner) => {
+            TypeVar::Known(_, KnownType::Array, inner) => {
                 let value = Self::inner_ungenerify_type(&inner[0], symtab, type_list, invert);
                 let size = Self::ungenerify_type(&inner[1], symtab, type_list).map(|t| {
                     if let ConcreteType::Integer(size) = t {
@@ -252,14 +252,14 @@ impl TypeState {
                     _ => None,
                 }
             }
-            TypeVar::Known(KnownType::Tuple, inner) => {
+            TypeVar::Known(_, KnownType::Tuple, inner) => {
                 let inner = inner
                     .iter()
                     .map(|v| Self::inner_ungenerify_type(v, symtab, type_list, invert))
                     .collect::<Option<Vec<_>>>()?;
                 Some(ConcreteType::Tuple(inner))
             }
-            TypeVar::Known(KnownType::Backward, inner) => {
+            TypeVar::Known(_, KnownType::Backward, inner) => {
                 if invert {
                     Self::inner_ungenerify_type(&inner[0], symtab, type_list, invert)
                         .map(|t| ConcreteType::Wire(Box::new(t)))
@@ -268,7 +268,7 @@ impl TypeState {
                         .map(|t| ConcreteType::Backward(Box::new(t)))
                 }
             }
-            TypeVar::Known(KnownType::Wire, inner) => {
+            TypeVar::Known(_, KnownType::Wire, inner) => {
                 if invert {
                     Self::inner_ungenerify_type(&inner[0], symtab, type_list, invert)
                         .map(|t| ConcreteType::Backward(Box::new(t)))
@@ -277,10 +277,10 @@ impl TypeState {
                         .map(|t| ConcreteType::Wire(Box::new(t)))
                 }
             }
-            TypeVar::Known(KnownType::Inverted, inner) => {
+            TypeVar::Known(_, KnownType::Inverted, inner) => {
                 Self::inner_ungenerify_type(&inner[0], symtab, type_list, !invert)
             }
-            TypeVar::Known(KnownType::Traits(_), inner) => {
+            TypeVar::Known(_, KnownType::Traits(_), inner) => {
                 assert!(inner.is_empty(), "Traits cannot have generic parameters");
 
                 None
