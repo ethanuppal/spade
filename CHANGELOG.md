@@ -18,12 +18,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - [!254][!254] Added `std::conv::unsafe::unsafe_cast` for converting between types. Also added `std::conv::int_to_bits`, `std::conv::bits_to_int` for safe conversions.
 - [!254][!254] Added `std::conv::flip_array`
 - [!255][!255] Add range indexing to arrays. You can now access parts of arrays using `a[start:end]`
+- [!262][!262] Add `uint<#N>` for unsigned integers. Adjusted stdlib accordingly
 
 ### Fixed
 
 ### Changed
 
 - [!260][!260] Instantiation parameters are now passed by name, which makes interaction with external verilog easier.
+- [!262][!262] **Breaking change**: Integers with `u` suffixes now have no effect, use unsigned types instead.
 
 ### Removed
 
@@ -32,6 +34,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 [!254]: https://gitlab.com/spade-lang/spade/-/merge_requests/254
 [!255]: https://gitlab.com/spade-lang/spade/-/merge_requests/255
 [!260]: https://gitlab.com/spade-lang/spade/-/merge_requests/260
+[!262]: https://gitlab.com/spade-lang/spade/-/merge_requests/263
 
 ## [0.5.0] - 2023-11-17
 
