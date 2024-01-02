@@ -444,7 +444,6 @@ impl TypeState {
                     .into_default_diagnostic(result)?;
             } else {
                 // Block without return value. Unify with void type.
-                // TODO: Bad error source
                 self.unify(&expression.inner, &t_void(ctx.symtab).at_loc(expression), ctx)
                     .into_diagnostic(Loc::nowhere(()), |err, Tm{g: _, e: _}| {
                         diag_anyhow!(

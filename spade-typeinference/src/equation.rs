@@ -78,13 +78,13 @@ impl std::hash::Hash for TraitList {
     fn hash<H: std::hash::Hasher>(&self, _state: &mut H) {}
 }
 impl PartialOrd for TraitList {
-    fn partial_cmp(&self, _other: &Self) -> Option<std::cmp::Ordering> {
-        Some(std::cmp::Ordering::Equal)
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
     }
 }
 impl Ord for TraitList {
-    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        self.partial_cmp(other).unwrap()
+    fn cmp(&self, _other: &Self) -> std::cmp::Ordering {
+        std::cmp::Ordering::Equal
     }
 }
 
@@ -260,9 +260,6 @@ impl std::fmt::Debug for TypeVar {
             TypeVar::Known(_, KnownType::Backward, params) => write!(f, "&mut {:?}", params[0]),
             TypeVar::Known(_, KnownType::Wire, params) => write!(f, "&{:?}", params[0]),
             TypeVar::Known(_, KnownType::Inverted, params) => write!(f, "~{:?}", params[0]),
-            TypeVar::Known(_, KnownType::Traits(inner), _) => {
-                write!(f, "{}", inner.iter().map(|t| format!("{t}")).join(" + "))
-            }
             TypeVar::Unknown(id, traits) => write!(
                 f,
                 "t{id}({})",
@@ -310,11 +307,6 @@ impl std::fmt::Display for TypeVar {
             TypeVar::Known(_, KnownType::Backward, params) => write!(f, "&mut {}", params[0]),
             TypeVar::Known(_, KnownType::Wire, params) => write!(f, "&{}", params[0]),
             TypeVar::Known(_, KnownType::Inverted, params) => write!(f, "~{}", params[0]),
-            TypeVar::Known(_, KnownType::Traits(traits), _) => write!(
-                f,
-                "impl {}",
-                traits.iter().map(|t| format!("{t}")).join("+")
-            ),
             TypeVar::Unknown(_, traits) if traits.inner.is_empty() => write!(f, "_"),
             TypeVar::Unknown(_, traits) => {
                 write!(

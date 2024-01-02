@@ -165,7 +165,6 @@ pub enum KnownType {
     Backward,
     Wire,
     Inverted,
-    Traits(Vec<NameID>), // TODO: What is this??
 }
 
 impl WithLocation for KnownType {}

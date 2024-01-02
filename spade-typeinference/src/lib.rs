@@ -312,7 +312,6 @@ impl TypeState {
         if entity.head.unit_kind.is_pipeline() {
             self.unify(
                 &TypedExpression::Name(entity.inputs[0].0.clone().inner),
-                // TODO: Also not a great marker
                 &t_clock(ctx.symtab).at_loc(&entity.head.unit_kind),
                 ctx,
             )
@@ -357,7 +356,6 @@ impl TypeState {
             // No output type, so unify with the unit type.
             self.unify(
                 &TypedExpression::Id(entity.body.inner.id),
-                // TODO: This is a terrible marker
                 &t_void(ctx.symtab).at_loc(&entity.head.name),
                 ctx
             )
@@ -1525,19 +1523,11 @@ impl TypeState {
                             .iter()
                             .zip(new_params.iter())
                             .map(|(t1, t2)| {
-                                if trait_is_expected {
-                                    Ok(try_with_context!(
-                                        self.unify_inner(t1, t2, ctx),
-                                        fake_type,
-                                        other
-                                    ))
-                                } else {
-                                    Ok(try_with_context!(
-                                        self.unify_inner(t1, t2, ctx),
-                                        fake_type,
-                                        other
-                                    ))
-                                }
+                                Ok(try_with_context!(
+                                    self.unify_inner(t1, t2, ctx),
+                                    fake_type,
+                                    other
+                                ))
                             })
                             .collect::<std::result::Result<_, _>>()?;
                     }
@@ -1691,7 +1681,6 @@ impl TypeState {
             traits.clone(),
             trait_is_expected,
         ));
-        // TODO: Don't look this up for every ensure_impls
         let number = ctx
             .symtab
             .lookup_trait(&Path::from_strs(&["Number"]).nowhere())
