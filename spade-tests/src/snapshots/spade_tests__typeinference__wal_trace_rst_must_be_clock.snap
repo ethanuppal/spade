@@ -13,8 +13,13 @@ fn test(t: T, x: int<10>) -> bool {
 error: Expected type bool, got int<10>
   ┌─ testinput:4:21
   │
+3 │ fn test(t: T, x: int<10>) -> bool {
+  │                  ------- Type int<10> inferred here
 4 │     #[wal_trace(rst=x)]
-  │                     ^ Expected bool
+  │     ----------------^--
+  │     │               │
+  │     │               Expected bool
+  │     Type bool inferred here
   │
   = note: Expected: bool
                Got: int<10>

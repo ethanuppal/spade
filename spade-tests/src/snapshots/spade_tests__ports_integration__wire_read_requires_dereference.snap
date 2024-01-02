@@ -9,7 +9,9 @@ error: Output type mismatch. Expected bool, got &bool
   ┌─ testinput:1:28
   │  
 1 │   entity x(a: &bool) -> bool {
-  │                         ---- bool type specified here
+  │               -----     ---- bool type specified here
+  │               │          
+  │               Type &bool inferred here
   │ ╭────────────────────────────^
 2 │ │     a
 3 │ │ }

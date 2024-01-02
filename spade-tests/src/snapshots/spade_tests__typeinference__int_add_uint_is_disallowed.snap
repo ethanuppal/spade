@@ -9,6 +9,10 @@ fn test(x: uint<8>, y: int<8>) -> uint<9> {
 error: Expected type int<8>, got uint<8>
   ┌─ testinput:2:5
   │
+1 │ fn test(x: uint<8>, y: int<8>) -> uint<9> {
+  │            -------     ------ Type int<8> inferred here
+  │            │            
+  │            Type uint<8> inferred here
 2 │     x + y
   │     ^ Expected int<8>
   │

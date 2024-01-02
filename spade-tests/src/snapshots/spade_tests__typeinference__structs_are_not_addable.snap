@@ -10,6 +10,8 @@ fn test(x: A, y: A) -> A {
 error: Expected type Number<_>, got A
   ┌─ testinput:3:5
   │
+2 │ fn test(x: A, y: A) -> A {
+  │            - Type A inferred here
 3 │     x + y
   │     ^ Expected Number<_>
   │

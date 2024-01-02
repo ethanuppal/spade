@@ -1,0 +1,20 @@
+---
+source: spade-tests/src/typeinference.rs
+---
+fn test() {
+    let x: bool = 0;
+}
+
+
+error: Expected type bool, got Number<_>
+  ┌─ testinput:2:19
+  │
+2 │     let x: bool = 0;
+  │            ----   ^ Expected bool
+  │            │       
+  │            Type bool inferred here
+  │
+  = note: Expected: bool
+               Got: Number<_>
+
+

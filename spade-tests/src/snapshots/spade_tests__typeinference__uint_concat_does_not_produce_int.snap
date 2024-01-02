@@ -9,6 +9,10 @@ fn test(x: uint<16>, y: uint<8>) -> int<24> {
 error: Expected type int<24>, got uint<_>
   ┌─ testinput:2:5
   │
+1 │ fn test(x: uint<16>, y: uint<8>) -> int<24> {
+  │            --------                 ------- Type int<24> inferred here
+  │            │                         
+  │            Type uint<_> inferred here
 2 │     x `concat` y
   │     ^^^^^^^^^^^^
   │     │

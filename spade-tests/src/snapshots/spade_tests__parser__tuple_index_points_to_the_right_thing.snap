@@ -8,6 +8,8 @@ fn test(a: (bool,)) -> bool {
 error: Attempt to use tuple indexing on non-tuple
   ┌─ testinput:2:5
   │
+1 │ fn test(a: (bool,)) -> bool {
+  │            ------- Type bool inferred here
 2 │     a#0#0
   │     ^^^-- Because this is a tuple index
   │     │   

@@ -1,7 +1,7 @@
 use std::collections::{BTreeMap, VecDeque};
 
 use spade_common::{id_tracker::ExprIdTracker, location_info::WithLocation, name::NameID};
-use spade_diagnostics::{DiagHandler, Diagnostic};
+use spade_diagnostics::DiagHandler;
 use spade_hir::{symbol_table::FrozenSymtab, ExecutableItem, ItemList, UnitName};
 use spade_mir as mir;
 use spade_typeinference::equation::TypeVar;

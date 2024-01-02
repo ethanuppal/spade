@@ -18,6 +18,7 @@ error: Output type mismatch. Expected int<8>, got int<9>
 2 │ │     decl x;
 3 │ │     let a = x;
 4 │ │     let x: int<9> = 0;
+  │ │                - Type 9 inferred here
 5 │ │     x
 6 │ │ }
   │ ╰─^ Found type int<9>

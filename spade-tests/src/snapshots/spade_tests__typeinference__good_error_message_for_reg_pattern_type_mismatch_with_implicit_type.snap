@@ -17,6 +17,7 @@ error: Pattern type mismatch. Expected bool got (_, _)
   │                ^^^^^^^^^^^^^^^^^^^^^ expected bool, got (_, _)
   │ ╭──────────────────────────────────────'
 3 │ │         true
+  │ │         ---- Type bool inferred here
 4 │ │     };
   │ ╰─────' because this has type bool
   │  

@@ -12,6 +12,7 @@ error: Output type mismatch. Expected bool, got void
   │             ---- bool type specified here
   │ ╭────────────────^
 2 │ │     {}
+  │ │     -- Type void inferred here
 3 │ │ }
   │ ╰─^ Found type void
   │  

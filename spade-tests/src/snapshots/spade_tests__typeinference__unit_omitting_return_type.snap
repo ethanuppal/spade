@@ -19,6 +19,7 @@ error: Output type mismatch
   ┌─ testinput:1:19
   │  
 1 │   fn empty(a: bool) {
+  │               ---- Type bool inferred here
   │ ╭───────────────────^
 2 │ │     a
 3 │ │ }
@@ -33,6 +34,7 @@ error: Output type mismatch
   ┌─ testinput:5:36
   │  
 5 │   entity empty2(clk: clock, b: bool) {
+  │                                ---- Type bool inferred here
   │ ╭────────────────────────────────────^
 6 │ │     b
 7 │ │ }
@@ -47,6 +49,7 @@ error: Output type mismatch
    ┌─ testinput:9:41
    │  
  9 │   pipeline(4) empty3(clk: clock, c: bool) {
+   │                                     ---- Type bool inferred here
    │ ╭─────────────────────────────────────────^
 10 │ │     reg*4;
 11 │ │         c

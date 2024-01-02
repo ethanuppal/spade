@@ -13,6 +13,7 @@ error: Output type mismatch. Expected int<16>, got int<17>
   │                                          ------- int<16> type specified here
   │ ╭────────────────────────────────────────────────^
 2 │ │     a + b
+  │ │     ----- Type 17 inferred here
 3 │ │ }
   │ ╰─^ Found type int<17>
   │  

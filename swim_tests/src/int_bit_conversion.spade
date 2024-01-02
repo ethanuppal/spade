@@ -1,4 +1,4 @@
-fn index_int(val: int<8>, idx: int<3>) -> bool {
+fn index_int(val: int<8>, idx: uint<3>) -> bool {
     let bits = std::conv::int_to_bits(val);
     bits[idx]
 }

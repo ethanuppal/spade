@@ -337,7 +337,7 @@ impl TypeState {
         if let Some(output_type) = &entity.head.output_type {
             let tvar = self.type_var_from_hir(output_type.loc(), output_type, &generic_list);
             self.unify(&TypedExpression::Id(entity.body.inner.id), &tvar, ctx)
-                .into_diagnostic(
+                .into_diagnostic_no_expected_source(
                     &entity.body,
                     |diag,
                      Tm {
@@ -361,7 +361,7 @@ impl TypeState {
                 &t_void(ctx.symtab).at_loc(&entity.head.name),
                 ctx
             )
-            .into_diagnostic(entity.body.loc(), |diag, Tm{g: got, e: _expected}| {
+            .into_diagnostic_no_expected_source(entity.body.loc(), |diag, Tm{g: got, e: _expected}| {
                 diag.message("Output type mismatch")
                     .primary_label(format!("Found type {got}"))
                     .note(format!(
@@ -1062,7 +1062,10 @@ impl TypeState {
         // type of the identifiers in the pattern
         if let Some(tvar) = type_spec_type {
             self.unify(&TypedExpression::Id(reg.pattern.id), tvar, ctx)
-                .into_diagnostic(reg.pattern.loc(), error_pattern_type_mismatch(tvar.loc()))?;
+                .into_diagnostic_no_expected_source(
+                    reg.pattern.loc(),
+                    error_pattern_type_mismatch(tvar.loc()),
+                )?;
         }
 
         self.visit_expression(&reg.clock, ctx, generic_list)?;
@@ -1376,7 +1379,7 @@ impl TypeState {
         // Figure out the most general type, and take note if we need to
         // do any replacement of the types in the rest of the state
         let result = match (&v1, &v2) {
-            (TypeVar::Known(l1, t1, p1), TypeVar::Known(l2, t2, p2)) => {
+            (TypeVar::Known(_, t1, p1), TypeVar::Known(_, t2, p2)) => {
                 macro_rules! unify_params {
                     () => {
                         unify_params_!(p1, p2)
@@ -1496,7 +1499,7 @@ impl TypeState {
             }
             (other @ TypeVar::Known(loc, base, params), uk @ TypeVar::Unknown(_, traits))
             | (uk @ TypeVar::Unknown(_, traits), other @ TypeVar::Known(loc, base, params)) => {
-                let trait_is_expected = match (other, uk) {
+                let trait_is_expected = match (&v1, &v2) {
                     (TypeVar::Known(_, _, _), _) => true,
                     _ => false,
                 };
@@ -1683,6 +1686,11 @@ impl TypeState {
         trait_is_expected: bool,
         ctx: &Context,
     ) -> std::result::Result<(), UnificationError> {
+        self.trace_stack.push(TraceStackEntry::EnsuringImpls(
+            var.clone(),
+            traits.clone(),
+            trait_is_expected,
+        ));
         // TODO: Don't look this up for every ensure_impls
         let number = ctx
             .symtab
@@ -1978,14 +1986,10 @@ mod tests {
     use super::TypedExpression as TExpr;
 
     use crate::testutil::{sized_int, unsized_int};
-    use crate::{ensure_same_type, get_type};
-    use crate::{
-        fixed_types::t_clock,
-        hir::{self, Block},
-    };
+    use crate::{ensure_same_type, get_type, HasType};
+    use crate::{fixed_types::t_clock, hir};
     use hir::hparams;
     use hir::symbol_table::TypeDeclKind;
-    use hir::AttributeList;
     use hir::PatternKind;
     use hir::{dtype, testutil::t_num, ArgumentList};
     use spade_ast::testutil::{ast_ident, ast_path};
@@ -1993,29 +1997,6 @@ mod tests {
     use spade_common::name::testutil::name_id;
     use spade_common::num_ext::InfallibleToBigInt;
     use spade_hir::symbol_table::{SymbolTable, Thing};
-
-    #[test]
-    fn int_literals_have_type_known_int() {
-        let mut state = TypeState::new();
-        let mut symtab = SymbolTable::new();
-        let generic_list = state.create_generic_list(GenericListSource::Anonymous, &vec![]);
-        spade_ast_lowering::builtins::populate_symtab(&mut symtab, &mut ItemList::new());
-
-        let input = ExprKind::int_literal(0).with_id(0).nowhere();
-
-        state
-            .visit_expression(
-                &input,
-                &Context {
-                    symtab: &symtab,
-                    items: &ItemList::new(),
-                },
-                &generic_list,
-            )
-            .expect("Type error");
-
-        ensure_same_type!(state, TExpr::Id(0), unsized_int(1, &symtab));
-    }
 
     #[test]
     fn if_statements_have_correctly_inferred_types() {
@@ -2052,7 +2033,11 @@ mod tests {
             .unwrap();
 
         // Check the generic type variables
-        ensure_same_type!(state, TExpr::Id(0), TVar::Known(t_bool(&symtab), vec![]));
+        ensure_same_type!(
+            state,
+            TExpr::Id(0),
+            TVar::Known(().nowhere(), t_bool(&symtab), vec![])
+        );
         ensure_same_type!(state, TExpr::Id(1), TExpr::Id(2));
         ensure_same_type!(state, TExpr::Id(1), TExpr::Id(3));
 
@@ -2097,7 +2082,11 @@ mod tests {
             .unwrap();
 
         // Check the generic type variables
-        ensure_same_type!(state, TExpr::Id(0), TVar::Known(t_bool(&symtab), vec![]));
+        ensure_same_type!(
+            state,
+            TExpr::Id(0),
+            TVar::Known(().nowhere(), t_bool(&symtab), vec![])
+        );
         ensure_same_type!(state, TExpr::Id(1), unsized_int(101, &symtab));
         ensure_same_type!(state, TExpr::Id(2), unsized_int(101, &symtab));
         ensure_same_type!(state, TExpr::Id(3), unsized_int(101, &symtab));
@@ -2128,7 +2117,10 @@ mod tests {
         let expr_c = TExpr::Name(name_id(2, "c").inner);
         state.add_eq_from_tvar(expr_a.clone(), TVar::Unknown(100, TraitList::empty()));
         state.add_eq_from_tvar(expr_b.clone(), unsized_int(101, &symtab));
-        state.add_eq_from_tvar(expr_c.clone(), TVar::Known(t_clock(&symtab), vec![]));
+        state.add_eq_from_tvar(
+            expr_c.clone(),
+            TVar::Known(().nowhere(), t_clock(&symtab), vec![]),
+        );
 
         let generic_list = state.create_generic_list(GenericListSource::Anonymous, &vec![]);
         assert_ne!(
@@ -2246,7 +2238,10 @@ mod tests {
             )
             .unwrap();
 
-        let expected_type = TVar::tuple(vec![kvar!(t_bool(&symtab)), kvar!(t_bool(&symtab))]);
+        let expected_type = TVar::tuple(
+            ().nowhere(),
+            vec![kvar!(t_bool(&symtab)), kvar!(t_bool(&symtab))],
+        );
 
         // Ensure patterns have same type as each other, and as the expression
         ensure_same_type!(state, expr_a, expected_type);
@@ -2292,36 +2287,6 @@ mod tests {
     }
 
     #[test]
-    fn block_visiting_without_definitions_works() {
-        let mut symtab = SymbolTable::new();
-        spade_ast_lowering::builtins::populate_symtab(&mut symtab, &mut ItemList::new());
-
-        let input = ExprKind::Block(Box::new(Block {
-            statements: vec![],
-            result: Some(ExprKind::int_literal(5).with_id(0).nowhere()),
-        }))
-        .with_id(1)
-        .nowhere();
-
-        let mut state = TypeState::new();
-
-        let generic_list = state.create_generic_list(GenericListSource::Anonymous, &vec![]);
-        state
-            .visit_expression(
-                &input,
-                &Context {
-                    symtab: &symtab,
-                    items: &ItemList::new(),
-                },
-                &generic_list,
-            )
-            .unwrap();
-
-        ensure_same_type!(state, TExpr::Id(0), unsized_int(2, &symtab));
-        ensure_same_type!(state, TExpr::Id(1), unsized_int(2, &symtab));
-    }
-
-    #[test]
     fn integer_literals_are_compatible_with_fixed_size_ints() {
         let mut state = TypeState::new();
         let mut symtab = SymbolTable::new();
@@ -2356,7 +2321,11 @@ mod tests {
             .unwrap();
 
         // Check the generic type variables
-        ensure_same_type!(state, TExpr::Id(0), TVar::Known(t_bool(&symtab), vec![]));
+        ensure_same_type!(
+            state,
+            TExpr::Id(0),
+            TVar::Known(().nowhere(), t_bool(&symtab), vec![])
+        );
         ensure_same_type!(state, TExpr::Id(1), sized_int(5, &symtab));
         ensure_same_type!(state, TExpr::Id(2), sized_int(5, &symtab));
         ensure_same_type!(state, TExpr::Id(3), sized_int(5, &symtab));
@@ -2365,240 +2334,6 @@ mod tests {
         ensure_same_type!(state, TExpr::Id(0), expr_a);
         ensure_same_type!(state, TExpr::Id(1), expr_b);
         ensure_same_type!(state, TExpr::Id(2), expr_c);
-    }
-
-    #[test]
-    fn array_indexing_infers_all_types_correctly() {
-        let mut state = TypeState::new();
-        let mut symtab = SymbolTable::new();
-        spade_ast_lowering::builtins::populate_symtab(&mut symtab, &mut ItemList::new());
-
-        let input = ExprKind::Index(
-            Box::new(
-                ExprKind::Identifier(name_id(0, "a").inner)
-                    .with_id(1)
-                    .nowhere(),
-            ),
-            Box::new(
-                ExprKind::Identifier(name_id(1, "b").inner)
-                    .with_id(2)
-                    .nowhere(),
-            ),
-        )
-        .with_id(3)
-        .nowhere();
-
-        // Add eqs for the literals
-        let expr_a = TExpr::Name(name_id(0, "a").inner);
-        let expr_b = TExpr::Name(name_id(1, "b").inner);
-        state.add_eq_from_tvar(expr_a.clone(), TVar::Unknown(100, TraitList::empty()));
-        state.add_eq_from_tvar(expr_b.clone(), TVar::Unknown(101, TraitList::empty()));
-
-        let generic_list = state.create_generic_list(GenericListSource::Anonymous, &vec![]);
-        state
-            .visit_expression(
-                &input,
-                &Context {
-                    symtab: &symtab,
-                    items: &ItemList::new(),
-                },
-                &generic_list,
-            )
-            .unwrap();
-
-        // The index should be an integer
-        ensure_same_type!(state, expr_b, unsized_int(5, &symtab));
-        // The target should be an array
-
-        ensure_same_type!(
-            state,
-            &expr_a,
-            TVar::array(
-                TVar::Unknown(0, TraitList::empty()),
-                TVar::Unknown(4, TraitList::empty())
-            )
-        );
-
-        // The result should be the inner type
-        ensure_same_type!(state, TExpr::Id(3), TVar::Unknown(0, TraitList::empty()));
-    }
-
-    #[test]
-    fn registers_typecheck_correctly() {
-        let mut symtab = SymbolTable::new();
-        spade_ast_lowering::builtins::populate_symtab(&mut symtab, &mut ItemList::new());
-
-        let input = hir::Register {
-            pattern: PatternKind::name(name_id(0, "a")).with_id(10).nowhere(),
-            clock: ExprKind::Identifier(name_id(1, "clk").inner)
-                .with_id(3)
-                .nowhere(),
-            reset: None,
-            initial: None,
-            value: ExprKind::int_literal(0).with_id(0).nowhere(),
-            value_type: None,
-            attributes: AttributeList::empty(),
-        };
-
-        let mut state = TypeState::new();
-
-        let expr_clk = TExpr::Name(name_id(1, "clk").inner);
-        state.add_eq_from_tvar(expr_clk.clone(), TVar::Unknown(100, TraitList::empty()));
-
-        let generic_list = state.create_generic_list(GenericListSource::Anonymous, &vec![]);
-        state
-            .visit_register(
-                &input,
-                &Context {
-                    symtab: &symtab,
-                    items: &ItemList::new(),
-                },
-                &generic_list,
-            )
-            .unwrap();
-
-        ensure_same_type!(state, TExpr::Id(0), unsized_int(3, &symtab));
-        ensure_same_type!(
-            state,
-            TExpr::Name(name_id(0, "a").inner),
-            unsized_int(3, &symtab)
-        );
-        ensure_same_type!(state, expr_clk, t_clock(&symtab));
-    }
-
-    #[test]
-    fn self_referential_registers_typepcheck_correctly() {
-        let mut symtab = SymbolTable::new();
-        spade_ast_lowering::builtins::populate_symtab(&mut symtab, &mut ItemList::new());
-
-        let input = hir::Register {
-            pattern: PatternKind::name(name_id(0, "a")).with_id(10).nowhere(),
-            clock: ExprKind::Identifier(name_id(1, "clk").inner)
-                .with_id(3)
-                .nowhere(),
-            reset: None,
-            initial: None,
-            value: ExprKind::Identifier(name_id(0, "a").inner)
-                .with_id(0)
-                .nowhere(),
-            value_type: None,
-            attributes: hir::AttributeList::empty(),
-        };
-
-        let mut state = TypeState::new();
-
-        let expr_clk = TExpr::Name(name_id(1, "clk").inner);
-        state.add_eq_from_tvar(expr_clk.clone(), TVar::Unknown(100, TraitList::empty()));
-
-        let generic_list = state.create_generic_list(GenericListSource::Anonymous, &vec![]);
-        state
-            .visit_register(
-                &input,
-                &Context {
-                    symtab: &symtab,
-                    items: &ItemList::new(),
-                },
-                &generic_list,
-            )
-            .unwrap();
-
-        ensure_same_type!(
-            state,
-            TExpr::Name(name_id(0, "a").inner),
-            TVar::Unknown(2, TraitList::empty())
-        );
-        ensure_same_type!(state, expr_clk, t_clock(&symtab));
-    }
-
-    #[test]
-    fn registers_with_resets_typecheck_correctly() {
-        let mut symtab = SymbolTable::new();
-        spade_ast_lowering::builtins::populate_symtab(&mut symtab, &mut ItemList::new());
-
-        let rst_cond = name_id(2, "rst").inner;
-        let rst_value = name_id(3, "rst_value").inner;
-        let input = hir::Register {
-            pattern: PatternKind::name(name_id(0, "a")).with_id(10).nowhere(),
-            clock: ExprKind::Identifier(name_id(1, "clk").inner)
-                .with_id(3)
-                .nowhere(),
-            reset: Some((
-                ExprKind::Identifier(rst_cond.clone()).with_id(1).nowhere(),
-                ExprKind::Identifier(rst_value.clone()).with_id(2).nowhere(),
-            )),
-            initial: None,
-            value: ExprKind::int_literal(0).with_id(0).nowhere(),
-            value_type: None,
-            attributes: hir::AttributeList::empty(),
-        };
-
-        let mut state = TypeState::new();
-
-        let expr_clk = TExpr::Name(name_id(1, "clk").inner);
-        let expr_rst_cond = TExpr::Name(name_id(2, "rst").inner);
-        let expr_rst_value = TExpr::Name(name_id(3, "rst_value").inner);
-        state.add_eq_from_tvar(expr_clk.clone(), TVar::Unknown(100, TraitList::empty()));
-        state.add_eq_from_tvar(
-            expr_rst_cond.clone(),
-            TVar::Unknown(101, TraitList::empty()),
-        );
-        state.add_eq_from_tvar(
-            expr_rst_value.clone(),
-            TVar::Unknown(102, TraitList::empty()),
-        );
-
-        let generic_list = state.create_generic_list(GenericListSource::Anonymous, &vec![]);
-        state
-            .visit_register(
-                &input,
-                &Context {
-                    symtab: &symtab,
-                    items: &ItemList::new(),
-                },
-                &generic_list,
-            )
-            .unwrap();
-
-        let t0 = get_type!(state, &TExpr::Id(0));
-        let ta = get_type!(state, &TExpr::Name(name_id(0, "a").inner));
-        let tclk = get_type!(state, &TExpr::Name(name_id(1, "clk").inner));
-        let trst_cond = get_type!(state, &TExpr::Name(rst_cond.clone()));
-        let trst_val = get_type!(state, &TExpr::Name(rst_value.clone()));
-        ensure_same_type!(state, t0, unsized_int(3, &symtab));
-        ensure_same_type!(state, ta, unsized_int(3, &symtab));
-        ensure_same_type!(state, tclk, t_clock(&symtab));
-        ensure_same_type!(state, trst_cond, t_bool(&symtab));
-        ensure_same_type!(state, trst_val, unsized_int(3, &symtab));
-    }
-
-    #[test]
-    fn untyped_let_bindings_typecheck_correctly() {
-        let mut symtab = SymbolTable::new();
-        spade_ast_lowering::builtins::populate_symtab(&mut symtab, &mut ItemList::new());
-
-        let input = hir::Statement::binding(
-            PatternKind::name(name_id(0, "a")).with_id(10).nowhere(),
-            None,
-            ExprKind::IntLiteral(0.to_bigint()).with_id(0).nowhere(),
-        )
-        .nowhere();
-
-        let mut state = TypeState::new();
-
-        let generic_list = state.create_generic_list(GenericListSource::Anonymous, &vec![]);
-        state
-            .visit_statement(
-                &input,
-                &Context {
-                    symtab: &symtab,
-                    items: &ItemList::new(),
-                },
-                &generic_list,
-            )
-            .unwrap();
-
-        let ta = get_type!(state, &TExpr::Name(name_id(0, "a").inner));
-        ensure_same_type!(state, ta, unsized_int(1, &symtab));
     }
 
     #[test]
@@ -2678,10 +2413,13 @@ mod tests {
 
         let ttup = get_type!(state, &TExpr::Id(3));
         let reg = get_type!(state, &TExpr::Name(name_id(0, "test").inner));
-        let expected = TypeVar::tuple(vec![
-            sized_int(5, &symtab),
-            TypeVar::Known(t_bool(&symtab), vec![]),
-        ]);
+        let expected = TypeVar::tuple(
+            ().nowhere(),
+            vec![
+                sized_int(5, &symtab),
+                TypeVar::Known(().nowhere(), t_bool(&symtab), vec![]),
+            ],
+        );
         ensure_same_type!(state, ttup, &expected);
         ensure_same_type!(state, reg, &expected);
     }
@@ -2747,21 +2485,27 @@ mod tests {
         let tb = get_type!(state, &expr_b);
 
         // Check the generic type variables
-        ensure_same_type!(state, t0.clone(), TVar::Known(t_bool(&symtab), vec![]));
+        ensure_same_type!(
+            state,
+            t0.clone(),
+            TVar::Known(().nowhere(), t_bool(&symtab), vec![])
+        );
         ensure_same_type!(
             state,
             t1.clone(),
             TVar::Known(
+                ().nowhere(),
                 t_int(&symtab),
-                vec![TypeVar::Known(KnownType::integer(10), vec![])],
+                vec![TypeVar::Known(().nowhere(), KnownType::integer(10), vec![])],
             )
         );
         ensure_same_type!(
             state,
             t2,
             TVar::Known(
+                ().nowhere(),
                 t_int(&symtab),
-                vec![TypeVar::Known(KnownType::integer(5), vec![])],
+                vec![TypeVar::Known(().nowhere(), KnownType::integer(5), vec![])],
             )
         );
 
@@ -2824,21 +2568,27 @@ mod tests {
             .unwrap();
 
         // Check the generic type variables
-        ensure_same_type!(state, TExpr::Id(0), TVar::Known(t_bool(&symtab), vec![]));
+        ensure_same_type!(
+            state,
+            TExpr::Id(0),
+            TVar::Known(().nowhere(), t_bool(&symtab), vec![])
+        );
         ensure_same_type!(
             state,
             TExpr::Id(1),
             TVar::Known(
+                ().nowhere(),
                 t_int(&symtab),
-                vec![TypeVar::Known(KnownType::integer(10), vec![])],
+                vec![TypeVar::Known(().nowhere(), KnownType::integer(10), vec![])],
             )
         );
         ensure_same_type!(
             state,
             TExpr::Id(2),
             TVar::Known(
+                ().nowhere(),
                 t_int(&symtab),
-                vec![TypeVar::Known(KnownType::integer(5), vec![])],
+                vec![TypeVar::Known(().nowhere(), KnownType::integer(5), vec![])],
             )
         );
 

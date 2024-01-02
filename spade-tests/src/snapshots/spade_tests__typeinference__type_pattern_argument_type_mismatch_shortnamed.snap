@@ -15,6 +15,11 @@ entity main() -> bool {
 error: Argument type mismatch. Expected bool got int<8>
   ┌─ testinput:8:12
   │
+2 │     b: bool,
+  │        ---- Type bool inferred here
+  ·
+7 │     let x: int<8> = b;
+  │            ------ Type int<8> inferred here
 8 │     let X$(b) = X(true);
   │            ^ expected bool
   │

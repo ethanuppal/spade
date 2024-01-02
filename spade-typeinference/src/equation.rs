@@ -47,7 +47,7 @@ impl std::fmt::Debug for TraitReq {
     }
 }
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct TraitList {
     pub inner: Vec<TraitReq>,
 }

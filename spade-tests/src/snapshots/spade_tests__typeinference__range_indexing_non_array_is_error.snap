@@ -9,8 +9,13 @@ fn test(x: int<8>) -> [int<8>; 2] {
 error: Index target must be an array, got int<8>
   ┌─ testinput:2:5
   │
+1 │ fn test(x: int<8>) -> [int<8>; 2] {
+  │            ------ Type int<8> inferred here
 2 │     x[0:3]
-  │     ^ Expected array
+  │     ^-----
+  │     │
+  │     Type [_; _] inferred here
+  │     Expected array
   │
   = note: Expected: [_; _]
                Got: int<8>

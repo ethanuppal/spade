@@ -14,13 +14,16 @@ entity main() -> bool {
 }
 
 
-error: Argument type mismatch. Expected bool got int<_>
+error: Argument type mismatch. Expected bool got Number<_>
   ┌─ testinput:8:15
   │
+2 │     b: bool,
+  │        ---- Type bool inferred here
+  ·
 8 │         X$(b: 0) => true,
   │               ^ expected bool
   │
   = note: Expected: bool
-               Got: int<_>
+               Got: Number<_>
 
 

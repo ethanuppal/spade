@@ -8,6 +8,8 @@ fn a(y: int<1>) -> int<32> {
 error: If condition must be a bool, got int<1>
   ┌─ testinput:2:8
   │
+1 │ fn a(y: int<1>) -> int<32> {
+  │         ------ Type int<1> inferred here
 2 │     if y {3} else {5}
   │        ^ Expected boolean
   │

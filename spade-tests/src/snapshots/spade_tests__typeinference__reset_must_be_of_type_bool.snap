@@ -10,6 +10,8 @@ entity test(clk: clock, b: int<4>) -> int<8> {
 error: Register reset condition must be a bool, got int<4>
   ┌─ testinput:2:23
   │
+1 │ entity test(clk: clock, b: int<4>) -> int<8> {
+  │                            ------ Type int<4> inferred here
 2 │     reg(clk) a reset (b: 0) = 3;
   │                       ^ expected bool
   │

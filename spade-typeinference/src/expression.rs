@@ -153,7 +153,7 @@ impl TypeState {
                     return Err(Diagnostic::error(tup.loc(), "Attempt to use tuple indexing on non-tuple")
                         .primary_label(format!("expected tuple, got {t}"))
                         .secondary_label(index, "Because this is a tuple index")
-                        .secondary_label(other_source, "Type {t} inferred here")
+                        .secondary_label(other_source, format!("Type {t} inferred here"))
                     );
                 }
                 TypeVar::Unknown(_, _) => {
@@ -475,11 +475,11 @@ impl TypeState {
                         message(format!("If condition must be a bool, got {}", got))
                         .primary_label("Expected boolean")
                 })?;
-            self.unify(&on_true.inner, &on_false.inner, ctx)
+            self.unify(&on_false.inner, &on_true.inner, ctx)
                 .into_diagnostic(on_false.as_ref(), |diag, Tm{e: expected, g: got}| {
                     diag.message("If branches have incompatible type")
-                        .primary_label(format!("But this has type {expected}"))
-                        .secondary_label(on_true.as_ref(), format!("This branch has type {got}"))
+                        .primary_label(format!("But this has type {got}"))
+                        .secondary_label(on_true.as_ref(), format!("This branch has type {expected}"))
                 })?;
             self.unify(expression, &on_false.inner, ctx)
                 .into_default_diagnostic(expression)?;
@@ -502,7 +502,7 @@ impl TypeState {
                 self.visit_pattern(pattern, ctx, generic_list)?;
                 self.visit_expression(result, ctx, generic_list)?;
 
-                self.unify(&cond.inner, pattern, ctx)
+                self.unify(pattern, &cond.inner, ctx)
                     .into_default_diagnostic(pattern)?;
 
                 if i != 0 {

@@ -5,8 +5,7 @@ struct X {
     b: bool,
 }
 
-entity main() -> bool {
-    let x = X$(b: true);
+entity main(x: X) -> bool {
     match x {
         X(0) => true,
         _ => false,
@@ -15,12 +14,12 @@ entity main() -> bool {
 
 
 error: Argument type mismatch. Expected bool got Number<_>
-  ┌─ testinput:8:11
+  ┌─ testinput:7:11
   │
 2 │     b: bool,
   │        ---- Type bool inferred here
   ·
-8 │         X(0) => true,
+7 │         X(0) => true,
   │           ^ expected bool
   │
   = note: Expected: bool

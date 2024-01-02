@@ -14,6 +14,7 @@ error: Output type mismatch. Expected int<10>, got int<9>
   │                                   ------- int<10> type specified here
   │ ╭─────────────────────────────────────────^
 2 │ │     let x = a + b;
+  │ │             ----- Type 9 inferred here
 3 │ │     x
 4 │ │ }
   │ ╰─^ Found type int<9>

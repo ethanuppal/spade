@@ -14,8 +14,13 @@ entity test(clk: clock, rst: bool) -> bool {
 error: Expected type int<8>, got int<10>
   ┌─ testinput:5:28
   │
+3 │     reg(clk) shift_clock: int<10> reset(rst: shift_clock_initial) = {
+  │                               -- Type 10 inferred here
+4 │         let upper: int<2> = trunc(shift_clock);
 5 │         let rest: int<8> = shift_clock >> 2;
-  │                            ^^^^^^^^^^^^^^^^ Expected int<8>
+  │                       -    ^^^^^^^^^^^^^^^^ Expected int<8>
+  │                       │     
+  │                       Type 8 inferred here
   │
   = note: Expected: 8
                 in: int<8>

@@ -1,0 +1,31 @@
+---
+source: spade-tests/src/typeinference.rs
+---
+struct A {}
+struct B {}
+
+struct X {
+    b: B,
+}
+
+entity main(x: X) -> bool {
+    match x {
+        X(A()) => true,
+        _ => false,
+    }
+}
+
+
+error: Argument type mismatch. Expected B got A
+   ┌─ testinput:10:11
+   │
+ 5 │     b: B,
+   │        - Type B inferred here
+   ·
+10 │         X(A()) => true,
+   │           ^^^ expected B
+   │
+   = note: Expected: B
+                Got: A
+
+

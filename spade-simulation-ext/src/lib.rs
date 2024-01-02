@@ -312,7 +312,7 @@ impl Spade {
 
         let ty = self
             .type_state
-            .type_var_from_hir(&output_type, &generic_list);
+            .type_var_from_hir(output_type.loc(), &output_type, &generic_list);
 
         let concrete = TypeState::ungenerify_type(
             &ty,
@@ -358,7 +358,7 @@ impl Spade {
             .create_generic_list(GenericListSource::Anonymous, &[]);
         let ty = self
             .type_state
-            .type_var_from_hir(&output_type, &generic_list);
+            .type_var_from_hir(output_type.loc(), &output_type, &generic_list);
 
         // NOTE: safe unwrap, o_name is something we just created, so it can be any type
         let g = self.type_state.new_generic();
@@ -511,7 +511,7 @@ impl Spade {
 
         let mut type_state = TypeState::new();
         let generic_list = type_state.create_generic_list(GenericListSource::Anonymous, &[]);
-        let ty = type_state.type_var_from_hir(&port_ty, &generic_list);
+        let ty = type_state.type_var_from_hir(port_ty.loc(), &port_ty, &generic_list);
 
         let val = self.compile_expr(expr, &ty)?;
         Ok((port_name, val))
@@ -530,7 +530,7 @@ impl Spade {
     /// Tries to get the type and the name of the port in the generated verilog of the specified
     /// input port
     #[tracing::instrument(level = "trace", skip(self))]
-    fn get_port(&mut self, port: String) -> Result<(String, TypeSpec)> {
+    fn get_port(&mut self, port: String) -> Result<(String, Loc<TypeSpec>)> {
         let owned = self.owned.as_ref().unwrap();
         let symtab = owned.symtab.symtab();
         let head = Self::lookup_function_like(&self.uut, symtab)
@@ -549,7 +549,7 @@ impl Spade {
                 } else {
                     port
                 };
-                return Ok((verilog_name, ty.inner.clone()));
+                return Ok((verilog_name, ty.clone()));
             }
         }
 
@@ -663,14 +663,14 @@ impl Spade {
 
     /// Return the output type of uut
     #[tracing::instrument(level = "trace", skip(self))]
-    fn output_type(&mut self) -> Result<TypeSpec> {
+    fn output_type(&mut self) -> Result<Loc<TypeSpec>> {
         let ty = self
             .uut_head
             .output_type
             .clone()
             .ok_or_else(|| anyhow!("{} does not have an output type", self.uut))?;
 
-        Ok(ty.inner)
+        Ok(ty)
     }
 
     #[tracing::instrument(level = "trace", skip(self))]

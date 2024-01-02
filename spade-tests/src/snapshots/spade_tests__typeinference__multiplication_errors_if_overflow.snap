@@ -13,6 +13,7 @@ error: Output type mismatch. Expected int<32>, got int<30>
   │                                          ------- int<32> type specified here
   │ ╭────────────────────────────────────────────────^
 2 │ │     a * b
+  │ │     ----- Type 30 inferred here
 3 │ │ }
   │ ╰─^ Found type int<30>
   │  

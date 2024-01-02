@@ -5,7 +5,7 @@ use itertools::Itertools;
 use num::BigInt;
 
 use crate::{
-    equation::{TypeVar, TypedExpression},
+    equation::{TraitList, TypeVar, TypedExpression},
     requirements::Requirement,
 };
 
@@ -38,6 +38,7 @@ pub enum TraceStackEntry {
     TryingUnify(TypeVar, TypeVar),
     /// Unified .0 with .1 producing .2. .3 were replaced
     Unified(TypeVar, TypeVar, TypeVar, Vec<TypeVar>),
+    EnsuringImpls(TypeVar, TraitList, bool),
     AddingEquation(TypedExpression, TypeVar),
     AddRequirement(Requirement),
     ResolvedRequirement(Requirement),
@@ -79,6 +80,12 @@ pub fn format_trace_stack(stack: &TraceStack) -> String {
                     "trying unification".cyan(),
                     lhs,
                     rhs
+                )
+            }
+            TraceStackEntry::EnsuringImpls(ty, tr, trait_is_expected) => {
+                format!(
+                    "{} {ty} as {tr:?} (trait_is_expected: {trait_is_expected})",
+                    "ensuring impls".yellow()
                 )
             }
             TraceStackEntry::InferringFromConstraints(lhs, rhs) => {

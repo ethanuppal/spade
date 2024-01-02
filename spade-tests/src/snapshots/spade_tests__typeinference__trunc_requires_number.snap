@@ -11,6 +11,8 @@ fn test(a: A) -> int<8> {
 error: Argument type mismatch. Expected Number<_> got A
   ┌─ testinput:4:11
   │
+3 │ fn test(a: A) -> int<8> {
+  │            - Type A inferred here
 4 │     trunc(a)
   │           ^ expected Number<_>
   │

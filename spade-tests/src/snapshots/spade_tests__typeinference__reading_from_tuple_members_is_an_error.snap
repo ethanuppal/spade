@@ -15,6 +15,8 @@ entity uut(val: &mut (bool, int<3>)) -> bool {
 error: Attempt to use tuple indexing on non-tuple
   ┌─ testinput:6:32
   │
+5 │ entity uut(val: &mut (bool, int<3>)) -> bool {
+  │                 ------------------- Type &mut (bool, int<3>) inferred here
 6 │     let x = inst read_mut_wire(val#0);
   │                                ^^^-- Because this is a tuple index
   │                                │   

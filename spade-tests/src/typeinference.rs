@@ -938,6 +938,41 @@ snapshot_error! {
     }
     "
 }
+
+snapshot_error! {
+    type_pattern_argument_type_mismatch_positional2,
+    "
+    struct X {
+        b: bool,
+    }
+
+    entity main(x: X) -> bool {
+        match x {
+            X(0) => true,
+            _ => false,
+        }
+    }
+    "
+}
+
+snapshot_error! {
+    type_pattern_argument_type_mismatch_positional3,
+    "
+    struct A {}
+    struct B {}
+
+    struct X {
+        b: B,
+    }
+
+    entity main(x: X) -> bool {
+        match x {
+            X(A()) => true,
+            _ => false,
+        }
+    }
+    "
+}
 snapshot_error! {
     type_pattern_argument_type_mismatch_named,
     "
@@ -1226,6 +1261,15 @@ snapshot_error! {
 
         fn test(a: A) -> int<8> {
             a `concat` a
+        }
+    "
+}
+
+snapshot_error! {
+    wrong_type_signature_on_let_binding_does_not_double_report,
+    "
+        fn test() {
+            let x: bool = 0;
         }
     "
 }

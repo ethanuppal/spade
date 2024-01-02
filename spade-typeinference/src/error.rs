@@ -1,5 +1,4 @@
 use itertools::Itertools;
-use spade_types::KnownType;
 use thiserror::Error;
 
 use spade_common::{
@@ -83,6 +82,29 @@ pub trait UnificationErrorExt<T>: Sized {
         message: F,
     ) -> std::result::Result<T, Diagnostic>
     where
+        F: Fn(Diagnostic, TypeMismatch) -> Diagnostic,
+    {
+        self.into_diagnostic_impl(unification_point, false, message)
+    }
+
+    fn into_diagnostic_no_expected_source<F>(
+        self,
+        unification_point: impl Into<FullSpan> + Clone,
+        message: F,
+    ) -> std::result::Result<T, Diagnostic>
+    where
+        F: Fn(Diagnostic, TypeMismatch) -> Diagnostic,
+    {
+        self.into_diagnostic_impl(unification_point, true, message)
+    }
+
+    fn into_diagnostic_impl<F>(
+        self,
+        unification_point: impl Into<FullSpan> + Clone,
+        omit_expected_source: bool,
+        message: F,
+    ) -> std::result::Result<T, Diagnostic>
+    where
         F: Fn(Diagnostic, TypeMismatch) -> Diagnostic;
 }
 impl<T> UnificationErrorExt<T> for std::result::Result<T, UnificationError> {
@@ -111,9 +133,10 @@ impl<T> UnificationErrorExt<T> for std::result::Result<T, UnificationError> {
         }
     }
 
-    fn into_diagnostic<F>(
+    fn into_diagnostic_impl<F>(
         self,
         unification_point: impl Into<FullSpan> + Clone,
+        omit_expected_source: bool,
         message: F,
     ) -> std::result::Result<T, Diagnostic>
     where
@@ -132,24 +155,13 @@ impl<T> UnificationErrorExt<T> for std::result::Result<T, UnificationError> {
                     },
                 );
 
-                let diag = if let TypeVar::Known(k, _, _) = &e.failing {
-                    if FullSpan::from(k) != unification_point.clone().into() {
-                        diag.secondary_label(k, format!("Type {} inferred here", e.failing))
-                    } else {
-                        diag
-                    }
+                let diag = if !omit_expected_source {
+                    add_known_type_context(diag, unification_point.clone(), &e.failing)
                 } else {
                     diag
                 };
-                let diag = if let TypeVar::Known(k, _, _) = &g.failing {
-                    if FullSpan::from(k) != unification_point.into() {
-                        diag.secondary_label(k, format!("Type {} inferred here", g.failing))
-                    } else {
-                        diag
-                    }
-                } else {
-                    diag
-                };
+
+                let diag = add_known_type_context(diag, unification_point, &g.failing);
                 diag.type_error(
                     format!("{}", e.failing),
                     e.inside.map(|o| format!("{o}")),
@@ -210,6 +222,22 @@ impl<T> UnificationErrorExt<T> for std::result::Result<T, UnificationError> {
             }
             UnificationError::Specific(e) => e,
         })
+    }
+}
+
+fn add_known_type_context(
+    diag: Diagnostic,
+    unification_point: impl Into<FullSpan> + Clone,
+    failing: &TypeVar,
+) -> Diagnostic {
+    if let TypeVar::Known(k, _, _) = &failing {
+        if FullSpan::from(k) != unification_point.clone().into() {
+            diag.secondary_label(k, format!("Type {} inferred here", failing))
+        } else {
+            diag
+        }
+    } else {
+        diag
     }
 }
 

@@ -12,8 +12,10 @@ error: Pattern type mismatch. Expected bool got (_, _)
   ┌─ testinput:2:9
   │
 2 │     let (x, y) = true;
-  │         ^^^^^^   ---- because this has type bool
-  │         │         
+  │         ^^^^^^   ----
+  │         │        │
+  │         │        because this has type bool
+  │         │        Type bool inferred here
   │         expected bool, got (_, _)
   │
   = note: Expected: bool
