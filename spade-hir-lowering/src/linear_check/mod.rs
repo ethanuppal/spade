@@ -261,6 +261,7 @@ fn visit_expression(
             kind: _,
             callee,
             args: list,
+            turbofish: _,
         } => {
             // The read_mut_wire function is special and should not consume the port
             // it is reading.

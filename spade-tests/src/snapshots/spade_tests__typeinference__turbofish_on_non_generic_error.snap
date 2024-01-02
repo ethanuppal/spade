@@ -1,0 +1,19 @@
+---
+source: spade-tests/src/typeinference.rs
+---
+fn ret_int() -> int<8> {
+    0
+}
+
+fn test() {
+    let x: int<8> = ret_int::<10>();
+}
+
+
+error: Turbofish on non-generic function
+  ┌─ testinput:6:30
+  │
+6 │     let x: int<8> = ret_int::<10>();
+  │                              ^^^^ Turbofish on non-generic function
+
+

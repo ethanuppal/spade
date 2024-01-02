@@ -139,10 +139,46 @@ impl<'a> Parser<'a> {
             }
         }
         // NOTE: (safe unwrap) The vec will have at least one element because the first thing
-        // in the loop must pus an identifier.
+        // in the loop must push an identifier.
         let start = result.first().unwrap().span;
         let end = result.last().unwrap().span;
         Ok(Path(result).between(self.file_id, &start, &end))
+    }
+
+    #[trace_parser]
+    pub fn path_with_turbofish(
+        &mut self,
+    ) -> Result<(Loc<Path>, Option<Loc<Vec<Loc<TypeExpression>>>>)> {
+        let mut result = vec![];
+        loop {
+            result.push(self.identifier()?);
+
+            // NOTE: (safe unwrap) The vec will have at least one element because the first thing
+            // in the loop must push an identifier.
+            let path_start = result.first().unwrap().span;
+            let path_end = result.last().unwrap().span;
+
+            if self.peek_and_eat(&TokenKind::PathSeparator)?.is_none() {
+                break Ok((
+                    Path(result).between(self.file_id, &path_start, &path_end),
+                    None,
+                ));
+            } else if self.peek_kind(&TokenKind::Lt)? {
+                let (params, loc) = self.surrounded(
+                    &TokenKind::Lt,
+                    |s| {
+                        s.comma_separated(Self::type_expression, &TokenKind::Gt)
+                            .extra_expected(vec!["type spec"])
+                    },
+                    &TokenKind::Gt,
+                )?;
+
+                break Ok((
+                    Path(result).between(self.file_id, &path_start, &path_end),
+                    Some(params.at_loc(&loc)),
+                ));
+            }
+        }
     }
 
     #[trace_parser]
@@ -219,7 +255,7 @@ impl<'a> Parser<'a> {
             None
         };
 
-        let name = self.path()?;
+        let (name, turbofish) = self.path_with_turbofish()?;
         let next_token = self.peek()?;
 
         let args = self.argument_list()?.ok_or_else(|| {
@@ -239,6 +275,7 @@ impl<'a> Parser<'a> {
                     ),
                     callee: name,
                     args: args.clone(),
+                    turbofish,
                 }
                 .between(self.file_id, &start.span, &args),
             ))
@@ -248,6 +285,7 @@ impl<'a> Parser<'a> {
                     kind: CallKind::Entity(start_loc),
                     callee: name,
                     args: args.clone(),
+                    turbofish,
                 }
                 .between(self.file_id, &start.span, &args),
             ))
@@ -3076,6 +3114,7 @@ mod tests {
                 Expression::Identifier(ast_path("z")).nowhere(),
             ])
             .nowhere(),
+            turbofish: None,
         }
         .nowhere();
 
@@ -3094,6 +3133,7 @@ mod tests {
                 Expression::Identifier(ast_path("a")).nowhere(),
             )])
             .nowhere(),
+            turbofish: None,
         }
         .nowhere();
 
@@ -3284,6 +3324,7 @@ mod tests {
                 Expression::Identifier(ast_path("z")).nowhere(),
             ])
             .nowhere(),
+            turbofish: None,
         }
         .nowhere();
 

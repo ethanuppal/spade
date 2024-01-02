@@ -74,6 +74,7 @@ impl<'a> Pass for LowerMethods<'a> {
                     kind: call_kind.clone(),
                     callee: method.inner.at_loc(name),
                     args: args.clone(),
+                    turbofish: None,
                 })
             }
             _ => None,

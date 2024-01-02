@@ -88,6 +88,12 @@ pub enum GenericListToken {
     Expression(u64),
 }
 
+pub struct TurbofishCtx<'a> {
+    turbofish: &'a Loc<Vec<Loc<hir::TypeExpression>>>,
+    prev_generic_list: &'a GenericListToken,
+    type_ctx: &'a Context<'a>,
+}
+
 /// State of the type inference algorithm
 #[derive(Clone)]
 pub struct TypeState {
@@ -301,7 +307,8 @@ impl TypeState {
         let generic_list = self.create_generic_list(
             GenericListSource::Definition(&entity.name.name_id().inner),
             &entity.head.type_params,
-        );
+            None,
+        )?;
 
         // Add equations for the inputs
         for (name, t) in &entity.inputs {
@@ -469,6 +476,7 @@ impl TypeState {
                 kind: _,
                 callee,
                 args,
+                turbofish,
             } => {
                 let head = ctx.symtab.unit_by_id(&callee.inner);
                 self.handle_function_like(
@@ -480,6 +488,11 @@ impl TypeState {
                     ctx,
                     true,
                     false,
+                    turbofish.as_ref().map(|turbofish| TurbofishCtx {
+                        turbofish,
+                        prev_generic_list: generic_list,
+                        type_ctx: ctx,
+                    }),
                 )?;
             }
             ExprKind::PipelineRef { .. } => {
@@ -515,12 +528,14 @@ impl TypeState {
         // If we are calling a method, we have an implicit self argument which means
         // that any error reporting number of arguments should be reduced by one
         is_method: bool,
+        turbofish: Option<TurbofishCtx>,
     ) -> Result<()> {
         // Add new symbols for all the type parameters
         let generic_list = self.create_generic_list(
             GenericListSource::Expression(expression_id.inner),
             &head.type_params,
-        );
+            turbofish,
+        )?;
 
         if visit_args {
             self.visit_argument_list(args, ctx, &generic_list)?;
@@ -744,27 +759,76 @@ impl TypeState {
         Ok(())
     }
 
-    #[tracing::instrument(level = "trace", skip(self))]
+    #[tracing::instrument(level = "trace", skip(self, turbofish))]
     pub fn create_generic_list(
         &mut self,
         source: GenericListSource,
         params: &[Loc<TypeParam>],
-    ) -> GenericListToken {
+        turbofish: Option<TurbofishCtx>,
+    ) -> Result<GenericListToken> {
+        let turbofish_params = if let Some(turbofish) = turbofish.as_ref() {
+            if params.is_empty() {
+                return Err(Diagnostic::error(
+                    turbofish.turbofish,
+                    "Turbofish on non-generic function",
+                )
+                .primary_label("Turbofish on non-generic function")
+                .into());
+            }
+            if turbofish.turbofish.len() != params.len() {
+                return Err(Diagnostic::error(
+                    turbofish.turbofish,
+                    "Wrong number of type parameters",
+                )
+                .primary_label(format!(
+                    "Expected {} type parameter{s}",
+                    params.len(),
+                    s = if params.len() != 1 { "s" } else { "" }
+                ))
+                .secondary_label(
+                    ().between_locs(&params[0], &params[1]),
+                    format!(
+                        "Because this has {} parameter{s}",
+                        params.len(),
+                        s = if params.len() != 1 { "s" } else { "" }
+                    ),
+                ));
+            }
+
+            turbofish
+                .turbofish
+                .inner
+                .iter()
+                .map(|p| Some(p.clone()))
+                .collect()
+        } else {
+            params.iter().map(|_| None).collect::<Vec<_>>()
+        };
         let new_list = params
             .iter()
-            .map(|param| {
+            .enumerate()
+            .map(|(i, param)| {
                 let name = match &param.inner {
                     hir::TypeParam::TypeName(_, name) => name.clone(),
                     hir::TypeParam::Integer(_, name) => name.clone(),
                 };
 
                 let t = self.new_generic();
-                (name, t)
+
+                if let Some(tf) = &turbofish_params[i] {
+                    let tf_ctx = turbofish.as_ref().unwrap();
+                    let ty = self.hir_type_expr_to_var(tf, tf_ctx.prev_generic_list);
+                    self.unify(&ty, &t, tf_ctx.type_ctx)
+                        .into_default_diagnostic(param)?;
+                }
+                Ok((name, t))
             })
+            .collect::<Result<Vec<_>>>()?
+            .into_iter()
             .map(|(name, t)| (name, t.clone()))
             .collect();
 
-        self.add_mapped_generic_list(source, new_list)
+        Ok(self.add_mapped_generic_list(source, new_list))
     }
 
     /// Adds a generic list with parameters already mapped to types
@@ -868,7 +932,8 @@ impl TypeState {
                             let generic_list = self.create_generic_list(
                                 GenericListSource::Anonymous,
                                 &enum_variant.type_params,
-                            );
+                                None,
+                            )?;
 
                             let condition_type = self.type_var_from_hir(
                                 pattern.loc(),
@@ -883,8 +948,11 @@ impl TypeState {
                             params: _,
                         } => {
                             let s = ctx.symtab.struct_by_id(name).inner;
-                            let generic_list = self
-                                .create_generic_list(GenericListSource::Anonymous, &s.type_params);
+                            let generic_list = self.create_generic_list(
+                                GenericListSource::Anonymous,
+                                &s.type_params,
+                                None,
+                            )?;
 
                             let condition_type =
                                 self.type_var_from_hir(pattern.loc(), &s.self_type, &generic_list);
@@ -2009,17 +2077,14 @@ mod tests {
         state.add_eq_from_tvar(expr_b.clone(), TVar::Unknown(101, TraitList::empty()));
         state.add_eq_from_tvar(expr_c.clone(), TVar::Unknown(102, TraitList::empty()));
 
-        let generic_list = state.create_generic_list(GenericListSource::Anonymous, &vec![]);
-        state
-            .visit_expression(
-                &input,
-                &Context {
-                    symtab: &symtab,
-                    items: &ItemList::new(),
-                },
-                &generic_list,
-            )
+        let ctx = Context {
+            symtab: &symtab,
+            items: &ItemList::new(),
+        };
+        let generic_list = state
+            .create_generic_list(GenericListSource::Anonymous, &vec![], None)
             .unwrap();
+        state.visit_expression(&input, &ctx, &generic_list).unwrap();
 
         // Check the generic type variables
         ensure_same_type!(
@@ -2057,18 +2122,14 @@ mod tests {
         state.add_eq_from_tvar(expr_a.clone(), TVar::Unknown(100, TraitList::empty()));
         state.add_eq_from_tvar(expr_b.clone(), unsized_int(101, &symtab));
         state.add_eq_from_tvar(expr_c.clone(), TVar::Unknown(102, TraitList::empty()));
-
-        let generic_list = state.create_generic_list(GenericListSource::Anonymous, &vec![]);
-        state
-            .visit_expression(
-                &input,
-                &Context {
-                    symtab: &symtab,
-                    items: &ItemList::new(),
-                },
-                &generic_list,
-            )
+        let ctx = Context {
+            symtab: &symtab,
+            items: &ItemList::new(),
+        };
+        let generic_list = state
+            .create_generic_list(GenericListSource::Anonymous, &vec![], None)
             .unwrap();
+        state.visit_expression(&input, &ctx, &generic_list).unwrap();
 
         // Check the generic type variables
         ensure_same_type!(
@@ -2111,18 +2172,14 @@ mod tests {
             TVar::Known(().nowhere(), t_clock(&symtab), vec![]),
         );
 
-        let generic_list = state.create_generic_list(GenericListSource::Anonymous, &vec![]);
-        assert_ne!(
-            state.visit_expression(
-                &input,
-                &Context {
-                    symtab: &symtab,
-                    items: &ItemList::new(),
-                },
-                &generic_list
-            ),
-            Ok(())
-        );
+        let ctx = Context {
+            symtab: &symtab,
+            items: &ItemList::new(),
+        };
+        let generic_list = state
+            .create_generic_list(GenericListSource::Anonymous, &vec![], None)
+            .unwrap();
+        assert_ne!(state.visit_expression(&input, &ctx, &generic_list), Ok(()));
     }
 
     #[test]
@@ -2159,17 +2216,14 @@ mod tests {
         state.add_eq_from_tvar(expr_b.clone(), unsized_int(101, &symtab));
         state.add_eq_from_tvar(expr_c.clone(), TVar::Unknown(102, TraitList::empty()));
 
-        let generic_list = state.create_generic_list(GenericListSource::Anonymous, &vec![]);
-        state
-            .visit_expression(
-                &input,
-                &Context {
-                    symtab: &symtab,
-                    items: &ItemList::new(),
-                },
-                &generic_list,
-            )
+        let ctx = Context {
+            symtab: &symtab,
+            items: &ItemList::new(),
+        };
+        let generic_list = state
+            .create_generic_list(GenericListSource::Anonymous, &vec![], None)
             .unwrap();
+        state.visit_expression(&input, &ctx, &generic_list).unwrap();
 
         // Ensure branches have the same type
         ensure_same_type!(state, expr_b, &expr_c);
@@ -2215,17 +2269,14 @@ mod tests {
         state.add_eq_from_tvar(expr_b.clone(), TVar::Unknown(101, TraitList::empty()));
         state.add_eq_from_tvar(expr_c.clone(), TVar::Unknown(102, TraitList::empty()));
 
-        let generic_list = state.create_generic_list(GenericListSource::Anonymous, &vec![]);
-        state
-            .visit_expression(
-                &input,
-                &Context {
-                    symtab: &symtab,
-                    items: &ItemList::new(),
-                },
-                &generic_list,
-            )
+        let ctx = Context {
+            symtab: &symtab,
+            items: &ItemList::new(),
+        };
+        let generic_list = state
+            .create_generic_list(GenericListSource::Anonymous, &vec![], None)
             .unwrap();
+        state.visit_expression(&input, &ctx, &generic_list).unwrap();
 
         let expected_type = TVar::tuple(
             ().nowhere(),
@@ -2261,18 +2312,14 @@ mod tests {
             Expression::ident(1, 1, "a").nowhere(),
         )
         .nowhere();
-
-        let generic_list = state.create_generic_list(GenericListSource::Anonymous, &vec![]);
-        assert!(state
-            .visit_statement(
-                &input,
-                &Context {
-                    symtab: &symtab,
-                    items: &ItemList::new(),
-                },
-                &generic_list
-            )
-            .is_err());
+        let ctx = Context {
+            symtab: &symtab,
+            items: &ItemList::new(),
+        };
+        let generic_list = state
+            .create_generic_list(GenericListSource::Anonymous, &vec![], None)
+            .unwrap();
+        assert!(state.visit_statement(&input, &ctx, &generic_list).is_err());
     }
 
     #[test]
@@ -2297,17 +2344,14 @@ mod tests {
         state.add_eq_from_tvar(expr_b.clone(), unsized_int(101, &symtab));
         state.add_eq_from_tvar(expr_c.clone(), sized_int(5, &symtab));
 
-        let generic_list = state.create_generic_list(GenericListSource::Anonymous, &vec![]);
-        state
-            .visit_expression(
-                &input,
-                &Context {
-                    symtab: &symtab,
-                    items: &ItemList::new(),
-                },
-                &generic_list,
-            )
+        let ctx = Context {
+            symtab: &symtab,
+            items: &ItemList::new(),
+        };
+        let generic_list = state
+            .create_generic_list(GenericListSource::Anonymous, &vec![], None)
             .unwrap();
+        state.visit_expression(&input, &ctx, &generic_list).unwrap();
 
         // Check the generic type variables
         ensure_same_type!(
@@ -2339,17 +2383,14 @@ mod tests {
 
         let mut state = TypeState::new();
 
-        let generic_list = state.create_generic_list(GenericListSource::Anonymous, &vec![]);
-        state
-            .visit_statement(
-                &input,
-                &Context {
-                    symtab: &symtab,
-                    items: &ItemList::new(),
-                },
-                &generic_list,
-            )
+        let ctx = Context {
+            symtab: &symtab,
+            items: &ItemList::new(),
+        };
+        let generic_list = state
+            .create_generic_list(GenericListSource::Anonymous, &vec![], None)
             .unwrap();
+        state.visit_statement(&input, &ctx, &generic_list).unwrap();
 
         let ta = get_type!(state, &TExpr::Name(name_id(0, "a").inner));
         ensure_same_type!(state, ta, sized_int(5, &symtab));
@@ -2388,17 +2429,14 @@ mod tests {
         let expr_clk = TExpr::Name(name_id(1, "clk").inner);
         state.add_eq_from_tvar(expr_clk.clone(), TVar::Unknown(100, TraitList::empty()));
 
-        let generic_list = state.create_generic_list(GenericListSource::Anonymous, &vec![]);
-        state
-            .visit_register(
-                &input,
-                &Context {
-                    symtab: &symtab,
-                    items: &ItemList::new(),
-                },
-                &generic_list,
-            )
+        let ctx = Context {
+            symtab: &symtab,
+            items: &ItemList::new(),
+        };
+        let generic_list = state
+            .create_generic_list(GenericListSource::Anonymous, &vec![], None)
             .unwrap();
+        state.visit_register(&input, &ctx, &generic_list).unwrap();
 
         let ttup = get_type!(state, &TExpr::Id(3));
         let reg = get_type!(state, &TExpr::Name(name_id(0, "test").inner));
@@ -2442,6 +2480,7 @@ mod tests {
                 Expression::ident(1, 1, "b").nowhere(),
             ])
             .nowhere(),
+            turbofish: None,
         }
         .with_id(2)
         .nowhere();
@@ -2454,7 +2493,9 @@ mod tests {
         state.add_eq_from_tvar(expr_a.clone(), TVar::Unknown(100, TraitList::empty()));
         state.add_eq_from_tvar(expr_b.clone(), TVar::Unknown(101, TraitList::empty()));
 
-        let generic_list = state.create_generic_list(GenericListSource::Anonymous, &vec![]);
+        let generic_list = state
+            .create_generic_list(GenericListSource::Anonymous, &vec![], None)
+            .unwrap();
         state
             .visit_expression(
                 &input,
@@ -2532,6 +2573,7 @@ mod tests {
                 Expression::ident(1, 1, "b").nowhere(),
             ])
             .nowhere(),
+            turbofish: None,
         }
         .with_id(2)
         .nowhere();
@@ -2544,7 +2586,9 @@ mod tests {
         state.add_eq_from_tvar(expr_a.clone(), TVar::Unknown(100, TraitList::empty()));
         state.add_eq_from_tvar(expr_b.clone(), TVar::Unknown(101, TraitList::empty()));
 
-        let generic_list = state.create_generic_list(GenericListSource::Anonymous, &vec![]);
+        let generic_list = state
+            .create_generic_list(GenericListSource::Anonymous, &vec![], None)
+            .unwrap();
         state
             .visit_expression(
                 &input,

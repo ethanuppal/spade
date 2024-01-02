@@ -1449,13 +1449,23 @@ pub fn visit_expression(e: &ast::Expression, ctx: &mut Context) -> Result<hir::E
         ast::Expression::Block(block) => {
             Ok(hir::ExprKind::Block(Box::new(visit_block(block, ctx)?)))
         }
-        ast::Expression::Call{kind, callee, args} => {
+        ast::Expression::Call{kind, callee, args, turbofish} => {
             let (name_id, _) = ctx.symtab.lookup_unit(callee)?;
             let args = visit_argument_list(args, ctx)?.at_loc(args);
 
             let kind = visit_call_kind(kind, ctx)?;
 
-            Ok(hir::ExprKind::Call{kind, callee: name_id.at_loc(callee), args})
+            let turbofish = turbofish.as_ref().map(|tf| {
+                tf.try_map_ref(|args| {
+                    args.iter().map(|arg| {
+                        arg.try_map_ref(|arg| {
+                            visit_type_expression(arg, &mut ctx.symtab)
+                        })
+                    }).collect::<Result<_>>()
+                })
+            }).transpose()?;
+
+            Ok(hir::ExprKind::Call{kind, callee: name_id.at_loc(callee), args, turbofish})
         }
         ast::Expression::Identifier(path) => {
             // If the identifier isn't a valid variable, report as "expected value".
@@ -1470,7 +1480,7 @@ pub fn visit_expression(e: &ast::Expression, ctx: &mut Context) -> Result<hir::E
                         // NOTE: This loc is a little bit approximate because it is unlikely
                         // that any error will reference the empty argument list.
                         let args = hir::ArgumentList::Positional(vec![]).at_loc(&path);
-                        Ok(hir::ExprKind::Call{kind: hir::expression::CallKind::Function, callee, args})
+                        Ok(hir::ExprKind::Call{kind: hir::expression::CallKind::Function, callee, args, turbofish: None})
                     }
                     else {
                         Err(LookupError::NotAValue(path, was.clone()).into())
@@ -2438,6 +2448,7 @@ mod expression_visiting {
                 ast::Expression::int_literal(2).nowhere(),
             ])
             .nowhere(),
+            turbofish: None,
         }
         .nowhere();
 
@@ -2449,6 +2460,7 @@ mod expression_visiting {
                 hir::ExprKind::int_literal(2).idless().nowhere(),
             ])
             .nowhere(),
+            turbofish: None,
         }
         .idless();
 
@@ -2497,6 +2509,7 @@ mod expression_visiting {
                 ast::NamedArgument::Full(ast_ident("a"), ast::Expression::int_literal(1).nowhere()),
             ])
             .nowhere(),
+            turbofish: None,
         }
         .nowhere();
 
@@ -2514,6 +2527,7 @@ mod expression_visiting {
                 ),
             ])
             .nowhere(),
+            turbofish: None,
         }
         .idless();
 
@@ -2562,6 +2576,7 @@ mod expression_visiting {
                 ast::Expression::int_literal(2).nowhere(),
             ])
             .nowhere(),
+            turbofish: None,
         }
         .nowhere();
 
@@ -2573,6 +2588,7 @@ mod expression_visiting {
                 hir::ExprKind::int_literal(2).idless().nowhere(),
             ])
             .nowhere(),
+            turbofish: None,
         }
         .idless();
 
@@ -2624,6 +2640,7 @@ mod expression_visiting {
                 ast::Expression::int_literal(2).nowhere(),
             ])
             .nowhere(),
+            turbofish: None,
         }
         .nowhere();
 
@@ -2635,6 +2652,7 @@ mod expression_visiting {
                 hir::ExprKind::int_literal(2).idless().nowhere(),
             ])
             .nowhere(),
+            turbofish: None,
         }
         .idless();
 

@@ -1273,3 +1273,42 @@ snapshot_error! {
         }
     "
 }
+
+snapshot_error! {
+    turbofish_overrides_type,
+    "
+        fn ret_int<#N>() -> int<N> {
+            0
+        }
+
+        fn test() {
+            let x: int<8> = ret_int::<10>();
+        }
+    "
+}
+
+snapshot_error! {
+    turbofish_on_non_generic_error,
+    "
+        fn ret_int() -> int<8> {
+            0
+        }
+
+        fn test() {
+            let x: int<8> = ret_int::<10>();
+        }
+    "
+}
+
+snapshot_error! {
+    turbofish_param_number_mismatch,
+    "
+        fn ret_int<#A, #B>() -> int<8> {
+            0
+        }
+
+        fn test() {
+            let x: int<8> = ret_int::<10>();
+        }
+    "
+}

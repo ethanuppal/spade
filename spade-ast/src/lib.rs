@@ -155,6 +155,7 @@ pub enum Expression {
         kind: CallKind,
         callee: Loc<Path>,
         args: Loc<ArgumentList>,
+        turbofish: Option<Loc<Vec<Loc<TypeExpression>>>>,
     },
     MethodCall {
         target: Box<Loc<Expression>>,

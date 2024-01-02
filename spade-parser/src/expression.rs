@@ -117,9 +117,9 @@ impl<'a> Parser<'a> {
         let lhs_val = self.expr_bp(OpBindingPower::None)?;
 
         if self.peek_kind(&TokenKind::InfixOperatorSeparator)? {
-            let (callee, _) = self.surrounded(
+            let ((callee, turbofish), _) = self.surrounded(
                 &TokenKind::InfixOperatorSeparator,
-                Self::path,
+                Self::path_with_turbofish,
                 &TokenKind::InfixOperatorSeparator,
             )?;
 
@@ -133,6 +133,7 @@ impl<'a> Parser<'a> {
                     &lhs_val,
                     &rhs_val,
                 ),
+                turbofish,
             }
             .between(self.file_id, &lhs_val, &rhs_val))
         } else {
@@ -213,22 +214,32 @@ impl<'a> Parser<'a> {
         } else if let Some(create_ports) = self.peek_and_eat(&TokenKind::Port)? {
             Ok(Expression::CreatePorts.at(self.file_id, &create_ports))
         } else {
-            match self.path() {
-                Ok(path) => {
+            match self.path_with_turbofish() {
+                Ok((path, turbofish)) => {
                     let span = path.span;
-                    // Check if this is a function call by looking for an argument list
-                    if let Some(args) = self.argument_list()? {
-                        // Doing this avoids cloning result and args
-                        let span = ().between(self.file_id, &path, &args);
-
-                        Ok(Expression::Call {
-                            kind: CallKind::Function,
-                            callee: path,
-                            args,
+                    match (turbofish, self.argument_list()?) {
+                        (None, None) => Ok(Expression::Identifier(path).at(self.file_id, &span)),
+                        (Some(tf), None) => {
+                            return Err(Diagnostic::error(self.peek()?, "Expected argument list")
+                                .primary_label("Expected argument list")
+                                .secondary_label(
+                                    tf,
+                                    "Type parameters can only be specified on function calls",
+                                )
+                                .into())
                         }
-                        .at_loc(&span))
-                    } else {
-                        Ok(Expression::Identifier(path).at(self.file_id, &span))
+                        (tf, Some(args)) => {
+                            // Doing this avoids cloning result and args
+                            let span = ().between(self.file_id, &path, &args);
+
+                            Ok(Expression::Call {
+                                kind: CallKind::Function,
+                                callee: path,
+                                args,
+                                turbofish: tf,
+                            }
+                            .at_loc(&span))
+                        }
                     }
                 }
                 Err(Error::UnexpectedToken { got, .. }) => Err(Error::ExpectedExpression { got }),
@@ -577,6 +588,7 @@ mod test {
                 Expression::int_literal(2).nowhere(),
             ])
             .nowhere(),
+            turbofish: None,
         }
         .nowhere();
 
@@ -595,6 +607,7 @@ mod test {
                 NamedArgument::Short(ast_ident("b")),
             ])
             .nowhere(),
+            turbofish: None,
         }
         .nowhere();
 
@@ -863,6 +876,7 @@ mod test {
                 Expression::int_literal(2).nowhere(),
             ])
             .nowhere(),
+            turbofish: None,
         }
         .nowhere();
 
@@ -896,10 +910,12 @@ mod test {
                         Expression::int_literal(3).nowhere(),
                     ])
                     .nowhere(),
+                    turbofish: None,
                 }
                 .nowhere(),
             ])
             .nowhere(),
+            turbofish: None,
         }
         .nowhere();
 
@@ -1035,6 +1051,7 @@ mod test {
                     kind: CallKind::Function,
                     callee: ast_path("a"),
                     args: ArgumentList::Positional(vec![]).nowhere(),
+                    turbofish: None,
                 }
                 .nowhere(),
             ),

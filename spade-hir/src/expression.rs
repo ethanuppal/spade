@@ -1,4 +1,4 @@
-use crate::Pattern;
+use crate::{Pattern, TypeExpression};
 
 use super::{Block, NameID};
 use num::{BigInt, BigUint};
@@ -172,6 +172,7 @@ pub enum ExprKind {
         kind: CallKind,
         callee: Loc<NameID>,
         args: Loc<ArgumentList>,
+        turbofish: Option<Loc<Vec<Loc<TypeExpression>>>>,
     },
     BinaryOperator(
         Box<Loc<Expression>>,

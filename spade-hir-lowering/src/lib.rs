@@ -754,6 +754,7 @@ pub fn do_wal_trace_lowering(
                         }
                         .nowhere()])
                         .nowhere(),
+                        turbofish: None,
                     },
                 }
                 .nowhere()
@@ -774,13 +775,15 @@ pub fn do_wal_trace_lowering(
                 .nowhere()
             };
 
-            let generic_list = &ctx
-                .types
-                .create_generic_list(spade_typeinference::GenericListSource::Anonymous, &[]);
             let type_ctx = spade_typeinference::Context {
                 symtab: ctx.symtab.symtab(),
                 items: ctx.item_list,
             };
+            let generic_list = &ctx.types.create_generic_list(
+                spade_typeinference::GenericListSource::Anonymous,
+                &[],
+                None,
+            )?;
             ctx.types
                 .visit_expression(&dummy_expr, &type_ctx, generic_list)
                 .map_err(|e| {
@@ -1615,7 +1618,12 @@ impl ExprLocal for Loc<Expression> {
                     self,
                 )
             }
-            ExprKind::Call { kind, callee, args } => {
+            ExprKind::Call {
+                kind,
+                callee,
+                args,
+                turbofish: _,
+            } => {
                 let head = ctx.symtab.symtab().unit_by_id(callee);
                 let args =
                     match_args_with_params(args, &head.inputs, false).map_err(Diagnostic::from)?;

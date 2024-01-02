@@ -1,0 +1,22 @@
+---
+source: spade-tests/src/typeinference.rs
+---
+fn ret_int<#A, #B>() -> int<8> {
+    0
+}
+
+fn test() {
+    let x: int<8> = ret_int::<10>();
+}
+
+
+error: Wrong number of type parameters
+  ┌─ testinput:6:30
+  │
+1 │ fn ret_int<#A, #B>() -> int<8> {
+  │            ------ Because this has 2 parameters
+  ·
+6 │     let x: int<8> = ret_int::<10>();
+  │                              ^^^^ Expected 2 type parameters
+
+

@@ -65,6 +65,7 @@ impl Passable for Loc<Expression> {
                 kind: _,
                 callee: _,
                 args,
+                turbofish: _,
             } => {
                 for arg in args.expressions_mut() {
                     arg.apply(pass)?;

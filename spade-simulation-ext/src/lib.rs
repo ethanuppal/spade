@@ -306,9 +306,9 @@ impl Spade {
     #[tracing::instrument(level = "trace", skip(self))]
     pub fn output_as_field_ref(&mut self) -> Result<FieldRef> {
         let output_type = self.output_type()?;
-        let generic_list = self
-            .type_state
-            .create_generic_list(GenericListSource::Anonymous, &[]);
+        let generic_list =
+            self.type_state
+                .create_generic_list(GenericListSource::Anonymous, &[], None)?;
 
         let ty = self
             .type_state
@@ -353,9 +353,9 @@ impl Spade {
         symtab.new_scope();
         let o_name = symtab.add_local_variable(Identifier("o".to_string()).nowhere());
 
-        let generic_list = self
-            .type_state
-            .create_generic_list(GenericListSource::Anonymous, &[]);
+        let generic_list =
+            self.type_state
+                .create_generic_list(GenericListSource::Anonymous, &[], None)?;
         let ty = self
             .type_state
             .type_var_from_hir(output_type.loc(), &output_type, &generic_list);
@@ -400,15 +400,15 @@ impl Spade {
             .report_and_convert(&mut self.error_buffer, &self.code, &mut self.diag_handler)?
             .at_loc(&ast);
 
-        let generic_list = self
-            .type_state
-            .create_generic_list(GenericListSource::Anonymous, &[]);
-        // NOTE: We need to actually have the type information about what we're assigning to here
-        // available
         let type_ctx = spade_typeinference::Context {
             symtab: &ast_ctx.symtab,
             items: &self.item_list,
         };
+        let generic_list =
+            self.type_state
+                .create_generic_list(GenericListSource::Anonymous, &[], None)?;
+        // NOTE: We need to actually have the type information about what we're assigning to here
+        // available
         self.type_state
             .visit_expression(&hir, &type_ctx, &generic_list)
             .report_and_convert(&mut self.error_buffer, &self.code, &mut self.diag_handler)?;
@@ -510,7 +510,8 @@ impl Spade {
         let (port_name, port_ty) = self.get_port(port.into())?;
 
         let mut type_state = TypeState::new();
-        let generic_list = type_state.create_generic_list(GenericListSource::Anonymous, &[]);
+        let generic_list =
+            type_state.create_generic_list(GenericListSource::Anonymous, &[], None)?;
         let ty = type_state.type_var_from_hir(port_ty.loc(), &port_ty, &generic_list);
 
         let val = self.compile_expr(expr, &ty)?;
@@ -602,14 +603,15 @@ impl Spade {
 
         let mut symtab = ast_ctx.symtab.freeze();
 
-        let generic_list = self
-            .type_state
-            .create_generic_list(GenericListSource::Anonymous, &[]);
-
         let type_ctx = spade_typeinference::Context {
             symtab: symtab.symtab(),
             items: &self.item_list,
         };
+        let generic_list = self
+            .type_state
+            .create_generic_list(GenericListSource::Anonymous, &[], None)
+            .unwrap();
+
         self.type_state
             .visit_expression(&hir, &type_ctx, &generic_list)
             .report_and_convert(&mut self.error_buffer, &self.code, &mut self.diag_handler)?;

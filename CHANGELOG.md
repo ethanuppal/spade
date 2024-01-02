@@ -19,6 +19,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - [!254][!254] Added `std::conv::flip_array`
 - [!255][!255] Add range indexing to arrays. You can now access parts of arrays using `a[start:end]`
 - [!262][!262] Add `uint<#N>` for unsigned integers. Adjusted stdlib accordingly
+- [!263][!263] Allow specifying type parameters for Units using turbofish (`::<>`) syntax. For example `trunc::<10>(x)`
 
 ### Fixed
 
