@@ -1,36 +1,4 @@
-use codespan_reporting::diagnostic::Diagnostic;
-use codespan_reporting::term::{self, termcolor::Buffer};
-use itertools::Itertools;
-use num::One;
-
-use spade_common::location_info::AsLabel;
-use spade_diagnostics::emitter::codespan_config;
-use spade_diagnostics::{CodeBundle, CompilationError, DiagHandler};
-
-use crate::usefulness::Witness;
-use crate::Error;
-
-fn format_witnesses(witnesses: &[Witness]) -> String {
-    // Print 1 or 2 missing patterns in full, if more print and X more not covered
-    let threshold_len = 2;
-    if witnesses.len() == 1 {
-        format!("pattern {}", witnesses[0])
-    } else if witnesses.len() <= threshold_len {
-        format!(
-            "patterns {}",
-            witnesses.iter().map(|w| format!("{w}")).join(", ")
-        )
-    } else {
-        let partial = witnesses[0..threshold_len]
-            .iter()
-            .map(|w| format!("{w}"))
-            .join(", ");
-        format!(
-            "patterns {partial} and {} more",
-            witnesses.len() - threshold_len
-        )
-    }
-}
+/*
 
 impl CompilationError for Error {
     fn report(&self, buffer: &mut Buffer, code: &CodeBundle, diag_handler: &mut DiagHandler) {
@@ -68,9 +36,7 @@ impl CompilationError for Error {
                             .with_message(format!("This has {rhs} bit{rhs_plural}")),
                     ])
             }
-            Error::UndefinedVariable { name } => Diagnostic::error()
-                .with_message(format!("Use of undeclared name {name}"))
-                .with_labels(vec![name.primary_label().with_message("Undeclared name")]),
+            Error::UndefinedVariable { name } => ,
             Error::UseBeforeReady {
                 name,
                 unavailable_for,
@@ -151,3 +117,4 @@ impl CompilationError for Error {
         term::emit(buffer, &codespan_config(), &code.files, &diag).unwrap();
     }
 }
+*/

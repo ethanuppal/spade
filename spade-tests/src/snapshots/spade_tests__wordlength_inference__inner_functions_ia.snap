@@ -2,7 +2,7 @@
 source: spade-tests/src/wordlength_inference.rs
 ---
 fn g() -> int<3> { 0 }
-fn f<a, b>(a: int<2>) -> int<0> {
+fn f<A, B>(a: int<2>) -> int<0> {
     g() + a
 }
 entity main(clk: clock, rst: bool) -> int<0> { f(0) }

@@ -1312,3 +1312,18 @@ snapshot_error! {
         }
     "
 }
+
+snapshot_error! {
+    type_params_are_accessible_in_units,
+    "
+        fn produce_something<T>() -> T __builtin__
+
+        fn test<T>() {
+            let a: T = produce_something();
+        }
+
+        fn main() {
+            test::<int<8>>()
+        }
+    "
+}

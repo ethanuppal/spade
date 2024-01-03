@@ -452,6 +452,14 @@ impl SymbolTable {
         self.add_thing_with_id(id, name, item)
     }
 
+    pub fn re_add_type(&mut self, name: Loc<Identifier>, name_id: NameID) {
+        assert!(self.types.contains_key(&name_id));
+        self.symbols
+            .last_mut()
+            .unwrap()
+            .insert(Path::ident(name), name_id);
+    }
+
     pub fn add_type_with_id(&mut self, id: u64, name: Path, t: Loc<TypeSymbol>) -> NameID {
         let full_name = self.namespace.join(name);
         let name_id = NameID(id, full_name.clone());

@@ -1,6 +1,5 @@
 ---
 source: spade-tests/src/hir_lowering.rs
-assertion_line: 1605
 ---
 pipeline(5) X(clk: clock) -> bool {reg*5; false}
 
@@ -19,7 +18,7 @@ error: Use of x before it is ready
 6 │         let res = stage(-1).x;
   │                             ^ Is unavailable for another 1 stage
   │
-  = Requesting x from stage 4
-  = But it will not be available until stage 5
+  = note: Requesting x from stage 4
+  = note: But it will not be available until stage 5
 
 

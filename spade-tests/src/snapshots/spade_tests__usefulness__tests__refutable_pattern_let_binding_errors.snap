@@ -13,7 +13,7 @@ error: Refutable pattern in local binding: pattern false not covered
 2 │     let true = false;
   │         ^^^^ pattern pattern false not covered
   │
-  = let requires a pattern which matches all possible options, such as a variable, struct or enum with only 1 option.
-  = hint: you might want to use match statement to handle different cases
+  = note: let requires a pattern which matches all possible options, such as a variable, struct or enum with only 1 option.
+  = help: hint: you might want to use match statement to handle different cases
 
 

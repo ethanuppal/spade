@@ -17,6 +17,6 @@ error: Ports cannot be put in a register
 6 │     reg(clk) _ = a;
   │                  ^ This is a port
   │
-  = struct X {a: &mut bool, b: &bool} is a port
+  = note: struct X {a: &mut bool, b: &bool} is a port
 
 

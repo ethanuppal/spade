@@ -1140,6 +1140,7 @@ dependencies = [
  "spade-common",
  "spade-diagnostics",
  "spade-hir",
+ "spade-macros",
  "spade-mir",
  "spade-typeinference",
  "spade-types",

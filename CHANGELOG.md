@@ -9,6 +9,23 @@ released as a new version.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [Unreleased]
+
+### Added
+
+- [!266][!266] Provide more information when type inference fails during monomorphisation
+
+### Changed
+
+### Fixed
+
+### Removed
+
+
+
+[!266]: https://gitlab.com/spade-lang/spade/-/merge_requests/266
+
+
 ## [0.6.0] - 2024-01-03
 
 ### Added

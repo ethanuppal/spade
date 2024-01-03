@@ -15,6 +15,10 @@ use std::collections::BTreeMap;
 
 use attributes::AttributeListExt;
 use attributes::LocAttributeExt;
+use error::format_witnesses;
+use error::refutable_pattern_diagnostic;
+use error::undefined_variable;
+use error::use_before_ready;
 use error::{expect_entity, expect_function, expect_pipeline};
 use hir::expression::BitLiteral;
 use hir::expression::CallKind;
@@ -33,6 +37,7 @@ use mir::types::Type as MirType;
 use mir::MirInput;
 use mir::ValueNameSource;
 use mir::{ConstantValue, ValueName};
+use monomorphisation::MonoItem;
 use monomorphisation::MonoState;
 use name_map::NameSource;
 pub use name_map::NameSourceMap;
@@ -53,10 +58,9 @@ use spade_types::KnownType;
 use statement_list::StatementList;
 use substitution::Substitution;
 use substitution::Substitutions;
-use thiserror::Error;
 use usefulness::{is_useful, PatStack, Usefulness};
 
-use crate::error::{Error, Result};
+use crate::error::Result;
 use spade_common::{location_info::Loc, name::NameID};
 use spade_hir as hir;
 use spade_hir::{expression::BinaryOperator, ExprKind, Expression, Statement, Unit};
@@ -898,11 +902,11 @@ impl StatementLocal for Statement {
 
                 let refutability = pattern.is_refutable(ctx);
                 if refutability.is_useful() {
-                    return Err(Error::RefutablePattern {
-                        pattern: pattern.loc(),
-                        witnesses: refutability.witnesses,
-                        binding_kind: "let",
-                    });
+                    return Err(refutable_pattern_diagnostic(
+                        pattern.loc(),
+                        &refutability,
+                        "let",
+                    ));
                 }
 
                 let concrete_ty =
@@ -953,11 +957,11 @@ impl StatementLocal for Statement {
 
                 let refutability = pattern.is_refutable(ctx);
                 if refutability.is_useful() {
-                    return Err(Error::RefutablePattern {
-                        pattern: register.pattern.loc(),
-                        witnesses: refutability.witnesses,
-                        binding_kind: "reg",
-                    });
+                    return Err(refutable_pattern_diagnostic(
+                        pattern.loc(),
+                        &refutability,
+                        "reg",
+                    ));
                 }
 
                 let ty =
@@ -965,10 +969,11 @@ impl StatementLocal for Statement {
                         .type_of_id(pattern.id, ctx.symtab.symtab(), &ctx.item_list.types);
 
                 if ty.is_port() {
-                    return Err(Error::PortInRegister {
-                        loc: value.loc(),
-                        ty,
-                    });
+                    return Err(
+                        Diagnostic::error(value, "Ports cannot be put in a register")
+                            .primary_label("This is a port")
+                            .note(format!("{ty} is a port")),
+                    );
                 }
 
                 let mut traced = None;
@@ -1073,14 +1078,12 @@ impl ExprLocal for Loc<Expression> {
     fn alias(&self, subs: &Substitutions) -> Result<Option<mir::ValueName>> {
         match &self.kind {
             ExprKind::Identifier(ident) => match subs.lookup(ident) {
-                Substitution::Undefined => Err(Error::UndefinedVariable {
-                    name: ident.clone().at_loc(self),
-                }),
-                Substitution::Waiting(available_in, name) => Err(Error::UseBeforeReady {
-                    name: name.at_loc(self),
-                    referenced_at_stage: subs.current_stage,
-                    unavailable_for: available_in,
-                }),
+                Substitution::Undefined => Err(undefined_variable(&ident.clone().at_loc(self))),
+                Substitution::Waiting(available_in, name) => Err(use_before_ready(
+                    &name.at_loc(self),
+                    subs.current_stage,
+                    available_in,
+                )),
                 Substitution::Available(current) => Ok(Some(current.value_name())),
                 Substitution::Port | Substitution::ZeroSized => Ok(Some(ident.value_name())),
             },
@@ -1111,16 +1114,12 @@ impl ExprLocal for Loc<Expression> {
                 declares_name: _,
             } => {
                 match subs.lookup_referenced(stage.inner, name) {
-                    Substitution::Undefined => Err(Error::UndefinedVariable { name: name.clone() }),
+                    Substitution::Undefined => Err(undefined_variable(&name)),
                     Substitution::Waiting(available_at, _) => {
                         // Available at is the amount of cycles left at the stage
                         // from which the variable is requested.
                         let referenced_at_stage = subs.current_stage - available_at;
-                        Err(Error::UseBeforeReady {
-                            name: name.clone(),
-                            referenced_at_stage,
-                            unavailable_for: available_at,
-                        })
+                        Err(use_before_ready(name, referenced_at_stage, available_at))
                     }
                     Substitution::Available(name) => Ok(Some(name.value_name())),
                     Substitution::Port | Substitution::ZeroSized => Ok(Some(name.value_name())),
@@ -1584,10 +1583,13 @@ impl ExprLocal for Loc<Expression> {
                 );
 
                 if wildcard_useful.is_useful() {
-                    return Err(Error::MissingPatterns {
-                        match_expr: self.loc(),
-                        useful_branches: wildcard_useful.witnesses,
-                    });
+                    let witnesses = format_witnesses(&wildcard_useful.witnesses);
+
+                    return Err(Diagnostic::error(
+                        self.loc(),
+                        format!("Non-exhaustive match: {witnesses} not covered"),
+                    )
+                    .primary_label(format!("{witnesses} not covered")));
                 }
 
                 result.append(operand.lower(ctx)?);
@@ -1762,12 +1764,13 @@ impl ExprLocal for Loc<Expression> {
                 let actual =
                     TypeState::ungenerify_type(ty, ctx.symtab.symtab(), &ctx.item_list.types);
                 if actual.as_ref().map(|t| t.is_port()).unwrap_or(false) {
-                    return Err(Error::PortInGenericType {
-                        loc: self.loc(),
-                        param: name.clone(),
-                        // NOTE: Safe because we were able to run `t.is_port()` above
-                        actual: actual.unwrap().clone(),
-                    });
+                    return Err(
+                        Diagnostic::error(self.loc(), "Generic types cannot be ports")
+                            .primary_label(format!(
+                                "Parameter {name} is {actual} which is a port type",
+                                actual = actual.unwrap()
+                            )),
+                    );
                 }
             }
             Ok(())
@@ -1884,7 +1887,13 @@ impl ExprLocal for Loc<Expression> {
 
                     UnitName::WithID(
                         ctx.mono_state
-                            .request_compilation(unit_name, false, t, ctx.symtab)
+                            .request_compilation(
+                                unit_name,
+                                false,
+                                t,
+                                ctx.symtab,
+                                ctx.self_mono_item.clone().map(|item| (item, self.loc())),
+                            )
                             .nowhere(),
                     )
                 } else {
@@ -1922,16 +1931,18 @@ impl ExprLocal for Loc<Expression> {
                 );
             }
             Some(hir::ExecutableItem::BuiltinUnit(name, head)) => {
-                let (unit_name, type_params, head_loc) = (name, &head.type_params, head.loc());
+                let (unit_name, type_params) = (name, &head.type_params);
 
                 // NOTE: Ideally this check would be done earlier, when defining the generic
                 // builtin. However, at the moment, the compiler does not know if the generic
                 // is an intrinsic until here when it has gone through the list of intrinsics
                 if !type_params.is_empty() {
-                    return Err(Error::InstantiatingGenericBuiltin {
-                        loc: self.loc(),
-                        head: head_loc,
-                    });
+                    return Err(Diagnostic::error(
+                        self.loc(),
+                        "Generic builtins cannot be instantiated",
+                    )
+                    .primary_label("Invalid instance")
+                    .secondary_label(head, "Because this is a generic __builtin__"));
                 }
 
                 let params = args
@@ -2432,12 +2443,13 @@ impl ExprLocal for Loc<Expression> {
             .to_mir_type();
 
         if self_type.size() != arg0_type.size() + arg1_type.size() {
-            Err(Error::ConcatSizeMismatch {
-                lhs: arg0_type.size().at_loc(args[0].value),
-                rhs: arg1_type.size().at_loc(args[1].value),
-                expected: arg0_type.size() + arg1_type.size(),
-                result: self_type.size().at_loc(self),
-            })
+            Err(Diagnostic::bug(
+                self_type.size().at_loc(self),
+                format!(
+                    "Concatenation produces {result} bits, expected {expected}",
+                    expected = arg0_type.size() + arg1_type.size()
+                ),
+            ))
         } else {
             result.push_primary(
                 mir::Statement::Binding(mir::Binding {
@@ -2562,6 +2574,7 @@ pub struct Context<'a> {
     pub subs: &'a mut Substitutions,
     pub diag_handler: &'a mut DiagHandler,
     pub pipeline_context: &'a mut MaybePipelineContext,
+    pub self_mono_item: Option<MonoItem>,
 }
 
 pub fn generate_unit<'a>(
@@ -2576,6 +2589,7 @@ pub fn generate_unit<'a>(
     mono_state: &mut MonoState,
     diag_handler: &mut DiagHandler,
     name_source_map: &mut NameSourceMap,
+    self_mono_item: Option<MonoItem>,
 ) -> Result<mir::Entity> {
     let mir_inputs = unit
         .head
@@ -2635,6 +2649,7 @@ pub fn generate_unit<'a>(
         mono_state,
         diag_handler,
         pipeline_context,
+        self_mono_item,
     };
 
     if let UnitKind::Pipeline(_) = unit.head.unit_kind.inner {

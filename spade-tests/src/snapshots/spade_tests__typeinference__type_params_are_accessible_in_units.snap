@@ -1,0 +1,29 @@
+---
+source: spade-tests/src/typeinference.rs
+---
+fn produce_something<T>() -> T __builtin__
+
+fn test<T>() {
+    let a: T = produce_something();
+}
+
+fn main() {
+    test::<int<8>>()
+}
+
+
+error: Type of expression is not fully known
+  ┌─ testinput:4:16
+  │
+4 │     let a: T = produce_something();
+  │                ^^^^^^^^^^^^^^^^^^^ The type of this expression is not fully known
+  │
+  = note: Found incomplete type: _
+help: Unit instantiated here
+  ┌─ testinput:8:5
+  │
+8 │     test::<int<8>>()
+  │     ^^^^^^^^^^^^^^^^ Unit instantiated here
+  │
+
+

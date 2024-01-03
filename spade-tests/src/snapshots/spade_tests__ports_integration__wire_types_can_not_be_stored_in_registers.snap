@@ -13,6 +13,6 @@ error: Ports cannot be put in a register
 2 │     reg(clk) _ = a;
   │                  ^ This is a port
   │
-  = &bool is a port
+  = note: &bool is a port
 
 

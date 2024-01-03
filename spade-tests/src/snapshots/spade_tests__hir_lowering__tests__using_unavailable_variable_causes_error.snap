@@ -18,7 +18,7 @@ error: Use of x before it is ready
 6 │         let res = x;
   │                   ^ Is unavailable for another 4 stages
   │
-  = Requesting x from stage 1
-  = But it will not be available until stage 5
+  = note: Requesting x from stage 1
+  = note: But it will not be available until stage 5
 
 

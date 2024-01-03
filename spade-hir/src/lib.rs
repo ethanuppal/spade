@@ -200,8 +200,8 @@ impl WithLocation for Register {}
 /// re-added to the symtab multiple times
 #[derive(PartialEq, Debug, Clone, Hash, Eq, Serialize, Deserialize)]
 pub enum TypeParam {
-    TypeName(Identifier, NameID),
-    Integer(Identifier, NameID),
+    TypeName(Loc<Identifier>, NameID),
+    Integer(Loc<Identifier>, NameID),
 }
 impl WithLocation for TypeParam {}
 impl TypeParam {
@@ -352,7 +352,7 @@ pub struct TypeDeclaration {
 }
 impl WithLocation for TypeDeclaration {}
 
-#[derive(PartialEq, Debug, Clone, Serialize, Deserialize)]
+#[derive(PartialEq, Debug, Clone, Serialize, Deserialize, Hash, Eq)]
 pub enum UnitName {
     /// The name will be mangled down to contain the NameID in order to ensure
     /// uniqueness. Emitted by generic functions

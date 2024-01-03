@@ -23,10 +23,9 @@ use spade_ast_lowering::{
 };
 use spade_common::id_tracker;
 use spade_common::name::{NameID, Path as SpadePath};
-use spade_diagnostics::{CodeBundle, CompilationError, DiagHandler};
+use spade_diagnostics::{CodeBundle, CompilationError, DiagHandler, Diagnostic};
 use spade_hir::symbol_table::SymbolTable;
 use spade_hir::{ExecutableItem, ItemList};
-use spade_hir_lowering::error::Error as HirLoweringError;
 use spade_hir_lowering::monomorphisation::MirOutput;
 use spade_hir_lowering::NameSourceMap;
 pub use spade_parser::lexer;
@@ -66,9 +65,6 @@ pub struct Opt<'b> {
 pub enum Error {
     #[error("parse error")]
     ParseError(#[from] spade_parser::error::Error),
-
-    #[error("hir lowering error")]
-    HirLoweringError(#[from] spade_hir_lowering::error::Error),
 
     #[error("io error")]
     IoError(#[from] std::io::Error),
@@ -465,7 +461,7 @@ fn lower_ast(
 
 #[tracing::instrument(skip_all)]
 fn codegen(
-    mir_entities: Vec<Result<MirOutput, HirLoweringError>>,
+    mir_entities: Vec<Result<MirOutput, Diagnostic>>,
     code: Rc<RwLock<CodeBundle>>,
     errors: &mut ErrorHandler,
     idtracker: &mut ExprIdTracker,

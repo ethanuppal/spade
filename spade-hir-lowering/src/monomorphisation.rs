@@ -1,7 +1,9 @@
-use std::collections::{BTreeMap, VecDeque};
+use std::collections::{BTreeMap, HashMap, VecDeque};
 
+use spade_common::location_info::Loc;
 use spade_common::{id_tracker::ExprIdTracker, location_info::WithLocation, name::NameID};
-use spade_diagnostics::DiagHandler;
+use spade_diagnostics::diagnostic::{Labels, Message, Subdiagnostic};
+use spade_diagnostics::{DiagHandler, Diagnostic};
 use spade_hir::{symbol_table::FrozenSymtab, ExecutableItem, ItemList, UnitName};
 use spade_mir as mir;
 use spade_typeinference::equation::TypeVar;
@@ -9,16 +11,17 @@ use spade_typeinference::error::UnificationErrorExt;
 use spade_typeinference::{GenericListToken, TypeState};
 use spade_wordlength_inference as wordlength_inference;
 
-use crate::error::{Error, Result};
+use crate::error::Result;
 use crate::generate_unit;
 use crate::name_map::NameSourceMap;
 use crate::passes::lower_methods::LowerMethods;
 use crate::passes::pass::Passable;
 
 /// An item to be monomorphised
-struct MonoItem {
+#[derive(Clone, Debug, Hash, PartialEq, Eq)]
+pub struct MonoItem {
     /// The name of the original item which this is a monomorphised version of
-    pub source_name: NameID,
+    pub source_name: Loc<NameID>,
     /// The new name of the new item
     pub new_name: UnitName,
     /// The types to replace the generic types in the item. Positional replacement
@@ -30,6 +33,9 @@ pub struct MonoState {
     to_compile: VecDeque<MonoItem>,
     /// Mapping between items with types specified and names
     translation: BTreeMap<(NameID, Vec<TypeVar>), NameID>,
+    /// Locations in the code where compilation of the Mono item was requested. None
+    /// if this is non-generic
+    request_points: HashMap<MonoItem, Option<(MonoItem, Loc<()>)>>,
 }
 
 impl Default for MonoState {
@@ -43,6 +49,7 @@ impl MonoState {
         MonoState {
             to_compile: VecDeque::new(),
             translation: BTreeMap::new(),
+            request_points: HashMap::new(),
         }
     }
 
@@ -55,6 +62,7 @@ impl MonoState {
         reuse_nameid: bool,
         params: Vec<TypeVar>,
         symtab: &mut FrozenSymtab,
+        request_point: Option<(MonoItem, Loc<()>)>,
     ) -> NameID {
         match self
             .translation
@@ -78,11 +86,14 @@ impl MonoState {
                     }
                 };
 
-                self.to_compile.push_back(MonoItem {
-                    source_name: source_name.name_id().inner.clone(),
+                let item = MonoItem {
+                    source_name: source_name.name_id().clone(),
                     new_name: new_unit_name,
                     params,
-                });
+                };
+                self.request_points.insert(item.clone(), request_point);
+
+                self.to_compile.push_back(item);
                 new_name
             }
         }
@@ -90,6 +101,25 @@ impl MonoState {
 
     fn next_target(&mut self) -> Option<MonoItem> {
         self.to_compile.pop_front()
+    }
+
+    fn add_mono_traceback(&self, diagnostic: Diagnostic, parent: &MonoItem) -> Diagnostic {
+        let parent = self.request_points.get(parent).and_then(|x| x.clone());
+        if let Some((parent, loc)) = parent {
+            let new = diagnostic.subdiagnostic(Subdiagnostic::SpannedNote {
+                level: spade_diagnostics::diagnostic::SubdiagnosticLevel::Help,
+                labels: Labels {
+                    message: Message::from("Unit instantiated here"),
+                    span: loc.into(),
+                    primary_label: Some(Message::from("Unit instantiated here")),
+                    secondary_labels: vec![],
+                },
+            });
+
+            self.add_mono_traceback(new, &parent)
+        } else {
+            diagnostic
+        }
     }
 }
 
@@ -119,7 +149,7 @@ pub fn compile_items(
         match item {
             ExecutableItem::Unit(u) => {
                 if u.head.type_params.is_empty() {
-                    state.request_compilation(u.name.clone(), true, vec![], symtab);
+                    state.request_compilation(u.name.clone(), true, vec![], symtab, None);
                 }
             }
             ExecutableItem::StructInstance => {}
@@ -130,7 +160,7 @@ pub fn compile_items(
 
     let mut result = vec![];
     while let Some(item) = state.next_target() {
-        let original_item = items.get(&item.source_name);
+        let original_item = items.get(&item.source_name.inner);
 
         let mut reg_name_map = BTreeMap::new();
         match original_item {
@@ -156,7 +186,7 @@ pub fn compile_items(
                         {
                             Ok(_) => {}
                             Err(e) => {
-                                result.push(Err(Error::SpadeDiagnostic(e)));
+                                result.push(Err(state.add_mono_traceback(e, &item)));
                             }
                         }
                     }
@@ -182,14 +212,15 @@ pub fn compile_items(
                         type_ctx,
                     );
                     if let Err(e) = infer_result {
-                        result.push(Err(Error::SpadeDiagnostic(e)));
+                        result.push(Err(state.add_mono_traceback(e, &item)));
                         continue;
                     }
                 }
 
+                let self_mono_item = Some(item.clone());
                 let out = generate_unit(
                     &u.inner,
-                    item.new_name,
+                    item.new_name.clone(),
                     &mut type_state,
                     symtab,
                     idtracker,
@@ -198,7 +229,9 @@ pub fn compile_items(
                     &mut state,
                     diag_handler,
                     name_source_map,
+                    self_mono_item,
                 )
+                .map_err(|e| state.add_mono_traceback(e, &item))
                 .map(|mir| MirOutput {
                     mir,
                     type_state: type_state.clone(),

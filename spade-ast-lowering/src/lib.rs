@@ -85,7 +85,7 @@ pub fn visit_type_param(
                 TypeSymbol::GenericArg { traits }.at_loc(ident),
             );
 
-            Ok(hir::TypeParam::TypeName(ident.inner.clone(), name_id))
+            Ok(hir::TypeParam::TypeName(ident.clone(), name_id))
         }
         ast::TypeParam::Integer(ident) => {
             let name_id = symtab.add_type(
@@ -93,7 +93,7 @@ pub fn visit_type_param(
                 TypeSymbol::GenericArg { traits: vec![] }.at_loc(ident),
             );
 
-            Ok(hir::TypeParam::Integer(ident.inner.clone(), name_id))
+            Ok(hir::TypeParam::Integer(ident.clone(), name_id))
         }
     }
 }
@@ -488,6 +488,14 @@ pub fn visit_unit(
             },
         )
         .collect::<Vec<_>>();
+
+    // Add the type params to the symtab to make them visible in the body
+    for param in &head.type_params {
+        match param.inner.clone() {
+            hir::TypeParam::TypeName(ident, name) => ctx.symtab.re_add_type(ident, name),
+            hir::TypeParam::Integer(ident, name) => ctx.symtab.re_add_type(ident, name),
+        }
+    }
 
     ctx.pipeline_ctx = maybe_perform_pipelining_tasks(unit, &head, ctx)?;
 

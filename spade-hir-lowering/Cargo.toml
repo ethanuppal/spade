@@ -26,6 +26,7 @@ spade-common = {path = "../spade-common"}
 spade-diagnostics = { path = "../spade-diagnostics" }
 spade-hir = {path = "../spade-hir"}
 spade-mir = {path = "../spade-mir"}
+spade-macros = {path = "../spade-macros"}
 spade-typeinference = {path = "../spade-typeinference"}
 spade-types = {path = "../spade-types"}
 spade-wordlength-inference = {path = "../spade-wordlength-inference"}

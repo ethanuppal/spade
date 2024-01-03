@@ -1,7 +1,7 @@
 ---
 source: spade-tests/src/wordlength_inference.rs
 ---
-fn f<a, b>(a: int<a>, b: int<b>) -> int<b> {
+fn f<A, B>(a: int<a>, b: int<b>) -> int<b> {
   a + b
 }
 
@@ -12,10 +12,10 @@ entity main(clk: clock, rst: bool) -> int<0> {
 }
 
 
-error: Word length mismatch. Got 2 bits but expected 0 bits
-  ┌─ testinput:8:3
+error: Use of undeclared name b
+  ┌─ testinput:1:41
   │
-8 │   0
-  │   ^ Got 2 bits, expected 0
+1 │ fn f<A, B>(a: int<a>, b: int<b>) -> int<b> {
+  │                                         ^ Undeclared name
 
 

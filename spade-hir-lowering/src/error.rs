@@ -1,68 +1,77 @@
-use num::BigUint;
+use itertools::Itertools;
 use spade_common::{location_info::Loc, name::NameID};
 use spade_diagnostics::Diagnostic;
-use spade_types::ConcreteType;
-use thiserror::Error;
 
-use crate::usefulness::Witness;
+use crate::usefulness::{Usefulness, Witness};
 
-#[derive(Error, Debug)]
-pub enum Error {
-    #[error("concat size mismatch")]
-    ConcatSizeMismatch {
-        lhs: Loc<BigUint>,
-        rhs: Loc<BigUint>,
-        result: Loc<BigUint>,
-        expected: BigUint,
-    },
-    #[error("Use of undefined identifier")]
-    UndefinedVariable { name: Loc<NameID> },
-    #[error("Use of value before it is ready")]
-    UseBeforeReady {
-        name: Loc<NameID>,
-        // The number of stages left until the value is available
-        unavailable_for: usize,
-        // The absolute stage at which the variable is requested
-        referenced_at_stage: usize,
-    },
-    #[error("Availability mismatch")]
-    AvailabilityMismatch { prev: Loc<usize>, new: Loc<usize> },
-    #[error("Generic builtin")]
-    InstantiatingGenericBuiltin { loc: Loc<()>, head: Loc<()> },
-    #[error("Missing patterns")]
-    MissingPatterns {
-        match_expr: Loc<()>,
-        useful_branches: Vec<Witness>,
-    },
-    #[error("Refutable pattern")]
-    RefutablePattern {
-        pattern: Loc<()>,
-        witnesses: Vec<Witness>,
-        // The statement in which this binding occurs. (let, reg etc.)
-        binding_kind: &'static str,
-    },
-    #[error("Port in register")]
-    PortInRegister { loc: Loc<()>, ty: ConcreteType },
-    #[error("Port in generic type")]
-    PortInGenericType {
-        loc: Loc<()>,
-        param: NameID,
-        actual: ConcreteType,
-    },
-    #[error("Unification error")]
-    UnificationError(#[source] Diagnostic),
+pub type Result<T> = std::result::Result<T, Diagnostic>;
 
-    #[error("Spade diagnostic")]
-    SpadeDiagnostic(#[from] Diagnostic),
+pub(crate) fn undefined_variable(name: &Loc<NameID>) -> Diagnostic {
+    Diagnostic::error(name, format!("Use of undeclared name {name}"))
+        .primary_label("Undeclared name")
 }
-pub type Result<T> = std::result::Result<T, Error>;
+
+pub(crate) fn use_before_ready(
+    name: &Loc<NameID>,
+    referenced_at_stage: usize,
+    unavailable_for: usize,
+) -> Diagnostic {
+    let plural = if unavailable_for == 1 { "" } else { "s" };
+
+    Diagnostic::error(name, format!("Use of {name} before it is ready"))
+        .primary_label(format!(
+            "Is unavailable for another {unavailable_for} stage{plural}"
+        ))
+        .note(format!(
+            "Requesting {name} from stage {referenced_at_stage}"
+        ))
+        .note(format!(
+            "But it will not be available until stage {}",
+            referenced_at_stage + unavailable_for
+        ))
+}
+
+pub(crate) fn refutable_pattern_diagnostic(
+    loc: Loc<()>,
+    refutability: &Usefulness,
+    binding_kind: &str,
+) -> Diagnostic {
+    let witnesses = format_witnesses(&refutability.witnesses);
+
+    return Diagnostic::error(loc, format!("Refutable pattern in local binding: {witnesses} not covered"))
+        .primary_label(format!("pattern {witnesses} not covered"))
+        .note(format!("{binding_kind} requires a pattern which matches all possible options, such as a variable, struct or enum with only 1 option."))
+        .help("hint: you might want to use match statement to handle different cases");
+}
+
+pub fn format_witnesses(witnesses: &[Witness]) -> String {
+    // Print 1 or 2 missing patterns in full, if more print and X more not covered
+    let threshold_len = 2;
+    if witnesses.len() == 1 {
+        format!("pattern {}", witnesses[0])
+    } else if witnesses.len() <= threshold_len {
+        format!(
+            "patterns {}",
+            witnesses.iter().map(|w| format!("{w}")).join(", ")
+        )
+    } else {
+        let partial = witnesses[0..threshold_len]
+            .iter()
+            .map(|w| format!("{w}"))
+            .join(", ");
+        format!(
+            "patterns {partial} and {} more",
+            witnesses.len() - threshold_len
+        )
+    }
+}
 
 /// Error to emit when instantiating non-function without inst
 pub fn expect_function(
     callee: &Loc<NameID>,
     unit_def: Loc<()>,
     found_instead: &spade_hir::UnitKind,
-) -> Error {
+) -> Diagnostic {
     let callee_name = &callee.map_ref(|n| n.1.tail());
     let diag = spade_diagnostics::Diagnostic::error(
         callee_name,
@@ -85,7 +94,6 @@ pub fn expect_function(
             )
             .secondary_label(unit_def, format!("{callee_name} is a pipeline")),
     }
-    .into()
 }
 
 /// Error to emit when using `inst` to instantiate pipeline or entity
@@ -94,7 +102,7 @@ pub fn expect_entity(
     callee: &Loc<NameID>,
     unit_def: Loc<()>,
     found_instead: &spade_hir::UnitKind,
-) -> Error {
+) -> Diagnostic {
     let unit_name = &callee.map_ref(|n| n.1.tail());
     let diag = spade_diagnostics::Diagnostic::error(
         unit_name,
@@ -127,7 +135,7 @@ pub fn expect_pipeline(
     callee: &Loc<NameID>,
     unit_def: Loc<()>,
     found_instead: &spade_hir::UnitKind,
-) -> Error {
+) -> Diagnostic {
     let unit_name = &callee.map_ref(|n| n.1.tail());
     let diag = spade_diagnostics::Diagnostic::error(
         unit_name,

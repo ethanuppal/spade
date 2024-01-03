@@ -223,9 +223,9 @@ pub fn re_visit_type_declaration(
             .at_loc(arg);
         let param = match &arg.inner {
             ast::TypeParam::TypeName { name, traits: _ } => {
-                hir::TypeParam::TypeName(name.inner.clone(), name_id.clone())
+                hir::TypeParam::TypeName(name.clone(), name_id.clone())
             }
-            ast::TypeParam::Integer(n) => hir::TypeParam::Integer(n.inner.clone(), name_id.clone()),
+            ast::TypeParam::Integer(n) => hir::TypeParam::Integer(n.clone(), name_id.clone()),
         };
         output_type_exprs.push(expr);
         type_params.push(param.at_loc(arg))
@@ -584,11 +584,9 @@ mod tests {
                 }
                 .nowhere(),
             ),
-            generic_args: vec![hir::TypeParam::TypeName(
-                ast_ident("T").inner,
-                name_id(1, "T").inner,
-            )
-            .nowhere()],
+            generic_args: vec![
+                hir::TypeParam::TypeName(ast_ident("T"), name_id(1, "T").inner).nowhere(),
+            ],
         };
 
         assert_eq!(result.inner, expected);

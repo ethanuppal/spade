@@ -15,7 +15,7 @@ use spade_mir as mir;
 
 use crate::Context;
 use crate::ExprLocal;
-use crate::{error::Error, statement_list::StatementList, MirLowerable, NameIDExt, Result};
+use crate::{statement_list::StatementList, MirLowerable, NameIDExt, Result};
 
 pub struct PipelineContext {
     /// Mapping from stage index to the corresponding enable signal, i.e. what
@@ -542,10 +542,14 @@ pub fn try_compute_availability(
             Some(prev) if a == prev => result,
             // NOTE: Safe index. This branch can only be reached in iteration 2 of the loop
             _ => {
-                return Err(Error::AvailabilityMismatch {
-                    prev: exprs[0].borrow().clone().map(|_| result.unwrap()),
-                    new: expr.borrow().clone().map(|_| a),
-                })
+                let prev = exprs[0].borrow().clone().map(|_| result.unwrap());
+                let new = expr.borrow().clone().map(|_| a);
+                return Err(Diagnostic::error(
+                    new,
+                    "All subexpressions need the same pipeline delay",
+                )
+                .primary_label(format!("This has delay {new}"))
+                .secondary_label(prev, format!("But this has delay {prev}")));
             }
         }
     }

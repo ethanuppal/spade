@@ -644,6 +644,7 @@ impl Spade {
             subs: &mut Substitutions::new(),
             diag_handler: &mut self.diag_handler,
             pipeline_context: &mut MaybePipelineContext::NotPipeline,
+            self_mono_item: None,
         };
 
         let mir = expr_to_mir(hir, &mut hir_ctx).report_and_convert(
