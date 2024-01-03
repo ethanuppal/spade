@@ -9,7 +9,7 @@ released as a new version.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
-## Unreleased
+## [0.6.0] - 2024-01-03
 
 ### Added
 
@@ -19,23 +19,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - [!254][!254] Added `std::conv::flip_array`
 - [!255][!255] Add range indexing to arrays. You can now access parts of arrays using `a[start:end]`
 - [!262][!262] Add `uint<#N>` for unsigned integers. Adjusted stdlib accordingly
-- [!263][!263] Allow specifying type parameters for Units using turbofish (`::<>`) syntax. For example `trunc::<10>(x)`
-
-### Fixed
+- [!263][!263] Allow specifying type parameters for Units using turbofish (`::<>`) syntax. For example `trunc::<10, 5>(x)`
 
 ### Changed
 
 - [!260][!260] Instantiation parameters are now passed by name, which makes interaction with external verilog easier.
 - [!262][!262] **Breaking change**: Integers with `u` suffixes now have no effect, use unsigned types instead.
 
-### Removed
-
 [!251]: https://gitlab.com/spade-lang/spade/-/merge_requests/251
 [!252]: https://gitlab.com/spade-lang/spade/-/merge_requests/252
 [!254]: https://gitlab.com/spade-lang/spade/-/merge_requests/254
 [!255]: https://gitlab.com/spade-lang/spade/-/merge_requests/255
 [!260]: https://gitlab.com/spade-lang/spade/-/merge_requests/260
-[!262]: https://gitlab.com/spade-lang/spade/-/merge_requests/263
+[!262]: https://gitlab.com/spade-lang/spade/-/merge_requests/262
+[!263]: https://gitlab.com/spade-lang/spade/-/merge_requests/263
 
 ## [0.5.0] - 2023-11-17
 
@@ -176,7 +173,8 @@ Initial numbered version
 
 [Associated Swim release](https://gitlab.com/spade-lang/swim/-/tree/v0.1.0)
 
-[Unreleased]: https://gitlab.com/spade-lang/spade/-/compare/v0.5.0...master
+[Unreleased]: https://gitlab.com/spade-lang/spade/-/compare/v0.6.0...master
+[0.6.0]: https://gitlab.com/spade-lang/spade/-/compare/v0.5.0...v0.6.0
 [0.5.0]: https://gitlab.com/spade-lang/spade/-/compare/v0.4.0...v0.5.0
 [0.4.0]: https://gitlab.com/spade-lang/spade/-/compare/v0.3.0...v0.4.0
 [0.3.0]: https://gitlab.com/spade-lang/spade/-/compare/v0.2.0...v0.3.0
