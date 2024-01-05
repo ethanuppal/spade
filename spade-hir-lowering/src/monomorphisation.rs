@@ -159,7 +159,7 @@ pub fn compile_items(
     }
 
     let mut result = vec![];
-    while let Some(item) = state.next_target() {
+    'item_loop: while let Some(item) = state.next_target() {
         let original_item = items.get(&item.source_name.inner);
 
         let mut reg_name_map = BTreeMap::new();
@@ -187,6 +187,7 @@ pub fn compile_items(
                             Ok(_) => {}
                             Err(e) => {
                                 result.push(Err(state.add_mono_traceback(e, &item)));
+                                continue 'item_loop;
                             }
                         }
                     }

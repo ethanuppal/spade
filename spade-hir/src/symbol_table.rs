@@ -457,7 +457,7 @@ impl SymbolTable {
         self.symbols
             .last_mut()
             .unwrap()
-            .insert(Path::ident(name), name_id);
+            .insert(self.namespace.join(Path::ident(name)), name_id);
     }
 
     pub fn add_type_with_id(&mut self, id: u64, name: Path, t: Loc<TypeSymbol>) -> NameID {

@@ -1319,11 +1319,29 @@ snapshot_error! {
         fn produce_something<T>() -> T __builtin__
 
         fn test<T>() {
-            let a: T = produce_something();
+
+            let a: T = produce_something::<bool>();
         }
 
         fn main() {
-            test::<int<8>>()
+            test::<int<9>>()
+        }
+    "
+}
+
+snapshot_error! {
+    type_params_are_accessible_in_units2,
+    "
+        mod mem {
+            fn produce_something<T>() -> T __builtin__
+
+            fn test<#T>() {
+                let a: int<T> = produce_something::<int<8>>();
+            }
+
+            fn main() {
+                test::<int<9>>()
+            }
         }
     "
 }

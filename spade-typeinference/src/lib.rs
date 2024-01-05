@@ -804,6 +804,7 @@ impl TypeState {
         } else {
             params.iter().map(|_| None).collect::<Vec<_>>()
         };
+
         let new_list = params
             .iter()
             .enumerate()
@@ -821,7 +822,7 @@ impl TypeState {
                     self.unify(&ty, &t, tf_ctx.type_ctx)
                         .into_default_diagnostic(param)?;
                 }
-                Ok((name, t))
+                Ok((name, self.check_var_for_replacement(t)))
             })
             .collect::<Result<Vec<_>>>()?
             .into_iter()

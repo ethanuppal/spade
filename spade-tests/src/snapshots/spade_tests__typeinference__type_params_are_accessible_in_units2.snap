@@ -1,0 +1,38 @@
+---
+source: spade-tests/src/typeinference.rs
+---
+mod mem {
+    fn produce_something<T>() -> T __builtin__
+
+    fn test<#T>() {
+        let a: int<T> = produce_something::<int<8>>();
+    }
+
+    fn main() {
+        test::<int<9>>()
+    }
+}
+
+
+error: Expected type 8, got int<9>
+  ┌─ testinput:4:5
+  │  
+4 │ ╭     fn test<#T>() {
+5 │ │         let a: int<T> = produce_something::<int<8>>();
+  │ │                                                 - Type 8 inferred here
+6 │ │     }
+  │ ╰─────^ Expected 8
+  ·  
+9 │           test::<int<9>>()
+  │                  ----- Type int<9> inferred here
+  │  
+  = note: Expected: 8
+               Got: int<9>
+help: Unit instantiated here
+  ┌─ testinput:9:9
+  │
+9 │         test::<int<9>>()
+  │         ^^^^^^^^^^^^^^^^ Unit instantiated here
+  │
+
+
