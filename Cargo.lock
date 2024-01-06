@@ -1096,6 +1096,7 @@ dependencies = [
  "codespan-reporting 0.12.0",
  "colored",
  "insta",
+ "itertools",
  "local-impl",
  "logos",
  "spade-ast",

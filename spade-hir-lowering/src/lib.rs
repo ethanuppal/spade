@@ -1,6 +1,5 @@
 mod attributes;
 pub mod error;
-pub mod error_reporting;
 mod linear_check;
 pub mod monomorphisation;
 pub mod name_map;

@@ -121,6 +121,10 @@ pub enum Subdiagnostic {
         level: SubdiagnosticLevel,
         labels: Labels,
     },
+    TemplateTraceback {
+        span: FullSpan,
+        message: Message,
+    },
     /// A change suggestion, made up of one or more suggestion parts.
     Suggestion {
         /// The individual replacements that make up this suggestion.

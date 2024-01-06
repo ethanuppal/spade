@@ -26,11 +26,7 @@ error: Expected type 32, got 16
   │  
   = note: Expected: 32
                Got: 16
-help: Unit instantiated here
-  ┌─ testinput:8:5
-  │
-8 │     a(x, y)
-  │     ^^^^^^^ Unit instantiated here
-  │
+  = The error is in a generic unit instantiated at
+    ╰ testinput:8 a<16>
 
 

@@ -4,9 +4,11 @@ use codespan_reporting::diagnostic::{
     Diagnostic as CodespanDiagnostic, SpannedNote, Subdiagnostic as CodespanSubdiagnostic,
     Suggestion, SuggestionPart,
 };
+use codespan_reporting::files::Files;
 use codespan_reporting::term::termcolor::{Color, ColorChoice, ColorSpec, WriteColor};
 use codespan_reporting::term::{self, termcolor::Buffer};
 
+use itertools::Itertools;
 use spade_common::location_info::AsLabel;
 
 use crate::diagnostic::{DiagnosticLevel, Subdiagnostic};
@@ -127,6 +129,9 @@ impl Emitter for CodespanEmitter {
                             .collect(),
                     }))
                 }
+                Subdiagnostic::TemplateTraceback { .. } => {
+                    // Handled separately
+                }
                 Subdiagnostic::TypeMismatch {
                     got,
                     got_outer,
@@ -146,6 +151,34 @@ impl Emitter for CodespanEmitter {
                 }
             }
         }
+
+        let type_tracebacks = diag
+            .subdiagnostics
+            .iter()
+            .filter_map(|d| {
+                if let Subdiagnostic::TemplateTraceback { span, message } = d {
+                    let filename = code.files.name(span.1).unwrap();
+                    let line = code
+                        .files
+                        .location(span.1, span.0.start().0 as usize)
+                        .unwrap()
+                        .line_number;
+                    Some(format!("{filename}:{line} {}", message.as_str()))
+                } else {
+                    None
+                }
+            })
+            .collect::<Vec<_>>();
+
+        if !type_tracebacks.is_empty() {
+            let message = vec!["The error is in a generic unit instantiated at".to_string()]
+                .into_iter()
+                .chain(type_tracebacks)
+                .join("\n╰ ");
+
+            simple_notes.push(message)
+        };
+
         let diag = CodespanDiagnostic::new(severity)
             .with_message(message)
             .with_labels(labels)

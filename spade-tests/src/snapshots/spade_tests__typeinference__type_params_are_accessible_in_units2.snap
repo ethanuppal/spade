@@ -28,11 +28,7 @@ error: Expected type 8, got int<9>
   │  
   = note: Expected: 8
                Got: int<9>
-help: Unit instantiated here
-  ┌─ testinput:9:9
-  │
-9 │         test::<int<9>>()
-  │         ^^^^^^^^^^^^^^^^ Unit instantiated here
-  │
+  = The error is in a generic unit instantiated at
+    ╰ testinput:9 mem::test<int<9>>
 
 

@@ -28,11 +28,7 @@ error: Expected type bool, got int<9>
   │  
   = note: Expected: bool
                Got: int<9>
-help: Unit instantiated here
-  ┌─ testinput:9:5
-  │
-9 │     test::<int<9>>()
-  │     ^^^^^^^^^^^^^^^^ Unit instantiated here
-  │
+  = The error is in a generic unit instantiated at
+    ╰ testinput:9 test<int<9>>
 
 

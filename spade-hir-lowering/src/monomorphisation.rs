@@ -1,8 +1,9 @@
 use std::collections::{BTreeMap, HashMap, VecDeque};
 
+use itertools::Itertools;
 use spade_common::location_info::Loc;
 use spade_common::{id_tracker::ExprIdTracker, location_info::WithLocation, name::NameID};
-use spade_diagnostics::diagnostic::{Labels, Message, Subdiagnostic};
+use spade_diagnostics::diagnostic::{Message, Subdiagnostic};
 use spade_diagnostics::{DiagHandler, Diagnostic};
 use spade_hir::{symbol_table::FrozenSymtab, ExecutableItem, ItemList, UnitName};
 use spade_mir as mir;
@@ -103,20 +104,17 @@ impl MonoState {
         self.to_compile.pop_front()
     }
 
-    fn add_mono_traceback(&self, diagnostic: Diagnostic, parent: &MonoItem) -> Diagnostic {
-        let parent = self.request_points.get(parent).and_then(|x| x.clone());
-        if let Some((parent, loc)) = parent {
-            let new = diagnostic.subdiagnostic(Subdiagnostic::SpannedNote {
-                level: spade_diagnostics::diagnostic::SubdiagnosticLevel::Help,
-                labels: Labels {
-                    message: Message::from("Unit instantiated here"),
-                    span: loc.into(),
-                    primary_label: Some(Message::from("Unit instantiated here")),
-                    secondary_labels: vec![],
-                },
+    fn add_mono_traceback(&self, diagnostic: Diagnostic, item: &MonoItem) -> Diagnostic {
+        let parent = self.request_points.get(item).and_then(|x| x.clone());
+        if let Some((next_parent, loc)) = parent {
+            let generic_params = item.params.iter().map(|p| format!("{p}")).join(", ");
+
+            let new = diagnostic.subdiagnostic(Subdiagnostic::TemplateTraceback {
+                span: loc.into(),
+                message: Message::from(format!("{}<{}>", item.source_name, generic_params)),
             });
 
-            self.add_mono_traceback(new, &parent)
+            self.add_mono_traceback(new, &next_parent)
         } else {
             diagnostic
         }

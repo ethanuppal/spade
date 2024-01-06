@@ -13,6 +13,7 @@ rust-version.workspace = true
 codespan.workspace = true
 codespan-reporting.workspace = true
 colored.workspace = true
+itertools.workspace = true
 local-impl.workspace = true
 logos.workspace = true
 thiserror.workspace = true
