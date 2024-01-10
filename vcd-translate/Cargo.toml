@@ -13,7 +13,7 @@ color-eyre.workspace = true
 clap.workspace = true
 ron = "0.8.0"
 num = "0.4.0"
-itertools = "0.10.3"
+itertools = "0.12.0"
 
 spade-mir = {path = "../spade-mir"}
 spade-types = {path = "../spade-types"}
