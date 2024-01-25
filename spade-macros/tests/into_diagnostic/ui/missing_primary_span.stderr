@@ -1,5 +1,5 @@
-error: missing outer #[diagnostic] attribute
- --> tests/ui/missing_outer_attr.rs:3:10
+error: primary span is required
+ --> tests/into_diagnostic/ui/missing_primary_span.rs:3:10
   |
 3 | #[derive(spade_macros::IntoDiagnostic)]
   |          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^

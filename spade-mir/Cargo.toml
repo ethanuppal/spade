@@ -20,11 +20,11 @@ nesty = "0.2"
 itertools.workspace = true
 serde.workspace = true
 num = "0.4.0"
-derivative = "2.2.0"
+derive-where = "1.2.7"
 
-spade-common = {path = "../spade-common"}
-spade-diagnostics = {path = "../spade-diagnostics"}
-spade-macros = {path = "../spade-macros"}
+spade-common = { path = "../spade-common" }
+spade-diagnostics = { path = "../spade-diagnostics" }
+spade-macros = { path = "../spade-macros" }
 
 [dev-dependencies]
 colored.workspace = true

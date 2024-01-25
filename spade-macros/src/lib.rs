@@ -1,23 +1,17 @@
 use proc_macro::TokenStream;
-use proc_macro2::Literal;
-use proc_macro2::TokenStream as TokenStream2;
-use proc_macro_error::{abort, abort_call_site, proc_macro_error};
+use proc_macro2::{Literal, Span, TokenStream as TokenStream2};
 use quote::{quote, ToTokens};
-use syn::Fields;
-use syn::FieldsNamed;
-use syn::{
-    parse::{Nothing, Parse, ParseStream},
-    parse_macro_input, parse_quote,
-    punctuated::Punctuated,
-    Expr, Ident, ImplItemMethod, Token,
-};
+use syn::parse::{Nothing, Parse, ParseStream};
+use syn::punctuated::Punctuated;
+use syn::{parse_macro_input, parse_quote};
+use syn::{Error, Expr, Fields, FieldsNamed, Ident, ImplItemFn, ItemStruct, Token};
 
 // Thanks to discord user Yandros(MemeOverloard) for doing the bulk of the work with this
 // macro
 #[proc_macro_attribute]
 pub fn trace_parser(attrs: TokenStream, input: TokenStream) -> TokenStream {
     parse_macro_input!(attrs as Nothing);
-    let mut input = parse_macro_input!(input as ImplItemMethod);
+    let mut input = parse_macro_input!(input as ImplItemFn);
     let block = &mut input.block;
 
     let function_name = format!("{}", input.sig.ident);
@@ -39,7 +33,7 @@ pub fn trace_parser(attrs: TokenStream, input: TokenStream) -> TokenStream {
 #[proc_macro_attribute]
 pub fn trace_typechecker(attrs: TokenStream, input: TokenStream) -> TokenStream {
     parse_macro_input!(attrs as Nothing);
-    let mut input = parse_macro_input!(input as ImplItemMethod);
+    let mut input = parse_macro_input!(input as ImplItemFn);
     let block = &mut input.block;
 
     let function_name = format!("{}", input.sig.ident);
@@ -102,7 +96,7 @@ impl Parse for DiagnosticAttribute {
     }
 }
 
-fn field_attributes(fields: &FieldsNamed) -> Vec<(&Ident, DiagnosticAttribute)> {
+fn field_attributes(fields: &FieldsNamed) -> Result<Vec<(&Ident, DiagnosticAttribute)>, Error> {
     fields
         .named
         .iter()
@@ -113,7 +107,7 @@ fn field_attributes(fields: &FieldsNamed) -> Vec<(&Ident, DiagnosticAttribute)> 
                     std::iter::repeat(field_ident),
                     // Only the #[diagnostic]-attributes
                     field.attrs.iter().filter(|attr| {
-                        attr.path
+                        attr.path()
                             .get_ident()
                             .map(|ident| ident == "diagnostic")
                             .unwrap_or(false)
@@ -123,50 +117,64 @@ fn field_attributes(fields: &FieldsNamed) -> Vec<(&Ident, DiagnosticAttribute)> 
         })
         .flatten()
         .map(|(field, attr)| match attr.parse_args() {
-            Ok(attr) => (field, attr),
+            Ok(attr) => Ok((field, attr)),
             Err(_) => {
-                abort!(attr, "inner attribute is malformed\nexpected #[diagnostic(<primary/secondary>, <MESSAGE...>)]")
+                Err(Error::new_spanned(attr, "inner attribute is malformed\nexpected #[diagnostic(<primary/secondary>, <MESSAGE...>)]"))
             }
         })
         .collect()
 }
 
-#[proc_macro_error]
-#[proc_macro_derive(IntoDiagnostic, attributes(diagnostic))]
-pub fn derive_diagnostic(input: TokenStream) -> TokenStream {
-    let input = parse_macro_input!(input as syn::ItemStruct);
+/// Expected usage:
+///
+/// ```ignore
+/// #[derive(IntoDiagnostic, Clone)]
+/// #[diagnostic(error, "Expected argument list")]
+/// pub(crate) struct ExpectedArgumentList {
+///     #[diagnostic(primary, "Expected argument list for this instantiation")]
+///     pub base_expr: Loc<()>,
+///     pub next_token: Token,
+/// }
+/// ```
+fn actual_derive_diagnostic(input: ItemStruct) -> Result<TokenStream, Error> {
     let fields = match &input.fields {
         Fields::Named(fields) => fields,
-        Fields::Unnamed(_) => {
-            abort_call_site!("Can only derive IntoDiagnostic on structs with named fields")
-        }
-        Fields::Unit => {
-            abort_call_site!("Can only derive IntoDiagnostic on structs with named fields")
+        Fields::Unnamed(_) | Fields::Unit => {
+            return Err(Error::new(
+                Span::call_site(),
+                "Can only derive IntoDiagnostic on structs with named fields",
+            ));
         }
     };
     let ident = input.ident;
+
+    // Get the top attribute: `#[diagnostic(error, "...")]`
     let top_attribute = input
         .attrs
         .iter()
         .find(|attr| {
-            attr.path
+            attr.path()
                 .get_ident()
                 .map(|ident| ident == "diagnostic")
                 .unwrap_or(false)
         })
-        .unwrap_or_else(|| abort_call_site!("missing outer #[diagnostic] attribute"));
+        .ok_or_else(|| Error::new(Span::call_site(), "missing outer #[diagnostic] attribute"))?;
     let DiagnosticAttribute {
         ident: level,
         message: primary_message,
     } = top_attribute
         .parse_args()
-        .unwrap_or_else(|_| abort!(top_attribute, "top attribute is malformed\nexpected something like `#[diagnostic(error, \"uh oh, stinky\")]`"));
+        .map_err(|_| Error::new_spanned(top_attribute, "top attribute is malformed\nexpected something like `#[diagnostic(error, \"uh oh, stinky\")]`"))?;
     let primary_message = primary_message.map(|msg| msg.quote());
-    let attrs = field_attributes(fields);
+
+    // Look for field attributes (`#[diagnostic(primary, "...")]`), as a vec of
+    // idents and their diagnostic attribute. Only diagnostic attributes are
+    // handled.
+    let attrs = field_attributes(fields)?;
     let primary = attrs
         .iter()
         .find(|(_, attr)| attr.ident == "primary")
-        .unwrap_or_else(|| abort_call_site!("primary span is required"));
+        .ok_or_else(|| Error::new(Span::call_site(), "primary span is required"))?;
     let primary_span = primary.0;
     let primary_label = primary
         .1
@@ -178,16 +186,20 @@ pub fn derive_diagnostic(input: TokenStream) -> TokenStream {
     let secondary_labels = attrs
         .iter()
         .filter(|(_, attr)| attr.ident == "secondary")
-        .map(|(field, attr)| {
+        .map(|(field, attr)| -> Result<_, Error> {
             let message = attr
                 .message
                 .as_ref()
                 .map(DiagnosticMessage::quote)
-                .unwrap_or_else(|| abort_call_site!("secondary spans require a message"));
-            quote!( .secondary_label(diag.#field, #message) )
-        });
+                .ok_or_else(|| {
+                    Error::new(Span::call_site(), "secondary spans require a message")
+                })?;
+            Ok(quote!( .secondary_label(diag.#field, #message) ))
+        })
+        .collect::<Result<Vec<_>, _>>()?;
 
-    quote! {
+    // Generate the code, with safe paths.
+    Ok(quote! {
         impl std::convert::From<#ident> for ::spade_diagnostics::Diagnostic {
             fn from(diag: #ident) -> Self {
                 ::spade_diagnostics::Diagnostic::#level(
@@ -199,60 +211,89 @@ pub fn derive_diagnostic(input: TokenStream) -> TokenStream {
             }
         }
     }
-    .into()
+    .into())
 }
 
-#[proc_macro_error]
-#[proc_macro_derive(IntoSubdiagnostic, attributes(diagnostic))]
-pub fn derive_subdiagnostic(input: TokenStream) -> TokenStream {
-    let input = parse_macro_input!(input as syn::ItemStruct);
+#[proc_macro_derive(IntoDiagnostic, attributes(diagnostic))]
+pub fn derive_diagnostic(input: TokenStream) -> TokenStream {
+    match syn::parse2(input.into())
+        .and_then(actual_derive_diagnostic)
+        .map_err(|e| e.into_compile_error().into())
+    {
+        Ok(ts) | Err(ts) => ts,
+    }
+}
+
+/// Expected usage:
+///
+/// ```ignore
+/// #[derive(IntoSubdiagnostic)]
+/// #[diagnostic(suggestion, "Use `{` if you want to add items to this enum variant")]
+/// pub(crate) struct SuggestBraceEnumVariant {
+///     #[diagnostic(replace, "{")]
+///     pub open_paren: Loc<()>,
+///     #[diagnostic(replace, "}")]
+///     pub close_paren: Loc<()>,
+/// }
+/// ```
+fn actual_derive_subdiagnostic(input: ItemStruct) -> Result<TokenStream, Error> {
     let fields = match &input.fields {
         Fields::Named(fields) => fields,
-        Fields::Unnamed(_) => {
-            abort_call_site!("Can only derive IntoSubdiagnostic on structs with named fields")
-        }
-        Fields::Unit => {
-            abort_call_site!("Can only derive IntoSubdiagnostic on structs with named fields")
+        Fields::Unnamed(_) | Fields::Unit => {
+            return Err(Error::new(
+                Span::call_site(),
+                "Can only derive IntoSubdiagnostic on structs with named fields",
+            ));
         }
     };
     let ident = input.ident;
+
+    // Get the top attribute: `#[diagnostic(suggestion, "...")]`
     let top_attribute = input
         .attrs
         .iter()
         .find(|attr| {
-            attr.path
+            attr.path()
                 .get_ident()
                 .map(|ident| ident == "diagnostic")
                 .unwrap_or(false)
         })
-        .unwrap_or_else(|| abort_call_site!("missing outer #[diagnostic] attribute"));
+        .ok_or_else(|| Error::new(Span::call_site(), "missing outer #[diagnostic] attribute"))?;
     let DiagnosticAttribute {
         ident: subdiag_kind,
         message,
     } = top_attribute
         .parse_args()
-        .unwrap_or_else(|_| abort!(top_attribute, "top attribute is malformed\nexpected something like `#[diagnostic(suggestion, \"uh oh, stinky\")]`"));
+        .map_err(|_| Error::new_spanned(top_attribute, "top attribute is malformed\nexpected something like `#[diagnostic(suggestion, \"uh oh, stinky\")]`"))?;
     let message = message
         .as_ref()
         .map(DiagnosticMessage::quote)
         .unwrap_or(quote!(""));
-    let attrs = field_attributes(fields);
-    match subdiag_kind.to_string().as_str() {
+
+    // Look for field attributes (`#[diagnostic(replace, "...")]`), as a vec of
+    // idents and their diagnostic attribute. Only diagnostic attributes are
+    // handled.
+    let attrs = field_attributes(fields)?;
+    let tokens = match subdiag_kind.to_string().as_str() {
         "suggestion" => {
-            let parts = attrs.iter().filter_map(|(field, attr)| {
-                let replacement = attr
-                    .message
-                    .as_ref()
-                    .map(DiagnosticMessage::quote)
-                    .unwrap_or(quote!(""));
-                match attr.ident.to_string().as_str() {
-                    "replace" => Some(quote!((diag.#field.into(), #replacement.to_string()))),
-                    "insert_before" => todo!(),
-                    "insert_after" => todo!(),
-                    "remove" => todo!(),
-                    _ => abort!(attr.ident, "unknown suggestion part kind"),
-                }
-            });
+            let parts = attrs
+                .iter()
+                .map(|(field, attr)| {
+                    let replacement = attr
+                        .message
+                        .as_ref()
+                        .map(DiagnosticMessage::quote)
+                        .unwrap_or(quote!(""));
+                    match attr.ident.to_string().as_str() {
+                        "replace" => Ok(quote!((diag.#field.into(), #replacement.to_string()))),
+                        "insert_before" | "insert_after" | "remove" => todo!(),
+                        _ => Err(Error::new_spanned(
+                            &attr.ident,
+                            "unknown suggestion part kind",
+                        )),
+                    }
+                })
+                .collect::<Result<Vec<_>, _>>()?;
             quote! {
                 impl std::convert::From<#ident> for ::spade_diagnostics::diagnostic::Subdiagnostic {
                     fn from(diag: #ident) -> Self {
@@ -264,16 +305,41 @@ pub fn derive_subdiagnostic(input: TokenStream) -> TokenStream {
                 }
             }
         }
-        .into(),
-        _ => abort!(subdiag_kind, "unknown subdiagnostic kind"),
+        _ => {
+            return Err(Error::new_spanned(
+                subdiag_kind,
+                "unknown subdiagnostic kind",
+            ))
+        }
+    };
+    Ok(tokens.into())
+}
+
+#[proc_macro_derive(IntoSubdiagnostic, attributes(diagnostic))]
+pub fn derive_subdiagnostic(input: TokenStream) -> TokenStream {
+    match syn::parse2(input.into())
+        .and_then(actual_derive_subdiagnostic)
+        .map_err(|e| e.into_compile_error().into())
+    {
+        Ok(ts) | Err(ts) => ts,
     }
 }
 
 #[cfg(test)]
 mod test {
-    #[test]
-    fn ui() {
-        let t = trybuild::TestCases::new();
-        t.compile_fail("tests/ui/*.rs");
+    mod into_diagnostic {
+        #[test]
+        fn ui() {
+            let t = trybuild::TestCases::new();
+            t.compile_fail("tests/into_diagnostic/ui/*.rs");
+        }
+    }
+
+    mod into_subdiagnostic {
+        #[test]
+        fn ui() {
+            let t = trybuild::TestCases::new();
+            t.compile_fail("tests/into_subdiagnostic/ui/*.rs");
+        }
     }
 }

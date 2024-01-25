@@ -1,5 +1,5 @@
-error: Can only derive IntoDiagnostic on structs with named fields
- --> tests/ui/not_named_fields.rs:3:10
+error: missing outer #[diagnostic] attribute
+ --> tests/into_diagnostic/ui/missing_outer_attr.rs:3:10
   |
 3 | #[derive(spade_macros::IntoDiagnostic)]
   |          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^

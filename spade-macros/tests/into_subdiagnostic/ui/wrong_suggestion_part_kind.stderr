@@ -1,0 +1,11 @@
+error: unknown suggestion part kind
+ --> tests/into_subdiagnostic/ui/wrong_suggestion_part_kind.rs:6:18
+  |
+6 |     #[diagnostic(waho, "waho")]
+  |                  ^^^^
+
+error: unknown suggestion part kind
+  --> tests/into_subdiagnostic/ui/wrong_suggestion_part_kind.rs:13:18
+   |
+13 |     #[diagnostic(waho)]
+   |                  ^^^^

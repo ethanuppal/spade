@@ -14,17 +14,16 @@ pub mod verilator_wrapper;
 mod verilog;
 mod wal;
 
-use derivative::Derivative;
+use derive_where::derive_where;
 use itertools::Itertools;
-
 use num::{BigInt, BigUint};
 use renaming::VerilogNameSource;
-use spade_common::{
-    location_info::{Loc, WithLocation},
-    name::NameID,
-    num_ext::InfallibleToBigInt,
-};
+use serde::{Deserialize, Serialize};
 use types::Type;
+
+use spade_common::location_info::{Loc, WithLocation};
+use spade_common::name::NameID;
+use spade_common::num_ext::InfallibleToBigInt;
 
 pub use unit_name::UnitName;
 
@@ -80,8 +79,8 @@ impl From<&ValueName> for ValueNameSource {
 
 /// A name of a value. Can either come from the NameID of the underlying
 /// variable, or the id of the underlying expression
-#[derive(Derivative, Clone, Debug, serde::Serialize, serde::Deserialize)]
-#[derivative(Hash, Eq, PartialEq)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive_where(Hash, Eq, PartialEq)]
 pub enum ValueName {
     /// A named value in the code with with an index to make that name locally unique
     Named(
@@ -92,7 +91,7 @@ pub enum ValueName {
         String,
         // The original name ID from which this name originates
         // NOTE: Not checked by MIR diff because it is only a metadata field
-        #[derivative(Hash = "ignore", PartialEq = "ignore")] ValueNameSource,
+        #[derive_where(skip)] ValueNameSource,
     ),
     // FIXME: Consider renaming this since it's now used for both patterns and expressions
     /// An un-named expression. In the resulting verilog, this is called _e_$id
@@ -160,8 +159,7 @@ pub struct ParamName {
     pub no_mangle: Option<Loc<()>>,
 }
 
-#[derive(Derivative)]
-#[derivative(PartialEq)]
+#[derive_where(PartialEq)]
 #[derive(Clone, Debug)]
 pub enum Operator {
     /// Binary arithmetic operators
@@ -290,7 +288,7 @@ pub enum Operator {
         name: UnitName,
         /// The names of the parameters in the same order as the operands.
         params: Vec<ParamName>,
-        #[derivative(PartialEq = "ignore")]
+        #[derive_where(skip)]
         loc: Option<Loc<()>>,
     },
     /// Alias another named value

@@ -1,0 +1,5 @@
+error: unknown subdiagnostic kind
+ --> tests/into_subdiagnostic/ui/wrong_subdiagnostic_kind.rs:4:14
+  |
+4 | #[diagnostic(blub_blub, "do this and that")]
+  |              ^^^^^^^^^

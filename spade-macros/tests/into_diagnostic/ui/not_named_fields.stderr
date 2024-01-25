@@ -1,5 +1,5 @@
-error: primary span is required
- --> tests/ui/missing_primary_span.rs:3:10
+error: Can only derive IntoDiagnostic on structs with named fields
+ --> tests/into_diagnostic/ui/not_named_fields.rs:3:10
   |
 3 | #[derive(spade_macros::IntoDiagnostic)]
   |          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
