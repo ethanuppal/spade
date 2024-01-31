@@ -1,8 +1,0 @@
-entity uut(x: int<16>, valid: bool) -> Option<int<16>> {
-    if valid {
-        Option::Some(x)
-    }
-    else {
-        Option::None()
-    }
-}

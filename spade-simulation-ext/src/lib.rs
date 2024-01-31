@@ -126,7 +126,10 @@ pub struct ComparisonResult {
     pub got_bits: BitString,
 }
 
+#[cfg_attr(feature = "python", pymethods)]
 impl ComparisonResult {
+    /// Returns `true` if the values are the same Spade value. If the expected value has
+    /// undefined bits, those are ignored
     pub fn matches(&self) -> bool {
         self.expected_bits
             .0

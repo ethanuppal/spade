@@ -1166,12 +1166,12 @@ mod tests {
             }
         "#;
 
-        let mir_enum = Type::Enum(vec![vec![Type::int(5)], vec![]]);
+        let mir_enum = Type::Enum(vec![vec![], vec![Type::int(5)]]);
 
         let expected = vec![entity!(&["test"]; (
                 "payload", n(0, "payload"), Type::int(5),
             ) -> mir_enum.clone(); {
-                (e(1); mir_enum; ConstructEnum({variant: 0, variant_count: 2}); n(0, "payload"));
+                (e(1); mir_enum; ConstructEnum({variant: 1, variant_count: 2}); n(0, "payload"));
             } => e(1)
         )];
 
@@ -1189,13 +1189,13 @@ mod tests {
             }
         "#;
 
-        let mir_type = Type::Enum(vec![vec![Type::int(16)], vec![]]);
+        let mir_type = Type::Enum(vec![vec![], vec![Type::int(16)]]);
 
         let expected = vec![
             entity! {&["unwrap_or_0"]; ("e", n(0, "e"), mir_type.clone()) -> Type::int(16); {
                 // Conditions for branches
-                (n(1, "x"); Type::int(16); EnumMember({variant: 0, member_index: 0, enum_type: mir_type.clone()}); n(0, "e"));
-                (e(2); Type::Bool; IsEnumVariant({variant: 0, enum_type: mir_type}); n(0, "e"));
+                (n(1, "x"); Type::int(16); EnumMember({variant: 1, member_index: 0, enum_type: mir_type.clone()}); n(0, "e"));
+                (e(2); Type::Bool; IsEnumVariant({variant: 1, enum_type: mir_type}); n(0, "e"));
                 (const 10; Type::Bool; ConstantValue::Bool(true));
                 (e(11); Type::Bool; LogicalAnd; e(2), e(10));
                 (const 3; Type::Bool; ConstantValue::Bool(true));
@@ -1305,21 +1305,21 @@ mod tests {
             }
         "#;
 
-        let mir_type = Type::Enum(vec![vec![Type::int(16)], vec![]]);
+        let mir_type = Type::Enum(vec![vec![], vec![Type::int(16)]]);
 
         let expected = vec![
             entity! {&["unwrap_or_0"]; ("e", n(0, "e"), mir_type.clone()) -> Type::int(16); {
                 // Conditions for branch 1
-                (e(11); Type::int(16); EnumMember({variant: 0, member_index: 0, enum_type: mir_type.clone()}); n(0, "e"));
-                (e(15); Type::Bool; IsEnumVariant({variant: 0, enum_type: mir_type.clone()}); n(0, "e"));
+                (e(11); Type::int(16); EnumMember({variant: 1, member_index: 0, enum_type: mir_type.clone()}); n(0, "e"));
+                (e(15); Type::Bool; IsEnumVariant({variant: 1, enum_type: mir_type.clone()}); n(0, "e"));
                 (const 10; Type::int(16); ConstantValue::int(10));
                 (e(12); Type::Bool; Eq; e(11), e(10));
                 (e(14); Type::Bool; LogicalAnd; e(15), e(12));
                 (const 13; Type::int(16); ConstantValue::int(5));
 
                 // Condition for branch 2
-                (n(1, "x"); Type::int(16); EnumMember({variant: 0, member_index: 0, enum_type: mir_type.clone()}); n(0, "e"));
-                (e(2); Type::Bool; IsEnumVariant({variant: 0, enum_type: mir_type}); n(0, "e"));
+                (n(1, "x"); Type::int(16); EnumMember({variant: 1, member_index: 0, enum_type: mir_type.clone()}); n(0, "e"));
+                (e(2); Type::Bool; IsEnumVariant({variant: 1, enum_type: mir_type}); n(0, "e"));
                 (const 3; Type::Bool; ConstantValue::Bool(true));
                 (e(20); Type::Bool; LogicalAnd; e(2), e(3));
 
@@ -2981,6 +2981,14 @@ mod tests {
         } => e(2)}];
 
         build_and_compare_entities!(code, expected);
+    }
+
+    snapshot_error! {
+        unknown_optimization_pass_is_an_error,
+        "
+            #[optimize(banana)]
+            entity a() {}
+        "
     }
 }
 

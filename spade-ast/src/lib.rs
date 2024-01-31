@@ -387,6 +387,9 @@ impl TypeParam {
 
 #[derive(PartialEq, Debug, Clone)]
 pub enum Attribute {
+    Optimize {
+        passes: Vec<Loc<String>>,
+    },
     NoMangle,
     Fsm {
         state: Option<Loc<Identifier>>,
@@ -409,6 +412,7 @@ pub enum Attribute {
 impl Attribute {
     pub fn name(&self) -> &str {
         match self {
+            Attribute::Optimize { passes: _ } => "optimize",
             Attribute::NoMangle => "no_mangle",
             Attribute::Fsm { state: _ } => "fsm",
             Attribute::WalTraceable { .. } => "wal_traceable",

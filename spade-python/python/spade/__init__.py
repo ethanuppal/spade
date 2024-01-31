@@ -68,7 +68,7 @@ class OutputField(object):
         expected_bits = r.expected_bits.inner();
         got_bits = r.got_bits.inner();
 
-        if expected_bits.lower() != got_bits.lower():
+        if not r.matches():
             message = "\n"
             message += colors.red("Assertion failed") + "\n"
             message += f"\t expected: {colors.green(r.expected_spade)}\n";

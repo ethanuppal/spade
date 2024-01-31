@@ -442,6 +442,16 @@ fn forward_expression_code(binding: &Binding, types: &TypeList, ops: &[ValueName
         Operator::IndexMemory => {
             format!("{}[{}]", op_names[0], op_names[1])
         }
+        Operator::RangeIndexBits {
+            start,
+            end_exclusive,
+        } => {
+            if end_exclusive - start == 1u32.to_biguint() {
+                format!("{}[{start}]", op_names[0])
+            } else {
+                format!("{}[{end_exclusive}:{start}]", op_names[0])
+            }
+        }
         Operator::DeclClockedMemory {
             write_ports,
             addr_w,
@@ -682,6 +692,7 @@ fn backward_expression_code(binding: &Binding, types: &TypeList, ops: &[ValueNam
         | Operator::ConstructEnum { .. }
         | Operator::IsEnumVariant { .. }
         | Operator::EnumMember { .. }
+        | Operator::RangeIndexBits { .. }
         | Operator::IndexMemory
         | Operator::Select
         | Operator::Match

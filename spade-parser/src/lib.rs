@@ -1860,6 +1860,23 @@ impl<'a> Parser<'a> {
                     Ok(Attribute::Fsm { state: None })
                 }
             }
+            "optimize" => {
+                let (passes, _) = self.surrounded(
+                    &TokenKind::OpenParen,
+                    |s| {
+                        s.comma_separated(|s| s.identifier(), &TokenKind::CloseParen)
+                            .no_context()
+                    },
+                    &TokenKind::CloseParen,
+                )?;
+
+                Ok(Attribute::Optimize {
+                    passes: passes
+                        .into_iter()
+                        .map(|loc| loc.map(|ident| ident.0))
+                        .collect(),
+                })
+            }
             "wal_trace" => {
                 if self.peek_kind(&TokenKind::OpenParen)? {
                     Ok(attribute_arg_parser!(

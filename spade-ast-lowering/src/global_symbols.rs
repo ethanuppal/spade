@@ -401,7 +401,8 @@ pub fn re_visit_type_declaration(
                     );
                     Ok(None)
                 }
-                ast::Attribute::NoMangle
+                ast::Attribute::Optimize { .. }
+                | ast::Attribute::NoMangle
                 | ast::Attribute::Fsm { .. }
                 | ast::Attribute::WalSuffix { .. }
                 | ast::Attribute::WalTrace { .. } => Err(attr.report_unused("struct")),

@@ -18,6 +18,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - [!308][!308] Add `/` and `%` for power of 2 operands, as well as `comb_div` and `comb_mod` for all operands
 - [!309][!309] Add named argument turbofishes (`::$<>`)
 - [!312][!312] Include a map of modules in `ItemList`
+- [!271][!271] Add automatic clock gating of the `Option`-type
 
 ### Changed
 
@@ -89,6 +90,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ### Removed
 
 [!266]: https://gitlab.com/spade-lang/spade/-/merge_requests/266
+<<<<<<< HEAD
 [!272]: https://gitlab.com/spade-lang/spade/-/merge_requests/272
 [!273]: https://gitlab.com/spade-lang/spade/-/merge_requests/273
 [!275]: https://gitlab.com/spade-lang/spade/-/merge_requests/275
@@ -97,6 +99,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 [!281]: https://gitlab.com/spade-lang/spade/-/merge_requests/281
 [!285]: https://gitlab.com/spade-lang/spade/-/merge_requests/285
 [!277]: https://gitlab.com/spade-lang/spade/-/merge_requests/277
+||||||| parent of 005c985 (Add simple automatic enum gating)
+
+=======
+[!271]: https://gitlab.com/spade-lang/spade/-/merge_requests/271
+
+>>>>>>> 005c985 (Add simple automatic enum gating)
 
 ## [0.6.0] - 2024-01-03
 

@@ -394,6 +394,7 @@ impl std::fmt::Display for UnitName {
 pub struct Unit {
     pub name: UnitName,
     pub head: UnitHead,
+    pub attributes: AttributeList,
     // This is needed here because the head does not have NameIDs
     pub inputs: Vec<(Loc<NameID>, Loc<TypeSpec>)>,
     pub body: Loc<Expression>,
@@ -591,12 +592,14 @@ impl std::fmt::Display for TraitName {
 /// ast node
 #[derive(PartialEq, Debug, Clone, Serialize, Deserialize)]
 pub enum Attribute {
+    Optimize { passes: Vec<Loc<String>> },
     Fsm { state: NameID },
     WalTraceable { suffix: Identifier },
 }
 impl Attribute {
     pub fn name(&self) -> &str {
         match self {
+            Attribute::Optimize { passes: _ } => "optimize",
             Attribute::Fsm { state: _ } => "fsm",
             Attribute::WalTraceable { suffix: _ } => "suffix",
         }

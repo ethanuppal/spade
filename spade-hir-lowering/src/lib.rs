@@ -987,6 +987,7 @@ impl StatementLocal for Statement {
                         Ok(())
                     }
                     Attribute::WalTraceable { .. } => Err(attr.report_unused("register")),
+                    Attribute::Optimize { .. } => Err(attr.report_unused("register")),
                 })?;
 
                 let initial = if let Some(init) = initial {
@@ -2978,11 +2979,33 @@ pub fn generate_unit<'a>(
         &item_list.types,
     )?;
 
+    let mut statements = statements.to_vec(name_source_map);
+
+    unit.attributes.lower(&mut |attr| match &attr.inner {
+        Attribute::Optimize { passes } => {
+            let pass_impls = spade_mir::passes::mir_passes();
+
+            for pass in passes {
+                if let Some(pass) = pass_impls.get(pass.inner.as_str()) {
+                    statements = pass.transform_statements(&statements, idtracker);
+                } else {
+                    Err(Diagnostic::error(
+                        pass,
+                        format!("There is no optimization pass named {pass}"),
+                    )
+                    .primary_label("No such pass"))?
+                }
+            }
+            Ok(())
+        }
+        Attribute::Fsm { .. } | Attribute::WalTraceable { .. } => Err(attr.report_unused("unit")),
+    })?;
+
     Ok(mir::Entity {
         name: name.as_mir(),
         inputs: mir_inputs,
         output: unit.body.variable(subs)?,
         output_type: output_t,
-        statements: statements.to_vec(name_source_map),
+        statements,
     })
 }

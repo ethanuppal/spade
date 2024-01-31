@@ -293,6 +293,7 @@ pub fn eval_statements(statements: &[Statement]) -> Value {
                     Operator::IndexArray => todo!(),
                     Operator::IndexMemory => todo!(),
                     Operator::RangeIndexArray { .. } => todo!(),
+                    Operator::RangeIndexBits { .. } => todo!(),
                     Operator::ConstructTuple => {
                         Value::Concat(ops.iter().map(|op| name_vals[op].clone()).collect())
                     }

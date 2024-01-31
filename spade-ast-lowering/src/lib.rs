@@ -461,7 +461,10 @@ pub fn visit_unit(
     };
     let mut wal_suffix = None;
 
-    attributes.lower(&mut |attr: &Loc<ast::Attribute>| match &attr.inner {
+    let attributes = attributes.lower(&mut |attr: &Loc<ast::Attribute>| match &attr.inner {
+        ast::Attribute::Optimize { passes } => Ok(Some(hir::Attribute::Optimize {
+            passes: passes.clone(),
+        })),
         ast::Attribute::NoMangle => {
             if !type_params.is_empty() {
                 let generic_list =
@@ -559,6 +562,7 @@ pub fn visit_unit(
         hir::Unit {
             name: unit_name,
             head: head.clone().inner,
+            attributes,
             inputs,
             body,
         }
@@ -1188,6 +1192,7 @@ fn visit_statement(s: &Loc<ast::Statement>, ctx: &mut Context) -> Result<Vec<Loc
                 }
                 ast::Attribute::NoMangle
                 | ast::Attribute::Fsm { .. }
+                | ast::Attribute::Optimize { .. }
                 | ast::Attribute::WalTraceable { .. } => Err(attr.report_unused("let binding")),
             })?;
 
@@ -1887,6 +1892,7 @@ mod entity_visiting {
                 type_params: vec![],
                 unit_kind: hir::UnitKind::Entity.nowhere(),
             },
+            attributes: hir::AttributeList::empty(),
             inputs: vec![((name_id(1, "a"), hir::TypeSpec::unit().nowhere()))],
             body: hir::ExprKind::Block(Box::new(hir::Block {
                 statements: vec![hir::Statement::binding(
@@ -3035,6 +3041,7 @@ mod item_visiting {
                     type_params: vec![],
                     unit_kind: hir::UnitKind::Entity.nowhere(),
                 },
+                attributes: hir::AttributeList::empty(),
                 inputs: vec![],
                 body: hir::ExprKind::Block(Box::new(hir::Block {
                     statements: vec![],
@@ -3142,6 +3149,7 @@ mod impl_blocks {
                     type_params: vec![],
                     unit_kind: hir::UnitKind::Function(hir::FunctionKind::Fn).nowhere(),
                 },
+                attributes: hir::AttributeList::empty(),
                 inputs: vec![(name_id(2, "self"), param_type_spec)],
                 body: hir::ExprKind::Block(Box::new(hir::Block {
                     statements: vec![],
@@ -3246,6 +3254,7 @@ mod module_visiting {
                             unit_kind: hir::UnitKind::Entity.nowhere(),
                         },
                         inputs: vec![],
+                        attributes: hir::AttributeList::empty(),
                         body: hir::ExprKind::Block(Box::new(hir::Block {
                             statements: vec![],
                             result: Some(hir::ExprKind::int_literal(0).idless().nowhere()),
