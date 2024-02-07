@@ -1,6 +1,28 @@
 use crate::{build_items, build_items_with_stdlib, snapshot_error};
 
 #[test]
+fn visit_unary_operator_works_for_tilde_int() {
+    let code = r#"
+        entity main() -> int<8> {
+            let x: int<8> = 0b01010101;
+            ~x
+        }
+    "#;
+    build_items(code);
+}
+
+#[test]
+fn visit_unary_operator_works_for_tilde_uint() {
+    let code = r#"
+        entity main() -> uint<8> {
+            let x: uint<8> = 0b01010101;
+            ~x
+        }
+    "#;
+    build_items(code);
+}
+
+#[test]
 fn type_inference_works_for_arrays() {
     let code = r#"
         entity x() -> [int<3>; 3] {
@@ -122,6 +144,13 @@ fn entities_without_return_type_can_be_instantiated() {
 
     build_items(code);
 }
+
+snapshot_error!(
+    expected_a_number_when_bitwise_inverting_an_enum_variant,
+    "entity main() -> uint<8> {
+        ~None
+    }"
+);
 
 snapshot_error!(
     backward_tuple_indexing_with_type_error_errors_nicely,

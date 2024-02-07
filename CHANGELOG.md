@@ -20,6 +20,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ### Fixed
 
 - [!272][!272] Parentheses can now be omitted on aliased enum variants like `None`
+- [!273][!273] Allow bitwise negation (~) of unsigned integers
 
 ### Removed
 
@@ -27,6 +28,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 [!266]: https://gitlab.com/spade-lang/spade/-/merge_requests/266
 [!272]: https://gitlab.com/spade-lang/spade/-/merge_requests/272
+[!273]: https://gitlab.com/spade-lang/spade/-/merge_requests/273
 
 
 ## [0.6.0] - 2024-01-03
@@ -177,7 +179,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Internal
 
-- [!154](!154) Rewrote compiler to use arbitrary width integers internally.
+- [!154][!154] Rewrote compiler to use arbitrary width integers internally.
 
 [!154]: https://gitlab.com/spade-lang/spade/-/merge_requests/154
 [!155]: https://gitlab.com/spade-lang/spade/-/merge_requests/155
