@@ -14,7 +14,7 @@ fn try_rename(name: &mut ValueName, replacements: &HashMap<ValueName, ValueName>
 /// unless a is also aliased for something else
 pub fn flatten_aliases(entity: &mut Entity) {
     let mut aliased_by = HashMap::new();
-    // Some things are unaliasable, like input names and constats. Keep
+    // Some things are unaliasable, like input names and constants. Keep
     // track of those here to avoid problems
     let mut unaliasable = HashSet::new();
 

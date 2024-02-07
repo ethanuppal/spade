@@ -19,11 +19,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Fixed
 
+- [!272][!272] Parentheses can now be omitted on aliased enum variants like `None`
+
 ### Removed
 
 
 
 [!266]: https://gitlab.com/spade-lang/spade/-/merge_requests/266
+[!272]: https://gitlab.com/spade-lang/spade/-/merge_requests/272
 
 
 ## [0.6.0] - 2024-01-03

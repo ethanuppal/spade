@@ -1481,16 +1481,19 @@ pub fn visit_expression(e: &ast::Expression, ctx: &mut Context) -> Result<hir::E
                 Ok(id) => {
                     Ok(hir::ExprKind::Identifier(id))
                 }
-                Err(LookupError::NotAVariable(path, ref was @ Thing::EnumVariant(ref v))) => {
-                    // NOTE: Safe unwrap, we just found out that this is an enum variant
-                    let callee = ctx.symtab.lookup_enum_variant(&path).unwrap().0.at_loc(&path);
-                    if v.params.0.is_empty() {
+                Err(LookupError::NotAVariable(path, ref was @ Thing::EnumVariant(_))) |
+                Err(LookupError::NotAVariable(path, ref was @ Thing::Alias { path: _, in_namespace: _ })) => {
+                    let (name_id, variant) = match ctx.symtab.lookup_enum_variant(&path) {
+                        Ok(res) => res,
+                        Err(_) => return Err(LookupError::NotAValue(path, was.clone()).into()),
+                    };
+                    if variant.params.0.is_empty() {
                         // NOTE: This loc is a little bit approximate because it is unlikely
                         // that any error will reference the empty argument list.
+                        let callee = name_id.at_loc(&path);
                         let args = hir::ArgumentList::Positional(vec![]).at_loc(&path);
                         Ok(hir::ExprKind::Call{kind: hir::expression::CallKind::Function, callee, args, turbofish: None})
-                    }
-                    else {
+                    } else {
                         Err(LookupError::NotAValue(path, was.clone()).into())
                     }
                 }

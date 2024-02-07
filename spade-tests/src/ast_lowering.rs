@@ -1,4 +1,4 @@
-use crate::{build_items, snapshot_error};
+use crate::{build_items, build_items_with_stdlib, snapshot_error};
 
 snapshot_error! {
     duplicate_definition_of_decl_triggers_errors,
@@ -176,6 +176,39 @@ snapshot_error! {
         #[uwu]
         pipeline(1) a(clk: clock) -> bool {reg; true}
     "
+}
+
+#[test]
+fn enum_variant_with_0_arguments_works() {
+    let code = r#"
+            enum Opt<T> {
+                Never,
+                Gonna,
+                Give { Ephippidae: T },
+                You,
+                Up,
+            }
+
+            use Opt as o;
+            use o::Never;
+
+            entity main() -> Opt<int<8>> {
+                Never
+            }
+        "#;
+
+    build_items(code);
+}
+
+#[test]
+fn none_without_parens_works() {
+    let code = r#"
+        entity main() -> Option<int<8>> {
+            None
+        }
+    "#;
+
+    build_items_with_stdlib(code);
 }
 
 #[test]
