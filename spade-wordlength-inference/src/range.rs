@@ -1,6 +1,7 @@
 use crate::inferer::{Equation, Var};
 use num::BigInt;
 use num::Signed;
+use num::Zero;
 use std::collections::BTreeMap;
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
@@ -80,8 +81,9 @@ impl Range {
     pub fn bit_manip(&self) -> Option<Self> {
         // This signed integers
         self.to_wordlength().map(|wl| {
-            let a = -BigInt::from(2).pow(wl - 1);
-            let b = BigInt::from(2).pow(wl - 1) - BigInt::from(1);
+            let bound = BigInt::from(1) << (wl - 1);
+            let a = -bound.clone();
+            let b = bound - BigInt::from(1);
 
             Self::new(a.clone().min(b.clone()), a.max(b))
         })
@@ -91,7 +93,7 @@ impl Range {
         // NOTE: This can be considerably more fancy, taking into account the range and working
         // from there - but I'm keeping things simple for now.
         for i in 1..2048 {
-            let n = BigInt::from(2).pow(i);
+            let n = BigInt::from(1) << i;
             if self.hi.abs() < n && self.lo.abs() < n + BigInt::from(1) {
                 return Some(i + 1);
             }
@@ -100,7 +102,7 @@ impl Range {
     }
 
     pub fn zero() -> Range {
-        Self::new(BigInt::from(0), BigInt::from(0))
+        Self::new(BigInt::zero(), BigInt::zero())
     }
 }
 

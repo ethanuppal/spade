@@ -1,4 +1,4 @@
-use num::{BigInt, BigRational, Signed};
+use num::{BigInt, BigRational, Signed, Zero};
 use spade_common::id_tracker::AAVarTracker;
 use std::collections::{btree_map::Entry, BTreeMap, BTreeSet};
 
@@ -82,7 +82,7 @@ impl AAForm {
             .iter()
             .map(|(v, x)| {
                 if v == &AffineVar::Const {
-                    BigRational::from_integer(BigInt::from(0))
+                    BigRational::from_integer(BigInt::zero())
                 } else {
                     x.abs()
                 }

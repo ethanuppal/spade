@@ -1,7 +1,4 @@
-use num::{
-    bigint::{Sign, ToBigUint},
-    BigInt, BigUint, ToPrimitive, Zero,
-};
+use num::{bigint::Sign, BigInt, BigUint, ToPrimitive, Zero};
 use spade_common::num_ext::InfallibleToBigUint;
 use spade_hir_lowering::MirLowerable;
 use spade_types::{ConcreteType, PrimitiveType};
@@ -103,11 +100,11 @@ fn translate_uint(value: &[Value], flip: bool) -> MaybeValue<BigUint> {
     MaybeValue::Value((result << accumulated_bits) + BigUint::from(intermediate))
 }
 
-/// Translate a signed integer into a BigInt if none of the elements are undefined
+/// Translate a signed integer into a BigInt if all the elements are defined
 /// if not returns Undef
 ///
 /// The values must be in two's complement form and of the intended width of the
-/// integer. I.e. the leftmost bit is interpreted as the sign bit
+/// integer. That is, the leftmost bit is interpreted as the sign bit
 fn translate_signed_int(value: &[Value]) -> MaybeValue<BigInt> {
     if value.contains(&Value::X) {
         MaybeValue::Undef
@@ -117,9 +114,7 @@ fn translate_signed_int(value: &[Value]) -> MaybeValue<BigInt> {
         let negative = value[0] == Value::V1;
         let uint_val = translate_uint(&value[1..], negative);
         if negative {
-            uint_val.map(|uint| {
-                BigInt::from_biguint(Sign::Minus, uint + ToBigUint::to_biguint(&1).unwrap())
-            })
+            uint_val.map(|uint| BigInt::from_biguint(Sign::Minus, uint + BigUint::from(true)))
         } else {
             uint_val.map(|uint| BigInt::from_biguint(Sign::Plus, uint))
         }
@@ -319,7 +314,6 @@ pub fn value_from_str(s: &str) -> Vec<Value> {
 
 #[cfg(test)]
 mod tests {
-    use num::bigint::ToBigInt;
     use spade_common::name::testutil::name_id;
 
     use super::*;
@@ -383,10 +377,7 @@ mod tests {
 
         let translated = translate_signed_int(&values);
 
-        assert_eq!(
-            translated,
-            MaybeValue::Value(ToBigInt::to_bigint(&-5).unwrap())
-        );
+        assert_eq!(translated, MaybeValue::Value(BigInt::from(-5)));
     }
 
     #[test]
@@ -398,7 +389,7 @@ mod tests {
 
         assert_eq!(
             translated,
-            MaybeValue::Value(ToBigUint::to_biguint(&0x10000_0000u64).unwrap())
+            MaybeValue::Value(BigUint::from(0x10000_0000u64))
         )
     }
 

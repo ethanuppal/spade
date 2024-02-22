@@ -37,16 +37,14 @@ pub fn infer_and_check(
     for (ty, var) in inferer.mappings.iter() {
         match &ty.inner {
             TypeVar::Known(_, KnownType::Integer(size), _) => {
-                let x = size
+                let x: u32 = size
                     .to_u128()
                     .unwrap()
                     .saturating_sub(1)
                     .try_into()
                     .unwrap(); // This is assumed to be small
-                known.insert(
-                    *var,
-                    Range::new(-BigInt::from(2).pow(x) + 1, BigInt::from(2).pow(x) - 2),
-                );
+                let bound: BigInt = BigInt::from(1) << x;
+                known.insert(*var, Range::new(1 - bound.clone(), bound - 2));
             }
             TypeVar::Known(_, KnownType::Named(n), _) => panic!("How do I handle a type? {:?}", n),
             TypeVar::Unknown(_, _) => {
