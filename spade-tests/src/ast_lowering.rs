@@ -1043,3 +1043,22 @@ fn zero_argument_enum_variants_dont_need_args() {
     ";
     build_items(code);
 }
+
+snapshot_error! {
+    using_generic_as_type_level_integer,
+    "
+        fn test<T>() -> int<8> {
+            T
+        }
+    "
+}
+
+snapshot_error! {
+    using_a_type_as_a_type_level_integer,
+    "
+        struct T {}
+        fn test() -> int<8> {
+            T
+        }
+    "
+}

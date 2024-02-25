@@ -638,6 +638,7 @@ impl Spade {
             idtracker: &mut ast_ctx.idtracker,
             types: &mut self.type_state,
             item_list: &self.item_list,
+            unit_generic_list: &None,
             // NOTE: This requires changes if we end up wanting to write tests
             // for generic units
             mono_state: &mut MonoState::new(),

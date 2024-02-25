@@ -168,19 +168,21 @@ pub fn compile_items(
                     items: item_list,
                 };
                 let mut type_state = old_type_state.clone();
-                if !u.head.type_params.is_empty() {
-                    let generic_list = type_state
-                        .get_generic_list(&GenericListToken::Definition(
-                            u.name.name_id().inner.clone(),
-                        ))
-                        .clone();
+                let generic_list_token = if !u.head.type_params.is_empty() {
+                    Some(GenericListToken::Definition(u.name.name_id().inner.clone()))
+                } else {
+                    None
+                };
 
+                if let Some(generic_list_token) = &generic_list_token {
+                    let generic_list = type_state.get_generic_list(&generic_list_token).clone();
                     for (source_param, new) in u.head.type_params.iter().zip(item.params.iter()) {
                         let source_var = &generic_list[&source_param.name_id()];
 
                         match type_state
                             .unify(new, source_var, type_ctx)
                             .into_default_diagnostic(u)
+                            .and_then(|_| type_state.check_requirements(type_ctx))
                         {
                             Ok(_) => {}
                             Err(e) => {
@@ -224,6 +226,7 @@ pub fn compile_items(
                     symtab,
                     idtracker,
                     item_list,
+                    &generic_list_token,
                     &mut reg_name_map,
                     &mut state,
                     diag_handler,

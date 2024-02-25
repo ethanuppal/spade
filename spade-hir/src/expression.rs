@@ -148,6 +148,7 @@ pub enum ExprKind {
     IntLiteral(BigInt),
     BoolLiteral(bool),
     BitLiteral(BitLiteral),
+    TypeLevelInteger(NameID),
     CreatePorts,
     TupleLiteral(Vec<Loc<Expression>>),
     ArrayLiteral(Vec<Loc<Expression>>),
@@ -258,6 +259,7 @@ impl LocExprExt for Loc<Expression> {
     fn runtime_requirement_witness(&self) -> Option<Loc<Expression>> {
         match &self.kind {
             ExprKind::Identifier(_) => Some(self.clone()),
+            ExprKind::TypeLevelInteger(_) => None,
             ExprKind::IntLiteral(_) => None,
             ExprKind::BoolLiteral(_) => None,
             ExprKind::BitLiteral(_) => Some(self.clone()),

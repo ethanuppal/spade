@@ -278,8 +278,14 @@ pub fn build_artifacts(code: &str, with_stdlib: bool) -> Artefacts {
 /// Sorts the entities by name to make deterministic
 #[macro_export]
 macro_rules! build_and_compare_entities {
+    ($code:expr, $expected:expr, no_stdlib) => {
+        build_and_compare_entities!($code, $expected, build_items)
+    };
     ($code:expr, $expected:expr) => {
-        let mut result = build_items_with_stdlib($code);
+        build_and_compare_entities!($code, $expected, build_items_with_stdlib)
+    };
+    ($code:expr, $expected:expr, $build_function:ident) => {
+        let mut result = $build_function($code);
 
         assert_eq!(
             $expected.len(),

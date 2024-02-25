@@ -7,10 +7,10 @@ fn f() -> bool {
 }
 
 
-error: Unexpected type bool
+error: Type bool is used as a value
   ┌─ testinput:2:13
   │
 2 │     let a = bool;
-  │             ^^^^ Unexpected type
+  │             ^^^^ bool is a type
 
 

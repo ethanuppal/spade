@@ -42,6 +42,7 @@ use trace_stack::{format_trace_stack, TraceStackEntry};
 
 use crate::error::TypeMismatch as Tm;
 use crate::fixed_types::t_void;
+use crate::requirements::ConstantInt;
 
 mod constraints;
 pub mod dump;
@@ -450,6 +451,9 @@ impl TypeState {
         // Recurse down the expression
         match &expression.inner.kind {
             ExprKind::Identifier(_) => self.visit_identifier(expression, ctx)?,
+            ExprKind::TypeLevelInteger(_) => {
+                self.visit_type_level_integer(expression, generic_list, ctx)?
+            }
             ExprKind::IntLiteral(_) => self.visit_int_literal(expression, ctx)?,
             ExprKind::BoolLiteral(_) => self.visit_bool_literal(expression, ctx)?,
             ExprKind::BitLiteral(_) => self.visit_bit_literal(expression, ctx)?,
@@ -1316,7 +1320,7 @@ impl TypeState {
 
     fn add_requirement(&mut self, requirement: Requirement) {
         macro_rules! replace {
-            ($name:ident) => {
+            ($name:expr) => {
                 self.check_var_for_replacement($name.inner.clone())
                     .at_loc(&$name)
             };
@@ -1346,7 +1350,12 @@ impl TypeState {
                 args,
             },
             Requirement::FitsIntLiteral { value, target_type } => Requirement::FitsIntLiteral {
-                value,
+                value: match value {
+                    ConstantInt::Generic(var) => {
+                        ConstantInt::Generic(replace!(var.clone().nowhere()).inner)
+                    }
+                    lit @ ConstantInt::Literal(_) => lit,
+                },
                 target_type: replace!(target_type),
             },
             Requirement::SharedBase(types) => {
@@ -1961,6 +1970,14 @@ impl TypeState {
         for (lhs, rhs) in &self.replacements {
             println!("{lhs:?} -> {rhs:?}")
         }
+
+        println!("\n Requirements:");
+
+        for requirement in &self.requirements {
+            println!("{:?}", requirement)
+        }
+
+        println!("")
     }
 }
 

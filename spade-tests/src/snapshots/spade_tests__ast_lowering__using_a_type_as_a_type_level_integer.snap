@@ -1,0 +1,24 @@
+---
+source: spade-tests/src/ast_lowering.rs
+---
+struct T {}
+fn test() -> int<8> {
+    T
+}
+
+
+error: Expected T to be a value
+  ┌─ testinput:3:5
+  │
+1 │ struct T {}
+  │ ----------- T is a struct
+2 │ fn test() -> int<8> {
+3 │     T
+  │     ^ Expected a value
+  │
+  = Consider specifying the struct parameters
+  │
+3 │     T()
+  │      ++
+
+

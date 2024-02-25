@@ -140,6 +140,7 @@ fn visit_expression(
     let produces_new_resource = match &expr.kind {
         spade_hir::ExprKind::Identifier(_) => false,
         spade_hir::ExprKind::IntLiteral(_) => true,
+        spade_hir::ExprKind::TypeLevelInteger(_) => true,
         spade_hir::ExprKind::BoolLiteral(_) => true,
         spade_hir::ExprKind::BitLiteral(_) => true,
         spade_hir::ExprKind::TupleLiteral(_) => true,
@@ -178,6 +179,7 @@ fn visit_expression(
             linear_state.add_alias_name(expr.id.at_loc(expr), &name.clone().at_loc(expr))?
         }
         spade_hir::ExprKind::IntLiteral(_) => {}
+        spade_hir::ExprKind::TypeLevelInteger(_) => {}
         spade_hir::ExprKind::BoolLiteral(_) => {}
         spade_hir::ExprKind::BitLiteral(_) => {}
         spade_hir::ExprKind::StageValid | spade_hir::ExprKind::StageReady => {}

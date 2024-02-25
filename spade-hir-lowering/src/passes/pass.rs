@@ -24,6 +24,7 @@ impl Passable for Loc<Expression> {
         match &mut self.inner.kind {
             ExprKind::Identifier(_) => {}
             ExprKind::IntLiteral(_) => {}
+            ExprKind::TypeLevelInteger(_) => {}
             ExprKind::BoolLiteral(_) => {}
             ExprKind::BitLiteral(_) => {}
             ExprKind::CreatePorts => {}

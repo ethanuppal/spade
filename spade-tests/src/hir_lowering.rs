@@ -1529,11 +1529,10 @@ mod tests {
         let inst_name = spade_mir::UnitName {
             kind: UnitNameKind::Escaped {
                 // NOTE: The number here is sequential and depends on the number
-                // of generic modules we have. If new modules are added to the stdlib,
-                // this needs to be incremented. If we end up with more tests
+                // of generic modules we have. If we end up with more tests
                 // like this, we should do smarter comparison
                 // lifeguard spade#224
-                name: "identity[110]".to_string(),
+                name: "identity[5]".to_string(),
                 path: vec!["identity".to_string()],
             },
             source: NameID(0, Path::from_strs(&["identity"])),
@@ -1552,7 +1551,46 @@ mod tests {
             } => n(0, "x")},
         ];
 
-        build_and_compare_entities!(code, expected);
+        build_and_compare_entities!(code, expected, no_stdlib);
+    }
+
+    #[test]
+    fn generic_integers_codegen_correctly() {
+        let code = r#"
+            fn create_t<#T>() -> int<8> {
+                T
+            }
+
+            fn x() -> int<8> {
+                create_t::<64>()
+            }
+        "#;
+
+        let inst_name = spade_mir::UnitName {
+            kind: UnitNameKind::Escaped {
+                // NOTE: The number here is sequential and depends on the number
+                // of generic modules we have. If we end up with more tests
+                // like this, we should do smarter comparison
+                // lifeguard spade#224
+                name: "create_t[3]".to_string(),
+                path: vec!["create_t".to_string()],
+            },
+            source: NameID(0, Path::from_strs(&["create_t"])),
+        };
+
+        let expected = vec![
+            entity! {&["x"]; (
+            ) -> Type::int(8); {
+                (e(0); Type::int(8); simple_instance((inst_name.clone(), vec![])); )
+            } => e(0)},
+            // Monomorphised identity function
+            entity! {&inst_name; (
+            ) -> Type::int(8); {
+                (const 10; Type::int(8); ConstantValue::int(64));
+            } => e(10)},
+        ];
+
+        build_and_compare_entities!(code, expected, no_stdlib);
     }
 
     snapshot_error! {

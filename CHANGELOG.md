@@ -14,6 +14,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ### Added
 
 - [!266][!266] Provide more information when type inference fails during monomorphisation
+- [!276][!276] Allow using the values of generic number parameters as expressions
 
 ### Changed
 

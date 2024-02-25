@@ -90,7 +90,7 @@ pub fn visit_type_param(
         ast::TypeParam::Integer(ident) => {
             let name_id = symtab.add_type(
                 Path::ident(ident.clone()),
-                TypeSymbol::GenericArg { traits: vec![] }.at_loc(ident),
+                TypeSymbol::GenericInt.at_loc(ident),
             );
 
             Ok(hir::TypeParam::Integer(ident.clone(), name_id))
@@ -1480,6 +1480,27 @@ pub fn visit_expression(e: &ast::Expression, ctx: &mut Context) -> Result<hir::E
             match ctx.symtab.lookup_variable(path) {
                 Ok(id) => {
                     Ok(hir::ExprKind::Identifier(id))
+                }
+                Err(LookupError::IsAType(_)) => {
+                    let ty = ctx.symtab.lookup_type_symbol(path)?;
+                    let (name, ty) = &ty;
+                    match ty.inner {
+                        TypeSymbol::GenericInt => Ok(hir::ExprKind::TypeLevelInteger(name.clone())),
+                        TypeSymbol::GenericArg { .. } => {
+                            Err(Diagnostic::error(path, format!("Generic type {name} is used as a value"))
+                                .primary_label(format!("{name} is a generic type"))
+                                .secondary_label(ty, format!("{name} is declared here"))
+                                .span_suggest_insert_before(
+                                    format!("Consider making `{name}` a type level integer"),
+                                    ty,
+                                    "#"
+                                ))
+                        }
+                        TypeSymbol::Declared(_, _) => {
+                            Err(Diagnostic::error(path, format!("Type {name} is used as a value"))
+                                .primary_label(format!("{name} is a type")))
+                        }
+                    }
                 }
                 Err(LookupError::NotAVariable(path, ref was @ Thing::EnumVariant(_))) |
                 Err(LookupError::NotAVariable(path, ref was @ Thing::Alias { path: _, in_namespace: _ })) => {

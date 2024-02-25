@@ -562,6 +562,7 @@ impl PipelineAvailability for ExprKind {
         match self {
             ExprKind::Identifier(_) => Ok(0),
             ExprKind::IntLiteral(_) => Ok(0),
+            ExprKind::TypeLevelInteger(_) => Ok(0),
             ExprKind::BoolLiteral(_) => Ok(0),
             ExprKind::BitLiteral(_) => Ok(0),
             ExprKind::CreatePorts => Ok(0),

@@ -13,7 +13,7 @@ use crate::constraints::{bits_to_store, ce_int, ce_var, ConstraintSource};
 use crate::equation::{TypeVar, TypedExpression};
 use crate::error::{TypeMismatch as Tm, UnificationErrorExt};
 use crate::fixed_types::{t_bit, t_bool, t_void};
-use crate::requirements::Requirement;
+use crate::requirements::{ConstantInt, Requirement};
 use crate::{kvar, Context, GenericListToken, HasType, Result, TraceStackEntry, TypeState};
 
 macro_rules! assuming_kind {
@@ -37,6 +37,35 @@ impl TypeState {
                 &TypedExpression::Name(ident.clone()),
                 ctx
             )?;
+        });
+        Ok(())
+    }
+
+    #[trace_typechecker]
+    #[tracing::instrument(level = "trace", skip_all)]
+    pub fn visit_type_level_integer(
+        &mut self,
+        expression: &Loc<Expression>,
+        generic_list: &GenericListToken,
+        ctx: &Context,
+    ) -> Result<()> {
+        assuming_kind!(ExprKind::TypeLevelInteger(value) = &expression => {
+            let (t, _size) = self.new_generic_number(ctx);
+            self.unify(&t, &expression.inner, ctx)
+                .into_diagnostic(expression.loc(), |diag, Tm{e: _, g: _got}| {
+                    diag
+                        .level(DiagnosticLevel::Bug)
+                        .message("Failed to unify integer literal with integer")
+                })?;
+            let generic = self.get_generic_list(generic_list).get(value).ok_or_else(|| {
+                Diagnostic::bug(expression, "Found no generic list when visiting {value}")
+            })?;
+            self.add_requirement(
+                Requirement::FitsIntLiteral {
+                    value: ConstantInt::Generic(generic.clone()),
+                    target_type: t.at_loc(expression)
+                }
+            )
         });
         Ok(())
     }
@@ -76,7 +105,7 @@ impl TypeState {
                         .message("Failed to unify integer literal with integer")
                 })?;
             self.add_requirement(Requirement::FitsIntLiteral {
-                value: value.clone(),
+                value: ConstantInt::Literal(value.clone()),
                 target_type: t.at_loc(expression)
             });
         });

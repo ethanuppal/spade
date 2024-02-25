@@ -16,6 +16,12 @@ use crate::trace_stack::TraceStackEntry;
 use crate::{Context, GenericListSource, TypeState};
 
 #[derive(Clone, Debug)]
+pub enum ConstantInt {
+    Generic(TypeVar),
+    Literal(BigInt),
+}
+
+#[derive(Clone, Debug)]
 pub enum Requirement {
     HasField {
         /// The type which should have the associated field
@@ -40,7 +46,7 @@ pub enum Requirement {
     },
     /// The type should be an integer large enough to fit the specified value
     FitsIntLiteral {
-        value: BigInt,
+        value: ConstantInt,
         target_type: Loc<TypeVar>,
     },
     /// The provided TypeVar should all share a base type
@@ -68,10 +74,11 @@ impl Requirement {
                 TypeState::replace_type_var(target_type, from, to);
                 TypeState::replace_type_var(expr, from, to);
             }
-            Requirement::FitsIntLiteral {
-                value: _,
-                target_type,
-            } => {
+            Requirement::FitsIntLiteral { value, target_type } => {
+                match value {
+                    ConstantInt::Generic(var) => TypeState::replace_type_var(var, from, to),
+                    ConstantInt::Literal(_) => {}
+                };
                 TypeState::replace_type_var(target_type, from, to);
             }
             Requirement::SharedBase(bases) => {
@@ -266,9 +273,21 @@ impl Requirement {
                                     .note("How did you manage to trigger this 🤔")
                                 })?;
 
+                                let value = match value {
+                                    ConstantInt::Generic(TypeVar::Unknown(_, _)) => return Ok(RequirementResult::NoChange),
+                                    ConstantInt::Generic(TypeVar::Known(_, KnownType::Integer(val), _)) => {
+                                        val.to_bigint()
+                                    }
+                                    ConstantInt::Generic(other @ TypeVar::Known(_, _, _)) => diag_bail!(
+                                        target_type,
+                                        "Inferred non-integer type ({other}) for type level integer"
+                                    ),
+                                    ConstantInt::Literal(val) => val.clone(),
+                                };
+
                                 // If the value is 0, we can fit it into any integer and
                                 // can get rid of the requirement
-                                if value == &BigInt::zero() {
+                                if value == BigInt::zero() {
                                     return Ok(RequirementResult::Satisfied(vec![]));
                                 }
 
@@ -284,7 +303,7 @@ impl Requirement {
                                     )
                                 };
 
-                                if value < &contained_range.0 || value > &contained_range.1 {
+                                if value < contained_range.0 || value > contained_range.1 {
                                     let diagnostic = Diagnostic::error(
                                         target_type,
                                         format!("Integer value does not fit in int<{size}>"),

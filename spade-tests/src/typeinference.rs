@@ -1374,3 +1374,31 @@ snapshot_error! {
         }
     "
 }
+
+snapshot_error! {
+    out_of_bounds_type_level_integer_is_error,
+    "
+        fn return_t<#T>() -> int<8> {
+            T
+        }
+
+        fn test() -> int<8> {
+            return_t::<1024>()
+        }
+    "
+}
+
+#[test]
+fn in_bounds_type_level_integer_is_ok() {
+    build_items(
+        "
+        fn return_t<#T>() -> int<8> {
+            T
+        }
+
+        fn test() -> int<8> {
+            return_t::<0>()
+        }
+    ",
+    );
+}

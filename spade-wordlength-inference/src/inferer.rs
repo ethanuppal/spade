@@ -95,6 +95,7 @@ impl<'a> Inferer<'a> {
                 literal.clone(),
                 literal.clone(),
             ))),
+            ExprKind::TypeLevelInteger(_) => todo!(),
 
             ExprKind::BinaryOperator(lhs, op, rhs) => self.binary_operator(lhs, op.inner, rhs)?,
             ExprKind::UnaryOperator(op, v) => self.unary_operator(*op, v)?,
