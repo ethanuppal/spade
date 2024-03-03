@@ -8,7 +8,7 @@ variables:
     CARGO_HOME: $CI_PROJECT_DIR/cargo
     FF_ENABLE_BASH_EXIT_CODE_CHECK: "true"
     GIT_SUBMODULE_STRATEGY: normal
-    RUST_IMAGE: "rust:1.70"
+    RUST_IMAGE: "rust:1.74"
     # Faster zipping helping with cache sync speeds (https://gitlab.com/gitlab-org/gitlab-runner/-/issues/1797)
     FF_USE_FASTZIP: "true"
     CACHE_COMPRESSION_LEVEL: fast
@@ -80,7 +80,7 @@ test:output-test:
         - command -v /usr/bin/python3 || ln -s /usr/bin/python$APT_PYTHON_VERSION /usr/bin/python3
         - curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain none
         - source ./cargo/env
-        - rustup install 1.70
+        - rustup install 1.74
         - source ./cargo/env
         - cd output_test && make
 
