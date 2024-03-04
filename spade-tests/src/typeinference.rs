@@ -1402,3 +1402,48 @@ fn in_bounds_type_level_integer_is_ok() {
     ",
     );
 }
+
+snapshot_error! {
+    type_parameter_propagation_regression,
+    "
+        use std::ports::new_mut_wire;
+        use std::ports::read_mut_wire;
+
+        struct ReadPort_<W> { }
+
+        struct port FifoRead<#W> { }
+
+        entity fifo_read_side<#W>(
+            write_ptr_w: uint<W>,
+            ram_read: ReadPort_<W>,
+            read_ptr_wire: &mut uint<W>,
+        ) -> FifoRead<W> {
+            FifoRead$()
+        }
+
+        entity fifo<#W>(
+            ram_read: ReadPort_<W>
+        ) -> FifoRead<W> {
+            let read_ptr_wire = inst new_mut_wire();
+
+            let read_ptr_w = inst read_mut_wire(read_ptr_wire);
+
+            let write_ptr_w  = 0;
+
+            let full_w = 0 == read_ptr_w;
+
+
+            inst fifo_read_side$(
+                    write_ptr_w,
+                    ram_read,
+                    read_ptr_wire,
+                )
+        }
+
+        entity fifo_test_harness(
+            ram_read: ReadPort_<4>
+        ) {
+            let _ = inst fifo::<4>$(ram_read);
+        }
+    "
+}

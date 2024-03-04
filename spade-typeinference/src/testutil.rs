@@ -33,7 +33,7 @@ macro_rules! get_type {
         if let Ok(t) = $state.type_of($e) {
             t
         } else {
-            println!("{}", format_trace_stack(&$state.trace_stack));
+            println!("{}", format_trace_stack(&$state));
             panic!("Failed to get type of {:?}", $e)
         }
     };
@@ -49,7 +49,7 @@ macro_rules! ensure_same_type {
         let _t1 = t1.get_type(&$state);
         let _t2 = t2.get_type(&$state);
         if _t1 != _t2 {
-            println!("{}", format_trace_stack(&$state.trace_stack));
+            println!("{}", format_trace_stack(&$state));
             $state.print_equations();
 
             if let (Ok(t1), Ok(t2)) = (&_t1, &_t2) {

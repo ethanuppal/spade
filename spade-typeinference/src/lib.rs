@@ -9,7 +9,9 @@
 use std::collections::{BTreeSet, HashMap};
 use std::sync::Arc;
 
+use colored::Colorize;
 use hir::{Binding, Parameter, UnitHead, WalTrace};
+use itertools::Itertools;
 use num::{BigInt, Zero};
 use serde::{Deserialize, Serialize};
 use spade_common::num_ext::InfallibleToBigInt;
@@ -343,6 +345,10 @@ impl TypeState {
         // Ensure that the output type matches what the user specified, and unit otherwise
         if let Some(output_type) = &entity.head.output_type {
             let tvar = self.type_var_from_hir(output_type.loc(), output_type, &generic_list);
+
+            self.trace_stack.push(TraceStackEntry::Message(format!(
+                "Unifying with output type {tvar:?}"
+            )));
             self.unify(&TypedExpression::Id(entity.body.inner.id), &tvar, ctx)
                 .into_diagnostic_no_expected_source(
                     &entity.body,
@@ -621,14 +627,14 @@ impl TypeState {
             }
         };
 
+        // Unify the types of the arguments
+        self.type_check_argument_list(&matched_args, ctx, &generic_list)?;
+
         let return_type = head
             .output_type
             .as_ref()
             .map(|o| self.type_var_from_hir(expression_id.loc(), o, &generic_list))
             .unwrap_or_else(|| TypeVar::Known(expression_id.loc(), t_void(ctx.symtab), vec![]));
-
-        // Unify the types of the arguments
-        self.type_check_argument_list(&matched_args, ctx, &generic_list)?;
 
         self.unify(expression_type, &return_type, ctx)
             .into_default_diagnostic(expression_id.loc())?;
@@ -831,7 +837,10 @@ impl TypeState {
             .collect::<Result<Vec<_>>>()?
             .into_iter()
             .map(|(name, t)| (name, t.clone()))
-            .collect();
+            .collect::<HashMap<_, _>>();
+
+        self.trace_stack
+            .push(TraceStackEntry::NewGenericList(new_list.clone()));
 
         Ok(self.add_mapped_generic_list(source, new_list))
     }
@@ -1295,7 +1304,7 @@ impl TypeState {
         if let Some(prev) = self.equations.insert(expression.clone(), var.clone()) {
             let var = var.clone();
             let expr = expression.clone();
-            println!("{}", format_trace_stack(&self.trace_stack));
+            println!("{}", format_trace_stack(&self));
             panic!("Adding equation for {} == {} but a previous eq exists.\n\tIt was previously bound to {}", expr, var, prev)
         }
     }
@@ -1962,13 +1971,21 @@ impl TypeState {
 impl TypeState {
     pub fn print_equations(&self) {
         for (lhs, rhs) in &self.equations {
-            println!("{}: {:?}", lhs, rhs);
+            println!(
+                "{} -> {}",
+                format!("{lhs}").blue(),
+                format!("{rhs:?}").green()
+            )
         }
 
         println!("\nReplacments:");
 
-        for (lhs, rhs) in &self.replacements {
-            println!("{lhs:?} -> {rhs:?}")
+        for (lhs, rhs) in self.replacements.iter().sorted() {
+            println!(
+                "{} -> {}",
+                format!("{lhs:?}").blue(),
+                format!("{rhs:?}").green()
+            )
         }
 
         println!("\n Requirements:");

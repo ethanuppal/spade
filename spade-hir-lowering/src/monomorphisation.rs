@@ -9,6 +9,7 @@ use spade_hir::{symbol_table::FrozenSymtab, ExecutableItem, ItemList, UnitName};
 use spade_mir as mir;
 use spade_typeinference::equation::TypeVar;
 use spade_typeinference::error::UnificationErrorExt;
+use spade_typeinference::trace_stack::{format_trace_stack, TraceStackEntry};
 use spade_typeinference::{GenericListToken, TypeState};
 use spade_wordlength_inference as wordlength_inference;
 
@@ -179,6 +180,12 @@ pub fn compile_items(
                     for (source_param, new) in u.head.type_params.iter().zip(item.params.iter()) {
                         let source_var = &generic_list[&source_param.name_id()];
 
+                        type_state
+                            .trace_stack
+                            .push(TraceStackEntry::Message(format!(
+                                "Performing mono replacement of {source_var:?} -> {new:?}"
+                            )));
+
                         match type_state
                             .unify(new, source_var, type_ctx)
                             .into_default_diagnostic(u)
@@ -190,6 +197,12 @@ pub fn compile_items(
                                 continue 'item_loop;
                             }
                         }
+                    }
+
+                    if std::env::var("SPADE_TRACE_TYPEINFERENCE").is_ok() {
+                        println!("After mono of {} with {:?}", u.inner.name, item.params);
+                        type_state.print_equations();
+                        println!("{}", format_trace_stack(&type_state));
                     }
                 }
 

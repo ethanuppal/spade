@@ -1,12 +1,14 @@
-use std::sync::RwLock;
+use std::{collections::HashMap, sync::RwLock};
 
 use colored::*;
 use itertools::Itertools;
 use num::BigInt;
+use spade_common::name::NameID;
 
 use crate::{
     equation::{TraitList, TypeVar, TypedExpression},
     requirements::Requirement,
+    TypeState,
 };
 
 pub struct TraceStack {
@@ -42,15 +44,28 @@ pub enum TraceStackEntry {
     AddingEquation(TypedExpression, TypeVar),
     AddRequirement(Requirement),
     ResolvedRequirement(Requirement),
+    NewGenericList(HashMap<NameID, TypeVar>),
     /// Inferring more from constraints
     InferringFromConstraints(TypeVar, BigInt),
     /// Arbitrary message
     Message(String),
 }
 
-pub fn format_trace_stack(stack: &TraceStack) -> String {
+pub fn format_trace_stack(type_state: &TypeState) -> String {
+    let stack = &type_state.trace_stack;
     let mut result = String::new();
     let mut indent_amount = 0;
+
+    // Prints a type var with some formatting if there is a type variable that
+    // has not been replaced by a concrete type at the end of type inference
+    let maybe_replaced = |t: &TypeVar| {
+        let replacement = type_state.check_var_for_replacement(t.clone());
+        if &replacement == t && matches!(replacement, TypeVar::Unknown(_, _)) {
+            format!("{}", format!("{:?}", t).bright_yellow())
+        } else {
+            format!("{:?}", t)
+        }
+    };
 
     for entry in stack.entries.read().unwrap().iter() {
         let mut next_indent_amount = indent_amount;
@@ -60,36 +75,54 @@ pub fn format_trace_stack(stack: &TraceStack) -> String {
                 format!("{} `{}`", "call".white(), function.blue())
             }
             TraceStackEntry::AddingEquation(expr, t) => {
-                format!("{} {:?} <- {:?}", "eq".yellow(), expr, t)
+                format!("{} {:?} <- {}", "eq".yellow(), expr, maybe_replaced(t))
             }
             TraceStackEntry::Unified(lhs, rhs, result, replaced) => {
                 next_indent_amount -= 1;
                 format!(
-                    "{} {:?}, {:?} -> {:?} (replacing {})",
+                    "{} {}, {} -> {} (replacing {})",
                     "unified".green(),
-                    lhs,
-                    rhs,
-                    result,
-                    replaced.iter().map(|t| format!("{t:?}")).join(",")
+                    maybe_replaced(lhs),
+                    maybe_replaced(rhs),
+                    maybe_replaced(result),
+                    replaced
+                        .iter()
+                        .map(|t| format!("{}", maybe_replaced(t)))
+                        .join(",")
                 )
             }
             TraceStackEntry::TryingUnify(lhs, rhs) => {
                 next_indent_amount += 1;
                 format!(
-                    "{} of {:?} with {:?}",
+                    "{} of {} with {}",
                     "trying unification".cyan(),
-                    lhs,
-                    rhs
+                    maybe_replaced(lhs),
+                    maybe_replaced(rhs)
                 )
             }
             TraceStackEntry::EnsuringImpls(ty, tr, trait_is_expected) => {
                 format!(
                     "{} {ty} as {tr:?} (trait_is_expected: {trait_is_expected})",
-                    "ensuring impls".yellow()
+                    "ensuring impls".yellow(),
+                    ty = maybe_replaced(ty)
                 )
             }
             TraceStackEntry::InferringFromConstraints(lhs, rhs) => {
-                format!("{} {lhs} as {rhs} from constraints", "inferring".purple())
+                format!(
+                    "{} {lhs} as {rhs} from constraints",
+                    "inferring".purple(),
+                    lhs = maybe_replaced(lhs),
+                )
+            }
+            TraceStackEntry::NewGenericList(mapping) => {
+                format!(
+                    "{}: {}",
+                    "new generic list".bright_cyan(),
+                    mapping
+                        .iter()
+                        .map(|(k, v)| format!("{k} -> {}", maybe_replaced(v)))
+                        .join(", ")
+                )
             }
             TraceStackEntry::Message(msg) => {
                 format!("{}: {}", "m".purple(), msg)
