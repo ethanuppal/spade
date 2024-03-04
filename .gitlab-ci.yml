@@ -13,6 +13,14 @@ variables:
     FF_USE_FASTZIP: "true"
     CACHE_COMPRESSION_LEVEL: fast
 
+# Only run pipelines for merge requests, tags, and the default branch.
+# https://docs.gitlab.com/ee/ci/pipelines/merge_request_pipelines.html#use-rules-to-add-jobs
+workflow:
+  rules:
+    - if: $CI_PIPELINE_SOURCE == 'merge_request_event'
+    - if: $CI_COMMIT_TAG
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
 stages:
     - test
     - trawler
