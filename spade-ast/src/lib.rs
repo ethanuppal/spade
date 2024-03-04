@@ -3,7 +3,7 @@ use num::{BigInt, BigUint, Zero};
 use spade_common::{
     location_info::{Loc, WithLocation},
     name::{Identifier, Path},
-    num_ext::InfallibleToBigInt,
+    num_ext::{InfallibleToBigInt, InfallibleToBigUint},
 };
 
 pub mod comptime;
@@ -137,15 +137,15 @@ impl WithLocation for BitLiteral {}
 #[derive(PartialEq, Debug, Clone)]
 pub enum Expression {
     Identifier(Loc<Path>),
-    IntLiteral(BigInt),
+    IntLiteral(IntLiteral),
     BoolLiteral(bool),
     BitLiteral(BitLiteral),
     ArrayLiteral(Vec<Loc<Expression>>),
     Index(Box<Loc<Expression>>, Box<Loc<Expression>>),
     RangeIndex {
         target: Box<Loc<Expression>>,
-        start: Box<Loc<Expression>>,
-        end: Loc<IntLiteral>,
+        start: Loc<BigUint>,
+        end: Loc<BigUint>,
     },
     TupleLiteral(Vec<Loc<Expression>>),
     TupleIndex(Box<Loc<Expression>>, Loc<u128>),
@@ -204,8 +204,28 @@ pub enum Expression {
 impl WithLocation for Expression {}
 
 impl Expression {
-    pub fn int_literal(val: i32) -> Self {
-        Self::IntLiteral(val.to_bigint())
+    pub fn int_literal_signed(val: i32) -> Self {
+        Self::IntLiteral(IntLiteral::Signed(val.to_bigint()))
+    }
+
+    pub fn int_literal_unsigned(val: u32) -> Self {
+        Self::IntLiteral(IntLiteral::Unsigned(val.to_biguint()))
+    }
+
+    pub fn as_int_literal(self) -> Option<IntLiteral> {
+        match self {
+            Expression::IntLiteral(lit) => Some(lit),
+            _ => None,
+        }
+    }
+
+    pub fn is_usub_int_literal(&self) -> bool {
+        match self {
+            Expression::UnaryOperator(UnaryOperator::Sub, e) => {
+                matches!(e.inner, Expression::IntLiteral(_))
+            }
+            _ => false,
+        }
     }
 
     pub fn assume_block(&self) -> &Block {

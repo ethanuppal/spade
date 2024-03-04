@@ -1,6 +1,5 @@
 ---
 source: spade-tests/src/typeinference.rs
-assertion_line: 947
 ---
 fn test(x: [int<8>; 6]) -> [int<8>; 1] {
     x[-1:5]
@@ -11,6 +10,6 @@ error: Range indices must be non-negative
   ┌─ testinput:2:7
   │
 2 │     x[-1:5]
-  │       ^^ Range index is negative
+  │       ^^ range index is negative
 
 

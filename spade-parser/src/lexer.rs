@@ -1,6 +1,6 @@
 use logos::Logos;
 
-use num::BigInt;
+use num::BigUint;
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum LiteralKind {
@@ -8,9 +8,9 @@ pub enum LiteralKind {
     Unsigned,
 }
 
-fn parse_int(slice: &str, radix: u32) -> (BigInt, LiteralKind) {
+fn parse_int(slice: &str, radix: u32) -> (BigUint, LiteralKind) {
     let lower = slice.to_ascii_lowercase();
-    let cleaned = lower.replace(['_', 'u', 'U'], "");
+    let cleaned = lower.replace(['_', 'u'], "");
 
     let signed = if lower.ends_with('u') {
         LiteralKind::Unsigned
@@ -19,7 +19,7 @@ fn parse_int(slice: &str, radix: u32) -> (BigInt, LiteralKind) {
     };
 
     (
-        BigInt::parse_bytes(cleaned.as_bytes(), radix).unwrap(),
+        BigUint::parse_bytes(cleaned.as_bytes(), radix).unwrap(),
         signed,
     )
 }
@@ -34,18 +34,18 @@ pub enum TokenKind {
     )"#, |lex| lex.slice().to_string())]
     Identifier(String),
 
-    #[regex(r"-?[0-9][0-9_]*[uU]?", |lex| {
+    #[regex(r"[0-9][0-9_]*[uU]?", |lex| {
         parse_int(lex.slice(), 10)
     })]
-    Integer((BigInt, LiteralKind)),
-    #[regex(r"-?0x[0-9A-Fa-f][0-9_A-Fa-f]*[uU]?", |lex| {
+    Integer((BigUint, LiteralKind)),
+    #[regex(r"0x[0-9A-Fa-f][0-9_A-Fa-f]*[uU]?", |lex| {
         parse_int(&lex.slice()[2..], 16)
     })]
-    HexInteger((BigInt, LiteralKind)),
-    #[regex(r"-?0b[0-1][0-1_]*[uU]?", |lex| {
+    HexInteger((BigUint, LiteralKind)),
+    #[regex(r"0b[0-1][0-1_]*[uU]?", |lex| {
         parse_int(&lex.slice()[2..], 2)
     })]
-    BinInteger((BigInt, LiteralKind)),
+    BinInteger((BigUint, LiteralKind)),
 
     #[token("true")]
     True,
@@ -334,7 +334,7 @@ impl TokenKind {
 
 #[cfg(test)]
 mod tests {
-    use spade_common::num_ext::InfallibleToBigInt;
+    use spade_common::num_ext::InfallibleToBigUint;
 
     use super::*;
 
@@ -355,7 +355,7 @@ mod tests {
         assert_eq!(
             lex.next(),
             Some(Ok(TokenKind::Integer((
-                123.to_bigint(),
+                123_u32.to_biguint(),
                 LiteralKind::Signed
             ))))
         );
@@ -369,7 +369,7 @@ mod tests {
         assert_eq!(
             lex.next(),
             Some(Ok(TokenKind::HexInteger((
-                0x45.to_bigint(),
+                0x45_u32.to_biguint(),
                 LiteralKind::Signed
             ))))
         );
@@ -382,7 +382,10 @@ mod tests {
         let mut lex = TokenKind::lexer("0xg");
         assert_eq!(
             lex.next(),
-            Some(Ok(TokenKind::Integer((0.to_bigint(), LiteralKind::Signed))))
+            Some(Ok(TokenKind::Integer((
+                0_u32.to_biguint(),
+                LiteralKind::Signed
+            ))))
         );
         assert_eq!(
             lex.next(),

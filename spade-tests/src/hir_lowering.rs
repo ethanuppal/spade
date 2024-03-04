@@ -70,14 +70,15 @@ mod tests {
     }
 
     #[test]
-    fn negative_literals_give_correct_mir() {
-        let code = "fn a() -> int<32> {
+    fn unary_sub_literal_without_space_gives_correct_mir() {
+        let code = "fn name() -> int<32> {
             -1
         }";
 
-        let expected = entity! {&["a"]; () -> Type::int(32); {
-            (const 0; Type::int(32); ConstantValue::int(-1))
-        } => e(0)};
+        let expected = entity! {&["name"]; () -> Type::int(32); {
+            (const 2; Type::int(32); ConstantValue::int(1));
+            (e(1); Type::int(32); USub; e(2))
+        } => e(1)};
 
         assert_same_mir!(&build_entity!(code), &expected);
     }
@@ -406,10 +407,28 @@ mod tests {
     }
 
     #[test]
-    fn usub_codegens_correctly() {
+    fn usub_without_spaces_codegens_correctly() {
         let code = r#"
         entity name(a: int<16>) -> int<16> {
             -a
+        }
+        "#;
+
+        let expected = entity!(&["name"]; (
+                "a", n(0, "a"), Type::int(16),
+            ) -> Type::int(16); {
+                (e(0); Type::int(16); USub; n(0, "a"))
+            } => e(0)
+        );
+
+        assert_same_mir!(&build_entity!(code), &expected);
+    }
+
+    #[test]
+    fn usub_with_spaces_codegens_correctly() {
+        let code = r#"
+        entity name(a: int<16>) -> int<16> {
+            - a
         }
         "#;
 

@@ -22,6 +22,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 - [!272][!272] Parentheses can now be omitted on aliased enum variants like `None`
 - [!273][!273] Allow bitwise negation (~) of unsigned integers
+- [!275][!275] Fix parsing of subtraction without spaces, like `1-2`
 
 ### Removed
 

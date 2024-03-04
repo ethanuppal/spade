@@ -1311,7 +1311,7 @@ pub fn visit_expression(e: &ast::Expression, ctx: &mut Context) -> Result<hir::E
 
     match e {
         ast::Expression::IntLiteral(val) => {
-            Ok(hir::ExprKind::IntLiteral(val.clone()))
+            Ok(hir::ExprKind::IntLiteral(val.clone().as_signed()))
         },
         ast::Expression::BoolLiteral(val) => Ok(hir::ExprKind::BoolLiteral(*val)),
         ast::Expression::BitLiteral(lit) => {
@@ -1389,25 +1389,7 @@ pub fn visit_expression(e: &ast::Expression, ctx: &mut Context) -> Result<hir::E
         }
         ast::Expression::RangeIndex{target, start, end} => {
             let target = target.try_visit(visit_expression, ctx)?;
-            let start = start.try_map_ref(|s| match s {
-                ast::Expression::IntLiteral(v) => if v < &BigInt::zero() {
-                    Err(Diagnostic::error(start.as_ref(), "Range indices must be non-negative")
-                        .primary_label("Range index is negative"))
-                } else {
-                    Ok(v.to_biguint().unwrap())
-                },
-                _ => Err(Diagnostic::error(start.as_ref(), "Range indices must be integers.").primary_label("Expected integer"))
-            })?;
-            let end = end.try_map_ref(|s| match s {
-                ast::IntLiteral::Signed(v) => if v < &BigInt::zero() {
-                    Err(Diagnostic::error(end, "Range indices must be non-negative")
-                        .primary_label("Range index is negative"))
-                } else {
-                    Ok(v.to_biguint().unwrap())
-                },
-                ast::IntLiteral::Unsigned(v) => Ok(v.clone()),
-            })?;
-            Ok(hir::ExprKind::RangeIndex{target: Box::new(target), start, end})
+            Ok(hir::ExprKind::RangeIndex{target: Box::new(target), start: start.clone(), end: end.clone()})
         }
         ast::Expression::TupleIndex(tuple, index) => Ok(hir::ExprKind::TupleIndex(
             Box::new(tuple.try_visit(visit_expression, ctx)?),
@@ -1793,10 +1775,10 @@ mod entity_visiting {
                     statements: vec![ast::Statement::binding(
                         ast::Pattern::name("var"),
                         Some(ast::TypeSpec::Unit(().nowhere()).nowhere()),
-                        ast::Expression::int_literal(0).nowhere(),
+                        ast::Expression::int_literal_signed(0).nowhere(),
                     )
                     .nowhere()],
-                    result: Some(ast::Expression::int_literal(0).nowhere()),
+                    result: Some(ast::Expression::int_literal_signed(0).nowhere()),
                 }))
                 .nowhere(),
             ),
@@ -1934,7 +1916,7 @@ mod statement_visiting {
         let input = ast::Statement::binding(
             ast::Pattern::name("a"),
             Some(ast::TypeSpec::Unit(().nowhere()).nowhere()),
-            ast::Expression::int_literal(0).nowhere(),
+            ast::Expression::int_literal_signed(0).nowhere(),
         )
         .nowhere();
 
@@ -1957,7 +1939,7 @@ mod statement_visiting {
                 clock: ast::Expression::Identifier(ast_path("clk")).nowhere(),
                 reset: None,
                 initial: None,
-                value: ast::Expression::int_literal(0).nowhere(),
+                value: ast::Expression::int_literal_signed(0).nowhere(),
                 value_type: None,
                 attributes: ast::AttributeList::empty(),
             }
@@ -2065,7 +2047,7 @@ mod expression_visiting {
     fn int_literals_work() {
         let symtab = SymbolTable::new();
         let idtracker = ExprIdTracker::new();
-        let input = ast::Expression::int_literal(123);
+        let input = ast::Expression::int_literal_signed(123);
         let expected = hir::ExprKind::int_literal(123).idless();
 
         assert_eq!(
@@ -2089,9 +2071,9 @@ mod expression_visiting {
                 let symtab = SymbolTable::new();
                 let idtracker = ExprIdTracker::new();
                 let input = ast::Expression::BinaryOperator(
-                    Box::new(ast::Expression::int_literal(123).nowhere()),
+                    Box::new(ast::Expression::int_literal_signed(123).nowhere()),
                     spade_ast::BinaryOperator::$token.nowhere(),
-                    Box::new(ast::Expression::int_literal(456).nowhere()),
+                    Box::new(ast::Expression::int_literal_signed(456).nowhere()),
                 );
                 let expected = hir::ExprKind::BinaryOperator(
                     Box::new(hir::ExprKind::int_literal(123).idless().nowhere()),
@@ -2124,7 +2106,7 @@ mod expression_visiting {
                 let idtracker = ExprIdTracker::new();
                 let input = ast::Expression::UnaryOperator(
                     spade_ast::UnaryOperator::$token,
-                    Box::new(ast::Expression::int_literal(456).nowhere()),
+                    Box::new(ast::Expression::int_literal_signed(456).nowhere()),
                 );
                 let expected = hir::ExprKind::UnaryOperator(
                     hir::expression::UnaryOperator::$op,
@@ -2161,8 +2143,8 @@ mod expression_visiting {
         let symtab = SymbolTable::new();
         let idtracker = ExprIdTracker::new();
         let input = ast::Expression::Index(
-            Box::new(ast::Expression::int_literal(0).nowhere()),
-            Box::new(ast::Expression::int_literal(1).nowhere()),
+            Box::new(ast::Expression::int_literal_signed(0).nowhere()),
+            Box::new(ast::Expression::int_literal_signed(1).nowhere()),
         );
 
         let expected = hir::ExprKind::Index(
@@ -2190,7 +2172,7 @@ mod expression_visiting {
         let symtab = SymbolTable::new();
         let idtracker = ExprIdTracker::new();
         let input = ast::Expression::FieldAccess(
-            Box::new(ast::Expression::int_literal(0).nowhere()),
+            Box::new(ast::Expression::int_literal_signed(0).nowhere()),
             ast_ident("a"),
         );
 
@@ -2220,10 +2202,10 @@ mod expression_visiting {
             statements: vec![ast::Statement::binding(
                 ast::Pattern::name("a"),
                 None,
-                ast::Expression::int_literal(0).nowhere(),
+                ast::Expression::int_literal_signed(0).nowhere(),
             )
             .nowhere()],
-            result: Some(ast::Expression::int_literal(0).nowhere()),
+            result: Some(ast::Expression::int_literal_signed(0).nowhere()),
         }));
         let expected = hir::ExprKind::Block(Box::new(hir::Block {
             statements: vec![hir::Statement::binding(
@@ -2251,18 +2233,18 @@ mod expression_visiting {
     #[test]
     fn if_expressions_work() {
         let input = ast::Expression::If(
-            Box::new(ast::Expression::int_literal(0).nowhere()),
+            Box::new(ast::Expression::int_literal_signed(0).nowhere()),
             Box::new(
                 ast::Expression::Block(Box::new(ast::Block {
                     statements: vec![],
-                    result: Some(ast::Expression::int_literal(1).nowhere()),
+                    result: Some(ast::Expression::int_literal_signed(1).nowhere()),
                 }))
                 .nowhere(),
             ),
             Box::new(
                 ast::Expression::Block(Box::new(ast::Block {
                     statements: vec![],
-                    result: Some(ast::Expression::int_literal(2).nowhere()),
+                    result: Some(ast::Expression::int_literal_signed(2).nowhere()),
                 }))
                 .nowhere(),
             ),
@@ -2307,10 +2289,10 @@ mod expression_visiting {
     #[test]
     fn match_expressions_work() {
         let input = ast::Expression::Match(
-            Box::new(ast::Expression::int_literal(1).nowhere()),
+            Box::new(ast::Expression::int_literal_signed(1).nowhere()),
             vec![(
                 ast::Pattern::name("x"),
-                ast::Expression::int_literal(2).nowhere(),
+                ast::Expression::int_literal_signed(2).nowhere(),
             )]
             .nowhere(),
         );
@@ -2343,7 +2325,7 @@ mod expression_visiting {
     #[test]
     fn match_expressions_with_enum_members_works() {
         let input = ast::Expression::Match(
-            Box::new(ast::Expression::int_literal(1).nowhere()),
+            Box::new(ast::Expression::int_literal_signed(1).nowhere()),
             vec![(
                 ast::Pattern::Type(
                     ast_path("x"),
@@ -2408,7 +2390,7 @@ mod expression_visiting {
     #[test]
     fn match_expressions_with_0_argument_enum_works() {
         let input = ast::Expression::Match(
-            Box::new(ast::Expression::int_literal(1).nowhere()),
+            Box::new(ast::Expression::int_literal_signed(1).nowhere()),
             vec![(
                 ast::Pattern::Type(
                     ast_path("x"),
@@ -2476,8 +2458,8 @@ mod expression_visiting {
             kind: ast::CallKind::Entity(().nowhere()),
             callee: ast_path("test"),
             args: ast::ArgumentList::Positional(vec![
-                ast::Expression::int_literal(1).nowhere(),
-                ast::Expression::int_literal(2).nowhere(),
+                ast::Expression::int_literal_signed(1).nowhere(),
+                ast::Expression::int_literal_signed(2).nowhere(),
             ])
             .nowhere(),
             turbofish: None,
@@ -2537,8 +2519,14 @@ mod expression_visiting {
             kind: ast::CallKind::Entity(().nowhere()),
             callee: ast_path("test"),
             args: ast::ArgumentList::Named(vec![
-                ast::NamedArgument::Full(ast_ident("b"), ast::Expression::int_literal(2).nowhere()),
-                ast::NamedArgument::Full(ast_ident("a"), ast::Expression::int_literal(1).nowhere()),
+                ast::NamedArgument::Full(
+                    ast_ident("b"),
+                    ast::Expression::int_literal_signed(2).nowhere(),
+                ),
+                ast::NamedArgument::Full(
+                    ast_ident("a"),
+                    ast::Expression::int_literal_signed(1).nowhere(),
+                ),
             ])
             .nowhere(),
             turbofish: None,
@@ -2604,8 +2592,8 @@ mod expression_visiting {
             kind: ast::CallKind::Function,
             callee: ast_path("test"),
             args: ast::ArgumentList::Positional(vec![
-                ast::Expression::int_literal(1).nowhere(),
-                ast::Expression::int_literal(2).nowhere(),
+                ast::Expression::int_literal_signed(1).nowhere(),
+                ast::Expression::int_literal_signed(2).nowhere(),
             ])
             .nowhere(),
             turbofish: None,
@@ -2668,8 +2656,8 @@ mod expression_visiting {
             ),
             callee: ast_path("test"),
             args: ast::ArgumentList::Positional(vec![
-                ast::Expression::int_literal(1).nowhere(),
-                ast::Expression::int_literal(2).nowhere(),
+                ast::Expression::int_literal_signed(1).nowhere(),
+                ast::Expression::int_literal_signed(2).nowhere(),
             ])
             .nowhere(),
             turbofish: None,
@@ -2862,10 +2850,10 @@ mod register_visiting {
             clock: ast::Expression::Identifier(ast_path("clk")).nowhere(),
             reset: Some((
                 ast::Expression::Identifier(ast_path("rst")).nowhere(),
-                ast::Expression::int_literal(0).nowhere(),
+                ast::Expression::int_literal_signed(0).nowhere(),
             )),
-            initial: Some(ast::Expression::int_literal(0).nowhere()),
-            value: ast::Expression::int_literal(1).nowhere(),
+            initial: Some(ast::Expression::int_literal_signed(0).nowhere()),
+            value: ast::Expression::int_literal_signed(1).nowhere(),
             value_type: Some(ast::TypeSpec::Unit(().nowhere()).nowhere()),
             attributes: ast::AttributeList::empty(),
         }
@@ -2939,7 +2927,7 @@ mod item_visiting {
                 body: Some(
                     ast::Expression::Block(Box::new(ast::Block {
                         statements: vec![],
-                        result: Some(ast::Expression::int_literal(0).nowhere()),
+                        result: Some(ast::Expression::int_literal_signed(0).nowhere()),
                     }))
                     .nowhere(),
                 ),
@@ -3017,7 +3005,7 @@ mod impl_blocks {
                 body: Some(
                     ast::Expression::Block(Box::new(ast::Block {
                         statements: vec![],
-                        result: Some(ast::Expression::int_literal(0).nowhere()),
+                        result: Some(ast::Expression::int_literal_signed(0).nowhere()),
                     }))
                     .nowhere(),
                 ),
@@ -3144,7 +3132,7 @@ mod module_visiting {
                     body: Some(
                         ast::Expression::Block(Box::new(ast::Block {
                             statements: vec![],
-                            result: Some(ast::Expression::int_literal(0).nowhere()),
+                            result: Some(ast::Expression::int_literal_signed(0).nowhere()),
                         }))
                         .nowhere(),
                     ),

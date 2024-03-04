@@ -10,7 +10,8 @@ use error::{ExpectedArgumentList, SuggestBraceEnumVariant};
 use itertools::Itertools;
 use local_impl::local_impl;
 use logos::Lexer;
-use num::{BigInt, ToPrimitive, Zero};
+use num::ToPrimitive;
+use spade_common::num_ext::InfallibleToBigInt;
 use tracing::{event, Level};
 
 use spade_ast::{
@@ -30,7 +31,7 @@ use crate::error::{
 };
 use crate::error_reporting::unexpected_token_message;
 use crate::item_type::UnitKindLocal;
-use crate::lexer::TokenKind;
+use crate::lexer::{LiteralKind, TokenKind};
 
 /// A token with location info
 #[derive(Clone, Debug, PartialEq)]
@@ -346,35 +347,49 @@ impl<'a> Parser<'a> {
     }
 
     #[trace_parser]
+    #[tracing::instrument(skip(self))]
     pub fn int_literal(&mut self) -> Result<Option<Loc<IntLiteral>>> {
+        let plusminus = match &self.peek()?.kind {
+            TokenKind::Plus | TokenKind::Minus => Some(self.eat_unconditional()?),
+            _ => None,
+        };
         if self.peek_cond(TokenKind::is_integer, "integer")? {
             let token = self.eat_unconditional()?;
             match &token.kind {
                 TokenKind::Integer(val)
                 | TokenKind::HexInteger(val)
                 | TokenKind::BinInteger(val) => {
-                    let (val_int, sign) = val;
+                    let (val_int, val_signed) = val;
 
-                    let inner = match sign {
-                        crate::lexer::LiteralKind::Signed => IntLiteral::Signed(val_int.clone()),
-                        crate::lexer::LiteralKind::Unsigned => {
-                            if val_int < &BigInt::zero() {
-                                return Err(Diagnostic::error(
-                                    token,
-                                    "An unsigned int literal cannot be negative",
-                                )
-                                .into());
+                    let inner = match val_signed {
+                        LiteralKind::Signed => {
+                            if plusminus.as_ref().map(|tok| &tok.kind) == Some(&TokenKind::Minus) {
+                                IntLiteral::Signed(-val_int.to_bigint())
                             } else {
-                                IntLiteral::Unsigned(val_int.to_biguint().unwrap())
+                                IntLiteral::Signed(val_int.to_bigint())
                             }
                         }
+                        LiteralKind::Unsigned => IntLiteral::Unsigned(val_int.clone()),
                     };
-                    Ok(Some(Loc::new(inner, lspan(token.span), self.file_id)))
+                    let loc = if let Some(pm) = plusminus {
+                        ().between(self.file_id, &pm, &token)
+                    } else {
+                        token.loc()
+                    };
+                    Ok(Some(inner.at_loc(&loc)))
                 }
                 _ => unreachable!(),
             }
         } else {
-            Ok(None)
+            if let Some(pm) = plusminus {
+                return Err(Diagnostic::error(
+                    &pm.loc(),
+                    format!("expected a number after '{}'", pm.kind.as_str()),
+                )
+                .into());
+            } else {
+                return Ok(None);
+            }
         }
     }
 
@@ -451,19 +466,6 @@ impl<'a> Parser<'a> {
         let next = self.peek()?;
         let reference = match next.kind {
             TokenKind::Identifier(_) => PipelineStageReference::Absolute(self.identifier()?),
-            TokenKind::Plus => {
-                let plus = self.eat(&TokenKind::Plus)?;
-                let num = if let Some(d) = self.int_literal()? {
-                    d
-                } else {
-                    return Err(Error::ExpectedOffset {
-                        got: self.eat_unconditional()?,
-                    });
-                };
-
-                let offset = (num.inner.clone().as_signed()).between(plus.file_id, &plus, &num);
-                PipelineStageReference::Relative(offset)
-            }
             _ => {
                 let num = if let Some(d) = self.int_literal()? {
                     d
@@ -2343,7 +2345,7 @@ mod tests {
         check_parse!(
             "123",
             expression,
-            Ok(Expression::int_literal(123).nowhere())
+            Ok(Expression::int_literal_signed(123).nowhere())
         );
     }
 
@@ -2352,7 +2354,7 @@ mod tests {
         let expected = Statement::binding(
             Pattern::name("test"),
             None,
-            Expression::int_literal(123).nowhere(),
+            Expression::int_literal_signed(123).nowhere(),
         )
         .nowhere();
         check_parse!(
@@ -2387,7 +2389,7 @@ mod tests {
         let expected = Statement::binding(
             Pattern::name("test"),
             Some(TypeSpec::Named(ast_path("bool"), None).nowhere()),
-            Expression::int_literal(123).nowhere(),
+            Expression::int_literal_signed(123).nowhere(),
         )
         .nowhere();
         check_parse!(
@@ -2415,13 +2417,13 @@ mod tests {
                         Statement::binding(
                             Pattern::name("test"),
                             None,
-                            Expression::int_literal(123).nowhere(),
+                            Expression::int_literal_signed(123).nowhere(),
                         )
                         .nowhere(),
                         Statement::binding(
                             Pattern::name("test2"),
                             None,
-                            Expression::int_literal(123).nowhere(),
+                            Expression::int_literal_signed(123).nowhere(),
                         )
                         .nowhere(),
                     ],
@@ -2502,7 +2504,7 @@ mod tests {
                 clock: Expression::Identifier(ast_path("clk")).nowhere(),
                 reset: None,
                 initial: None,
-                value: Expression::int_literal(1).nowhere(),
+                value: Expression::int_literal_signed(1).nowhere(),
                 value_type: None,
                 attributes: ast::AttributeList::empty(),
             }
@@ -2528,10 +2530,10 @@ mod tests {
                 clock: Expression::Identifier(ast_path("clk")).nowhere(),
                 reset: Some((
                     Expression::Identifier(ast_path("rst")).nowhere(),
-                    Expression::int_literal(0).nowhere(),
+                    Expression::int_literal_signed(0).nowhere(),
                 )),
                 initial: None,
-                value: Expression::int_literal(1).nowhere(),
+                value: Expression::int_literal_signed(1).nowhere(),
                 value_type: None,
                 attributes: ast::AttributeList::empty(),
             }
@@ -2557,10 +2559,10 @@ mod tests {
                 clock: Expression::Identifier(ast_path("clk")).nowhere(),
                 reset: Some((
                     Expression::Identifier(ast_path("rst")).nowhere(),
-                    Expression::int_literal(0).nowhere(),
+                    Expression::int_literal_signed(0).nowhere(),
                 )),
                 initial: None,
-                value: Expression::int_literal(1).nowhere(),
+                value: Expression::int_literal_signed(1).nowhere(),
                 value_type: Some(TypeSpec::Named(ast_path("Type"), None).nowhere()),
                 attributes: ast::AttributeList::empty(),
             }
@@ -2657,7 +2659,7 @@ mod tests {
             body: Some(
                 Expression::Block(Box::new(Block {
                     statements: vec![],
-                    result: Some(Expression::int_literal(0).nowhere()),
+                    result: Some(Expression::int_literal_signed(0).nowhere()),
                 }))
                 .nowhere(),
             ),
@@ -2676,7 +2678,7 @@ mod tests {
             body: Some(
                 Expression::Block(Box::new(Block {
                     statements: vec![],
-                    result: Some(Expression::int_literal(1).nowhere()),
+                    result: Some(Expression::int_literal_signed(1).nowhere()),
                 }))
                 .nowhere(),
             ),
@@ -3213,7 +3215,7 @@ mod tests {
                         Statement::binding(
                             Pattern::name("b"),
                             None,
-                            Expression::int_literal(0).nowhere(),
+                            Expression::int_literal_signed(0).nowhere(),
                         )
                         .nowhere(),
                         Statement::PipelineRegMarker(None, None).nowhere(),
@@ -3221,11 +3223,11 @@ mod tests {
                         Statement::binding(
                             Pattern::name("c"),
                             None,
-                            Expression::int_literal(0).nowhere(),
+                            Expression::int_literal_signed(0).nowhere(),
                         )
                         .nowhere(),
                     ],
-                    result: Some(Expression::int_literal(0).nowhere()),
+                    result: Some(Expression::int_literal_signed(0).nowhere()),
                 }))
                 .nowhere(),
             ),
@@ -3261,7 +3263,7 @@ mod tests {
                     statements: vec![
                         Statement::PipelineRegMarker(Some(3.nowhere()), None).nowhere()
                     ],
-                    result: Some(Expression::int_literal(0).nowhere()),
+                    result: Some(Expression::int_literal_signed(0).nowhere()),
                 }))
                 .nowhere(),
             ),
@@ -3296,7 +3298,7 @@ mod tests {
                     body: Some(
                         Expression::Block(Box::new(Block {
                             statements: vec![],
-                            result: Some(Expression::int_literal(0).nowhere()),
+                            result: Some(Expression::int_literal_signed(0).nowhere()),
                         }))
                         .nowhere(),
                     ),
@@ -3650,7 +3652,7 @@ mod tests {
             on_true: Box::new(vec![Statement::binding(
                 Pattern::name("a"),
                 None,
-                Expression::int_literal(0).nowhere(),
+                Expression::int_literal_signed(0).nowhere(),
             )
             .nowhere()]),
             on_false: None,
@@ -3674,13 +3676,13 @@ mod tests {
             on_true: Box::new(vec![Statement::binding(
                 Pattern::name("a"),
                 None,
-                Expression::int_literal(0).nowhere(),
+                Expression::int_literal_signed(0).nowhere(),
             )
             .nowhere()]),
             on_false: Some(Box::new(vec![Statement::binding(
                 Pattern::name("b"),
                 None,
-                Expression::int_literal(0).nowhere(),
+                Expression::int_literal_signed(0).nowhere(),
             )
             .nowhere()])),
         })
@@ -3715,8 +3717,8 @@ mod tests {
         let expected = Expression::Comptime(Box::new(
             ComptimeCondition {
                 condition: (ast_path("x"), ComptimeCondOp::Eq, 0.to_bigint().nowhere()),
-                on_true: Box::new(Expression::IntLiteral(1.to_bigint()).nowhere()),
-                on_false: Some(Box::new(Expression::IntLiteral(0.to_bigint()).nowhere())),
+                on_true: Box::new(Expression::int_literal_signed(1).nowhere()),
+                on_false: Some(Box::new(Expression::int_literal_signed(0).nowhere())),
             }
             .nowhere(),
         ))

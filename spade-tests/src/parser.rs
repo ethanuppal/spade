@@ -393,3 +393,23 @@ snapshot_error! {
     unterminated_block_comment_is_error,
     "/*/**/"
 }
+
+snapshot_error! {
+    missing_end_of_range_index_is_error,
+    "
+        fn top() -> bool {
+            let a = [true, true, false];
+            a[1:]
+        }
+    "
+}
+
+snapshot_error! {
+    both_range_index_is_expr_and_missing_end_is_error,
+    "
+        fn top() -> bool {
+            let a = [true, true, false];
+            a[1+1:]
+        }
+    "
+}

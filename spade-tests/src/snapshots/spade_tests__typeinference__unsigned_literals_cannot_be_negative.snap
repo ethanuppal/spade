@@ -6,12 +6,18 @@ fn test() -> uint<8> {
 }
 
 
-error: Integer value does not fit in int<8>
-  ┌─ testinput:2:5
-  │
-2 │     -1
-  │     ^^ -1 does not fit in an uint<8>
-  │
-  = note: uint<8> fits unsigned integers in the range (0, 255)
+error: Output type mismatch. Expected uint<8>, got int<_>
+  ┌─ testinput:1:22
+  │  
+1 │   fn test() -> uint<8> {
+  │                ------- uint<8> type specified here
+  │ ╭──────────────────────^
+2 │ │     -1
+  │ │     -- Type int<_> inferred here
+3 │ │ }
+  │ ╰─^ Found type int<_>
+  │  
+  = note: Expected: uint<8>
+               Got: int<_>
 
 

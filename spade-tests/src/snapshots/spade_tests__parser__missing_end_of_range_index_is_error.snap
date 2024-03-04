@@ -1,0 +1,18 @@
+---
+source: spade-tests/src/parser.rs
+---
+fn top() -> bool {
+    let a = [true, true, false];
+    a[1:]
+}
+
+
+error: Expected end of range
+  ┌─ testinput:3:9
+  │
+3 │     a[1:]
+  │       --^ expected end of range
+  │       │  
+  │       since this index is a range
+
+

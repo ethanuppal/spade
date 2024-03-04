@@ -212,7 +212,7 @@ mod pipeline_visiting {
                         ast::Statement::binding(
                             ast::Pattern::name("a"),
                             None,
-                            ast::Expression::IntLiteral(0.to_bigint()).nowhere(),
+                            ast::Expression::int_literal_signed(0).nowhere(),
                         )
                         .nowhere(),
                         ast::Statement::PipelineRegMarker(Some(1.nowhere()), None).nowhere(),
@@ -230,7 +230,7 @@ mod pipeline_visiting {
                         )
                         .nowhere(),
                     ],
-                    result: Some(ast::Expression::IntLiteral(0.to_bigint()).nowhere()),
+                    result: Some(ast::Expression::int_literal_signed(0).nowhere()),
                 }))
                 .nowhere(),
             ),
@@ -308,7 +308,7 @@ mod pipeline_visiting {
                         ast::Statement::binding(
                             ast::Pattern::name("a"),
                             None,
-                            ast::Expression::IntLiteral(0.to_bigint()).nowhere(),
+                            ast::Expression::int_literal_signed(0).nowhere(),
                         )
                         .nowhere(),
                         ast::Statement::PipelineRegMarker(Some(1.nowhere()), None).nowhere(),
@@ -324,7 +324,7 @@ mod pipeline_visiting {
                         )
                         .nowhere(),
                     ],
-                    result: Some(ast::Expression::IntLiteral(0.to_bigint()).nowhere()),
+                    result: Some(ast::Expression::int_literal_signed(0).nowhere()),
                 }))
                 .nowhere(),
             ),

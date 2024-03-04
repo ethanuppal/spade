@@ -181,6 +181,15 @@ impl<T> Loc<T> {
             file_id: self.file_id,
         }
     }
+
+    pub fn try_map<Y, E>(self, mut op: impl FnMut(T) -> Result<Y, E>) -> Result<Loc<Y>, E> {
+        Ok(Loc {
+            inner: op(self.inner)?,
+            span: self.span,
+            file_id: self.file_id,
+        })
+    }
+
     pub fn map_ref<Y>(&self, mut op: impl FnMut(&T) -> Y) -> Loc<Y> {
         Loc {
             inner: op(&self.inner),
@@ -188,10 +197,8 @@ impl<T> Loc<T> {
             file_id: self.file_id,
         }
     }
-    pub fn try_map_ref<Y, E, F>(&self, mut op: F) -> Result<Loc<Y>, E>
-    where
-        F: FnMut(&T) -> Result<Y, E>,
-    {
+
+    pub fn try_map_ref<Y, E>(&self, mut op: impl FnMut(&T) -> Result<Y, E>) -> Result<Loc<Y>, E> {
         Ok(Loc {
             inner: op(&self.inner)?,
             span: self.span,

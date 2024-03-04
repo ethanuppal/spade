@@ -1,6 +1,5 @@
-use num::bigint::ToBigInt;
 use num::ToPrimitive;
-use spade_ast::{ArgumentList, BinaryOperator, CallKind, Expression, UnaryOperator};
+use spade_ast::{ArgumentList, BinaryOperator, CallKind, Expression, IntLiteral, UnaryOperator};
 use spade_common::location_info::{lspan, Loc, WithLocation};
 use spade_diagnostics::Diagnostic;
 use spade_macros::trace_parser;
@@ -195,9 +194,11 @@ impl<'a> Parser<'a> {
             Ok(val.map(Expression::BitLiteral))
         } else if let Some(val) = self.int_literal()? {
             match &val.inner {
-                spade_ast::IntLiteral::Signed(v) => Ok(Expression::IntLiteral(v.clone())),
+                spade_ast::IntLiteral::Signed(v) => {
+                    Ok(Expression::IntLiteral(IntLiteral::Signed(v.clone())))
+                }
                 spade_ast::IntLiteral::Unsigned(v) => {
-                    Ok(Expression::IntLiteral(v.to_bigint().unwrap()))
+                    Ok(Expression::IntLiteral(IntLiteral::Unsigned(v.clone())))
                 }
             }
             .map(|v| v.at_loc(&val))
@@ -346,21 +347,57 @@ impl<'a> Parser<'a> {
             let (inner_expr, loc) = self.surrounded(
                 &TokenKind::OpenBracket,
                 |s| {
+                    // `start` is parsed as an expression since at this point we are parsing either
+                    //
+                    // - an array index (`a[2]`) which allows an expression (`a[2+offset]`)
+                    // - a range index (`a[1:2]`) which does not allow an expression
                     let start = s.expression()?;
+                    let start_loc = start.loc();
 
                     if let Some(colon) = s.peek_and_eat(&TokenKind::Colon)? {
-                        if let Some(end) = s.int_literal()? {
-                            Ok(Expression::RangeIndex {
-                                target: Box::new(expr.clone()),
-                                start: Box::new(start),
-                                end,
-                            })
-                        } else {
-                            Err(Diagnostic::error(s.peek()?, "Expected end of range")
+                        // colon => range index: `[1:2]`
+                        let start_is_usub_literal = start.is_usub_int_literal();
+                        let start = start
+                            .try_map(|x| {
+                                x.as_int_literal().ok_or_else(|| {
+                                    if start_is_usub_literal {
+                                        Diagnostic::error(
+                                            start_loc,
+                                            "Range indices must be non-negative",
+                                        )
+                                        .primary_label("range index is negative")
+                                    } else {
+                                        Diagnostic::error(
+                                            start_loc,
+                                            "Range indices must be integers",
+                                        )
+                                        .primary_label("range index is not an integer literal")
+                                    }
+                                })
+                            })?
+                            // safe unwrap: -123 is parsed as usub(123), which we already checked
+                            .map(|x| x.as_unsigned().unwrap());
+                        let Some(end) = s.int_literal()? else {
+                            return Err(Diagnostic::error(s.peek()?, "Expected end of range")
                                 .primary_label("expected end of range")
-                                .secondary_label(colon, "since this index is a range")
-                                .into())
-                        }
+                                .secondary_label(
+                                    ().between_locs(&start_loc, &colon.loc()),
+                                    "since this index is a range",
+                                )
+                                .into());
+                        };
+                        let end_loc = end.loc();
+                        let end = end.try_map(|x| {
+                            x.as_unsigned().ok_or_else(|| {
+                                Diagnostic::error(end_loc, "Range indices must be non-negative")
+                                    .primary_label("Range index is negative")
+                            })
+                        })?;
+                        Ok(Expression::RangeIndex {
+                            target: Box::new(expr.clone()),
+                            start,
+                            end,
+                        })
                     } else {
                         Ok(Expression::Index(Box::new(expr.clone()), Box::new(start)))
                     }
@@ -584,8 +621,8 @@ mod test {
             kind: CallKind::Function,
             callee: ast_path("test"),
             args: ArgumentList::Positional(vec![
-                Expression::int_literal(1).nowhere(),
-                Expression::int_literal(2).nowhere(),
+                Expression::int_literal_signed(1).nowhere(),
+                Expression::int_literal_signed(2).nowhere(),
             ])
             .nowhere(),
             turbofish: None,
@@ -619,7 +656,7 @@ mod test {
         let code = "(1, true)";
 
         let expected = Expression::TupleLiteral(vec![
-            Expression::int_literal(1).nowhere(),
+            Expression::int_literal_signed(1).nowhere(),
             Expression::BoolLiteral(true).nowhere(),
         ])
         .nowhere();
@@ -632,9 +669,9 @@ mod test {
         let code = "[1, 2, 3]";
 
         let expected = Expression::ArrayLiteral(vec![
-            Expression::int_literal(1).nowhere(),
-            Expression::int_literal(2).nowhere(),
-            Expression::int_literal(3).nowhere(),
+            Expression::int_literal_signed(1).nowhere(),
+            Expression::int_literal_signed(2).nowhere(),
+            Expression::int_literal_signed(3).nowhere(),
         ])
         .nowhere();
 
@@ -647,7 +684,7 @@ mod test {
 
         let expected = Expression::Index(
             Box::new(Expression::Identifier(ast_path("a")).nowhere()),
-            Box::new(Expression::int_literal(0).nowhere()),
+            Box::new(Expression::int_literal_signed(0).nowhere()),
         )
         .nowhere();
 
@@ -829,10 +866,10 @@ mod test {
             statements: vec![Statement::binding(
                 Pattern::name("a"),
                 None,
-                Expression::int_literal(0).nowhere(),
+                Expression::int_literal_signed(0).nowhere(),
             )
             .nowhere()],
-            result: Some(Expression::int_literal(1).nowhere()),
+            result: Some(Expression::int_literal_signed(1).nowhere()),
         }
         .nowhere();
 
@@ -852,10 +889,10 @@ mod test {
             statements: vec![Statement::binding(
                 Pattern::name("a"),
                 None,
-                Expression::int_literal(0).nowhere(),
+                Expression::int_literal_signed(0).nowhere(),
             )
             .nowhere()],
-            result: Some(Expression::int_literal(1).nowhere()),
+            result: Some(Expression::int_literal_signed(1).nowhere()),
         }))
         .nowhere();
 
@@ -872,8 +909,8 @@ mod test {
             kind: CallKind::Function,
             callee: ast_path("infix"),
             args: ArgumentList::Positional(vec![
-                Expression::int_literal(1).nowhere(),
-                Expression::int_literal(2).nowhere(),
+                Expression::int_literal_signed(1).nowhere(),
+                Expression::int_literal_signed(2).nowhere(),
             ])
             .nowhere(),
             turbofish: None,
@@ -897,17 +934,17 @@ mod test {
             callee: ast_path("infix"),
             args: ArgumentList::Positional(vec![
                 Expression::BinaryOperator(
-                    Box::new(Expression::int_literal(0).nowhere()),
+                    Box::new(Expression::int_literal_signed(0).nowhere()),
                     BinaryOperator::LogicalOr.nowhere(),
-                    Box::new(Expression::int_literal(1).nowhere()),
+                    Box::new(Expression::int_literal_signed(1).nowhere()),
                 )
                 .nowhere(),
                 Expression::Call {
                     kind: CallKind::Function,
                     callee: ast_path("infix"),
                     args: ArgumentList::Positional(vec![
-                        Expression::int_literal(2).nowhere(),
-                        Expression::int_literal(3).nowhere(),
+                        Expression::int_literal_signed(2).nowhere(),
+                        Expression::int_literal_signed(3).nowhere(),
                     ])
                     .nowhere(),
                     turbofish: None,
@@ -1097,7 +1134,7 @@ mod test {
 
     #[test]
     fn unary_sub_binds_correctly() {
-        let expexte_value = Expression::BinaryOperator(
+        let expected_value = Expression::BinaryOperator(
             Box::new(
                 Expression::UnaryOperator(
                     UnaryOperator::Sub,
@@ -1110,7 +1147,37 @@ mod test {
         )
         .nowhere();
 
-        check_parse!("-a + b", expression, Ok(expexte_value));
+        check_parse!("-a + b", expression, Ok(expected_value));
+    }
+
+    #[test]
+    fn unary_sub_binds_correctly_without_spaces() {
+        let expected_value = Expression::BinaryOperator(
+            Box::new(Expression::Identifier(ast_path("b")).nowhere()),
+            BinaryOperator::Add.nowhere(),
+            Box::new(
+                Expression::UnaryOperator(
+                    UnaryOperator::Sub,
+                    Box::new(Expression::Identifier(ast_path("a")).nowhere()),
+                )
+                .nowhere(),
+            ),
+        )
+        .nowhere();
+
+        check_parse!("b+-a", expression, Ok(expected_value));
+    }
+
+    #[test]
+    fn binary_sub_binds_correctly_without_spaces() {
+        let expected_value = Expression::BinaryOperator(
+            Box::new(Expression::Identifier(ast_path("b")).nowhere()),
+            BinaryOperator::Sub.nowhere(),
+            Box::new(Expression::Identifier(ast_path("a")).nowhere()),
+        )
+        .nowhere();
+
+        check_parse!("b-a", expression, Ok(expected_value));
     }
 
     #[test]
