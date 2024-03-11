@@ -23,6 +23,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - [!272][!272] Parentheses can now be omitted on aliased enum variants like `None`
 - [!273][!273] Allow bitwise negation (~) of unsigned integers
 - [!275][!275] Fix parsing of subtraction without spaces, like `1-2`
+- [!278][!278] Confirm correct number of generic parameters
 
 ### Removed
 
@@ -31,6 +32,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 [!266]: https://gitlab.com/spade-lang/spade/-/merge_requests/266
 [!272]: https://gitlab.com/spade-lang/spade/-/merge_requests/272
 [!273]: https://gitlab.com/spade-lang/spade/-/merge_requests/273
+[!275]: https://gitlab.com/spade-lang/spade/-/merge_requests/275
+[!276]: https://gitlab.com/spade-lang/spade/-/merge_requests/276
+[!278]: https://gitlab.com/spade-lang/spade/-/merge_requests/278
 
 
 ## [0.6.0] - 2024-01-03

@@ -1,6 +1,16 @@
 use crate::{build_items, build_items_with_stdlib, snapshot_error};
 
 snapshot_error! {
+    wrong_number_of_generic_arguments_triggers_error,
+    "
+    struct S<T> {}
+    entity x<T, U>() {
+        let a: S<T, U> = S();
+    }
+    "
+}
+
+snapshot_error! {
     duplicate_definition_of_decl_triggers_errors,
     "
     entity X() -> int<8> {

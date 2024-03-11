@@ -123,10 +123,10 @@ pub fn visit_type_spec(
 
             // Check if the type is a declared type or a generic argument.
             match &base_t.inner {
-                TypeSymbol::Declared(_, _) => {
+                TypeSymbol::Declared(generic_args, _) => {
                     // We'll defer checking the validity of generic args to the type checker,
                     // but we still have to visit them now
-                    let params = params
+                    let visited_params = params
                         // We can't flatten "through" Option<Loc<Vec<...>>>, so map it away.
                         .as_ref()
                         .map(|o| &o.inner)
@@ -135,7 +135,33 @@ pub fn visit_type_spec(
                         .map(|p| p.try_map_ref(|p| visit_type_expression(p, symtab)))
                         .collect::<Result<Vec<_>>>()?;
 
-                    Ok(hir::TypeSpec::Declared(base_id.at_loc(path), params))
+                    if generic_args.len() != visited_params.len() {
+                        Err(Diagnostic::error(
+                            params.as_ref().unwrap(),
+                            "Wrong number of type parameters",
+                        )
+                        .primary_label(format!(
+                            "Expected {} type parameter{}",
+                            generic_args.len(),
+                            if generic_args.len() != 1 { "s" } else { "" }
+                        ))
+                        .secondary_label(
+                            ().between_locs(
+                                &generic_args[0],
+                                &generic_args[generic_args.len() - 1],
+                            ),
+                            format!(
+                                "Because this has {} type parameter{}",
+                                generic_args.len(),
+                                if generic_args.len() != 1 { "s" } else { "" }
+                            ),
+                        ))
+                    } else {
+                        Ok(hir::TypeSpec::Declared(
+                            base_id.at_loc(path),
+                            visited_params,
+                        ))
+                    }
                 }
                 TypeSymbol::GenericArg { traits: _ } | TypeSymbol::GenericInt => {
                     // If this typename refers to a generic argument we need to make

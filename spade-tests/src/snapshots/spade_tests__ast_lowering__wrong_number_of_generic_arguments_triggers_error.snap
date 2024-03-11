@@ -1,0 +1,17 @@
+---
+source: spade-tests/src/ast_lowering.rs
+---
+struct S<T> {}
+entity x<T, U>() {
+    let a: S<T, U> = S();
+}
+
+
+error: Wrong number of type parameters
+  ┌─ testinput:3:13
+  │
+1 │ struct S<T> {}
+  │          - Because this has 1 type parameter
+2 │ entity x<T, U>() {
+3 │     let a: S<T, U> = S();
+  │             ^^^^^^ Expected 1 type parameter
