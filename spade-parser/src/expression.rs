@@ -1,10 +1,10 @@
 use num::ToPrimitive;
 use spade_ast::{ArgumentList, BinaryOperator, CallKind, Expression, IntLiteral, UnaryOperator};
-use spade_common::location_info::{lspan, Loc, WithLocation};
+use spade_common::location_info::{Loc, WithLocation};
 use spade_diagnostics::Diagnostic;
 use spade_macros::trace_parser;
 
-use crate::error::{Error, ExpectedArgumentList, Result};
+use crate::error::{ExpectedArgumentList, Result, UnexpectedToken};
 use crate::{lexer::TokenKind, ParseStackEntry, Parser};
 
 #[derive(PartialEq, PartialOrd, Eq, Ord)]
@@ -116,11 +116,17 @@ impl<'a> Parser<'a> {
         let lhs_val = self.expr_bp(OpBindingPower::None)?;
 
         if self.peek_kind(&TokenKind::InfixOperatorSeparator)? {
-            let ((callee, turbofish), _) = self.surrounded(
+            let (Some((callee, turbofish)), _) = self.surrounded(
                 &TokenKind::InfixOperatorSeparator,
                 Self::path_with_turbofish,
                 &TokenKind::InfixOperatorSeparator,
-            )?;
+            )?
+            else {
+                return Err(Diagnostic::from(UnexpectedToken {
+                    got: self.peek()?,
+                    expected: vec!["Identifier"],
+                }));
+            };
 
             let rhs_val = self.custom_infix_operator()?;
 
@@ -214,38 +220,38 @@ impl<'a> Parser<'a> {
             Ok(stageref)
         } else if let Some(create_ports) = self.peek_and_eat(&TokenKind::Port)? {
             Ok(Expression::CreatePorts.at(self.file_id, &create_ports))
-        } else {
-            match self.path_with_turbofish() {
-                Ok((path, turbofish)) => {
-                    let span = path.span;
-                    match (turbofish, self.argument_list()?) {
-                        (None, None) => Ok(Expression::Identifier(path).at(self.file_id, &span)),
-                        (Some(tf), None) => {
-                            return Err(Diagnostic::error(self.peek()?, "Expected argument list")
-                                .primary_label("Expected argument list")
-                                .secondary_label(
-                                    tf,
-                                    "Type parameters can only be specified on function calls",
-                                )
-                                .into())
-                        }
-                        (tf, Some(args)) => {
-                            // Doing this avoids cloning result and args
-                            let span = ().between(self.file_id, &path, &args);
-
-                            Ok(Expression::Call {
-                                kind: CallKind::Function,
-                                callee: path,
-                                args,
-                                turbofish: tf,
-                            }
-                            .at_loc(&span))
-                        }
-                    }
+        } else if let Some((path, turbofish)) = self.path_with_turbofish()? {
+            let span = path.span;
+            match (turbofish, self.argument_list()?) {
+                (None, None) => Ok(Expression::Identifier(path).at(self.file_id, &span)),
+                (Some(tf), None) => {
+                    return Err(Diagnostic::error(self.peek()?, "Expected argument list")
+                        .primary_label("Expected argument list")
+                        .secondary_label(
+                            tf,
+                            "Type parameters can only be specified on function calls",
+                        ))
                 }
-                Err(Error::UnexpectedToken { got, .. }) => Err(Error::ExpectedExpression { got }),
-                Err(e) => Err(e),
+                (tf, Some(args)) => {
+                    // Doing this avoids cloning result and args
+                    let span = ().between(self.file_id, &path, &args);
+
+                    Ok(Expression::Call {
+                        kind: CallKind::Function,
+                        callee: path,
+                        args,
+                        turbofish: tf,
+                    }
+                    .at_loc(&span))
+                }
             }
+        } else {
+            let got = self.peek()?;
+            Err(Diagnostic::error(
+                got.loc(),
+                format!("Unexpected `{}`, expected expression", got.kind.as_str()),
+            )
+            .primary_label("expected expression here"))
         }?;
 
         self.expression_suffix(expr)
@@ -308,9 +314,10 @@ impl<'a> Parser<'a> {
                     ),
                 )
             } else {
-                Err(Error::MissingTupleIndex {
-                    hash_loc: Loc::new((), lspan(hash.span), self.file_id),
-                })
+                Err(
+                    Diagnostic::error(self.peek()?.loc(), "expected an index after #")
+                        .primary_label("expected index here"),
+                )
             }
         } else if self.peek_and_eat(&TokenKind::Dot)?.is_some() {
             let inst = self.peek_and_eat(&TokenKind::Instance)?;
@@ -332,8 +339,7 @@ impl<'a> Parser<'a> {
                     next_token: self.peek()?,
                     base_expr: ().between(self.file_id, &inst_keyword, &field),
                 }
-                .with_suggestions()
-                .into())
+                .with_suggestions())
             } else {
                 Ok(
                     Expression::FieldAccess(Box::new(expr.clone()), field.clone()).between(
@@ -383,8 +389,7 @@ impl<'a> Parser<'a> {
                                 .secondary_label(
                                     ().between_locs(&start_loc, &colon.loc()),
                                     "since this index is a range",
-                                )
-                                .into());
+                                ));
                         };
                         let end_loc = end.loc();
                         let end = end.try_map(|x| {
@@ -416,6 +421,7 @@ impl<'a> Parser<'a> {
 
 #[cfg(test)]
 mod test {
+    use spade_ast::comptime::MaybeComptime;
     use spade_ast::testutil::{ast_ident, ast_path};
     use spade_ast::*;
     use spade_common::num_ext::InfallibleToBigInt;
@@ -1028,7 +1034,15 @@ mod test {
         }
         .nowhere();
 
-        check_parse!(code, expression, Ok(expected));
+        check_parse!(code, expression, Ok(expected), |p: &mut Parser| {
+            p.set_item_context(
+                UnitKind::Pipeline(
+                    MaybeComptime::Raw(IntLiteral::Unsigned(5u32.into()).nowhere()).nowhere(),
+                )
+                .nowhere(),
+            )
+            .unwrap();
+        });
     }
 
     #[test]
@@ -1042,7 +1056,15 @@ mod test {
         }
         .nowhere();
 
-        check_parse!(code, expression, Ok(expected));
+        check_parse!(code, expression, Ok(expected), |p: &mut Parser| {
+            p.set_item_context(
+                UnitKind::Pipeline(
+                    MaybeComptime::Raw(IntLiteral::Unsigned(6u32.into()).nowhere()).nowhere(),
+                )
+                .nowhere(),
+            )
+            .unwrap();
+        });
     }
 
     #[test]
@@ -1056,7 +1078,15 @@ mod test {
         }
         .nowhere();
 
-        check_parse!(code, expression, Ok(expected));
+        check_parse!(code, expression, Ok(expected), |p: &mut Parser| {
+            p.set_item_context(
+                UnitKind::Pipeline(
+                    MaybeComptime::Raw(IntLiteral::Unsigned(6u32.into()).nowhere()).nowhere(),
+                )
+                .nowhere(),
+            )
+            .unwrap();
+        });
     }
 
     // Precedence related tests

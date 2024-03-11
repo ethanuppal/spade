@@ -13,7 +13,6 @@ doctest = false
 
 [dependencies]
 codespan.workspace = true
-codespan-reporting.workspace = true
 colored.workspace = true
 local-impl.workspace = true
 logos.workspace = true

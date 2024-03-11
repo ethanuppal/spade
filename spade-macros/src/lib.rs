@@ -20,7 +20,7 @@ pub fn trace_parser(attrs: TokenStream, input: TokenStream) -> TokenStream {
         self.parse_stack.push(ParseStackEntry::Enter(#function_name.to_string()));
         let ret: Result<_> = (|| #block)();
         if let Err(e) = &ret {
-            self.parse_stack.push(ParseStackEntry::ExitWithError(e.clone()));
+            self.parse_stack.push(ParseStackEntry::ExitWithDiagnostic(e.clone()));
         }
         else {
             self.parse_stack.push(ParseStackEntry::Exit);

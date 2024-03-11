@@ -1,15 +1,12 @@
 ---
 source: spade-tests/src/parser.rs
-assertion_line: 130
 ---
 fn a() {
     decl;
 }
 
-error: Found empty decl statement
+error: empty decl statement
   ┌─ testinput:2:5
   │
 2 │     decl;
-  │     ^^^^ decl doesn't declare anything
-
-
+  │     ^^^^ this decl does not declare anything

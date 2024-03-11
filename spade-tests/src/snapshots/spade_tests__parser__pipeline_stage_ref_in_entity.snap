@@ -1,0 +1,25 @@
+---
+source: spade-tests/src/parser.rs
+---
+entity top(clk: clock) -> bool {
+    decl x;
+    stage(+1).x
+}
+
+
+error: pipeline stage reference in entity
+  ┌─ testinput:3:5
+  │
+1 │ entity top(clk: clock) -> bool {
+  │ ------ this is a entity
+2 │     decl x;
+3 │     stage(+1).x
+  │     ^^^^^ pipeline stage reference not allowed here
+  │
+  = note: only pipelines can contain pipeline stage references
+  = consider making the entity a pipeline
+  │
+1 │ pipeline(/* depth */) top(clk: clock) -> bool {
+  │ ~~~~~~~~~~~~~~~~~~~~~
+
+

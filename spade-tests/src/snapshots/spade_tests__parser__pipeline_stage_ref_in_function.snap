@@ -1,0 +1,25 @@
+---
+source: spade-tests/src/parser.rs
+---
+fn top() -> bool {
+    decl x;
+    stage(+1).x
+}
+
+
+error: pipeline stage reference in function
+  ┌─ testinput:3:5
+  │
+1 │ fn top() -> bool {
+  │ -- this is a function
+2 │     decl x;
+3 │     stage(+1).x
+  │     ^^^^^ pipeline stage reference not allowed here
+  │
+  = note: only pipelines can contain pipeline stage references
+  = consider making the function a pipeline
+  │
+1 │ pipeline(/* depth */) top() -> bool {
+  │ ~~~~~~~~~~~~~~~~~~~~~
+
+

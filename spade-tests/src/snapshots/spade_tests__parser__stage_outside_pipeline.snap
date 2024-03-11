@@ -6,12 +6,10 @@ entity main(x: X) -> int<8> {
 }
 
 
-error: Stage outside pipeline
+error: stage outside pipeline
   ┌─ testinput:2:5
   │
 2 │     reg;
   │     ^^^ stage is not allowed here
   │
-  = Stages are only allowed in the root block of a pipeline
-
-
+  = note: stages are only allowed in the root block of a pipeline

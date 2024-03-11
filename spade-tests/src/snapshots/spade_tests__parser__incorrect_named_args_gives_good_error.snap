@@ -1,0 +1,24 @@
+---
+source: spade-tests/src/parser.rs
+---
+fn f(x: bool) -> bool {
+    x
+}
+fn top() -> bool {
+    let a = true;
+    f$(x = a)
+}
+
+
+error: Unexpected `=`, expected `:`, `,`, or `)`
+  ┌─ testinput:6:10
+  │
+6 │     f$(x = a)
+  │          ^ expected `:`, `,`, or `)`
+  │
+  = named arguments are specified with `:`
+  │
+6 │     f$(x : a)
+  │          ~
+
+

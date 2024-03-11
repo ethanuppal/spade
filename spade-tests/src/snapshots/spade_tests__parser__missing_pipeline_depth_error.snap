@@ -6,13 +6,8 @@ entity a() -> bool {
 }
 
 
-error: Expected pipeline depth
+error: expected pipeline depth, got `)`
   ┌─ testinput:2:10
   │
 2 │     inst() x()
-  │          ^ Expected pipeline depth
-  │
-  = Found )
-  = Pipeline depth can only be fixed integers
-
-
+  │          ^ expected pipeline depth here

@@ -1,16 +1,13 @@
 ---
 source: spade-tests/src/parser.rs
-assertion_line: 107
 ---
 fn a() -> int<8> {
     let x : = 10;
     x
 }
 
-error: Unexpected token. Got `=`, expected type
+error: Unexpected `=`, expected `type`
   ┌─ testinput:2:13
   │
 2 │     let x : = 10;
-  │             ^ Expected a type
-
-
+  │             ^ expected `type`

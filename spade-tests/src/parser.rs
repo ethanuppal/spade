@@ -163,6 +163,16 @@ snapshot_error! {
 }
 
 snapshot_error! {
+    missing_pipeline_depth_error_with_variable,
+    "
+        entity a() -> bool {
+            let abc = 2;
+            inst(abc) x()
+        }
+    "
+}
+
+snapshot_error! {
     min_max_compiles,
     "
         entity a(b: int<8>, c: int<8>, d: int<8>) -> int<8> {
@@ -410,6 +420,126 @@ snapshot_error! {
         fn top() -> bool {
             let a = [true, true, false];
             a[1+1:]
+        }
+    "
+}
+
+snapshot_error! {
+    incorrect_named_args_gives_good_error,
+    "
+        fn f(x: bool) -> bool {
+            x
+        }
+        fn top() -> bool {
+            let a = true;
+            f$(x = a)
+        }
+    "
+}
+
+snapshot_error! {
+    missing_semicolon_error_points_to_correct_token,
+    "
+        fn top() -> bool {
+            let a = 1 let b = 2;
+            true
+        }
+    "
+}
+
+snapshot_error! {
+    identifier_in_entity_instance,
+    "
+        entity a() -> bool {
+            inst 123
+        }
+    "
+}
+
+snapshot_error! {
+    expected_expression,
+    "
+        fn top() -> bool {
+            let abc = ;
+            abc
+        }
+    "
+}
+
+snapshot_error! {
+    expected_expression_binop,
+    "
+        fn top() -> bool {
+            let abc = 1+#;
+            abc
+        }
+    "
+}
+
+snapshot_error! {
+    surrounded_pipeline_depth_wrong_start,
+    "
+        entity top() -> bool {
+            let abc = inst[1) e();
+        }
+    "
+}
+
+snapshot_error! {
+    surrounded_pipeline_depth_wrong_end,
+    "
+        entity top() -> bool {
+            let abc = inst(1] e();
+        }
+    "
+}
+
+snapshot_error! {
+    surrounded_pipeline_depth_wrong_both,
+    "
+        entity top() -> bool {
+            let abc = inst[1] e();
+        }
+    "
+}
+
+snapshot_error! {
+    invalid_top_level_tokens_cause_errors,
+    "
+        + x() -> bool {
+            false
+        }
+
+        entity x() -> bool {
+            false
+        }
+    "
+}
+
+snapshot_error! {
+    tuple_index_no_integer,
+    "fn a(y: int<1>) -> int<32> {
+        let t = (3, 5);
+        t#y
+    }"
+}
+
+snapshot_error! {
+    pipeline_stage_ref_in_entity,
+    "
+        entity top(clk: clock) -> bool {
+            decl x;
+            stage(+1).x
+        }
+    "
+}
+
+snapshot_error! {
+    pipeline_stage_ref_in_function,
+    "
+        fn top() -> bool {
+            decl x;
+            stage(+1).x
         }
     "
 }

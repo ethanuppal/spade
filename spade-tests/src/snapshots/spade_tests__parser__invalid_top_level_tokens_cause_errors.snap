@@ -1,0 +1,17 @@
+---
+source: spade-tests/src/parser.rs
+---
++ x() -> bool {
+    false
+}
+
+entity x() -> bool {
+    false
+}
+
+
+error: expected item, got `+`
+  ┌─ testinput:1:1
+  │
+1 │ + x() -> bool {
+  │ ^ expected item

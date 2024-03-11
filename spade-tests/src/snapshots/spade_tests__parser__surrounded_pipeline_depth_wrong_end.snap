@@ -1,0 +1,17 @@
+---
+source: spade-tests/src/parser.rs
+---
+entity top() -> bool {
+    let abc = inst(1] e();
+}
+
+
+error: expected closing `)`, got `]`
+  ┌─ testinput:2:21
+  │
+2 │     let abc = inst(1] e();
+  │                   - ^ expected `)`
+  │                   │  
+  │                   ...to close this `(`
+
+

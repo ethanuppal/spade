@@ -1,0 +1,14 @@
+---
+source: spade-tests/src/parser.rs
+---
+fn top() -> bool {
+    let a = 1 let b = 2;
+    true
+}
+
+
+error: Unexpected `let`, expected `;`
+  ┌─ testinput:2:15
+  │
+2 │     let a = 1 let b = 2;
+  │               ^^^ expected `;`

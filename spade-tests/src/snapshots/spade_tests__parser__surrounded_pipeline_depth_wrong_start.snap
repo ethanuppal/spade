@@ -1,0 +1,15 @@
+---
+source: spade-tests/src/parser.rs
+---
+entity top() -> bool {
+    let abc = inst[1) e();
+}
+
+
+error: Unexpected `[`, expected `identifier` or `pipeline depth`
+  ┌─ testinput:2:19
+  │
+2 │     let abc = inst[1) e();
+  │                   ^ expected `identifier` or `pipeline depth`
+
+

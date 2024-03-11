@@ -15,14 +15,13 @@ codespan.workspace = true
 color-eyre.workspace = true
 colored.workspace = true
 indoc.workspace = true
+itertools.workspace = true
 logos.workspace = true
 ron.workspace = true
 serde.workspace = true
-thiserror.workspace = true
 tracing-subscriber.workspace = true
 tracing-tree.workspace = true
 tracing.workspace = true
-itertools.workspace = true
 
 atty = "0.2.14"
 

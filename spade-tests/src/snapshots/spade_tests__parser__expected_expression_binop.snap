@@ -1,0 +1,16 @@
+---
+source: spade-tests/src/parser.rs
+---
+fn top() -> bool {
+    let abc = 1+#;
+    abc
+}
+
+
+error: Unexpected `#`, expected expression
+  ┌─ testinput:2:17
+  │
+2 │     let abc = 1+#;
+  │                 ^ expected expression here
+
+

@@ -160,14 +160,6 @@ snapshot_error!(
 );
 
 snapshot_error!(
-    tuple_input_as_index,
-    "fn a(y: int<1>) -> int<32> {
-        let t = (3, 5);
-        t#y
-    }"
-);
-
-snapshot_error!(
     useful_error_if_indexing_backward_array,
     "
     entity name(x: &mut [bool; 10]) -> int<32> {

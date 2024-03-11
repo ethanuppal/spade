@@ -11,18 +11,16 @@ fn X() -> bool {
 }
 
 
-error: Entities and pipelines cannot be instantiated in functions
+error: cannot instantiate entities and pipelines in functions
   ┌─ testinput:7:5
   │
 6 │ fn X() -> bool {
-  │ -- This is a function
+  │ -- this is a function
 7 │     inst(2) Y()
   │     ^^^^ inst not allowed here
   │
-  = note: Functions can only contain combinatorial logic
-  = Consider making the function an entity
+  = note: functions can only contain combinatorial logic
+  = consider making the function an entity
   │
 6 │ entity X() -> bool {
   │ ~~~~~~
-
-

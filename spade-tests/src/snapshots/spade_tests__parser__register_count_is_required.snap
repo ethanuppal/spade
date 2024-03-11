@@ -6,13 +6,10 @@ pipeline(3) main(x: X) -> int<8> {
 }
 
 
-error: Expected register count
+error: expected register count, got `;`
   ┌─ testinput:2:10
   │
 2 │     reg *;
-  │          ^ Expected register count
+  │          ^ expected register count here
   │
-  = Found ;
-  = Register count can only be fixed integers
-
-
+  = help: register counts can only be integer constants

@@ -1,0 +1,16 @@
+---
+source: spade-tests/src/parser.rs
+---
+fn top() -> bool {
+    let abc = ;
+    abc
+}
+
+
+error: Unexpected `;`, expected expression
+  ┌─ testinput:2:15
+  │
+2 │     let abc = ;
+  │               ^ expected expression here
+
+

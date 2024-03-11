@@ -3,8 +3,9 @@ use spade_ast::comptime::ComptimeCondition;
 use spade_ast::comptime::MaybeComptime;
 use spade_ast::IntLiteral;
 use spade_common::location_info::{Loc, WithLocation};
+use spade_diagnostics::Diagnostic;
 
-use crate::error::{Error, Result};
+use crate::error::{Result, UnexpectedToken};
 use crate::lexer::TokenKind;
 use crate::Parser;
 
@@ -27,20 +28,20 @@ impl<'a> Parser<'a> {
                 TokenKind::Ge => ComptimeCondOp::Ge,
                 TokenKind::Le => ComptimeCondOp::Le,
                 _ => {
-                    return Err(Error::UnexpectedToken {
+                    return Err(Diagnostic::from(UnexpectedToken {
                         got: op_tok,
                         expected: vec!["<", ">", "<=", ">="],
-                    })
+                    }))
                 }
             };
 
             let val = if let Some(val) = self.int_literal()? {
                 val
             } else {
-                return Err(Error::UnexpectedToken {
+                return Err(Diagnostic::from(UnexpectedToken {
                     got: self.eat_unconditional()?,
                     expected: vec!["integer"],
-                });
+                }));
             };
 
             let (on_true, on_true_loc) =

@@ -14,7 +14,6 @@ use std::collections::{BTreeMap, HashMap};
 use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::RwLock;
-use thiserror::Error;
 use tracing::Level;
 
 use spade_ast::ModuleBody;
@@ -59,15 +58,6 @@ pub struct Opt<'b> {
     pub print_type_traceback: bool,
     pub print_parse_traceback: bool,
     pub wl_infer_method: Option<spade_wordlength_inference::InferMethod>,
-}
-
-#[derive(Error, Debug)]
-pub enum Error {
-    #[error("parse error")]
-    ParseError(#[from] spade_parser::error::Error),
-
-    #[error("io error")]
-    IoError(#[from] std::io::Error),
 }
 
 trait Reportable<T> {

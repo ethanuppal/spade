@@ -1007,7 +1007,6 @@ dependencies = [
  "spade-typeinference",
  "spade-types",
  "spade-wordlength-inference",
- "thiserror",
  "tracing",
  "tracing-subscriber",
  "tracing-tree",
@@ -1163,7 +1162,6 @@ name = "spade-parser"
 version = "0.6.0"
 dependencies = [
  "codespan",
- "codespan-reporting 0.12.0",
  "colored",
  "itertools",
  "local-impl",

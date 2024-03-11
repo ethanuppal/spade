@@ -6,16 +6,16 @@ entity main() {
 }
 
 
-error: Expected array size
+error: missing array size
   ┌─ testinput:2:12
   │
 2 │     let _: [bool] = [true, false];
-  │            ^^^^^^ This array type
+  │            ^^^^^^ missing size for this array type
   │
-  = Array types need a specified size
-  = Insert a size here
+  = note: array types need a specified size
+  = insert a size here
   │
-2 │     let _: [bool; N] = [true, false];
-  │                 +++
+2 │     let _: [bool; /* N */] = [true, false];
+  │                 +++++++++
 
 

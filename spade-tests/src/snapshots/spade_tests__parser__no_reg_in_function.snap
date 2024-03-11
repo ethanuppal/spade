@@ -1,21 +1,21 @@
 ---
 source: spade-tests/src/parser.rs
-assertion_line: 115
 ---
 fn a(clk: clock) -> int<8> {
     reg(clk) x = 10;
     x
 }
 
-error: Functions cannot contain registers
+error: register declared in function
   ┌─ testinput:2:5
   │
 1 │ fn a(clk: clock) -> int<8> {
-  │ -- Because this is a function
+  │ -- this is a function
 2 │     reg(clk) x = 10;
-  │     ^^^ reg not allowed here
+  │     ^^^ register not allowed here
   │
-  = Functions can only contain combinatorial logic
-  = If you want to do this, make the function an entity
-
-
+  = note: functions can only contain combinatorial logic
+  = consider making the function an entity
+  │
+1 │ entity a(clk: clock) -> int<8> {
+  │ ~~~~~~
