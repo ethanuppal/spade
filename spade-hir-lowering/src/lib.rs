@@ -1854,6 +1854,7 @@ impl ExprLocal for Loc<Expression> {
             ["std", "conv", "unsafe", "unsafe_cast"] => handle_unsafe_cast {allow_port},
             ["std", "conv", "flip_array"] => handle_flip_array,
             ["std", "ops", "div_pow2"] => handle_div_pow2,
+            ["std", "ops", "gray_to_bin"] => handle_gray_to_bin,
             ["std", "ports", "new_mut_wire"] => handle_new_mut_wire,
             ["std", "ports", "read_mut_wire"] => handle_read_mut_wire
         }
@@ -2526,6 +2527,36 @@ impl ExprLocal for Loc<Expression> {
                     args[0].value.variable(ctx.subs)?,
                     args[1].value.variable(ctx.subs)?,
                 ],
+                ty: self_type,
+                loc: Some(self.loc()),
+            }),
+            self,
+        );
+
+        Ok(result)
+    }
+
+    fn handle_gray_to_bin(
+        &self,
+        _path: &Loc<NameID>,
+        result: StatementList,
+        args: &[Argument],
+        ctx: &mut Context,
+    ) -> Result<StatementList> {
+        let mut result = result;
+
+        let self_type = ctx
+            .types
+            .expr_type(self, ctx.symtab.symtab(), &ctx.item_list.types)?
+            .to_mir_type();
+
+        result.push_primary(
+            mir::Statement::Binding(mir::Binding {
+                name: self.variable(ctx.subs)?,
+                operator: mir::Operator::Gray2Bin {
+                    num_bits: self_type.size(),
+                },
+                operands: vec![args[0].value.variable(ctx.subs)?],
                 ty: self_type,
                 loc: Some(self.loc()),
             }),

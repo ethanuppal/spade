@@ -52,3 +52,13 @@ fn order<#N>(x: int<N>, y: int<N>) -> (int<N>, int<N>) {
         (y, x)
     }
 }
+
+
+/// Returns the gray code value of the given binary value
+fn bin_to_gray<#N>(x: uint<N>) -> uint<N> {
+    (x >> 1) ^ x
+}
+
+//NOTE: Implemented as a builtin because we don't support generate loops yet
+/// Returns the binary value of the given gray code value
+fn gray_to_bin<#N>(x: uint<N>) -> uint<N> __builtin__

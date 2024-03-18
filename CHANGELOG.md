@@ -15,8 +15,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 - [!266][!266] Provide more information when type inference fails during monomorphisation
 - [!276][!276] Allow using the values of generic number parameters as expressions
+- [!285][!285] Add `std::ops::gray_to_bin` and `std::ops::bin_to_gray`
 
 ### Changed
+
+- [!281][!281] Moved parser diagnostics to new diagnostics system
 
 ### Fixed
 
@@ -35,6 +38,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 [!275]: https://gitlab.com/spade-lang/spade/-/merge_requests/275
 [!276]: https://gitlab.com/spade-lang/spade/-/merge_requests/276
 [!278]: https://gitlab.com/spade-lang/spade/-/merge_requests/278
+[!281]: https://gitlab.com/spade-lang/spade/-/merge_requests/281
+[!285]: https://gitlab.com/spade-lang/spade/-/merge_requests/285
 
 
 ## [0.6.0] - 2024-01-03
