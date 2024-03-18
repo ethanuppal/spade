@@ -1,14 +1,8 @@
-# Ubuntu 18.04:
-# - glibc-2.27
-# - python3-3.7.5 (required by pyo3 for spade-python) <-- limiting factor
-# Ubuntu 18.04 is planned EOL April 2030 according to https://wiki.ubuntu.com/Releases (2022-08-03)
-image: ubuntu:18.04
-
 variables:
     CARGO_HOME: $CI_PROJECT_DIR/cargo
     FF_ENABLE_BASH_EXIT_CODE_CHECK: "true"
     GIT_SUBMODULE_STRATEGY: normal
-    RUST_IMAGE: "rust:1.74"
+    RUST_VERSION: "1.74"
     # Faster zipping helping with cache sync speeds (https://gitlab.com/gitlab-org/gitlab-runner/-/issues/1797)
     FF_USE_FASTZIP: "true"
     CACHE_COMPRESSION_LEVEL: fast
@@ -35,11 +29,12 @@ cache:
 
 check:clippy:
     stage: test
-    image: $RUST_IMAGE
-    script:
+    image: "rust:$RUST_VERSION"
+    before_script:
         - rustup component add clippy
         - cargo install gitlab_clippy
         - cargo clippy -V
+    script:
         - cargo clippy --workspace --exclude spade-cxx -- --allow clippy::useless_format
     after_script:
         - cargo clippy --workspace --exclude spade-cxx --message-format=json -- --allow clippy::useless_format | $CARGO_HOME/bin/gitlab-clippy > gl-code-quality-report.json
@@ -50,50 +45,71 @@ check:clippy:
 
 test:linux:
     stage: test
-    image: $RUST_IMAGE
-    script:
+    image: "rust:$RUST_VERSION"
+    before_script:
         - cargo -V
         - rustc -V
+    script:
         - cargo test --workspace --exclude spade-cxx --color=always
         - cargo doc --no-deps
 
 test:linux-latest:
     stage: test
     image: "rust:latest"
-    script:
+    before_script:
         - cargo -V
         - rustc -V
+    script:
         - cargo test --workspace --exclude spade-cxx --color=always
         - cargo doc --no-deps
 
 test:macos-aarch64:
-  image: potyarkin/cirrus-run
+  variables:
+    HOMEBREW_NO_AUTO_UPDATE: 1
+    HOMEBREW_NO_ENV_HINTS: 1
+    HOMEBREW_NO_INSTALL_CLEANUP: 1
+  tags:
+    - saas-macos-medium-m1
+  image: macos-14-xcode-15
   before_script:
-    - sed -e "s|[@]CI_REPOSITORY_URL@|$CI_REPOSITORY_URL|g"
-          -e "s|[@]CI_COMMIT_REF_NAME@|$CI_COMMIT_REF_NAME|g"
-          -i .cirrus.yml
+    - brew install rustup-init python3
+    - rustup install $RUST_VERSION
+    - rustup override set $RUST_VERSION
+    - python3 -m pip install --upgrade cffi
+    - cargo -V
+    - rustc -V
   script:
-    - cirrus-run --github sornas/spade-cirrus-ci
+    - cargo test --workspace --exclude spade-cxx --color=always
+    - cargo doc --no-deps
+  cache:
+    key:
+      files:
+        - Cargo.lock
+    paths:
+      - target
+      # FIXME: homebrew installs cargo deps somewhere else. where?
+      # - $CARGO_HOME
 
 test:output-test:
-    # Ubuntu 18.04 only has iverilog-10.1 but 22.04 has 11.0, which it seems like we need.
+    # Ubuntu 22.04 has iverilog-11.0, which it seems like we need.
     image: ubuntu:22.04
     variables:
         APT_PYTHON_VERSION: "3.10"
     stage: test
-    script:
+    before_script:
         - apt update
         - apt install -y iverilog curl gcc make python$APT_PYTHON_VERSION
         # pyo3 expects exactly `python3` in the path.
         - command -v /usr/bin/python3 || ln -s /usr/bin/python$APT_PYTHON_VERSION /usr/bin/python3
         - curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain none
         - source ./cargo/env
-        - rustup install 1.74
+        - rustup install $RUST_VERSION
         - source ./cargo/env
+    script:
         - cd output_test && make
 
 test:swim-tests:
-    image: $RUST_IMAGE
+    image: "rust:$RUST_VERSION"
     stage: test
     script:
         - apt update
@@ -104,7 +120,7 @@ test:swim-tests:
 
 # Build static binaries of spade and vcd-translate
 build:static:
-  image: $RUST_IMAGE-alpine
+  image: "rust:$RUST_VERSION-alpine"
   stage: test
   before_script:
     - apk add git musl-dev g++
@@ -163,7 +179,7 @@ test:coverage:
 
 check:cargo-fmt:
     stage: test
-    image: $RUST_IMAGE
+    image: "rust:$RUST_VERSION"
     cache: [] # Disable cache since it takes too much space in gitlab
     script:
         - rustup component add rustfmt
