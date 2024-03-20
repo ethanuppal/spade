@@ -25,6 +25,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 - [!272][!272] Parentheses can now be omitted on aliased enum variants like `None`
 - [!273][!273] Allow bitwise negation (~) of unsigned integers
+- [!277][!277] Passing too many types to a turbofish operator now produces an error instead of panicking 
 - [!275][!275] Fix parsing of subtraction without spaces, like `1-2`
 - [!278][!278] Confirm correct number of generic parameters
 
@@ -40,6 +41,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 [!278]: https://gitlab.com/spade-lang/spade/-/merge_requests/278
 [!281]: https://gitlab.com/spade-lang/spade/-/merge_requests/281
 [!285]: https://gitlab.com/spade-lang/spade/-/merge_requests/285
+[!277]: https://gitlab.com/spade-lang/spade/-/merge_requests/277
 
 
 ## [0.6.0] - 2024-01-03

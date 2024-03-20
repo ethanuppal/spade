@@ -146,6 +146,14 @@ fn entities_without_return_type_can_be_instantiated() {
 }
 
 snapshot_error!(
+    passing_too_many_arguments_to_turbofish_generates_proper_diagnostic,
+    "entity foo<T>() -> int<8> { 15 }
+    entity main() -> int<8> {
+        inst foo::<bool, bool>()
+    }"
+);
+
+snapshot_error!(
     expected_a_number_when_bitwise_inverting_an_enum_variant,
     "entity main() -> uint<8> {
         ~None

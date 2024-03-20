@@ -796,7 +796,7 @@ impl TypeState {
                     s = if params.len() != 1 { "s" } else { "" }
                 ))
                 .secondary_label(
-                    ().between_locs(&params[0], &params[1]),
+                    ().between_locs(&params[0], &params[params.len() - 1]),
                     format!(
                         "Because this has {} parameter{s}",
                         params.len(),
