@@ -12,14 +12,15 @@ take the opportunity to highlight other stuff that normally doesn't fit in a blo
         - [ ] Bump [unreleased] to [x.y.z].
         - [ ] Update unreleased compare link to latest version
         - [ ] Make sure the version header links to the diff between this and the previous version
-        - [ ] Build and add Cargo.lock
     - [ ] Bump cargo.toml version
+        - [ ] Build and add Cargo.lock
 - [ ] Swim
     - [ ] Update changelog
         - [ ] Bump [unreleased] to [x.y.z].
+        - [ ] Update unreleased compare link to latest version
         - [ ] Make sure the version header links to the diff between this and the previous version
-        - [ ] Build and add Cargo.lock
     - [ ] Bump cargo.toml version
+        - [ ] Build and add Cargo.lock
 
 ## Release
 
