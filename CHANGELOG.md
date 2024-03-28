@@ -12,12 +12,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ## [Unreleased]
 
 ### Added
+- [!288][!288] Implement binary reduction operations in std::ops
 
 ### Changed
 
 ### Fixed
 
 ### Removed
+
+
+[!288]: https://gitlab.com/spade-lang/spade/-/merge_requests/288
 
 ## [0.7.0] - 2024-03-21
 
