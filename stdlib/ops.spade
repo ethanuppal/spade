@@ -62,3 +62,16 @@ fn bin_to_gray<#N>(x: uint<N>) -> uint<N> {
 //NOTE: Implemented as a builtin because we don't support generate loops yet
 /// Returns the binary value of the given gray code value
 fn gray_to_bin<#N>(x: uint<N>) -> uint<N> __builtin__
+
+
+/// Equivalent to verilog and reduction operator &(x)
+/// Returns all bits of x joined by an and-operation
+fn reduce_and<#N>(x: uint<N>) -> bool __builtin__
+
+/// Equivalent to verilog or reduction operator |(x)
+/// Returns all bits of x joined by an or-operation
+fn reduce_or<#N>(x: uint<N>) -> bool __builtin__
+
+/// Equivalent to verilog xor reduction operator ^(x)
+/// Returns all bits of x joined by an xor-operation
+fn reduce_xor<#N>(x: uint<N>) -> bool __builtin__

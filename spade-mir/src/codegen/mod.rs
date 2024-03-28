@@ -261,6 +261,9 @@ fn forward_expression_code(binding: &Binding, types: &TypeList, ops: &[ValueName
         Operator::BitwiseXor => binop!("^"),
         Operator::USub => unop!("-"),
         Operator::Not => unop!("!"),
+        Operator::ReduceAnd => unop!("&"),
+        Operator::ReduceOr => unop!("|"),
+        Operator::ReduceXor => unop!("^"),
         Operator::DivPow2 => {
             // Split into 3 cases: if the division amount is 2^0, nothing should
             // be done. Must be handled as a special case of the rest of the computation
@@ -661,6 +664,9 @@ fn backward_expression_code(binding: &Binding, types: &TypeList, ops: &[ValueNam
         | Operator::BitwiseNot
         | Operator::DivPow2
         | Operator::Gray2Bin { .. }
+        | Operator::ReduceAnd { .. }
+        | Operator::ReduceOr { .. }
+        | Operator::ReduceXor { .. }
         | Operator::SignExtend { .. }
         | Operator::ZeroExtend { .. }
         | Operator::Concat

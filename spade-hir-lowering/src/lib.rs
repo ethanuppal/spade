@@ -1855,6 +1855,9 @@ impl ExprLocal for Loc<Expression> {
             ["std", "conv", "flip_array"] => handle_flip_array,
             ["std", "ops", "div_pow2"] => handle_div_pow2,
             ["std", "ops", "gray_to_bin"] => handle_gray_to_bin,
+            ["std", "ops", "reduce_and"] => handle_reduce_and,
+            ["std", "ops", "reduce_or"] => handle_reduce_or,
+            ["std", "ops", "reduce_xor"] => handle_reduce_xor,
             ["std", "ports", "new_mut_wire"] => handle_new_mut_wire,
             ["std", "ports", "read_mut_wire"] => handle_read_mut_wire
         }
@@ -2556,6 +2559,90 @@ impl ExprLocal for Loc<Expression> {
                 operator: mir::Operator::Gray2Bin {
                     num_bits: self_type.size(),
                 },
+                operands: vec![args[0].value.variable(ctx.subs)?],
+                ty: self_type,
+                loc: Some(self.loc()),
+            }),
+            self,
+        );
+
+        Ok(result)
+    }
+
+    fn handle_reduce_and(
+        &self,
+        _path: &Loc<NameID>,
+        result: StatementList,
+        args: &[Argument],
+        ctx: &mut Context,
+    ) -> Result<StatementList> {
+        let mut result = result;
+
+        let self_type = ctx
+            .types
+            .expr_type(self, ctx.symtab.symtab(), &ctx.item_list.types)?
+            .to_mir_type();
+
+        result.push_primary(
+            mir::Statement::Binding(mir::Binding {
+                name: self.variable(ctx.subs)?,
+                operator: mir::Operator::ReduceAnd,
+                operands: vec![args[0].value.variable(ctx.subs)?],
+                ty: self_type,
+                loc: Some(self.loc()),
+            }),
+            self,
+        );
+
+        Ok(result)
+    }
+
+    fn handle_reduce_or(
+        &self,
+        _path: &Loc<NameID>,
+        result: StatementList,
+        args: &[Argument],
+        ctx: &mut Context,
+    ) -> Result<StatementList> {
+        let mut result = result;
+
+        let self_type = ctx
+            .types
+            .expr_type(self, ctx.symtab.symtab(), &ctx.item_list.types)?
+            .to_mir_type();
+
+        result.push_primary(
+            mir::Statement::Binding(mir::Binding {
+                name: self.variable(ctx.subs)?,
+                operator: mir::Operator::ReduceOr,
+                operands: vec![args[0].value.variable(ctx.subs)?],
+                ty: self_type,
+                loc: Some(self.loc()),
+            }),
+            self,
+        );
+
+        Ok(result)
+    }
+
+    fn handle_reduce_xor(
+        &self,
+        _path: &Loc<NameID>,
+        result: StatementList,
+        args: &[Argument],
+        ctx: &mut Context,
+    ) -> Result<StatementList> {
+        let mut result = result;
+
+        let self_type = ctx
+            .types
+            .expr_type(self, ctx.symtab.symtab(), &ctx.item_list.types)?
+            .to_mir_type();
+
+        result.push_primary(
+            mir::Statement::Binding(mir::Binding {
+                name: self.variable(ctx.subs)?,
+                operator: mir::Operator::ReduceXor,
                 operands: vec![args[0].value.variable(ctx.subs)?],
                 ty: self_type,
                 loc: Some(self.loc()),
