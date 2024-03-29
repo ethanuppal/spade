@@ -64,6 +64,8 @@ test:linux-latest:
         - cargo doc --no-deps
 
 test:macos-aarch64:
+  rules:
+    - if: $CI_PROJECT_NAMESPACE == "spade-lang"
   variables:
     HOMEBREW_NO_AUTO_UPDATE: 1
     HOMEBREW_NO_ENV_HINTS: 1
