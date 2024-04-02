@@ -13,6 +13,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Added
 - [!288][!288] Implement binary reduction operations in std::ops
+- [!290][!290] Add higher level memory primitives to `std::mem`
+- [!290][!290] Add clock domain crossing primitives to `std::cdc`
 
 ### Changed
 
@@ -25,6 +27,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 [!244]: https://gitlab.com/spade-lang/spade/-/merge_requests/244
 [!288]: https://gitlab.com/spade-lang/spade/-/merge_requests/288
+[!290]: https://gitlab.com/spade-lang/spade/-/merge_requests/288
 
 ## [0.7.0] - 2024-03-21
 
