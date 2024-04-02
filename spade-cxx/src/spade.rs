@@ -138,9 +138,10 @@ impl SimulationExt {
     }
 
     pub fn output_field(&mut self, path: &Vec<String>) -> Result<Box<FieldRef>> {
-        self.0
-            .output_field(path.to_owned())
-            .map(|o| Box::new(FieldRef(o)))
+        self.0.output_field(path.clone()).and_then(|o| match o {
+            Some(field) => Ok(Box::new(FieldRef(field))),
+            None => bail!("Trying to access output field on a unit returning void"),
+        })
     }
 }
 

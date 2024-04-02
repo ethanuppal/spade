@@ -164,7 +164,7 @@ pub struct Spade {
     mir_context: HashMap<NameID, MirContext>,
 
     compilation_cache: HashMap<(TypeVar, String), Value>,
-    output_field_cache: HashMap<Vec<String>, FieldRef>,
+    output_field_cache: HashMap<Vec<String>, Option<FieldRef>>,
 }
 
 impl Spade {
@@ -304,8 +304,11 @@ impl Spade {
     }
 
     #[tracing::instrument(level = "trace", skip(self))]
-    pub fn output_as_field_ref(&mut self) -> Result<FieldRef> {
-        let output_type = self.output_type()?;
+    pub fn output_as_field_ref(&mut self) -> Result<Option<FieldRef>> {
+        let output_type = match self.output_type()? {
+            Some(t) => t,
+            None => return Ok(None),
+        };
         let generic_list =
             self.type_state
                 .create_generic_list(GenericListSource::Anonymous, &[], None)?;
@@ -323,19 +326,19 @@ impl Spade {
 
         let size = concrete.to_mir_type().size();
 
-        Ok(FieldRef {
+        Ok(Some(FieldRef {
             range: (
                 0,
                 size.to_u64()
                     .ok_or(anyhow!("Field index exceeds {} bits", usize::MAX))?,
             ),
             ty,
-        })
+        }))
     }
 
     /// Access a field of the DUT output or its subfields
     #[tracing::instrument(level = "trace", skip(self))]
-    pub fn output_field(&mut self, path: Vec<String>) -> Result<FieldRef> {
+    pub fn output_field(&mut self, path: Vec<String>) -> Result<Option<FieldRef>> {
         if let Some(cached) = self.output_field_cache.get(&path) {
             return Ok(cached.clone());
         }
@@ -344,7 +347,10 @@ impl Spade {
             return self.output_as_field_ref();
         }
 
-        let output_type = self.output_type()?;
+        let output_type = match self.output_type()? {
+            Some(t) => t,
+            None => return Ok(None),
+        };
 
         // Create a new variable which is guaranteed to have the output type
         let owned = self.take_owned();
@@ -458,7 +464,7 @@ impl Spade {
             impl_idtracker: ast_ctx.impl_idtracker,
         });
 
-        let result = FieldRef {
+        let result = Some(FieldRef {
             range: (
                 start
                     .to_u64()
@@ -467,7 +473,7 @@ impl Spade {
                     .ok_or(anyhow!("Field index exceeds {} bits", usize::MAX))?,
             ),
             ty: result_type,
-        };
+        });
 
         self.output_field_cache.insert(path, result.clone());
         Ok(result)
@@ -667,14 +673,8 @@ impl Spade {
 
     /// Return the output type of uut
     #[tracing::instrument(level = "trace", skip(self))]
-    fn output_type(&mut self) -> Result<Loc<TypeSpec>> {
-        let ty = self
-            .uut_head
-            .output_type
-            .clone()
-            .ok_or_else(|| anyhow!("{} does not have an output type", self.uut))?;
-
-        Ok(ty)
+    fn output_type(&mut self) -> Result<Option<Loc<TypeSpec>>> {
+        Ok(self.uut_head.output_type.clone())
     }
 
     #[tracing::instrument(level = "trace", skip(self))]

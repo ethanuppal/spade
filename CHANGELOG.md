@@ -16,11 +16,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Changed
 
+- [!244][!244] spade-python now supports units which return `void`
+
 ### Fixed
 
 ### Removed
 
 
+[!244]: https://gitlab.com/spade-lang/spade/-/merge_requests/244
 [!288]: https://gitlab.com/spade-lang/spade/-/merge_requests/288
 
 ## [0.7.0] - 2024-03-21
