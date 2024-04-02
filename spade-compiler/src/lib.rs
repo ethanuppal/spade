@@ -538,6 +538,7 @@ pub fn stdlib_and_prelude() -> Vec<(ModuleNamespace, String, String)> {
         (["std"], ["std", "ops"], "../../stdlib/ops.spade"),
         (["std"], ["std", "ports"], "../../stdlib/ports.spade"),
         (["std"], ["std", "option"], "../../stdlib/option.spade"),
+        (["std"], ["std", "cdc"], "../../stdlib/cdc.spade"),
     }
 }
 

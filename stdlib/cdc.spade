@@ -1,9 +1,16 @@
-use std::ops::gray2bin;
-use std::ops::bin2gray;
+/// This module contains primitives for clock domain crossing. Clock domain crossing
+/// is difficult to get right, and all of these modules come with pitfalls, for example
+/// the possibility to miss some signals if transferring between domains of similar speed.
+/// Make sure to read the docs of each individual module.
+///
+/// NOTE that these modules are also not well tested in practice at the moment.
+
+use std::ops::gray_to_bin;
+use std::ops::bin_to_gray;
 
 mod unsafe {
-    use std::ops::gray2bin;
-    use std::ops::bin2gray;
+    use std::ops::gray_to_bin;
+    use std::ops::bin_to_gray;
 
     /// NOTE: This function does not provide any guarantees about value
     /// integrity for / signals of more than one bit as crossing 2 domains with
@@ -19,11 +26,14 @@ mod unsafe {
     /// aspect is important, it must be a N bit gray counter for this to do
     /// anything useful.
     entity sync_uint_counter<#N>(source_clk: clock, dest_clk: clock, in: uint<N>) -> uint<N> {
-        reg(source_clk) gray = bin2gray(in);
-        gray2bin(inst sync2(dest_clk, gray))
+        reg(source_clk) gray = bin_to_gray(in);
+        gray_to_bin(inst sync2(dest_clk, gray))
     }
 }
 
+// Synchronize a bool signal into another domain. This guarantees valid values, but does
+// not guarantee that all values are transferred. If synchronizing a short pulse where
+// seeing the pulse is important, `handshake` may be better
 entity sync2_bool(clk: clock, in: bool) -> bool {
     inst unsafe::sync2(clk, in)
 }
