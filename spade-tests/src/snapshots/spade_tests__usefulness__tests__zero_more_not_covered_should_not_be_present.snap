@@ -11,7 +11,7 @@ fn test(in: (bool, bool, bool)) -> bool {
 }
 
 
-error: Non-exhaustive match: patterns (false, true, false), (true, false, false) and 2 more not covered
+error: Non-exhaustive match: patterns (false, true, false), (true, true, false) and 2 more not covered
   ┌─ testinput:2:5
   │  
 2 │ ╭     match in {
@@ -20,6 +20,6 @@ error: Non-exhaustive match: patterns (false, true, false), (true, false, false)
 5 │ │         (false, false, true) => true,
 6 │ │         (false, false, false) => true,
 7 │ │     }
-  │ ╰─────^ patterns (false, true, false), (true, false, false) and 2 more not covered
+  │ ╰─────^ patterns (false, true, false), (true, true, false) and 2 more not covered
 
 

@@ -181,7 +181,13 @@ impl Usefulness {
             let witnesses = self
                 .witnesses
                 .into_iter()
-                .map(|w| w.apply_constructor(ctor, ty))
+                .flat_map(|w| match ctor {
+                    Constructor::Missing { all_missing } => all_missing
+                        .iter()
+                        .map(|ctor| w.clone().apply_constructor(ctor, ty))
+                        .collect(),
+                    other => vec![w.apply_constructor(other, ty)],
+                })
                 .collect();
 
             Self { witnesses }

@@ -112,7 +112,9 @@ pub(crate) fn split_wildcard(
                 )
             }
             spade_types::PrimitiveType::Bool => {
-                vec![Constructor::Bool(false), Constructor::Bool(true)]
+                let all_ctors = vec![Constructor::Bool(false), Constructor::Bool(true)];
+
+                group_missing_constructors(all_ctors, other_ctors)
             }
             // Bit literals can't be matched on because you can't compare against z in hardware
             spade_types::PrimitiveType::Bit => vec![],
@@ -125,6 +127,42 @@ pub(crate) fn split_wildcard(
         ConcreteType::Backward(_) => vec![Constructor::Single],
         ConcreteType::Wire(_) => vec![Constructor::Single],
         ConcreteType::Integer(_) => unreachable!("Pattern matching on type level integer"),
+    }
+}
+
+/// Like rustc, we need a way to deal with arrays of mostly wildcard patterns. We
+/// steal rustc's solution of grouping all patterns not explicitly stated in one column
+/// of a pattern into a group of `missing` patterns. That way those can be checked groups.
+/// This function groups all the missing patterns when given a list of constructors
+pub fn group_missing_constructors(
+    all_ctors: Vec<Constructor>,
+    other_ctors: impl Iterator<Item = Constructor> + Clone,
+) -> Vec<Constructor> {
+    let mut non_wildcard_other = other_ctors
+        .filter(|other| !matches!(other, Constructor::Wildcard))
+        .collect::<Vec<_>>();
+
+    // This list contains every constructor from the list of possible constructors
+    // which is not matched by an explicit constructor in the other_ctors list.
+    // We lump these together for future operations, as explained in
+    // https://github.com/rust-lang/rust/blob/da895e7938e8d6f8d221fce2876d225bf58df865/compiler/rustc_mir_build/src/thir/pattern/deconstruct_pat.rs#L662
+    let missing = all_ctors
+        .iter()
+        .filter(|ctor| {
+            !non_wildcard_other
+                .iter()
+                .any(|other| ctor.is_covered_by(&other))
+        })
+        .cloned()
+        .collect::<Vec<_>>();
+
+    if missing.is_empty() {
+        all_ctors
+    } else {
+        non_wildcard_other.push(Constructor::Missing {
+            all_missing: missing,
+        });
+        non_wildcard_other
     }
 }
 
@@ -141,6 +179,9 @@ pub enum Constructor {
     IntRange {
         min: BigInt,
         max: BigInt,
+    },
+    Missing {
+        all_missing: Vec<Constructor>,
     },
     Wildcard,
 }
@@ -168,6 +209,8 @@ impl Constructor {
         match (self, other) {
             // Everything is covered by a wildcard
             (_, Wildcard) => true,
+            // The missing ctors are not covered by anything in the matrix except wildcards.
+            (Missing { .. }, _) => false,
             (Single, Single) => true,
             (Variant(self_id), Variant(other_id)) => self_id == other_id,
             (
@@ -216,6 +259,7 @@ impl Constructor {
             Constructor::Bool(_) => vec![],
             Constructor::IntRange { .. } => vec![],
             // Accessing the fields of a wildcard is (probably) impossible
+            Constructor::Missing { .. } => vec![],
             Constructor::Wildcard => unreachable!(),
         }
     }
@@ -377,6 +421,9 @@ impl std::fmt::Display for DeconstructedPattern {
             },
             Constructor::Bool(val) => write!(f, "{val}"),
             Constructor::IntRange { min, max } => write!(f, "{min}..{max}"),
+            Constructor::Missing { .. } => {
+                unreachable!("Missing should have been removed by Usefulness::apply_constructor")
+            }
             Constructor::Wildcard => write!(f, "_"),
         }
     }

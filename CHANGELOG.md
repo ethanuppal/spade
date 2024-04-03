@@ -22,12 +22,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Fixed
 
+- [!291][!291] Fix long runtime of pattern refutability checks for large arrays and tuples
+
 ### Removed
 
 
 [!244]: https://gitlab.com/spade-lang/spade/-/merge_requests/244
 [!288]: https://gitlab.com/spade-lang/spade/-/merge_requests/288
-[!290]: https://gitlab.com/spade-lang/spade/-/merge_requests/288
+[!290]: https://gitlab.com/spade-lang/spade/-/merge_requests/290
+[!291]: https://gitlab.com/spade-lang/spade/-/merge_requests/291
 
 ## [0.7.0] - 2024-03-21
 
