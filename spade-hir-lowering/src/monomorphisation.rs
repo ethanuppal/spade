@@ -16,8 +16,9 @@ use spade_wordlength_inference as wordlength_inference;
 use crate::error::Result;
 use crate::generate_unit;
 use crate::name_map::NameSourceMap;
+use crate::passes::disallow_inout_bindings::InOutChecks;
 use crate::passes::lower_methods::LowerMethods;
-use crate::passes::pass::Passable;
+use crate::passes::pass::{Pass, Passable};
 
 /// An item to be monomorphised
 #[derive(Clone, Debug, Hash, PartialEq, Eq)]
@@ -208,14 +209,24 @@ pub fn compile_items(
 
                 // Apply passes to the type checked module
                 let mut u = u.clone();
-                let pass_result = u.apply(&mut LowerMethods {
-                    type_state: &type_state,
-                    items: item_list,
-                    symtab,
-                });
-                if let Err(e) = pass_result {
-                    result.push(Err(e));
-                    continue;
+                let passes = [
+                    &mut LowerMethods {
+                        type_state: &type_state,
+                        items: item_list,
+                        symtab,
+                    } as &mut dyn Pass,
+                    &mut InOutChecks {
+                        type_state: &type_state,
+                        items: item_list,
+                        symtab,
+                    } as &mut dyn Pass,
+                ];
+                for pass in passes {
+                    let pass_result = u.apply(pass);
+                    if let Err(e) = pass_result {
+                        result.push(Err(e));
+                        continue 'item_loop;
+                    }
                 }
 
                 if let Some(method) = wordlength_inference_method {

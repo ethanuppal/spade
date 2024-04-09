@@ -204,7 +204,7 @@ impl<'a> Inferer<'a> {
             }
 
             Statement::Register(register) => {
-                let register = &register.inner;
+                let register = &register;
                 self.expression(&register.clock)?;
                 if let Some((left, right)) = &register.reset {
                     self.expression(left)?;

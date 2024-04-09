@@ -90,7 +90,7 @@ pub fn visit_statement(
                 value,
                 value_type: _,
                 attributes: _,
-            } = &reg.inner;
+            } = &reg;
 
             linear_state.push_pattern(pattern, ctx)?;
 

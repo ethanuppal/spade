@@ -99,6 +99,12 @@ pub fn populate_symtab(symtab: &mut SymbolTable, item_list: &mut ItemList) {
     add_type(&["bool"], vec![], PrimitiveType::Bool, false);
     add_type(&["void"], vec![], PrimitiveType::Void, false);
     add_type(&["bit"], vec![], PrimitiveType::Bool, false);
+    add_type(
+        &["inout"],
+        vec![GenericArg::Number(Identifier("T".into())).nowhere()],
+        PrimitiveType::InOut,
+        false,
+    );
 
     let mut add_marker_trait = |path: &[&str]| {
         let name = symtab

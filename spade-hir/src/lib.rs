@@ -142,7 +142,7 @@ pub struct Binding {
 #[derive(PartialEq, Debug, Clone, Serialize, Deserialize)]
 pub enum Statement {
     Binding(Binding),
-    Register(Loc<Register>),
+    Register(Register),
     Declaration(Vec<Loc<NameID>>),
     PipelineRegMarker(Option<Loc<Expression>>),
     Label(Loc<Identifier>),

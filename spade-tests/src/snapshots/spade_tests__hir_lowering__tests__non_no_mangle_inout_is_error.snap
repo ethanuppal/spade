@@ -1,0 +1,18 @@
+---
+source: spade-tests/src/hir_lowering.rs
+---
+entity test(t: inout<int<8>>) {}
+
+
+error: inout parameters must be marked #[no_mangle]
+  ┌─ testinput:1:13
+  │
+1 │ entity test(t: inout<int<8>>) {}
+  │             ^ inout parameter must be #[no_mangle]
+  │
+  = Consider making the input #[no_mangle]
+  │
+1 │ entity test(#[no_mangle] t: inout<int<8>>) {}
+  │             +++++++++++++
+
+

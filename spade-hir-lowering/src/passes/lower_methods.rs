@@ -86,4 +86,8 @@ impl<'a> Pass for LowerMethods<'a> {
         }
         Ok(())
     }
+
+    fn visit_unit(&mut self, _unit: &mut spade_hir::Unit) -> crate::error::Result<()> {
+        Ok(())
+    }
 }

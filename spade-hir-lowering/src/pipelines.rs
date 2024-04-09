@@ -80,7 +80,7 @@ pub fn handle_statement(
             }
         }
         Statement::Register(reg) => {
-            let time = reg.inner.value.kind.available_in()?;
+            let time = reg.value.kind.available_in()?;
             for name in reg.pattern.get_names() {
                 let ty = ctx
                     .types

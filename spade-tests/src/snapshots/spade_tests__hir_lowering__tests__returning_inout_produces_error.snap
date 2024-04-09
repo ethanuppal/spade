@@ -1,0 +1,19 @@
+---
+source: spade-tests/src/hir_lowering.rs
+---
+entity test(#[no_mangle] t: inout<int<8>>) -> inout<int<8>> {
+    t
+}
+
+error: Values of inout type cannot be returned
+  ┌─ testinput:1:61
+  │  
+1 │   entity test(#[no_mangle] t: inout<int<8>>) -> inout<int<8>> {
+  │ ╭─────────────────────────────────────────────────────────────^
+2 │ │     t
+3 │ │ }
+  │ ╰─^ returning inout value
+  │  
+  = help: inout values can only be passed along to other modules as inputs
+
+

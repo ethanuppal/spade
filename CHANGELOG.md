@@ -15,6 +15,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - [!288][!288] Implement binary reduction operations in std::ops
 - [!290][!290] Add higher level memory primitives to `std::mem`
 - [!290][!290] Add clock domain crossing primitives to `std::cdc`
+- [!293][!293] Add `inout<T>` for mapping to Verilog `inout` ports
 
 ### Changed
 

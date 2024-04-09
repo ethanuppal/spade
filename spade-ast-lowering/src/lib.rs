@@ -1708,18 +1708,15 @@ fn visit_register(reg: &Loc<ast::Register>, ctx: &mut Context) -> Result<Vec<Loc
     })?;
 
     stmts.push(
-        hir::Statement::Register(
-            hir::Register {
-                pattern,
-                clock,
-                reset,
-                initial,
-                value,
-                value_type,
-                attributes,
-            }
-            .at_loc(&loc),
-        )
+        hir::Statement::Register(hir::Register {
+            pattern,
+            clock,
+            reset,
+            initial,
+            value,
+            value_type,
+            attributes,
+        })
         .at_loc(&loc),
     );
 
@@ -1973,22 +1970,19 @@ mod statement_visiting {
         )
         .nowhere();
 
-        let expected = hir::Statement::Register(
-            hir::Register {
-                pattern: hir::PatternKind::name(name_id(1, "regname"))
-                    .idless()
-                    .nowhere(),
-                clock: hir::ExprKind::Identifier(name_id(0, "clk").inner)
-                    .with_id(0)
-                    .nowhere(),
-                reset: None,
-                initial: None,
-                value: hir::ExprKind::int_literal(0).idless().nowhere(),
-                value_type: None,
-                attributes: hir::AttributeList::empty(),
-            }
-            .nowhere(),
-        )
+        let expected = hir::Statement::Register(hir::Register {
+            pattern: hir::PatternKind::name(name_id(1, "regname"))
+                .idless()
+                .nowhere(),
+            clock: hir::ExprKind::Identifier(name_id(0, "clk").inner)
+                .with_id(0)
+                .nowhere(),
+            reset: None,
+            initial: None,
+            value: hir::ExprKind::int_literal(0).idless().nowhere(),
+            value_type: None,
+            attributes: hir::AttributeList::empty(),
+        })
         .nowhere();
 
         let symtab = SymbolTable::new();
@@ -2902,8 +2896,7 @@ mod register_visiting {
             value: hir::ExprKind::int_literal(1).idless().nowhere(),
             value_type: Some(hir::TypeSpec::unit().nowhere()),
             attributes: hir::AttributeList::empty(),
-        }
-        .nowhere();
+        };
 
         let mut symtab = SymbolTable::new();
         let idtracker = ExprIdTracker::new();

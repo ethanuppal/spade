@@ -1,2 +1,5 @@
 [default.extend-identifiers]
 MemeOverloard = "MemeOverloard"
+
+[default.extend-words]
+inout = "inout"

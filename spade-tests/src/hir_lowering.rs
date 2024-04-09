@@ -2816,6 +2816,42 @@ mod tests {
 
         build_and_compare_entities!(code, expected);
     }
+
+    snapshot_error! {
+        let_binding_inout_produes_error,
+        "
+        entity consumer(#[no_mangle] t: inout<bool>) __builtin__
+        entity test(#[no_mangle] t: inout<bool>) {
+            let t_ = t;
+            inst consumer(t_)
+        }"
+    }
+
+    snapshot_error! {
+        reg_binding_inout_produes_error,
+        "
+        entity consumer(#[no_mangle] t: inout<int<8>>) __builtin__
+
+        entity test(clk: clock, #[no_mangle] t: inout<int<8>>) {
+            reg(clk) t_ = t;
+            inst consumer(t_)
+        }"
+    }
+
+    snapshot_error! {
+        returning_inout_produces_error,
+        "
+        entity test(#[no_mangle] t: inout<int<8>>) -> inout<int<8>> {
+            t
+        }"
+    }
+
+    snapshot_error! {
+        non_no_mangle_inout_is_error,
+        "
+            entity test(t: inout<int<8>>) {}
+        "
+    }
 }
 
 #[cfg(test)]

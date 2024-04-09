@@ -23,6 +23,7 @@ pub enum Type {
     /// containing a Backward<T> is returned, the module 'returning' it has an additional *input*
     /// for the wire, and if it takes an input with, n additional *output* port is created.
     Backward(Box<Type>),
+    InOut(Box<Type>),
 }
 
 impl Type {
@@ -58,6 +59,7 @@ impl Type {
             Type::Array { inner, length } => inner.size() * length,
             Type::Memory { inner, length } => inner.size() * length,
             Type::Backward(_) => BigUint::zero(),
+            Type::InOut(inner) => inner.size(),
         }
     }
 
@@ -87,6 +89,7 @@ impl Type {
                 .iter()
                 .map(|(_, t)| t.backward_size())
                 .sum::<BigUint>(),
+            Type::InOut(_) => BigUint::zero(),
         }
     }
 
@@ -146,6 +149,9 @@ impl std::fmt::Display for Type {
             }
             Type::Backward(inner) => {
                 write!(f, "&mut ({inner})")
+            }
+            Type::InOut(inner) => {
+                write!(f, "inout<{inner}>")
             }
         }
     }

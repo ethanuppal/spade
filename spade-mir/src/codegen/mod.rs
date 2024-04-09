@@ -1107,6 +1107,11 @@ pub fn entity_code(
 
                 name_map.insert(&name, val_name.verilog_name_source_fwd());
 
+                let input_or_inout = match ty {
+                    Type::InOut(_) => "inout",
+                    _ => "input",
+                };
+
                 // If the no_mangle attribute is set, we need to avoid clashing between the port
                 // name, and the value_name. Because the first value_name in a module has the same
                 // name as the value_name, and because inputs are unique it is enough to just skip
@@ -1120,7 +1125,7 @@ pub fn entity_code(
                     code! {}
                 };
                 (
-                    format!("input{} {}", size_spec(&size), name),
+                    format!("{input_or_inout}{} {}", size_spec(&size), name),
                     alias_assignment,
                 )
             } else {
@@ -3090,5 +3095,50 @@ mod expression_tests {
         );
 
         result.verilog_code();
+    }
+
+    #[test]
+    fn inout_codegens_as_inout() {
+        let input = spade_mir::Entity {
+            name: spade_mir::unit_name::IntoUnitName::_test_into_unit_name("test"),
+            inputs: vec![spade_mir::MirInput {
+                name: "a".to_string(),
+                val_name: ValueName::_test_named(0, "a".to_string()),
+                ty: Type::InOut(Box::new(Type::Bool)),
+                no_mangle: Some(().nowhere()),
+            }],
+            output: ValueName::Expr(0),
+            output_type: Type::Void,
+            statements: vec![],
+        };
+
+        let expected = indoc!(
+            r#"
+            module test (
+                    inout a
+                );
+                `ifdef COCOTB_SIM
+                string __top_module;
+                string __vcd_file;
+                initial begin
+                    if ($value$plusargs("TOP_MODULE=%s", __top_module) && __top_module == "test" && $value$plusargs("VCD_FILENAME=%s", __vcd_file)) begin
+                        $dumpfile (__vcd_file);
+                        $dumpvars (0, test);
+                    end
+                end
+                `endif
+            endmodule"#
+        );
+
+        assert_same_code!(
+            &entity_code(
+                &prepare_codegen(input.clone(), &mut ExprIdTracker::new()),
+                &mut InstanceMap::new(),
+                &None
+            )
+            .0
+            .to_string(),
+            expected
+        );
     }
 }

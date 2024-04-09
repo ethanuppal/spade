@@ -122,6 +122,7 @@ pub(crate) fn split_wildcard(
             // on them impossible
             spade_types::PrimitiveType::Clock
             | spade_types::PrimitiveType::Memory
+            | spade_types::PrimitiveType::InOut
             | spade_types::PrimitiveType::Void => vec![],
         },
         ConcreteType::Backward(_) => vec![Constructor::Single],

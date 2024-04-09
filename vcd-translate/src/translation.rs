@@ -276,6 +276,13 @@ pub fn inner_translate_value(result: &mut String, in_value: &[Value], t: &Concre
             params: _,
         } => *result += "memory",
         ConcreteType::Single {
+            base: PrimitiveType::InOut,
+            params,
+        } => match params.as_slice() {
+            [inner] => inner_translate_value(result, in_value, inner),
+            t => panic!("Found an inout<{t:?}> but inout only supports one type parameter"),
+        },
+        ConcreteType::Single {
             base: PrimitiveType::Void,
             params: _,
         } => *result += "void",

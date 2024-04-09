@@ -15,6 +15,7 @@ pub enum PrimitiveType {
     Bit,
     Memory,
     Void,
+    InOut,
 }
 
 impl std::fmt::Display for PrimitiveType {
@@ -27,6 +28,7 @@ impl std::fmt::Display for PrimitiveType {
             PrimitiveType::Bit => write!(f, "bit"),
             PrimitiveType::Memory => write!(f, "Memory"),
             PrimitiveType::Void => write!(f, "()"),
+            PrimitiveType::InOut => write!(f, "inout"),
         }
     }
 }

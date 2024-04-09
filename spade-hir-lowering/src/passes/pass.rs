@@ -5,16 +5,19 @@ use crate::Result;
 
 pub trait Pass {
     fn visit_expression(&mut self, expression: &mut Loc<Expression>) -> Result<()>;
+    /// Perform transformations on the unit. This should not transform the body of the unit, that
+    /// is handled by `visit_expression`
+    fn visit_unit(&mut self, unit: &mut Unit) -> Result<()>;
 }
 
 pub trait Passable {
     /// Applies the pass to this HIR node. Children are visited before
     /// parents. Statements are visited in the order that they are defined
-    fn apply(&mut self, pass: &mut impl Pass) -> Result<()>;
+    fn apply(&mut self, pass: &mut dyn Pass) -> Result<()>;
 }
 
 impl Passable for Loc<Expression> {
-    fn apply(&mut self, pass: &mut impl Pass) -> Result<()> {
+    fn apply(&mut self, pass: &mut dyn Pass) -> Result<()> {
         macro_rules! subnodes {
             ($($node:expr),*) => {
                 {$($node.apply(pass)?;)*}
@@ -98,7 +101,7 @@ impl Passable for Loc<Expression> {
                                 value,
                                 value_type: _,
                                 attributes: _,
-                            } = &mut reg.inner;
+                            } = reg;
 
                             match reset {
                                 Some((trig, val)) => subnodes!(trig, val),
@@ -146,7 +149,9 @@ impl Passable for Loc<Expression> {
 }
 
 impl Passable for Unit {
-    fn apply(&mut self, pass: &mut impl Pass) -> Result<()> {
-        self.body.apply(pass)
+    fn apply(&mut self, pass: &mut dyn Pass) -> Result<()> {
+        self.body.apply(pass)?;
+        pass.visit_unit(self)?;
+        Ok(())
     }
 }

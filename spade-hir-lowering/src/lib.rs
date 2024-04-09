@@ -156,6 +156,13 @@ impl MirLowerable for ConcreteType {
                 base: PrimitiveType::Void,
                 params: _,
             } => Type::Void,
+            CType::Single {
+                base: PrimitiveType::InOut,
+                params,
+            } => match params.as_slice() {
+                [inner] => Type::InOut(Box::new(inner.to_mir_type())),
+                t => unreachable!("{:?} is an invalid generic parameter for inout", t),
+            },
             CType::Integer(_) => {
                 unreachable!("Found an integer at the base level of a type")
             }
@@ -941,7 +948,7 @@ impl StatementLocal for Statement {
                     value,
                     value_type: _,
                     attributes,
-                } = &register.inner;
+                } = &register;
                 result.append(clock.lower(ctx)?);
 
                 if let Some((trig, value)) = &reset {
