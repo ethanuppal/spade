@@ -143,6 +143,10 @@ impl SimulationExt {
             None => bail!("Trying to access output field on a unit returning void"),
         })
     }
+
+    pub fn field_value(&mut self, field: &FieldRef, output_bits: &BitString) -> Result<String> {
+        self.0.field_value(field.0.clone(), &output_bits.0)
+    }
 }
 
 #[cxx::bridge(namespace = "spade")]
@@ -150,6 +154,9 @@ mod ffi {
 
     extern "Rust" {
         type FieldRef;
+    }
+
+    extern "Rust" {
         type BitString;
     }
 
@@ -204,5 +211,7 @@ mod ffi {
         ) -> Result<()>;
 
         fn output_field(&mut self, path: &Vec<String>) -> Result<Box<FieldRef>>;
+
+        pub fn field_value(&mut self, field: &FieldRef, output_bits: &BitString) -> Result<String>;
     }
 }

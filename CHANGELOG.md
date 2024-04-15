@@ -16,6 +16,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - [!290][!290] Add higher level memory primitives to `std::mem`
 - [!290][!290] Add clock domain crossing primitives to `std::cdc`
 - [!293][!293] Add `inout<T>` for mapping to Verilog `inout` ports
+- [!294][!294] Add `.spade_repr()` to output fields in Verilator
 
 ### Changed
 
@@ -34,6 +35,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 [!288]: https://gitlab.com/spade-lang/spade/-/merge_requests/288
 [!290]: https://gitlab.com/spade-lang/spade/-/merge_requests/290
 [!291]: https://gitlab.com/spade-lang/spade/-/merge_requests/291
+[!293]: https://gitlab.com/spade-lang/spade/-/merge_requests/293
+[!294]: https://gitlab.com/spade-lang/spade/-/merge_requests/294
 [!297]: https://gitlab.com/spade-lang/spade/-/merge_requests/297
 [!300]: https://gitlab.com/spade-lang/spade/-/merge_requests/300
 

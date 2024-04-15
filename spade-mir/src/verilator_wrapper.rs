@@ -74,6 +74,13 @@ impl Type {
             [3]             format!(r#"    ->s_ext"#);
             [3]             format!(r#"    ->assert_eq(*field, expected, *val, source_loc);"#);
             [2]         "}";
+            [2]         format!("std::string spade_repr() {{");
+            [3]             format!(r#"auto field = root->s_ext->output_field({{{field_as_strings}}});"#);
+            [3]             format!("auto val = spade::new_bit_string(root->output_string_fn());");
+            [3]             format!(r#"return std::string(root"#);
+            [3]             format!(r#"    ->s_ext"#);
+            [3]             format!(r#"    ->field_value(*field, *val));"#);
+            [2]         "}";
             [2]         field_members;
             [0] "};";
             [0] format!("{class_name}* init_{class_name}({root_class}* root) {{");
