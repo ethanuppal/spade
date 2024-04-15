@@ -51,9 +51,9 @@ entity handshake<T>(clk1: clock, rst: bool, data: Option<T>, clk2: clock) -> Opt
     // Hold onto the data in the sending domain until the receiving domain has acknowledged that
     // it received
     reg(clk1) holder_clk1 reset(rst: None()) = match (data, holder_clk1, ack_clk1) {
-        (Some(new), _, _) => Some(new),
         (_, Some(prev), false) => Some(prev),
         (_, Some(prev), true) => None(),
+        (Some(new), _, _) => Some(new),
         (None, None, _) => None()
     };
 
