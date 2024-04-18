@@ -39,38 +39,76 @@ entity sync2_bool(clk: clock, in: bool) -> bool {
 }
 
 
+mod handshake_impl {
+    struct port TxOutRxIn<T> {
+        data_valid: &mut bool,
+        data: &mut T,
+        ack: &bool,
+    }
+
+    enum TxState {
+        WaitData,
+        HoldData,
+        WaitAck,
+    }
+
+
+    entity transmitter<T>(clk: clock, rst: bool, data: Option<T>, out: TxOutRxIn<T>) {
+        let ack = inst std::cdc::sync2_bool(clk, *out.ack);
+
+        reg(clk) state reset(rst: TxState::WaitData) = match (state, data, ack) {
+            (TxState::WaitData, None, _) => TxState::WaitData,
+            (TxState::WaitData, Some(_), _) => TxState::HoldData,
+            (TxState::HoldData, _, _) => TxState::WaitAck,
+            (TxState::WaitAck, _, false) => TxState::WaitAck,
+            (TxState::WaitAck, _, true) => TxState::WaitData,
+        };
+
+        reg(clk) data_held = match (data, state) {
+            (Some(d), TxState::WaitData) => d,
+            _ => data_held,
+        };
+        set out.data = data_held;
+
+        set out.data_valid = match state {
+            TxState::WaitData => false,
+            TxState::HoldData => false,
+            TxState::WaitAck => true,
+        };
+    }
+
+    enum RxState {
+        WaitValid,
+        WaitInvalid,
+    }
+
+    entity receiver<T>(clk: clock, rst: bool, in: ~TxOutRxIn<T>) -> Option<T> {
+        let data_valid = inst std::cdc::sync2_bool(clk, *in.data_valid);
+
+        reg(clk) (state, data_out) reset(rst: (RxState::WaitValid, None)) = match (state, data_valid) {
+            (RxState::WaitValid, false) => (state, None),
+            (RxState::WaitValid, true) => (RxState::WaitInvalid, Some(*in.data)),
+            (RxState::WaitInvalid, true) => (RxState::WaitInvalid, None),
+            (RxState::WaitInvalid, false) => (RxState::WaitValid, None),
+        };
+
+        set in.ack = match state {
+            RxState::WaitValid => false,
+            RxState::WaitInvalid => true,
+        };
+
+        data_out
+    }
+}
+
 // Synchronize data from clk1 to clk2 via handshaking. Primarily to be used to cross
 // domains of similar speed. A single pulse on data in clk1 results in a single output in clk2.
 // If data is active for more than one cycle, the behaviour is undefined. Likewise if
 // data occurs too frequently, i.e. within a few clock cycles in the slowest domain
 entity handshake<T>(clk1: clock, rst: bool, data: Option<T>, clk2: clock) -> Option<T> {
-    decl ack_clk2;
-    // NOTE: Since we only read the Option bit of this value, we're safe to use sync2
-    let ack_clk1 = inst unsafe::sync2(clk1, ack_clk2);
-
-    // Hold onto the data in the sending domain until the receiving domain has acknowledged that
-    // it received
-    reg(clk1) holder_clk1 reset(rst: None()) = match (data, holder_clk1, ack_clk1) {
-        (_, Some(prev), false) => Some(prev),
-        (_, Some(prev), true) => None(),
-        (Some(new), _, _) => Some(new),
-        (None, None, _) => None()
-    };
-
-    // NOTE: Since we only read the Option bit of this value, we're safe to use sync2
-    let holder_clk2 = inst unsafe::sync2(clk2, holder_clk1);
-
-    reg(clk2) ack_clk2 reset (rst: false) = match (ack_clk2, holder_clk2) {
-        (false, None) => false,
-        (false, Some(_)) => true,
-        (true, None) => false,
-        (true, Some(_)) => true,
-    };
-
-    match (ack_clk2, holder_clk2) {
-        (false, Some(val)) => Some(val),
-        _ => None()
-    }
+    let (txorxi, txirxo) = port;
+    let _ = inst handshake_impl::transmitter(clk1, rst, data, txorxi);
+    inst handshake_impl::receiver(clk2, rst, txirxo)
 }
 
 
