@@ -23,8 +23,6 @@ tracing-subscriber.workspace = true
 tracing-tree.workspace = true
 tracing.workspace = true
 
-atty = "0.2.14"
-
 spade-ast = {path = "../spade-ast"}
 spade-ast-lowering = {path = "../spade-ast-lowering"}
 spade-common = {path = "../spade-common"}

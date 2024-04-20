@@ -13,7 +13,7 @@ resolver = "2"
 version = "0.8.0"
 license = "EUPL-1.2"
 edition = "2021"
-rust-version = "1.64" # workspade-inheritance is only supported in 1.64
+rust-version = "1.70" # is_terminal is stable from 1.70
 
 [workspace.dependencies]
 clap = { version = "4.4", features = ["derive"] }

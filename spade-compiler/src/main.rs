@@ -1,5 +1,5 @@
 use std::fs::File;
-use std::io::prelude::*;
+use std::io::{prelude::*, stderr, IsTerminal};
 use std::path::PathBuf;
 
 use clap::Parser;
@@ -99,7 +99,7 @@ fn main() -> Result<()> {
         )
         .collect();
 
-    let mut buffer = if opts.no_color || atty::isnt(atty::Stream::Stderr) {
+    let mut buffer = if opts.no_color || !stderr().is_terminal() {
         Buffer::no_color()
     } else {
         Buffer::ansi() // FIXME: Use `Buffer::console()` on windows?
