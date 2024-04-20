@@ -11,9 +11,9 @@ rust-version.workspace = true
 vcd = "0.6.1"
 color-eyre.workspace = true
 clap.workspace = true
-ron = "0.8.0"
-num = "0.4.0"
-itertools = "0.12.0"
+ron.workspace = true
+num.workspace = true
+itertools.workspace = true
 
 spade-mir = {path = "../spade-mir"}
 spade-types = {path = "../spade-types"}

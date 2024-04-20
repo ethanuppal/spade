@@ -19,7 +19,7 @@ indoc.workspace = true
 nesty = "0.2"
 itertools.workspace = true
 serde.workspace = true
-num = "0.4.0"
+num.workspace = true
 derive-where = "1.2.7"
 
 spade-common = { path = "../spade-common" }
