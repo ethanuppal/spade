@@ -531,9 +531,9 @@ impl<'a> Parser<'a> {
             ))),
             other => Err(Diagnostic::error(
                 &ident,
-                format!("Expected `stage` or `valid`, got `{other}`"),
+                format!("Expected `ready` or `valid`, got `{other}`"),
             )
-            .primary_label("Expected `stage` or `valid`")),
+            .primary_label("Expected `ready` or `valid`")),
         }
     }
 

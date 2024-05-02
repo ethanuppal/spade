@@ -6,8 +6,8 @@ pipeline(0) top() -> bool{
 }
 
 
-error: Expected `stage` or `valid`, got `ident`
+error: Expected `ready` or `valid`, got `ident`
   ┌─ testinput:2:11
   │
 2 │     stage.ident
-  │           ^^^^^ Expected `stage` or `valid`
+  │           ^^^^^ Expected `ready` or `valid`

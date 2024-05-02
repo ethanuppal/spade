@@ -23,6 +23,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ### Fixed
 
 - [!291][!291] Fix long runtime of pattern refutability checks for large arrays and tuples
+- [!300][!300] Fix expected `stage.ready` or `stage.valid` diagnostic
 
 ### Removed
 
