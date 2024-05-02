@@ -1,0 +1,13 @@
+---
+source: spade-tests/src/parser.rs
+---
+pipeline(0) top() -> bool{
+    stage.ident
+}
+
+
+error: Expected `stage` or `valid`, got `ident`
+  ┌─ testinput:2:11
+  │
+2 │     stage.ident
+  │           ^^^^^ Expected `stage` or `valid`

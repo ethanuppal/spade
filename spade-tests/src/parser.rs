@@ -543,3 +543,12 @@ snapshot_error! {
         }
     "
 }
+
+snapshot_error! {
+    stage_ready_or_valid,
+    "
+        pipeline(0) top() -> bool{
+            stage.ident
+        }
+    "
+}
