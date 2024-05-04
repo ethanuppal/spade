@@ -14,12 +14,9 @@ pub trait Emitter {
     fn emit_diagnostic(&mut self, diag: &Diagnostic, buffer: &mut Buffer, code: &CodeBundle);
 }
 
-// Glue so we can stuff our fancy new diagnostics in a thiserror. This should be removed when we
-// don't have any Error-enums left.
-
 impl std::fmt::Display for Diagnostic {
-    fn fmt(&self, _: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        unimplemented!()
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.labels.message.as_str())
     }
 }
 
