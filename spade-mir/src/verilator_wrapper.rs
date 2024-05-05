@@ -99,6 +99,7 @@ impl Entity {
         let (constructor_calls, fields_in_parent, field_classes): (Vec<_>, Vec<_>, Vec<_>) = self
             .inputs
             .iter()
+            .filter(|f| f.ty.size() != 0u32.to_biguint())
             .map(|f| {
                 let field_name = &f.name;
                 let field_name_mangled = mangle_input(&f.no_mangle, &f.name);
