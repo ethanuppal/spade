@@ -18,6 +18,7 @@ use crate::{FunctionKind, ParameterList, TypeParam, TypeSpec, UnitHead, UnitKind
 #[derive(Debug, Clone, PartialEq)]
 pub enum LookupError {
     NoSuchSymbol(Loc<Path>),
+    NotAThing(Loc<Path>),
     NotATypeSymbol(Loc<Path>, Thing),
     NotAVariable(Loc<Path>, Thing),
     NotAUnit(Loc<Path>, Thing),
@@ -35,6 +36,10 @@ impl From<LookupError> for Diagnostic {
         match &lookup_error {
             LookupError::NoSuchSymbol(path) => {
                 Diagnostic::error(path, format!("Use of undeclared name {path}"))
+                    .primary_label("Undeclared name")
+            }
+            LookupError::NotAThing(path) => {
+                Diagnostic::error(path, format!("Use of {path} before it was decleared"))
                     .primary_label("Undeclared name")
             }
             LookupError::IsAType(path) => {
@@ -60,7 +65,9 @@ impl From<LookupError> for Diagnostic {
                     LookupError::NotAValue(_, _) => "a value",
                     LookupError::NotAComptimeValue(_, _) => "a compile time value",
                     LookupError::NotATrait(_, _) => "a trait",
-                    LookupError::NoSuchSymbol(_) | LookupError::IsAType(_) => unreachable!(),
+                    LookupError::NoSuchSymbol(_)
+                    | LookupError::IsAType(_)
+                    | LookupError::NotAThing(_) => unreachable!(),
                 };
 
                 // an entity can be instantiated, ...
@@ -129,6 +136,7 @@ impl LookupError {
 
         match_replace_path! {
             NoSuchSymbol(_) => (path),
+            NotAThing(_) => (path),
             NotATypeSymbol(_, thing) => (path, thing),
             NotAVariable(_, thing) => (path, thing),
             NotAUnit(_, thing) => (path, thing),
@@ -326,9 +334,15 @@ pub enum TypeSymbol {
 }
 impl WithLocation for TypeSymbol {}
 
+/// The declaration/definition status of a variable
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum DeclarationState {
+    /// This variable has been defined by a `decl` statement
     Undefined(NameID),
+    /// There is a pipeline reference to this variable, but no definition or declaration (yet)
+    Undecleared(NameID),
+    /// This variable has been defined (and assigned) with a let binding.
+    /// All variables must be in the declared state before the end of the scope
     Defined(Loc<()>),
 }
 impl WithLocation for DeclarationState {}
@@ -384,6 +398,10 @@ impl SymbolTable {
     pub fn close_scope(&mut self) {
         self.symbols.pop();
         self.declarations.pop();
+    }
+
+    pub fn current_scope(&self) -> usize {
+        self.symbols.len() - 1
     }
 
     /// Push an identifier onto the current namespace
@@ -555,6 +573,22 @@ impl SymbolTable {
         }
     }
 
+    pub fn add_undecleared_at_offset(&mut self, offset: usize, name: Loc<Identifier>) -> NameID {
+        let path = Path(vec![name.clone()]);
+
+        let name_id = NameID(self.id_tracker.next(), path.clone());
+        let full_name = self.namespace.join(path);
+
+        let index = self.symbols.len() - 1 - offset;
+        if index > self.symbols.len() {
+            panic!("Not enough scopes to add symbol at offset {}", offset);
+        }
+        self.symbols[index].insert(full_name, name_id.clone());
+        self.declarations[index].insert(name, DeclarationState::Undecleared(name_id.clone()));
+
+        name_id
+    }
+
     pub fn get_declaration(&mut self, ident: &Loc<Identifier>) -> Option<Loc<DeclarationState>> {
         self.declarations
             .last()
@@ -572,13 +606,14 @@ impl SymbolTable {
             .unwrap() = DeclarationState::Defined(definition_point)
     }
 
-    pub fn get_undefined_declarations(&self) -> Vec<Loc<Identifier>> {
+    pub fn get_undefined_declarations(&self) -> Vec<(Loc<Identifier>, DeclarationState)> {
         self.declarations
             .last()
             .unwrap()
             .iter()
             .filter_map(|(ident, state)| match state {
-                DeclarationState::Undefined(_) => Some(ident.clone()),
+                DeclarationState::Undefined(_) => Some((ident.clone(), state.clone())),
+                DeclarationState::Undecleared(_) => Some((ident.clone(), state.clone())),
                 DeclarationState::Defined(_) => None,
             })
             .collect()
@@ -634,7 +669,7 @@ macro_rules! thing_accessors {
                     None => {
                         match self.types.get(&id) {
                             Some(_) => Err(LookupError::IsAType(name.clone())),
-                            None => panic!("{:?} is in symtab but not a thing or type", id)
+                            None => Err(LookupError::NotAThing(name.clone()))
                         }
                     }
                 }
@@ -722,6 +757,7 @@ impl SymbolTable {
             Err(LookupError::NotAComptimeValue(_, _)) => unreachable!(),
             Err(LookupError::NotATrait(_, _)) => unreachable!(),
             Err(LookupError::IsAType(_)) => unreachable!(),
+            Err(LookupError::NotAThing(_)) => unreachable!(),
         }
     }
 
@@ -759,7 +795,7 @@ impl SymbolTable {
             Some(other) => Err(LookupError::NotAVariable(name.clone(), other.clone())),
             None => match self.types.get(&id) {
                 Some(_) => Err(LookupError::IsAType(name.clone())),
-                None => panic!("{:?} is in symtab but not a thing or type", id),
+                None => Err(LookupError::NotAThing(name.clone())),
             },
         }
     }

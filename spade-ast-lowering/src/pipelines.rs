@@ -29,6 +29,8 @@ pub struct PipelineContext {
     pub stages: Vec<Option<Loc<Identifier>>>,
     /// The stage we are currently lowering
     pub current_stage: usize,
+    /// Scope of the pipeline body
+    pub scope: usize,
 }
 
 impl PipelineContext {
@@ -136,6 +138,7 @@ pub fn maybe_perform_pipelining_tasks(
             let mut context = PipelineContext {
                 stages: vec![None],
                 current_stage: 0,
+                scope: ctx.symtab.current_scope() + 1,
             };
 
             let body = body.as_ref().unwrap();

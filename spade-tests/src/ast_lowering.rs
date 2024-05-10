@@ -1072,3 +1072,65 @@ snapshot_error! {
         }
     "
 }
+
+#[test]
+fn access_pipeline_reg_from_block() {
+    let code = r#"
+        pipeline(3) main(clk: clock) -> int<8> {
+                let a = { stage(+1).b };
+            reg;
+                let b = 0;
+            reg;
+            reg;
+                a
+        }
+    "#;
+
+    build_items(code);
+}
+
+#[test]
+fn access_pipeline_reg_twice() {
+    let code = r#"
+        pipeline(3) main(clk: clock) -> int<8> {
+                let a = stage(+1).b;
+                let c = stage(+2).b;
+            reg;
+                let b = 0;
+            reg;
+            reg;
+                a
+        }
+    "#;
+
+    build_items(code);
+}
+
+snapshot_error! {
+    access_undefined_pipeline_reg,
+    "
+    pipeline(3) main(clk: clock) -> int<8> {
+            let a = stage(+2).d;
+        reg;
+        reg;
+            let c = 0;
+        reg;
+            c
+    }
+    "
+}
+
+snapshot_error! {
+    stage_laundering,
+    "
+    pipeline(3) main(clk: clock) -> int<8> {
+            let a = stage(+2).c;
+            let b = c; // <-- This should be an error
+        reg;
+        reg;
+            let c = 0;
+        reg;
+            c
+    }
+    "
+}

@@ -549,6 +549,8 @@ pub fn visit_unit(
         }
     }
 
+    check_for_undefined(ctx)?;
+
     ctx.symtab.close_scope();
 
     info!("Checked all function arguments");
@@ -982,6 +984,15 @@ pub fn visit_pattern(p: &ast::Pattern, ctx: &mut Context) -> Result<hir::Pattern
                         if let Some(state) = ctx.symtab.get_declaration(ident) {
                             match state.inner {
                                 DeclarationState::Undefined(id) => {
+                                    ctx.symtab
+                                        .mark_declaration_defined(ident.clone(), ident.loc());
+                                    (id, true)
+                                }
+                                DeclarationState::Undecleared(id) => {
+                                    ctx.symtab.add_thing_with_name_id(
+                                        id.clone(),
+                                        Thing::Variable(ident.clone()),
+                                    );
                                     ctx.symtab
                                         .mark_declaration_defined(ident.clone(), ident.loc());
                                     (id, true)
@@ -1581,7 +1592,17 @@ pub fn visit_expression(e: &ast::Expression, ctx: &mut Context) -> Result<hir::E
             let path = Path(vec![name.clone()]).at_loc(name);
             let (name_id, declares_name) = match ctx.symtab.try_lookup_variable(&path)? {
                 Some(id) => (id.at_loc(name), false),
-                None => (ctx.symtab.add_declaration(name.clone())?.at_loc(name), true),
+                None => {
+                    let pipeline_offset = ctx.symtab.current_scope() - pipeline_ctx.scope;
+                    let undecleared_lookup = ctx.symtab.declarations[pipeline_ctx.scope].get(&name);
+
+                    if let Some(DeclarationState::Undecleared(name_id)) = undecleared_lookup {
+                        (name_id.clone().at_loc(name), false)
+                    } else {
+                        let name_id = ctx.symtab.add_undecleared_at_offset(pipeline_offset, name.clone());
+                        (name_id.at_loc(name), true)
+                    }
+                }
             };
 
             Ok(hir::ExprKind::PipelineRef {
@@ -1605,6 +1626,26 @@ pub fn visit_expression(e: &ast::Expression, ctx: &mut Context) -> Result<hir::E
     .map(|kind| kind.with_id(new_id))
 }
 
+fn check_for_undefined(ctx: &Context) -> Result<()> {
+    match ctx.symtab.get_undefined_declarations().first() {
+        Some((undefined, DeclarationState::Undefined(_))) => {
+            Err(
+                Diagnostic::error(undefined, "Declared variable is not defined")
+                    .primary_label("This variable is declared but not defined")
+                    // FIXME: Suggest removing the declaration (with a diagnostic suggestion) only if the variable is unused.
+                    .help(format!("Define {undefined} with a let or reg binding"))
+                    .help("Or, remove the declaration if the variable is unused"),
+            )
+        }
+        Some((undecleared, DeclarationState::Undecleared(_))) => Err(Diagnostic::error(
+            undecleared,
+            "Could not find referenced variable",
+        )
+        .primary_label("This variable could not be found")),
+        _ => Ok(()),
+    }
+}
+
 fn visit_block(b: &ast::Block, ctx: &mut Context) -> Result<hir::Block> {
     ctx.symtab.new_scope();
     let statements = b
@@ -1622,15 +1663,7 @@ fn visit_block(b: &ast::Block, ctx: &mut Context) -> Result<hir::Block> {
         .map(|o| o.try_visit(visit_expression, ctx))
         .transpose()?;
 
-    if let Some(undefined) = ctx.symtab.get_undefined_declarations().first() {
-        return Err(
-            Diagnostic::error(undefined, "Declared variable is not defined")
-                .primary_label("This variable is declared but not defined")
-                // FIXME: Suggest removing the declaration (with a diagnostic suggestion) only if the variable is unused.
-                .help(format!("Define {undefined} with a let or reg binding"))
-                .help("Or, remove the declaration if the variable is unused"),
-        );
-    }
+    check_for_undefined(ctx)?;
 
     ctx.symtab.close_scope();
 
@@ -2036,6 +2069,7 @@ mod statement_visiting {
             pipeline_ctx: Some(PipelineContext {
                 stages: vec![],
                 current_stage: 0,
+                scope: 0,
             }),
         };
         assert_eq!(

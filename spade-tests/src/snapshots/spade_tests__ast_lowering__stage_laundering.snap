@@ -1,0 +1,19 @@
+---
+source: spade-tests/src/ast_lowering.rs
+---
+pipeline(3) main(clk: clock) -> int<8> {
+        let a = stage(+2).c;
+        let b = c; // <-- This should be an error
+    reg;
+    reg;
+        let c = 0;
+    reg;
+        c
+}
+
+
+error: Use of c before it was decleared
+  ┌─ testinput:3:17
+  │
+3 │         let b = c; // <-- This should be an error
+  │                 ^ Undeclared name

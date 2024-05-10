@@ -27,6 +27,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - [!291][!291] Fix long runtime of pattern refutability checks for large arrays and tuples
 - [!297][!297] Fix panic when passing modules with reserved keywords as name (it is still a normal error)
 - [!300][!300] Fix expected `stage.ready` or `stage.valid` diagnostic
+- [!299][!299] Pipeline References now work in blocks
+- [!299][!299] Prevent Pipeline references from laundering variables before they were declared 
 
 ### Removed
 
@@ -38,6 +40,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 [!293]: https://gitlab.com/spade-lang/spade/-/merge_requests/293
 [!294]: https://gitlab.com/spade-lang/spade/-/merge_requests/294
 [!297]: https://gitlab.com/spade-lang/spade/-/merge_requests/297
+[!299]: https://gitlab.com/spade-lang/spade/-/merge_requests/299
 [!300]: https://gitlab.com/spade-lang/spade/-/merge_requests/300
 
 ## [0.7.0] - 2024-03-21
