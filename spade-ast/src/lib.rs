@@ -3,7 +3,7 @@ use num::{BigInt, BigUint, Zero};
 use spade_common::{
     location_info::{Loc, WithLocation},
     name::{Identifier, Path},
-    num_ext::{InfallibleToBigInt, InfallibleToBigUint},
+    num_ext::InfallibleToBigInt,
 };
 
 pub mod comptime;
@@ -57,7 +57,7 @@ impl WithLocation for Pattern {}
 // Helper constructors for writing neater tests
 impl Pattern {
     pub fn integer(val: i32) -> Self {
-        Pattern::Integer(IntLiteral::Signed(val.to_bigint()))
+        Pattern::Integer(IntLiteral::Unsized(val.to_bigint()))
     }
     pub fn name(name: &str) -> Loc<Self> {
         Pattern::Path(Path(vec![Identifier(name.to_string()).nowhere()]).nowhere()).nowhere()
@@ -207,11 +207,7 @@ impl WithLocation for Expression {}
 
 impl Expression {
     pub fn int_literal_signed(val: i32) -> Self {
-        Self::IntLiteral(IntLiteral::Signed(val.to_bigint()))
-    }
-
-    pub fn int_literal_unsigned(val: u32) -> Self {
-        Self::IntLiteral(IntLiteral::Unsigned(val.to_biguint()))
+        Self::IntLiteral(IntLiteral::unsized_(val))
     }
 
     pub fn as_int_literal(self) -> Option<IntLiteral> {
@@ -270,23 +266,24 @@ impl Expression {
 /// it being an unsigned literal.
 #[derive(PartialEq, Debug, Clone)]
 pub enum IntLiteral {
-    Signed(BigInt),
-    Unsigned(BigUint),
+    Unsized(BigInt),
+    Signed { val: BigInt, size: BigUint },
+    Unsigned { val: BigUint, size: BigUint },
 }
 impl WithLocation for IntLiteral {}
 
 impl IntLiteral {
-    pub fn signed(val: i32) -> IntLiteral {
-        IntLiteral::Signed(val.to_bigint())
+    pub fn unsized_(val: i32) -> IntLiteral {
+        IntLiteral::Unsized(val.to_bigint())
     }
 
     /// Returns this number as a signed number. Unsigned numbers are losslessly converted to
     /// signed
     pub fn as_signed(self) -> BigInt {
         match self {
-            IntLiteral::Signed(val) => val,
-            // NOTE: Safe unwrap. This can't fail
-            IntLiteral::Unsigned(val) => val.to_bigint(),
+            IntLiteral::Signed { val, size: _ } => val,
+            IntLiteral::Unsigned { val, size: _ } => val.to_bigint(),
+            IntLiteral::Unsized(val) => val,
         }
     }
 
@@ -294,14 +291,14 @@ impl IntLiteral {
     // None
     pub fn as_unsigned(self) -> Option<BigUint> {
         match self {
-            IntLiteral::Signed(val) => {
+            IntLiteral::Signed { val, size: _ } | IntLiteral::Unsized(val) => {
                 if val >= BigInt::zero() {
                     Some(val.to_biguint().unwrap())
                 } else {
                     None
                 }
             }
-            IntLiteral::Unsigned(val) => Some(val),
+            IntLiteral::Unsigned { val, size: _ } => Some(val),
         }
     }
 }

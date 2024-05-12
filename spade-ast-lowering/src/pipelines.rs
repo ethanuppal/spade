@@ -179,7 +179,7 @@ mod pipeline_visiting {
     use super::*;
 
     use ast::comptime::MaybeComptime;
-    use hir::symbol_table::SymbolTable;
+    use hir::{expression::IntLiteralKind, symbol_table::SymbolTable};
     use spade_ast::testutil::ast_ident;
     use spade_common::{
         id_tracker::{ExprIdTracker, ImplIdTracker},
@@ -196,7 +196,7 @@ mod pipeline_visiting {
             head: ast::UnitHead {
                 name: ast_ident("pipe"),
                 unit_kind: ast::UnitKind::Pipeline(
-                    MaybeComptime::Raw(ast::IntLiteral::Signed(2.to_bigint()).nowhere()).nowhere(),
+                    MaybeComptime::Raw(ast::IntLiteral::Unsized(2.to_bigint()).nowhere()).nowhere(),
                 )
                 .nowhere(),
                 inputs: ast::ParameterList::without_self(vec![(
@@ -245,7 +245,7 @@ mod pipeline_visiting {
             hir::Statement::named_let(
                 2,
                 name_id(2, "a"),
-                hir::ExprKind::IntLiteral(0.to_bigint()).with_id(3),
+                hir::ExprKind::IntLiteral(0.to_bigint(), IntLiteralKind::Unsized).with_id(3),
             )
             .nowhere(),
             hir::Statement::PipelineRegMarker(None).nowhere(),
@@ -291,7 +291,7 @@ mod pipeline_visiting {
             head: ast::UnitHead {
                 name: ast_ident("pipe"),
                 unit_kind: ast::UnitKind::Pipeline(
-                    MaybeComptime::Raw(ast::IntLiteral::Signed(2.to_bigint()).nowhere()).nowhere(),
+                    MaybeComptime::Raw(ast::IntLiteral::Unsized(2.to_bigint()).nowhere()).nowhere(),
                 )
                 .nowhere(),
                 inputs: ast::ParameterList::without_self(vec![(
@@ -340,7 +340,7 @@ mod pipeline_visiting {
             hir::Statement::named_let(
                 2,
                 name_id(2, "a"),
-                hir::ExprKind::IntLiteral(0.to_bigint()).with_id(3),
+                hir::ExprKind::IntLiteral(0.to_bigint(), IntLiteralKind::Unsized).with_id(3),
             )
             .nowhere(),
             hir::Statement::PipelineRegMarker(None).nowhere(),

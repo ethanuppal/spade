@@ -4,7 +4,7 @@ use spade_common::name::Identifier;
 use spade_common::num_ext::{InfallibleToBigInt, InfallibleToBigUint};
 use spade_diagnostics::diagnostic::DiagnosticLevel;
 use spade_diagnostics::{diag_anyhow, Diagnostic};
-use spade_hir::expression::{BinaryOperator, NamedArgument, UnaryOperator};
+use spade_hir::expression::{BinaryOperator, IntLiteralKind, NamedArgument, UnaryOperator};
 use spade_hir::{ExprKind, Expression};
 use spade_macros::trace_typechecker;
 use spade_types::KnownType;
@@ -96,8 +96,22 @@ impl TypeState {
     #[trace_typechecker]
     #[tracing::instrument(level = "trace", skip_all)]
     pub fn visit_int_literal(&mut self, expression: &Loc<Expression>, ctx: &Context) -> Result<()> {
-        assuming_kind!(ExprKind::IntLiteral(value) = &expression => {
-            let (t, _size) = self.new_generic_number(ctx);
+        assuming_kind!(ExprKind::IntLiteral(value, kind) = &expression => {
+            let (t, _size) = match kind {
+                IntLiteralKind::Unsized => self.new_generic_number(ctx),
+                IntLiteralKind::Signed(size) => {
+                    let (t, size_var) = self.new_split_generic_int(expression.loc(), ctx.symtab);
+                    // NOTE: Safe unwrap, we're unifying a generic int with a size
+                    self.unify(&size_var, &KnownType::Integer(size.clone()).at_loc(expression), ctx).unwrap();
+                    (t, size_var)
+                },
+                IntLiteralKind::Unsigned(size) => {
+                    let (t, size_var) = self.new_split_generic_uint(expression.loc(), ctx.symtab);
+                    // NOTE: Safe unwrap, we're unifying a generic int with a size
+                    self.unify(&size_var, &KnownType::Integer(size.clone()).at_loc(expression), ctx).unwrap();
+                    (t, size_var)
+                }
+            };
             self.unify(&t, &expression.inner, ctx)
                 .into_diagnostic(expression.loc(), |diag, Tm{e: _, g: _got}| {
                     diag

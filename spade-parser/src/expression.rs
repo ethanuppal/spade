@@ -1,5 +1,5 @@
 use num::ToPrimitive;
-use spade_ast::{ArgumentList, BinaryOperator, CallKind, Expression, IntLiteral, UnaryOperator};
+use spade_ast::{ArgumentList, BinaryOperator, CallKind, Expression, UnaryOperator};
 use spade_common::location_info::{Loc, WithLocation};
 use spade_diagnostics::Diagnostic;
 use spade_macros::trace_parser;
@@ -203,15 +203,7 @@ impl<'a> Parser<'a> {
         } else if let Some(val) = self.bit_literal()? {
             Ok(val.map(Expression::BitLiteral))
         } else if let Some(val) = self.int_literal()? {
-            match &val.inner {
-                spade_ast::IntLiteral::Signed(v) => {
-                    Ok(Expression::IntLiteral(IntLiteral::Signed(v.clone())))
-                }
-                spade_ast::IntLiteral::Unsigned(v) => {
-                    Ok(Expression::IntLiteral(IntLiteral::Unsigned(v.clone())))
-                }
-            }
-            .map(|v| v.at_loc(&val))
+            Ok(Expression::IntLiteral(val.inner.clone())).map(|v| v.at_loc(&val))
         } else if let Some(block) = self.block(false)? {
             Ok(block.map(Box::new).map(Expression::Block))
         } else if let Some(if_expr) = self.if_expression()? {
@@ -1041,7 +1033,7 @@ mod test {
         check_parse!(code, expression, Ok(expected), |p: &mut Parser| {
             p.set_item_context(
                 UnitKind::Pipeline(
-                    MaybeComptime::Raw(IntLiteral::Unsigned(5u32.into()).nowhere()).nowhere(),
+                    MaybeComptime::Raw(IntLiteral::Unsized(5u32.into()).nowhere()).nowhere(),
                 )
                 .nowhere(),
             )
@@ -1063,7 +1055,7 @@ mod test {
         check_parse!(code, expression, Ok(expected), |p: &mut Parser| {
             p.set_item_context(
                 UnitKind::Pipeline(
-                    MaybeComptime::Raw(IntLiteral::Unsigned(6u32.into()).nowhere()).nowhere(),
+                    MaybeComptime::Raw(IntLiteral::Unsized(6u32.into()).nowhere()).nowhere(),
                 )
                 .nowhere(),
             )
@@ -1085,7 +1077,7 @@ mod test {
         check_parse!(code, expression, Ok(expected), |p: &mut Parser| {
             p.set_item_context(
                 UnitKind::Pipeline(
-                    MaybeComptime::Raw(IntLiteral::Unsigned(6u32.into()).nowhere()).nowhere(),
+                    MaybeComptime::Raw(IntLiteral::Unsized(6u32.into()).nowhere()).nowhere(),
                 )
                 .nowhere(),
             )

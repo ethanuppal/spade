@@ -147,9 +147,16 @@ pub enum BitLiteral {
 }
 
 #[derive(PartialEq, Debug, Clone, Serialize, Deserialize)]
+pub enum IntLiteralKind {
+    Unsized,
+    Signed(BigUint),
+    Unsigned(BigUint),
+}
+
+#[derive(PartialEq, Debug, Clone, Serialize, Deserialize)]
 pub enum ExprKind {
     Identifier(NameID),
-    IntLiteral(BigInt),
+    IntLiteral(BigInt, IntLiteralKind),
     BoolLiteral(bool),
     BitLiteral(BitLiteral),
     TypeLevelInteger(NameID),
@@ -215,7 +222,7 @@ impl ExprKind {
     }
 
     pub fn int_literal(val: i32) -> Self {
-        Self::IntLiteral(val.to_bigint())
+        Self::IntLiteral(val.to_bigint(), IntLiteralKind::Unsized)
     }
 }
 
@@ -264,7 +271,7 @@ impl LocExprExt for Loc<Expression> {
         match &self.kind {
             ExprKind::Identifier(_) => Some(self.clone()),
             ExprKind::TypeLevelInteger(_) => None,
-            ExprKind::IntLiteral(_) => None,
+            ExprKind::IntLiteral(_, _) => None,
             ExprKind::BoolLiteral(_) => None,
             ExprKind::BitLiteral(_) => Some(self.clone()),
             ExprKind::TupleLiteral(inner) => {

@@ -1,0 +1,22 @@
+---
+source: spade-tests/src/typeinference.rs
+---
+fn test() {
+    let x: uint<16> = 10u32;
+}
+
+
+error: Expected type uint<16>, got uint<32>
+  ┌─ testinput:2:23
+  │
+2 │     let x: uint<16> = 10u32;
+  │                 --    ^^^^^ Expected uint<16>
+  │                 │      
+  │                 Type 16 inferred here
+  │
+  = note: Expected: 16
+                in: uint<16>
+               Got: 32
+                in: uint<32>
+
+

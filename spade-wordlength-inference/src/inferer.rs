@@ -91,7 +91,8 @@ impl<'a> Inferer<'a> {
     pub fn expression(&mut self, expr: &Loc<Expression>) -> Res {
         let maybe_eq = match &expr.inner.kind {
             ExprKind::Identifier(_) => self.find_or_create(expr).map(Equation::V),
-            ExprKind::IntLiteral(literal) => Some(Equation::Constant(Range::new(
+            ExprKind::IntLiteral(literal, _) => Some(Equation::Constant(Range::new(
+                // FIXME: Use size
                 literal.clone(),
                 literal.clone(),
             ))),

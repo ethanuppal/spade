@@ -1089,7 +1089,7 @@ impl ExprLocal for Loc<Expression> {
                 Substitution::Available(current) => Ok(Some(current.value_name())),
                 Substitution::Port | Substitution::ZeroSized => Ok(Some(ident.value_name())),
             },
-            ExprKind::IntLiteral(_) => Ok(None),
+            ExprKind::IntLiteral(_, _) => Ok(None),
             ExprKind::TypeLevelInteger(_) => Ok(None),
             ExprKind::BoolLiteral(_) => Ok(None),
             ExprKind::BitLiteral(_) => Ok(None),
@@ -1162,7 +1162,7 @@ impl ExprLocal for Loc<Expression> {
             ExprKind::Identifier(_) => {
                 // Empty. The identifier will be defined elsewhere
             }
-            ExprKind::IntLiteral(value) => {
+            ExprKind::IntLiteral(value, _) => {
                 let ty = self_type;
                 result.push_primary(
                     mir::Statement::Constant(self.id, ty, mir::ConstantValue::Int(value.clone())),
@@ -1287,7 +1287,7 @@ impl ExprLocal for Loc<Expression> {
                     BinaryOperator::BitwiseXor => binop_builder!(BitwiseXor),
                     BinaryOperator::Div => {
                         match &rhs.inner.kind {
-                            ExprKind::IntLiteral(val) => {
+                            ExprKind::IntLiteral(val, _) => {
                                 let val_u128 = val.to_u128()
                                     .ok_or_else(|| Diagnostic::error(
                                         rhs.loc(),
@@ -1321,7 +1321,7 @@ impl ExprLocal for Loc<Expression> {
                     }
                     BinaryOperator::Mod => {
                         match &rhs.inner.kind {
-                            ExprKind::IntLiteral(val) => {
+                            ExprKind::IntLiteral(val, _) => {
                                 let val_u128 = val.to_u128()
                                     .ok_or_else(|| Diagnostic::error(
                                         rhs.loc(),

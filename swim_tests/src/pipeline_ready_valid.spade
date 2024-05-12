@@ -25,9 +25,9 @@ pipeline(4) ready_valid_pipeline(clk: clock, val: int<8>, enables: &[bool; 4]) -
         let s1 = &RV$(valid: stage.valid, ready: stage.ready);
     reg[(*enables)[1]];
         let s2 = &RV$(valid: stage.valid, ready: stage.ready);
-    reg[(*enables)[2u]];
+    reg[(*enables)[2]];
         let s3 = &RV$(valid: stage.valid, ready: stage.ready);
-    reg[(*enables)[3u]];
+    reg[(*enables)[3]];
         let s4 = &RV$(valid: stage.valid, ready: stage.ready);
         Output $(
             s0_valid: (*s0).valid,
@@ -56,8 +56,8 @@ pipeline(4) stalled_integer_producer(clk: clock, rst: bool, enables: &[bool; 4])
         let out = if stage.ready {out_reg} else {0};
     reg[(*enables)[0]];
     reg[(*enables)[1]];
-    reg[(*enables)[2u]];
-    reg[(*enables)[3u]];
+    reg[(*enables)[2]];
+    reg[(*enables)[3]];
         StalledOut $(
             valid: stage.valid && !rst,
             val: out

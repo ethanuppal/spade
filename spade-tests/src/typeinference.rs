@@ -1465,3 +1465,30 @@ snapshot_error! {
         }
     "
 }
+
+snapshot_error! {
+    signed_integer_constraint_gives_error_on_mismatch,
+    "
+    fn test() {
+        let x: int<16> = 10i32;
+    }
+    "
+}
+
+snapshot_error! {
+    unsigned_integer_constraint_gives_error_on_mismatch,
+    "
+    fn test() {
+        let x: uint<16> = 10u32;
+    }
+    "
+}
+
+snapshot_error! {
+    unsigned_integer_constraint_gives_error_on_signedness_mismatch,
+    "
+    fn test() {
+        let x: int<16> = 10u32;
+    }
+    "
+}

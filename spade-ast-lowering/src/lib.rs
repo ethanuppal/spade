@@ -29,7 +29,7 @@ use crate::attributes::AttributeListExt;
 use crate::pipelines::maybe_perform_pipelining_tasks;
 use crate::types::IsPort;
 use ast::{Binding, ParameterList, UnitKind};
-use hir::expression::BinaryOperator;
+use hir::expression::{BinaryOperator, IntLiteralKind};
 use hir::symbol_table::{LookupError, SymbolTable, Thing, TypeSymbol};
 pub use spade_common::id_tracker;
 
@@ -1348,7 +1348,12 @@ pub fn visit_expression(e: &ast::Expression, ctx: &mut Context) -> Result<hir::E
 
     match e {
         ast::Expression::IntLiteral(val) => {
-            Ok(hir::ExprKind::IntLiteral(val.clone().as_signed()))
+            let kind = match val {
+                ast::IntLiteral::Unsized(_) => IntLiteralKind::Unsized,
+                ast::IntLiteral::Signed { val: _, size } => IntLiteralKind::Signed(size.clone()),
+                ast::IntLiteral::Unsigned { val: _, size } => IntLiteralKind::Unsigned(size.clone()),
+            };
+            Ok(hir::ExprKind::IntLiteral(val.clone().as_signed(), kind))
         },
         ast::Expression::BoolLiteral(val) => Ok(hir::ExprKind::BoolLiteral(*val)),
         ast::Expression::BitLiteral(lit) => {
@@ -2708,7 +2713,7 @@ mod expression_visiting {
         let input = ast::Expression::Call {
             kind: ast::CallKind::Pipeline(
                 ().nowhere(),
-                MaybeComptime::Raw(ast::IntLiteral::Signed(2.to_bigint()).nowhere()).nowhere(),
+                MaybeComptime::Raw(ast::IntLiteral::Unsized(2.to_bigint()).nowhere()).nowhere(),
             ),
             callee: ast_path("test"),
             args: ast::ArgumentList::Positional(vec![

@@ -369,15 +369,24 @@ impl<'a> Parser<'a> {
                 | TokenKind::BinInteger(val) => {
                     let (val_int, val_signed) = val;
 
-                    let inner = match val_signed {
-                        LiteralKind::Signed => {
-                            if plusminus.as_ref().map(|tok| &tok.kind) == Some(&TokenKind::Minus) {
-                                IntLiteral::Signed(-val_int.to_bigint())
-                            } else {
-                                IntLiteral::Signed(val_int.to_bigint())
-                            }
+                    let signed_val = || {
+                        if plusminus.as_ref().map(|tok| &tok.kind) == Some(&TokenKind::Minus) {
+                            -val_int.to_bigint()
+                        } else {
+                            val_int.to_bigint()
                         }
-                        LiteralKind::Unsigned => IntLiteral::Unsigned(val_int.clone()),
+                    };
+
+                    let inner = match val_signed {
+                        LiteralKind::Signed(size) => IntLiteral::Signed {
+                            val: signed_val(),
+                            size: size.clone(),
+                        },
+                        LiteralKind::Unsized => IntLiteral::Unsized(signed_val()),
+                        LiteralKind::Unsigned(size) => IntLiteral::Unsigned {
+                            val: val_int.clone(),
+                            size: size.clone(),
+                        },
                     };
                     let loc = if let Some(pm) = plusminus {
                         ().between(self.file_id, &pm, &token)
@@ -2819,50 +2828,28 @@ mod tests {
     #[test]
     fn dec_int_literals_work() {
         let code = "1";
-        let expected = IntLiteral::signed(1).nowhere();
-
-        check_parse!(code, int_literal, Ok(Some(expected)));
-    }
-    #[test]
-    fn dec_uint_literals_work() {
-        let code = "1u";
-        let expected = IntLiteral::Unsigned(1u32.to_biguint()).nowhere();
+        let expected = IntLiteral::unsized_(1).nowhere();
 
         check_parse!(code, int_literal, Ok(Some(expected)));
     }
     #[test]
     fn dec_negative_int_literals_work() {
         let code = "-1";
-        let expected = IntLiteral::signed(-1).nowhere();
+        let expected = IntLiteral::unsized_(-1).nowhere();
 
         check_parse!(code, int_literal, Ok(Some(expected)));
     }
     #[test]
     fn hex_int_literals_work() {
         let code = "0xff";
-        let expected = IntLiteral::signed(255).nowhere();
-
-        check_parse!(code, int_literal, Ok(Some(expected)));
-    }
-    #[test]
-    fn hex_uint_literals_work() {
-        let code = "0xffu";
-        let expected = IntLiteral::Unsigned(255u32.to_biguint()).nowhere();
+        let expected = IntLiteral::unsized_(255).nowhere();
 
         check_parse!(code, int_literal, Ok(Some(expected)));
     }
     #[test]
     fn bin_int_literals_work() {
         let code = "0b101";
-        let expected = IntLiteral::signed(5).nowhere();
-
-        check_parse!(code, int_literal, Ok(Some(expected)));
-    }
-
-    #[test]
-    fn bin_uint_literals_work() {
-        let code = "0b101u";
-        let expected = IntLiteral::Unsigned(5u32.to_biguint()).nowhere();
+        let expected = IntLiteral::unsized_(5).nowhere();
 
         check_parse!(code, int_literal, Ok(Some(expected)));
     }
@@ -2939,7 +2926,7 @@ mod tests {
                     inputs: ParameterList::without_self(vec![]).nowhere(),
                     output_type: None,
                     unit_kind: UnitKind::Pipeline(
-                        MaybeComptime::Raw(IntLiteral::signed(1).nowhere()).nowhere(),
+                        MaybeComptime::Raw(IntLiteral::unsized_(1).nowhere()).nowhere(),
                     )
                     .nowhere(),
                     type_params: vec![],
@@ -3034,7 +3021,7 @@ mod tests {
                 head: UnitHead {
                     attributes: AttributeList(vec![Attribute::NoMangle.nowhere()]),
                     unit_kind: UnitKind::Pipeline(
-                        MaybeComptime::Raw(IntLiteral::signed(2).nowhere()).nowhere(),
+                        MaybeComptime::Raw(IntLiteral::unsized_(2).nowhere()).nowhere(),
                     )
                     .nowhere(),
                     name: ast_ident("test"),
@@ -3176,7 +3163,7 @@ mod tests {
             head: UnitHead {
                 attributes: AttributeList::empty(),
                 unit_kind: UnitKind::Pipeline(
-                    MaybeComptime::Raw(IntLiteral::signed(2).nowhere()).nowhere(),
+                    MaybeComptime::Raw(IntLiteral::unsized_(2).nowhere()).nowhere(),
                 )
                 .nowhere(),
                 name: ast_ident("test"),
@@ -3227,7 +3214,7 @@ mod tests {
             head: UnitHead {
                 attributes: AttributeList::empty(),
                 unit_kind: UnitKind::Pipeline(
-                    MaybeComptime::Raw(IntLiteral::signed(2).nowhere()).nowhere(),
+                    MaybeComptime::Raw(IntLiteral::unsized_(2).nowhere()).nowhere(),
                 )
                 .nowhere(),
                 name: ast_ident("test"),
@@ -3264,7 +3251,7 @@ mod tests {
                     head: UnitHead {
                         attributes: AttributeList::empty(),
                         unit_kind: UnitKind::Pipeline(
-                            MaybeComptime::Raw(IntLiteral::signed(2).nowhere()).nowhere(),
+                            MaybeComptime::Raw(IntLiteral::unsized_(2).nowhere()).nowhere(),
                         )
                         .nowhere(),
                         name: ast_ident("test"),
@@ -3294,7 +3281,7 @@ mod tests {
         let expected = Expression::Call {
             kind: CallKind::Pipeline(
                 ().nowhere(),
-                MaybeComptime::Raw(IntLiteral::signed(2).nowhere()).nowhere(),
+                MaybeComptime::Raw(IntLiteral::unsized_(2).nowhere()).nowhere(),
             ),
             callee: ast_path("some_pipeline"),
             args: ArgumentList::Positional(vec![

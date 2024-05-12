@@ -460,7 +460,7 @@ impl TypeState {
             ExprKind::TypeLevelInteger(_) => {
                 self.visit_type_level_integer(expression, generic_list, ctx)?
             }
-            ExprKind::IntLiteral(_) => self.visit_int_literal(expression, ctx)?,
+            ExprKind::IntLiteral(_, _) => self.visit_int_literal(expression, ctx)?,
             ExprKind::BoolLiteral(_) => self.visit_bool_literal(expression, ctx)?,
             ExprKind::BitLiteral(_) => self.visit_bit_literal(expression, ctx)?,
             ExprKind::TupleLiteral(_) => self.visit_tuple_literal(expression, ctx, generic_list)?,
@@ -2104,6 +2104,7 @@ mod tests {
     use crate::testutil::{sized_int, unsized_int};
     use crate::{ensure_same_type, get_type, HasType};
     use crate::{fixed_types::t_clock, hir};
+    use hir::expression::IntLiteralKind;
     use hir::hparams;
     use hir::symbol_table::TypeDeclKind;
     use hir::PatternKind;
@@ -2436,7 +2437,9 @@ mod tests {
         let input = hir::Statement::binding(
             PatternKind::name(name_id(0, "a")).with_id(10).nowhere(),
             Some(dtype!(symtab => "int"; (t_num(5)))),
-            ExprKind::IntLiteral(0.to_bigint()).with_id(0).nowhere(),
+            ExprKind::IntLiteral(0.to_bigint(), IntLiteralKind::Unsized)
+                .with_id(0)
+                .nowhere(),
         )
         .nowhere();
 
@@ -2468,7 +2471,9 @@ mod tests {
             reset: None,
             initial: None,
             value: ExprKind::TupleLiteral(vec![
-                ExprKind::IntLiteral(5.to_bigint()).with_id(1).nowhere(),
+                ExprKind::IntLiteral(5.to_bigint(), IntLiteralKind::Unsized)
+                    .with_id(1)
+                    .nowhere(),
                 ExprKind::BoolLiteral(true).with_id(2).nowhere(),
             ])
             .with_id(3)

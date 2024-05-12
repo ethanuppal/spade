@@ -551,7 +551,7 @@ impl PipelineAvailability for ExprKind {
     fn available_in(&self) -> Result<usize> {
         match self {
             ExprKind::Identifier(_) => Ok(0),
-            ExprKind::IntLiteral(_) => Ok(0),
+            ExprKind::IntLiteral(_, _) => Ok(0),
             ExprKind::TypeLevelInteger(_) => Ok(0),
             ExprKind::BoolLiteral(_) => Ok(0),
             ExprKind::BitLiteral(_) => Ok(0),
