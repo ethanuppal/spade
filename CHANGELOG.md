@@ -9,7 +9,7 @@ released as a new version.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
-## [Unreleased]
+## [0.8.0] - 2024-05-14
 
 ### Added
 - [!288][!288] Implement binary reduction operations in std::ops
@@ -29,8 +29,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - [!300][!300] Fix expected `stage.ready` or `stage.valid` diagnostic
 - [!299][!299] Pipeline References now work in blocks
 - [!299][!299] Prevent Pipeline references from laundering variables before they were declared 
-
-### Removed
 
 
 [!244]: https://gitlab.com/spade-lang/spade/-/merge_requests/244
@@ -242,7 +240,8 @@ Initial numbered version
 
 [Associated Swim release](https://gitlab.com/spade-lang/swim/-/tree/v0.1.0)
 
-[Unreleased]: https://gitlab.com/spade-lang/spade/-/compare/v0.7.0...master
+[Unreleased]: https://gitlab.com/spade-lang/spade/-/compare/v0.8.0...main
+[0.8.0]: https://gitlab.com/spade-lang/spade/-/compare/v0.8.0...v0.7.0
 [0.7.0]: https://gitlab.com/spade-lang/spade/-/compare/v0.7.0...v0.6.0
 [0.6.0]: https://gitlab.com/spade-lang/spade/-/compare/v0.5.0...v0.6.0
 [0.5.0]: https://gitlab.com/spade-lang/spade/-/compare/v0.4.0...v0.5.0
