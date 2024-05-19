@@ -6,6 +6,7 @@ variables:
     # Faster zipping helping with cache sync speeds (https://gitlab.com/gitlab-org/gitlab-runner/-/issues/1797)
     FF_USE_FASTZIP: "true"
     CACHE_COMPRESSION_LEVEL: fast
+    RUSTFLAGS: "-D warnings"
 
 # Only run pipelines for merge requests, tags, and the default branch.
 # https://docs.gitlab.com/ee/ci/pipelines/merge_request_pipelines.html#use-rules-to-add-jobs
@@ -29,6 +30,9 @@ cache:
 
 check:clippy:
     stage: test
+    variables:
+      # Override the -D warnings for clippy
+      RUSTFLAGS: ""
     image: "rust:$RUST_VERSION"
     before_script:
         - rustup component add clippy
@@ -61,6 +65,19 @@ test:linux-latest:
         - rustc -V
     script:
         - cargo test --workspace --exclude spade-cxx --color=always
+        - cargo doc --no-deps
+
+test:linux-nightly:
+    allow_failure: true
+    stage: test
+    image: "alpine:latest"
+    before_script:
+        - apk add build-base rustup
+        - rustup-init --default-toolchain nightly -y
+        - source cargo/env
+    script:
+        - cargo build -p spade
+        - cargo test --color=always
         - cargo doc --no-deps
 
 test:macos-aarch64:

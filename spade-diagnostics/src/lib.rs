@@ -396,6 +396,6 @@ mod tests {
         let mut emitter = CodespanEmitter;
         let diagnostic = Diagnostic::bug(sp, "oof");
         emitter.emit_diagnostic(&diagnostic, &mut buffer, &code);
-        insta::assert_display_snapshot!(String::from_utf8(buffer.into_inner()).unwrap());
+        insta::assert_snapshot!(String::from_utf8(buffer.into_inner()).unwrap());
     }
 }

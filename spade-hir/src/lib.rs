@@ -539,11 +539,6 @@ impl Item {
     }
 }
 
-#[derive(PartialEq, Debug, Clone)]
-struct Trait {
-    fns: HashMap<Identifier, UnitHead>,
-}
-
 /// Items which have associated code that can be executed. This is different from
 /// type declarations which are items, but which do not have code on their own
 #[derive(PartialEq, Debug, Clone, Serialize, Deserialize)]

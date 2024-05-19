@@ -429,18 +429,8 @@ impl MaybeConst {
     }
 }
 
-trait OptionExt {
-    fn or_const_false(self) -> MaybeConst;
-    fn or_const_true(self) -> MaybeConst;
-}
+#[local_impl::local_impl]
 impl OptionExt for Option<ValueName> {
-    fn or_const_false(self) -> MaybeConst {
-        match self {
-            Some(v) => MaybeConst::Val(v),
-            None => MaybeConst::Const(false),
-        }
-    }
-
     fn or_const_true(self) -> MaybeConst {
         match self {
             Some(v) => MaybeConst::Val(v),

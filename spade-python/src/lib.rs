@@ -1,9 +1,9 @@
-use pyo3::{pymodule, types::PyModule, PyResult, Python};
+use pyo3::{pymodule, types::PyModule, Bound, PyResult, Python};
 use spade_simulation_ext::{BitString, ComparisonResult, SpadeType};
 
 /// A Python module implemented in Rust.
 #[pymodule]
-fn spade(_py: Python, m: &PyModule) -> PyResult<()> {
+fn spade(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<spade_simulation_ext::Spade>()?;
     m.add_class::<BitString>()?;
     m.add_class::<SpadeType>()?;
