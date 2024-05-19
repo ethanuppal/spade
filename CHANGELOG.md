@@ -13,11 +13,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Added
 
+- [!307][!307] Allow specifying command line arguments via a json file
+
 ### Changed
 
 ### Fixed
 
 ### Removed
+
+[!307]: https://gitlab.com/spade-lang/spade/-/merge_requests/307
 
 ## [0.8.0] - 2024-05-14
 

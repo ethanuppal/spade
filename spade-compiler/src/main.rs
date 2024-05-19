@@ -4,7 +4,8 @@ use std::path::PathBuf;
 
 use clap::Parser;
 use codespan_reporting::term::termcolor::Buffer;
-use color_eyre::eyre::{anyhow, Context, Result};
+use color_eyre::eyre::{anyhow, bail, Context, Result};
+use serde::Deserialize;
 use spade_diagnostics::emitter::CodespanEmitter;
 use spade_diagnostics::DiagHandler;
 use tracing_subscriber::filter::{EnvFilter, LevelFilter};
@@ -12,15 +13,17 @@ use tracing_subscriber::prelude::*;
 use tracing_tree::HierarchicalLayer;
 
 use spade::{
-    namespaced_file::{namespaced_file, NamespacedFile},
+    namespaced_file::{dummy_file, namespaced_file, NamespacedFile},
     wordlength_inference_method, ModuleNamespace,
 };
 
-#[derive(Parser)]
+#[derive(Deserialize, Parser)]
 #[structopt(name = "spade", about = "Compiler for the spade language")]
 pub struct Opt {
+    #[serde(skip, default = "dummy_file")]
     #[arg(name = "INPUT_FILE", value_parser(namespaced_file))]
     pub infile: NamespacedFile,
+    #[serde(skip, default)]
     #[arg(name = "EXTRA_FILES", value_parser(namespaced_file))]
     pub extra_files: Vec<NamespacedFile>,
     #[structopt(short = 'o')]
@@ -38,6 +41,7 @@ pub struct Opt {
     /// Use (currently experimental) affine arithmetic to check integer bounds stricter than
     /// previously possible. Expects either "IA", "AA" or "AAIA" - leave empty for a sane default
     /// value. This flag overwrites the `SPADE_INFER_METHOD` environment variable.
+    #[serde(skip)]
     #[structopt(long = "wl-infer-method", value_parser(wordlength_inference_method))]
     pub wl_infer_method: Option<spade_wordlength_inference::InferMethod>,
 
@@ -57,6 +61,16 @@ pub struct Opt {
     /// Print a traceback of the parser if parsing fails
     #[structopt(long = "print-parse-traceback")]
     pub print_parse_traceback: bool,
+
+    /// Read the arguments from the specified `.json` file instead of parsing the
+    /// command line arguments
+    #[structopt(long)]
+    command_file: Option<PathBuf>,
+
+    /// When command_file is used, use this field to specify a list of strings that will
+    /// be decoded to NamespacedFile instead of using `infile` and `extra_files`
+    #[structopt(skip)]
+    files: Vec<String>,
 }
 
 fn main() -> Result<()> {
@@ -71,6 +85,27 @@ fn main() -> Result<()> {
     tracing_subscriber::registry().with(layer).init();
 
     let mut opts = Opt::parse();
+
+    if let Some(command_file) = opts.command_file {
+        let content = std::fs::read_to_string(&command_file)
+            .with_context(|| format!("Failed to read commands from {command_file:?}"))?;
+        opts = serde_json::from_str(&content)
+            .with_context(|| format!("Failed to decode {command_file:?}"))?;
+
+        let files = opts
+            .files
+            .iter()
+            .map(|s| namespaced_file(&s).map_err(|e| anyhow!("{e}")))
+            .collect::<Result<Vec<_>>>()
+            .with_context(|| format!("Failed to decode file list in {command_file:?}"))?;
+
+        if files.is_empty() {
+            bail!("File list in {command_file:?} contains no files")
+        }
+
+        opts.infile = files[0].clone();
+        opts.extra_files = files[1..].to_vec();
+    }
 
     let mut infiles = vec![opts.infile.clone()];
     infiles.append(&mut opts.extra_files);

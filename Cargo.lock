@@ -1014,6 +1014,7 @@ dependencies = [
  "prettydiff",
  "ron",
  "serde",
+ "serde_json",
  "spade-ast",
  "spade-ast-lowering",
  "spade-common",

@@ -60,6 +60,10 @@ pub fn namespaced_file(arg: &str) -> Result<NamespacedFile, String> {
     }
 }
 
+pub fn dummy_file() -> NamespacedFile {
+    namespaced_file("a,a,a.spade").unwrap()
+}
+
 #[cfg(test)]
 mod tests {
     use spade_common::{
