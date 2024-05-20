@@ -85,10 +85,7 @@ pub fn format_trace_stack(type_state: &TypeState) -> String {
                     maybe_replaced(lhs),
                     maybe_replaced(rhs),
                     maybe_replaced(result),
-                    replaced
-                        .iter()
-                        .map(|t| format!("{}", maybe_replaced(t)))
-                        .join(",")
+                    replaced.iter().map(maybe_replaced).join(",")
                 )
             }
             TraceStackEntry::TryingUnify(lhs, rhs) => {

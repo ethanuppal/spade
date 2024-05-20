@@ -152,7 +152,7 @@ pub fn group_missing_constructors(
         .filter(|ctor| {
             !non_wildcard_other
                 .iter()
-                .any(|other| ctor.is_covered_by(&other))
+                .any(|other| ctor.is_covered_by(other))
         })
         .cloned()
         .collect::<Vec<_>>();

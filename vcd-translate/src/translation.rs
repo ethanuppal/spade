@@ -127,8 +127,7 @@ fn translate_unsigned_int(value: &[Value]) -> MaybeValue<BigUint> {
     } else if value.contains(&Value::Z) {
         MaybeValue::HighImpedance
     } else {
-        let uint_val = translate_uint(&value, false);
-        uint_val
+        translate_uint(value, false)
     }
 }
 

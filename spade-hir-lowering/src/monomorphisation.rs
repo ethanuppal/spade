@@ -177,7 +177,7 @@ pub fn compile_items(
                 };
 
                 if let Some(generic_list_token) = &generic_list_token {
-                    let generic_list = type_state.get_generic_list(&generic_list_token).clone();
+                    let generic_list = type_state.get_generic_list(generic_list_token).clone();
                     for (source_param, new) in u.head.type_params.iter().zip(item.params.iter()) {
                         let source_var = &generic_list[&source_param.name_id()];
 

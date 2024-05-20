@@ -357,7 +357,7 @@ impl Requirement {
                                 Replacement {
                                     from: ty.clone(),
                                     to: TypeVar::Known(
-                                        loc.clone(),
+                                        *loc,
                                         base.inner.clone(),
                                         first_params
                                             .iter()

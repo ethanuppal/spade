@@ -165,7 +165,7 @@ impl TypeState {
         &'a self,
         generic_list_token: &'a GenericListToken,
     ) -> &'a HashMap<NameID, TypeVar> {
-        &self.generic_lists[&generic_list_token]
+        &self.generic_lists[generic_list_token]
     }
 
     #[tracing::instrument(level = "trace", skip_all)]
@@ -685,8 +685,8 @@ impl TypeState {
         );
 
         self.add_requirement(Requirement::SharedBase(vec![
-            lhs_type.at_loc(&args[0].value),
-            rhs_type.at_loc(&args[1].value),
+            lhs_type.at_loc(args[0].value),
+            rhs_type.at_loc(args[1].value),
             result_type.at_loc(&expression_id.loc()),
         ]));
         Ok(())
@@ -708,7 +708,7 @@ impl TypeState {
             .into_default_diagnostic(expression_id.loc())?;
 
         self.add_requirement(Requirement::SharedBase(vec![
-            in_ty.at_loc(&args[0].value),
+            in_ty.at_loc(args[0].value),
             result_type.at_loc(&expression_id.loc()),
         ]));
         Ok(())
@@ -782,8 +782,7 @@ impl TypeState {
                     turbofish.turbofish,
                     "Turbofish on non-generic function",
                 )
-                .primary_label("Turbofish on non-generic function")
-                .into());
+                .primary_label("Turbofish on non-generic function"));
             }
             if turbofish.turbofish.len() != params.len() {
                 return Err(Diagnostic::error(
@@ -1160,7 +1159,7 @@ impl TypeState {
             self.visit_expression(rst_cond, ctx, generic_list)?;
             self.visit_expression(rst_value, ctx, generic_list)?;
             // Ensure cond is a boolean
-            self.unify(&rst_cond.inner, &t_bool(ctx.symtab).at_loc(&rst_cond), ctx)
+            self.unify(&rst_cond.inner, &t_bool(ctx.symtab).at_loc(rst_cond), ctx)
                 .into_diagnostic(
                     rst_cond.loc(),
                     |diag,
@@ -1304,7 +1303,7 @@ impl TypeState {
         if let Some(prev) = self.equations.insert(expression.clone(), var.clone()) {
             let var = var.clone();
             let expr = expression.clone();
-            println!("{}", format_trace_stack(&self));
+            println!("{}", format_trace_stack(self));
             panic!("Adding equation for {} == {} but a previous eq exists.\n\tIt was previously bound to {}", expr, var, prev)
         }
     }
@@ -1476,8 +1475,8 @@ impl TypeState {
                     }
                     (KnownType::Named(n1), KnownType::Named(n2)) => {
                         match (
-                            &ctx.symtab.type_symbol_by_id(&n1).inner,
-                            &ctx.symtab.type_symbol_by_id(&n2).inner,
+                            &ctx.symtab.type_symbol_by_id(n1).inner,
+                            &ctx.symtab.type_symbol_by_id(n2).inner,
                         ) {
                             (TypeSymbol::Declared(_, _), TypeSymbol::Declared(_, _)) => {
                                 if n1 != n2 {
@@ -1485,8 +1484,8 @@ impl TypeState {
                                 }
 
                                 unify_params!();
-                                let new_ts1 = ctx.symtab.type_symbol_by_id(&n1).inner;
-                                let new_ts2 = ctx.symtab.type_symbol_by_id(&n2).inner;
+                                let new_ts1 = ctx.symtab.type_symbol_by_id(n1).inner;
+                                let new_ts2 = ctx.symtab.type_symbol_by_id(n2).inner;
                                 let new_v1 = e1
                                     .get_type(self)
                                     .expect("Tried to unify types but the lhs was not found");
@@ -1557,7 +1556,7 @@ impl TypeState {
                 let new_traits = new_trait_names
                     .iter()
                     .map(
-                        |name| match (traits1.get_trait(&name), traits2.get_trait(&name)) {
+                        |name| match (traits1.get_trait(name), traits2.get_trait(name)) {
                             (Some(req1), Some(req2)) => {
                                 let new_params = req1
                                     .type_params
@@ -1602,8 +1601,7 @@ impl TypeState {
                         // we unify, for example, `Number<10>` with `uint<9>`. Since we know the
                         // outer types match already, we'll create a fake type for the lhs where
                         // we preemptively crate uint<T>
-                        let fake_type =
-                            TypeVar::Known(loc.clone(), base.clone(), t.type_params.clone());
+                        let fake_type = TypeVar::Known(*loc, base.clone(), t.type_params.clone());
 
                         new_params = t
                             .type_params
@@ -1620,7 +1618,7 @@ impl TypeState {
                     }
                 }
 
-                let new = TypeVar::Known(loc.clone(), base.clone(), new_params);
+                let new = TypeVar::Known(*loc, base.clone(), new_params);
 
                 Ok((new, vec![uk.clone()]))
             }
@@ -1797,7 +1795,7 @@ impl TypeState {
                     .filter(|t| {
                         // Number is special cased for now because we can't impl traits
                         // on generic types
-                        if &t.name == &number {
+                        if t.name == number {
                             let int_type = &ctx
                                 .symtab
                                 .lookup_type_symbol(&Path::from_strs(&["int"]).nowhere())
@@ -1994,7 +1992,7 @@ impl TypeState {
             println!("{:?}", requirement)
         }
 
-        println!("")
+        println!()
     }
 }
 

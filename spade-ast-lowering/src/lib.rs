@@ -1364,7 +1364,7 @@ pub fn visit_expression(e: &ast::Expression, ctx: &mut Context) -> Result<hir::E
             let lhs = lhs.try_visit(visit_expression, ctx)?;
             let rhs = rhs.try_visit(visit_expression, ctx)?;
 
-            let operator = |op: BinaryOperator| hir::ExprKind::BinaryOperator(Box::new(lhs), op.at_loc(&tok), Box::new(rhs));
+            let operator = |op: BinaryOperator| hir::ExprKind::BinaryOperator(Box::new(lhs), op.at_loc(tok), Box::new(rhs));
 
             match tok.inner {
                 ast::BinaryOperator::Add => Ok(operator(BinaryOperator::Add)),
@@ -1594,7 +1594,7 @@ pub fn visit_expression(e: &ast::Expression, ctx: &mut Context) -> Result<hir::E
                 Some(id) => (id.at_loc(name), false),
                 None => {
                     let pipeline_offset = ctx.symtab.current_scope() - pipeline_ctx.scope;
-                    let undecleared_lookup = ctx.symtab.declarations[pipeline_ctx.scope].get(&name);
+                    let undecleared_lookup = ctx.symtab.declarations[pipeline_ctx.scope].get(name);
 
                     if let Some(DeclarationState::Undecleared(name_id)) = undecleared_lookup {
                         (name_id.clone().at_loc(name), false)

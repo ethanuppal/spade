@@ -596,8 +596,7 @@ pub fn do_wal_trace_lowering(
                     return Err(Diagnostic::error(
                         wal_trace,
                         format!("The {name} signal for this trace must be provided"),
-                    )
-                    .into())
+                    ))
                 }
                 (Some(signal), false) => {
                     return Err(
@@ -606,8 +605,7 @@ pub fn do_wal_trace_lowering(
                             .secondary_label(
                                 wal_traceable,
                                 format!("This struct does not need a {name} signal for tracing"),
-                            )
-                            .into(),
+                            ),
                     )
                 }
                 (Some(signal), true) => result.push_anonymous(mir::Statement::WalTrace {
@@ -640,8 +638,7 @@ pub fn do_wal_trace_lowering(
                 )
                 .primary_label(format!(
                     "The field '{n}' of the struct has both & and &mut wires"
-                ))
-                .into());
+                )));
             }
         }
 
@@ -832,7 +829,7 @@ pub fn lower_wal_trace(
 ) -> Result<()> {
     let hir_ty = pattern
         .get_type(ctx.types)
-        .map_err(|_| diag_anyhow!(pattern, "Pattern had no type during wal trace generation"))?;
+        .map_err(|_| diag_anyhow!(pattern, "Pattern had no type during WAL trace generation"))?;
     match &hir_ty {
         TypeVar::Known(_, spade_types::KnownType::Named(name), _) => {
             let ty = ctx.item_list.types.get(name);
@@ -859,8 +856,7 @@ pub fn lower_wal_trace(
                             pattern,
                             format!("This has type {} which does not have #[wal_traceable]", hir_ty),
                         )
-                        .note("This most likely means that the struct can not be analyzed by a wal script")
-                        .into());
+                        .note("This most likely means that the struct can not be analyzed by a wal script"));
                     }
                 }
                 Some(other) => {
@@ -886,8 +882,7 @@ pub fn lower_wal_trace(
                 "#[wal_trace] can only be applied to values of struct type",
             )
             .primary_label(format!("#[wal_trace] on {}", other))
-            .secondary_label(pattern, format!("This has type {other}"))
-            .into())
+            .secondary_label(pattern, format!("This has type {other}")))
         }
     }
     Ok(())
@@ -989,7 +984,7 @@ impl StatementLocal for Statement {
                         traced = Some(state.value_name());
                         Ok(())
                     }
-                    Attribute::WalTraceable { .. } => Err(attr.report_unused("register").into()),
+                    Attribute::WalTraceable { .. } => Err(attr.report_unused("register")),
                 })?;
 
                 let initial = if let Some(init) = initial {
@@ -1002,8 +997,7 @@ impl StatementLocal for Statement {
                         .secondary_label(
                             witness,
                             "This subexpression cannot be computed at compile time",
-                        )
-                        .into());
+                        ));
                     };
 
                     Some(init.lower(ctx)?.to_vec_no_source_map())
@@ -1122,7 +1116,7 @@ impl ExprLocal for Loc<Expression> {
                 declares_name: _,
             } => {
                 match subs.lookup_referenced(stage.inner, name) {
-                    Substitution::Undefined => Err(undefined_variable(&name)),
+                    Substitution::Undefined => Err(undefined_variable(name)),
                     Substitution::Waiting(available_at, _) => {
                         // Available at is the amount of cycles left at the stage
                         // from which the variable is requested.
@@ -1402,8 +1396,7 @@ impl ExprLocal for Loc<Expression> {
                         "A port expression cannot create non-port values",
                     )
                     .primary_label(format!("{inner_tvar} is not a port type"))
-                    .note(format!("The port expression creates a {self_tvar}"))
-                    .into());
+                    .note(format!("The port expression creates a {self_tvar}")));
                 }
 
                 let inner_mir_type = inner_type.to_mir_type();
@@ -1539,8 +1532,7 @@ impl ExprLocal for Loc<Expression> {
                                     .secondary_label(
                                         target.as_ref(),
                                         format!("This array only has {size} elements"),
-                                    )
-                                    .into());
+                                    ));
                             }
                             if &end.inner > size {
                                 return Err(Diagnostic::error(end, "Array index out of bounds")
@@ -1548,8 +1540,7 @@ impl ExprLocal for Loc<Expression> {
                                     .secondary_label(
                                         target.as_ref(),
                                         format!("This array only has {size} elements"),
-                                    )
-                                    .into());
+                                    ));
                             }
                         }
                         _ => {
@@ -1684,8 +1675,7 @@ impl ExprLocal for Loc<Expression> {
                                 "Pipeline depth mismatch".to_string(),
                             )
                             .primary_label(format!("Expected depth {udepth}"))
-                            .secondary_label(udepth, format!("{} has depth {udepth}", head.name))
-                            .into());
+                            .secondary_label(udepth, format!("{} has depth {udepth}", head.name)));
                         }
 
                         result.append(self.handle_call(callee, &args, ctx)?);
@@ -2089,8 +2079,7 @@ impl ExprLocal for Loc<Expression> {
                 .secondary_label(
                     witness,
                     "This subexpression cannot be computed at compile time",
-                )
-                .into());
+                ));
             }
 
             if let ExprKind::ArrayLiteral(elems) = &initial_arg.value.kind {
@@ -2216,8 +2205,7 @@ impl ExprLocal for Loc<Expression> {
                     self,
                     format!("The value is truncated to {} bits here", self_type.size()),
                 )
-                .note("Truncation can only remove bits")
-                .into());
+                .note("Truncation can only remove bits"));
         }
 
         result.push_primary(
@@ -2272,8 +2260,7 @@ impl ExprLocal for Loc<Expression> {
                     "Sign-extension cannot decrease width, use trunc instead",
                     path,
                     "trunc",
-                )
-                .into());
+                ));
         }
 
         let extra_bits = if self_type.size() > input_type.size() {
@@ -2333,8 +2320,7 @@ impl ExprLocal for Loc<Expression> {
                     "Zero-extension cannot decrease width, use trunc instead",
                     path,
                     "trunc",
-                )
-                .into());
+                ));
         }
 
         let extra_bits = if self_type.size() > input_type.size() {
@@ -2373,7 +2359,7 @@ impl ExprLocal for Loc<Expression> {
 
         let input_type_hir =
             ctx.types
-                .expr_type(&args[0].value, ctx.symtab.symtab(), &ctx.item_list.types)?;
+                .expr_type(args[0].value, ctx.symtab.symtab(), &ctx.item_list.types)?;
         let input_type = input_type_hir.to_mir_type();
 
         if self_type.backward_size() != BigUint::zero() {
@@ -2381,16 +2367,14 @@ impl ExprLocal for Loc<Expression> {
                 self,
                 format!("Attempting to cast to type containing &mut value"),
             )
-            .primary_label(format!("{self_type_hir} has a &mut wire"))
-            .into());
+            .primary_label(format!("{self_type_hir} has a &mut wire")));
         }
         if input_type.backward_size() != BigUint::zero() {
             return Err(Diagnostic::error(
                 args[0].value,
                 format!("Attempting to cast from type containing &mut value"),
             )
-            .primary_label(format!("{input_type_hir} has a &mut wire"))
-            .into());
+            .primary_label(format!("{input_type_hir} has a &mut wire")));
         }
 
         if self_type.size() != input_type.size() {
@@ -2411,8 +2395,7 @@ impl ExprLocal for Loc<Expression> {
                 input_loc,
                 format!("The source has {}", bits_str(input_type.size()),),
             )
-            .help("unsafe_cast can only convert between types of identical size")
-            .into());
+            .help("unsafe_cast can only convert between types of identical size"));
         }
 
         let extra_bits = if self_type.size() > input_type.size() {
@@ -2782,8 +2765,7 @@ pub fn generate_unit<'a>(
                             "Ports with both & and &mut cannot be #[no_mangle]",
                         )
                         .primary_label("Not allowed on mixed-direction ports")
-                        .secondary_label(type_spec, "This has both & and &mut components")
-                        .into());
+                        .secondary_label(type_spec, "This has both & and &mut components"));
                     }
                 }
 

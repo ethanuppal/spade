@@ -38,10 +38,10 @@ pub(crate) fn refutable_pattern_diagnostic(
 ) -> Diagnostic {
     let witnesses = format_witnesses(&refutability.witnesses);
 
-    return Diagnostic::error(loc, format!("Refutable pattern in local binding: {witnesses} not covered"))
+    Diagnostic::error(loc, format!("Refutable pattern in local binding: {witnesses} not covered"))
         .primary_label(format!("pattern {witnesses} not covered"))
         .note(format!("{binding_kind} requires a pattern which matches all possible options, such as a variable, struct or enum with only 1 option."))
-        .help("you might want to use match statement to handle different cases");
+        .help("you might want to use match statement to handle different cases")
 }
 
 pub fn format_witnesses(witnesses: &[Witness]) -> String {
@@ -126,7 +126,6 @@ pub fn expect_entity(
             diag.span_suggest_insert_after("Consider adding depth", inst, format!("({depth})"))
         }
     }
-    .into()
 }
 
 /// Error to emit when using `inst` to instantiate pipeline or entity
@@ -155,5 +154,4 @@ pub fn expect_pipeline(
             spade_diagnostics::Diagnostic::bug(unit_name, "expected pipeline and got it")
         }
     }
-    .into()
 }

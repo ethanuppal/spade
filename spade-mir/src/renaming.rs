@@ -36,7 +36,7 @@ impl VerilogNameMap {
     }
 
     pub fn lookup_name(&self, name: &str) -> Option<&VerilogNameSource> {
-        self.inner.get(&name.to_string())
+        self.inner.get(name)
     }
 }
 

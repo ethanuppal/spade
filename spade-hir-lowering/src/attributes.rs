@@ -9,7 +9,7 @@ use crate::Result;
 impl AttributeListExt for AttributeList {
     fn report_unused(&self, on: &str) -> Result<()> {
         if let Some(attr) = self.0.first() {
-            Err(attr.report_unused(on).into())
+            Err(attr.report_unused(on))
         } else {
             Ok(())
         }
