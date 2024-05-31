@@ -605,6 +605,20 @@ impl TypeState {
                     ctx
                 )?
             },
+            ["std", "ops", "comb_div"] => {
+                self.handle_comb_mod_or_div(
+                    generic_arg!(0),
+                    &matched_args,
+                    ctx
+                )?
+            },
+            ["std", "ops", "comb_mod"] => {
+                self.handle_comb_mod_or_div(
+                    generic_arg!(0),
+                    &matched_args,
+                    ctx
+                )?
+            },
             ["std", "mem", "clocked_memory"]  => {
                 let num_elements = generic_arg!(0);
                 let addr_size = generic_arg!(2);
@@ -711,6 +725,18 @@ impl TypeState {
             in_ty.at_loc(args[0].value),
             result_type.at_loc(&expression_id.loc()),
         ]));
+        Ok(())
+    }
+
+    pub fn handle_comb_mod_or_div(
+        &mut self,
+        n_ty: TypeVar,
+        args: &[Argument],
+        ctx: &Context,
+    ) -> Result<()> {
+        let (num, _) = self.new_generic_number(ctx);
+        self.unify(&n_ty, &num, ctx)
+            .into_default_diagnostic(args[0].value.loc())?;
         Ok(())
     }
 

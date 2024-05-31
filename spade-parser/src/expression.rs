@@ -31,6 +31,8 @@ fn binop_binding_power(op: &BinaryOperator) -> OpBindingPower {
         BinaryOperator::Add => OpBindingPower::AddLike,
         BinaryOperator::Sub => OpBindingPower::AddLike,
         BinaryOperator::Mul => OpBindingPower::MulLike,
+        BinaryOperator::Div => OpBindingPower::MulLike,
+        BinaryOperator::Mod => OpBindingPower::MulLike,
         BinaryOperator::Equals => OpBindingPower::Equality,
         BinaryOperator::NotEquals => OpBindingPower::Equality,
         BinaryOperator::Lt => OpBindingPower::RelationalCmp,
@@ -65,6 +67,8 @@ impl<'a> Parser<'a> {
             TokenKind::Plus => Some(BinaryOperator::Add),
             TokenKind::Minus => Some(BinaryOperator::Sub),
             TokenKind::Asterisk => Some(BinaryOperator::Mul),
+            TokenKind::Slash => Some(BinaryOperator::Div),
+            TokenKind::Percentage => Some(BinaryOperator::Mod),
             TokenKind::Equals => Some(BinaryOperator::Equals),
             TokenKind::NotEquals => Some(BinaryOperator::NotEquals),
             // We have to handle left and right shifts separately because otherwise

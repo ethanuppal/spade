@@ -14,6 +14,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ### Added
 
 - [!307][!307] Allow specifying command line arguments via a json file
+- [!308][!308] Add `/` and `%` for power of 2 operands, as well as `comb_div` and `comb_mod` for all operands
 
 ### Changed
 

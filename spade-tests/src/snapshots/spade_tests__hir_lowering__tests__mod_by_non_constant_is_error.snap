@@ -1,0 +1,18 @@
+---
+source: spade-tests/src/hir_lowering.rs
+---
+fn x(a: int<8>) -> int<8> {
+    5 % a
+}
+
+error: Modulo can only be performed on constant powers of two
+  ┌─ testinput:2:5
+  │
+2 │     5 % a
+  │     ^^^^^ Modulo by non-constant value
+  │
+  = help: Modulo is generally slow and should be done over multiple cycles.
+  = If you are sure you want to divide by a non-constant, use `std::ops::comb_mod`
+  │
+2 │     5 `std::ops::comb_mod` a
+  │       ~~~~~~~~~~~~~~~~~~~~

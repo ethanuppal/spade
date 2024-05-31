@@ -1,0 +1,7 @@
+struct ArrayInStruct {
+    inner: [int<8>; 8],
+    test: int<8>,
+}
+entity constant_array() -> ArrayInStruct {
+    ArrayInStruct([1,2,3,4,5,6,7,8], 9)
+}

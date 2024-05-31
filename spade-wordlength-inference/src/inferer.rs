@@ -280,6 +280,8 @@ impl<'a> Inferer<'a> {
             (BinaryOperator::Mul, Some(lhs_t), Some(rhs_t)) => {
                 Some(Equation::Mul(Box::new(lhs_t), Box::new(rhs_t)))
             }
+            (BinaryOperator::Div, _, _) => todo!(),
+            (BinaryOperator::Mod, _, _) => todo!(),
 
             (
                 BinaryOperator::LeftShift

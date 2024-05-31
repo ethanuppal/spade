@@ -14,6 +14,8 @@ pub enum BinaryOperator {
     Add,
     Sub,
     Mul,
+    Div,
+    Mod,
     Eq,
     NotEq,
     Gt,
@@ -37,6 +39,8 @@ impl std::fmt::Display for BinaryOperator {
             BinaryOperator::Add => write!(f, "+"),
             BinaryOperator::Sub => write!(f, "-"),
             BinaryOperator::Mul => write!(f, "*"),
+            BinaryOperator::Div => write!(f, "/"),
+            BinaryOperator::Mod => write!(f, "%"),
             BinaryOperator::Eq => write!(f, "=="),
             BinaryOperator::NotEq => write!(f, "!="),
             BinaryOperator::Gt => write!(f, ">"),
@@ -290,6 +294,8 @@ impl LocExprExt for Loc<Expression> {
                         BinaryOperator::Add => None,
                         BinaryOperator::Sub => None,
                         BinaryOperator::Mul
+                        | BinaryOperator::Div
+                        | BinaryOperator::Mod
                         | BinaryOperator::Eq
                         | BinaryOperator::NotEq
                         | BinaryOperator::Gt

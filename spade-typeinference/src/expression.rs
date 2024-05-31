@@ -643,6 +643,14 @@ impl TypeState {
                         result_t.at_loc(expression)
                     ]));
                 }
+                // Division, being integer division has the same width out as in
+                BinaryOperator::Div | BinaryOperator::Mod => {
+                    let (int_type, _size) = self.new_generic_number(ctx);
+
+                    self.unify_expression_generic_error(lhs, &int_type, ctx)?;
+                    self.unify_expression_generic_error(lhs, &rhs.inner, ctx)?;
+                    self.unify_expression_generic_error(expression, &rhs.inner, ctx)?;
+                },
                 // Shift operators have the same width in as they do out
                 BinaryOperator::LeftShift
                 | BinaryOperator::BitwiseAnd

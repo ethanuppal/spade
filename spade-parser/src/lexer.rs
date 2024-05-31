@@ -128,6 +128,8 @@ pub enum TokenKind {
     Asterisk,
     #[token("/")]
     Slash,
+    #[token("%")]
+    Percentage,
     #[token("==")]
     Equals,
     #[token("!=")]
@@ -271,6 +273,7 @@ impl TokenKind {
             TokenKind::Minus => "-",
             TokenKind::Asterisk => "*",
             TokenKind::Slash => "/",
+            TokenKind::Percentage => "%",
             TokenKind::Equals => "==",
             TokenKind::NotEquals => "!=",
             TokenKind::Lt => "<",

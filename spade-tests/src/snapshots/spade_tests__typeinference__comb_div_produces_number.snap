@@ -1,0 +1,16 @@
+---
+source: spade-tests/src/typeinference.rs
+---
+fn test() -> bool {
+    true `std::ops::comb_div` true
+}
+
+
+error: Argument type mismatch. Expected Number<_> got bool
+  ┌─ testinput:2:5
+  │
+2 │     true `std::ops::comb_div` true
+  │     ^^^^ expected Number<_>
+  │
+  = note: Expected: Number<_>
+               Got: bool

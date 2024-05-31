@@ -2852,6 +2852,136 @@ mod tests {
             entity test(t: inout<int<8>>) {}
         "
     }
+
+    snapshot_error! {
+        div_by_non_constant_is_error,
+        "fn x(a: int<8>) -> int<8> {
+            5 / a
+        }"
+    }
+
+    snapshot_error! {
+        div_by_non_pow2_constant_is_error,
+        "fn x(a: int<8>) -> int<8> {
+            5 / 3
+        }"
+    }
+
+    #[test]
+    fn comb_div_codegens_as_div() {
+        let code = r#"
+            entity test() -> int<8> {
+                1 `std::ops::comb_div` 1
+            }
+        "#;
+
+        let expected = vec![entity! {&["test"]; () -> Type::int(8); {
+            (const 0; Type::int(8); ConstantValue::int(1));
+            (const 1; Type::int(8); ConstantValue::int(1));
+            (e(2); Type::int(8); Div; e(0), e(1))
+        } => e(2)}];
+
+        build_and_compare_entities!(code, expected);
+    }
+
+    #[test]
+    fn unsigned_comb_div_codegens_as_unsigned_div() {
+        let code = r#"
+            entity test() -> uint<8> {
+                1 `std::ops::comb_div` 1
+            }
+        "#;
+
+        let expected = vec![entity! {&["test"]; () -> Type::uint(8); {
+            (const 0; Type::uint(8); ConstantValue::int(1));
+            (const 1; Type::uint(8); ConstantValue::int(1));
+            (e(2); Type::uint(8); UnsignedDiv; e(0), e(1))
+        } => e(2)}];
+
+        build_and_compare_entities!(code, expected);
+    }
+
+    snapshot_error! {
+        mod_by_non_constant_is_error,
+        "fn x(a: int<8>) -> int<8> {
+            5 % a
+        }"
+    }
+
+    snapshot_error! {
+        moddiv_by_non_pow2_constant_is_error,
+        "fn x(a: int<8>) -> int<8> {
+            5 % 3
+        }"
+    }
+
+    #[test]
+    fn comb_mod_codegens_as_mod() {
+        let code = r#"
+            entity test() -> int<8> {
+                1 `std::ops::comb_mod` 1
+            }
+        "#;
+
+        let expected = vec![entity! {&["test"]; () -> Type::int(8); {
+            (const 0; Type::int(8); ConstantValue::int(1));
+            (const 1; Type::int(8); ConstantValue::int(1));
+            (e(2); Type::int(8); Mod; e(0), e(1))
+        } => e(2)}];
+
+        build_and_compare_entities!(code, expected);
+    }
+
+    #[test]
+    fn unsigned_comb_mod_codegens_as_unsigned_mod() {
+        let code = r#"
+            entity test() -> uint<8> {
+                1 `std::ops::comb_mod` 1
+            }
+        "#;
+
+        let expected = vec![entity! {&["test"]; () -> Type::uint(8); {
+            (const 0; Type::uint(8); ConstantValue::int(1));
+            (const 1; Type::uint(8); ConstantValue::int(1));
+            (e(2); Type::uint(8); UnsignedMod; e(0), e(1))
+        } => e(2)}];
+
+        build_and_compare_entities!(code, expected);
+    }
+
+    #[test]
+    fn mod_codegens_as_mod() {
+        let code = r#"
+            entity test() -> int<8> {
+                1 % 1
+            }
+        "#;
+
+        let expected = vec![entity! {&["test"]; () -> Type::int(8); {
+            (const 0; Type::int(8); ConstantValue::int(1));
+            (const 1; Type::int(8); ConstantValue::int(1));
+            (e(2); Type::int(8); Mod; e(0), e(1))
+        } => e(2)}];
+
+        build_and_compare_entities!(code, expected);
+    }
+
+    #[test]
+    fn unsigned_mod_codegens_as_unsigned_div() {
+        let code = r#"
+            entity test() -> uint<8> {
+                1 % 1
+            }
+        "#;
+
+        let expected = vec![entity! {&["test"]; () -> Type::uint(8); {
+            (const 0; Type::uint(8); ConstantValue::int(1));
+            (const 1; Type::uint(8); ConstantValue::int(1));
+            (e(2); Type::uint(8); UnsignedMod; e(0), e(1))
+        } => e(2)}];
+
+        build_and_compare_entities!(code, expected);
+    }
 }
 
 #[cfg(test)]

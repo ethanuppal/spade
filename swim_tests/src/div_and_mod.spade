@@ -1,0 +1,32 @@
+struct SignedOut {
+    div_4: int<8>,
+    mod_4: int<8>,
+    div_3: int<8>,
+    mod_3: int<8>
+}
+
+fn signed_div_and_mod(x: int<8>) -> SignedOut {
+    SignedOut $(
+        div_4: x / 4,
+        mod_4: x % 4,
+        div_3: x `std::ops::comb_div` 3,
+        mod_3: x `std::ops::comb_mod` 3,
+    )
+}
+
+
+struct UnsignedOut {
+    div_4: uint<8>,
+    mod_4: uint<8>,
+    div_3: uint<8>,
+    mod_3: uint<8>
+}
+
+fn unsigned_div_and_mod(x: uint<8>) -> UnsignedOut {
+    UnsignedOut $(
+        div_4: x / 4,
+        mod_4: x % 4,
+        div_3: x `std::ops::comb_div` 3,
+        mod_3: x `std::ops::comb_mod` 3,
+    )
+}

@@ -75,3 +75,21 @@ fn reduce_or<#N>(x: uint<N>) -> bool __builtin__
 /// Equivalent to verilog xor reduction operator ^(x)
 /// Returns all bits of x joined by an xor-operation
 fn reduce_xor<#N>(x: uint<N>) -> bool __builtin__
+
+
+/// Evaluates to x / y in verilog.
+/// In general, this is going to be slow and large, so should be avoided if you don't know
+/// what you're doing.
+/// For division by constant powers of two, use `/`
+// This is special cased by the compiler. The actual type, if Spade was able to express
+// it itself would be comb_div<#N>(x: Number<N>, y: Number<N>) -> Number<N>.
+fn comb_div<N>(x: N, y: N) -> N __builtin__
+
+
+/// Evaluates to x % y in verilog.
+/// In general, this is going to be slow and large, so should be avoided if you don't know
+/// what you're doing.
+/// For modulo operations by constant powers of two, use `%`
+// This is special cased by the compiler. The actual type, if Spade was able to express
+// it itself would be comb_mod<#N>(x: Number<N>, y: Number<N>) -> Number<N>.
+fn comb_mod<N>(x: N, y: N) -> N __builtin__

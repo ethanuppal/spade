@@ -28,6 +28,7 @@ use hir::Parameter;
 use hir::TypeDeclKind;
 use hir::WalTrace;
 use local_impl::local_impl;
+use num::ToPrimitive;
 
 use hir::param_util::{match_args_with_params, Argument};
 use hir::symbol_table::{FrozenSymtab, PatternableKind};
@@ -1284,6 +1285,74 @@ impl ExprLocal for Loc<Expression> {
                     BinaryOperator::BitwiseAnd => binop_builder!(BitwiseAnd),
                     BinaryOperator::BitwiseOr => binop_builder!(BitwiseOr),
                     BinaryOperator::BitwiseXor => binop_builder!(BitwiseXor),
+                    BinaryOperator::Div => {
+                        match &rhs.inner.kind {
+                            ExprKind::IntLiteral(val) => {
+                                let val_u128 = val.to_u128()
+                                    .ok_or_else(|| Diagnostic::error(
+                                        rhs.loc(),
+                                        "Division by constants larger than 2^128 is unsupported"
+                                    ))?;
+
+                                if val_u128.count_ones() == 1 {
+                                    dual_binop_builder!(Div, UnsignedDiv)
+                                } else {
+                                    return Err(Diagnostic::error(rhs.loc(), "Division can only be performed on powers of two")
+                                    .primary_label("Division by non-power-of-two value")
+                                    .help("Non-power-of-two division is generally slow and should usually be done over multiple cycles.")
+                                    .span_suggest_replace(
+                                        format!("If you are sure you want to divide by {val}, use `std::ops::comb_div`"),
+                                        op,
+                                        "`std::ops::comb_div`"
+                                    ))
+                                }
+                            }
+                            _ => {
+                                return Err(Diagnostic::error(self, "Division can only be performed on constant powers of two")
+                                    .primary_label("Division by non-constant value")
+                                    .help("Division is generally slow and should be done over multiple cycles.")
+                                    .span_suggest_replace(
+                                        "If you are sure you want to divide by a non-constant, use `std::ops::comb_div`",
+                                        op,
+                                        "`std::ops::comb_div`"
+                                    ))
+                            }
+                        }
+                    }
+                    BinaryOperator::Mod => {
+                        match &rhs.inner.kind {
+                            ExprKind::IntLiteral(val) => {
+                                let val_u128 = val.to_u128()
+                                    .ok_or_else(|| Diagnostic::error(
+                                        rhs.loc(),
+                                        "Modulo by constants larger than 2^128 is unsupported"
+                                    ))?;
+
+                                if val_u128.count_ones() == 1 {
+                                    dual_binop_builder!(Mod, UnsignedMod)
+                                } else {
+                                    return Err(Diagnostic::error(rhs.loc(), "Modulo can only be performed on powers of two")
+                                    .primary_label("Modulo by non-power-of-two value")
+                                    .help("Non-power-of-two modulo is generally slow and should usually be done over multiple cycles.")
+                                    .span_suggest_replace(
+                                        format!("If you are sure you want to divide by {val}, use `std::ops::comb_mod`"),
+                                        op,
+                                        "`std::ops::comb_mod`"
+                                    ))
+                                }
+                            }
+                            _ => {
+                                return Err(Diagnostic::error(self, "Modulo can only be performed on constant powers of two")
+                                    .primary_label("Modulo by non-constant value")
+                                    .help("Modulo is generally slow and should be done over multiple cycles.")
+                                    .span_suggest_replace(
+                                        "If you are sure you want to divide by a non-constant, use `std::ops::comb_mod`",
+                                        op,
+                                        "`std::ops::comb_mod`"
+                                    ))
+                            }
+                        }
+                    }
                 };
             }
             ExprKind::UnaryOperator(op, operand) => {
@@ -1855,6 +1924,8 @@ impl ExprLocal for Loc<Expression> {
             ["std", "ops", "reduce_and"] => handle_reduce_and,
             ["std", "ops", "reduce_or"] => handle_reduce_or,
             ["std", "ops", "reduce_xor"] => handle_reduce_xor,
+            ["std", "ops", "comb_div"] => handle_comb_div,
+            ["std", "ops", "comb_mod"] => handle_comb_mod,
             ["std", "ports", "new_mut_wire"] => handle_new_mut_wire,
             ["std", "ports", "read_mut_wire"] => handle_read_mut_wire
         }
@@ -2634,6 +2705,90 @@ impl ExprLocal for Loc<Expression> {
                 name: self.variable(ctx.subs)?,
                 operator: mir::Operator::ReduceXor,
                 operands: vec![args[0].value.variable(ctx.subs)?],
+                ty: self_type,
+                loc: Some(self.loc()),
+            }),
+            self,
+        );
+
+        Ok(result)
+    }
+
+    fn handle_comb_div(
+        &self,
+        _path: &Loc<NameID>,
+        result: StatementList,
+        args: &[Argument],
+        ctx: &mut Context,
+    ) -> Result<StatementList> {
+        let mut result = result;
+
+        let self_type = ctx
+            .types
+            .expr_type(self, ctx.symtab.symtab(), &ctx.item_list.types)?
+            .to_mir_type();
+
+        let operator = match self_type {
+            mir::types::Type::Int(_) => mir::Operator::Div,
+            mir::types::Type::UInt(_) => mir::Operator::UnsignedDiv,
+            other => {
+                return Err(Diagnostic::bug(
+                    self,
+                    format!("Inferred non-integer type ({other}) for division operand"),
+                ))
+            }
+        };
+
+        result.push_primary(
+            mir::Statement::Binding(mir::Binding {
+                name: self.variable(ctx.subs)?,
+                operator,
+                operands: vec![
+                    args[0].value.variable(ctx.subs)?,
+                    args[1].value.variable(ctx.subs)?,
+                ],
+                ty: self_type,
+                loc: Some(self.loc()),
+            }),
+            self,
+        );
+
+        Ok(result)
+    }
+
+    fn handle_comb_mod(
+        &self,
+        _path: &Loc<NameID>,
+        result: StatementList,
+        args: &[Argument],
+        ctx: &mut Context,
+    ) -> Result<StatementList> {
+        let mut result = result;
+
+        let self_type = ctx
+            .types
+            .expr_type(self, ctx.symtab.symtab(), &ctx.item_list.types)?
+            .to_mir_type();
+
+        let operator = match self_type {
+            mir::types::Type::Int(_) => mir::Operator::Mod,
+            mir::types::Type::UInt(_) => mir::Operator::UnsignedMod,
+            other => {
+                return Err(Diagnostic::bug(
+                    self,
+                    format!("Inferred non-integer type ({other}) for modulo operand"),
+                ))
+            }
+        };
+
+        result.push_primary(
+            mir::Statement::Binding(mir::Binding {
+                name: self.variable(ctx.subs)?,
+                operator,
+                operands: vec![
+                    args[0].value.variable(ctx.subs)?,
+                    args[1].value.variable(ctx.subs)?,
+                ],
                 ty: self_type,
                 loc: Some(self.loc()),
             }),

@@ -1447,3 +1447,21 @@ snapshot_error! {
         }
     "
 }
+
+snapshot_error! {
+    comb_div_produces_number,
+    "
+        fn test() -> bool {
+            true `std::ops::comb_div` true
+        }
+    "
+}
+
+snapshot_error! {
+    comb_mod_produces_number,
+    "
+        fn test() -> bool {
+            true `std::ops::comb_mod` true
+        }
+    "
+}
