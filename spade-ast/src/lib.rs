@@ -16,6 +16,20 @@ pub enum TypeExpression {
 }
 impl WithLocation for TypeExpression {}
 
+#[derive(PartialEq, Debug, Clone)]
+pub enum NamedTurbofish {
+    Short(Loc<Identifier>),
+    Full(Loc<Identifier>, Loc<TypeExpression>),
+}
+impl WithLocation for NamedTurbofish {}
+
+#[derive(PartialEq, Debug, Clone)]
+pub enum TurbofishInner {
+    Named(Vec<Loc<NamedTurbofish>>),
+    Positional(Vec<Loc<TypeExpression>>),
+}
+impl WithLocation for TurbofishInner {}
+
 /// A specification of a type to be used. For example, the types of input/output arguments the type
 /// of fields in a struct etc.
 #[derive(PartialEq, Debug, Clone)]
@@ -157,7 +171,7 @@ pub enum Expression {
         kind: CallKind,
         callee: Loc<Path>,
         args: Loc<ArgumentList>,
-        turbofish: Option<Loc<Vec<Loc<TypeExpression>>>>,
+        turbofish: Option<Loc<TurbofishInner>>,
     },
     MethodCall {
         target: Box<Loc<Expression>>,

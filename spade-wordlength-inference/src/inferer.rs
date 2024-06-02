@@ -435,7 +435,7 @@ impl<'a> Inferer<'a> {
         Ok(None)
     }
 
-    fn visit_args(&mut self, args: &Loc<ArgumentList>) -> Res {
+    fn visit_args(&mut self, args: &Loc<ArgumentList<Expression>>) -> Res {
         let exprs = match &args.inner {
             ArgumentList::Named(named) => named
                 .iter()

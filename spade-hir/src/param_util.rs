@@ -11,7 +11,7 @@ use thiserror::Error;
 use spade_common::{location_info::Loc, name::Identifier};
 
 use crate::expression::NamedArgument;
-use crate::{ArgumentList, Expression, Parameter, ParameterList, TypeSpec};
+use crate::{ArgumentList, ParameterList, TypeParam, TypeSpec};
 
 #[derive(Error, Debug, PartialEq, Clone)]
 pub enum ArgumentError {
@@ -26,7 +26,7 @@ pub enum ArgumentError {
     TooManyArguments {
         got: usize,
         expected: usize,
-        extra: Vec<Loc<Expression>>,
+        extra: Vec<Loc<()>>,
         at: Loc<()>,
     },
     #[error("No argument named {name}")]
@@ -125,26 +125,73 @@ pub enum ArgumentKind {
     ShortNamed,
 }
 
-pub struct Argument<'a> {
+/// A resolved positional or named argument. Used by both value arguments and turbofishes.
+/// TypeLike is the target type for arguments, and () for turbofishes
+pub struct Argument<'a, T, TypeLike> {
     pub target: &'a Loc<Identifier>,
-    pub value: &'a Loc<Expression>,
-    pub target_type: &'a Loc<TypeSpec>,
+    pub value: &'a Loc<T>,
+    pub target_type: &'a TypeLike,
     pub kind: ArgumentKind,
+}
+
+pub struct ParameterListWrapper<'a, TypeLike>(Vec<(&'a Loc<Identifier>, &'a TypeLike)>);
+
+impl<'a, TypeLike> ParameterListWrapper<'a, TypeLike> {
+    fn try_get_arg_type(&self, name: &Identifier) -> Option<&'a TypeLike> {
+        self.0.iter().find_map(|(aname, val)| {
+            if &aname.inner == name {
+                Some(*val)
+            } else {
+                None
+            }
+        })
+    }
+
+    fn arg_index(&self, name: &Identifier) -> Option<usize> {
+        self.0
+            .iter()
+            .enumerate()
+            .find_map(|(i, (aname, _))| if &aname.inner == name { Some(i) } else { None })
+    }
+}
+
+pub trait ParameterListLike<'a, TypeLike> {
+    fn as_listlike(&'a self) -> ParameterListWrapper<'a, TypeLike>;
+}
+
+impl<'a> ParameterListLike<'a, TypeSpec> for ParameterList {
+    fn as_listlike(&'a self) -> ParameterListWrapper<'a, TypeSpec> {
+        ParameterListWrapper(self.0.iter().map(|p| (&p.name, &p.ty.inner)).collect())
+    }
+}
+
+impl<'a> ParameterListLike<'a, ()> for &[Loc<TypeParam>] {
+    fn as_listlike(&'a self) -> ParameterListWrapper<'a, ()> {
+        ParameterListWrapper(
+            self.iter()
+                .map(|p| match &p.inner {
+                    TypeParam::TypeName(name, _) => (name, &()),
+                    TypeParam::Integer(name, _) => (name, &()),
+                })
+                .collect(),
+        )
+    }
 }
 
 /// Matches the arguments passed in an argument list with the parameters of a parameter list. If
 /// the arguments match (correct amount of positional arguments, or unique mapping of named
 /// arguments), the mapping from argument to parameter is returned as a vector in positional order
 /// (but with named argument targets included for better diagnostics)
-pub fn match_args_with_params<'a>(
-    arg_list: &'a Loc<ArgumentList>,
-    params: &'a ParameterList,
+pub fn match_args_with_params<'a, T: Clone, TypeLike>(
+    arg_list: &'a Loc<ArgumentList<T>>,
+    params: &'a impl ParameterListLike<'a, TypeLike>,
     is_method: bool,
-) -> Result<Vec<Argument<'a>>, ArgumentError> {
+) -> Result<Vec<Argument<'a, T, TypeLike>>, ArgumentError> {
     match &arg_list.inner {
         ArgumentList::Positional(inner) => {
             let inner_loc = arg_list.shrink_left("(").shrink_right(")");
 
+            let params = params.as_listlike();
             if inner.len() < params.0.len() {
                 return Err(ArgumentError::TooFewArguments {
                     got: inner.len() - if is_method { 1 } else { 0 },
@@ -153,7 +200,7 @@ pub fn match_args_with_params<'a>(
                         .0
                         .iter()
                         .skip(inner.len())
-                        .map(|p| p.name.clone().inner)
+                        .map(|(name, _)| name.inner.clone())
                         .collect(),
                     at: inner_loc,
                 });
@@ -163,17 +210,21 @@ pub fn match_args_with_params<'a>(
                 return Err(ArgumentError::TooManyArguments {
                     got: inner.len() - if is_method { 1 } else { 0 },
                     expected: params.0.len() - if is_method { 1 } else { 0 },
-                    extra: inner.iter().skip(params.0.len()).cloned().collect(),
+                    extra: inner
+                        .iter()
+                        .skip(params.0.len())
+                        .map(|arg| arg.loc())
+                        .collect(),
                     at: inner_loc,
                 });
             }
 
             Ok(inner
                 .iter()
-                .zip(params.0.iter())
+                .zip(params.0)
                 .map(|(arg, param)| Argument {
-                    target: &param.name,
-                    target_type: &param.ty,
+                    target: &param.0,
+                    target_type: param.1,
                     value: arg,
                     kind: ArgumentKind::Positional,
                 })
@@ -181,10 +232,11 @@ pub fn match_args_with_params<'a>(
         }
         ArgumentList::Named(inner) => {
             let mut bound: HashSet<Loc<Identifier>> = HashSet::new();
+            let params = params.as_listlike();
             let mut unbound = params
                 .0
                 .iter()
-                .map(|Parameter { name: ident, .. }| ident.inner.clone())
+                .map(|(ident, _)| ident.inner.clone())
                 .collect::<HashSet<_>>();
 
             let mut result = inner
@@ -204,7 +256,7 @@ pub fn match_args_with_params<'a>(
                     }
                     bound.insert(target.clone());
 
-                    let target_type = if let Some(t) = params.try_get_arg_type(target) {
+                    let target_type = if let Some(t) = params.try_get_arg_type(&target.inner) {
                         t
                     } else {
                         return Err(ArgumentError::NoSuchArgument {

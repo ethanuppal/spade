@@ -1287,7 +1287,7 @@ fn visit_statement(s: &Loc<ast::Statement>, ctx: &mut Context) -> Result<Vec<Loc
 fn visit_argument_list(
     arguments: &ast::ArgumentList,
     ctx: &mut Context,
-) -> Result<hir::ArgumentList> {
+) -> Result<hir::ArgumentList<hir::Expression>> {
     match arguments {
         ast::ArgumentList::Positional(args) => {
             let inner = args
@@ -1491,11 +1491,51 @@ pub fn visit_expression(e: &ast::Expression, ctx: &mut Context) -> Result<hir::E
 
             let turbofish = turbofish.as_ref().map(|tf| {
                 tf.try_map_ref(|args| {
-                    args.iter().map(|arg| {
-                        arg.try_map_ref(|arg| {
-                            visit_type_expression(arg, &mut ctx.symtab)
-                        })
-                    }).collect::<Result<_>>()
+                    match args {
+                        ast::TurbofishInner::Named(fishes) => {
+                            fishes.iter().map(|fish| {
+                                match &fish.inner {
+                                    ast::NamedTurbofish::Short(name) => {
+                                        let arg = ast::TypeExpression::TypeSpec(
+                                            Box::new(
+                                                ast::TypeSpec::Named(
+                                                    Path(vec![name.clone()]).at_loc(&name),
+                                                    None
+                                                ).at_loc(&name)
+                                            )
+                                        );
+
+                                        let arg = visit_type_expression(
+                                            &arg,
+                                            &mut ctx.symtab
+                                        )?.at_loc(name);
+
+                                        Ok(hir::expression::NamedArgument::Short(name.clone(), arg))
+                                    },
+                                    ast::NamedTurbofish::Full(name, arg) => {
+                                        let arg = visit_type_expression(
+                                            arg,
+                                            &mut ctx.symtab
+                                        )?.at_loc(arg);
+
+                                        Ok(hir::expression::NamedArgument::Full(name.clone(), arg))
+                                    },
+                                }
+                            }).collect::<Result<Vec<_>>>()
+                            .map(|params| {
+                                hir::ArgumentList::Named(params)
+                            })
+
+                        },
+                        ast::TurbofishInner::Positional(args) => {
+                            args.iter().map(|arg| {
+                                arg.try_map_ref(|arg| {
+                                    visit_type_expression(arg, &mut ctx.symtab)
+                                })
+                            }).collect::<Result<_>>()
+                            .map(hir::ArgumentList::Positional)
+                        },
+                    }
                 })
             }).transpose()?;
 

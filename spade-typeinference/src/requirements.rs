@@ -6,7 +6,7 @@ use spade_common::num_ext::InfallibleToBigInt;
 use spade_common::{location_info::Loc, name::Identifier};
 use spade_diagnostics::{diag_anyhow, diag_assert, diag_bail, Diagnostic};
 use spade_hir::symbol_table::{TypeDeclKind, TypeSymbol};
-use spade_hir::ArgumentList;
+use spade_hir::{ArgumentList, Expression};
 use spade_types::KnownType;
 
 use crate::equation::TypeVar;
@@ -42,7 +42,7 @@ pub enum Requirement {
         expr: Loc<TypeVar>,
         /// The argument list passed to the method. This should include the `self` expression as
         /// the appropriate argument (first positional or a non-shorthand self otherwise)
-        args: Loc<ArgumentList>,
+        args: Loc<ArgumentList<Expression>>,
     },
     /// The type should be an integer large enough to fit the specified value
     FitsIntLiteral {

@@ -71,14 +71,16 @@ pub enum UnaryOperator {
     FlipPort,
 }
 
+// Named arguments are used for both type parameters in turbofishes and in argument lists. T is the
+// right hand side of a binding, i.e. an expression in an argument list
 #[derive(PartialEq, Debug, Clone, Serialize, Deserialize)]
-pub enum NamedArgument {
+pub enum NamedArgument<T> {
     /// Binds the arguent named LHS in the outer scope to the expression
-    Full(Loc<Identifier>, Loc<Expression>),
+    Full(Loc<Identifier>, Loc<T>),
     /// Binds a local variable to an argument with the same name
-    Short(Loc<Identifier>, Loc<Expression>),
+    Short(Loc<Identifier>, Loc<T>),
 }
-impl WithLocation for NamedArgument {}
+impl<T> WithLocation for NamedArgument<T> {}
 
 /// Specifies how an argument is bound. Mainly used for error reporting without
 /// code duplication
@@ -90,17 +92,17 @@ pub enum ArgumentKind {
 }
 
 #[derive(PartialEq, Debug, Clone, Serialize, Deserialize)]
-pub enum ArgumentList {
-    Named(Vec<NamedArgument>),
-    Positional(Vec<Loc<Expression>>),
+pub enum ArgumentList<T> {
+    Named(Vec<NamedArgument<T>>),
+    Positional(Vec<Loc<T>>),
 }
 
-impl ArgumentList {
-    pub fn expressions(&self) -> Vec<&Loc<Expression>> {
+impl<T> ArgumentList<T> {
+    pub fn expressions(&self) -> Vec<&Loc<T>> {
         match self {
             ArgumentList::Named(n) => n
                 .iter()
-                .map(|arg| match arg {
+                .map(|arg| match &arg {
                     NamedArgument::Full(_, expr) => expr,
                     NamedArgument::Short(_, expr) => expr,
                 })
@@ -108,7 +110,7 @@ impl ArgumentList {
             ArgumentList::Positional(arg) => arg.iter().collect(),
         }
     }
-    pub fn expressions_mut(&mut self) -> Vec<&mut Loc<Expression>> {
+    pub fn expressions_mut(&mut self) -> Vec<&mut Loc<T>> {
         match self {
             ArgumentList::Named(n) => n
                 .iter_mut()
@@ -121,14 +123,14 @@ impl ArgumentList {
         }
     }
 }
+impl<T> WithLocation for ArgumentList<T> {}
 
 #[derive(PartialEq, Debug, Clone, Serialize, Deserialize)]
-pub struct Argument {
+pub struct Argument<T> {
     pub target: Loc<Identifier>,
-    pub value: Loc<Expression>,
+    pub value: Loc<T>,
     pub kind: ArgumentKind,
 }
-impl WithLocation for ArgumentList {}
 
 // FIXME: Migrate entity, pipeline and fn instantiation to this
 #[derive(PartialEq, Debug, Clone, Serialize, Deserialize)]
@@ -177,14 +179,14 @@ pub enum ExprKind {
     MethodCall {
         target: Box<Loc<Expression>>,
         name: Loc<Identifier>,
-        args: Loc<ArgumentList>,
+        args: Loc<ArgumentList<Expression>>,
         call_kind: CallKind,
     },
     Call {
         kind: CallKind,
         callee: Loc<NameID>,
-        args: Loc<ArgumentList>,
-        turbofish: Option<Loc<Vec<Loc<TypeExpression>>>>,
+        args: Loc<ArgumentList<Expression>>,
+        turbofish: Option<Loc<ArgumentList<TypeExpression>>>,
     },
     BinaryOperator(
         Box<Loc<Expression>>,

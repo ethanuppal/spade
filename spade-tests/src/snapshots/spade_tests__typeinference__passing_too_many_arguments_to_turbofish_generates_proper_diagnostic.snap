@@ -1,19 +1,16 @@
 ---
 source: spade-tests/src/typeinference.rs
-assertion_line: 148
 ---
 entity foo<T>() -> int<8> { 15 }
 entity main() -> int<8> {
     inst foo::<bool, bool>()
 }
 
-error: Wrong number of type parameters
-  ┌─ testinput:3:15
+error: Too many arguments. Expected 1, got 2
+  ┌─ testinput:3:16
   │
-1 │ entity foo<T>() -> int<8> { 15 }
-  │            - Because this has 1 parameter
-2 │ entity main() -> int<8> {
 3 │     inst foo::<bool, bool>()
-  │               ^^^^^^^^^^^^ Expected 1 type parameter
-
-
+  │                ^^^^^^^^^^
+  │                │     │
+  │                │     Unexpected argument
+  │                Expected 1 argument

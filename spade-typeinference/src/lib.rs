@@ -10,7 +10,7 @@ use std::collections::{BTreeSet, HashMap};
 use std::sync::Arc;
 
 use colored::Colorize;
-use hir::{Binding, Parameter, UnitHead, WalTrace};
+use hir::{param_util, Binding, Parameter, TypeExpression, TypeSpec, UnitHead, WalTrace};
 use itertools::Itertools;
 use num::{BigInt, Zero};
 use serde::{Deserialize, Serialize};
@@ -92,7 +92,7 @@ pub enum GenericListToken {
 }
 
 pub struct TurbofishCtx<'a> {
-    turbofish: &'a Loc<Vec<Loc<hir::TypeExpression>>>,
+    turbofish: &'a Loc<ArgumentList<TypeExpression>>,
     prev_generic_list: &'a GenericListToken,
     type_ctx: &'a Context<'a>,
 }
@@ -392,7 +392,7 @@ impl TypeState {
     #[tracing::instrument(level = "trace", skip_all)]
     fn visit_argument_list(
         &mut self,
-        args: &Loc<ArgumentList>,
+        args: &Loc<ArgumentList<Expression>>,
         ctx: &Context,
         generic_list: &GenericListToken,
     ) -> Result<()> {
@@ -405,7 +405,7 @@ impl TypeState {
     #[trace_typechecker]
     fn type_check_argument_list(
         &mut self,
-        args: &[Argument],
+        args: &[Argument<Expression, TypeSpec>],
         ctx: &Context,
         generic_list: &GenericListToken,
     ) -> Result<()> {
@@ -529,7 +529,7 @@ impl TypeState {
         expression_type: &TypeVar,
         name: &NameID,
         head: &Loc<UnitHead>,
-        args: &Loc<ArgumentList>,
+        args: &Loc<ArgumentList<Expression>>,
         ctx: &Context,
         // Whether or not to visit the argument expressions passed to the function here. This
         // should not be done if the expressoins have been visited before, for example, when
@@ -577,13 +577,14 @@ impl TypeState {
             };
         }
 
-        let matched_args = match_args_with_params(args, &head.inputs, is_method).map_err(|e| {
-            let diag: Diagnostic = e.into();
-            diag.secondary_label(
-                head,
-                format!("{kind} defined here", kind = head.unit_kind.name()),
-            )
-        })?;
+        let matched_args =
+            match_args_with_params(args, &head.inputs.inner, is_method).map_err(|e| {
+                let diag: Diagnostic = e.into();
+                diag.secondary_label(
+                    head,
+                    format!("{kind} defined here", kind = head.unit_kind.name()),
+                )
+            })?;
 
         handle_special_functions! {
             ["std", "conv", "concat"] => {
@@ -662,7 +663,7 @@ impl TypeState {
         source_lhs_ty: TypeVar,
         source_rhs_ty: TypeVar,
         source_result_ty: TypeVar,
-        args: &[Argument],
+        args: &[Argument<Expression, TypeSpec>],
         ctx: &Context,
     ) -> Result<()> {
         let (lhs_type, lhs_size) = self.new_generic_number(ctx);
@@ -711,7 +712,7 @@ impl TypeState {
         expression_id: Loc<u64>,
         source_in_ty: TypeVar,
         source_result_ty: TypeVar,
-        args: &[Argument],
+        args: &[Argument<Expression, TypeSpec>],
         ctx: &Context,
     ) -> Result<()> {
         let (in_ty, _) = self.new_generic_number(ctx);
@@ -731,7 +732,7 @@ impl TypeState {
     pub fn handle_comb_mod_or_div(
         &mut self,
         n_ty: TypeVar,
-        args: &[Argument],
+        args: &[Argument<Expression, TypeSpec>],
         ctx: &Context,
     ) -> Result<()> {
         let (num, _) = self.new_generic_number(ctx);
@@ -744,7 +745,7 @@ impl TypeState {
         &mut self,
         num_elements: TypeVar,
         addr_size_arg: TypeVar,
-        args: &[Argument],
+        args: &[Argument<Expression, TypeSpec>],
         ctx: &Context,
     ) -> Result<()> {
         let (addr_type, addr_size) = self.new_split_generic_uint(args[1].value.loc(), ctx.symtab);
@@ -776,7 +777,7 @@ impl TypeState {
         &mut self,
         num_elements: TypeVar,
         addr_size_arg: TypeVar,
-        args: &[Argument],
+        args: &[Argument<Expression, TypeSpec>],
         ctx: &Context,
     ) -> Result<()> {
         let (addr_type, addr_size) = self.new_split_generic_uint(args[1].value.loc(), ctx.symtab);
@@ -810,32 +811,41 @@ impl TypeState {
                 )
                 .primary_label("Turbofish on non-generic function"));
             }
-            if turbofish.turbofish.len() != params.len() {
-                return Err(Diagnostic::error(
-                    turbofish.turbofish,
-                    "Wrong number of type parameters",
-                )
-                .primary_label(format!(
-                    "Expected {} type parameter{s}",
-                    params.len(),
-                    s = if params.len() != 1 { "s" } else { "" }
-                ))
-                .secondary_label(
-                    ().between_locs(&params[0], &params[params.len() - 1]),
-                    format!(
-                        "Because this has {} parameter{s}",
-                        params.len(),
-                        s = if params.len() != 1 { "s" } else { "" }
-                    ),
-                ));
-            }
 
-            turbofish
-                .turbofish
-                .inner
+            let matched_params =
+                param_util::match_args_with_params(&turbofish.turbofish, &params, false)?;
+
+            // We want this to be positional, but the params we get from matching are
+            // named, transform it. We'll do some unwrapping here, but it is safe
+            // because we know all params are present
+            matched_params
                 .iter()
-                .map(|p| Some(p.clone()))
-                .collect()
+                .map(|matched_param| {
+                    let i = params
+                        .iter()
+                        .enumerate()
+                        .find_map(|(i, param)| match &param.inner {
+                            TypeParam::TypeName(ident, _) => {
+                                if ident == matched_param.target {
+                                    Some(i)
+                                } else {
+                                    None
+                                }
+                            }
+                            TypeParam::Integer(ident, _) => {
+                                if ident == matched_param.target {
+                                    Some(i)
+                                } else {
+                                    None
+                                }
+                            }
+                        })
+                        .unwrap();
+                    (i, matched_param)
+                })
+                .sorted_by_key(|(i, _)| *i)
+                .map(|(_, mp)| Some(mp.value))
+                .collect::<Vec<_>>()
         } else {
             params.iter().map(|_| None).collect::<Vec<_>>()
         };

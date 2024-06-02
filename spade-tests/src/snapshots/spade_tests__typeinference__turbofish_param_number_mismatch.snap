@@ -10,13 +10,13 @@ fn test() {
 }
 
 
-error: Wrong number of type parameters
-  ┌─ testinput:6:30
+error: Too few arguments. Expected 2, got 1
+  ┌─ testinput:6:31
   │
-1 │ fn ret_int<#A, #B>() -> int<8> {
-  │            ------ Because this has 2 parameters
-  ·
 6 │     let x: int<8> = ret_int::<10>();
-  │                              ^^^^ Expected 2 type parameters
-
-
+  │                               ^^ Missing 1 argument
+  │
+  = Consider providing the argument
+  │
+6 │     let x: int<8> = ret_int::<10, /* B */>();
+  │                                 +++++++++

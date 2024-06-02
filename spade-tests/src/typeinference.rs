@@ -1492,3 +1492,32 @@ snapshot_error! {
     }
     "
 }
+
+snapshot_error! {
+    turbofish_can_flip_type_params,
+    "
+        fn func<A, B>(a: A, b: B) {}
+
+        fn test() {
+            let a: bool = false;
+            let b: uint<8> = 0;
+            func::$<B: bool, A: uint<8>>(a, b)
+        }
+    "
+}
+
+snapshot_error! {
+    shorthand_turbofish_works,
+    "
+        fn func<A>(a: A) {}
+
+        fn func2<A>() {
+            let a: bool = false;
+            func::$<A>(a)
+        }
+
+        fn test() {
+            func2::<uint<8>>()
+        }
+    "
+}

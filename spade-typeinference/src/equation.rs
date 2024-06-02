@@ -66,7 +66,7 @@ impl TraitList {
     }
 }
 
-// NOTE: The trait imformation is currently carried along with the type vars, but
+// NOTE: The trait information is currently carried along with the type vars, but
 // the trait information should not be involved in comparisons
 impl PartialEq for TraitList {
     fn eq(&self, _other: &Self) -> bool {

@@ -1,0 +1,25 @@
+---
+source: spade-tests/src/typeinference.rs
+---
+fn func<A, B>(a: A, b: B) {}
+
+fn test() {
+    let a: bool = false;
+    let b: uint<8> = 0;
+    func::$<B: bool, A: uint<8>>(a, b)
+}
+
+
+error: Argument type mismatch. Expected uint<8> got bool
+  ┌─ testinput:6:34
+  │
+4 │     let a: bool = false;
+  │                   ----- Type bool inferred here
+5 │     let b: uint<8> = 0;
+6 │     func::$<B: bool, A: uint<8>>(a, b)
+  │                         ------   ^ expected uint<8>
+  │                         │         
+  │                         Type uint<8> inferred here
+  │
+  = note: Expected: uint<8>
+               Got: bool

@@ -14,9 +14,9 @@ use tracing::{debug, event, Level};
 use spade_ast::{
     ArgumentList, ArgumentPattern, Attribute, AttributeList, Binding, BitLiteral, Block, CallKind,
     ComptimeConfig, Enum, Expression, ImplBlock, IntLiteral, Item, Module, ModuleBody,
-    NamedArgument, ParameterList, Pattern, PipelineStageReference, Register, Statement, Struct,
-    TraitDef, TypeDeclKind, TypeDeclaration, TypeExpression, TypeParam, TypeSpec, Unit, UnitHead,
-    UnitKind, UseStatement,
+    NamedArgument, NamedTurbofish, ParameterList, Pattern, PipelineStageReference, Register,
+    Statement, Struct, TraitDef, TurbofishInner, TypeDeclKind, TypeDeclaration, TypeExpression,
+    TypeParam, TypeSpec, Unit, UnitHead, UnitKind, UseStatement,
 };
 use spade_common::location_info::{lspan, AsLabel, FullSpan, HasCodespan, Loc, WithLocation};
 use spade_common::name::{Identifier, Path};
@@ -145,10 +145,24 @@ impl<'a> Parser<'a> {
         Ok(Path(result).between(self.file_id, &start, &end))
     }
 
+    pub fn named_turbofish(&mut self) -> Result<Loc<NamedTurbofish>> {
+        // This is a named arg
+        let name = self.identifier()?;
+        if self.peek_and_eat(&TokenKind::Colon)?.is_some() {
+            let value = self.type_expression()?;
+
+            let span = name.span.merge(value.span);
+
+            Ok(NamedTurbofish::Full(name, value).at(self.file_id, &span))
+        } else {
+            Ok(NamedTurbofish::Short(name.clone()).at(self.file_id, &name))
+        }
+    }
+
     #[trace_parser]
     pub fn path_with_turbofish(
         &mut self,
-    ) -> Result<Option<(Loc<Path>, Option<Loc<Vec<Loc<TypeExpression>>>>)>> {
+    ) -> Result<Option<(Loc<Path>, Option<Loc<TurbofishInner>>)>> {
         let mut result = vec![];
         if !self.peek_cond(TokenKind::is_identifier, "Identifier")? {
             return Ok(None);
@@ -179,7 +193,22 @@ impl<'a> Parser<'a> {
 
                 break Ok(Some((
                     Path(result).between(self.file_id, &path_start, &path_end),
-                    Some(params.at_loc(&loc)),
+                    Some(TurbofishInner::Positional(params).at_loc(&loc)),
+                )));
+            } else if self.peek_kind(&TokenKind::Dollar)? {
+                self.eat_unconditional()?;
+                let (params, loc) = self.surrounded(
+                    &TokenKind::Lt,
+                    |s| {
+                        s.comma_separated(Self::named_turbofish, &TokenKind::Gt)
+                            .extra_expected(vec!["identifier", "type spec"])
+                    },
+                    &TokenKind::Gt,
+                )?;
+
+                break Ok(Some((
+                    Path(result).between(self.file_id, &path_start, &path_end),
+                    Some(TurbofishInner::Named(params).at_loc(&loc)),
                 )));
             }
         }
