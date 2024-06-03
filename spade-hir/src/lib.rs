@@ -195,6 +195,11 @@ pub struct Register {
 }
 impl WithLocation for Register {}
 
+#[derive(PartialEq, Debug, Clone, Serialize, Deserialize)]
+pub struct Module {
+    pub name: Loc<NameID>,
+}
+
 /// Type params have both an identifier and a NameID since they go through the
 /// ast lowering process in a few separate steps, and the identifier needs to be
 /// re-added to the symtab multiple times
@@ -617,14 +622,18 @@ pub struct ImplBlock {
 impl WithLocation for ImplBlock {}
 
 /// A list of all the items present in the whole AST, flattened to remove module
-/// hirearchies.
+/// hierarchies.
 ///
 /// That is, `mod a { mod b{ entity X {} } } will result in members containing `a::b::X`, but the
-/// modules will not be present.
+/// module hierarchy no longer has to be traversed.
+///
+/// The hierarchy however still exists through the `modules` map.
 #[derive(PartialEq, Debug, Clone, Serialize, Deserialize)]
 pub struct ItemList {
     pub executables: BTreeMap<NameID, ExecutableItem>,
     pub types: TypeList,
+    /// Contains the **direct** sub-modules of a module.
+    pub modules: BTreeMap<NameID, Vec<Module>>,
     // FIXME: Support entities and pipelines as trait members.
     /// All traits in the compilation unit. Traits consist of a list of functions
     /// by name. Anonymous impl blocks are also members here, but their name is never
@@ -644,6 +653,7 @@ impl ItemList {
         Self {
             executables: BTreeMap::new(),
             types: TypeList::new(),
+            modules: BTreeMap::new(),
             traits: HashMap::new(),
             impls: HashMap::new(),
         }

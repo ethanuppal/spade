@@ -23,7 +23,7 @@ use spade_ast as ast;
 use spade_common::id_tracker::{ExprIdTracker, ImplIdTracker};
 use spade_common::location_info::{Loc, WithLocation};
 use spade_common::name::{Identifier, Path};
-use spade_hir as hir;
+use spade_hir::{self as hir, Module};
 
 use crate::attributes::AttributeListExt;
 use crate::pipelines::maybe_perform_pipelining_tasks;
@@ -890,6 +890,34 @@ pub fn visit_module(
     module: &ast::Module,
     ctx: &mut Context,
 ) -> Result<()> {
+    let path = Path(vec![module.name.clone()]).at_loc(&module.name.loc());
+    let id = ctx
+        .symtab
+        .lookup_id(&path)
+        .map_err(|_| {
+            ctx.symtab.print_symbols();
+            println!("Failed to find {path:?} in symtab")
+        })
+        .expect("Attempting to lower a module that has not been added to the symtab previously");
+
+    let parent = id.1.pop();
+    let parent_id = ctx
+        .symtab
+        .lookup_id(&parent)
+        .map_err(|_| {
+            ctx.symtab.print_symbols();
+            println!("Failed to find {parent:?} in symtab")
+        })
+        .expect("Attempting to lower a module that has not been added to the symtab previously");
+
+    item_list
+        .modules
+        .entry(parent_id)
+        .or_default()
+        .push(Module {
+            name: id.at_loc(&module.name),
+        });
+
     visit_module_body(item_list, &module.body, ctx)
 }
 
@@ -3268,6 +3296,58 @@ mod module_visiting {
             .into_iter()
             .collect(),
             types: vec![].into_iter().collect(),
+            modules: vec![].into_iter().collect(),
+            traits: HashMap::new(),
+            impls: HashMap::new(),
+        };
+
+        let mut symtab = SymbolTable::new();
+        let idtracker = ExprIdTracker::new();
+        global_symbols::gather_symbols(&input, &mut symtab, &mut ItemList::new())
+            .expect("failed to collect global symbols");
+        let mut item_list = ItemList::new();
+        assert_eq!(
+            visit_module_body(
+                &mut item_list,
+                &input,
+                &mut Context {
+                    symtab,
+                    idtracker,
+                    impl_idtracker: ImplIdTracker::new(),
+                    pipeline_ctx: None
+                }
+            ),
+            Ok(())
+        );
+
+        assert_eq!(item_list, expected);
+    }
+
+    #[test]
+    fn visiting_submodules_works() {
+        let input = ast::ModuleBody {
+            members: vec![ast::Item::Module(
+                ast::Module {
+                    name: ast_ident("outer"),
+                    body: ast::ModuleBody {
+                        members: vec![ast::Item::Module(
+                            ast::Module {
+                                name: ast_ident("inner"),
+                                body: ast::ModuleBody { members: vec![] }.nowhere(),
+                            }
+                            .nowhere(),
+                        )],
+                    }
+                    .nowhere(),
+                }
+                .nowhere(),
+            )],
+        };
+
+        let expected = hir::ItemList {
+            executables: vec![].into_iter().collect(),
+            types: vec![].into_iter().collect(),
+            modules: vec![].into_iter().collect(),
             traits: HashMap::new(),
             impls: HashMap::new(),
         };
