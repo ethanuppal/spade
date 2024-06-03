@@ -3,7 +3,7 @@ pub mod param_util;
 pub mod symbol_table;
 pub mod testutil;
 
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 pub use expression::{Argument, ArgumentKind, ArgumentList, ExprKind, Expression};
 use itertools::Itertools;
@@ -195,7 +195,7 @@ pub struct Register {
 }
 impl WithLocation for Register {}
 
-#[derive(PartialEq, Debug, Clone, Serialize, Deserialize)]
+#[derive(PartialEq, Debug, Clone, PartialOrd, Eq, Ord, Serialize, Deserialize)]
 pub struct Module {
     pub name: Loc<NameID>,
 }
@@ -627,13 +627,13 @@ impl WithLocation for ImplBlock {}
 /// That is, `mod a { mod b{ entity X {} } } will result in members containing `a::b::X`, but the
 /// module hierarchy no longer has to be traversed.
 ///
-/// The hierarchy however still exists through the `modules` map.
+/// The modules themselves however still exist in the `modules` set.
 #[derive(PartialEq, Debug, Clone, Serialize, Deserialize)]
 pub struct ItemList {
     pub executables: BTreeMap<NameID, ExecutableItem>,
     pub types: TypeList,
-    /// Contains the **direct** sub-modules of a module.
-    pub modules: BTreeMap<NameID, Vec<Module>>,
+    /// All modules, including empty ones.
+    pub modules: BTreeMap<NameID, Module>,
     // FIXME: Support entities and pipelines as trait members.
     /// All traits in the compilation unit. Traits consist of a list of functions
     /// by name. Anonymous impl blocks are also members here, but their name is never

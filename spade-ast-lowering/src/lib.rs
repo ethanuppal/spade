@@ -900,23 +900,12 @@ pub fn visit_module(
         })
         .expect("Attempting to lower a module that has not been added to the symtab previously");
 
-    let parent = id.1.pop();
-    let parent_id = ctx
-        .symtab
-        .lookup_id(&parent)
-        .map_err(|_| {
-            ctx.symtab.print_symbols();
-            println!("Failed to find {parent:?} in symtab")
-        })
-        .expect("Attempting to lower a module that has not been added to the symtab previously");
-
-    item_list
-        .modules
-        .entry(parent_id)
-        .or_default()
-        .push(Module {
+    item_list.modules.insert(
+        id.clone(),
+        Module {
             name: id.at_loc(&module.name),
-        });
+        },
+    );
 
     visit_module_body(item_list, &module.body, ctx)
 }
@@ -3354,6 +3343,16 @@ mod module_visiting {
 
         let mut symtab = SymbolTable::new();
         let idtracker = ExprIdTracker::new();
+
+        /*let namespace = ModuleNamespace {
+            namespace: SpadePath::from_strs(&$namespace),
+            base_namespace: SpadePath::from_strs(&$base_namespace),
+        };
+        symtab.add_thing(
+            namespace.namespace.clone(),
+            spade_hir::symbol_table::Thing::Module(namespace.namespace.0[0].clone()),
+        );*/
+
         global_symbols::gather_symbols(&input, &mut symtab, &mut ItemList::new())
             .expect("failed to collect global symbols");
         let mut item_list = ItemList::new();
