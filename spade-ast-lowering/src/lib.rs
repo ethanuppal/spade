@@ -890,7 +890,11 @@ pub fn visit_module(
     module: &ast::Module,
     ctx: &mut Context,
 ) -> Result<()> {
-    let path = Path(vec![module.name.clone()]).at_loc(&module.name.loc());
+    let path = &ctx
+        .symtab
+        .current_namespace()
+        .clone()
+        .at_loc(&module.name.loc());
     let id = ctx
         .symtab
         .lookup_id(&path)

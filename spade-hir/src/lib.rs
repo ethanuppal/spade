@@ -3,7 +3,7 @@ pub mod param_util;
 pub mod symbol_table;
 pub mod testutil;
 
-use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::collections::{BTreeMap, HashMap};
 
 pub use expression::{Argument, ArgumentKind, ArgumentList, ExprKind, Expression};
 use itertools::Itertools;
