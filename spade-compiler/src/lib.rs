@@ -7,6 +7,7 @@ use compiler_state::{CompilerState, MirContext};
 use logos::Logos;
 use ron::ser::PrettyConfig;
 use spade_ast_lowering::id_tracker::ExprIdTracker;
+pub use spade_common::namespace::ModuleNamespace;
 use spade_mir::codegen::{prepare_codegen, Codegenable};
 use spade_mir::unit_name::InstanceMap;
 use spade_mir::verilator_wrapper::verilator_wrappers;
@@ -102,12 +103,6 @@ impl<'a> ErrorHandler<'a> {
             &mut self.diag_handler,
         );
     }
-}
-
-#[derive(Debug)]
-pub struct ModuleNamespace {
-    pub namespace: SpadePath,
-    pub base_namespace: SpadePath,
 }
 
 /// Compiler output.

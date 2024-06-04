@@ -3232,6 +3232,7 @@ mod module_visiting {
     use spade_common::name::testutil::name_id;
 
     use pretty_assertions::assert_eq;
+    use spade_common::namespace::ModuleNamespace;
 
     #[test]
     fn visiting_module_with_one_entity_works() {
@@ -3344,14 +3345,15 @@ mod module_visiting {
         let mut symtab = SymbolTable::new();
         let idtracker = ExprIdTracker::new();
 
-        /*let namespace = ModuleNamespace {
-            namespace: SpadePath::from_strs(&$namespace),
-            base_namespace: SpadePath::from_strs(&$base_namespace),
+        let namespace = ModuleNamespace {
+            namespace: Path::from_strs(&[""]),
+            base_namespace: Path::from_strs(&[""]),
         };
         symtab.add_thing(
             namespace.namespace.clone(),
             spade_hir::symbol_table::Thing::Module(namespace.namespace.0[0].clone()),
-        );*/
+        );
+        global_symbols::gather_types(&input, &mut symtab).expect("failed to collect types");
 
         global_symbols::gather_symbols(&input, &mut symtab, &mut ItemList::new())
             .expect("failed to collect global symbols");
