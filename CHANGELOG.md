@@ -17,6 +17,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - [!307][!307] Allow specifying command line arguments via a json file
 - [!308][!308] Add `/` and `%` for power of 2 operands, as well as `comb_div` and `comb_mod` for all operands
 - [!309][!309] Add named argument turbofishes (`::$<>`)
+- [!312][!312] Include a map of modules in `ItemList`
 
 ### Changed
 
@@ -27,10 +28,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 [!304]: https://gitlab.com/spade-lang/spade/-/merge_requests/304
 [!307]: https://gitlab.com/spade-lang/spade/-/merge_requests/307
 [!308]: https://gitlab.com/spade-lang/spade/-/merge_requests/308
+[!309]: https://gitlab.com/spade-lang/spade/-/merge_requests/309
+[!312]: https://gitlab.com/spade-lang/spade/-/merge_requests/312
 
 ## [0.8.0] - 2024-05-14
 
 ### Added
+
 - [!288][!288] Implement binary reduction operations in std::ops
 - [!290][!290] Add higher level memory primitives to `std::mem`
 - [!290][!290] Add clock domain crossing primitives to `std::cdc`
@@ -47,8 +51,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - [!297][!297] Fix panic when passing modules with reserved keywords as name (it is still a normal error)
 - [!300][!300] Fix expected `stage.ready` or `stage.valid` diagnostic
 - [!299][!299] Pipeline References now work in blocks
-- [!299][!299] Prevent Pipeline references from laundering variables before they were declared 
-
+- [!299][!299] Prevent Pipeline references from laundering variables before they were declared
 
 [!244]: https://gitlab.com/spade-lang/spade/-/merge_requests/244
 [!288]: https://gitlab.com/spade-lang/spade/-/merge_requests/288
@@ -76,13 +79,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 - [!272][!272] Parentheses can now be omitted on aliased enum variants like `None`
 - [!273][!273] Allow bitwise negation (~) of unsigned integers
-- [!277][!277] Passing too many types to a turbofish operator now produces an error instead of panicking 
+- [!277][!277] Passing too many types to a turbofish operator now produces an error instead of panicking
 - [!275][!275] Fix parsing of subtraction without spaces, like `1-2`
 - [!278][!278] Confirm correct number of generic parameters
 
 ### Removed
-
-
 
 [!266]: https://gitlab.com/spade-lang/spade/-/merge_requests/266
 [!272]: https://gitlab.com/spade-lang/spade/-/merge_requests/272
@@ -93,7 +94,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 [!281]: https://gitlab.com/spade-lang/spade/-/merge_requests/281
 [!285]: https://gitlab.com/spade-lang/spade/-/merge_requests/285
 [!277]: https://gitlab.com/spade-lang/spade/-/merge_requests/277
-
 
 ## [0.6.0] - 2024-01-03
 
@@ -172,7 +172,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 - [!206][!206] Remove type dump file. This information was redundant and can be recovered from `CompilerState` instead
 
-
 [Associated Swim release](https://gitlab.com/spade-lang/swim/-/tree/v0.4.0)
 
 [!202]: https://gitlab.com/spade-lang/spade/-/merge_requests/202
@@ -220,7 +219,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 [!195]: https://gitlab.com/spade-lang/spade/-/merge_requests/195
 [!200]: https://gitlab.com/spade-lang/spade/-/merge_requests/200
 [!201]: https://gitlab.com/spade-lang/spade/-/merge_requests/201
-
 [doc_inverted_ports]: https://docs.spade-lang.org/language_reference/type_system/inverted_ports.html
 
 ## [0.2.0] - 2023-04-20
@@ -251,7 +249,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 [!165]: https://gitlab.com/spade-lang/spade/-/merge_requests/165
 [!169]: https://gitlab.com/spade-lang/spade/-/merge_requests/169
 [!185]: https://gitlab.com/spade-lang/spade/-/merge_requests/185
-
 
 ## [0.1.0] - 2023-03-07
 
