@@ -659,6 +659,22 @@ impl ItemList {
         }
     }
 
+    pub fn add_executable(
+        &mut self,
+        name: Loc<NameID>,
+        item: ExecutableItem,
+    ) -> Result<(), Diagnostic> {
+        if let Some(_) = self.executables.get_key_value(&name) {
+            Err(
+                Diagnostic::error(&name, format!("Multiple definitions of thing {name}"))
+                    .primary_label("New definition"),
+            )
+        } else {
+            self.executables.insert(name.inner, item);
+            Ok(())
+        }
+    }
+
     pub fn add_trait(
         &mut self,
         name: TraitName,

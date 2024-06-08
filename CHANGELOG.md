@@ -21,6 +21,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Changed
 
+- [!314][!314] Cleanup `ItemList` merge and make trait impls inside modules work
+
 ### Fixed
 
 ### Removed
@@ -30,6 +32,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 [!308]: https://gitlab.com/spade-lang/spade/-/merge_requests/308
 [!309]: https://gitlab.com/spade-lang/spade/-/merge_requests/309
 [!312]: https://gitlab.com/spade-lang/spade/-/merge_requests/312
+[!314]: https://gitlab.com/spade-lang/spade/-/merge_requests/314
 
 ## [0.8.0] - 2024-05-14
 

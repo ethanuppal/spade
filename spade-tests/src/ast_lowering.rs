@@ -1134,3 +1134,23 @@ snapshot_error! {
     }
     "
 }
+
+#[test]
+fn trait_impls_inside_modules_works() {
+    let code = r#"
+        struct A {}
+        trait X {
+            fn foo(self) -> bool;
+        }
+
+        mod M {
+            impl X for A {
+                fn foo(self) -> bool {
+                    true
+                }
+            }
+        }
+    "#;
+
+    build_items(code);
+}

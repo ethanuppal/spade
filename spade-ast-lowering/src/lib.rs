@@ -852,35 +852,31 @@ pub fn visit_item(
     item: &ast::Item,
     ctx: &mut Context,
     item_list: &mut hir::ItemList,
-) -> Result<(Vec<hir::Item>, Option<hir::ItemList>)> {
+) -> Result<Vec<hir::Item>> {
     match item {
-        ast::Item::Unit(u) => Ok((vec![visit_unit(None, u, ctx)?], None)),
+        ast::Item::Unit(u) => Ok(vec![visit_unit(None, u, ctx)?]),
         ast::Item::TraitDef(_) => {
             // Global symbol lowering already visits traits
             event!(Level::INFO, "Trait definition");
-            Ok((vec![], None))
+            Ok(vec![])
         }
         ast::Item::Type(_) => {
             // Global symbol lowering already visits type declarations
             event!(Level::INFO, "Type definition");
-            Ok((vec![], None))
+            Ok(vec![])
         }
-        ast::Item::ImplBlock(block) => Ok((visit_impl(block, item_list, ctx)?, None)),
+        ast::Item::ImplBlock(block) => visit_impl(block, item_list, ctx),
         ast::Item::Module(m) => {
             ctx.symtab.push_namespace(m.name.clone());
-            let mut new_item_list = hir::ItemList::new();
-            let result = match visit_module(&mut new_item_list, m, ctx) {
-                Ok(()) => Ok((vec![], Some(new_item_list))),
-                Err(e) => Err(e),
-            };
+            let result = visit_module(item_list, m, ctx);
             ctx.symtab.pop_namespace();
-            result
+            result.map(|_| vec![])
         }
         ast::Item::Use(s) => match ctx.symtab.lookup_id(&s.path) {
-            Ok(_) => Ok((vec![], None)),
+            Ok(_) => Ok(vec![]),
             Err(lookup_error) => Err(lookup_error.into()),
         },
-        ast::Item::Config(_) => Ok((vec![], None)),
+        ast::Item::Config(_) => Ok(vec![]),
     }
 }
 
@@ -920,44 +916,17 @@ pub fn visit_module_body(
     body: &ast::ModuleBody,
     ctx: &mut Context,
 ) -> Result<()> {
-    let all_items = body
-        .members
-        .iter()
-        .map(|i| visit_item(i, ctx, item_list))
-        .collect::<Result<Vec<_>>>()?
-        .into_iter();
-
-    for (items, new_item_list) in all_items {
-        // Insertion in hash maps return a value if duplicates are present (or not if try_insert is
-        // used) We need to get rid of that for the type of the match block here to work, and a macro
-        // hides those details
-        macro_rules! add_item {
-            ($map:expr, $name:expr, $item:expr) => {{
-                if let Some(_) = $map.insert($name, $item) {
-                    panic!("Internal error: Multiple things named {}", $name)
+    for i in &body.members {
+        for item in visit_item(i, ctx, item_list)? {
+            match item {
+                hir::Item::Unit(u) => {
+                    item_list.add_executable(u.name.name_id().clone(), ExecutableItem::Unit(u))?
                 }
-            }};
-        }
 
-        use hir::Item::*;
-        for item in items {
-            match &item {
-                Unit(u) => add_item!(
-                    item_list.executables,
-                    u.name.name_id().inner.clone(),
-                    ExecutableItem::Unit(u.clone())
-                ),
-                Builtin(name, head) => add_item!(
-                    item_list.executables,
-                    name.name_id().inner.clone(),
-                    ExecutableItem::BuiltinUnit(name.clone(), head.clone())
-                ),
-            }
-        }
-
-        if let Some(list) = new_item_list {
-            for (name, executable) in list.executables {
-                add_item!(item_list.executables, name.clone(), executable)
+                hir::Item::Builtin(name, head) => item_list.add_executable(
+                    name.name_id().clone(),
+                    ExecutableItem::BuiltinUnit(name, head),
+                )?,
             }
         }
     }
@@ -3091,7 +3060,7 @@ mod item_visiting {
                 },
                 &mut ItemList::new()
             ),
-            Ok((vec![expected], None))
+            Ok(vec![expected])
         );
     }
 }
@@ -3341,7 +3310,22 @@ mod module_visiting {
         let expected = hir::ItemList {
             executables: vec![].into_iter().collect(),
             types: vec![].into_iter().collect(),
-            modules: vec![].into_iter().collect(),
+            modules: vec![
+                (
+                    name_id(1, "outer").inner,
+                    hir::Module {
+                        name: name_id(1, "outer"),
+                    },
+                ),
+                (
+                    name_id(2, "outer::inner").inner,
+                    hir::Module {
+                        name: name_id(2, "outer::inner"),
+                    },
+                ),
+            ]
+            .into_iter()
+            .collect(),
             traits: HashMap::new(),
             impls: HashMap::new(),
         };
