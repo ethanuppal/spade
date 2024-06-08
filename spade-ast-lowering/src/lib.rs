@@ -897,7 +897,7 @@ pub fn visit_module(
         .at_loc(&module.name.loc());
     let id = ctx
         .symtab
-        .lookup_id(&path)
+        .lookup_id(path)
         .map_err(|_| {
             ctx.symtab.print_symbols();
             println!("Failed to find {path:?} in symtab")
