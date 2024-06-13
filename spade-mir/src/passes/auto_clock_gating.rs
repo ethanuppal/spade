@@ -32,7 +32,7 @@ fn split_trivial_tag_value(
         name: payload_name.clone(),
         operator: Operator::RangeIndexBits {
             start: 0u32.to_biguint(),
-            end_exclusive: payload_size + 1u32.to_biguint(),
+            end_exclusive: payload_size,
         },
         operands: vec![value.clone()],
         ty: Type::Tuple(variants[1].clone()),
@@ -101,7 +101,7 @@ impl Register {
                         operands: vec![
                             value_tag.clone(),
                             value_payload.clone(),
-                            payload_reg_value_name.clone(),
+                            payload_reg_name.clone(),
                         ],
                         ty: payload_type.clone(),
                         loc: self.loc,
