@@ -110,4 +110,3 @@ class OutputField(object):
                 self.spade__.output_field(new_path),
                 self.dut__
             )
-

@@ -15,28 +15,28 @@ use spade_hir as hir;
 use crate::{
     attributes::{AttributeListExt, LocAttributeExt},
     types::IsPort,
-    visit_parameter_list, Result, SelfContext,
+    visit_parameter_list, Context, Result,
 };
 use spade_hir::symbol_table::{GenericArg, SymbolTable, Thing, TypeSymbol};
 
 #[tracing::instrument(skip_all)]
-pub fn gather_types(module: &ast::ModuleBody, symtab: &mut SymbolTable) -> Result<()> {
+pub fn gather_types(module: &ast::ModuleBody, ctx: &mut Context) -> Result<()> {
     for item in &module.members {
         match item {
             ast::Item::Type(t) => {
-                visit_type_declaration(t, symtab)?;
+                visit_type_declaration(t, &mut ctx.symtab)?;
             }
             ast::Item::Module(m) => {
-                symtab.add_unique_thing(
+                ctx.symtab.add_unique_thing(
                     Path::ident(m.name.clone()).at_loc(&m.name),
                     Thing::Module(m.name.clone()),
                 )?;
-                symtab.push_namespace(m.name.clone());
-                if let Err(e) = gather_types(&m.body, symtab) {
-                    symtab.pop_namespace();
+                ctx.symtab.push_namespace(m.name.clone());
+                if let Err(e) = gather_types(&m.body, ctx) {
+                    ctx.symtab.pop_namespace();
                     return Err(e);
                 };
-                symtab.pop_namespace();
+                ctx.symtab.pop_namespace();
             }
             ast::Item::ImplBlock(_) => {}
             ast::Item::Unit(_) => {}
@@ -45,7 +45,7 @@ pub fn gather_types(module: &ast::ModuleBody, symtab: &mut SymbolTable) -> Resul
                 // to the symtab here
             }
             ast::Item::Config(cfg) => {
-                symtab.add_unique_thing(
+                ctx.symtab.add_unique_thing(
                     Path::ident(cfg.name.clone()).at_loc(&cfg.name),
                     Thing::ComptimeConfig(cfg.val.clone()),
                 )?;
@@ -56,7 +56,7 @@ pub fn gather_types(module: &ast::ModuleBody, symtab: &mut SymbolTable) -> Resul
                     None => u.path.0.last().unwrap().clone(),
                 };
 
-                symtab.add_alias(
+                ctx.symtab.add_alias(
                     Path::ident(new_name.clone()).at_loc(&new_name.loc()),
                     u.path.clone(),
                 )?;
@@ -70,28 +70,23 @@ pub fn gather_types(module: &ast::ModuleBody, symtab: &mut SymbolTable) -> Resul
 #[tracing::instrument(skip_all)]
 pub fn gather_symbols(
     module: &ast::ModuleBody,
-    symtab: &mut SymbolTable,
     item_list: &mut ItemList,
+    ctx: &mut Context,
 ) -> Result<()> {
     for item in &module.members {
-        visit_item(item, symtab, item_list)?;
+        visit_item(item, item_list, ctx)?;
     }
-
     Ok(())
 }
 
 #[tracing::instrument(skip_all)]
-pub fn visit_item(
-    item: &ast::Item,
-    symtab: &mut SymbolTable,
-    item_list: &mut ItemList,
-) -> Result<()> {
+pub fn visit_item(item: &ast::Item, item_list: &mut ItemList, ctx: &mut Context) -> Result<()> {
     match item {
         ast::Item::Unit(e) => {
-            visit_unit(&None, e, symtab, &SelfContext::FreeStanding)?;
+            visit_unit(&None, e, ctx)?;
         }
         ast::Item::TraitDef(def) => {
-            let name = symtab.add_unique_thing(
+            let name = ctx.symtab.add_unique_thing(
                 Path(vec![def.name.clone()]).at_loc(&def.name),
                 Thing::Trait(def.name.clone()),
             )?;
@@ -100,20 +95,20 @@ pub fn visit_item(
                 hir::TraitName::Named(name.at_loc(&def.name)),
                 &def.methods,
                 item_list,
-                symtab,
+                ctx,
             )?;
         }
         ast::Item::ImplBlock(_) => {}
         ast::Item::Type(t) => {
-            re_visit_type_declaration(t, symtab, item_list)?;
+            re_visit_type_declaration(t, item_list, ctx)?;
         }
         ast::Item::Module(m) => {
-            symtab.push_namespace(m.name.clone());
-            if let Err(e) = gather_symbols(&m.body, symtab, item_list) {
-                symtab.pop_namespace();
+            ctx.symtab.push_namespace(m.name.clone());
+            if let Err(e) = gather_symbols(&m.body, item_list, ctx) {
+                ctx.symtab.pop_namespace();
                 return Err(e);
             }
-            symtab.pop_namespace();
+            ctx.symtab.pop_namespace();
         }
         ast::Item::Use(_) => {}
         ast::Item::Config(_) => {}
@@ -122,13 +117,8 @@ pub fn visit_item(
 }
 
 #[tracing::instrument(skip_all)]
-pub fn visit_unit(
-    extra_path: &Option<Path>,
-    e: &Loc<ast::Unit>,
-    symtab: &mut SymbolTable,
-    self_context: &SelfContext,
-) -> Result<()> {
-    let head = crate::unit_head(&e.head, symtab, self_context)?;
+pub fn visit_unit(extra_path: &Option<Path>, e: &Loc<ast::Unit>, ctx: &mut Context) -> Result<()> {
+    let head = crate::unit_head(&e.head, ctx)?;
 
     let new_path = extra_path
         .as_ref()
@@ -136,7 +126,8 @@ pub fn visit_unit(
         .join(Path::ident(e.head.name.clone()))
         .at_loc(&e.head.name);
 
-    symtab.add_unique_thing(new_path, Thing::Unit(head.at_loc(e)))?;
+    ctx.symtab
+        .add_unique_thing(new_path, Thing::Unit(head.at_loc(e)))?;
 
     Ok(())
 }
@@ -179,25 +170,26 @@ pub fn visit_type_declaration(
 /// we check type declarations
 pub fn re_visit_type_declaration(
     t: &Loc<ast::TypeDeclaration>,
-    symtab: &mut SymbolTable,
     items: &mut ItemList,
+    ctx: &mut Context,
 ) -> Result<()> {
     // Process right hand side of type declarations
     // The first visitor has already added the LHS to the symtab
     // Look up the ID
-    let (declaration_id, _) = symtab
+    let (declaration_id, _) = ctx
+        .symtab
         .lookup_type_symbol(&Path(vec![t.name.clone()]).at_loc(&t.name))
         .expect("Expected type symbol to already be in symtab");
     let declaration_id = declaration_id.at_loc(&t.name);
 
     // Add the generic parameters to a new symtab scope
-    symtab.new_scope();
+    ctx.symtab.new_scope();
     for param in &t.generic_args {
         let (name, symbol_type) = match &param.inner {
             ast::TypeParam::TypeName { name: n, traits } => {
                 let resolved_traits = traits
                     .iter()
-                    .map(|t| Ok(symtab.lookup_trait(t)?.0.at_loc(t)))
+                    .map(|t| Ok(ctx.symtab.lookup_trait(t)?.0.at_loc(t)))
                     .collect::<Result<Vec<_>>>()?;
                 (
                     n,
@@ -208,7 +200,8 @@ pub fn re_visit_type_declaration(
             }
             ast::TypeParam::Integer(n) => (n, TypeSymbol::GenericInt),
         };
-        symtab.add_type(Path::ident(name.clone()), symbol_type.at_loc(param));
+        ctx.symtab
+            .add_type(Path::ident(name.clone()), symbol_type.at_loc(param));
     }
 
     // Generate TypeExprs and TypeParam vectors which are needed for building the
@@ -216,7 +209,8 @@ pub fn re_visit_type_declaration(
     let mut output_type_exprs = vec![];
     let mut type_params = vec![];
     for arg in &t.generic_args {
-        let (name_id, _) = symtab
+        let (name_id, _) = ctx
+            .symtab
             .lookup_type_symbol(&Path(vec![arg.name().clone()]).at_loc(arg))
             .expect("Expected generic param to be in symtab");
         let expr = TypeExpression::TypeSpec(hir::TypeSpec::Generic(name_id.clone().at_loc(arg)))
@@ -250,7 +244,7 @@ pub fn re_visit_type_declaration(
                 let parameter_list = option
                     .1
                     .clone()
-                    .map(|l| visit_parameter_list(&l, symtab, &SelfContext::FreeStanding))
+                    .map(|l| visit_parameter_list(&l, ctx))
                     .unwrap_or_else(|| Ok(hir::ParameterList(vec![]).nowhere()))?;
 
                 let args = option
@@ -267,7 +261,7 @@ pub fn re_visit_type_declaration(
 
                 // Ensure that we don't have any port types in the enum variants
                 for (_, _, ty) in args {
-                    if ty.is_port(symtab)? {
+                    if ty.is_port(&ctx.symtab)? {
                         return Err(Diagnostic::error(ty, "Port in enum")
                             .primary_label("This is a port")
                             .secondary_label(&e.name, "This is an enum"));
@@ -287,7 +281,7 @@ pub fn re_visit_type_declaration(
                 };
 
                 // Add option constructor to symtab at the outer scope
-                let head_id = symtab.add_thing_at_offset(
+                let head_id = ctx.symtab.add_thing_at_offset(
                     1,
                     Path(vec![e.name.clone(), option.0.clone()]),
                     Thing::EnumVariant(variant_thing.at_loc(&option.0)),
@@ -325,7 +319,7 @@ pub fn re_visit_type_declaration(
             // if it is not
             if s.is_port() {
                 for (_, f, ty) in &s.members.args {
-                    if !ty.is_port(symtab)? {
+                    if !ty.is_port(&ctx.symtab)? {
                         return Err(Diagnostic::error(ty, "Non-port in port struct")
                             .primary_label("This is not a port type")
                             .secondary_label(
@@ -342,7 +336,7 @@ pub fn re_visit_type_declaration(
                 }
             } else {
                 for (_, _, ty) in &s.members.args {
-                    if ty.is_port(symtab)? {
+                    if ty.is_port(&ctx.symtab)? {
                         return Err(Diagnostic::error(ty, "Port in non-port struct")
                             .primary_label("This is a port")
                             .secondary_label(&s.name, "This is not a port struct")
@@ -355,13 +349,13 @@ pub fn re_visit_type_declaration(
                 }
             }
 
-            let members = visit_parameter_list(&s.members, symtab, &SelfContext::FreeStanding)?;
+            let members = visit_parameter_list(&s.members, ctx)?;
 
             let self_type =
                 hir::TypeSpec::Declared(declaration_id.clone(), output_type_exprs.clone())
                     .at_loc(s);
 
-            symtab.add_thing_with_name_id(
+            ctx.symtab.add_thing_with_name_id(
                 declaration_id.inner.clone(),
                 Thing::Struct(
                     StructCallable {
@@ -421,7 +415,7 @@ pub fn re_visit_type_declaration(
         }
     };
     // Close the symtab scope
-    symtab.close_scope();
+    ctx.symtab.close_scope();
 
     // Add type to item list
     let decl = hir::TypeDeclaration {
@@ -437,6 +431,7 @@ pub fn re_visit_type_declaration(
 
 #[cfg(test)]
 mod tests {
+    use crate::testutil::test_context;
     use ast::{
         aparams,
         testutil::{ast_ident, ast_path},
@@ -499,17 +494,15 @@ mod tests {
         .nowhere();
 
         // Populate the symtab with builtins
-        let mut symtab = SymbolTable::new();
+        let mut ctx = test_context();
+        let mut item_list = ItemList::new();
 
-        let mut items = ItemList::new();
-
-        crate::builtins::populate_symtab(&mut symtab, &mut ItemList::new());
-        crate::global_symbols::visit_type_declaration(&input, &mut symtab)
-            .expect("Failed to visit global symbol");
-        crate::global_symbols::re_visit_type_declaration(&input, &mut symtab, &mut items)
+        crate::builtins::populate_symtab(&mut ctx.symtab, &mut ItemList::new());
+        visit_type_declaration(&input, &mut ctx.symtab).expect("Failed to visit global symbol");
+        re_visit_type_declaration(&input, &mut item_list, &mut ctx)
             .expect("Failed to re-visit global symbol");
 
-        let result = items.types.get(&name_id(0, "test").inner).unwrap();
+        let result = item_list.types.get(&name_id(0, "test").inner).unwrap();
 
         let expected = hir::TypeDeclaration {
             name: name_id(0, "test"),
@@ -522,11 +515,11 @@ mod tests {
                         ),
                         (
                             name_id_p(2, &["test", "B"]),
-                            hparams![("x", dtype!(symtab => "bool"))].nowhere(),
+                            hparams![("x", dtype!(ctx.symtab => "bool"))].nowhere(),
                         ),
                         (
                             name_id_p(3, &["test", "C"]),
-                            hparams![("x", dtype!(symtab => "int"; (t_num(10))))].nowhere(),
+                            hparams![("x", dtype!(ctx.symtab => "int"; (t_num(10))))].nowhere(),
                         ),
                     ],
                 }
@@ -561,17 +554,15 @@ mod tests {
         .nowhere();
 
         // Populate the symtab with builtins
-        let mut symtab = SymbolTable::new();
+        let mut ctx = test_context();
+        let mut item_list = ItemList::new();
 
-        let mut items = ItemList::new();
-
-        crate::builtins::populate_symtab(&mut symtab, &mut ItemList::new());
-        crate::global_symbols::visit_type_declaration(&input, &mut symtab)
-            .expect("Failed to visit global symbol");
-        crate::global_symbols::re_visit_type_declaration(&input, &mut symtab, &mut items)
+        crate::builtins::populate_symtab(&mut ctx.symtab, &mut ItemList::new());
+        visit_type_declaration(&input, &mut ctx.symtab).expect("Failed to visit global symbol");
+        re_visit_type_declaration(&input, &mut item_list, &mut ctx)
             .expect("Failed to visit global symbol");
 
-        let result = items.types.get(&name_id(0, "test").inner).unwrap();
+        let result = item_list.types.get(&name_id(0, "test").inner).unwrap();
 
         let expected = hir::TypeDeclaration {
             name: name_id(0, "test"),

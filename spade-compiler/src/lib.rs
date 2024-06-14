@@ -20,8 +20,9 @@ use tracing::Level;
 use spade_ast::ModuleBody;
 use spade_ast_lowering::{
     ensure_unique_anonymous_traits, global_symbols, visit_module_body, Context as AstLoweringCtx,
+    SelfContext,
 };
-use spade_common::id_tracker;
+use spade_common::id_tracker::ImplIdTracker;
 use spade_common::name::{NameID, Path as SpadePath};
 use spade_diagnostics::{CodeBundle, CompilationError, DiagHandler, Diagnostic};
 use spade_hir::symbol_table::SymbolTable;
@@ -178,15 +179,23 @@ pub fn compile(
         return Err(unfinished_artefacts);
     }
 
+    let mut ctx = AstLoweringCtx {
+        symtab,
+        idtracker: ExprIdTracker::new(),
+        impl_idtracker: ImplIdTracker::new(),
+        pipeline_ctx: None,
+        self_ctx: SelfContext::FreeStanding,
+    };
+
     for (namespace, module_ast) in &module_asts {
         if !namespace.namespace.0.is_empty() {
-            symtab.add_thing(
+            ctx.symtab.add_thing(
                 namespace.namespace.clone(),
                 spade_hir::symbol_table::Thing::Module(namespace.namespace.0[0].clone()),
             );
         }
-        do_in_namespace(namespace, &mut symtab, &mut |symtab| {
-            global_symbols::gather_types(module_ast, symtab).or_report(&mut errors);
+        do_in_namespace(namespace, &mut ctx, &mut |ctx| {
+            global_symbols::gather_types(module_ast, ctx).or_report(&mut errors);
         })
     }
 
@@ -195,9 +204,8 @@ pub fn compile(
     }
 
     for (namespace, module_ast) in &module_asts {
-        do_in_namespace(namespace, &mut symtab, &mut |symtab| {
-            global_symbols::gather_symbols(module_ast, symtab, &mut item_list)
-                .or_report(&mut errors);
+        do_in_namespace(namespace, &mut ctx, &mut |ctx| {
+            global_symbols::gather_symbols(module_ast, &mut item_list, ctx).or_report(&mut errors);
         })
     }
 
@@ -206,15 +214,6 @@ pub fn compile(
     if errors.failed {
         return Err(unfinished_artefacts);
     }
-
-    let idtracker = id_tracker::ExprIdTracker::new();
-    let impl_idtracker = id_tracker::ImplIdTracker::new();
-    let mut ctx = AstLoweringCtx {
-        symtab,
-        idtracker,
-        impl_idtracker,
-        pipeline_ctx: None,
-    };
 
     lower_ast(&module_asts, &mut item_list, &mut ctx, &mut errors);
 
@@ -225,13 +224,14 @@ pub fn compile(
         mut idtracker,
         impl_idtracker,
         pipeline_ctx: _,
+        self_ctx: _,
     } = ctx;
 
     for e in ensure_unique_anonymous_traits(&item_list) {
         errors.report(&e)
     }
 
-    // If we have errors during AST lowering, we need to early return becausue the
+    // If we have errors during AST lowering, we need to early return because the
     // items have already been added to the symtab when they are detected. Further compilation
     // relies on all names in the symtab being in the item list, which will not be the
     // case if we failed to compile some
@@ -369,20 +369,21 @@ pub fn compile(
 
 fn do_in_namespace(
     namespace: &ModuleNamespace,
-    symtab: &mut SymbolTable,
-    to_do: &mut dyn FnMut(&mut SymbolTable),
+    ctx: &mut AstLoweringCtx,
+    to_do: &mut dyn FnMut(&mut AstLoweringCtx),
 ) {
     for ident in &namespace.namespace.0 {
         // NOTE: These identifiers do not have the correct file_id. However,
         // as far as I know, they will never be part of an error, so we *should*
         // be safe.
-        symtab.push_namespace(ident.clone());
+        ctx.symtab.push_namespace(ident.clone());
     }
-    symtab.set_base_namespace(namespace.base_namespace.clone());
-    to_do(symtab);
-    symtab.set_base_namespace(SpadePath(vec![]));
+    ctx.symtab
+        .set_base_namespace(namespace.base_namespace.clone());
+    to_do(ctx);
+    ctx.symtab.set_base_namespace(SpadePath(vec![]));
     for _ in &namespace.namespace.0 {
-        symtab.pop_namespace();
+        ctx.symtab.pop_namespace();
     }
 }
 

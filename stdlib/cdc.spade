@@ -15,7 +15,7 @@ mod unsafe {
     /// NOTE: This function does not provide any guarantees about value
     /// integrity for / signals of more than one bit as crossing 2 domains with
     /// multi-bit signals can cause issues.
-    /// It is primariliy intended for other synchronization primitives
+    /// It is primarily intended for other synchronization primitives
     entity sync2<T>(clk: clock, in: T) -> T {
         reg(clk) sync1 = in;
         reg(clk) sync2 = sync1;

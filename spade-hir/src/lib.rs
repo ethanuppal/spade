@@ -255,7 +255,7 @@ pub enum TypeSpec {
     Inverted(Box<Loc<TypeSpec>>),
     Wire(Box<Loc<TypeSpec>>),
     /// The type of the `self` parameter in a trait method spec. Should not
-    /// occur in non-traits. The Loc is only used for diag_bails, so an approximte
+    /// occur in non-traits. The Loc is only used for diag_bails, so an approximate
     /// reference is fine.
     TraitSelf(Loc<()>),
 }
@@ -270,7 +270,7 @@ impl TypeSpec {
 
 impl std::fmt::Display for TypeSpec {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
+        let str = match self {
             TypeSpec::Declared(name, params) => {
                 let type_params = if params.is_empty() {
                     String::from("")
@@ -284,12 +284,11 @@ impl std::fmt::Display for TypeSpec {
                             .join(", ")
                     )
                 };
-                write!(f, "{name}{type_params}",)
+                format!("{name}{type_params}")
             }
-            TypeSpec::Generic(name) => write!(f, "{name}"),
+            TypeSpec::Generic(name) => format!("{name}"),
             TypeSpec::Tuple(members) => {
-                write!(
-                    f,
+                format!(
                     "({})",
                     members
                         .iter()
@@ -298,13 +297,14 @@ impl std::fmt::Display for TypeSpec {
                         .join(", ")
                 )
             }
-            TypeSpec::Array { inner, size } => write!(f, "[{inner}; {size}]"),
-            TypeSpec::Unit(_) => write!(f, "()"),
-            TypeSpec::Backward(inner) => write!(f, "&mut {inner}"),
-            TypeSpec::Inverted(inner) => write!(f, "~{inner}"),
-            TypeSpec::Wire(inner) => write!(f, "&{inner}"),
-            TypeSpec::TraitSelf(_) => write!(f, "Self"),
-        }
+            TypeSpec::Array { inner, size } => format!("[{inner}; {size}]"),
+            TypeSpec::Unit(_) => "()".into(),
+            TypeSpec::Backward(inner) => format!("&mut {inner}"),
+            TypeSpec::Inverted(inner) => format!("~{inner}"),
+            TypeSpec::Wire(inner) => format!("&{inner}"),
+            TypeSpec::TraitSelf(_) => "Self".into(),
+        };
+        write!(f, "{str}")
     }
 }
 

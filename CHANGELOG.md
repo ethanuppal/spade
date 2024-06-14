@@ -44,6 +44,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - [!290][!290] Add clock domain crossing primitives to `std::cdc`
 - [!293][!293] Add `inout<T>` for mapping to Verilog `inout` ports
 - [!294][!294] Add `.spade_repr()` to output fields in Verilator
+- [!303][!303] Add `Self` type in traits and impl blocks
 
 ### Changed
 
@@ -66,6 +67,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 [!297]: https://gitlab.com/spade-lang/spade/-/merge_requests/297
 [!299]: https://gitlab.com/spade-lang/spade/-/merge_requests/299
 [!300]: https://gitlab.com/spade-lang/spade/-/merge_requests/300
+[!303]: https://gitlab.com/spade-lang/spade/-/merge_requests/303
 
 ## [0.7.0] - 2024-03-21
 

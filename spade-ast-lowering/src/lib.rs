@@ -4,6 +4,7 @@ mod comptime;
 pub mod error;
 pub mod global_symbols;
 pub mod pipelines;
+pub mod testutil;
 pub mod types;
 
 use attributes::LocAttributeExt;
@@ -18,7 +19,7 @@ use std::collections::{HashMap, HashSet};
 use comptime::ComptimeCondExt;
 use hir::param_util::ArgumentError;
 use hir::symbol_table::DeclarationState;
-use hir::{ExecutableItem, Parameter, PatternKind, TraitName, WalTrace};
+use hir::{ExecutableItem, PatternKind, TraitName, WalTrace};
 use spade_ast as ast;
 use spade_common::id_tracker::{ExprIdTracker, ImplIdTracker};
 use spade_common::location_info::{Loc, WithLocation};
@@ -27,19 +28,21 @@ use spade_hir::{self as hir, Module};
 
 use crate::attributes::AttributeListExt;
 use crate::pipelines::maybe_perform_pipelining_tasks;
-use crate::types::IsPort;
+use crate::types::{IsPort, IsSelf};
 use ast::{Binding, ParameterList, UnitKind};
 use hir::expression::{BinaryOperator, IntLiteralKind};
 use hir::symbol_table::{LookupError, SymbolTable, Thing, TypeSymbol};
 pub use spade_common::id_tracker;
 
 use error::Result;
+use spade_hir::TypeSpec;
 
 pub struct Context {
     pub symtab: SymbolTable,
     pub idtracker: ExprIdTracker,
     pub impl_idtracker: ImplIdTracker,
     pub pipeline_ctx: Option<PipelineContext>,
+    pub self_ctx: SelfContext,
 }
 
 trait LocExt<T> {
@@ -61,10 +64,7 @@ impl<T> LocExt<T> for Loc<T> {
 /// added to the symbol table as this function is re-used for both global symbol collection
 /// and normal HIR lowering.
 #[tracing::instrument(skip_all, fields(name=%param.name()))]
-pub fn visit_type_param(
-    param: &ast::TypeParam,
-    symtab: &mut SymbolTable,
-) -> Result<hir::TypeParam> {
+pub fn visit_type_param(param: &ast::TypeParam, ctx: &mut Context) -> Result<hir::TypeParam> {
     match &param {
         ast::TypeParam::TypeName {
             name: ident,
@@ -73,14 +73,14 @@ pub fn visit_type_param(
             let traits = traits
                 .iter()
                 .map(|t| {
-                    symtab
+                    ctx.symtab
                         .lookup_trait(t)
                         .map(|(name, _)| name.at_loc(t))
                         .map_err(|e| e.into())
                 })
                 .collect::<Result<_>>()?;
 
-            let name_id = symtab.add_type(
+            let name_id = ctx.symtab.add_type(
                 Path::ident(ident.clone()),
                 TypeSymbol::GenericArg { traits }.at_loc(ident),
             );
@@ -88,7 +88,7 @@ pub fn visit_type_param(
             Ok(hir::TypeParam::TypeName(ident.clone(), name_id))
         }
         ast::TypeParam::Integer(ident) => {
-            let name_id = symtab.add_type(
+            let name_id = ctx.symtab.add_type(
                 Path::ident(ident.clone()),
                 TypeSymbol::GenericInt.at_loc(ident),
             );
@@ -100,11 +100,11 @@ pub fn visit_type_param(
 
 pub fn visit_type_expression(
     expr: &ast::TypeExpression,
-    symtab: &mut SymbolTable,
+    ctx: &mut Context,
 ) -> Result<hir::TypeExpression> {
     match expr {
         ast::TypeExpression::TypeSpec(spec) => {
-            let inner = visit_type_spec(spec, symtab)?;
+            let inner = visit_type_spec(spec, ctx)?;
             // Look up the type. For now, we'll panic if we don't find a concrete type
             Ok(hir::TypeExpression::TypeSpec(inner.inner))
         }
@@ -112,14 +112,21 @@ pub fn visit_type_expression(
     }
 }
 
-pub fn visit_type_spec(
-    t: &Loc<ast::TypeSpec>,
-    symtab: &mut SymbolTable,
-) -> Result<Loc<hir::TypeSpec>> {
+pub fn visit_type_spec(t: &Loc<ast::TypeSpec>, ctx: &mut Context) -> Result<Loc<hir::TypeSpec>> {
+    let trait_loc = if let SelfContext::TraitDefinition(TraitName::Named(name)) = &ctx.self_ctx {
+        name.loc()
+    } else {
+        ().nowhere()
+    };
+
+    if matches!(ctx.self_ctx, SelfContext::TraitDefinition(_)) && t.is_self()? {
+        return Ok(hir::TypeSpec::TraitSelf(().at_loc(&trait_loc)).at_loc(t));
+    };
+
     let result = match &t.inner {
         ast::TypeSpec::Named(path, params) => {
             // Lookup the referenced type
-            let (base_id, base_t) = symtab.lookup_type_symbol(path)?;
+            let (base_id, base_t) = ctx.symtab.lookup_type_symbol(path)?;
 
             // Check if the type is a declared type or a generic argument.
             match &base_t.inner {
@@ -132,7 +139,7 @@ pub fn visit_type_spec(
                         .map(|o| &o.inner)
                         .into_iter()
                         .flatten()
-                        .map(|p| p.try_map_ref(|p| visit_type_expression(p, symtab)))
+                        .map(|p| p.try_map_ref(|p| visit_type_expression(p, ctx)))
                         .collect::<Result<Vec<_>>>()?;
 
                     if generic_args.len() != visited_params.len() {
@@ -181,8 +188,8 @@ pub fn visit_type_spec(
             }
         }
         ast::TypeSpec::Array { inner, size } => {
-            let inner = Box::new(visit_type_spec(inner, symtab)?);
-            let size = Box::new(visit_type_expression(size, symtab)?.at_loc(size));
+            let inner = Box::new(visit_type_spec(inner, ctx)?);
+            let size = Box::new(visit_type_expression(size, ctx)?.at_loc(size));
 
             Ok(hir::TypeSpec::Array { inner, size })
         }
@@ -193,7 +200,7 @@ pub fn visit_type_spec(
             let transitive_port_witness = inner
                 .iter()
                 .map(|p| {
-                    if p.is_port(symtab)? {
+                    if p.is_port(&ctx.symtab)? {
                         Ok(Some(p))
                     } else {
                         Ok(None)
@@ -206,7 +213,7 @@ pub fn visit_type_spec(
             if let Some(witness) = transitive_port_witness {
                 // Since this type has 1 port, all members must be ports
                 for ty in inner {
-                    if !ty.is_port(symtab)? {
+                    if !ty.is_port(&ctx.symtab)? {
                         return Err(Diagnostic::error(
                             ty,
                             "Cannot mix ports and non-ports in a tuple",
@@ -220,42 +227,40 @@ pub fn visit_type_spec(
 
             let inner = inner
                 .iter()
-                .map(|p| visit_type_spec(p, symtab))
+                .map(|p| visit_type_spec(p, ctx))
                 .collect::<Result<Vec<_>>>()?;
 
             Ok(hir::TypeSpec::Tuple(inner))
         }
         ast::TypeSpec::Unit(w) => Ok(hir::TypeSpec::Unit(*w)),
         ast::TypeSpec::Backward(inner) => {
-            if inner.is_port(symtab)? {
+            if inner.is_port(&ctx.symtab)? {
                 return Err(Diagnostic::from(error::WireOfPort {
                     full_type: t.loc(),
                     inner_type: inner.loc(),
                 }));
             }
             Ok(hir::TypeSpec::Backward(Box::new(visit_type_spec(
-                inner, symtab,
+                inner, ctx,
             )?)))
         }
         ast::TypeSpec::Wire(inner) => {
-            if inner.is_port(symtab)? {
+            if inner.is_port(&ctx.symtab)? {
                 return Err(Diagnostic::from(error::WireOfPort {
                     full_type: t.loc(),
                     inner_type: inner.loc(),
                 }));
             }
-            Ok(hir::TypeSpec::Wire(Box::new(visit_type_spec(
-                inner, symtab,
-            )?)))
+            Ok(hir::TypeSpec::Wire(Box::new(visit_type_spec(inner, ctx)?)))
         }
         ast::TypeSpec::Inverted(inner) => {
-            if !inner.is_port(symtab)? {
+            if !inner.is_port(&ctx.symtab)? {
                 return Err(Diagnostic::error(t, "A non-port type can not be inverted")
                     .primary_label("Inverting non-port")
                     .secondary_label(inner.as_ref(), "This is not a port"));
             } else {
                 Ok(hir::TypeSpec::Inverted(Box::new(visit_type_spec(
-                    inner, symtab,
+                    inner, ctx,
                 )?)))
             }
         }
@@ -264,24 +269,24 @@ pub fn visit_type_spec(
     Ok(result?.at_loc(t))
 }
 
+#[derive(Debug, Clone, PartialEq)]
 pub enum SelfContext {
     /// `self` currently does not refer to anything
     FreeStanding,
     /// `self` refers to `TypeSpec` in an impl block for that type
     ImplBlock(Loc<hir::TypeSpec>),
     /// `self` refers to a trait implementor
-    TraitDefinition,
+    TraitDefinition(TraitName),
 }
 
 fn visit_parameter_list(
     l: &Loc<ParameterList>,
-    symtab: &mut SymbolTable,
-    self_context: &SelfContext,
+    ctx: &mut Context,
 ) -> Result<Loc<hir::ParameterList>> {
     let mut arg_names: HashSet<Loc<Identifier>> = HashSet::new();
     let mut result = vec![];
 
-    if let SelfContext::ImplBlock(_) = self_context {
+    if let SelfContext::ImplBlock(_) = ctx.self_ctx {
         if l.self_.is_none() {
             // Suggest insertion after the first paren
             let mut diag = Diagnostic::error(l, "Method must take 'self' as the first parameter")
@@ -298,7 +303,7 @@ fn visit_parameter_list(
     }
 
     if let Some(self_loc) = l.self_ {
-        match self_context {
+        match &ctx.self_ctx {
             SelfContext::FreeStanding => {
                 return Err(Diagnostic::error(
                     self_loc,
@@ -314,7 +319,7 @@ fn visit_parameter_list(
             // When visiting trait definitions, we don't need to add self to the
             // symtab at all since we won't be visiting unit bodies here.
             // NOTE: This will be incorrect if we add default impls for traits
-            SelfContext::TraitDefinition => result.push(hir::Parameter {
+            SelfContext::TraitDefinition(_) => result.push(hir::Parameter {
                 no_mangle: None,
                 name: Identifier(String::from("self")).at_loc(&self_loc),
                 ty: hir::TypeSpec::TraitSelf(self_loc).at_loc(&self_loc),
@@ -331,7 +336,7 @@ fn visit_parameter_list(
             );
         }
         arg_names.insert(name.clone());
-        let t = visit_type_spec(input_type, symtab)?;
+        let t = visit_type_spec(input_type, ctx)?;
 
         let mut attrs = attrs.clone();
         let no_mangle = attrs.consume_no_mangle().map(|ident| ident.loc());
@@ -348,25 +353,22 @@ fn visit_parameter_list(
 
 /// Visit the head of an entity to generate an entity head
 #[tracing::instrument(skip_all, fields(name=%head.name))]
-pub fn unit_head(
-    head: &ast::UnitHead,
-    symtab: &mut SymbolTable,
-    self_context: &SelfContext,
-) -> Result<hir::UnitHead> {
-    symtab.new_scope();
+pub fn unit_head(head: &ast::UnitHead, ctx: &mut Context) -> Result<hir::UnitHead> {
+    ctx.symtab.new_scope();
 
     let type_params = head
         .type_params
         .iter()
-        .map(|p| p.try_map_ref(|p| visit_type_param(p, symtab)))
+        .map(|p| p.try_map_ref(|p| visit_type_param(p, ctx)))
         .collect::<Result<_>>()?;
 
     let output_type = if let Some(output_type) = &head.output_type {
-        Some(visit_type_spec(output_type, symtab)?)
+        Some(visit_type_spec(output_type, ctx)?)
     } else {
         None
     };
-    let inputs = visit_parameter_list(&head.inputs, symtab, self_context)?;
+
+    let inputs = visit_parameter_list(&head.inputs, ctx)?;
 
     // Check for ports in functions
     // We need to have the scope open to check this, but we also need to close
@@ -375,7 +377,11 @@ pub fn unit_head(
 
     if let ast::UnitKind::Function = head.unit_kind.inner {
         for (_, _, ty) in &head.inputs.args {
-            if ty.is_port(symtab)? {
+            if matches!(ctx.self_ctx, SelfContext::TraitDefinition(_)) && ty.is_self()? {
+                continue;
+            };
+
+            if ty.is_port(&ctx.symtab)? {
                 port_error = Err(Diagnostic::error(ty, "Port argument in function")
                     .primary_label("This is a port")
                     .note("Only entities and pipelines can take ports as arguments")
@@ -388,7 +394,7 @@ pub fn unit_head(
         }
     }
 
-    symtab.close_scope();
+    ctx.symtab.close_scope();
     port_error?;
 
     let unit_kind: Result<_> = head.unit_kind.try_map_ref(|k| {
@@ -397,7 +403,7 @@ pub fn unit_head(
             ast::UnitKind::Entity => hir::UnitKind::Entity,
             ast::UnitKind::Pipeline(depth) => {
                 hir::UnitKind::Pipeline(int_literal_to_pipeline_stages(
-                    &depth.inner.maybe_unpack(symtab)?.ok_or_else(|| {
+                    &depth.inner.maybe_unpack(&ctx.symtab)?.ok_or_else(|| {
                         Diagnostic::error(depth, "Missing pipeline depth")
                             .primary_label("Missing pipeline depth")
                             .note("The current comptime branch does not specify a depth")
@@ -574,17 +580,12 @@ pub fn create_trait_from_unit_heads(
     name: TraitName,
     heads: &[Loc<ast::UnitHead>],
     item_list: &mut hir::ItemList,
-    symtab: &mut SymbolTable,
+    ctx: &mut Context,
 ) -> Result<()> {
-    let self_context = SelfContext::TraitDefinition;
+    ctx.self_ctx = SelfContext::TraitDefinition(name.clone());
     let trait_members = heads
         .iter()
-        .map(|head| {
-            Ok((
-                head.name.inner.clone(),
-                crate::unit_head(head, symtab, &self_context)?,
-            ))
-        })
+        .map(|head| Ok((head.name.inner.clone(), unit_head(head, ctx)?)))
         .collect::<Result<Vec<_>>>()?;
 
     // Add the trait to the trait list
@@ -600,6 +601,11 @@ pub fn visit_impl(
     ctx: &mut Context,
 ) -> Result<Vec<hir::Item>> {
     let mut result = vec![];
+
+    ctx.symtab.new_scope();
+
+    let self_path = Loc::new(Path::from_strs(&["Self"]), block.span, block.file_id);
+    ctx.symtab.add_alias(self_path, block.target.clone())?;
 
     let impl_block_id = ctx.impl_idtracker.next();
     let trait_name = if let Some(t) = &block.r#trait {
@@ -617,7 +623,7 @@ pub fn visit_impl(
                 .map(|u| u.head.clone().at_loc(u))
                 .collect::<Vec<_>>(),
             items,
-            &mut ctx.symtab,
+            ctx,
         )?;
 
         trait_name
@@ -635,11 +641,13 @@ pub fn visit_impl(
     // FIXME: Support impls for generic items
     let target_name = ctx.symtab.lookup_type_symbol(&block.target)?;
     let ast_type_spec = ast::TypeSpec::Named(block.target.clone(), None).at_loc(&block.target);
-    let target_type_spec = visit_type_spec(&ast_type_spec, &mut ctx.symtab)?;
+    let target_type_spec = visit_type_spec(&ast_type_spec, ctx)?;
 
     let mut trait_members = vec![];
     let mut trait_impl = HashMap::new();
-    let self_context = SelfContext::ImplBlock(target_type_spec);
+
+    ctx.self_ctx = SelfContext::ImplBlock(target_type_spec);
+
     for unit in &block.units {
         let target_method = if let Some(method) = target_trait.get(&unit.head.name.inner) {
             method
@@ -678,7 +686,7 @@ pub fn visit_impl(
         let path_suffix = Some(Path(vec![
             Identifier(format!("impl_{}", impl_block_id)).nowhere()
         ]));
-        global_symbols::visit_unit(&path_suffix, unit, &mut ctx.symtab, &self_context)?;
+        global_symbols::visit_unit(&path_suffix, unit, ctx)?;
         let item = visit_unit(path_suffix, unit, ctx)?;
 
         match &item {
@@ -709,12 +717,22 @@ pub fn visit_impl(
         let impl_head = &item.assume_unit().head;
 
         if impl_head.output_type() != target_method.output_type() {
-            return Err(Diagnostic::error(
-                impl_head.output_type(),
-                "Return type does not match trait",
-            )
-            .primary_label(format!("Expected {}", target_method.output_type()))
-            .secondary_label(target_method.output_type(), "To match the trait"));
+            let returns_trait_self =
+                matches!(target_method.output_type().inner, TypeSpec::TraitSelf(_));
+            let (impl_path, _) = ctx.symtab.lookup_type_symbol(&block.target)?;
+            let impl_output_type = match impl_head.output_type().inner {
+                TypeSpec::Declared(name, _) => Some(name),
+                _ => None,
+            };
+
+            if !(returns_trait_self && impl_output_type.is_some_and(|it| it.inner == impl_path)) {
+                return Err(Diagnostic::error(
+                    impl_head.output_type(),
+                    "Return type does not match trait",
+                )
+                .primary_label(format!("Expected {}", target_method.output_type()))
+                .secondary_label(target_method.output_type(), "To match the trait"));
+            }
         }
 
         for (i, pair) in impl_head
@@ -726,12 +744,12 @@ pub fn visit_impl(
         {
             match pair {
                 EitherOrBoth::Both(
-                    Parameter {
+                    hir::Parameter {
                         name: i_name,
                         ty: i_spec,
                         no_mangle: _,
                     },
-                    Parameter {
+                    hir::Parameter {
                         name: t_name,
                         ty: t_spec,
                         no_mangle: _,
@@ -746,7 +764,17 @@ pub fn visit_impl(
                             ));
                     }
 
-                    if !matches!(&t_spec.inner, hir::TypeSpec::TraitSelf(_)) && t_spec != i_spec {
+                    let i_spec_name = match &i_spec.inner {
+                        TypeSpec::Declared(name, _) => Some(&name.inner),
+                        _ => None,
+                    };
+
+                    let (target_name, _) = ctx.symtab.lookup_type_symbol(&block.target)?;
+
+                    if !(matches!(&t_spec.inner, hir::TypeSpec::TraitSelf(_))
+                        && i_spec_name.is_some_and(|path| path == &target_name))
+                        && t_spec != i_spec
+                    {
                         return Err(Diagnostic::error(i_spec, "Argument type mismatch")
                             .primary_label(format!("Expected {t_spec}"))
                             .secondary_label(
@@ -755,7 +783,7 @@ pub fn visit_impl(
                             ));
                     }
                 }
-                EitherOrBoth::Left(Parameter {
+                EitherOrBoth::Left(hir::Parameter {
                     name,
                     ty: _,
                     no_mangle: _,
@@ -766,7 +794,7 @@ pub fn visit_impl(
                             .secondary_label(&target_method.name, "Method defined here"),
                     )
                 }
-                EitherOrBoth::Right(Parameter {
+                EitherOrBoth::Right(hir::Parameter {
                     name,
                     ty: _,
                     no_mangle: _,
@@ -783,8 +811,6 @@ pub fn visit_impl(
                 }
             }
         }
-
-        // Ensure that the argument lists match
 
         missing_methods.remove(&unit.head.name.inner);
 
@@ -847,6 +873,9 @@ pub fn visit_impl(
         )
         .secondary_label(prev, "Previous impl here"));
     }
+
+    ctx.self_ctx = SelfContext::FreeStanding;
+    ctx.symtab.close_scope();
 
     Ok(result)
 }
@@ -1150,7 +1179,7 @@ fn visit_statement(s: &Loc<ast::Statement>, ctx: &mut Context) -> Result<Vec<Loc
             let mut stmts = vec![];
 
             let hir_type = if let Some(t) = ty {
-                Some(visit_type_spec(t, &mut ctx.symtab)?)
+                Some(visit_type_spec(t, ctx)?)
             } else {
                 None
             };
@@ -1500,19 +1529,11 @@ pub fn visit_expression(e: &ast::Expression, ctx: &mut Context) -> Result<hir::E
                                             )
                                         );
 
-                                        let arg = visit_type_expression(
-                                            &arg,
-                                            &mut ctx.symtab
-                                        )?.at_loc(name);
-
+                                        let arg = visit_type_expression(&arg, ctx)?.at_loc(name);
                                         Ok(hir::expression::NamedArgument::Short(name.clone(), arg))
                                     },
                                     ast::NamedTurbofish::Full(name, arg) => {
-                                        let arg = visit_type_expression(
-                                            arg,
-                                            &mut ctx.symtab
-                                        )?.at_loc(arg);
-
+                                        let arg = visit_type_expression(arg, ctx)?.at_loc(arg);
                                         Ok(hir::expression::NamedArgument::Full(name.clone(), arg))
                                     },
                                 }
@@ -1525,7 +1546,7 @@ pub fn visit_expression(e: &ast::Expression, ctx: &mut Context) -> Result<hir::E
                         ast::TurbofishInner::Positional(args) => {
                             args.iter().map(|arg| {
                                 arg.try_map_ref(|arg| {
-                                    visit_type_expression(arg, &mut ctx.symtab)
+                                    visit_type_expression(arg, ctx)
                                 })
                             }).collect::<Result<_>>()
                             .map(hir::ArgumentList::Positional)
@@ -1737,7 +1758,7 @@ fn visit_register(reg: &Loc<ast::Register>, ctx: &mut Context) -> Result<Vec<Loc
     let value = reg.value.try_visit(visit_expression, ctx)?;
 
     let value_type = if let Some(value_type) = &reg.value_type {
-        Some(visit_type_spec(value_type, &mut ctx.symtab)?)
+        Some(visit_type_spec(value_type, ctx)?)
     } else {
         None
     };
@@ -1851,6 +1872,7 @@ mod entity_visiting {
     use spade_common::name::testutil::name_id;
     use spade_common::{location_info::WithLocation, name::Identifier};
 
+    use crate::testutil::test_context;
     use pretty_assertions::assert_eq;
 
     #[test]
@@ -1908,16 +1930,9 @@ mod entity_visiting {
         }
         .nowhere();
 
-        let symtab = SymbolTable::new();
-        let idtracker = ExprIdTracker::new();
-        let mut ctx = Context {
-            symtab,
-            idtracker,
-            impl_idtracker: ImplIdTracker::new(),
-            pipeline_ctx: None,
-        };
-        global_symbols::visit_unit(&None, &input, &mut ctx.symtab, &SelfContext::FreeStanding)
-            .expect("Failed to collect global symbols");
+        let mut ctx = &mut test_context();
+
+        global_symbols::visit_unit(&None, &input, ctx).expect("Failed to collect global symbols");
 
         let result = visit_unit(None, &input, &mut ctx);
 
@@ -1996,6 +2011,7 @@ mod entity_visiting {
 mod statement_visiting {
     use super::*;
 
+    use crate::testutil::test_context;
     use pretty_assertions::assert_eq;
     use spade_ast::testutil::{ast_ident, ast_path};
     use spade_common::location_info::WithLocation;
@@ -2003,14 +2019,7 @@ mod statement_visiting {
 
     #[test]
     fn bindings_convert_correctly() {
-        let symtab = SymbolTable::new();
-        let idtracker = ExprIdTracker::new();
-        let mut ctx = &mut Context {
-            symtab,
-            idtracker,
-            impl_idtracker: ImplIdTracker::new(),
-            pipeline_ctx: None,
-        };
+        let mut ctx = test_context();
 
         let input = ast::Statement::binding(
             ast::Pattern::name("a"),
@@ -2061,14 +2070,7 @@ mod statement_visiting {
         })
         .nowhere();
 
-        let symtab = SymbolTable::new();
-        let idtracker = ExprIdTracker::new();
-        let mut ctx = Context {
-            symtab,
-            idtracker,
-            impl_idtracker: ImplIdTracker::new(),
-            pipeline_ctx: None,
-        };
+        let mut ctx = test_context();
         let clk_id = ctx.symtab.add_local_variable(ast_ident("clk"));
         assert_eq!(clk_id.0, 0);
         assert_eq!(visit_statement(&input, &mut ctx), Ok(vec![expected]));
@@ -2078,15 +2080,7 @@ mod statement_visiting {
     #[test]
     fn declarations_declare_variables() {
         let input = ast::Statement::Declaration(vec![ast_ident("x"), ast_ident("y")]).nowhere();
-
-        let symtab = SymbolTable::new();
-        let idtracker = ExprIdTracker::new();
-        let mut ctx = Context {
-            symtab,
-            idtracker,
-            impl_idtracker: ImplIdTracker::new(),
-            pipeline_ctx: None,
-        };
+        let mut ctx = &mut test_context();
         assert_eq!(
             visit_statement(&input, &mut ctx),
             Ok(vec![hir::Statement::Declaration(vec![
@@ -2103,18 +2097,12 @@ mod statement_visiting {
     fn multi_reg_statements_lower_correctly() {
         let input = ast::Statement::PipelineRegMarker(Some(3.nowhere()), None).nowhere();
 
-        let symtab = SymbolTable::new();
-        let idtracker = ExprIdTracker::new();
-        let mut ctx = Context {
-            symtab,
-            idtracker,
-            impl_idtracker: ImplIdTracker::new(),
-            pipeline_ctx: Some(PipelineContext {
-                stages: vec![],
-                current_stage: 0,
-                scope: 0,
-            }),
-        };
+        let mut ctx = test_context();
+        ctx.pipeline_ctx = Some(PipelineContext {
+            stages: vec![],
+            current_stage: 0,
+            scope: 0,
+        });
         assert_eq!(
             visit_statement(&input, &mut ctx),
             Ok(vec![
@@ -2132,6 +2120,7 @@ mod statement_visiting {
 mod expression_visiting {
     use super::*;
 
+    use crate::testutil::test_context;
     use ast::comptime::MaybeComptime;
     use hir::hparams;
     use hir::symbol_table::EnumVariant;
@@ -2142,31 +2131,16 @@ mod expression_visiting {
 
     #[test]
     fn int_literals_work() {
-        let symtab = SymbolTable::new();
-        let idtracker = ExprIdTracker::new();
         let input = ast::Expression::int_literal_signed(123);
         let expected = hir::ExprKind::int_literal(123).idless();
 
-        assert_eq!(
-            visit_expression(
-                &input,
-                &mut Context {
-                    symtab,
-                    idtracker,
-                    impl_idtracker: ImplIdTracker::new(),
-                    pipeline_ctx: None
-                }
-            ),
-            Ok(expected)
-        );
+        assert_eq!(visit_expression(&input, &mut test_context()), Ok(expected));
     }
 
     macro_rules! binop_test {
         ($test_name:ident, $token:ident, $op:ident) => {
             #[test]
             fn $test_name() {
-                let symtab = SymbolTable::new();
-                let idtracker = ExprIdTracker::new();
                 let input = ast::Expression::BinaryOperator(
                     Box::new(ast::Expression::int_literal_signed(123).nowhere()),
                     spade_ast::BinaryOperator::$token.nowhere(),
@@ -2179,18 +2153,7 @@ mod expression_visiting {
                 )
                 .idless();
 
-                assert_eq!(
-                    visit_expression(
-                        &input,
-                        &mut Context {
-                            symtab,
-                            idtracker,
-                            impl_idtracker: ImplIdTracker::new(),
-                            pipeline_ctx: None
-                        }
-                    ),
-                    Ok(expected)
-                );
+                assert_eq!(visit_expression(&input, &mut test_context()), Ok(expected));
             }
         };
     }
@@ -2199,8 +2162,6 @@ mod expression_visiting {
         ($test_name:ident, $token:ident, $op:ident) => {
             #[test]
             fn $test_name() {
-                let symtab = SymbolTable::new();
-                let idtracker = ExprIdTracker::new();
                 let input = ast::Expression::UnaryOperator(
                     spade_ast::UnaryOperator::$token,
                     Box::new(ast::Expression::int_literal_signed(456).nowhere()),
@@ -2211,18 +2172,7 @@ mod expression_visiting {
                 )
                 .idless();
 
-                assert_eq!(
-                    visit_expression(
-                        &input,
-                        &mut Context {
-                            symtab,
-                            idtracker,
-                            impl_idtracker: ImplIdTracker::new(),
-                            pipeline_ctx: None
-                        }
-                    ),
-                    Ok(expected)
-                );
+                assert_eq!(visit_expression(&input, &mut test_context()), Ok(expected));
             }
         };
     }
@@ -2237,8 +2187,6 @@ mod expression_visiting {
 
     #[test]
     fn indexing_works() {
-        let symtab = SymbolTable::new();
-        let idtracker = ExprIdTracker::new();
         let input = ast::Expression::Index(
             Box::new(ast::Expression::int_literal_signed(0).nowhere()),
             Box::new(ast::Expression::int_literal_signed(1).nowhere()),
@@ -2250,24 +2198,11 @@ mod expression_visiting {
         )
         .idless();
 
-        assert_eq!(
-            visit_expression(
-                &input,
-                &mut Context {
-                    symtab,
-                    idtracker,
-                    impl_idtracker: ImplIdTracker::new(),
-                    pipeline_ctx: None
-                }
-            ),
-            Ok(expected)
-        );
+        assert_eq!(visit_expression(&input, &mut test_context()), Ok(expected));
     }
 
     #[test]
     fn field_access_works() {
-        let symtab = SymbolTable::new();
-        let idtracker = ExprIdTracker::new();
         let input = ast::Expression::FieldAccess(
             Box::new(ast::Expression::int_literal_signed(0).nowhere()),
             ast_ident("a"),
@@ -2279,18 +2214,7 @@ mod expression_visiting {
         )
         .idless();
 
-        assert_eq!(
-            visit_expression(
-                &input,
-                &mut Context {
-                    symtab,
-                    idtracker,
-                    impl_idtracker: ImplIdTracker::new(),
-                    pipeline_ctx: None
-                }
-            ),
-            Ok(expected)
-        );
+        assert_eq!(visit_expression(&input, &mut test_context(),), Ok(expected));
     }
 
     #[test]
@@ -2315,14 +2239,7 @@ mod expression_visiting {
         }))
         .idless();
 
-        let symtab = SymbolTable::new();
-        let idtracker = ExprIdTracker::new();
-        let mut ctx = Context {
-            symtab,
-            idtracker,
-            impl_idtracker: ImplIdTracker::new(),
-            pipeline_ctx: None,
-        };
+        let mut ctx = test_context();
         assert_eq!(visit_expression(&input, &mut ctx), Ok(expected));
         assert!(!ctx.symtab.has_symbol(ast_path("a").inner));
     }
@@ -2367,20 +2284,7 @@ mod expression_visiting {
         )
         .idless();
 
-        let symtab = SymbolTable::new();
-        let idtracker = ExprIdTracker::new();
-        assert_eq!(
-            visit_expression(
-                &input,
-                &mut Context {
-                    symtab,
-                    idtracker,
-                    impl_idtracker: ImplIdTracker::new(),
-                    pipeline_ctx: None
-                }
-            ),
-            Ok(expected)
-        );
+        assert_eq!(visit_expression(&input, &mut test_context(),), Ok(expected));
     }
 
     #[test]
@@ -2403,20 +2307,7 @@ mod expression_visiting {
         )
         .idless();
 
-        let symtab = SymbolTable::new();
-        let idtracker = ExprIdTracker::new();
-        assert_eq!(
-            visit_expression(
-                &input,
-                &mut Context {
-                    symtab,
-                    idtracker,
-                    impl_idtracker: ImplIdTracker::new(),
-                    pipeline_ctx: None
-                }
-            ),
-            Ok(expected)
-        )
+        assert_eq!(visit_expression(&input, &mut test_context(),), Ok(expected))
     }
 
     #[test]
@@ -2469,15 +2360,12 @@ mod expression_visiting {
         .nowhere();
 
         symtab.add_thing_with_id(100, ast_path("x").inner, Thing::EnumVariant(enum_variant));
-        let idtracker = ExprIdTracker::new();
         assert_eq!(
             visit_expression(
                 &input,
                 &mut Context {
                     symtab,
-                    idtracker,
-                    impl_idtracker: ImplIdTracker::new(),
-                    pipeline_ctx: None
+                    ..test_context()
                 }
             ),
             Ok(expected)
@@ -2534,15 +2422,13 @@ mod expression_visiting {
         .nowhere();
 
         symtab.add_thing_with_id(100, ast_path("x").inner, Thing::EnumVariant(enum_variant));
-        let idtracker = ExprIdTracker::new();
+
         assert_eq!(
             visit_expression(
                 &input,
                 &mut Context {
                     symtab,
-                    idtracker,
-                    impl_idtracker: ImplIdTracker::new(),
-                    pipeline_ctx: None
+                    ..test_context()
                 }
             ),
             Ok(expected)
@@ -2576,7 +2462,6 @@ mod expression_visiting {
         .idless();
 
         let mut symtab = SymbolTable::new();
-        let idtracker = ExprIdTracker::new();
 
         symtab.add_thing(
             ast_path("test").inner,
@@ -2601,9 +2486,7 @@ mod expression_visiting {
                 &input,
                 &mut Context {
                     symtab,
-                    idtracker,
-                    impl_idtracker: ImplIdTracker::new(),
-                    pipeline_ctx: None
+                    ..test_context()
                 }
             ),
             Ok(expected)
@@ -2649,7 +2532,6 @@ mod expression_visiting {
         .idless();
 
         let mut symtab = SymbolTable::new();
-        let idtracker = ExprIdTracker::new();
 
         symtab.add_thing(
             ast_path("test").inner,
@@ -2674,9 +2556,7 @@ mod expression_visiting {
                 &input,
                 &mut Context {
                     symtab,
-                    idtracker,
-                    impl_idtracker: ImplIdTracker::new(),
-                    pipeline_ctx: None
+                    ..test_context()
                 }
             ),
             Ok(expected)
@@ -2710,7 +2590,6 @@ mod expression_visiting {
         .idless();
 
         let mut symtab = SymbolTable::new();
-        let idtracker = ExprIdTracker::new();
 
         symtab.add_thing(
             ast_path("test").inner,
@@ -2735,9 +2614,7 @@ mod expression_visiting {
                 &input,
                 &mut Context {
                     symtab,
-                    idtracker,
-                    impl_idtracker: ImplIdTracker::new(),
-                    pipeline_ctx: None
+                    ..test_context()
                 }
             ),
             Ok(expected)
@@ -2774,7 +2651,6 @@ mod expression_visiting {
         .idless();
 
         let mut symtab = SymbolTable::new();
-        let idtracker = ExprIdTracker::new();
 
         symtab.add_thing(
             ast_path("test").inner,
@@ -2799,9 +2675,7 @@ mod expression_visiting {
                 &input,
                 &mut Context {
                     symtab,
-                    idtracker,
-                    impl_idtracker: ImplIdTracker::new(),
-                    pipeline_ctx: None
+                    ..test_context()
                 }
             ),
             Ok(expected)
@@ -2811,6 +2685,7 @@ mod expression_visiting {
 
 #[cfg(test)]
 mod pattern_visiting {
+    use crate::testutil::test_context;
     use ast::{
         testutil::{ast_ident, ast_path},
         ArgumentPattern,
@@ -2820,7 +2695,7 @@ mod pattern_visiting {
         symbol_table::{StructCallable, TypeDeclKind},
         PatternKind,
     };
-    use spade_common::{id_tracker::ImplIdTracker, name::testutil::name_id};
+    use spade_common::name::testutil::name_id;
 
     use super::*;
 
@@ -2828,18 +2703,7 @@ mod pattern_visiting {
     fn bool_patterns_work() {
         let input = ast::Pattern::Bool(true);
 
-        let symtab = SymbolTable::new();
-        let idtracker = ExprIdTracker::new();
-
-        let result = visit_pattern(
-            &input,
-            &mut Context {
-                symtab,
-                idtracker,
-                impl_idtracker: ImplIdTracker::new(),
-                pipeline_ctx: None,
-            },
-        );
+        let result = visit_pattern(&input, &mut test_context());
 
         assert_eq!(result, Ok(PatternKind::Bool(true).idless()));
     }
@@ -2848,18 +2712,7 @@ mod pattern_visiting {
     fn int_patterns_work() {
         let input = ast::Pattern::integer(5);
 
-        let symtab = SymbolTable::new();
-        let idtracker = ExprIdTracker::new();
-
-        let result = visit_pattern(
-            &input,
-            &mut Context {
-                symtab,
-                idtracker,
-                impl_idtracker: ImplIdTracker::new(),
-                pipeline_ctx: None,
-            },
-        );
+        let result = visit_pattern(&input, &mut test_context());
 
         assert_eq!(result, Ok(PatternKind::integer(5).idless()));
     }
@@ -2876,7 +2729,6 @@ mod pattern_visiting {
         );
 
         let mut symtab = SymbolTable::new();
-        let idtracker = ExprIdTracker::new();
 
         let type_name = symtab.add_type(
             ast_path("a").inner,
@@ -2905,9 +2757,7 @@ mod pattern_visiting {
             &input,
             &mut Context {
                 symtab,
-                idtracker,
-                impl_idtracker: ImplIdTracker::new(),
-                pipeline_ctx: None,
+                ..test_context()
             },
         );
 
@@ -2936,6 +2786,7 @@ mod pattern_visiting {
 mod register_visiting {
     use super::*;
 
+    use crate::testutil::test_context;
     use spade_ast::testutil::{ast_ident, ast_path};
     use spade_common::location_info::WithLocation;
     use spade_common::name::testutil::name_id;
@@ -2976,7 +2827,6 @@ mod register_visiting {
         };
 
         let mut symtab = SymbolTable::new();
-        let idtracker = ExprIdTracker::new();
         let clk_id = symtab.add_local_variable(ast_ident("clk"));
         assert_eq!(clk_id.0, 0);
         let rst_id = symtab.add_local_variable(ast_ident("rst"));
@@ -2986,9 +2836,7 @@ mod register_visiting {
                 &input,
                 &mut Context {
                     symtab,
-                    idtracker,
-                    impl_idtracker: ImplIdTracker::new(),
-                    pipeline_ctx: None
+                    ..test_context()
                 }
             ),
             Ok(vec![hir::Statement::Register(expected).nowhere()])
@@ -3006,6 +2854,7 @@ mod item_visiting {
     use spade_common::location_info::WithLocation;
     use spade_common::name::testutil::name_id;
 
+    use crate::testutil::test_context;
     use pretty_assertions::assert_eq;
 
     #[test]
@@ -3053,20 +2902,11 @@ mod item_visiting {
             .nowhere(),
         );
 
-        let mut symtab = SymbolTable::new();
-        let idtracker = ExprIdTracker::new();
-        crate::global_symbols::visit_item(&input, &mut symtab, &mut ItemList::new()).unwrap();
+        let mut ctx = test_context();
+
+        global_symbols::visit_item(&input, &mut ItemList::new(), &mut ctx).unwrap();
         assert_eq!(
-            visit_item(
-                &input,
-                &mut Context {
-                    symtab,
-                    idtracker,
-                    impl_idtracker: ImplIdTracker::new(),
-                    pipeline_ctx: None,
-                },
-                &mut ItemList::new()
-            ),
+            visit_item(&input, &mut ctx, &mut ItemList::new()),
             Ok(vec![expected])
         );
     }
@@ -3081,6 +2921,7 @@ mod impl_blocks {
     use hir::{hparams, symbol_table::TypeDeclKind, ItemList};
     use spade_common::name::testutil::name_id;
 
+    use crate::testutil::test_context;
     use pretty_assertions::assert_eq;
 
     use super::*;
@@ -3112,12 +2953,7 @@ mod impl_blocks {
         .nowhere();
 
         let mut items = ItemList::new();
-        let mut ctx = Context {
-            symtab: SymbolTable::new(),
-            idtracker: ExprIdTracker::new(),
-            impl_idtracker: ImplIdTracker::new(),
-            pipeline_ctx: None,
-        };
+        let mut ctx = test_context();
 
         // Add the type we are going to impl for. NOTE: Adding this as a j
         let target_type_name = ctx.symtab.add_type(
@@ -3150,7 +2986,7 @@ mod impl_blocks {
                     unit_kind: hir::UnitKind::Function(hir::FunctionKind::Fn).nowhere(),
                 },
                 attributes: hir::AttributeList::empty(),
-                inputs: vec![(name_id(2, "self"), param_type_spec)],
+                inputs: vec![(name_id(3, "self"), param_type_spec)],
                 body: hir::ExprKind::Block(Box::new(hir::Block {
                     statements: vec![],
                     result: Some(hir::ExprKind::int_literal(0).with_id(1).nowhere()),
@@ -3212,6 +3048,7 @@ mod module_visiting {
     use spade_common::location_info::WithLocation;
     use spade_common::name::testutil::name_id;
 
+    use crate::testutil::test_context;
     use pretty_assertions::assert_eq;
     use spade_common::namespace::ModuleNamespace;
 
@@ -3273,24 +3110,11 @@ mod module_visiting {
             impls: HashMap::new(),
         };
 
-        let mut symtab = SymbolTable::new();
-        let idtracker = ExprIdTracker::new();
-        global_symbols::gather_symbols(&input, &mut symtab, &mut ItemList::new())
+        let mut ctx = test_context();
+        global_symbols::gather_symbols(&input, &mut ItemList::new(), &mut ctx)
             .expect("failed to collect global symbols");
         let mut item_list = ItemList::new();
-        assert_eq!(
-            visit_module_body(
-                &mut item_list,
-                &input,
-                &mut Context {
-                    symtab,
-                    idtracker,
-                    impl_idtracker: ImplIdTracker::new(),
-                    pipeline_ctx: None
-                }
-            ),
-            Ok(())
-        );
+        assert_eq!(visit_module_body(&mut item_list, &input, &mut ctx,), Ok(()));
 
         assert_eq!(item_list, expected);
     }
@@ -3339,35 +3163,20 @@ mod module_visiting {
             impls: HashMap::new(),
         };
 
-        let mut symtab = SymbolTable::new();
-        let idtracker = ExprIdTracker::new();
+        let mut ctx = test_context();
 
         let namespace = ModuleNamespace {
             namespace: Path::from_strs(&[""]),
             base_namespace: Path::from_strs(&[""]),
         };
-        symtab.add_thing(
+        ctx.symtab.add_thing(
             namespace.namespace.clone(),
-            spade_hir::symbol_table::Thing::Module(namespace.namespace.0[0].clone()),
+            Thing::Module(namespace.namespace.0[0].clone()),
         );
-        global_symbols::gather_types(&input, &mut symtab).expect("failed to collect types");
+        global_symbols::gather_types(&input, &mut ctx).expect("failed to collect types");
 
-        global_symbols::gather_symbols(&input, &mut symtab, &mut ItemList::new())
-            .expect("failed to collect global symbols");
         let mut item_list = ItemList::new();
-        assert_eq!(
-            visit_module_body(
-                &mut item_list,
-                &input,
-                &mut Context {
-                    symtab,
-                    idtracker,
-                    impl_idtracker: ImplIdTracker::new(),
-                    pipeline_ctx: None
-                }
-            ),
-            Ok(())
-        );
+        assert_eq!(visit_module_body(&mut item_list, &input, &mut ctx), Ok(()));
 
         assert_eq!(item_list, expected);
     }

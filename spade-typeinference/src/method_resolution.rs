@@ -6,7 +6,7 @@ use spade_common::name::{Identifier, NameID};
 use spade_diagnostics::Diagnostic;
 use spade_hir::ItemList;
 
-/// Attempts to look up which functiono to call when calling `method` on a var
+/// Attempts to look up which function to call when calling `method` on a var
 /// of type `self_type`.
 pub fn select_method(
     expr: Loc<()>,

@@ -13,6 +13,7 @@ use pyo3::prelude::*;
 
 use ::spade::compiler_state::{type_of_hierarchical_value, CompilerState, MirContext};
 use spade_ast_lowering::id_tracker::{ExprIdTracker, ImplIdTracker};
+use spade_ast_lowering::SelfContext;
 use spade_common::location_info::{Loc, WithLocation};
 use spade_common::name::{Identifier, NameID, Path as SpadePath};
 use spade_diagnostics::emitter::CodespanEmitter;
@@ -397,13 +398,12 @@ impl Spade {
             &mut self.diag_handler,
         )?;
 
-        let idtracker = owned.idtracker;
-
         let mut ast_ctx = spade_ast_lowering::Context {
             symtab,
-            idtracker,
-            pipeline_ctx: None,
+            idtracker: owned.idtracker,
             impl_idtracker: owned.impl_idtracker,
+            pipeline_ctx: None,
+            self_ctx: SelfContext::FreeStanding,
         };
         let hir = spade_ast_lowering::visit_expression(&ast, &mut ast_ctx)
             .report_and_convert(&mut self.error_buffer, &self.code, &mut self.diag_handler)?
@@ -603,8 +603,9 @@ impl Spade {
         let mut ast_ctx = spade_ast_lowering::Context {
             symtab,
             idtracker,
-            pipeline_ctx: None,
             impl_idtracker,
+            pipeline_ctx: None,
+            self_ctx: SelfContext::FreeStanding,
         };
         let hir = spade_ast_lowering::visit_expression(&ast, &mut ast_ctx)
             .report_and_convert(&mut self.error_buffer, &self.code, &mut self.diag_handler)?

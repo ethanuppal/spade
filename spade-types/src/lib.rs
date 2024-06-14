@@ -20,16 +20,17 @@ pub enum PrimitiveType {
 
 impl std::fmt::Display for PrimitiveType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            PrimitiveType::Int => write!(f, "int"),
-            PrimitiveType::Uint => write!(f, "uint"),
-            PrimitiveType::Clock => write!(f, "clk"),
-            PrimitiveType::Bool => write!(f, "bool"),
-            PrimitiveType::Bit => write!(f, "bit"),
-            PrimitiveType::Memory => write!(f, "Memory"),
-            PrimitiveType::Void => write!(f, "()"),
-            PrimitiveType::InOut => write!(f, "inout"),
-        }
+        let str = match self {
+            PrimitiveType::Int => "int",
+            PrimitiveType::Uint => "uint",
+            PrimitiveType::Clock => "clk",
+            PrimitiveType::Bool => "bool",
+            PrimitiveType::Bit => "bit",
+            PrimitiveType::Memory => "Memory",
+            PrimitiveType::Void => "()",
+            PrimitiveType::InOut => "inout",
+        };
+        write!(f, "{str}")
     }
 }
 
@@ -89,10 +90,9 @@ impl ConcreteType {
 
 impl std::fmt::Display for ConcreteType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
+        let str = match self {
             ConcreteType::Tuple(inner) => {
-                write!(
-                    f,
+                format!(
                     "({})",
                     inner
                         .iter()
@@ -102,8 +102,7 @@ impl std::fmt::Display for ConcreteType {
                 )
             }
             ConcreteType::Struct { name, members } => {
-                write!(
-                    f,
+                format!(
                     "struct {name} {{{}}}",
                     members
                         .iter()
@@ -113,10 +112,10 @@ impl std::fmt::Display for ConcreteType {
                 )
             }
             ConcreteType::Array { inner, size } => {
-                write!(f, "[{}; {}]", inner, size)
+                format!("[{}; {}]", inner, size)
             }
             ConcreteType::Enum { options } => {
-                write!(f, "enum {{",)?;
+                format!("enum {{");
                 let inner = options
                     .iter()
                     .map(|o| {
@@ -129,8 +128,8 @@ impl std::fmt::Display for ConcreteType {
                     })
                     .collect::<Vec<_>>()
                     .join(",");
-                write!(f, "{}", inner)?;
-                write!(f, "}}")
+                format!("{}", inner);
+                format!("}}")
             }
             ConcreteType::Single { base, params } => {
                 let params_str = if params.is_empty() {
@@ -143,18 +142,20 @@ impl std::fmt::Display for ConcreteType {
                         .join(", ")
                 };
 
-                write!(f, "{}{}", base, params_str)
+                format!("{}{}", base, params_str)
             }
             ConcreteType::Integer(size) => {
-                write!(f, "#{}", size)
+                format!("#{}", size)
             }
             ConcreteType::Backward(inner) => {
-                write!(f, "&mut {}", inner)
+                format!("&mut {}", inner)
             }
             ConcreteType::Wire(inner) => {
-                write!(f, "&{}", inner)
+                format!("&{}", inner)
             }
-        }
+        };
+
+        write!(f, "{str}")
     }
 }
 

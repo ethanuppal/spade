@@ -1,5 +1,47 @@
 use crate::{build_items, snapshot_error};
 
+snapshot_error!(
+    trait_self_wrong_impl_return_type,
+    r#"
+        trait X {
+            fn fun(self) -> Self;
+        }
+
+        struct A {}
+        struct B {}
+
+        impl X for A {
+            fn fun(self) -> B {
+                self
+            }
+        }
+    "#
+);
+
+#[test]
+fn trait_self_return_type_works() {
+    let code = r#"
+        trait X {
+            fn fun(self) -> Self;
+        }
+
+        struct A {}
+
+        impl X for A {
+            fn fun(self) -> Self {
+                self
+            }
+        }
+
+        entity main() -> A {
+            let a = A();
+            a.fun()
+        }
+    "#;
+
+    build_items(code);
+}
+
 #[test]
 fn namespacing_works() {
     let code = r#"
@@ -407,7 +449,7 @@ mod trait_tests {
     }
 
     #[test]
-    fn trait_in_module_works() {
+    fn anonymous_trait_in_module_works() {
         let code = "
             mod m {
                 enum ContainerSpot {
@@ -492,14 +534,21 @@ mod trait_tests {
     fn impl_trait_compiles() {
         let code = "
             trait X {
-                fn a(self) -> bool;
+                fn a(self, x: Self) -> Self;
             }
 
             struct A {}
+            struct B {}
 
             impl X for A {
-                fn a(self) -> bool {
-                    true
+                fn a(self, x: Self) -> Self {
+                    Self()
+                }
+            }
+
+            impl X for B {
+                fn a(self, x: B) -> B {
+                    B()
                 }
             }
         ";
@@ -651,7 +700,31 @@ mod trait_tests {
             struct A {}
 
             impl X for A {
-                fn a(self, x: int<10>) -> bool{
+                fn a(self, x: int<10>) -> bool {
+                    true
+                }
+            }
+        "
+    }
+
+    snapshot_error! {
+        impls_require_correct_signature_wrong_arg_type_self,
+        "
+            trait X {
+                fn a(self, x: Self) -> bool;
+            }
+
+            struct A {}
+            struct B {}
+
+            impl X for A {
+                fn a(self, x: Self) -> bool {
+                    true
+                }
+            }
+
+            impl X for B {
+                fn a(self, x: A) -> bool {
                     true
                 }
             }
@@ -662,7 +735,7 @@ mod trait_tests {
         impls_require_correct_signature_wrong_return_type,
         "
             trait X {
-                fn a(self) -> int<10> ;
+                fn a(self) -> int<10>;
             }
 
             struct A {}
@@ -670,6 +743,30 @@ mod trait_tests {
             impl X for A {
                 fn a(self) -> bool {
                     true
+                }
+            }
+        "
+    }
+
+    snapshot_error! {
+        impls_require_correct_signature_wrong_return_type_self,
+        "
+            trait X {
+                fn a(self) -> Self;
+            }
+
+            struct A {}
+            struct B {}
+
+            impl X for A {
+                fn a(self) -> A {
+                    A()
+                }
+            }
+
+            impl X for B {
+                fn a(self) -> A {
+                    A()
                 }
             }
         "

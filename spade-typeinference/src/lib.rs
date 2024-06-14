@@ -243,7 +243,7 @@ impl TypeState {
     }
 
     /// Returns the type of the expression with the specified id. Error if no equation
-    /// for the specified epxression exists
+    /// for the specified expression exists
     pub fn type_of(&self, expr: &TypedExpression) -> Result<TypeVar> {
         for (e, t) in &self.equations {
             if e == expr {
