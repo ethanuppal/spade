@@ -1,0 +1,22 @@
+---
+source: spade-tests/src/ast_lowering.rs
+---
+struct N {}
+fn test<#O>()
+    where O: N
+{}
+
+
+error: N is not a type level integer.
+  ┌─ testinput:3:14
+  │
+1 │ struct N {}
+  │ ----------- N is defined here
+2 │ fn test<#O>()
+3 │     where O: N
+  │              ^ Expected type level integer
+  │
+  = Try making the generic a number
+  │
+1 │ #struct N {}
+  │ +

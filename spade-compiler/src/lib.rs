@@ -255,7 +255,7 @@ pub fn compile(
                     .set_wordlength_inferece(opts.wl_infer_method.is_some());
 
                 if let Ok(()) = type_state
-                    .visit_entity(u, &type_inference_ctx)
+                    .visit_unit(u, &type_inference_ctx)
                     .report(&mut errors)
                 {
                     if opts.print_type_traceback {

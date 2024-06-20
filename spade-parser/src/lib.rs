@@ -1346,6 +1346,33 @@ impl<'a> Parser<'a> {
             None
         };
 
+        let where_clauses = if let Some(where_kw) = self.peek_and_eat(&TokenKind::Where)? {
+            let clauses = self
+                .comma_separated(
+                    |s| {
+                        if s.peek_cond(|t| matches!(t, &TokenKind::Identifier(_)), "identifier")? {
+                            let name = s.path()?;
+                            let _colon = s.eat(&TokenKind::Colon)?;
+                            let value = s.expression()?;
+                            Ok((name, value))
+                        } else {
+                            Err(Diagnostic::bug(
+                                ().at(s.file_id, &where_kw),
+                                "Comma separated should not show this error",
+                            ))
+                        }
+                        // NOTE: With this ending symbol we won't support __builtin__ with where
+                        // clauses.
+                    },
+                    &TokenKind::OpenBrace,
+                )
+                .extra_expected(vec!["identifier"])?;
+
+            clauses
+        } else {
+            vec![]
+        };
+
         let end = output_type
             .as_ref()
             .map(|o| o.loc())
@@ -1359,6 +1386,7 @@ impl<'a> Parser<'a> {
                 inputs,
                 output_type,
                 type_params,
+                where_clauses,
             }
             .between(self.file_id, &start_token, &end),
         ))
@@ -2501,6 +2529,7 @@ mod tests {
                 inputs: aparams![],
                 output_type: None,
                 type_params: vec![],
+                where_clauses: vec![],
             },
             body: Some(
                 Expression::Block(Box::new(Block {
@@ -2539,6 +2568,7 @@ mod tests {
                 inputs: aparams![("clk", tspec!("bool")), ("rst", tspec!("bool"))],
                 output_type: Some(TypeSpec::Named(ast_path("bool"), None).nowhere()),
                 type_params: vec![],
+                where_clauses: vec![],
             },
             body: Some(
                 Expression::Block(Box::new(Block {
@@ -2571,6 +2601,7 @@ mod tests {
                     .nowhere(),
                     TypeParam::Integer(ast_ident("Y")).nowhere(),
                 ],
+                where_clauses: vec![],
             },
             body: Some(
                 Expression::Block(Box::new(Block {
@@ -2746,6 +2777,7 @@ mod tests {
                 inputs: aparams![],
                 output_type: None,
                 type_params: vec![],
+                where_clauses: vec![],
             },
             body: Some(
                 Expression::Block(Box::new(Block {
@@ -2765,6 +2797,7 @@ mod tests {
                 inputs: aparams![],
                 output_type: None,
                 type_params: vec![],
+                where_clauses: vec![],
             },
             body: Some(
                 Expression::Block(Box::new(Block {
@@ -2802,6 +2835,7 @@ mod tests {
                     inputs: ParameterList::without_self(vec![]).nowhere(),
                     output_type: None,
                     type_params: vec![],
+                    where_clauses: vec![],
                 },
                 body: None,
             }
@@ -2835,6 +2869,7 @@ mod tests {
                     inputs: ParameterList::without_self(vec![]).nowhere(),
                     output_type: None,
                     type_params: vec![],
+                    where_clauses: vec![],
                 },
                 body: None,
             }
@@ -2951,6 +2986,7 @@ mod tests {
                     inputs: ParameterList::without_self(vec![]).nowhere(),
                     output_type: None,
                     type_params: vec![],
+                    where_clauses: vec![],
                 },
                 body: None,
             }
@@ -2976,6 +3012,7 @@ mod tests {
                     )
                     .nowhere(),
                     type_params: vec![],
+                    where_clauses: vec![],
                 },
                 body: None,
             }
@@ -2998,6 +3035,7 @@ mod tests {
                     inputs: ParameterList::without_self(vec![]).nowhere(),
                     output_type: None,
                     type_params: vec![],
+                    where_clauses: vec![],
                 },
                 body: None,
             }
@@ -3022,6 +3060,7 @@ mod tests {
                     inputs: ParameterList::without_self(vec![]).nowhere(),
                     output_type: None,
                     type_params: vec![],
+                    where_clauses: vec![],
                 },
                 body: None,
             }
@@ -3046,6 +3085,7 @@ mod tests {
                     inputs: ParameterList::without_self(vec![]).nowhere(),
                     output_type: None,
                     type_params: vec![],
+                    where_clauses: vec![],
                 },
                 body: None,
             }
@@ -3074,6 +3114,7 @@ mod tests {
                     inputs: aparams![("a", tspec!("bool"))],
                     output_type: None,
                     type_params: vec![],
+                    where_clauses: vec![],
                 },
                 body: None,
             }
@@ -3101,6 +3142,7 @@ mod tests {
                     inputs: ParameterList::without_self(vec![]).nowhere(),
                     output_type: None,
                     type_params: vec![],
+                    where_clauses: vec![],
                 },
                 body: Some(
                     Expression::Block(Box::new(Block {
@@ -3216,6 +3258,7 @@ mod tests {
                 inputs: aparams![("a", tspec!("bool"))],
                 output_type: Some(TypeSpec::Named(ast_path("bool"), None).nowhere()),
                 type_params: vec![],
+                where_clauses: vec![],
             },
             body: Some(
                 Expression::Block(Box::new(Block {
@@ -3267,6 +3310,7 @@ mod tests {
                 inputs: aparams![("a", tspec!("bool"))],
                 output_type: Some(TypeSpec::Named(ast_path("bool"), None).nowhere()),
                 type_params: vec![],
+                where_clauses: vec![],
             },
             body: Some(
                 Expression::Block(Box::new(Block {
@@ -3304,6 +3348,7 @@ mod tests {
                         inputs: aparams![("a", tspec!("bool"))],
                         output_type: Some(TypeSpec::Named(ast_path("bool"), None).nowhere()),
                         type_params: vec![],
+                        where_clauses: vec![],
                     },
                     body: Some(
                         Expression::Block(Box::new(Block {

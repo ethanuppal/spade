@@ -1521,3 +1521,49 @@ snapshot_error! {
         }
     "
 }
+
+snapshot_error! {
+    simple_unsatisfied_where_clause_errors,
+    "
+        fn add_one<#N, #O>(in: int<N>) -> int<O>
+            where O: N + 2
+        {
+            in + 1
+        }
+
+        fn test() -> int<10> {
+            add_one(10i8)
+        }
+    "
+}
+
+snapshot_error! {
+    simple_unsatisfied_where_clause_errors2,
+    "
+        fn add_one<#N, #O>(in: int<N>) -> int<O>
+            where O: N + 2
+        {
+            0
+        }
+
+        fn test() -> int<9> {
+            add_one(10i8)
+        }
+    "
+}
+
+#[test]
+fn where_clauses_drive_inference() {
+    let code = "
+        fn add_one<#N, #O>(in: int<N>) -> int<O>
+            where O: N + 2
+        {
+            0
+        }
+
+        fn test() {
+            let _ = add_one(10i8);
+        }
+    ";
+    build_items(code);
+}

@@ -793,6 +793,7 @@ pub fn do_wal_trace_lowering(
                 spade_typeinference::GenericListSource::Anonymous,
                 &[],
                 None,
+                &[],
             )?;
             ctx.types
                 .visit_expression(&dummy_expr, &type_ctx, generic_list)

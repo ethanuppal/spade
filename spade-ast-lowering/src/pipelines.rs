@@ -205,6 +205,7 @@ mod pipeline_visiting {
                 output_type: Some(ast::TypeSpec::Unit(().nowhere()).nowhere()),
                 type_params: vec![],
                 attributes: ast::AttributeList(vec![]),
+                where_clauses: vec![],
             },
             body: Some(
                 ast::Expression::Block(Box::new(ast::Block {
@@ -290,6 +291,7 @@ mod pipeline_visiting {
                 output_type: Some(ast::TypeSpec::Unit(().nowhere()).nowhere()),
                 type_params: vec![],
                 attributes: ast::AttributeList(vec![]),
+                where_clauses: vec![],
             },
             body: Some(
                 ast::Expression::Block(Box::new(ast::Block {

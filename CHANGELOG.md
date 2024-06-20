@@ -19,6 +19,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - [!309][!309] Add named argument turbofishes (`::$<>`)
 - [!312][!312] Include a map of modules in `ItemList`
 - [!271][!271] Add automatic clock gating of the `Option`-type
+- [!319][!319] Add `where` clauses to allow specifying constraints on generic parameters
 
 ### Changed
 
@@ -35,6 +36,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 [!309]: https://gitlab.com/spade-lang/spade/-/merge_requests/309
 [!312]: https://gitlab.com/spade-lang/spade/-/merge_requests/312
 [!314]: https://gitlab.com/spade-lang/spade/-/merge_requests/314
+[!319]: https://gitlab.com/spade-lang/spade/-/merge_requests/319
 
 ## [0.8.0] - 2024-05-14
 

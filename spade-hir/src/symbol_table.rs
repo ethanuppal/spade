@@ -175,6 +175,7 @@ impl EnumVariant {
             output_type: Some(self.output_type.clone()),
             type_params: self.type_params.clone(),
             unit_kind: UnitKind::Function(FunctionKind::Enum).at_loc(&self.name),
+            where_clauses: vec![],
         }
     }
 }
@@ -195,6 +196,7 @@ impl StructCallable {
             output_type: Some(self.self_type.clone()),
             type_params: self.type_params.clone(),
             unit_kind: UnitKind::Function(FunctionKind::Struct).at_loc(&self.name),
+            where_clauses: vec![],
         }
     }
 }

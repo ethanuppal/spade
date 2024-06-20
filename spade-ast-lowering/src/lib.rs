@@ -19,7 +19,7 @@ use std::collections::{HashMap, HashSet};
 use comptime::ComptimeCondExt;
 use hir::param_util::ArgumentError;
 use hir::symbol_table::DeclarationState;
-use hir::{ExecutableItem, PatternKind, TraitName, WalTrace};
+use hir::{ConstGeneric, ExecutableItem, PatternKind, TraitName, WalTrace, WhereClause};
 use spade_ast as ast;
 use spade_common::id_tracker::{ExprIdTracker, ImplIdTracker};
 use spade_common::location_info::{Loc, WithLocation};
@@ -394,8 +394,11 @@ pub fn unit_head(head: &ast::UnitHead, ctx: &mut Context) -> Result<hir::UnitHea
         }
     }
 
+    let where_clauses = visit_where_clauses(&head.where_clauses, ctx);
+
     ctx.symtab.close_scope();
     port_error?;
+    let where_clauses = where_clauses?;
 
     let unit_kind: Result<_> = head.unit_kind.try_map_ref(|k| {
         let inner = match k {
@@ -420,7 +423,101 @@ pub fn unit_head(head: &ast::UnitHead, ctx: &mut Context) -> Result<hir::UnitHea
         output_type,
         type_params,
         unit_kind: unit_kind?,
+        where_clauses,
     })
+}
+
+pub fn visit_const_generic(
+    t: &Loc<ast::Expression>,
+    ctx: &mut Context,
+) -> Result<Loc<hir::ConstGeneric>> {
+    let kind = match &t.inner {
+        ast::Expression::Identifier(name) => {
+            let (name, sym) = ctx.symtab.lookup_type_symbol(name)?;
+            match &sym.inner {
+                TypeSymbol::GenericArg { traits: _ } | TypeSymbol::Declared(_, _) => {
+                    return Err(Diagnostic::error(
+                        t,
+                        format!("{name} is not a type level integer."),
+                    )
+                    .primary_label(format!("Expected type level integer"))
+                    .secondary_label(&sym, format!("{name} is defined here"))
+                    .span_suggest_insert_before(
+                        "Try making the generic a number",
+                        sym,
+                        "#",
+                    ))
+                }
+                TypeSymbol::GenericInt => ConstGeneric::Name(name.at_loc(t)),
+            }
+        }
+        ast::Expression::IntLiteral(val) => ConstGeneric::Const(val.clone().as_signed()),
+        ast::Expression::BinaryOperator(lhs, op, rhs) => {
+            let lhs = visit_const_generic(lhs, ctx)?;
+            let rhs = visit_const_generic(rhs, ctx)?;
+
+            match &op.inner {
+                ast::BinaryOperator::Add => ConstGeneric::Add(Box::new(lhs), Box::new(rhs)),
+                other => {
+                    return Err(Diagnostic::error(
+                        op,
+                        format!("Operator `{other}` is not supported in a type expression"),
+                    )
+                    .primary_label("Not supported in a type expression"))
+                }
+            }
+        }
+        _ => {
+            return Err(Diagnostic::error(
+                t,
+                format!("This expression is not supported in a type expression"),
+            )
+            .primary_label("Not supported in a type expression"))
+        }
+    };
+
+    Ok(kind.at_loc(t))
+}
+
+pub fn visit_where_clauses(
+    where_clauses: &[(Loc<Path>, Loc<ast::Expression>)],
+    ctx: &mut Context,
+) -> Result<Vec<Loc<WhereClause>>> {
+    where_clauses
+        .iter()
+        .map(|(name, rhs)| {
+            let (name_id, sym) = ctx.symtab.lookup_type_symbol(name)?;
+            let lhs = match &sym.inner {
+                TypeSymbol::Declared(_, _) => {
+                    return Err(Diagnostic::error(
+                        name,
+                        format!("Currently, only generic numbers can occur in where clauses"),
+                    )
+                    .primary_label("Declared type in where clause")
+                    .secondary_label(sym, format!("{name} is a type declared here")))
+                }
+                TypeSymbol::GenericArg { .. } => {
+                    return Err(Diagnostic::error(
+                        name,
+                        format!("Currently, only generic numbers can occur in where clauses"),
+                    )
+                    .primary_label("Generic type in where clause")
+                    .secondary_label(&sym, format!("{name} is a generic type declared here"))
+                    .span_suggest_insert_before(
+                        "Try making the generic a number",
+                        &sym,
+                        "#",
+                    ))
+                }
+                TypeSymbol::GenericInt => name_id.at_loc(name),
+            };
+
+            let rhs = visit_const_generic(rhs, ctx)?;
+
+            let loc = ().between_locs(&lhs, &rhs);
+            Ok(WhereClause { lhs, rhs }.at_loc(&loc))
+        })
+        .collect()
 }
 
 /// The `extra_path` parameter allows specifying an extra path prepended to
@@ -440,6 +537,7 @@ pub fn visit_unit(
                 output_type: _,
                 unit_kind: _,
                 type_params,
+                where_clauses: _,
             },
         body,
     } = &unit.inner;
@@ -1889,6 +1987,7 @@ mod entity_visiting {
                 type_params: vec![],
                 attributes: ast::AttributeList(vec![]),
                 unit_kind: ast::UnitKind::Entity.nowhere(),
+                where_clauses: vec![],
             },
             body: Some(
                 ast::Expression::Block(Box::new(ast::Block {
@@ -1913,6 +2012,7 @@ mod entity_visiting {
                 output_type: None,
                 type_params: vec![],
                 unit_kind: hir::UnitKind::Entity.nowhere(),
+                where_clauses: vec![],
             },
             attributes: hir::AttributeList::empty(),
             inputs: vec![((name_id(1, "a"), hir::TypeSpec::unit().nowhere()))],
@@ -2476,6 +2576,7 @@ mod expression_visiting {
                     output_type: None,
                     type_params: vec![],
                     unit_kind: hir::UnitKind::Entity.nowhere(),
+                    where_clauses: vec![],
                 }
                 .nowhere(),
             ),
@@ -2546,6 +2647,7 @@ mod expression_visiting {
                     output_type: None,
                     type_params: vec![],
                     unit_kind: hir::UnitKind::Entity.nowhere(),
+                    where_clauses: vec![],
                 }
                 .nowhere(),
             ),
@@ -2604,6 +2706,7 @@ mod expression_visiting {
                     output_type: None,
                     type_params: vec![],
                     unit_kind: hir::UnitKind::Function(hir::FunctionKind::Fn).nowhere(),
+                    where_clauses: vec![],
                 }
                 .nowhere(),
             ),
@@ -2665,6 +2768,7 @@ mod expression_visiting {
                     .nowhere(),
                     output_type: None,
                     type_params: vec![],
+                    where_clauses: vec![],
                 }
                 .nowhere(),
             ),
@@ -2868,6 +2972,7 @@ mod item_visiting {
                     type_params: vec![],
                     attributes: ast::AttributeList(vec![]),
                     unit_kind: ast::UnitKind::Entity.nowhere(),
+                    where_clauses: vec![],
                 },
                 body: Some(
                     ast::Expression::Block(Box::new(ast::Block {
@@ -2889,6 +2994,7 @@ mod item_visiting {
                     inputs: hir::ParameterList(vec![]).nowhere(),
                     type_params: vec![],
                     unit_kind: hir::UnitKind::Entity.nowhere(),
+                    where_clauses: vec![],
                 },
                 attributes: hir::AttributeList::empty(),
                 inputs: vec![],
@@ -2939,6 +3045,7 @@ mod impl_blocks {
                     output_type: None,
                     type_params: vec![],
                     unit_kind: ast::UnitKind::Function.nowhere(),
+                    where_clauses: vec![],
                 },
                 body: Some(
                     ast::Expression::Block(Box::new(ast::Block {
@@ -2984,6 +3091,7 @@ mod impl_blocks {
                     output_type: None,
                     type_params: vec![],
                     unit_kind: hir::UnitKind::Function(hir::FunctionKind::Fn).nowhere(),
+                    where_clauses: vec![],
                 },
                 attributes: hir::AttributeList::empty(),
                 inputs: vec![(name_id(3, "self"), param_type_spec)],
@@ -3009,6 +3117,7 @@ mod impl_blocks {
             output_type: None,
             type_params: vec![],
             unit_kind: hir::UnitKind::Function(hir::FunctionKind::Fn).nowhere(),
+            where_clauses: vec![],
         };
         assert_eq!(t.1, &HashMap::from([(ast_ident("x").inner, trait_head)]));
 
@@ -3064,6 +3173,7 @@ mod module_visiting {
                         type_params: vec![],
                         attributes: ast::AttributeList(vec![]),
                         unit_kind: ast::UnitKind::Entity.nowhere(),
+                        where_clauses: vec![],
                     },
                     body: Some(
                         ast::Expression::Block(Box::new(ast::Block {
@@ -3089,6 +3199,7 @@ mod module_visiting {
                             inputs: hparams!().nowhere(),
                             type_params: vec![],
                             unit_kind: hir::UnitKind::Entity.nowhere(),
+                            where_clauses: vec![],
                         },
                         inputs: vec![],
                         attributes: hir::AttributeList::empty(),

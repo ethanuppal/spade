@@ -358,6 +358,21 @@ pub struct TypeDeclaration {
 impl WithLocation for TypeDeclaration {}
 
 #[derive(PartialEq, Debug, Clone, Serialize, Deserialize, Hash, Eq)]
+pub enum ConstGeneric {
+    Name(Loc<NameID>),
+    Const(BigInt),
+    Add(Box<Loc<ConstGeneric>>, Box<Loc<ConstGeneric>>),
+}
+impl WithLocation for ConstGeneric {}
+
+#[derive(PartialEq, Debug, Clone, Serialize, Deserialize, Hash, Eq)]
+pub struct WhereClause {
+    pub lhs: Loc<NameID>,
+    pub rhs: Loc<ConstGeneric>,
+}
+impl WithLocation for WhereClause {}
+
+#[derive(PartialEq, Debug, Clone, Serialize, Deserialize, Hash, Eq)]
 pub enum UnitName {
     /// The name will be mangled down to contain the NameID in order to ensure
     /// uniqueness. Emitted by generic functions
@@ -515,6 +530,7 @@ pub struct UnitHead {
     pub output_type: Option<Loc<TypeSpec>>,
     pub type_params: Vec<Loc<TypeParam>>,
     pub unit_kind: Loc<UnitKind>,
+    pub where_clauses: Vec<Loc<WhereClause>>,
 }
 impl WithLocation for UnitHead {}
 

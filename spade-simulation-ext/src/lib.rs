@@ -315,7 +315,7 @@ impl Spade {
         };
         let generic_list =
             self.type_state
-                .create_generic_list(GenericListSource::Anonymous, &[], None)?;
+                .create_generic_list(GenericListSource::Anonymous, &[], None, &[])?;
 
         let ty = self
             .type_state
@@ -365,7 +365,7 @@ impl Spade {
 
         let generic_list =
             self.type_state
-                .create_generic_list(GenericListSource::Anonymous, &[], None)?;
+                .create_generic_list(GenericListSource::Anonymous, &[], None, &[])?;
         let ty = self
             .type_state
             .type_var_from_hir(output_type.loc(), &output_type, &generic_list);
@@ -415,7 +415,7 @@ impl Spade {
         };
         let generic_list =
             self.type_state
-                .create_generic_list(GenericListSource::Anonymous, &[], None)?;
+                .create_generic_list(GenericListSource::Anonymous, &[], None, &[])?;
         // NOTE: We need to actually have the type information about what we're assigning to here
         // available
         self.type_state
@@ -520,7 +520,7 @@ impl Spade {
 
         let mut type_state = TypeState::new();
         let generic_list =
-            type_state.create_generic_list(GenericListSource::Anonymous, &[], None)?;
+            type_state.create_generic_list(GenericListSource::Anonymous, &[], None, &[])?;
         let ty = type_state.type_var_from_hir(port_ty.loc(), &port_ty, &generic_list);
 
         let val = self.compile_expr(expr, &ty)?;
@@ -619,7 +619,7 @@ impl Spade {
         };
         let generic_list = self
             .type_state
-            .create_generic_list(GenericListSource::Anonymous, &[], None)
+            .create_generic_list(GenericListSource::Anonymous, &[], None, &[])
             .unwrap();
 
         self.type_state

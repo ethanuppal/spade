@@ -10,7 +10,10 @@ use std::collections::{BTreeSet, HashMap};
 use std::sync::Arc;
 
 use colored::Colorize;
-use hir::{param_util, Binding, Parameter, TypeExpression, TypeSpec, UnitHead, WalTrace};
+use hir::{
+    param_util, Binding, ConstGeneric, Parameter, TypeExpression, TypeSpec, UnitHead, WalTrace,
+    WhereClause,
+};
 use itertools::Itertools;
 use num::{BigInt, Zero};
 use serde::{Deserialize, Serialize};
@@ -306,11 +309,14 @@ impl TypeState {
 
     #[trace_typechecker]
     #[tracing::instrument(level = "trace", skip_all, fields(%entity.name))]
-    pub fn visit_entity(&mut self, entity: &Unit, ctx: &Context) -> Result<()> {
+    pub fn visit_unit(&mut self, entity: &Unit, ctx: &Context) -> Result<()> {
         let generic_list = self.create_generic_list(
             GenericListSource::Definition(&entity.name.name_id().inner),
             &entity.head.type_params,
             None,
+            // NOTE: I'm not 100% sure we need to pass these here, the information
+            // is probably redundant
+            &entity.head.where_clauses,
         )?;
 
         // Add equations for the inputs
@@ -545,6 +551,7 @@ impl TypeState {
             GenericListSource::Expression(expression_id.inner),
             &head.type_params,
             turbofish,
+            &head.where_clauses,
         )?;
 
         if visit_args {
@@ -802,6 +809,7 @@ impl TypeState {
         source: GenericListSource,
         params: &[Loc<TypeParam>],
         turbofish: Option<TurbofishCtx>,
+        where_clauses: &[Loc<WhereClause>],
     ) -> Result<GenericListToken> {
         let turbofish_params = if let Some(turbofish) = turbofish.as_ref() {
             if params.is_empty() {
@@ -867,6 +875,7 @@ impl TypeState {
                     self.unify(&ty, &t, tf_ctx.type_ctx)
                         .into_default_diagnostic(param)?;
                 }
+
                 Ok((name, self.check_var_for_replacement(t)))
             })
             .collect::<Result<Vec<_>>>()?
@@ -877,7 +886,29 @@ impl TypeState {
         self.trace_stack
             .push(TraceStackEntry::NewGenericList(new_list.clone()));
 
-        Ok(self.add_mapped_generic_list(source, new_list))
+        let tok = self.add_mapped_generic_list(source, new_list.clone());
+
+        for clause in where_clauses {
+            let constraint = self.visit_const_generic(&clause.rhs, &tok)?;
+
+            let name = &clause.lhs;
+            let tvar = new_list.get(&name).ok_or_else(|| {
+                Diagnostic::error(
+                    &clause.lhs,
+                    format!("{name} is not a generic parameter on this unit"),
+                )
+                .primary_label("Not a generic parameter")
+            })?;
+            self.add_constraint(
+                tvar.clone(),
+                constraint,
+                clause.loc(),
+                &tvar,
+                ConstraintSource::Where,
+            );
+        }
+
+        Ok(tok)
     }
 
     /// Adds a generic list with parameters already mapped to types
@@ -982,6 +1013,7 @@ impl TypeState {
                                 GenericListSource::Anonymous,
                                 &enum_variant.type_params,
                                 None,
+                                &[],
                             )?;
 
                             let condition_type = self.type_var_from_hir(
@@ -1001,6 +1033,7 @@ impl TypeState {
                                 GenericListSource::Anonymous,
                                 &s.type_params,
                                 None,
+                                &[],
                             )?;
 
                             let condition_type =
@@ -1268,6 +1301,28 @@ impl TypeState {
             )?;
 
         Ok(())
+    }
+
+    pub fn visit_const_generic(
+        &self,
+        g: &ConstGeneric,
+        generic_list: &GenericListToken,
+    ) -> Result<ConstraintExpr> {
+        match g {
+            ConstGeneric::Name(n) => {
+                let var = self.get_generic_list(generic_list).get(n).ok_or_else(|| {
+                    Diagnostic::bug(n, "Found non-generic argument in where clause")
+                })?;
+                Ok(ConstraintExpr::Var(
+                    self.check_var_for_replacement(var.clone()),
+                ))
+            }
+            ConstGeneric::Const(val) => Ok(ConstraintExpr::Integer(val.clone())),
+            ConstGeneric::Add(lhs, rhs) => Ok(ConstraintExpr::Sum(
+                Box::new(self.visit_const_generic(lhs, generic_list)?),
+                Box::new(self.visit_const_generic(rhs, generic_list)?),
+            )),
+        }
     }
 }
 
@@ -2152,7 +2207,7 @@ mod tests {
             items: &ItemList::new(),
         };
         let generic_list = state
-            .create_generic_list(GenericListSource::Anonymous, &vec![], None)
+            .create_generic_list(GenericListSource::Anonymous, &vec![], None, &[])
             .unwrap();
         state.visit_expression(&input, &ctx, &generic_list).unwrap();
 
@@ -2197,7 +2252,7 @@ mod tests {
             items: &ItemList::new(),
         };
         let generic_list = state
-            .create_generic_list(GenericListSource::Anonymous, &vec![], None)
+            .create_generic_list(GenericListSource::Anonymous, &vec![], None, &[])
             .unwrap();
         state.visit_expression(&input, &ctx, &generic_list).unwrap();
 
@@ -2247,7 +2302,7 @@ mod tests {
             items: &ItemList::new(),
         };
         let generic_list = state
-            .create_generic_list(GenericListSource::Anonymous, &vec![], None)
+            .create_generic_list(GenericListSource::Anonymous, &vec![], None, &[])
             .unwrap();
         assert_ne!(state.visit_expression(&input, &ctx, &generic_list), Ok(()));
     }
@@ -2291,7 +2346,7 @@ mod tests {
             items: &ItemList::new(),
         };
         let generic_list = state
-            .create_generic_list(GenericListSource::Anonymous, &vec![], None)
+            .create_generic_list(GenericListSource::Anonymous, &vec![], None, &[])
             .unwrap();
         state.visit_expression(&input, &ctx, &generic_list).unwrap();
 
@@ -2344,7 +2399,7 @@ mod tests {
             items: &ItemList::new(),
         };
         let generic_list = state
-            .create_generic_list(GenericListSource::Anonymous, &vec![], None)
+            .create_generic_list(GenericListSource::Anonymous, &vec![], None, &[])
             .unwrap();
         state.visit_expression(&input, &ctx, &generic_list).unwrap();
 
@@ -2387,7 +2442,7 @@ mod tests {
             items: &ItemList::new(),
         };
         let generic_list = state
-            .create_generic_list(GenericListSource::Anonymous, &vec![], None)
+            .create_generic_list(GenericListSource::Anonymous, &vec![], None, &[])
             .unwrap();
         assert!(state.visit_statement(&input, &ctx, &generic_list).is_err());
     }
@@ -2419,7 +2474,7 @@ mod tests {
             items: &ItemList::new(),
         };
         let generic_list = state
-            .create_generic_list(GenericListSource::Anonymous, &vec![], None)
+            .create_generic_list(GenericListSource::Anonymous, &vec![], None, &[])
             .unwrap();
         state.visit_expression(&input, &ctx, &generic_list).unwrap();
 
@@ -2460,7 +2515,7 @@ mod tests {
             items: &ItemList::new(),
         };
         let generic_list = state
-            .create_generic_list(GenericListSource::Anonymous, &vec![], None)
+            .create_generic_list(GenericListSource::Anonymous, &vec![], None, &[])
             .unwrap();
         state.visit_statement(&input, &ctx, &generic_list).unwrap();
 
@@ -2508,7 +2563,7 @@ mod tests {
             items: &ItemList::new(),
         };
         let generic_list = state
-            .create_generic_list(GenericListSource::Anonymous, &vec![], None)
+            .create_generic_list(GenericListSource::Anonymous, &vec![], None, &[])
             .unwrap();
         state.visit_register(&input, &ctx, &generic_list).unwrap();
 
@@ -2542,6 +2597,7 @@ mod tests {
             .nowhere(),
             output_type: Some(dtype!(symtab => "int"; (t_num(5)))),
             type_params: vec![],
+            where_clauses: vec![],
         };
 
         let entity_name = symtab.add_thing(ast_path("test").inner, Thing::Unit(unit.nowhere()));
@@ -2568,7 +2624,7 @@ mod tests {
         state.add_eq_from_tvar(expr_b.clone(), TVar::Unknown(101, TraitList::empty()));
 
         let generic_list = state
-            .create_generic_list(GenericListSource::Anonymous, &vec![], None)
+            .create_generic_list(GenericListSource::Anonymous, &vec![], None, &[])
             .unwrap();
         state
             .visit_expression(
@@ -2635,6 +2691,7 @@ mod tests {
             .nowhere(),
             output_type: Some(dtype!(symtab => "int"; ( t_num(5) ))),
             type_params: vec![],
+            where_clauses: vec![],
         };
 
         let entity_name = symtab.add_thing(ast_path("test").inner, Thing::Unit(unit.nowhere()));
@@ -2661,7 +2718,7 @@ mod tests {
         state.add_eq_from_tvar(expr_b.clone(), TVar::Unknown(101, TraitList::empty()));
 
         let generic_list = state
-            .create_generic_list(GenericListSource::Anonymous, &vec![], None)
+            .create_generic_list(GenericListSource::Anonymous, &vec![], None, &[])
             .unwrap();
         state
             .visit_expression(

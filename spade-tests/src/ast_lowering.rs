@@ -1154,3 +1154,31 @@ fn trait_impls_inside_modules_works() {
 
     build_items(code);
 }
+
+snapshot_error! {
+    generic_type_in_const_generic_where_clause_lhs,
+    "
+        fn test<O>()
+            where O: 1
+        {}
+    "
+}
+
+snapshot_error! {
+    generic_type_in_const_generic_where_clause_rhs,
+    "
+        fn test<N, #O>()
+            where O: N
+        {}
+    "
+}
+
+snapshot_error! {
+    struct_type_in_const_generic_where_clause,
+    "
+        struct N {}
+        fn test<#O>()
+            where O: N
+        {}
+    "
+}

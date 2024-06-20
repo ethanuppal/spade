@@ -118,6 +118,33 @@ pub enum BinaryOperator {
 }
 impl WithLocation for BinaryOperator {}
 
+impl std::fmt::Display for BinaryOperator {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            BinaryOperator::Add => write!(f, "+"),
+            BinaryOperator::Sub => write!(f, "-"),
+            BinaryOperator::Mul => write!(f, "*"),
+            BinaryOperator::Div => write!(f, "/"),
+            BinaryOperator::Mod => write!(f, "%"),
+            BinaryOperator::Equals => write!(f, "=="),
+            BinaryOperator::NotEquals => write!(f, "!="),
+            BinaryOperator::Lt => write!(f, "<"),
+            BinaryOperator::Gt => write!(f, ">"),
+            BinaryOperator::Le => write!(f, "<="),
+            BinaryOperator::Ge => write!(f, ">="),
+            BinaryOperator::LogicalAnd => write!(f, "&"),
+            BinaryOperator::LogicalOr => write!(f, "|"),
+            BinaryOperator::LogicalXor => write!(f, "^"),
+            BinaryOperator::LeftShift => write!(f, "<<"),
+            BinaryOperator::RightShift => write!(f, ">>"),
+            BinaryOperator::ArithmeticRightShift => write!(f, ">>>"),
+            BinaryOperator::BitwiseAnd => write!(f, "&&"),
+            BinaryOperator::BitwiseOr => write!(f, "||"),
+            BinaryOperator::BitwiseXor => write!(f, "^^"),
+        }
+    }
+}
+
 #[derive(PartialEq, Debug, Clone)]
 pub enum UnaryOperator {
     Sub,
@@ -501,6 +528,7 @@ pub struct UnitHead {
     pub inputs: Loc<ParameterList>,
     pub output_type: Option<Loc<TypeSpec>>,
     pub type_params: Vec<Loc<TypeParam>>,
+    pub where_clauses: Vec<(Loc<Path>, Loc<Expression>)>,
 }
 impl WithLocation for UnitHead {}
 
