@@ -27,6 +27,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Fixed
 
+- [!321][!321] Fix codegen for enums with a single variant
+
 ### Removed
 
 [!271]: https://gitlab.com/spade-lang/spade/-/merge_requests/271

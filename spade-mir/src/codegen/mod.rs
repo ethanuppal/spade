@@ -558,10 +558,20 @@ fn forward_expression_code(binding: &Binding, types: &TypeList, ops: &[ValueName
             let ops_text = if op_names.is_empty() {
                 String::new()
             } else {
-                format!(", {}", op_names.join(", "))
+                format!(
+                    "{}{}",
+                    if tag_size != 0 { ", " } else { "" },
+                    op_names.join(", ")
+                )
             };
 
-            format!("{{{}'d{}{}{}}}", tag_size, variant, ops_text, padding_text)
+            let tag = if tag_size != 0 {
+                format!("{tag_size}'d{variant}")
+            } else {
+                "".to_string()
+            };
+
+            format!("{{{tag}{ops_text}{padding_text}}}")
         }
         Operator::IsEnumVariant { variant, enum_type } => {
             let tag_size = enum_util::tag_size(enum_type.assume_enum().len());
@@ -570,7 +580,9 @@ fn forward_expression_code(binding: &Binding, types: &TypeList, ops: &[ValueName
             let tag_end = &total_size - 1u32.to_biguint();
             let tag_start = &total_size - tag_size as u64;
 
-            if total_size == 1u32.to_biguint() {
+            if tag_size == 0 {
+                "1".to_string()
+            } else if total_size == 1u32.to_biguint() {
                 format!("{} == 1'd{}", op_names[0], variant)
             } else if tag_end == tag_start {
                 format!("{}[{}] == {}'d{}", op_names[0], tag_end, tag_size, variant)
@@ -598,12 +610,13 @@ fn forward_expression_code(binding: &Binding, types: &TypeList, ops: &[ValueName
 
             let member_end = &member_start + variant_list[*variant][*member_index].size();
 
-            format!(
-                "{}[{}:{}]",
-                op_names[0],
-                &full_size - member_start - 1u32.to_biguint(),
-                full_size - member_end
-            )
+            let upper_idx = &full_size - &member_start - 1u32.to_biguint();
+            let lower_idx = full_size - &member_end;
+            if upper_idx == lower_idx && tag_size == 0 {
+                op_names[0].clone()
+            } else {
+                format!("{}[{}:{}]", op_names[0], upper_idx, lower_idx)
+            }
         }
         Operator::ReadPort => ops[0].backward_var_name(),
         Operator::FlipPort => {
