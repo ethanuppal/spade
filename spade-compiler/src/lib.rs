@@ -12,6 +12,7 @@ use spade_mir::codegen::{prepare_codegen, Codegenable};
 use spade_mir::unit_name::InstanceMap;
 use spade_mir::verilator_wrapper::verilator_wrappers;
 use std::collections::{BTreeMap, HashMap};
+use std::io::Write;
 use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::RwLock;
@@ -60,6 +61,7 @@ pub struct Opt<'b> {
     pub print_type_traceback: bool,
     pub print_parse_traceback: bool,
     pub wl_infer_method: Option<spade_wordlength_inference::InferMethod>,
+    pub opt_passes: Vec<String>,
 }
 
 trait Reportable<T> {
@@ -156,11 +158,38 @@ pub fn compile(
     spade_ast_lowering::builtins::populate_symtab(&mut symtab, &mut item_list);
 
     let code = Rc::new(RwLock::new(CodeBundle::new("".to_string())));
+
+    let mut unfinished_artefacts = UnfinishedArtefacts {
+        code: code.read().unwrap().clone(),
+        item_list: None,
+    };
+
     let mut errors = ErrorHandler {
         failed: false,
         error_buffer: opts.error_buffer,
         diag_handler,
         code: Rc::clone(&code),
+    };
+
+    let pass_impls = spade_mir::passes::mir_passes();
+    let opt_passes = opts
+        .opt_passes
+        .iter()
+        .map(|pass| {
+            if let Some(pass) = pass_impls.get(pass.as_str()) {
+                Ok(pass.as_ref())
+            } else {
+                let err = format!("{pass} is not a known optimization pass.");
+                Err(err)
+            }
+        })
+        .collect::<Result<Vec<_>, _>>();
+    let opt_passes = match opt_passes {
+        Ok(p) => p,
+        Err(e) => {
+            errors.error_buffer.write_all(e.as_bytes()).unwrap();
+            return Err(unfinished_artefacts);
+        }
     };
 
     let module_asts = parse(
@@ -169,11 +198,6 @@ pub fn compile(
         opts.print_parse_traceback,
         &mut errors,
     );
-
-    let mut unfinished_artefacts = UnfinishedArtefacts {
-        code: code.read().unwrap().clone(),
-        item_list: None,
-    };
 
     if errors.failed {
         return Err(unfinished_artefacts);
@@ -290,6 +314,7 @@ pub fn compile(
         &item_list,
         &mut errors.diag_handler,
         opts.wl_infer_method,
+        &opt_passes,
     );
 
     let CodegenArtefacts {

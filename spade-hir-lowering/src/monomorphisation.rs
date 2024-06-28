@@ -1,6 +1,7 @@
 use std::collections::{BTreeMap, HashMap, VecDeque};
 
 use itertools::Itertools;
+use mir::passes::MirPass;
 use spade_common::location_info::Loc;
 use spade_common::{id_tracker::ExprIdTracker, location_info::WithLocation, name::NameID};
 use spade_diagnostics::diagnostic::{Message, Subdiagnostic};
@@ -139,6 +140,7 @@ pub fn compile_items(
     item_list: &ItemList,
     diag_handler: &mut DiagHandler,
     wordlength_inference_method: Option<wordlength_inference::InferMethod>,
+    opt_passes: &[&dyn MirPass],
 ) -> Vec<Result<MirOutput>> {
     // Build a map of items to use for compilation later. Also push all non
     // generic items to the compilation queue
@@ -256,6 +258,7 @@ pub fn compile_items(
                     diag_handler,
                     name_source_map,
                     self_mono_item,
+                    opt_passes,
                 )
                 .map_err(|e| state.add_mono_traceback(e, &item))
                 .map(|mir| MirOutput {

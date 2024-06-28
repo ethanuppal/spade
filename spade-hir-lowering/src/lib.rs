@@ -29,6 +29,7 @@ use hir::TypeDeclKind;
 use hir::TypeSpec;
 use hir::WalTrace;
 use local_impl::local_impl;
+use mir::passes::MirPass;
 use num::ToPrimitive;
 
 use hir::param_util::{match_args_with_params, Argument};
@@ -2894,6 +2895,7 @@ pub fn generate_unit<'a>(
     diag_handler: &mut DiagHandler,
     name_source_map: &mut NameSourceMap,
     self_mono_item: Option<MonoItem>,
+    opt_passes: &[&dyn MirPass],
 ) -> Result<mir::Entity> {
     let mir_inputs = unit
         .head
@@ -2980,27 +2982,31 @@ pub fn generate_unit<'a>(
         &item_list.types,
     )?;
 
-    let mut statements = statements.to_vec(name_source_map);
-
+    let mut local_passes = opt_passes.to_vec();
+    let pass_impls = spade_mir::passes::mir_passes();
     unit.attributes.lower(&mut |attr| match &attr.inner {
-        Attribute::Optimize { passes } => {
-            let pass_impls = spade_mir::passes::mir_passes();
-
-            for pass in passes {
-                if let Some(pass) = pass_impls.get(pass.inner.as_str()) {
-                    statements = pass.transform_statements(&statements, idtracker);
+        Attribute::Optimize { passes: new_passes } => {
+            for new_pass in new_passes {
+                if let Some(pass) = pass_impls.get(new_pass.inner.as_str()) {
+                    local_passes.push(pass.as_ref());
                 } else {
-                    Err(Diagnostic::error(
-                        pass,
-                        format!("There is no optimization pass named {pass}"),
+                    return Err(Diagnostic::error(
+                        new_pass,
+                        format!("There is no optimization pass named {new_pass}"),
                     )
-                    .primary_label("No such pass"))?
+                    .primary_label("No such pass"))?;
                 }
             }
             Ok(())
         }
         Attribute::Fsm { .. } | Attribute::WalTraceable { .. } => Err(attr.report_unused("unit")),
     })?;
+
+    let mut statements = statements.to_vec(name_source_map);
+
+    for pass in local_passes.iter().chain(opt_passes) {
+        statements = pass.transform_statements(&statements, idtracker);
+    }
 
     Ok(mir::Entity {
         name: name.as_mir(),

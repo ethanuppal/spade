@@ -67,6 +67,10 @@ pub struct Opt {
     #[structopt(long)]
     command_file: Option<PathBuf>,
 
+    // List of optimization passes to apply globally
+    #[structopt(long = "optimize")]
+    opt_passes: Vec<String>,
+
     /// When command_file is used, use this field to specify a list of strings that will
     /// be decoded to NamespacedFile instead of using `infile` and `extra_files`
     #[structopt(skip)]
@@ -154,6 +158,7 @@ fn main() -> Result<()> {
                 .ok()
                 .and_then(|x| wordlength_inference_method(&x).ok())
         }),
+        opt_passes: opts.opt_passes,
     };
 
     let diag_handler = DiagHandler::new(Box::new(CodespanEmitter));
