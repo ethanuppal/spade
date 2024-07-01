@@ -1,4 +1,5 @@
-from typing import List
+from typing import List, NewType
+import typing
 from .spade import *
 
 import cocotb
@@ -10,6 +11,8 @@ from spade import Spade
 
 import os
 
+# FIXME: Once we only support newer python versions, we should use this typedef
+# type SpadeConvertible = str | int | bool | List[SpadeConvertible]
 
 class SpadeExt(Spade):
     def __new__(cls, dut):
@@ -39,8 +42,9 @@ class InputPorts(object):
         self.spade__ = spade
         self.dut__ = dut
 
-    def __setattr__(self, name: str, value: str):
+    def __setattr__(self, name: str, value: object):
         if not name.endswith("__"):
+            value = to_spade_value(value)
             # Ask the spade compiler if the DUT has this field
             (port, val) = self.spade__.port_value(name, value)
 
@@ -56,7 +60,8 @@ class OutputField(object):
         self.field_ref__ = field_ref
         self.dut__ = dut
 
-    def assert_eq(self, expected: str):
+    def assert_eq(self, expected: object):
+        expected = to_spade_value(expected)
         # This shares a bit of code with is_eq, but since we need access to intermediate
         # values, we'll duplicate things for now
         r = self.spade__.compare_field(
@@ -88,15 +93,14 @@ class OutputField(object):
             BitString(self.dut__.output__.value.binstr)
         )
 
-    def is_eq(self, other: str) -> bool:
+    def is_eq(self, other: object) -> bool:
         return self == other
 
     def __ne__(self, value: object, /) -> bool:
         return not self == value
 
     def __eq__(self, value: object, /) -> bool:
-        if type(value) != str:
-            raise TypeError("Spade fields can only be compared to strings")
+        value = to_spade_value(typing.cast(object, value))
         r = self.spade__.compare_field(
             self.field_ref__,
             value,
@@ -118,3 +122,16 @@ class OutputField(object):
                 self.spade__.output_field(new_path),
                 self.dut__
             )
+
+
+def to_spade_value(val: object) -> str:
+    if type(val) == str:
+        return val
+    elif type(val) == int:
+        return f"{val}"
+    elif type(val) == bool:
+        return "true" if val else "false"
+    elif type(val) == list:
+        return f"[{', '.join(map(lambda v: to_spade_value(v), val))}]"
+    else:
+        raise TypeError(f"Values of type {type(val)} cannot be converted to Spade values")

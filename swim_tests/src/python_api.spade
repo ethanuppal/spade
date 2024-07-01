@@ -1,0 +1,13 @@
+struct Types {
+    b: bool,
+    i: int<8>,
+    array: [int<8>; 8]
+}
+
+fn type_casts(
+    b: bool,
+    i: int<8>,
+    array: [int<8>; 8]
+) -> Types {
+    Types$(b, i, array)
+}
