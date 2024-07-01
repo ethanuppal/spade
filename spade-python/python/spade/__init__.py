@@ -89,9 +89,17 @@ class OutputField(object):
         )
 
     def is_eq(self, other: str) -> bool:
+        return self == other
+
+    def __ne__(self, value: object, /) -> bool:
+        return not self == value
+
+    def __eq__(self, value: object, /) -> bool:
+        if type(value) != str:
+            raise TypeError("Spade fields can only be compared to strings")
         r = self.spade__.compare_field(
             self.field_ref__,
-            other,
+            value,
             BitString(self.dut__.output__.value.binstr)
         )
         expected_bits = r.expected_bits.inner();
