@@ -1,0 +1,16 @@
+---
+source: spade-tests/src/ast_lowering.rs
+---
+trait X {}
+struct S {}
+impl<T> X<T> for S {}
+
+
+error: Generic type parameters specified for non-generic trait
+  ┌─ testinput:3:10
+  │
+1 │ trait X {}
+  │       - Trait X is not generic
+2 │ struct S {}
+3 │ impl<T> X<T> for S {}
+  │          ^^^ Generic type parameters specified here

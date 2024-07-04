@@ -284,7 +284,7 @@ mod trait_tests {
     }
 
     snapshot_error! {
-        pipelines_in_impl_blocks_are_graceuflly_disallowed,
+        pipelines_in_impl_blocks_are_gracefully_disallowed,
         "
             struct X {}
 
@@ -804,5 +804,67 @@ mod trait_tests {
                 }
             }
         "
+    }
+
+    #[test]
+    fn impl_blocks_support_generics() {
+        let code = r#"
+        struct HasGeneric<T> {}
+        impl<T> HasGeneric<T> {
+            fn test(self) {}
+        }
+        "#;
+        build_items(code);
+    }
+
+    snapshot_error! {
+        impl_on_tuple_is_error,
+        r#"
+            impl (bool, bool) {}
+        "#
+    }
+
+    snapshot_error! {
+        impl_of_tuple_is_error,
+        r#"
+            struct T {}
+
+            impl (bool, bool) for T {}
+        "#
+    }
+
+    #[test]
+    fn impl_type_parameters_are_visible_in_function_bodies() {
+        let code = "
+        struct HasGeneric<#N> {}
+
+        impl<#N> HasGeneric<N> {
+            fn get_generic(self) -> int<8> {
+                N
+            }
+        }
+        ";
+
+        build_items(code);
+    }
+
+    #[test]
+    fn generic_function_in_impl_block_works() {
+        let code = "
+        struct Fp<#Size, #FracBits> {
+            inner: int<Size>
+        }
+        impl<#Size, #FracBits> Fp<Size, FracBits> {
+            fn add<#OutSize>(self, other: Fp<Size, FracBits>) -> Fp<OutSize, FracBits> {
+                Fp(self.inner + other.inner)
+            }
+        
+            fn sub<#OutSize>(self, other: Fp<Size, FracBits>) -> Fp<OutSize, FracBits> {
+                Fp(self.inner - other.inner)
+            }
+        }
+        ";
+
+        build_items(code);
     }
 }

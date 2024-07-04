@@ -1,0 +1,16 @@
+---
+source: spade-tests/src/ast_lowering.rs
+---
+trait X<T> {}
+struct S {}
+impl X for S {}
+
+
+error: Raw use of generic trait X
+  ┌─ testinput:3:6
+  │
+1 │ trait X<T> {}
+  │       - Trait X defined here
+2 │ struct S {}
+3 │ impl X for S {}
+  │      ^ Trait X used without specifying type parameters

@@ -13,6 +13,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Added
 
+- [!307][!307] Allow specifying command line arguments via a json file
+- [!318][!318] Add generic traits, generic impls, `Option<T>::is_some()` and `Option<T>::is_none()`
+
+### Changed
+
+### Fixed
+
+### Removed
+
+[!307]: https://gitlab.com/spade-lang/spade/-/merge_requests/307
+[!318]: https://gitlab.com/spade-lang/spade/-/merge_requests/318
+
+## [0.8.0] - 2024-05-14
+
+### Added
+
 - [!304][!304] Allow specifying the bit width of integer literals as `512u32` or `123i64`
 - [!307][!307] Allow specifying command line arguments via a json file
 - [!308][!308] Add `/` and `%` for power of 2 operands, as well as `comb_div` and `comb_mod` for all operands

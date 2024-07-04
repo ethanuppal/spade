@@ -527,7 +527,7 @@ pub struct UnitHead {
     pub name: Loc<Identifier>,
     pub inputs: Loc<ParameterList>,
     pub output_type: Option<Loc<TypeSpec>>,
-    pub type_params: Vec<Loc<TypeParam>>,
+    pub type_params: Option<Loc<Vec<Loc<TypeParam>>>>,
     pub where_clauses: Vec<(Loc<Path>, Loc<Expression>)>,
 }
 impl WithLocation for UnitHead {}
@@ -557,14 +557,24 @@ impl WithLocation for Register {}
 #[derive(PartialEq, Debug, Clone)]
 pub struct TraitDef {
     pub name: Loc<Identifier>,
+    pub type_params: Option<Loc<Vec<Loc<TypeParam>>>>,
     pub methods: Vec<Loc<UnitHead>>,
 }
 impl WithLocation for TraitDef {}
 
+/// A specification of a trait with type parameters
+#[derive(PartialEq, Debug, Clone)]
+pub struct TraitSpec {
+    pub path: Loc<Path>,
+    pub type_params: Option<Loc<Vec<Loc<TypeExpression>>>>,
+}
+impl WithLocation for TraitSpec {}
+
 #[derive(PartialEq, Debug, Clone)]
 pub struct ImplBlock {
-    pub r#trait: Option<Loc<Path>>,
-    pub target: Loc<Path>,
+    pub r#trait: Option<Loc<TraitSpec>>,
+    pub type_params: Option<Loc<Vec<Loc<TypeParam>>>>,
+    pub target: Loc<TypeSpec>,
     pub units: Vec<Loc<Unit>>,
 }
 impl WithLocation for ImplBlock {}
@@ -603,7 +613,7 @@ pub enum TypeDeclKind {
 pub struct TypeDeclaration {
     pub name: Loc<Identifier>,
     pub kind: TypeDeclKind,
-    pub generic_args: Vec<Loc<TypeParam>>,
+    pub generic_args: Option<Loc<Vec<Loc<TypeParam>>>>,
 }
 impl WithLocation for TypeDeclaration {}
 

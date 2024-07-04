@@ -83,7 +83,7 @@ pub fn gather_symbols(
 pub fn visit_item(item: &ast::Item, item_list: &mut ItemList, ctx: &mut Context) -> Result<()> {
     match item {
         ast::Item::Unit(e) => {
-            visit_unit(&None, e, ctx)?;
+            visit_unit(&None, e, &None, ctx)?;
         }
         ast::Item::TraitDef(def) => {
             let name = ctx.symtab.add_unique_thing(
@@ -93,6 +93,7 @@ pub fn visit_item(item: &ast::Item, item_list: &mut ItemList, ctx: &mut Context)
 
             crate::create_trait_from_unit_heads(
                 hir::TraitName::Named(name.at_loc(&def.name)),
+                &def.type_params,
                 &def.methods,
                 item_list,
                 ctx,
@@ -117,17 +118,22 @@ pub fn visit_item(item: &ast::Item, item_list: &mut ItemList, ctx: &mut Context)
 }
 
 #[tracing::instrument(skip_all)]
-pub fn visit_unit(extra_path: &Option<Path>, e: &Loc<ast::Unit>, ctx: &mut Context) -> Result<()> {
-    let head = crate::unit_head(&e.head, ctx)?;
+pub fn visit_unit(
+    extra_path: &Option<Path>,
+    unit: &Loc<ast::Unit>,
+    scope_type_params: &Option<Loc<Vec<Loc<ast::TypeParam>>>>,
+    ctx: &mut Context,
+) -> Result<()> {
+    let head = crate::unit_head(&unit.head, scope_type_params, ctx)?;
 
     let new_path = extra_path
         .as_ref()
         .unwrap_or(&Path(vec![]))
-        .join(Path::ident(e.head.name.clone()))
-        .at_loc(&e.head.name);
+        .join(Path::ident(unit.head.name.clone()))
+        .at_loc(&unit.head.name);
 
     ctx.symtab
-        .add_unique_thing(new_path, Thing::Unit(head.at_loc(e)))?;
+        .add_unique_thing(new_path, Thing::Unit(head.at_loc(unit)))?;
 
     Ok(())
 }
@@ -138,6 +144,9 @@ pub fn visit_type_declaration(
 ) -> Result<()> {
     let args = t
         .generic_args
+        .as_ref()
+        .map(|args| &args.inner)
+        .unwrap_or(&vec![])
         .iter()
         .map(|arg| {
             match &arg.inner {
@@ -184,7 +193,12 @@ pub fn re_visit_type_declaration(
 
     // Add the generic parameters to a new symtab scope
     ctx.symtab.new_scope();
-    for param in &t.generic_args {
+    for param in t
+        .generic_args
+        .as_ref()
+        .map(Loc::strip_ref)
+        .unwrap_or(&vec![])
+    {
         let (name, symbol_type) = match &param.inner {
             ast::TypeParam::TypeName { name: n, traits } => {
                 let resolved_traits = traits
@@ -208,7 +222,7 @@ pub fn re_visit_type_declaration(
     // hir::TypeDeclaration and for enum constructors
     let mut output_type_exprs = vec![];
     let mut type_params = vec![];
-    for arg in &t.generic_args {
+    for arg in t.generic_args.as_ref().map(|l| &l.inner).unwrap_or(&vec![]) {
         let (name_id, _) = ctx
             .symtab
             .lookup_type_symbol(&Path(vec![arg.name().clone()]).at_loc(arg))
@@ -489,7 +503,7 @@ mod tests {
                 }
                 .nowhere(),
             ),
-            generic_args: vec![],
+            generic_args: None,
         }
         .nowhere();
 
@@ -545,11 +559,14 @@ mod tests {
                 }
                 .nowhere(),
             ),
-            generic_args: vec![TypeParam::TypeName {
-                name: ast_ident("T"),
-                traits: vec![],
-            }
-            .nowhere()],
+            generic_args: Some(
+                vec![TypeParam::TypeName {
+                    name: ast_ident("T"),
+                    traits: vec![],
+                }
+                .nowhere()]
+                .nowhere(),
+            ),
         }
         .nowhere();
 

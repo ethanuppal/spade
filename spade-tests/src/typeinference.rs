@@ -1523,6 +1523,40 @@ snapshot_error! {
 }
 
 snapshot_error! {
+    impl_of_constrained_param_is_not_usable_outside_constraints,
+    "
+    struct HasGeneric<T> {}
+
+    impl HasGeneric<bool> {
+        fn requires_bool(self) {}
+    }
+
+    fn test() {
+        let g = HasGeneric::<int<8>>();
+
+        g.requires_bool()
+    }
+    "
+}
+
+snapshot_error! {
+    impl_of_semi_constrained_params_is_not_usable_outside_constraints,
+    "
+    struct HasGeneric<T, S> {}
+
+    impl<S> HasGeneric<bool, S> {
+        fn requires_bool(self) {}
+    }
+
+    fn test() {
+        let g = HasGeneric::<int<8>, bool>();
+
+        g.requires_bool()
+    }
+    "
+}
+
+snapshot_error! {
     simple_unsatisfied_where_clause_errors,
     "
         fn add_one<#N, #O>(in: int<N>) -> int<O>

@@ -150,7 +150,7 @@ pub fn compile_items(
     for (item, _) in items.values() {
         match item {
             ExecutableItem::Unit(u) => {
-                if u.head.type_params.is_empty() {
+                if u.head.get_type_params().is_empty() {
                     state.request_compilation(u.name.clone(), true, vec![], symtab, None);
                 }
             }
@@ -172,7 +172,7 @@ pub fn compile_items(
                     items: item_list,
                 };
                 let mut type_state = old_type_state.clone();
-                let generic_list_token = if !u.head.type_params.is_empty() {
+                let generic_list_token = if !u.head.get_type_params().is_empty() {
                     Some(GenericListToken::Definition(u.name.name_id().inner.clone()))
                 } else {
                     None
@@ -180,7 +180,9 @@ pub fn compile_items(
 
                 if let Some(generic_list_token) = &generic_list_token {
                     let generic_list = type_state.get_generic_list(generic_list_token).clone();
-                    for (source_param, new) in u.head.type_params.iter().zip(item.params.iter()) {
+                    for (source_param, new) in
+                        u.head.get_type_params().iter().zip(item.params.iter())
+                    {
                         let source_var = &generic_list[&source_param.name_id()];
 
                         type_state

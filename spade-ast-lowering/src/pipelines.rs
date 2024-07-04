@@ -203,7 +203,7 @@ mod pipeline_visiting {
                 )])
                 .nowhere(),
                 output_type: Some(ast::TypeSpec::Unit(().nowhere()).nowhere()),
-                type_params: vec![],
+                type_params: None,
                 attributes: ast::AttributeList(vec![]),
                 where_clauses: vec![],
             },
@@ -263,10 +263,10 @@ mod pipeline_visiting {
 
         let mut ctx = test_context();
 
-        crate::global_symbols::visit_unit(&None, &input, &mut ctx)
+        crate::global_symbols::visit_unit(&None, &input, &None, &mut ctx)
             .expect("Failed to add pipeline to symtab");
 
-        let result = visit_unit(None, &input, &mut ctx);
+        let result = visit_unit(None, &input, &None, &mut ctx);
 
         assert_eq!(
             result.unwrap().assume_unit().body.assume_block().statements,
@@ -289,7 +289,7 @@ mod pipeline_visiting {
                 )])
                 .nowhere(),
                 output_type: Some(ast::TypeSpec::Unit(().nowhere()).nowhere()),
-                type_params: vec![],
+                type_params: None,
                 attributes: ast::AttributeList(vec![]),
                 where_clauses: vec![],
             },
@@ -349,10 +349,10 @@ mod pipeline_visiting {
 
         let mut ctx = test_context();
 
-        crate::global_symbols::visit_unit(&None, &input, &mut ctx)
+        crate::global_symbols::visit_unit(&None, &input, &None, &mut ctx)
             .expect("Failed to add pipeline to symtab");
 
-        let result = visit_unit(None, &input, &mut ctx);
+        let result = visit_unit(None, &input, &None, &mut ctx);
 
         assert_eq!(
             result.unwrap().assume_unit().body.assume_block().statements,

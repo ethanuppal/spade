@@ -23,7 +23,7 @@ use hir::{ConstGeneric, ExecutableItem, PatternKind, TraitName, WalTrace, WhereC
 use spade_ast as ast;
 use spade_common::id_tracker::{ExprIdTracker, ImplIdTracker};
 use spade_common::location_info::{Loc, WithLocation};
-use spade_common::name::{Identifier, Path};
+use spade_common::name::{Identifier, NameID, Path};
 use spade_hir::{self as hir, Module};
 
 use crate::attributes::AttributeListExt;
@@ -35,7 +35,8 @@ use hir::symbol_table::{LookupError, SymbolTable, Thing, TypeSymbol};
 pub use spade_common::id_tracker;
 
 use error::Result;
-use spade_hir::TypeSpec;
+use spade_ast::{ImplBlock, TypeParam, Unit};
+use spade_hir::{TraitDef, TraitSpec, TypeExpression, TypeSpec, UnitHead};
 
 pub struct Context {
     pub symtab: SymbolTable,
@@ -60,9 +61,8 @@ impl<T> LocExt<T> for Loc<T> {
     }
 }
 
-/// Visit an AST type parameter, converting it to a HIR type parameter. The name is not
-/// added to the symbol table as this function is re-used for both global symbol collection
-/// and normal HIR lowering.
+/// Visit an AST type parameter, converting it to a HIR type parameter and adding it
+/// to the symbol table
 #[tracing::instrument(skip_all, fields(name=%param.name()))]
 pub fn visit_type_param(param: &ast::TypeParam, ctx: &mut Context) -> Result<hir::TypeParam> {
     match &param {
@@ -93,6 +93,28 @@ pub fn visit_type_param(param: &ast::TypeParam, ctx: &mut Context) -> Result<hir
                 TypeSymbol::GenericInt.at_loc(ident),
             );
 
+            Ok(hir::TypeParam::Integer(ident.clone(), name_id))
+        }
+    }
+}
+
+/// Visit an AST type parameter, converting it to a HIR type parameter. The name is not
+/// added to the symbol table as this function is re-used for both global symbol collection
+/// and normal HIR lowering.
+#[tracing::instrument(skip_all, fields(name=%param.name()))]
+pub fn re_visit_type_param(param: &ast::TypeParam, ctx: &Context) -> Result<hir::TypeParam> {
+    match &param {
+        ast::TypeParam::TypeName {
+            name: ident,
+            traits: _,
+        } => {
+            let path = Path::ident(ident.clone()).at_loc(ident);
+            let name_id = ctx.symtab.lookup_type_symbol(&path)?.0;
+            Ok(hir::TypeParam::TypeName(ident.clone(), name_id))
+        }
+        ast::TypeParam::Integer(ident) => {
+            let path = Path::ident(ident.clone()).at_loc(ident);
+            let name_id = ctx.symtab.lookup_type_symbol(&path)?.0;
             Ok(hir::TypeParam::Integer(ident.clone(), name_id))
         }
     }
@@ -144,8 +166,11 @@ pub fn visit_type_spec(t: &Loc<ast::TypeSpec>, ctx: &mut Context) -> Result<Loc<
 
                     if generic_args.len() != visited_params.len() {
                         Err(Diagnostic::error(
-                            params.as_ref().unwrap(),
-                            "Wrong number of type parameters",
+                            params
+                                .as_ref()
+                                .map(|p| ().at_loc(p))
+                                .unwrap_or(().at_loc(t)),
+                            "Wrong number of generic type parameters",
                         )
                         .primary_label(format!(
                             "Expected {} type parameter{}",
@@ -153,10 +178,14 @@ pub fn visit_type_spec(t: &Loc<ast::TypeSpec>, ctx: &mut Context) -> Result<Loc<
                             if generic_args.len() != 1 { "s" } else { "" }
                         ))
                         .secondary_label(
-                            ().between_locs(
-                                &generic_args[0],
-                                &generic_args[generic_args.len() - 1],
-                            ),
+                            if !generic_args.is_empty() {
+                                ().between_locs(
+                                    &generic_args[0],
+                                    &generic_args[generic_args.len() - 1],
+                                )
+                            } else {
+                                ().at_loc(&base_t)
+                            },
                             format!(
                                 "Because this has {} type parameter{}",
                                 generic_args.len(),
@@ -353,14 +382,29 @@ fn visit_parameter_list(
 
 /// Visit the head of an entity to generate an entity head
 #[tracing::instrument(skip_all, fields(name=%head.name))]
-pub fn unit_head(head: &ast::UnitHead, ctx: &mut Context) -> Result<hir::UnitHead> {
+pub fn unit_head(
+    head: &ast::UnitHead,
+    scope_type_params: &Option<Loc<Vec<Loc<TypeParam>>>>,
+    ctx: &mut Context,
+) -> Result<hir::UnitHead> {
     ctx.symtab.new_scope();
 
-    let type_params = head
+    let scope_type_params = scope_type_params
+        .as_ref()
+        .map(Loc::strip_ref)
+        .into_iter()
+        .flatten()
+        .map(|loc| loc.try_map_ref(|p| re_visit_type_param(p, ctx)))
+        .collect::<Result<Vec<Loc<hir::TypeParam>>>>()?;
+
+    let unit_type_params = head
         .type_params
-        .iter()
-        .map(|p| p.try_map_ref(|p| visit_type_param(p, ctx)))
-        .collect::<Result<_>>()?;
+        .as_ref()
+        .map(Loc::strip_ref)
+        .into_iter()
+        .flatten()
+        .map(|loc| loc.try_map_ref(|p| visit_type_param(p, ctx)))
+        .collect::<Result<Vec<Loc<hir::TypeParam>>>>()?;
 
     let output_type = if let Some(output_type) = &head.output_type {
         Some(visit_type_spec(output_type, ctx)?)
@@ -421,7 +465,8 @@ pub fn unit_head(head: &ast::UnitHead, ctx: &mut Context) -> Result<hir::UnitHea
         name: head.name.clone(),
         inputs,
         output_type,
-        type_params,
+        unit_type_params,
+        scope_type_params,
         unit_kind: unit_kind?,
         where_clauses,
     })
@@ -526,6 +571,7 @@ pub fn visit_where_clauses(
 pub fn visit_unit(
     extra_path: Option<Path>,
     unit: &Loc<ast::Unit>,
+    scope_type_params: &Option<Loc<Vec<Loc<ast::TypeParam>>>>,
     ctx: &mut Context,
 ) -> Result<hir::Item> {
     let ast::Unit {
@@ -548,6 +594,7 @@ pub fn visit_unit(
         .unwrap_or(Path(vec![]))
         .join(Path(vec![name.clone()]))
         .at_loc(&name.loc());
+
     let (id, head) = ctx
         .symtab
         .lookup_unit(&path)
@@ -556,13 +603,13 @@ pub fn visit_unit(
             println!("Failed to find {path:?} in symtab")
         })
         .expect("Attempting to lower an entity that has not been added to the symtab previously");
-    let head = head.clone(); // An offering to the borrow checker. May ferris have mercy on us all
 
-    let mut unit_name = if !type_params.is_empty() {
+    let mut unit_name = if type_params.is_some() || scope_type_params.is_some() {
         hir::UnitName::WithID(id.clone().at_loc(name))
     } else {
         hir::UnitName::FullPath(id.clone().at_loc(name))
     };
+
     let mut wal_suffix = None;
 
     let attributes = attributes.lower(&mut |attr: &Loc<ast::Attribute>| match &attr.inner {
@@ -570,14 +617,19 @@ pub fn visit_unit(
             passes: passes.clone(),
         })),
         ast::Attribute::NoMangle => {
-            if !type_params.is_empty() {
-                let generic_list =
-                    ().between_locs(type_params.first().unwrap(), type_params.last().unwrap());
+            if let Some(generic_list) = type_params {
                 Err(
                     Diagnostic::error(attr, "no_mangle is not allowed on generic units")
                         .primary_label("no_mangle not allowed here")
                         .secondary_label(generic_list, "Because this unit is generic"),
                 )
+            } else if let Some(generic_list) = scope_type_params {
+                Err(Diagnostic::error(
+                    attr,
+                    "no_mangle is not allowed on units inside generic impls",
+                )
+                .primary_label("no_mangle not allowed here")
+                .secondary_label(generic_list, "Because this impl is generic"))
             } else {
                 unit_name = hir::UnitName::Unmangled(name.0.clone(), id.clone().at_loc(name));
                 Ok(None)
@@ -623,7 +675,7 @@ pub fn visit_unit(
         .collect::<Vec<_>>();
 
     // Add the type params to the symtab to make them visible in the body
-    for param in &head.type_params {
+    for param in head.get_type_params() {
         match param.inner.clone() {
             hir::TypeParam::TypeName(ident, name) => ctx.symtab.re_add_type(ident, name),
             hir::TypeParam::Integer(ident, name) => ctx.symtab.re_add_type(ident, name),
@@ -676,19 +728,67 @@ pub fn visit_unit(
 
 pub fn create_trait_from_unit_heads(
     name: TraitName,
+    type_params: &Option<Loc<Vec<Loc<TypeParam>>>>,
     heads: &[Loc<ast::UnitHead>],
     item_list: &mut hir::ItemList,
     ctx: &mut Context,
 ) -> Result<()> {
+    ctx.symtab.new_scope();
+
+    let visited_type_params = if let Some(params) = type_params {
+        Some(params.try_map_ref(|params| {
+            params
+                .iter()
+                .map(|param| {
+                    param.try_map_ref(|tp| {
+                        let ident = tp.name();
+                        let type_symbol = match tp {
+                            TypeParam::TypeName { name, traits } => {
+                                if !traits.is_empty() {
+                                    return Err(Diagnostic::bug(
+                                        ().between_locs(
+                                            traits.first().unwrap(),
+                                            traits.last().unwrap(),
+                                        ),
+                                        "Trait bounds are not allowed on trait type parameters",
+                                    )
+                                    .primary_label("Trait bounds not allowed here"));
+                                } else {
+                                    TypeSymbol::GenericArg {
+                                        traits: vec![], /* TODO trait bounds */
+                                    }
+                                    .at_loc(name)
+                                }
+                            }
+                            TypeParam::Integer(n) => TypeSymbol::GenericInt.at_loc(n),
+                        };
+                        let name = ctx.symtab.add_type(Path::ident(ident.clone()), type_symbol);
+                        match tp {
+                            TypeParam::TypeName { .. } => {
+                                Ok(hir::TypeParam::TypeName(ident.clone(), name))
+                            }
+                            TypeParam::Integer(_) => {
+                                Ok(hir::TypeParam::Integer(ident.clone(), name))
+                            }
+                        }
+                    })
+                })
+                .collect()
+        })?)
+    } else {
+        None
+    };
+
     ctx.self_ctx = SelfContext::TraitDefinition(name.clone());
     let trait_members = heads
         .iter()
-        .map(|head| Ok((head.name.inner.clone(), unit_head(head, ctx)?)))
+        .map(|head| Ok((head.name.inner.clone(), unit_head(head, type_params, ctx)?)))
         .collect::<Result<Vec<_>>>()?;
 
     // Add the trait to the trait list
-    item_list.add_trait(name, trait_members)?;
+    item_list.add_trait(name, visited_type_params, trait_members)?;
 
+    ctx.symtab.close_scope();
     Ok(())
 }
 
@@ -703,18 +803,56 @@ pub fn visit_impl(
     ctx.symtab.new_scope();
 
     let self_path = Loc::new(Path::from_strs(&["Self"]), block.span, block.file_id);
-    ctx.symtab.add_alias(self_path, block.target.clone())?;
+    let target_path = if let ast::TypeSpec::Named(path, _) = &block.target.inner {
+        ctx.symtab.add_alias(self_path, path.clone())?;
+        path
+    } else {
+        return Err(
+            Diagnostic::error(&block.target, "Impl target is not a named type")
+                .primary_label("Not a named type"),
+        );
+    };
+
+    if let Some(type_params) = &block.type_params {
+        for param in type_params.inner.iter() {
+            let ident = param.inner.name();
+            ctx.symtab.add_type(
+                Path::ident(ident.clone()),
+                match &param.inner {
+                    TypeParam::TypeName { name, traits } => {
+                        if !traits.is_empty() {
+                            return Err(Diagnostic::bug(
+                                ().between_locs(traits.first().unwrap(), traits.last().unwrap()),
+                                "Trait bounds are not allowed on trait type parameters",
+                            )
+                            .primary_label("Trait bounds not allowed here"));
+                        } else {
+                            TypeSymbol::GenericArg {
+                                traits: vec![], /* TODO trait bounds */
+                            }
+                            .at_loc(name)
+                        }
+                    }
+                    TypeParam::Integer(n) => TypeSymbol::GenericInt.at_loc(n),
+                },
+            );
+        }
+    }
 
     let impl_block_id = ctx.impl_idtracker.next();
-    let trait_name = if let Some(t) = &block.r#trait {
-        let name = ctx.symtab.lookup_trait(t)?;
-        TraitName::Named(name.0.at_loc(&name.1))
+    let (trait_name, trait_spec) = if let Some(t) = &block.r#trait {
+        let name = ctx.symtab.lookup_trait(&t.inner.path)?;
+        (
+            TraitName::Named(name.0.at_loc(&name.1)),
+            visit_trait_spec(t, ctx)?,
+        )
     } else {
         // Create an anonymous trait which we will impl
         let trait_name = TraitName::Anonymous(impl_block_id);
 
         create_trait_from_unit_heads(
             trait_name.clone(),
+            &block.type_params,
             &block
                 .units
                 .iter()
@@ -724,30 +862,52 @@ pub fn visit_impl(
             ctx,
         )?;
 
-        trait_name
+        let type_params = match &block.type_params {
+            None => None,
+            Some(params) => {
+                let mut type_expressions = vec![];
+                for param in &params.inner {
+                    let (name, _) = ctx.symtab.lookup_type_symbol(
+                        &param.map_ref(|_| Path::ident(param.inner.name().clone())),
+                    )?;
+                    let spec = TypeSpec::Generic(name.at_loc(param));
+                    type_expressions.push(TypeExpression::TypeSpec(spec).at_loc(param));
+                }
+                Some(type_expressions.at_loc(params))
+            }
+        };
+
+        let spec = TraitSpec {
+            path: target_path.clone(),
+            type_params,
+        };
+
+        (trait_name, spec)
     };
 
-    let target_trait = items.get_trait(&trait_name).ok_or_else(|| {
+    let trait_def = items.get_trait(&trait_name).ok_or_else(|| {
         Diagnostic::bug(
             block,
             format!("Failed to find trait {trait_name} in the item list"),
         )
     })?;
 
-    let mut missing_methods = target_trait.keys().collect::<HashSet<_>>();
+    check_generic_params_match_trait_def(&trait_name, trait_def, &trait_spec)?;
 
-    // FIXME: Support impls for generic items
-    let target_name = ctx.symtab.lookup_type_symbol(&block.target)?;
-    let ast_type_spec = ast::TypeSpec::Named(block.target.clone(), None).at_loc(&block.target);
-    let target_type_spec = visit_type_spec(&ast_type_spec, ctx)?;
+    let trait_methods = &trait_def.fns;
+
+    let (target_name, _) = ctx.symtab.lookup_type_symbol(target_path)?;
+    let target_type_spec = visit_type_spec(&block.target, ctx)?;
 
     let mut trait_members = vec![];
     let mut trait_impl = HashMap::new();
 
     ctx.self_ctx = SelfContext::ImplBlock(target_type_spec);
 
+    let mut missing_methods = trait_methods.keys().collect::<HashSet<_>>();
+
     for unit in &block.units {
-        let target_method = if let Some(method) = target_trait.get(&unit.head.name.inner) {
+        let trait_method = if let Some(method) = trait_methods.get(&unit.head.name.inner) {
             method
         } else {
             return Err(Diagnostic::error(
@@ -765,34 +925,21 @@ pub fn visit_impl(
             ));
         };
 
-        if matches!(unit.head.unit_kind.inner, UnitKind::Function)
-            && ast_type_spec.is_port(&ctx.symtab)?
-        {
-            return Err(Diagnostic::error(
-                &unit.head.unit_kind,
-                "Functions are not allowed on port types",
-            )
-            .primary_label("Function on port type")
-            .secondary_label(ast_type_spec, "This is a port type")
-            .span_suggest_replace(
-                "Consider making this an entity",
-                &unit.head.unit_kind,
-                "entity",
-            ));
-        }
+        check_is_no_function_on_port_type(unit, block, ctx)?;
 
         let path_suffix = Some(Path(vec![
             Identifier(format!("impl_{}", impl_block_id)).nowhere()
         ]));
-        global_symbols::visit_unit(&path_suffix, unit, ctx)?;
-        let item = visit_unit(path_suffix, unit, ctx)?;
+
+        global_symbols::visit_unit(&path_suffix, unit, &block.type_params, ctx)?;
+        let item = visit_unit(path_suffix, unit, &block.type_params, ctx)?;
 
         match &item {
-            hir::Item::Unit(e) => {
-                trait_members.push((unit.head.name.inner.clone(), e.head.clone()));
+            hir::Item::Unit(u) => {
+                let name = &unit.head.name;
+                trait_members.push((name.inner.clone(), u.head.clone()));
 
-                if let Some((_, prev)) = trait_impl.get(&unit.head.name.inner) {
-                    let name = &unit.head.name;
+                if let Some((_, prev)) = trait_impl.get(&name.inner) {
                     return Err(
                         Diagnostic::error(name, format!("Multiple definitions of {name}"))
                             .primary_label(format!("{name} is defined multiple times"))
@@ -801,8 +948,8 @@ pub fn visit_impl(
                 }
 
                 trait_impl.insert(
-                    unit.head.name.inner.clone(),
-                    (e.name.name_id().inner.clone(), e.loc()),
+                    name.inner.clone(),
+                    (u.name.name_id().inner.clone(), u.loc()),
                 );
             }
             hir::Item::Builtin(_, head) => {
@@ -811,110 +958,598 @@ pub fn visit_impl(
             }
         }
 
-        // Ensure that the return type matches the trait
-        let impl_head = &item.assume_unit().head;
+        let impl_method = &item.assume_unit().head;
 
-        if impl_head.output_type() != target_method.output_type() {
-            let returns_trait_self =
-                matches!(target_method.output_type().inner, TypeSpec::TraitSelf(_));
-            let (impl_path, _) = ctx.symtab.lookup_type_symbol(&block.target)?;
-            let impl_output_type = match impl_head.output_type().inner {
-                TypeSpec::Declared(name, _) => Some(name),
-                _ => None,
-            };
+        check_type_params_for_impl_method_and_trait_method_match(impl_method, &trait_method)?;
 
-            if !(returns_trait_self && impl_output_type.is_some_and(|it| it.inner == impl_path)) {
-                return Err(Diagnostic::error(
-                    impl_head.output_type(),
-                    "Return type does not match trait",
-                )
-                .primary_label(format!("Expected {}", target_method.output_type()))
-                .secondary_label(target_method.output_type(), "To match the trait"));
-            }
-        }
+        let trait_method_mono =
+            monomorphise_trait_method(trait_method, impl_method, trait_def, &trait_spec)?;
 
-        for (i, pair) in impl_head
-            .inputs
-            .0
-            .iter()
-            .zip_longest(target_method.inputs.0.iter())
-            .enumerate()
-        {
-            match pair {
-                EitherOrBoth::Both(
-                    hir::Parameter {
-                        name: i_name,
-                        ty: i_spec,
-                        no_mangle: _,
-                    },
-                    hir::Parameter {
-                        name: t_name,
-                        ty: t_spec,
-                        no_mangle: _,
-                    },
-                ) => {
-                    if i_name != t_name {
-                        return Err(Diagnostic::error(i_name, "Argument name mismatch")
-                            .primary_label(format!("Expected `{t_name}`"))
-                            .secondary_label(
-                                t_name,
-                                format!("Because argument {i} is named `{t_name}` in the trait"),
-                            ));
-                    }
+        check_output_type_for_impl_method_and_trait_method_matches(
+            impl_method,
+            &trait_method_mono,
+            &target_name,
+        )?;
 
-                    let i_spec_name = match &i_spec.inner {
-                        TypeSpec::Declared(name, _) => Some(&name.inner),
-                        _ => None,
-                    };
-
-                    let (target_name, _) = ctx.symtab.lookup_type_symbol(&block.target)?;
-
-                    if !(matches!(&t_spec.inner, hir::TypeSpec::TraitSelf(_))
-                        && i_spec_name.is_some_and(|path| path == &target_name))
-                        && t_spec != i_spec
-                    {
-                        return Err(Diagnostic::error(i_spec, "Argument type mismatch")
-                            .primary_label(format!("Expected {t_spec}"))
-                            .secondary_label(
-                                t_spec,
-                                format!("Because of the type of {t_name} in the trait"),
-                            ));
-                    }
-                }
-                EitherOrBoth::Left(hir::Parameter {
-                    name,
-                    ty: _,
-                    no_mangle: _,
-                }) => {
-                    return Err(
-                        Diagnostic::error(name, "Trait method does not have this argument")
-                            .primary_label("Extra argument")
-                            .secondary_label(&target_method.name, "Method defined here"),
-                    )
-                }
-                EitherOrBoth::Right(hir::Parameter {
-                    name,
-                    ty: _,
-                    no_mangle: _,
-                }) => {
-                    return Err(Diagnostic::error(
-                        // FIXME: Head.name is not optimal, we should point
-                        // to the argument list, but that LOC is not available
-                        // right now
-                        &impl_head.inputs,
-                        format!("Missing argument {}", name),
-                    )
-                    .primary_label(format!("Missing argument {}", name))
-                    .secondary_label(name, "The trait method has this argument"));
-                }
-            }
-        }
+        check_params_for_impl_method_and_trait_method_match(
+            impl_method,
+            &trait_method_mono,
+            target_path,
+            ctx,
+        )?;
 
         missing_methods.remove(&unit.head.name.inner);
 
         result.push(item);
     }
 
+    check_no_missing_methods(block, missing_methods)?;
+
+    let duplicate = items.impls.entry(target_name.clone()).or_default().insert(
+        trait_name.clone(),
+        hir::ImplBlock { fns: trait_impl }.at_loc(block),
+    );
+
+    check_no_duplicate_trait_impl(duplicate, block, &trait_name, &target_name)?;
+
+    ctx.self_ctx = SelfContext::FreeStanding;
+    ctx.symtab.close_scope();
+
+    Ok(result)
+}
+
+fn check_generic_params_match_trait_def(
+    trait_name: &TraitName,
+    trait_def: &TraitDef,
+    trait_spec: &TraitSpec,
+) -> Result<()> {
+    if let Some(generic_params) = &trait_def.type_params {
+        if let TraitSpec {
+            type_params: Some(generic_spec),
+            ..
+        } = trait_spec
+        {
+            if generic_params.len() != generic_spec.len() {
+                Err(
+                    Diagnostic::error(generic_spec, "Wrong number of generic type parameters")
+                        .primary_label(format!(
+                            "Expected {} type parameter{}",
+                            generic_params.len(),
+                            if generic_params.len() != 1 { "s" } else { "" }
+                        ))
+                        .secondary_label(
+                            ().between_locs(
+                                &generic_params[0],
+                                &generic_params[generic_params.len() - 1],
+                            ),
+                            format!(
+                                "Because this has {} type parameter{}",
+                                generic_params.len(),
+                                if generic_params.len() != 1 { "s" } else { "" }
+                            ),
+                        ),
+                )
+            } else {
+                Ok(())
+            }
+        } else {
+            match trait_name {
+                TraitName::Named(name) => Err(Diagnostic::error(
+                    &trait_spec.path,
+                    format!("Raw use of generic trait {}", name),
+                )
+                .primary_label(format!(
+                    "Trait {} used without specifying type parameters",
+                    name
+                ))
+                .secondary_label(name, format!("Trait {} defined here", name))),
+                TraitName::Anonymous(_) => Err(Diagnostic::bug(
+                    ().nowhere(),
+                    "Generic anonymous trait found, which should not be possible",
+                )),
+            }
+        }
+    } else if let TraitSpec {
+        type_params: Some(generic_spec),
+        ..
+    } = trait_spec
+    {
+        match trait_name {
+            TraitName::Named(name) => {
+                Err(Diagnostic::error(
+                    generic_spec,
+                    "Generic type parameters specified for non-generic trait",
+                )
+                .primary_label(
+                    "Generic type parameters specified here",
+                )
+                .secondary_label(
+                    name,
+                    format!("Trait {} is not generic", name.inner.1),
+                ))
+            },
+            TraitName::Anonymous(_) => Err(Diagnostic::bug(
+                generic_spec,
+                "Generic type parameters specified for anonymous trait, which should not be possible",
+            ))
+        }
+    } else {
+        Ok(())
+    }
+}
+
+/// Replaces the generic type parameters in a trait method with the corresponding generic type parameters of the impl block.
+/// This is used to check if the method signature of the impl block matches the method signature of the trait.
+/// e.g. `fn foo<T>(self, a: T) -> T` in the trait would be replaced with `fn foo<U>(self, a: U) -> U` in the impl block.
+fn monomorphise_trait_method(
+    trait_method: &hir::UnitHead,
+    impl_method: &hir::UnitHead,
+    trait_def: &hir::TraitDef,
+    trait_spec: &hir::TraitSpec,
+) -> Result<hir::UnitHead> {
+    let trait_type_params = trait_def
+        .type_params
+        .as_ref()
+        .map_or(vec![], |params| params.inner.clone());
+
+    let trait_method_type_params = &trait_method.unit_type_params;
+
+    let impl_type_params = trait_spec
+        .type_params
+        .as_ref()
+        .map_or(vec![], |params| params.inner.clone());
+
+    let impl_method_type_params = &impl_method
+        .unit_type_params
+        .iter()
+        .map(|param| {
+            let spec = TypeSpec::Generic(param.map_ref(hir::TypeParam::name_id));
+            TypeExpression::TypeSpec(spec).at_loc(param)
+        })
+        .collect_vec();
+
+    let inputs = trait_method.inputs.try_map_ref(|param_list| {
+        param_list
+            .0
+            .iter()
+            .map(|param| {
+                monomorphise_type_spec(
+                    &param.ty,
+                    trait_type_params.as_slice(),
+                    trait_method_type_params.as_slice(),
+                    impl_type_params.as_slice(),
+                    impl_method_type_params.as_slice(),
+                )
+                .map(|ty| hir::Parameter {
+                    name: param.name.clone(),
+                    ty,
+                    no_mangle: param.no_mangle,
+                })
+            })
+            .collect::<Result<_>>()
+            .map(|params| hir::ParameterList(params))
+    })?;
+
+    let output_type = if let Some(ty) = trait_method.output_type.as_ref() {
+        Some(monomorphise_type_spec(
+            ty,
+            trait_type_params.as_slice(),
+            trait_method_type_params.as_slice(),
+            impl_type_params.as_slice(),
+            impl_method_type_params.as_slice(),
+        )?)
+    } else {
+        None
+    };
+
+    Ok(UnitHead {
+        inputs,
+        output_type,
+        ..trait_method.clone()
+    })
+}
+
+fn monomorphise_type_spec(
+    ty: &Loc<hir::TypeSpec>,
+    trait_type_params: &[Loc<hir::TypeParam>],
+    trait_method_type_params: &[Loc<hir::TypeParam>],
+    impl_type_params: &[Loc<hir::TypeExpression>],
+    impl_method_type_params: &[Loc<hir::TypeExpression>],
+) -> Result<Loc<hir::TypeSpec>> {
+    match &ty.inner {
+        TypeSpec::Declared(name, te) => {
+            let mono_tes = te
+                .iter()
+                .map(|te| match &te.inner {
+                    TypeExpression::TypeSpec(spec) => monomorphise_type_spec(
+                        &spec.clone().at_loc(te),
+                        trait_type_params,
+                        trait_method_type_params,
+                        impl_type_params,
+                        impl_method_type_params,
+                    )
+                    .map(|spec| spec.map(|spec| TypeExpression::TypeSpec(spec))),
+                    TypeExpression::Integer(_) => Ok(te.clone()),
+                })
+                .collect::<Result<_>>()?;
+
+            Ok(TypeSpec::Declared(name.clone(), mono_tes).at_loc(ty))
+        }
+        TypeSpec::Generic(name) => {
+            let param_idx = trait_type_params
+                .iter()
+                .find_position(|tp| tp.name_id() == name.inner)
+                .map(|(idx, _)| idx);
+
+            if let Some(param_idx) = param_idx {
+                impl_type_params[param_idx].try_map_ref(|te| match te {
+                    TypeExpression::TypeSpec(spec) => Ok(spec.clone()),
+                    TypeExpression::Integer(_) => Err(Diagnostic::bug(
+                        &impl_type_params[param_idx],
+                        "Expected a TypeExpression::TypeSpec, found TypeExpression::Integer",
+                    )),
+                })
+            } else {
+                let param_idx = trait_method_type_params
+                    .iter()
+                    .find_position(|tp| tp.name_id() == name.inner)
+                    .map(|(idx, _)| idx);
+
+                if let Some(param_idx) = param_idx {
+                    impl_method_type_params[param_idx].try_map_ref(|te| match te {
+                        TypeExpression::TypeSpec(spec) => Ok(spec.clone()),
+                        TypeExpression::Integer(_) => Err(Diagnostic::bug(
+                            &impl_method_type_params[param_idx],
+                            "Expected a TypeExpression::TypeSpec, found TypeExpression::Integer",
+                        )),
+                    })
+                } else {
+                    Err(Diagnostic::bug(
+                        name,
+                        format!(
+                            "Could not find type parameter {} in trait or trait method.",
+                            name.inner
+                        ),
+                    ))
+                }
+            }
+        }
+        TypeSpec::Tuple(specs) => {
+            let mono_elems = specs
+                .iter()
+                .map(|spec| {
+                    monomorphise_type_spec(
+                        spec,
+                        trait_type_params,
+                        trait_method_type_params,
+                        impl_type_params,
+                        impl_method_type_params,
+                    )
+                })
+                .collect::<Result<_>>()?;
+
+            Ok(TypeSpec::Tuple(mono_elems).at_loc(ty))
+        }
+        TypeSpec::Array { inner, size } => {
+            let mono_inner = monomorphise_type_spec(
+                inner,
+                trait_type_params,
+                trait_method_type_params,
+                impl_type_params,
+                impl_method_type_params,
+            )?;
+            let mono_size = match &size.inner {
+                TypeExpression::TypeSpec(spec) => monomorphise_type_spec(
+                    &spec.clone().at_loc(size),
+                    trait_type_params,
+                    trait_method_type_params,
+                    impl_type_params,
+                    impl_method_type_params,
+                )?
+                .map(|spec| TypeExpression::TypeSpec(spec)),
+                TypeExpression::Integer(_) => *(size.clone()),
+            };
+            Ok(TypeSpec::Array {
+                inner: Box::from(mono_inner),
+                size: Box::from(mono_size),
+            }
+            .at_loc(ty))
+        }
+        TypeSpec::Backward(inner) => {
+            let mono_inner = monomorphise_type_spec(
+                inner,
+                trait_type_params,
+                trait_method_type_params,
+                impl_type_params,
+                impl_method_type_params,
+            )?;
+            Ok(TypeSpec::Backward(Box::from(mono_inner)).at_loc(ty))
+        }
+        TypeSpec::Inverted(inner) => {
+            let mono_inner = monomorphise_type_spec(
+                inner,
+                trait_type_params,
+                trait_method_type_params,
+                impl_type_params,
+                impl_method_type_params,
+            )?;
+            Ok(TypeSpec::Inverted(Box::from(mono_inner)).at_loc(ty))
+        }
+        TypeSpec::Wire(inner) => {
+            let mono_inner = monomorphise_type_spec(
+                inner,
+                trait_type_params,
+                trait_method_type_params,
+                impl_type_params,
+                impl_method_type_params,
+            )?;
+            Ok(TypeSpec::Wire(Box::from(mono_inner)).at_loc(ty))
+        }
+        _ => Ok(ty.clone()),
+    }
+}
+
+fn check_type_params_for_impl_method_and_trait_method_match(
+    impl_method: &UnitHead,
+    trait_method: &UnitHead,
+) -> Result<()> {
+    if impl_method.unit_type_params.len() != trait_method.unit_type_params.len() {
+        if impl_method.unit_type_params.is_empty() {
+            Err(Diagnostic::error(
+                &impl_method.name,
+                format!(
+                    "Missing type parameter{} on impl of generic method",
+                    if trait_method.unit_type_params.len() != 1 {
+                        "s"
+                    } else {
+                        ""
+                    },
+                ),
+            )
+            .primary_label(format!(
+                "Expected {} type parameter{}",
+                trait_method.unit_type_params.len(),
+                if trait_method.unit_type_params.len() != 1 {
+                    "s"
+                } else {
+                    ""
+                },
+            ))
+            .secondary_label(
+                ().between_locs(
+                    &trait_method.unit_type_params.first().unwrap(),
+                    &trait_method.unit_type_params.last().unwrap(),
+                ),
+                format!(
+                    "Because this has {} type parameter{}",
+                    trait_method.unit_type_params.len(),
+                    if trait_method.unit_type_params.len() != 1 {
+                        "s"
+                    } else {
+                        ""
+                    },
+                ),
+            ))
+        } else if trait_method.unit_type_params.is_empty() {
+            Err(Diagnostic::error(
+                ().between_locs(
+                    &impl_method.unit_type_params.first().unwrap(),
+                    &impl_method.unit_type_params.last().unwrap(),
+                ),
+                format!(
+                    "Unexpected type parameter{} on impl of non-generic method",
+                    if impl_method.unit_type_params.len() != 1 {
+                        "s"
+                    } else {
+                        ""
+                    },
+                ),
+            )
+            .primary_label(format!(
+                "Type parameter{} specified here",
+                if impl_method.unit_type_params.len() != 1 {
+                    "s"
+                } else {
+                    ""
+                },
+            ))
+            .secondary_label(&trait_method.name, "But this is not generic"))
+        } else {
+            Err(Diagnostic::error(
+                ().between_locs(
+                    &impl_method.unit_type_params.first().unwrap(),
+                    &impl_method.unit_type_params.last().unwrap(),
+                ),
+                "Wrong number of generic type parameters",
+            )
+            .primary_label(format!(
+                "Expected {} type parameter{}",
+                trait_method.unit_type_params.len(),
+                if trait_method.unit_type_params.len() != 1 {
+                    "s"
+                } else {
+                    ""
+                },
+            ))
+            .secondary_label(
+                ().between_locs(
+                    &trait_method.unit_type_params.first().unwrap(),
+                    &trait_method.unit_type_params.last().unwrap(),
+                ),
+                format!(
+                    "Because this has {} type parameter{}",
+                    trait_method.unit_type_params.len(),
+                    if trait_method.unit_type_params.len() != 1 {
+                        "s"
+                    } else {
+                        ""
+                    },
+                ),
+            ))
+        }
+    } else {
+        Ok(())
+    }
+}
+
+fn check_output_type_for_impl_method_and_trait_method_matches(
+    impl_method: &UnitHead,
+    trait_method: &UnitHead,
+    target_name: &NameID,
+) -> Result<()> {
+    if impl_method.output_type() != trait_method.output_type() {
+        let returns_trait_self = matches!(trait_method.output_type().inner, TypeSpec::TraitSelf(_));
+        let impl_output_type = match impl_method.output_type().inner {
+            TypeSpec::Declared(name, _) => Some(name),
+            TypeSpec::Generic(name) => Some(name),
+            _ => None,
+        };
+
+        if !(returns_trait_self && impl_output_type.is_some_and(|it| &it.inner == target_name)) {
+            return Err(Diagnostic::error(
+                impl_method.output_type(),
+                "Return type does not match trait",
+            )
+            .primary_label(format!("Expected {}", trait_method.output_type()))
+            .secondary_label(trait_method.output_type(), "To match the trait"));
+        }
+    }
+    Ok(())
+}
+
+fn check_params_for_impl_method_and_trait_method_match(
+    impl_method: &UnitHead,
+    trait_method: &UnitHead,
+    target_path: &Loc<Path>,
+    ctx: &Context,
+) -> Result<()> {
+    for (i, pair) in impl_method
+        .inputs
+        .0
+        .iter()
+        .zip_longest(trait_method.inputs.0.iter())
+        .enumerate()
+    {
+        match pair {
+            EitherOrBoth::Both(
+                hir::Parameter {
+                    name: i_name,
+                    ty: i_spec,
+                    no_mangle: _,
+                },
+                hir::Parameter {
+                    name: t_name,
+                    ty: t_spec,
+                    no_mangle: _,
+                },
+            ) => {
+                if i_name != t_name {
+                    return Err(Diagnostic::error(i_name, "Argument name mismatch")
+                        .primary_label(format!("Expected `{t_name}`"))
+                        .secondary_label(
+                            t_name,
+                            format!("Because argument {i} is named `{t_name}` in the trait"),
+                        ));
+                }
+
+                let i_spec_name = match &i_spec.inner {
+                    TypeSpec::Declared(name, _) => Some(&name.inner),
+                    _ => None,
+                };
+
+                let (target_name, _) = ctx.symtab.lookup_type_symbol(target_path)?;
+
+                if !(matches!(&t_spec.inner, hir::TypeSpec::TraitSelf(_))
+                    && i_spec_name.is_some_and(|path| path == &target_name))
+                    && t_spec != i_spec
+                {
+                    return Err(Diagnostic::error(i_spec, "Argument type mismatch")
+                        .primary_label(format!("Expected {t_spec}"))
+                        .secondary_label(
+                            t_spec,
+                            format!("Because of the type of {t_name} in the trait"),
+                        ));
+                }
+            }
+            EitherOrBoth::Left(hir::Parameter {
+                name,
+                ty: _,
+                no_mangle: _,
+            }) => {
+                return Err(
+                    Diagnostic::error(name, "Trait method does not have this argument")
+                        .primary_label("Extra argument")
+                        .secondary_label(&trait_method.name, "Method defined here"),
+                )
+            }
+            EitherOrBoth::Right(hir::Parameter {
+                name,
+                ty: _,
+                no_mangle: _,
+            }) => {
+                return Err(Diagnostic::error(
+                    &impl_method.inputs,
+                    format!("Missing argument {}", name),
+                )
+                .primary_label(format!("Missing argument {}", name))
+                .secondary_label(name, "The trait method has this argument"));
+            }
+        }
+    }
+    Ok(())
+}
+
+fn check_is_no_function_on_port_type(
+    unit: &Loc<Unit>,
+    block: &Loc<ImplBlock>,
+    ctx: &mut Context,
+) -> Result<()> {
+    if matches!(unit.head.unit_kind.inner, UnitKind::Function)
+        && block.target.is_port(&ctx.symtab)?
+    {
+        Err(Diagnostic::error(
+            &unit.head.unit_kind,
+            "Functions are not allowed on port types",
+        )
+        .primary_label("Function on port type")
+        .secondary_label(block.target.clone(), "This is a port type")
+        .span_suggest_replace(
+            "Consider making this an entity",
+            &unit.head.unit_kind,
+            "entity",
+        ))
+    } else {
+        Ok(())
+    }
+}
+
+fn check_no_duplicate_trait_impl(
+    duplicate: Option<Loc<hir::ImplBlock>>,
+    block: &Loc<ImplBlock>,
+    trait_name: &TraitName,
+    target_name: &NameID,
+) -> Result<()> {
+    if let Some(duplicate) = duplicate {
+        let name = match &trait_name {
+            TraitName::Named(n) => n,
+            TraitName::Anonymous(_) => {
+                diag_bail!(block, "Found multiple impls of anonymous trait")
+            }
+        };
+        Err(Diagnostic::error(
+            block,
+            format!("Multiple implementations of {} for {}", name, &target_name),
+        )
+        .secondary_label(duplicate, "Previous impl here"))
+    } else {
+        Ok(())
+    }
+}
+
+fn check_no_missing_methods(
+    block: &Loc<ImplBlock>,
+    missing_methods: HashSet<&Identifier>,
+) -> Result<()> {
     if !missing_methods.is_empty() {
         // Sort for deterministic errors
         let mut missing_list = missing_methods.into_iter().collect::<Vec<_>>();
@@ -940,42 +1575,35 @@ pub fn visit_impl(
             }
         };
 
-        return Err(
+        Err(
             Diagnostic::error(block, format!("Missing methods {as_str}"))
                 .primary_label(format!("Missing definition of {as_str} in this impl block")),
-        );
-    }
-
-    let prev = items
-        .impls
-        .entry(target_name.0.clone())
-        .or_default()
-        .insert(
-            trait_name.clone(),
-            hir::ImplBlock { fns: trait_impl }.at_loc(block),
-        );
-
-    if let Some(prev) = prev {
-        let name = match &trait_name {
-            TraitName::Named(n) => n,
-            TraitName::Anonymous(_) => {
-                diag_bail!(block, "Found multiple impls of anonymous trait")
-            }
-        };
-        return Err(Diagnostic::error(
-            block,
-            format!(
-                "Multiple implementations of {} for {}",
-                name, &target_name.0
-            ),
         )
-        .secondary_label(prev, "Previous impl here"));
+    } else {
+        Ok(())
     }
+}
 
-    ctx.self_ctx = SelfContext::FreeStanding;
-    ctx.symtab.close_scope();
+#[tracing::instrument(skip_all, fields(name=?trait_spec.path))]
+pub fn visit_trait_spec(trait_spec: &ast::TraitSpec, ctx: &mut Context) -> Result<hir::TraitSpec> {
+    if let Some(params) = &trait_spec.type_params {
+        let visited_params = params.try_map_ref(|params| {
+            params
+                .iter()
+                .map(|param| param.try_map_ref(|te| visit_type_expression(te, ctx)))
+                .collect::<Result<_>>()
+        })?;
 
-    Ok(result)
+        Ok(hir::TraitSpec {
+            path: trait_spec.path.clone(),
+            type_params: Some(visited_params),
+        })
+    } else {
+        Ok(hir::TraitSpec {
+            path: trait_spec.path.clone(),
+            type_params: None,
+        })
+    }
 }
 
 #[tracing::instrument(skip_all, fields(name=?item.name()))]
@@ -985,7 +1613,7 @@ pub fn visit_item(
     item_list: &mut hir::ItemList,
 ) -> Result<Vec<hir::Item>> {
     match item {
-        ast::Item::Unit(u) => Ok(vec![visit_unit(None, u, ctx)?]),
+        ast::Item::Unit(u) => Ok(vec![visit_unit(None, u, &None, ctx)?]),
         ast::Item::TraitDef(_) => {
             // Global symbol lowering already visits traits
             event!(Level::INFO, "Trait definition");
@@ -1984,7 +2612,7 @@ mod entity_visiting {
                 )])
                 .nowhere(),
                 output_type: None,
-                type_params: vec![],
+                type_params: None,
                 attributes: ast::AttributeList(vec![]),
                 unit_kind: ast::UnitKind::Entity.nowhere(),
                 where_clauses: vec![],
@@ -2010,7 +2638,8 @@ mod entity_visiting {
                 name: Identifier("test".to_string()).nowhere(),
                 inputs: hparams!(("a", hir::TypeSpec::unit().nowhere())).nowhere(),
                 output_type: None,
-                type_params: vec![],
+                unit_type_params: vec![],
+                scope_type_params: vec![],
                 unit_kind: hir::UnitKind::Entity.nowhere(),
                 where_clauses: vec![],
             },
@@ -2030,11 +2659,12 @@ mod entity_visiting {
         }
         .nowhere();
 
-        let mut ctx = &mut test_context();
+        let mut ctx = test_context();
 
-        global_symbols::visit_unit(&None, &input, ctx).expect("Failed to collect global symbols");
+        global_symbols::visit_unit(&None, &input, &None, &mut ctx)
+            .expect("Failed to collect global symbols");
 
-        let result = visit_unit(None, &input, &mut ctx);
+        let result = visit_unit(None, &input, &None, &mut ctx);
 
         assert_eq!(result, Ok(hir::Item::Unit(expected)));
 
@@ -2574,7 +3204,8 @@ mod expression_visiting {
                     ]
                     .nowhere(),
                     output_type: None,
-                    type_params: vec![],
+                    unit_type_params: vec![],
+                    scope_type_params: vec![],
                     unit_kind: hir::UnitKind::Entity.nowhere(),
                     where_clauses: vec![],
                 }
@@ -2645,7 +3276,8 @@ mod expression_visiting {
                     ]
                     .nowhere(),
                     output_type: None,
-                    type_params: vec![],
+                    unit_type_params: vec![],
+                    scope_type_params: vec![],
                     unit_kind: hir::UnitKind::Entity.nowhere(),
                     where_clauses: vec![],
                 }
@@ -2704,7 +3336,8 @@ mod expression_visiting {
                     ]
                     .nowhere(),
                     output_type: None,
-                    type_params: vec![],
+                    unit_type_params: vec![],
+                    scope_type_params: vec![],
                     unit_kind: hir::UnitKind::Function(hir::FunctionKind::Fn).nowhere(),
                     where_clauses: vec![],
                 }
@@ -2767,7 +3400,8 @@ mod expression_visiting {
                     ]
                     .nowhere(),
                     output_type: None,
-                    type_params: vec![],
+                    unit_type_params: vec![],
+                    scope_type_params: vec![],
                     where_clauses: vec![],
                 }
                 .nowhere(),
@@ -2969,7 +3603,7 @@ mod item_visiting {
                     name: ast_ident("test"),
                     output_type: None,
                     inputs: aparams![],
-                    type_params: vec![],
+                    type_params: None,
                     attributes: ast::AttributeList(vec![]),
                     unit_kind: ast::UnitKind::Entity.nowhere(),
                     where_clauses: vec![],
@@ -2992,7 +3626,8 @@ mod item_visiting {
                     name: Identifier("test".to_string()).nowhere(),
                     output_type: None,
                     inputs: hir::ParameterList(vec![]).nowhere(),
-                    type_params: vec![],
+                    unit_type_params: vec![],
+                    scope_type_params: vec![],
                     unit_kind: hir::UnitKind::Entity.nowhere(),
                     where_clauses: vec![],
                 },
@@ -3029,6 +3664,7 @@ mod impl_blocks {
 
     use crate::testutil::test_context;
     use pretty_assertions::assert_eq;
+    use spade_ast::testutil::ast_type_spec;
 
     use super::*;
 
@@ -3036,14 +3672,15 @@ mod impl_blocks {
     fn anonymous_impl_blocks_work() {
         let ast_block = ImplBlock {
             r#trait: None,
-            target: ast_path("a"),
+            type_params: None,
+            target: ast_type_spec("a"),
             units: vec![ast::Unit {
                 head: ast::UnitHead {
                     attributes: ast::AttributeList::empty(),
                     name: ast_ident("x"),
                     inputs: ParameterList::with_self(().nowhere(), vec![]).nowhere(),
                     output_type: None,
-                    type_params: vec![],
+                    type_params: None,
                     unit_kind: ast::UnitKind::Function.nowhere(),
                     where_clauses: vec![],
                 },
@@ -3089,7 +3726,8 @@ mod impl_blocks {
                     name: ast_ident("x"),
                     inputs: hir_param_list.clone().nowhere(),
                     output_type: None,
-                    type_params: vec![],
+                    unit_type_params: vec![],
+                    scope_type_params: vec![],
                     unit_kind: hir::UnitKind::Function(hir::FunctionKind::Fn).nowhere(),
                     where_clauses: vec![],
                 },
@@ -3115,11 +3753,12 @@ mod impl_blocks {
             name: ast_ident("x"),
             inputs: hparams![("self", hir::TypeSpec::TraitSelf(().nowhere()).nowhere())].nowhere(),
             output_type: None,
-            type_params: vec![],
+            unit_type_params: vec![],
+            scope_type_params: vec![],
             unit_kind: hir::UnitKind::Function(hir::FunctionKind::Fn).nowhere(),
             where_clauses: vec![],
         };
-        assert_eq!(t.1, &HashMap::from([(ast_ident("x").inner, trait_head)]));
+        assert_eq!(t.1.fns, HashMap::from([(ast_ident("x").inner, trait_head)]));
 
         let trait_name = t.0;
 
@@ -3170,7 +3809,7 @@ mod module_visiting {
                         name: ast_ident("test"),
                         output_type: None,
                         inputs: ParameterList::without_self(vec![]).nowhere(),
-                        type_params: vec![],
+                        type_params: None,
                         attributes: ast::AttributeList(vec![]),
                         unit_kind: ast::UnitKind::Entity.nowhere(),
                         where_clauses: vec![],
@@ -3197,7 +3836,8 @@ mod module_visiting {
                             name: Identifier("test".to_string()).nowhere(),
                             output_type: None,
                             inputs: hparams!().nowhere(),
-                            type_params: vec![],
+                            unit_type_params: vec![],
+                            scope_type_params: vec![],
                             unit_kind: hir::UnitKind::Entity.nowhere(),
                             where_clauses: vec![],
                         },

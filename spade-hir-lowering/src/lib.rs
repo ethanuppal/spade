@@ -793,6 +793,7 @@ pub fn do_wal_trace_lowering(
             let generic_list = &ctx.types.create_generic_list(
                 spade_typeinference::GenericListSource::Anonymous,
                 &[],
+                &[],
                 None,
                 &[],
             )?;
@@ -1984,7 +1985,7 @@ impl ExprLocal for Loc<Expression> {
                 self,
             ),
             Some(hir::ExecutableItem::Unit(u)) => {
-                let (type_params, unit_name) = (&u.head.type_params, u.name.clone());
+                let (type_params, unit_name) = (&u.head.get_type_params(), u.name.clone());
 
                 let instance_name = if !type_params.is_empty() {
                     let t = type_params
@@ -2042,7 +2043,7 @@ impl ExprLocal for Loc<Expression> {
                 );
             }
             Some(hir::ExecutableItem::BuiltinUnit(name, head)) => {
-                let (unit_name, type_params) = (name, &head.type_params);
+                let (unit_name, type_params) = (name, &head.get_type_params());
 
                 // NOTE: Ideally this check would be done earlier, when defining the generic
                 // builtin. However, at the moment, the compiler does not know if the generic

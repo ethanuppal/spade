@@ -1,3 +1,4 @@
+use crate::{TraitSpec, TypeExpression, TypeSpec};
 use spade_common::{
     location_info::{Loc, WithLocation},
     name::{Identifier, Path},
@@ -9,6 +10,27 @@ pub fn ast_ident(name: &str) -> Loc<Identifier> {
 
 pub fn ast_path(name: &str) -> Loc<Path> {
     Path(vec![ast_ident(name)]).nowhere()
+}
+
+pub fn ast_type_spec(name: &str) -> Loc<TypeSpec> {
+    TypeSpec::Named(ast_path(name), None).nowhere()
+}
+
+pub fn ast_trait_spec(name: &str, type_params: Option<Vec<TypeExpression>>) -> Loc<TraitSpec> {
+    TraitSpec {
+        path: ast_path(name),
+        type_params: type_params.map(|p| {
+            p.into_iter()
+                .map(|t| t.nowhere())
+                .collect::<Vec<Loc<TypeExpression>>>()
+                .nowhere()
+        }),
+    }
+    .nowhere()
+}
+
+pub fn ast_type_expr(name: &str) -> TypeExpression {
+    TypeExpression::TypeSpec(Box::new(ast_type_spec(name)))
 }
 
 #[macro_export]

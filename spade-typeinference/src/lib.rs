@@ -312,7 +312,8 @@ impl TypeState {
     pub fn visit_unit(&mut self, entity: &Unit, ctx: &Context) -> Result<()> {
         let generic_list = self.create_generic_list(
             GenericListSource::Definition(&entity.name.name_id().inner),
-            &entity.head.type_params,
+            &entity.head.unit_type_params,
+            &entity.head.scope_type_params,
             None,
             // NOTE: I'm not 100% sure we need to pass these here, the information
             // is probably redundant
@@ -549,7 +550,8 @@ impl TypeState {
         // Add new symbols for all the type parameters
         let generic_list = self.create_generic_list(
             GenericListSource::Expression(expression_id.inner),
-            &head.type_params,
+            &head.unit_type_params,
+            &head.scope_type_params,
             turbofish,
             &head.where_clauses,
         )?;
@@ -558,7 +560,7 @@ impl TypeState {
             self.visit_argument_list(args, ctx, &generic_list)?;
         }
 
-        let type_params = &head.type_params;
+        let type_params = &head.get_type_params();
 
         // Special handling of built in functions
         macro_rules! handle_special_functions {
@@ -807,12 +809,13 @@ impl TypeState {
     pub fn create_generic_list(
         &mut self,
         source: GenericListSource,
-        params: &[Loc<TypeParam>],
+        type_params: &[Loc<TypeParam>],
+        scope_type_params: &[Loc<TypeParam>],
         turbofish: Option<TurbofishCtx>,
         where_clauses: &[Loc<WhereClause>],
     ) -> Result<GenericListToken> {
         let turbofish_params = if let Some(turbofish) = turbofish.as_ref() {
-            if params.is_empty() {
+            if type_params.is_empty() {
                 return Err(Diagnostic::error(
                     turbofish.turbofish,
                     "Turbofish on non-generic function",
@@ -821,7 +824,7 @@ impl TypeState {
             }
 
             let matched_params =
-                param_util::match_args_with_params(&turbofish.turbofish, &params, false)?;
+                param_util::match_args_with_params(&turbofish.turbofish, &type_params, false)?;
 
             // We want this to be positional, but the params we get from matching are
             // named, transform it. We'll do some unwrapping here, but it is safe
@@ -829,7 +832,7 @@ impl TypeState {
             matched_params
                 .iter()
                 .map(|matched_param| {
-                    let i = params
+                    let i = type_params
                         .iter()
                         .enumerate()
                         .find_map(|(i, param)| match &param.inner {
@@ -855,10 +858,21 @@ impl TypeState {
                 .map(|(_, mp)| Some(mp.value))
                 .collect::<Vec<_>>()
         } else {
-            params.iter().map(|_| None).collect::<Vec<_>>()
+            type_params.iter().map(|_| None).collect::<Vec<_>>()
         };
 
-        let new_list = params
+        let scope_type_params = scope_type_params
+            .iter()
+            .map(|param| {
+                let name = match &param.inner {
+                    hir::TypeParam::TypeName(_, name) => name.clone(),
+                    hir::TypeParam::Integer(_, name) => name.clone(),
+                };
+                (name.clone(), self.new_generic())
+            })
+            .collect::<Vec<_>>();
+
+        let new_list = type_params
             .iter()
             .enumerate()
             .map(|(i, param)| {
@@ -880,6 +894,7 @@ impl TypeState {
             })
             .collect::<Result<Vec<_>>>()?
             .into_iter()
+            .chain(scope_type_params.into_iter())
             .map(|(name, t)| (name, t.clone()))
             .collect::<HashMap<_, _>>();
 
@@ -1012,6 +1027,7 @@ impl TypeState {
                             let generic_list = self.create_generic_list(
                                 GenericListSource::Anonymous,
                                 &enum_variant.type_params,
+                                &[],
                                 None,
                                 &[],
                             )?;
@@ -1032,6 +1048,7 @@ impl TypeState {
                             let generic_list = self.create_generic_list(
                                 GenericListSource::Anonymous,
                                 &s.type_params,
+                                &[],
                                 None,
                                 &[],
                             )?;
@@ -2207,7 +2224,7 @@ mod tests {
             items: &ItemList::new(),
         };
         let generic_list = state
-            .create_generic_list(GenericListSource::Anonymous, &vec![], None, &[])
+            .create_generic_list(GenericListSource::Anonymous, &vec![], &[], None, &[])
             .unwrap();
         state.visit_expression(&input, &ctx, &generic_list).unwrap();
 
@@ -2252,7 +2269,7 @@ mod tests {
             items: &ItemList::new(),
         };
         let generic_list = state
-            .create_generic_list(GenericListSource::Anonymous, &vec![], None, &[])
+            .create_generic_list(GenericListSource::Anonymous, &vec![], &[], None, &[])
             .unwrap();
         state.visit_expression(&input, &ctx, &generic_list).unwrap();
 
@@ -2302,7 +2319,7 @@ mod tests {
             items: &ItemList::new(),
         };
         let generic_list = state
-            .create_generic_list(GenericListSource::Anonymous, &vec![], None, &[])
+            .create_generic_list(GenericListSource::Anonymous, &vec![], &[], None, &[])
             .unwrap();
         assert_ne!(state.visit_expression(&input, &ctx, &generic_list), Ok(()));
     }
@@ -2346,7 +2363,7 @@ mod tests {
             items: &ItemList::new(),
         };
         let generic_list = state
-            .create_generic_list(GenericListSource::Anonymous, &vec![], None, &[])
+            .create_generic_list(GenericListSource::Anonymous, &vec![], &[], None, &[])
             .unwrap();
         state.visit_expression(&input, &ctx, &generic_list).unwrap();
 
@@ -2399,7 +2416,7 @@ mod tests {
             items: &ItemList::new(),
         };
         let generic_list = state
-            .create_generic_list(GenericListSource::Anonymous, &vec![], None, &[])
+            .create_generic_list(GenericListSource::Anonymous, &vec![], &[], None, &[])
             .unwrap();
         state.visit_expression(&input, &ctx, &generic_list).unwrap();
 
@@ -2442,7 +2459,7 @@ mod tests {
             items: &ItemList::new(),
         };
         let generic_list = state
-            .create_generic_list(GenericListSource::Anonymous, &vec![], None, &[])
+            .create_generic_list(GenericListSource::Anonymous, &vec![], &[], None, &[])
             .unwrap();
         assert!(state.visit_statement(&input, &ctx, &generic_list).is_err());
     }
@@ -2474,7 +2491,7 @@ mod tests {
             items: &ItemList::new(),
         };
         let generic_list = state
-            .create_generic_list(GenericListSource::Anonymous, &vec![], None, &[])
+            .create_generic_list(GenericListSource::Anonymous, &vec![], &[], None, &[])
             .unwrap();
         state.visit_expression(&input, &ctx, &generic_list).unwrap();
 
@@ -2515,7 +2532,7 @@ mod tests {
             items: &ItemList::new(),
         };
         let generic_list = state
-            .create_generic_list(GenericListSource::Anonymous, &vec![], None, &[])
+            .create_generic_list(GenericListSource::Anonymous, &vec![], &[], None, &[])
             .unwrap();
         state.visit_statement(&input, &ctx, &generic_list).unwrap();
 
@@ -2563,7 +2580,7 @@ mod tests {
             items: &ItemList::new(),
         };
         let generic_list = state
-            .create_generic_list(GenericListSource::Anonymous, &vec![], None, &[])
+            .create_generic_list(GenericListSource::Anonymous, &vec![], &[], None, &[])
             .unwrap();
         state.visit_register(&input, &ctx, &generic_list).unwrap();
 
@@ -2596,7 +2613,8 @@ mod tests {
             ]
             .nowhere(),
             output_type: Some(dtype!(symtab => "int"; (t_num(5)))),
-            type_params: vec![],
+            unit_type_params: vec![],
+            scope_type_params: vec![],
             where_clauses: vec![],
         };
 
@@ -2624,7 +2642,7 @@ mod tests {
         state.add_eq_from_tvar(expr_b.clone(), TVar::Unknown(101, TraitList::empty()));
 
         let generic_list = state
-            .create_generic_list(GenericListSource::Anonymous, &vec![], None, &[])
+            .create_generic_list(GenericListSource::Anonymous, &vec![], &[], None, &[])
             .unwrap();
         state
             .visit_expression(
@@ -2690,7 +2708,8 @@ mod tests {
             ]
             .nowhere(),
             output_type: Some(dtype!(symtab => "int"; ( t_num(5) ))),
-            type_params: vec![],
+            unit_type_params: vec![],
+            scope_type_params: vec![],
             where_clauses: vec![],
         };
 
@@ -2718,7 +2737,7 @@ mod tests {
         state.add_eq_from_tvar(expr_b.clone(), TVar::Unknown(101, TraitList::empty()));
 
         let generic_list = state
-            .create_generic_list(GenericListSource::Anonymous, &vec![], None, &[])
+            .create_generic_list(GenericListSource::Anonymous, &vec![], &[], None, &[])
             .unwrap();
         state
             .visit_expression(

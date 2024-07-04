@@ -308,6 +308,13 @@ impl std::fmt::Display for TypeSpec {
     }
 }
 
+/// A specification of a trait with type parameters
+#[derive(PartialEq, Debug, Clone)]
+pub struct TraitSpec {
+    pub path: Loc<Path>,
+    pub type_params: Option<Loc<Vec<Loc<TypeExpression>>>>,
+}
+
 /// Declaration of an enum
 #[derive(PartialEq, Debug, Clone, Serialize, Deserialize)]
 pub struct Enum {
@@ -528,7 +535,8 @@ pub struct UnitHead {
     pub name: Loc<Identifier>,
     pub inputs: Loc<ParameterList>,
     pub output_type: Option<Loc<TypeSpec>>,
-    pub type_params: Vec<Loc<TypeParam>>,
+    pub unit_type_params: Vec<Loc<TypeParam>>,
+    pub scope_type_params: Vec<Loc<TypeParam>>,
     pub unit_kind: Loc<UnitKind>,
     pub where_clauses: Vec<Loc<WhereClause>>,
 }
@@ -543,6 +551,13 @@ impl UnitHead {
                 TypeSpec::Unit(self.name.loc()).at_loc(&self.name.loc())
             }
         }
+    }
+    pub fn get_type_params(&self) -> Vec<Loc<TypeParam>> {
+        self.unit_type_params
+            .iter()
+            .chain(self.scope_type_params.iter())
+            .cloned()
+            .collect_vec()
     }
 }
 
@@ -640,6 +655,13 @@ pub struct ImplBlock {
 }
 impl WithLocation for ImplBlock {}
 
+#[derive(PartialEq, Debug, Clone, Serialize, Deserialize)]
+pub struct TraitDef {
+    pub type_params: Option<Loc<Vec<Loc<TypeParam>>>>,
+    pub fns: HashMap<Identifier, UnitHead>,
+}
+impl WithLocation for TraitDef {}
+
 /// A list of all the items present in the whole AST, flattened to remove module
 /// hierarchies.
 ///
@@ -657,7 +679,7 @@ pub struct ItemList {
     /// All traits in the compilation unit. Traits consist of a list of functions
     /// by name. Anonymous impl blocks are also members here, but their name is never
     /// visible to the user.
-    pub traits: HashMap<TraitName, HashMap<Identifier, UnitHead>>,
+    pub traits: HashMap<TraitName, TraitDef>,
     pub impls: HashMap<NameID, HashMap<TraitName, Loc<ImplBlock>>>,
 }
 
@@ -697,6 +719,7 @@ impl ItemList {
     pub fn add_trait(
         &mut self,
         name: TraitName,
+        type_params: Option<Loc<Vec<Loc<TypeParam>>>>,
         members: Vec<(Identifier, UnitHead)>,
     ) -> Result<(), Diagnostic> {
         if let Some((prev, _)) = self.traits.get_key_value(&name) {
@@ -711,16 +734,22 @@ impl ItemList {
                 .secondary_label(prev.name_loc().unwrap(), "Previous definition"),
             )
         } else {
-            self.traits.insert(name, members.into_iter().collect());
+            self.traits.insert(
+                name,
+                TraitDef {
+                    type_params,
+                    fns: members.into_iter().collect(),
+                },
+            );
             Ok(())
         }
     }
 
-    pub fn get_trait(&mut self, name: &TraitName) -> Option<&HashMap<Identifier, UnitHead>> {
+    pub fn get_trait(&mut self, name: &TraitName) -> Option<&TraitDef> {
         self.traits.get(name)
     }
 
-    pub fn traits(&self) -> &HashMap<TraitName, HashMap<Identifier, UnitHead>> {
+    pub fn traits(&self) -> &HashMap<TraitName, TraitDef> {
         &self.traits
     }
 }
