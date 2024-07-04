@@ -22,7 +22,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - [!319][!319] Add `where` clauses to allow specifying constraints on generic parameters
 - [!322][!322] Add `==` operator to outputs in cocotb
 - [!322][!322] Allow raw integers, booleans, and lists to be passed to inputs and outputs in cocotb.
-- [!307][!307] Allow specifying command line arguments via a json file
 - [!318][!318] Add generic traits, generic impls, `Option<T>::is_some()` and `Option<T>::is_none()`
 
 ### Changed
