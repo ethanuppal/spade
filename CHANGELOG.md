@@ -9,23 +9,7 @@ released as a new version.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
-## [Unreleased]
-
-### Added
-
-- [!307][!307] Allow specifying command line arguments via a json file
-- [!318][!318] Add generic traits, generic impls, `Option<T>::is_some()` and `Option<T>::is_none()`
-
-### Changed
-
-### Fixed
-
-### Removed
-
-[!307]: https://gitlab.com/spade-lang/spade/-/merge_requests/307
-[!318]: https://gitlab.com/spade-lang/spade/-/merge_requests/318
-
-## [0.8.0] - 2024-05-14
+## [0.9.0] - 2024-07-04
 
 ### Added
 
@@ -38,6 +22,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - [!319][!319] Add `where` clauses to allow specifying constraints on generic parameters
 - [!322][!322] Add `==` operator to outputs in cocotb
 - [!322][!322] Allow raw integers, booleans, and lists to be passed to inputs and outputs in cocotb.
+- [!307][!307] Allow specifying command line arguments via a json file
+- [!318][!318] Add generic traits, generic impls, `Option<T>::is_some()` and `Option<T>::is_none()`
 
 ### Changed
 
@@ -56,6 +42,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 [!309]: https://gitlab.com/spade-lang/spade/-/merge_requests/309
 [!312]: https://gitlab.com/spade-lang/spade/-/merge_requests/312
 [!314]: https://gitlab.com/spade-lang/spade/-/merge_requests/314
+[!318]: https://gitlab.com/spade-lang/spade/-/merge_requests/318
 [!319]: https://gitlab.com/spade-lang/spade/-/merge_requests/319
 [!322]: https://gitlab.com/spade-lang/spade/-/merge_requests/322
 
@@ -286,7 +273,8 @@ Initial numbered version
 
 [Associated Swim release](https://gitlab.com/spade-lang/swim/-/tree/v0.1.0)
 
-[Unreleased]: https://gitlab.com/spade-lang/spade/-/compare/v0.8.0...main
+[Unreleased]: https://gitlab.com/spade-lang/spade/-/compare/v0.9.0...main
+[0.9.0]: https://gitlab.com/spade-lang/spade/-/compare/v0.9.0...v0.8.0
 [0.8.0]: https://gitlab.com/spade-lang/spade/-/compare/v0.8.0...v0.7.0
 [0.7.0]: https://gitlab.com/spade-lang/spade/-/compare/v0.7.0...v0.6.0
 [0.6.0]: https://gitlab.com/spade-lang/spade/-/compare/v0.5.0...v0.6.0

@@ -1000,7 +1000,7 @@ checksum = "3c5e1a9a646d36c3599cd173a41282daf47c44583ad367b8e6837255952e5c67"
 
 [[package]]
 name = "spade"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "clap",
  "codespan",
@@ -1034,7 +1034,7 @@ dependencies = [
 
 [[package]]
 name = "spade-ast"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "num",
  "spade-common",
@@ -1042,7 +1042,7 @@ dependencies = [
 
 [[package]]
 name = "spade-ast-lowering"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "itertools",
  "local-impl",
@@ -1060,7 +1060,7 @@ dependencies = [
 
 [[package]]
 name = "spade-common"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "codespan",
  "codespan-reporting 0.12.0",
@@ -1086,7 +1086,7 @@ dependencies = [
 
 [[package]]
 name = "spade-diagnostics"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "codespan",
  "codespan-reporting 0.12.0",
@@ -1104,7 +1104,7 @@ dependencies = [
 
 [[package]]
 name = "spade-hir"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "codespan-reporting 0.12.0",
  "colored",
@@ -1122,7 +1122,7 @@ dependencies = [
 
 [[package]]
 name = "spade-hir-lowering"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "codespan",
  "codespan-reporting 0.12.0",
@@ -1148,7 +1148,7 @@ dependencies = [
 
 [[package]]
 name = "spade-macros"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -1158,7 +1158,7 @@ dependencies = [
 
 [[package]]
 name = "spade-mir"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "codespan",
  "codespan-reporting 0.12.0",
@@ -1179,7 +1179,7 @@ dependencies = [
 
 [[package]]
 name = "spade-parser"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "codespan",
  "colored",
@@ -1197,7 +1197,7 @@ dependencies = [
 
 [[package]]
 name = "spade-python"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "codespan-reporting 0.12.0",
  "color-eyre",
@@ -1226,7 +1226,7 @@ dependencies = [
 
 [[package]]
 name = "spade-simulation-ext"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "codespan-reporting 0.12.0",
  "color-eyre",
@@ -1254,7 +1254,7 @@ dependencies = [
 
 [[package]]
 name = "spade-tests"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "codespan-reporting 0.12.0",
  "colored",
@@ -1282,7 +1282,7 @@ dependencies = [
 
 [[package]]
 name = "spade-typeinference"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "assert_matches",
  "codespan",
@@ -1305,7 +1305,7 @@ dependencies = [
 
 [[package]]
 name = "spade-types"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "num",
  "serde",
@@ -1314,7 +1314,7 @@ dependencies = [
 
 [[package]]
 name = "spade-wordlength-inference"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "codespan",
  "codespan-reporting 0.12.0",
