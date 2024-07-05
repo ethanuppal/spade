@@ -543,7 +543,7 @@ pub fn stdlib_and_prelude() -> Vec<(ModuleNamespace, String, String)> {
                             namespace: SpadePath::from_strs(&$namespace),
                             base_namespace: SpadePath::from_strs(&$base_namespace),
                         },
-                        String::from($filename).replace("../../", "<compiler dir>/"),
+                        String::from($filename).replace("../", "<compiler dir>/"),
                         String::from(include_str!($filename))
                     )
                 ),*
@@ -552,14 +552,14 @@ pub fn stdlib_and_prelude() -> Vec<(ModuleNamespace, String, String)> {
     }
 
     sources! {
-        ([], [], "../../prelude/prelude.spade"),
-        (["std"], ["std", "conv"], "../../stdlib/conv.spade"),
-        (["std"], ["std", "io"], "../../stdlib/io.spade"),
-        (["std"], ["std", "mem"], "../../stdlib/mem.spade"),
-        (["std"], ["std", "ops"], "../../stdlib/ops.spade"),
-        (["std"], ["std", "ports"], "../../stdlib/ports.spade"),
-        (["std"], ["std", "option"], "../../stdlib/option.spade"),
-        (["std"], ["std", "cdc"], "../../stdlib/cdc.spade"),
+        ([], [], "../prelude/prelude.spade"),
+        (["std"], ["std", "conv"], "../stdlib/conv.spade"),
+        (["std"], ["std", "io"], "../stdlib/io.spade"),
+        (["std"], ["std", "mem"], "../stdlib/mem.spade"),
+        (["std"], ["std", "ops"], "../stdlib/ops.spade"),
+        (["std"], ["std", "ports"], "../stdlib/ports.spade"),
+        (["std"], ["std", "option"], "../stdlib/option.spade"),
+        (["std"], ["std", "cdc"], "../stdlib/cdc.spade"),
     }
 }
 
@@ -586,8 +586,8 @@ mod tests {
             })
             .collect::<Vec<_>>();
 
-        let missing_files = std::fs::read_dir("../stdlib/")
-            .expect("Failed to read ../stdlib")
+        let missing_files = std::fs::read_dir("stdlib/")
+            .expect("Failed to read stdlib")
             .into_iter()
             .map(|f| {
                 f.unwrap()
