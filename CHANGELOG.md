@@ -13,6 +13,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Added
 
+- [!325][!325] Add `to_uint`, `bits` and `to_int` methods to `int` and `uint`.
+
 ### Changed
 
 - [!324][!324] Move `stdlib` and `prelude` directories to `spade-compiler`

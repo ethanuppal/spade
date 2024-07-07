@@ -85,3 +85,31 @@ mod unsafe {
         unsafe_cast(c)
     }
 }
+
+impl<#N> int<N> {
+    fn to_uint(self) -> uint<N> {
+        int_to_uint(self)
+    }
+    // Interpret a uint as the raw bit values. output[0] is the lsb of the integer
+    // nad output[N] is the MSB
+    //
+    // Note that this means that 0b1100 will be [false, false, true, true] since arrays
+    // are written lsb first, while integers are written msb first
+    fn bits(self) -> [bool; N] {
+        int_to_bits(self)
+    }
+}
+
+impl<#N> uint<N> {
+    fn to_int(self) -> int<N> {
+        uint_to_int(self)
+    }
+    // Interpret a int as the raw bit values. output[0] is the lsb of the integer
+    // nad output[N] is the MSB
+    //
+    // Note that this means that 0b1100 will be [false, false, true, true] since arrays
+    // are written lsb first, while integers are written msb first
+    fn bits(self) -> [bool; N] {
+        uint_to_bits(self)
+    }
+}
