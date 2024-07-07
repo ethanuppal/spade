@@ -28,11 +28,11 @@ fn bit_to_bool(b: bit) -> bool {
 /// For example, [1, 2, 3] becomes [3, 2, 1]
 fn flip_array<T, #N>(in: [T; N]) -> [T; N] __builtin__
 
-/// Interpret an int as the raw bit values. output[0] is the lsb of the integer
-/// and output[N] is the MSB
+/// Interpret an int as the raw bit values. output[0] is the LSB of the integer
+/// and output[N-1] is the MSB
 ///
 /// Note that this means that 0b1100 will be [false, false, true, true] since arrays
-/// are written lsb first, while integers are written msb first
+/// are written LSB first, while integers are written MSB first
 fn int_to_bits<#N>(input: int<N>) -> [bool; N] {
     unsafe::unsafe_cast(input)
 }
@@ -41,11 +41,11 @@ fn bits_to_int<#N>(input: [bool; N]) -> int<N> {
     unsafe::unsafe_cast(input)
 }
 
-/// Interpret a uint as the raw bit values. output[0] is the lsb of the integer
-/// and output[N] is the MSB
+/// Interpret a uint as the raw bit values. output[0] is the LSB of the integer
+/// and output[N-1] is the MSB
 ///
 /// Note that this means that 0b1100 will be [false, false, true, true] since arrays
-/// are written lsb first, while integers are written msb first
+/// are written LSB first, while integers are written MSB first
 fn uint_to_bits<#N>(input: uint<N>) -> [bool; N] {
     unsafe::unsafe_cast(input)
 }
@@ -90,11 +90,11 @@ impl<#N> int<N> {
     fn to_uint(self) -> uint<N> {
         int_to_uint(self)
     }
-    /// Interpret a uint as the raw bit values. output[0] is the lsb of the integer
-    /// and output[N] is the MSB
+    /// Interpret a uint as the raw bit values. output[0] is the LSB of the integer
+    /// and output[N-1] is the MSB
     ///
     /// Note that this means that 0b1100 will be [false, false, true, true] since arrays
-    /// are written lsb first, while integers are written msb first
+    /// are written LSB first, while integers are written MSB first
     fn bits(self) -> [bool; N] {
         int_to_bits(self)
     }
@@ -104,11 +104,11 @@ impl<#N> uint<N> {
     fn to_int(self) -> int<N> {
         uint_to_int(self)
     }
-    /// Interpret a int as the raw bit values. output[0] is the lsb of the integer
-    /// and output[N] is the MSB
+    /// Interpret a int as the raw bit values. output[0] is the LSB of the integer
+    /// and output[N-1] is the MSB
     ///
     /// Note that this means that 0b1100 will be [false, false, true, true] since arrays
-    /// are written lsb first, while integers are written msb first
+    /// are written LSB first, while integers are written MSB first
     fn bits(self) -> [bool; N] {
         uint_to_bits(self)
     }
