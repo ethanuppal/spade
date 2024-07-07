@@ -14,7 +14,7 @@ use crate::equation::{TypeVar, TypedExpression};
 use crate::error::{TypeMismatch as Tm, UnificationErrorExt};
 use crate::fixed_types::{t_bit, t_bool, t_void};
 use crate::requirements::{ConstantInt, Requirement};
-use crate::{kvar, Context, GenericListToken, HasType, Result, TraceStackEntry, TypeState};
+use crate::{Context, GenericListToken, HasType, Result, TraceStackEntry, TypeState};
 
 macro_rules! assuming_kind {
     ($pattern:pat = $expr:expr => $block:block) => {
@@ -326,7 +326,7 @@ impl TypeState {
                 members[0].get_type(self)?
             };
 
-            let size_type = kvar!(KnownType::Integer(members.len().to_biguint()));
+            let size_type = TypeVar::Known(expression.loc(), KnownType::Integer(members.len().to_biguint()), vec![]);
             let result_type = TypeVar::array(
                 expression.loc(),
                 inner_type,

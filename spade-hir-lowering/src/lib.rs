@@ -51,6 +51,7 @@ use spade_common::id_tracker::ExprIdTracker;
 use spade_common::location_info::WithLocation;
 use spade_common::name::{Identifier, Path};
 use spade_common::num_ext::InfallibleToBigInt;
+use spade_common::num_ext::InfallibleToBigUint;
 use spade_diagnostics::diag_anyhow;
 use spade_diagnostics::{diag_assert, diag_bail, DiagHandler, Diagnostic};
 use spade_typeinference::equation::TypeVar;
@@ -289,6 +290,37 @@ impl PatternLocal for Loc<Pattern> {
                     result.append(p.lower(p.value_name(), ctx)?)
                 }
             }
+            hir::PatternKind::Array(inner) => {
+                let index_ty =
+                    MirType::Int((((inner.len() as f32).log2().floor() + 1.) as u128).to_biguint());
+                for (i, p) in inner.iter().enumerate() {
+                    let idx_id = ctx.idtracker.next();
+                    result.push_secondary(
+                        mir::Statement::Constant(
+                            idx_id,
+                            index_ty.clone(),
+                            mir::ConstantValue::Int(i.to_bigint()),
+                        ),
+                        p,
+                        "destructured array index",
+                    );
+                    result.push_primary(
+                        mir::Statement::Binding(mir::Binding {
+                            name: p.value_name(),
+                            operator: mir::Operator::IndexArray,
+                            operands: vec![self_name.clone(), ValueName::Expr(idx_id)],
+                            ty: ctx
+                                .types
+                                .type_of_id(p.id, ctx.symtab.symtab(), &ctx.item_list.types)
+                                .to_mir_type(),
+                            loc: None,
+                        }),
+                        p,
+                    );
+
+                    result.append(p.lower(p.value_name(), ctx)?)
+                }
+            }
             hir::PatternKind::Type(path, args) => {
                 let patternable = ctx.symtab.symtab().patternable_type_by_id(path);
                 match patternable.kind {
@@ -435,10 +467,10 @@ impl PatternLocal for Loc<Pattern> {
                 )],
                 result_name,
             }),
-            hir::PatternKind::Tuple(branches) => {
+            hir::PatternKind::Tuple(branches) | hir::PatternKind::Array(branches) => {
                 assert!(
                     !branches.is_empty(),
-                    "Tuple patterns without any subpatterns are unsupported"
+                    "Tuple/array patterns without any subpatterns are unsupported"
                 );
 
                 let subpatterns = branches
@@ -538,6 +570,7 @@ impl PatternLocal for Loc<Pattern> {
             hir::PatternKind::Bool(_) => {}
             hir::PatternKind::Tuple(_) => {}
             hir::PatternKind::Type(_, _) => {}
+            hir::PatternKind::Array(_) => {}
         }
         ValueName::Expr(self.id)
     }
@@ -551,6 +584,7 @@ impl PatternLocal for Loc<Pattern> {
             hir::PatternKind::Bool(_) => false,
             hir::PatternKind::Tuple(_) => false,
             hir::PatternKind::Type(_, _) => false,
+            hir::PatternKind::Array(_) => false,
         }
     }
 

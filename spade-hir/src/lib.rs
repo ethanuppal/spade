@@ -46,6 +46,7 @@ pub enum PatternKind {
         pre_declared: bool,
     },
     Tuple(Vec<Loc<Pattern>>),
+    Array(Vec<Loc<Pattern>>),
     /// Instantiation of an entity. While the argument contains information about
     /// argument names, for codegen purposes, the arguments must be ordered in
     /// the target order. I.e. they should all act as positioanl arguments
@@ -85,6 +86,13 @@ impl std::fmt::Display for PatternKind {
                     members.iter().map(|m| format!("{}", m.kind)).join(", ")
                 )
             }
+            PatternKind::Array(members) => {
+                write!(
+                    f,
+                    "[{}]",
+                    members.iter().map(|m| format!("{}", m.kind)).join(", ")
+                )
+            }
             PatternKind::Type(name, _) => write!(f, "{name}(..)"),
         }
     }
@@ -112,6 +120,7 @@ impl Pattern {
             PatternKind::Type(_, args) => {
                 args.iter().flat_map(|arg| arg.value.get_names()).collect()
             }
+            PatternKind::Array(inner) => inner.iter().flat_map(|i| i.get_names()).collect(),
         }
     }
 }

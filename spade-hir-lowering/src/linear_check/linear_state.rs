@@ -536,6 +536,11 @@ impl LinearState {
                     self.push_pattern(pat, ctx)?;
                 }
             }
+            PatternKind::Array(inner) => {
+                for pat in inner {
+                    self.push_pattern(pat, ctx)?;
+                }
+            }
             PatternKind::Type(_, args) => {
                 for arg in args {
                     self.push_pattern(&arg.value.inner, ctx)?;

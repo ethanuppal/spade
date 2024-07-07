@@ -1783,6 +1783,13 @@ pub fn visit_pattern(p: &ast::Pattern, ctx: &mut Context) -> Result<hir::Pattern
                 .collect::<Result<_>>()?;
             hir::PatternKind::Tuple(inner)
         }
+        ast::Pattern::Array(patterns) => {
+            let inner = patterns
+                .iter()
+                .map(|p| p.try_map_ref(|p| visit_pattern(p, ctx)))
+                .collect::<Result<_>>()?;
+            hir::PatternKind::Array(inner)
+        }
         ast::Pattern::Type(path, args) => {
             // Look up the name to see if it's an enum variant.
             let (name_id, p) = ctx.symtab.lookup_patternable_type(path)?;

@@ -64,6 +64,7 @@ pub enum Pattern {
     Bool(bool),
     Path(Loc<Path>),
     Tuple(Vec<Loc<Pattern>>),
+    Array(Vec<Loc<Pattern>>),
     Type(Loc<Path>, Loc<ArgumentPattern>),
 }
 impl WithLocation for Pattern {}

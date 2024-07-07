@@ -14,6 +14,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ### Added
 
 - [!325][!325] Add `to_uint`, `bits` and `to_int` methods to `int` and `uint`.
+- [!326][!326] Add pattern matching for arrays
 
 ### Changed
 
@@ -24,6 +25,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ### Removed
 
 [!324]: https://gitlab.com/spade-lang/spade/-/merge_requests/324
+[!325]: https://gitlab.com/spade-lang/spade/-/merge_requests/325
+[!326]: https://gitlab.com/spade-lang/spade/-/merge_requests/326
 
 ## [0.9.0] - 2024-07-04
 

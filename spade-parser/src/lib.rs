@@ -779,6 +779,18 @@ impl<'a> Parser<'a> {
                 )))
             },
             &|s| {
+                let start = peek_for!(s, &TokenKind::OpenBracket);
+                let inner = s
+                    .comma_separated(Self::pattern, &TokenKind::CloseBracket)
+                    .no_context()?;
+                let end = s.eat(&TokenKind::CloseBracket)?;
+                Ok(Some(Pattern::Array(inner).between(
+                    s.file_id,
+                    &start.span,
+                    &end.span,
+                )))
+            },
+            &|s| {
                 Ok(s.int_literal()?
                     // Map option, then map Loc
                     .map(|val| val.map(Pattern::Integer)))

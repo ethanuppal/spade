@@ -1601,3 +1601,60 @@ fn where_clauses_drive_inference() {
     ";
     build_items(code);
 }
+
+snapshot_error! {
+    array_pattern_mismatch_is_error,
+    "
+        fn test() {
+            let array = [true, true];
+            match array {
+                [true, 10] => {}
+            }
+        }
+    "
+}
+
+snapshot_error! {
+    array_pattern_mismatch_with_actual_is_error,
+    "
+        fn test() {
+            let array = [0, 1];
+            match array {
+                [true, true] => {}
+            }
+        }
+    "
+}
+
+snapshot_error! {
+    array_pattern_length_must_match,
+    "
+        fn test() {
+            let array = [0];
+            match array {
+                [0, 0] => true
+            }
+        }
+    "
+}
+
+#[test]
+fn irrefutable_array_pattern_compiles() {
+    let code = "
+        fn test_array_pattern(input: [uint<8>; 4]) {
+            let [at0, at1, at2, at3] = input;
+        }
+    ";
+    build_items(code);
+}
+
+snapshot_error! {
+    empty_array_pattern_is_error,
+    "
+        fn test(a: [bool; 0]) {
+            match a {
+                [] => {}
+            }
+        }
+    "
+}

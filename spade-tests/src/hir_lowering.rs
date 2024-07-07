@@ -2990,6 +2990,15 @@ mod tests {
             entity a() {}
         "
     }
+
+    snapshot_error! {
+        refutable_array_patterns_are_detected,
+        "
+            fn test() {
+                let [true, x] = [true, true];
+            }
+        "
+    }
 }
 
 #[cfg(test)]

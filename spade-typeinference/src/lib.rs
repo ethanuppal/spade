@@ -17,7 +17,7 @@ use hir::{
 use itertools::Itertools;
 use num::{BigInt, Zero};
 use serde::{Deserialize, Serialize};
-use spade_common::num_ext::InfallibleToBigInt;
+use spade_common::num_ext::{InfallibleToBigInt, InfallibleToBigUint};
 use spade_diagnostics::Diagnostic;
 use spade_macros::trace_typechecker;
 use trace_stack::TraceStack;
@@ -1015,6 +1015,45 @@ impl TypeState {
 
                 self.unify(pattern, &tuple_type, ctx)
                     .expect("Unification of new_generic with tuple type cannot fail");
+            }
+            hir::PatternKind::Array(inner) => {
+                for pattern in inner {
+                    self.visit_pattern(pattern, ctx, generic_list)?;
+                }
+                if inner.len() == 0 {
+                    return Err(
+                        Diagnostic::error(pattern, "Empty array patterns are unsupported")
+                            .primary_label("Empty array pattern"),
+                    );
+                } else {
+                    let inner_t = inner[0].get_type(self)?;
+
+                    for pattern in inner.iter().skip(1) {
+                        self.unify(pattern, &inner_t, ctx)
+                            .into_default_diagnostic(pattern)?;
+                    }
+
+                    // The for loop may give us a more refined type which we need to inherit here.
+                    let inner_t = inner[0].get_type(self)?;
+
+                    self.unify(
+                        pattern,
+                        &TypeVar::Known(
+                            pattern.loc(),
+                            KnownType::Array,
+                            vec![
+                                inner_t,
+                                TypeVar::Known(
+                                    pattern.loc(),
+                                    KnownType::Integer(inner.len().to_biguint()),
+                                    vec![],
+                                ),
+                            ],
+                        ),
+                        ctx,
+                    )
+                    .into_default_diagnostic(pattern)?;
+                }
             }
             hir::PatternKind::Type(name, args) => {
                 let (condition_type, params, generic_list) =
