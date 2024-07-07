@@ -42,7 +42,7 @@ entity fifo_test_harness(
 }
 
 
-error: Unused resource
+error: read_ptr_wire is unused
    ┌─ testinput:11:5
    │
 11 │     read_ptr_wire: &mut uint<W>,
@@ -52,5 +52,3 @@ error: Unused resource
    = The error is in a generic unit instantiated at
      ╰ testinput:28 fifo_read_side<4>
      ╰ testinput:38 fifo<4>
-
-
