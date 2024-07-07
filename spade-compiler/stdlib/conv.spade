@@ -12,27 +12,27 @@ fn sext<#N, #M>(x: int<N>) -> int<M> __builtin__
 /// than the input
 fn zext<#N, #M>(x: uint<N>) -> uint<M> __builtin__
 
-// This is special cased by the compiler. The actual type, if Spade was able to express
-// it itself would be concat<#N, #M>(x: Number<N>, y: Number<M>) -> Number<N + M>.
+/// This is special cased by the compiler. The actual type, if Spade was able to express
+/// it itself would be concat<#N, #M>(x: Number<N>, y: Number<M>) -> Number<N + M>.
 fn concat<N, M, K>(x: N, y: M) -> K __builtin__
 
-// Casts a `bit` to a `bool`. low maps to false, high maps to true, but HIGHIMP is undefined.
-// In practice, in a simulator, it will map to Z
+/// Casts a `bit` to a `bool`. low maps to false, high maps to true, but HIGHIMP is undefined.
+/// In practice, in a simulator, it will map to Z
 fn bit_to_bool(b: bit) -> bool {
     unsafe::unsafe_cast(b)
 }
 
 
 
-// Completely reverses the order of the elements in the `in` array
-// For example, [1, 2, 3] becomes [3, 2, 1]
+/// Completely reverses the order of the elements in the `in` array
+/// For example, [1, 2, 3] becomes [3, 2, 1]
 fn flip_array<T, #N>(in: [T; N]) -> [T; N] __builtin__
 
-// Interpret an int as the raw bit values. output[0] is the lsb of the integer
-// nad output[N] is the MSB
-//
-// Note that this means that 0b1100 will be [false, false, true, true] since arrays
-// are written lsb first, while integers are written msb first
+/// Interpret an int as the raw bit values. output[0] is the lsb of the integer
+/// and output[N] is the MSB
+///
+/// Note that this means that 0b1100 will be [false, false, true, true] since arrays
+/// are written lsb first, while integers are written msb first
 fn int_to_bits<#N>(input: int<N>) -> [bool; N] {
     unsafe::unsafe_cast(input)
 }
@@ -41,11 +41,11 @@ fn bits_to_int<#N>(input: [bool; N]) -> int<N> {
     unsafe::unsafe_cast(input)
 }
 
-// Interpret a uint as the raw bit values. output[0] is the lsb of the integer
-// nad output[N] is the MSB
-//
-// Note that this means that 0b1100 will be [false, false, true, true] since arrays
-// are written lsb first, while integers are written msb first
+/// Interpret a uint as the raw bit values. output[0] is the lsb of the integer
+/// and output[N] is the MSB
+///
+/// Note that this means that 0b1100 will be [false, false, true, true] since arrays
+/// are written lsb first, while integers are written msb first
 fn uint_to_bits<#N>(input: uint<N>) -> [bool; N] {
     unsafe::unsafe_cast(input)
 }
@@ -53,11 +53,11 @@ fn bits_to_uint<#N>(input: [bool; N]) -> uint<N> {
     unsafe::unsafe_cast(input)
 }
 
-// Cast an unsigned integer to a signed integer by re-interpreting the bits.
+/// Cast an unsigned integer to a signed integer by re-interpreting the bits.
 fn uint_to_int <#N>(input: uint<N>) -> int<N> {
     unsafe::unsafe_cast(input)
 }
-// Cast a signed integer to an unsigned integer by re-interpreting the bits.
+/// Cast a signed integer to an unsigned integer by re-interpreting the bits.
 fn int_to_uint <#N>(input: int<N>) -> uint<N> {
     unsafe::unsafe_cast(input)
 }
@@ -90,11 +90,11 @@ impl<#N> int<N> {
     fn to_uint(self) -> uint<N> {
         int_to_uint(self)
     }
-    // Interpret a uint as the raw bit values. output[0] is the lsb of the integer
-    // nad output[N] is the MSB
-    //
-    // Note that this means that 0b1100 will be [false, false, true, true] since arrays
-    // are written lsb first, while integers are written msb first
+    /// Interpret a uint as the raw bit values. output[0] is the lsb of the integer
+    /// and output[N] is the MSB
+    ///
+    /// Note that this means that 0b1100 will be [false, false, true, true] since arrays
+    /// are written lsb first, while integers are written msb first
     fn bits(self) -> [bool; N] {
         int_to_bits(self)
     }
@@ -104,11 +104,11 @@ impl<#N> uint<N> {
     fn to_int(self) -> int<N> {
         uint_to_int(self)
     }
-    // Interpret a int as the raw bit values. output[0] is the lsb of the integer
-    // nad output[N] is the MSB
-    //
-    // Note that this means that 0b1100 will be [false, false, true, true] since arrays
-    // are written lsb first, while integers are written msb first
+    /// Interpret a int as the raw bit values. output[0] is the lsb of the integer
+    /// and output[N] is the MSB
+    ///
+    /// Note that this means that 0b1100 will be [false, false, true, true] since arrays
+    /// are written lsb first, while integers are written msb first
     fn bits(self) -> [bool; N] {
         uint_to_bits(self)
     }
