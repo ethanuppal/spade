@@ -1,0 +1,23 @@
+---
+source: spade-tests/src/typeinference.rs
+---
+struct T<I> {}
+impl<I> T<I> {
+    fn uwu<#W>(self) -> uint<W> {
+        0
+    }
+}
+
+fn test(t: T<bool>) {
+    let x: uint<10> = t.uwu::<8, 9>();
+}
+
+
+error: Too many arguments. Expected 1, got 2
+  ┌─ testinput:9:31
+  │
+9 │     let x: uint<10> = t.uwu::<8, 9>();
+  │                               ^^^^
+  │                               │  │
+  │                               │  Unexpected argument
+  │                               Expected 1 argument

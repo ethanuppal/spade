@@ -181,6 +181,7 @@ pub enum ExprKind {
         name: Loc<Identifier>,
         args: Loc<ArgumentList<Expression>>,
         call_kind: CallKind,
+        turbofish: Option<Loc<ArgumentList<TypeExpression>>>,
     },
     Call {
         kind: CallKind,

@@ -2099,6 +2099,38 @@ pub fn visit_call_kind(
     })
 }
 
+pub fn visit_turbofish(
+    t: &Loc<ast::TurbofishInner>,
+    ctx: &mut Context,
+) -> Result<Loc<hir::ArgumentList<TypeExpression>>> {
+    t.try_map_ref(|args| match args {
+        ast::TurbofishInner::Named(fishes) => fishes
+            .iter()
+            .map(|fish| match &fish.inner {
+                ast::NamedTurbofish::Short(name) => {
+                    let arg = ast::TypeExpression::TypeSpec(Box::new(
+                        ast::TypeSpec::Named(Path(vec![name.clone()]).at_loc(&name), None)
+                            .at_loc(&name),
+                    ));
+
+                    let arg = visit_type_expression(&arg, ctx)?.at_loc(name);
+                    Ok(hir::expression::NamedArgument::Short(name.clone(), arg))
+                }
+                ast::NamedTurbofish::Full(name, arg) => {
+                    let arg = visit_type_expression(arg, ctx)?.at_loc(arg);
+                    Ok(hir::expression::NamedArgument::Full(name.clone(), arg))
+                }
+            })
+            .collect::<Result<Vec<_>>>()
+            .map(|params| hir::ArgumentList::Named(params)),
+        ast::TurbofishInner::Positional(args) => args
+            .iter()
+            .map(|arg| arg.try_map_ref(|arg| visit_type_expression(arg, ctx)))
+            .collect::<Result<_>>()
+            .map(hir::ArgumentList::Positional),
+    })
+}
+
 #[tracing::instrument(skip_all, fields(kind=e.variant_str()))]
 pub fn visit_expression(e: &ast::Expression, ctx: &mut Context) -> Result<hir::Expression> {
     let new_id = ctx.idtracker.next();
@@ -2200,11 +2232,12 @@ pub fn visit_expression(e: &ast::Expression, ctx: &mut Context) -> Result<hir::E
             Box::new(target.try_visit(visit_expression, ctx)?),
             field.clone(),
         )),
-        ast::Expression::MethodCall{kind, target, name, args} => Ok(hir::ExprKind::MethodCall{
+        ast::Expression::MethodCall{kind, target, name, args, turbofish} => Ok(hir::ExprKind::MethodCall{
             target: Box::new(target.try_visit(visit_expression, ctx)?),
             name: name.clone(),
             args: args.try_map_ref(|args| visit_argument_list(args, ctx))?,
             call_kind: visit_call_kind(kind, ctx)?,
+            turbofish: turbofish.as_ref().map(|t| visit_turbofish(t, ctx)).transpose()?
         }),
         ast::Expression::If(cond, ontrue, onfalse) => {
             let cond = cond.try_visit(visit_expression, ctx)?;
@@ -2246,47 +2279,7 @@ pub fn visit_expression(e: &ast::Expression, ctx: &mut Context) -> Result<hir::E
 
             let kind = visit_call_kind(kind, ctx)?;
 
-            let turbofish = turbofish.as_ref().map(|tf| {
-                tf.try_map_ref(|args| {
-                    match args {
-                        ast::TurbofishInner::Named(fishes) => {
-                            fishes.iter().map(|fish| {
-                                match &fish.inner {
-                                    ast::NamedTurbofish::Short(name) => {
-                                        let arg = ast::TypeExpression::TypeSpec(
-                                            Box::new(
-                                                ast::TypeSpec::Named(
-                                                    Path(vec![name.clone()]).at_loc(&name),
-                                                    None
-                                                ).at_loc(&name)
-                                            )
-                                        );
-
-                                        let arg = visit_type_expression(&arg, ctx)?.at_loc(name);
-                                        Ok(hir::expression::NamedArgument::Short(name.clone(), arg))
-                                    },
-                                    ast::NamedTurbofish::Full(name, arg) => {
-                                        let arg = visit_type_expression(arg, ctx)?.at_loc(arg);
-                                        Ok(hir::expression::NamedArgument::Full(name.clone(), arg))
-                                    },
-                                }
-                            }).collect::<Result<Vec<_>>>()
-                            .map(|params| {
-                                hir::ArgumentList::Named(params)
-                            })
-
-                        },
-                        ast::TurbofishInner::Positional(args) => {
-                            args.iter().map(|arg| {
-                                arg.try_map_ref(|arg| {
-                                    visit_type_expression(arg, ctx)
-                                })
-                            }).collect::<Result<_>>()
-                            .map(hir::ArgumentList::Positional)
-                        },
-                    }
-                })
-            }).transpose()?;
+            let turbofish = turbofish.as_ref().map(|t| visit_turbofish(t, ctx)).transpose()?;
 
             Ok(hir::ExprKind::Call{kind, callee: name_id.at_loc(callee), args, turbofish})
         }

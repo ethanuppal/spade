@@ -1497,12 +1497,16 @@ impl TypeState {
                 method,
                 expr,
                 args,
+                turbofish,
+                prev_generic_list,
             } => Requirement::HasMethod {
                 expr_id,
                 target_type: replace!(target_type),
                 method,
                 expr: replace!(expr),
                 args,
+                turbofish,
+                prev_generic_list,
             },
             Requirement::FitsIntLiteral { value, target_type } => Requirement::FitsIntLiteral {
                 value: match value {

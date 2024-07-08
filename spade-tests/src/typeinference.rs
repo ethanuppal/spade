@@ -1658,3 +1658,83 @@ snapshot_error! {
         }
     "
 }
+
+snapshot_error! {
+    turbofish_on_method_works,
+    "
+        struct T {}
+        impl T {
+            fn uwu<#W>(self) -> uint<W> {
+                0
+            }
+        }
+
+        fn test(t: T) {
+            let x: uint<10> = t.uwu::<8>();
+        }
+    "
+}
+
+snapshot_error! {
+    named_turbofish_on_method_works,
+    "
+        struct T {}
+        impl T {
+            fn uwu<#W>(self) -> uint<W> {
+                0
+            }
+        }
+
+        fn test(t: T) {
+            let x: uint<10> = t.uwu::$<W: 8>();
+        }
+    "
+}
+
+snapshot_error! {
+    turbofish_on_generic_type_method_works,
+    "
+        struct T<I> {}
+        impl<I> T<I> {
+            fn uwu<#W>(self) -> uint<W> {
+                0
+            }
+        }
+
+        fn test(t: T<bool>) {
+            let x: uint<10> = t.uwu::<8>();
+        }
+    "
+}
+
+snapshot_error! {
+    named_turbofish_on_generic_type_method_works,
+    "
+        struct T<I> {}
+        impl<I> T<I> {
+            fn uwu<#W>(self) -> uint<W> {
+                0
+            }
+        }
+
+        fn test(t: T<bool>) {
+            let x: uint<10> = t.uwu::$<W: 8>();
+        }
+    "
+}
+
+snapshot_error! {
+    turbofish_on_generic_type_method_works2,
+    "
+        struct T<I> {}
+        impl<I> T<I> {
+            fn uwu<#W>(self) -> uint<W> {
+                0
+            }
+        }
+
+        fn test(t: T<bool>) {
+            let x: uint<10> = t.uwu::<8, 9>();
+        }
+    "
+}

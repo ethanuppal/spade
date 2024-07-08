@@ -258,7 +258,7 @@ impl TypeState {
         ctx: &Context,
         generic_list: &GenericListToken,
     ) -> Result<()> {
-        assuming_kind!(ExprKind::MethodCall{call_kind: _, target, name, args} = &expression => {
+        assuming_kind!(ExprKind::MethodCall{call_kind: _, target, name, args, turbofish} = &expression => {
             // NOTE: We don't visit_expression here as it is being added to the argument_list
             // which we *do* visit
             // self.visit_expression(target, ctx, generic_list)?;
@@ -286,7 +286,9 @@ impl TypeState {
                 target_type: target_type.at_loc(target),
                 method: name.clone(),
                 expr: self_type.at_loc(expression),
-                args: args_with_self
+                args: args_with_self,
+                turbofish: turbofish.clone(),
+                prev_generic_list: generic_list.clone()
             };
 
             requirement.check_or_add(self, ctx)?

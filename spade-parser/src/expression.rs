@@ -320,6 +320,8 @@ impl<'a> Parser<'a> {
 
             let field = self.identifier()?;
 
+            let turbofish = self.turbofish()?;
+
             if let Some(args) = self.argument_list()? {
                 Ok(Expression::MethodCall {
                     target: Box::new(expr.clone()),
@@ -328,12 +330,25 @@ impl<'a> Parser<'a> {
                     kind: inst
                         .map(|i| CallKind::Entity(().at(self.file_id, &i)))
                         .unwrap_or(CallKind::Function),
+                    turbofish,
                 }
                 .between(self.file_id, &expr, &args))
             } else if let Some(inst_keyword) = inst {
+                let base_loc = ().between(self.file_id, &inst_keyword, &field);
+                let base_expr = if let Some(turbofish) = turbofish {
+                    ().between_locs(&base_loc, &turbofish)
+                } else {
+                    base_loc
+                };
                 Err(ExpectedArgumentList {
                     next_token: self.peek()?,
-                    base_expr: ().between(self.file_id, &inst_keyword, &field),
+                    base_expr,
+                }
+                .with_suggestions())
+            } else if let Some(turbofish) = turbofish {
+                Err(ExpectedArgumentList {
+                    next_token: self.peek()?,
+                    base_expr: ().between(self.file_id, &turbofish, &field),
                 }
                 .with_suggestions())
             } else {
@@ -728,6 +743,7 @@ mod test {
             args: ArgumentList::Positional(vec![Expression::Identifier(ast_path("x")).nowhere()])
                 .nowhere(),
             kind: CallKind::Function,
+            turbofish: None,
         }
         .nowhere();
 
@@ -744,6 +760,7 @@ mod test {
             args: ArgumentList::Positional(vec![Expression::Identifier(ast_path("x")).nowhere()])
                 .nowhere(),
             kind: CallKind::Entity(().nowhere()),
+            turbofish: None,
         }
         .nowhere();
 
@@ -763,6 +780,7 @@ mod test {
             )])
             .nowhere(),
             kind: CallKind::Function,
+            turbofish: None,
         }
         .nowhere();
 

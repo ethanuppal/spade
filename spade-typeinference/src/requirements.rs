@@ -6,14 +6,14 @@ use spade_common::num_ext::InfallibleToBigInt;
 use spade_common::{location_info::Loc, name::Identifier};
 use spade_diagnostics::{diag_anyhow, diag_assert, diag_bail, Diagnostic};
 use spade_hir::symbol_table::{TypeDeclKind, TypeSymbol};
-use spade_hir::{ArgumentList, Expression};
+use spade_hir::{ArgumentList, Expression, TypeExpression};
 use spade_types::KnownType;
 
 use crate::equation::TypeVar;
 use crate::error::{Result, TypeMismatch, UnificationErrorExt};
 use crate::method_resolution::select_method;
 use crate::trace_stack::TraceStackEntry;
-use crate::{Context, GenericListSource, TypeState};
+use crate::{Context, GenericListSource, GenericListToken, TurbofishCtx, TypeState};
 
 #[derive(Clone, Debug)]
 pub enum ConstantInt {
@@ -43,6 +43,10 @@ pub enum Requirement {
         /// The argument list passed to the method. This should include the `self` expression as
         /// the appropriate argument (first positional or a non-shorthand self otherwise)
         args: Loc<ArgumentList<Expression>>,
+        /// The turbofish specified on the method.
+        turbofish: Option<Loc<ArgumentList<TypeExpression>>>,
+        /// The generic list of the context where this is instantiated
+        prev_generic_list: GenericListToken,
     },
     /// The type should be an integer large enough to fit the specified value
     FitsIntLiteral {
@@ -70,6 +74,8 @@ impl Requirement {
                 expr,
                 method: _,
                 args: _,
+                turbofish: _,
+                prev_generic_list: _,
             } => {
                 TypeState::replace_type_var(target_type, from, to);
                 TypeState::replace_type_var(expr, from, to);
@@ -205,6 +211,8 @@ impl Requirement {
                 method,
                 expr,
                 args,
+                turbofish,
+                prev_generic_list,
             } => target_type.expect_named(
                 |type_name, _params| {
                     let implementor = select_method(expr.loc(), type_name, method, ctx.items)?;
@@ -220,7 +228,11 @@ impl Requirement {
                         ctx,
                         false,
                         true,
-                        None,
+                        turbofish.as_ref().map(|turbofish| TurbofishCtx {
+                            turbofish,
+                            prev_generic_list,
+                            type_ctx: ctx,
+                        }),
                     )?;
                     Ok(RequirementResult::Satisfied(vec![]))
                 },

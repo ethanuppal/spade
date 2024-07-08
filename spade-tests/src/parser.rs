@@ -624,3 +624,30 @@ fn generic_param_on_struct_is_valid() {
 
     build_items(code);
 }
+
+snapshot_error! {
+    method_turbofish_without_argument_list,
+    "
+        fn test() {
+            a.field::<bool>
+        }
+    "
+}
+
+snapshot_error! {
+    inst_method_turbofish_without_argument_list,
+    "
+        fn test() {
+            a.inst field::<bool>
+        }
+    "
+}
+
+snapshot_error! {
+    method_with_partial_turbofish,
+    "
+        fn test() {
+            a.field::
+        }
+    "
+}

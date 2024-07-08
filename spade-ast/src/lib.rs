@@ -206,6 +206,7 @@ pub enum Expression {
         name: Loc<Identifier>,
         args: Loc<ArgumentList>,
         kind: CallKind,
+        turbofish: Option<Loc<TurbofishInner>>,
     },
     If(
         Box<Loc<Expression>>,

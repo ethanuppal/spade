@@ -160,6 +160,38 @@ impl<'a> Parser<'a> {
     }
 
     #[trace_parser]
+    pub fn turbofish(&mut self) -> Result<Option<Loc<TurbofishInner>>> {
+        let start = peek_for!(self, &TokenKind::PathSeparator);
+
+        if self.peek_kind(&TokenKind::Lt)? {
+            // safe unwrap, only None for token kind != Lt
+            let params = self.generic_spec_list()?.unwrap();
+
+            Ok(Some(params.map(|p| TurbofishInner::Positional(p))))
+        } else if self.peek_kind(&TokenKind::Dollar)? {
+            self.eat_unconditional()?;
+            let (params, loc) = self.surrounded(
+                &TokenKind::Lt,
+                |s| {
+                    s.comma_separated(Self::named_turbofish, &TokenKind::Gt)
+                        .extra_expected(vec!["identifier", "type spec"])
+                },
+                &TokenKind::Gt,
+            )?;
+
+            Ok(Some(TurbofishInner::Named(params).at_loc(&loc)))
+        } else {
+            let next = self.peek()?;
+            return Err(Diagnostic::error(next, "Expected $ or <")
+                .primary_label("Expected $ or <")
+                .secondary_label(
+                    start,
+                    ":: after an method is used to specify type parameters",
+                ));
+        }
+    }
+
+    #[trace_parser]
     pub fn path_with_turbofish(
         &mut self,
     ) -> Result<Option<(Loc<Path>, Option<Loc<TurbofishInner>>)>> {

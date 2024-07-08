@@ -24,6 +24,8 @@ impl<'a> Pass for LowerMethods<'a> {
                 name,
                 args,
                 call_kind,
+                // Turbofishes are only important during type inference
+                turbofish: _,
             } => {
                 let self_type = self_.get_type(self.type_state).map_err(|e| {
                     Diagnostic::bug(self_.as_ref(), format!("did not find a type ({e})"))

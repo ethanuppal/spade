@@ -1,0 +1,29 @@
+---
+source: spade-tests/src/typeinference.rs
+---
+struct T<I> {}
+impl<I> T<I> {
+    fn uwu<#W>(self) -> uint<W> {
+        0
+    }
+}
+
+fn test(t: T<bool>) {
+    let x: uint<10> = t.uwu::<8>();
+}
+
+
+error: Expected type uint<10>, got uint<8>
+  ┌─ testinput:9:23
+  │
+9 │     let x: uint<10> = t.uwu::<8>();
+  │                 --    ^^^^^^^^^^^^
+  │                 │     │       │
+  │                 │     │       Type 8 inferred here
+  │                 │     Expected uint<10>
+  │                 Type 10 inferred here
+  │
+  = note: Expected: 10
+                in: uint<10>
+               Got: 8
+                in: uint<8>

@@ -1,0 +1,22 @@
+---
+source: spade-tests/src/parser.rs
+---
+fn test() {
+    a.field::<bool>
+}
+
+
+error: Expected argument list
+  ┌─ testinput:2:7
+  │
+2 │     a.field::<bool>
+  │       ^^^^^^^^^^^^^ Expected argument list for this instantiation
+  │
+  = Consider specifying positional arguments
+  │
+2 │     a.field::<bool>(...)
+  │                    +++++
+  = or named arguments
+  │
+2 │     a.field::<bool>$(...)
+  │                    ++++++
