@@ -199,7 +199,6 @@ pub fn compile(
         }
     };
 
-
     if errors.failed {
         return Err(unfinished_artefacts);
     }
