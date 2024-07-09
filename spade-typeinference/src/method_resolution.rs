@@ -1,63 +1,235 @@
 use std::collections::HashMap;
 
+use itertools::Itertools;
 use spade_common::location_info::{Loc, WithLocation};
 use spade_common::name::{Identifier, NameID};
 
 use spade_diagnostics::Diagnostic;
-use spade_hir::ItemList;
+use spade_hir::{ItemList, TypeExpression, TypeSpec};
+use spade_types::KnownType;
+
+use crate::equation::TypeVar;
 
 /// Attempts to look up which function to call when calling `method` on a var
 /// of type `self_type`.
+/// Returns the method to call if it is fully known and exists, an error if there is
+/// no such method, or None if the method is ambiguous
 pub fn select_method(
     expr: Loc<()>,
-    type_name: &NameID,
+    self_type: &TypeVar,
     method: &Loc<Identifier>,
     items: &ItemList,
-) -> Result<Loc<NameID>, Diagnostic> {
+) -> Result<Option<Loc<NameID>>, Diagnostic> {
+    let type_name = self_type.expect_named(
+        |name, _params| Ok(name.clone()),
+        || Err(Diagnostic::bug(expr, "Generic type")),
+        |other| {
+            Err(Diagnostic::bug(
+                expr,
+                format!("{other} cannot have methods"),
+            ))
+        },
+    )?;
+
     // Go to the item list to check if this name has any methods
     let impld_traits = items
         .impls
-        .get(type_name)
+        .get(&type_name)
         .cloned()
         .unwrap_or_else(HashMap::new);
 
     // Gather all the candidate methods which we may want to call.
-    let candidates = impld_traits
-        .iter()
-        .flat_map(|(_, r#impl)| {
-            r#impl.fns.iter().map(move |(fn_name, actual_fn)| {
-                if fn_name == &method.inner {
-                    Some(actual_fn.0.clone().at_loc(&actual_fn.1))
-                } else {
-                    None
-                }
+    let (matched_candidates, maybe_candidates, unmatched_candidates): (Vec<_>, Vec<_>, Vec<_>) =
+        impld_traits
+            .iter()
+            .flat_map(|(_, r#impl)| {
+                r#impl.fns.iter().map(move |(fn_name, actual_fn)| {
+                    if fn_name == &method.inner {
+                        let is_overlapping = spec_is_overlapping(&r#impl.target, self_type);
+                        let selected = actual_fn.0.clone().at_loc(&actual_fn.1);
+                        match is_overlapping {
+                            Overlap::Yes => (Some(selected), None, None),
+                            Overlap::Maybe => (None, Some(selected), None),
+                            Overlap::No => (None, None, Some(&r#impl.target)),
+                        }
+                    } else {
+                        (None, None, None)
+                    }
+                })
             })
-        })
-        .flatten()
+            .multiunzip();
+
+    let matched_candidates = matched_candidates
+        .into_iter()
+        .filter_map(|x| x)
+        .collect::<Vec<_>>();
+    let maybe_candidates = maybe_candidates
+        .into_iter()
+        .filter_map(|x| x)
+        .collect::<Vec<_>>();
+    let unmatched_candidates = unmatched_candidates
+        .into_iter()
+        .filter_map(|x| x)
         .collect::<Vec<_>>();
 
-    let final_method = match candidates.as_slice() {
+    if !maybe_candidates.is_empty() {
+        return Ok(None);
+    }
+
+    let final_method = match matched_candidates.as_slice() {
         [name] => name,
         [] => {
-            return Err(
-                Diagnostic::error(expr, format!("{type_name} has no method {method}"))
-                    .primary_label("No such method"),
-            )
+            let mut d = Diagnostic::error(method, format!("{self_type} has no method {method}"))
+                .primary_label("No such method")
+                .secondary_label(expr, format!("This has type {self_type}"));
+
+            match unmatched_candidates.as_slice() {
+                [] => {}
+                [one] => {
+                    d.add_help(format!("The method exists for {one}"));
+                }
+                multiple => {
+                    d.add_help(format!(
+                        "The method exists for {}, and {}",
+                        multiple[0..multiple.len() - 1]
+                            .iter()
+                            .map(|t| format!("{t}"))
+                            .join(", "),
+                        multiple.last().unwrap()
+                    ));
+                }
+            };
+            return Err(d);
         }
-        all_candidates => {
-            let mut diag = Diagnostic::error(
-                expr,
-                format!("{type_name} has multiple methods named {method}"),
-            )
-            .primary_label("Ambiguous method call");
-
-            for candidate in all_candidates {
-                diag = diag.secondary_label(candidate, format!("{type_name} is defined here"))
-            }
-
-            return Err(diag);
+        _ => {
+            return Err(Diagnostic::bug(
+                method,
+                "Multiple candidates satisfy this method",
+            ))
         }
     };
 
-    Ok(final_method.clone())
+    Ok(Some(final_method.clone()))
+}
+
+enum Overlap {
+    /// We know for sure if there is overlap
+    Yes,
+    No,
+    /// We Are not sure yet if there is overlap. This happens if we have X<_>
+    /// satisfies but X<T> where T is concrete
+    Maybe,
+}
+
+trait IterExt {
+    fn all_overlap(self) -> Overlap;
+}
+
+impl<T> IterExt for T
+where
+    T: Iterator<Item = Overlap>,
+{
+    fn all_overlap(self) -> Overlap {
+        for o in self {
+            match o {
+                Overlap::Yes => {}
+                Overlap::No => return Overlap::No,
+                Overlap::Maybe => return Overlap::Maybe,
+            }
+        }
+        Overlap::Yes
+    }
+}
+
+fn specs_are_overlapping(specs: &[Loc<TypeSpec>], vars: &[TypeVar]) -> Overlap {
+    if specs.len() == vars.len() {
+        specs
+            .iter()
+            .zip(vars)
+            .map(|(s, v)| spec_is_overlapping(s, v))
+            .all_overlap()
+    } else {
+        Overlap::No
+    }
+}
+
+fn expr_is_overlapping(expr: &TypeExpression, var: &TypeVar) -> Overlap {
+    match (expr, var) {
+        (TypeExpression::Integer(eval), TypeVar::Known(_, KnownType::Integer(vval), _)) => {
+            if eval == vval {
+                Overlap::Yes
+            } else {
+                Overlap::No
+            }
+        }
+        (TypeExpression::Integer(_), TypeVar::Unknown(_, _)) => Overlap::Maybe,
+        (TypeExpression::Integer(_), _) => {
+            unreachable!("Non integer and non-generic type matched with integer")
+        }
+        (TypeExpression::TypeSpec(s), v) => spec_is_overlapping(s, v),
+    }
+}
+
+fn exprs_are_overlapping(exprs: &[Loc<TypeExpression>], vars: &[TypeVar]) -> Overlap {
+    if exprs.len() == vars.len() {
+        exprs
+            .iter()
+            .zip(vars)
+            .map(|(e, v)| expr_is_overlapping(e, v))
+            .all_overlap()
+    } else {
+        Overlap::No
+    }
+}
+
+fn spec_is_overlapping(spec: &TypeSpec, var: &TypeVar) -> Overlap {
+    match (spec, var) {
+        // Generics overlap with anything
+        (TypeSpec::Generic(_), _) => Overlap::Yes,
+        // For anything non-generic, we need a concrete type to know if there is overlap.
+        (_, TypeVar::Unknown(_, _)) => Overlap::Maybe,
+        (
+            TypeSpec::Declared(specname, specparams),
+            TypeVar::Known(_, KnownType::Named(varname), varparams),
+        ) => {
+            if &specname.inner == varname {
+                exprs_are_overlapping(specparams, varparams)
+            } else {
+                Overlap::No
+            }
+        }
+        (TypeSpec::Declared(_, _), _) => Overlap::No,
+
+        // NOTE: This block currently cannot be tested because we can't add methods to
+        // anything other than declared types
+        (TypeSpec::Tuple(sspecs), TypeVar::Known(_, KnownType::Tuple, vvars)) => {
+            specs_are_overlapping(sspecs, vvars)
+        }
+        (TypeSpec::Tuple(_), _) => Overlap::No,
+        (TypeSpec::Array { inner, size }, TypeVar::Known(_, KnownType::Array, vvars)) => [
+            spec_is_overlapping(inner, &vvars[0]),
+            expr_is_overlapping(size, &vvars[1]),
+        ]
+        .into_iter()
+        .all_overlap(),
+        (TypeSpec::Array { .. }, _) => Overlap::No,
+        // Unit types cannot have methods right now and KnownType cannot be `unit`, so
+        // for now we'll always return false from this
+        // FIXME: Type inference ignores TypeSpec::Unit, so presumably those are very unsupported
+        // anyway
+        (TypeSpec::Unit(_), _) => Overlap::No,
+        (TypeSpec::Backward(sinner), TypeVar::Known(_, KnownType::Backward, vinner))
+        | (TypeSpec::Inverted(sinner), TypeVar::Known(_, KnownType::Inverted, vinner))
+        | (TypeSpec::Wire(sinner), TypeVar::Known(_, KnownType::Wire, vinner)) => {
+            spec_is_overlapping(sinner, &vinner[0])
+        }
+        (TypeSpec::Backward(_), _) => Overlap::No,
+        (TypeSpec::Inverted(_), _) => Overlap::No,
+        (TypeSpec::Wire(_), _) => Overlap::No,
+
+        // TraitSelf cannot appear as the impl target, so what we do here is irrelevant
+        (TypeSpec::TraitSelf(_), TypeVar::Known(_, _, _)) => {
+            unreachable!("Trait self in impl target")
+        }
+    }
 }

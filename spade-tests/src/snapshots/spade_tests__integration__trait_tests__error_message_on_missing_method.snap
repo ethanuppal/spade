@@ -9,9 +9,10 @@ fn t(x: X) {
 
 
 error: X has no method test
-  ┌─ testinput:4:5
+  ┌─ testinput:4:7
   │
 4 │     x.test()
-  │     ^^^^^^^^ No such method
-
-
+  │     --^^^^--
+  │     │ │
+  │     │ No such method
+  │     This has type X

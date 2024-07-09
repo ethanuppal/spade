@@ -214,8 +214,12 @@ impl Requirement {
                 turbofish,
                 prev_generic_list,
             } => target_type.expect_named(
-                |type_name, _params| {
-                    let implementor = select_method(expr.loc(), type_name, method, ctx.items)?;
+                |_type_name, _params| {
+                    let Some(implementor) =
+                        select_method(expr.loc(), &target_type, method, ctx.items)?
+                    else {
+                        return Ok(RequirementResult::NoChange);
+                    };
 
                     let fn_head = ctx.symtab.unit_by_id(&implementor);
 

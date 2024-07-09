@@ -1,0 +1,22 @@
+---
+source: spade-tests/src/integration.rs
+---
+impl uint<8> {
+    fn method(self) {}
+}
+
+entity test(x: uint<10>) {
+    x.method()
+}
+
+
+error: uint<10> has no method method
+  ┌─ testinput:6:7
+  │
+6 │     x.method()
+  │     --^^^^^^--
+  │     │ │
+  │     │ No such method
+  │     This has type uint<10>
+  │
+  = help: The method exists for uint<8>

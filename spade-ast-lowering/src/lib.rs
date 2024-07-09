@@ -896,7 +896,17 @@ pub fn visit_impl(
 
     let trait_methods = &trait_def.fns;
 
-    let (target_name, _) = ctx.symtab.lookup_type_symbol(target_path)?;
+    let (target_name, target_sym) = ctx.symtab.lookup_type_symbol(target_path)?;
+
+    if let TypeSymbol::GenericArg { traits: _ } | TypeSymbol::GenericInt = &target_sym.inner {
+        return Err(Diagnostic::error(
+            target_path,
+            "Impl blocks cannot currently be used on generic types",
+        )
+        .primary_label("Impl on generic type")
+        .secondary_label(target_sym, format!("{target_name} defined here")));
+    }
+
     let target_type_spec = visit_type_spec(&block.target, ctx)?;
 
     let mut trait_members = vec![];
@@ -985,9 +995,15 @@ pub fn visit_impl(
 
     check_no_missing_methods(block, missing_methods)?;
 
+    let target = visit_type_spec(&block.target, ctx)?;
+
     let duplicate = items.impls.entry(target_name.clone()).or_default().insert(
         trait_name.clone(),
-        hir::ImplBlock { fns: trait_impl }.at_loc(block),
+        hir::ImplBlock {
+            fns: trait_impl,
+            target,
+        }
+        .at_loc(block),
     );
 
     check_no_duplicate_trait_impl(duplicate, block, &trait_name, &target_name)?;
@@ -2556,7 +2572,7 @@ pub fn ensure_unique_anonymous_traits(item_list: &hir::ItemList) -> Vec<Diagnost
             let mut fns = impls
                 .iter()
                 .filter(|(trait_name, _)| trait_name.is_anonymous())
-                .flat_map(|(_, impl_block)| impl_block.fns.iter())
+                .flat_map(|(_, impl_block)| impl_block.fns.iter().map(|f| (f, &impl_block.target)))
                 .collect::<Vec<_>>();
 
             // For deterministic error messages, the order at which functions are seen must be
@@ -2564,29 +2580,92 @@ pub fn ensure_unique_anonymous_traits(item_list: &hir::ItemList) -> Vec<Diagnost
             // sort them depending on the loc span of the impl. The exact ordering is
             // completely irrelevant, as long as it is ordered the same way every time a test
             // is run
-            fns.sort_by_key(|f| f.1 .1.span);
+            fns.sort_by_key(|(f, _target)| f.1 .1.span);
 
-            let mut set: HashMap<&Identifier, Loc<()>> = HashMap::new();
+            let mut set: HashMap<&Identifier, (Loc<()>, Vec<&TypeSpec>)> = HashMap::new();
 
             let mut duplicate_errs = vec![];
-            for (f, f_loc) in fns {
-                if let Some(prev) = set.get(f) {
-                    duplicate_errs.push(
-                        Diagnostic::error(
-                            f_loc.1,
-                            format!("{type_name} already has a method named {f}"),
-                        )
-                        .primary_label("Duplicate method")
-                        .secondary_label(prev, "Previous definition here"),
-                    );
+            for ((f, f_loc), target) in fns {
+                if let Some((prev, specs)) = set.get_mut(f) {
+                    if specs.iter().any(|spec| type_specs_overlap(target, spec)) {
+                        duplicate_errs.push(
+                            Diagnostic::error(
+                                f_loc.1,
+                                format!("{type_name} already has a method named {f}"),
+                            )
+                            .primary_label("Duplicate method")
+                            .secondary_label(prev.loc(), "Previous definition here"),
+                        );
+                    } else {
+                        specs.push(target)
+                    }
                 } else {
-                    set.insert(f, f_loc.1);
+                    set.insert(f, (f_loc.1, vec![&target.inner]));
                 }
             }
 
             duplicate_errs
         })
         .collect::<Vec<_>>()
+}
+
+fn type_specs_overlap(l: &TypeSpec, r: &TypeSpec) -> bool {
+    match (l, r) {
+        // Generic types overlap with all types
+        (TypeSpec::Generic(_), _) => true,
+        (_, TypeSpec::Generic(_)) => true,
+        // Declared types overlap if their base is the same and their generics overlap
+        (TypeSpec::Declared(lbase, lparams), TypeSpec::Declared(rbase, rparams)) => {
+            lbase == rbase
+                && lparams
+                    .iter()
+                    .zip(rparams)
+                    .all(|(le, re)| type_exprs_overlap(le, re))
+        }
+        (TypeSpec::Declared(_, _), _) => false,
+        (TypeSpec::Tuple(linner), TypeSpec::Tuple(rinner)) => linner
+            .iter()
+            .zip(rinner)
+            .all(|(l, r)| type_specs_overlap(l, r)),
+        (TypeSpec::Tuple(_), _) => false,
+        (
+            TypeSpec::Array {
+                inner: linner,
+                size: lsize,
+            },
+            TypeSpec::Array {
+                inner: rinner,
+                size: rsize,
+            },
+        ) => type_specs_overlap(linner, rinner) && type_exprs_overlap(lsize, rsize),
+        (TypeSpec::Array { .. }, _) => false,
+        (TypeSpec::Unit(_), TypeSpec::Unit(_)) => true,
+        (TypeSpec::Unit(_), _) => false,
+        (TypeSpec::Backward(linner), TypeSpec::Backward(rinner)) => {
+            type_specs_overlap(&linner.inner, &rinner.inner)
+        }
+        (TypeSpec::Backward(_), _) => false,
+        (TypeSpec::Inverted(linner), TypeSpec::Inverted(rinner)) => {
+            type_specs_overlap(&linner.inner, &rinner.inner)
+        }
+        (TypeSpec::Inverted(_), _) => todo!(),
+        (TypeSpec::Wire(linner), TypeSpec::Wire(rinner)) => type_specs_overlap(linner, rinner),
+        (TypeSpec::Wire(_), _) => false,
+        (TypeSpec::TraitSelf(_), _) => unreachable!("Self type cannot be checked for overlap"),
+    }
+}
+
+fn type_exprs_overlap(l: &TypeExpression, r: &TypeExpression) -> bool {
+    match (l, r) {
+        (TypeExpression::Integer(rval), TypeExpression::Integer(lval)) => rval == lval,
+        // The only way an integer overlaps with a type is if it is a generic, so both
+        // of these branches overlap
+        (TypeExpression::Integer(_), TypeExpression::TypeSpec(_)) => true,
+        (TypeExpression::TypeSpec(_), TypeExpression::Integer(_)) => true,
+        (TypeExpression::TypeSpec(lspec), TypeExpression::TypeSpec(rspec)) => {
+            type_specs_overlap(lspec, rspec)
+        }
+    }
 }
 
 #[cfg(test)]
@@ -3650,138 +3729,6 @@ mod item_visiting {
             visit_item(&input, &mut ctx, &mut ItemList::new()),
             Ok(vec![expected])
         );
-    }
-}
-
-#[cfg(test)]
-mod impl_blocks {
-    use ast::{
-        testutil::{ast_ident, ast_path},
-        ImplBlock,
-    };
-    use hir::{hparams, symbol_table::TypeDeclKind, ItemList};
-    use spade_common::name::testutil::name_id;
-
-    use crate::testutil::test_context;
-    use pretty_assertions::assert_eq;
-    use spade_ast::testutil::ast_type_spec;
-
-    use super::*;
-
-    #[test]
-    fn anonymous_impl_blocks_work() {
-        let ast_block = ImplBlock {
-            r#trait: None,
-            type_params: None,
-            target: ast_type_spec("a"),
-            units: vec![ast::Unit {
-                head: ast::UnitHead {
-                    attributes: ast::AttributeList::empty(),
-                    name: ast_ident("x"),
-                    inputs: ParameterList::with_self(().nowhere(), vec![]).nowhere(),
-                    output_type: None,
-                    type_params: None,
-                    unit_kind: ast::UnitKind::Function.nowhere(),
-                    where_clauses: vec![],
-                },
-                body: Some(
-                    ast::Expression::Block(Box::new(ast::Block {
-                        statements: vec![],
-                        result: Some(ast::Expression::int_literal_signed(0).nowhere()),
-                    }))
-                    .nowhere(),
-                ),
-            }
-            .nowhere()],
-        }
-        .nowhere();
-
-        let mut items = ItemList::new();
-        let mut ctx = test_context();
-
-        // Add the type we are going to impl for. NOTE: Adding this as a j
-        let target_type_name = ctx.symtab.add_type(
-            ast_path("a").inner,
-            TypeSymbol::Declared(vec![], TypeDeclKind::Struct { is_port: false }).nowhere(),
-        );
-
-        let new_items = visit_impl(&ast_block, &mut items, &mut ctx).unwrap();
-
-        assert_eq!(new_items.len(), 1);
-
-        // We'll have to cheat a bit here. Since we don't know what name will be given
-        // to the entity in the impl block, we'll peek at that and use it in the expected item
-        let entity_name = match new_items.first().unwrap() {
-            hir::Item::Unit(e) => e.name.clone(),
-            _ => panic!("Expected unit"),
-        };
-
-        let param_type_spec =
-            hir::TypeSpec::Declared(target_type_name.clone().nowhere(), vec![]).nowhere();
-        let hir_param_list = hparams![("self", param_type_spec.clone())];
-        let expected_item = hir::Item::Unit(
-            hir::Unit {
-                name: entity_name.clone(),
-                head: hir::UnitHead {
-                    name: ast_ident("x"),
-                    inputs: hir_param_list.clone().nowhere(),
-                    output_type: None,
-                    unit_type_params: vec![],
-                    scope_type_params: vec![],
-                    unit_kind: hir::UnitKind::Function(hir::FunctionKind::Fn).nowhere(),
-                    where_clauses: vec![],
-                },
-                attributes: hir::AttributeList::empty(),
-                inputs: vec![(name_id(3, "self"), param_type_spec)],
-                body: hir::ExprKind::Block(Box::new(hir::Block {
-                    statements: vec![],
-                    result: Some(hir::ExprKind::int_literal(0).with_id(1).nowhere()),
-                }))
-                .with_id(0)
-                .nowhere(),
-            }
-            .nowhere(),
-        );
-
-        // Ensure that the entity is generated
-        assert_eq!(&expected_item, new_items.first().unwrap());
-
-        // Ensure that the trait is added to the item list
-        assert_eq!(items.traits().len(), 1);
-        let t = items.traits().iter().next().unwrap().clone();
-        let trait_head = hir::UnitHead {
-            name: ast_ident("x"),
-            inputs: hparams![("self", hir::TypeSpec::TraitSelf(().nowhere()).nowhere())].nowhere(),
-            output_type: None,
-            unit_type_params: vec![],
-            scope_type_params: vec![],
-            unit_kind: hir::UnitKind::Function(hir::FunctionKind::Fn).nowhere(),
-            where_clauses: vec![],
-        };
-        assert_eq!(t.1.fns, HashMap::from([(ast_ident("x").inner, trait_head)]));
-
-        let trait_name = t.0;
-
-        // Ensure that there is an impl of the trait
-        let impl_note = items
-            .impls
-            .get(&target_type_name)
-            .expect("Expected an impl list")
-            .get(&trait_name)
-            .expect("Expected an impl of trait");
-
-        assert_eq!(
-            impl_note,
-            &hir::ImplBlock {
-                fns: vec![(
-                    ast_ident("x").inner,
-                    (entity_name.name_id().inner.clone(), ().nowhere())
-                )]
-                .into_iter()
-                .collect()
-            }
-            .nowhere()
-        )
     }
 }
 

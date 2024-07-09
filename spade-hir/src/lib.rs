@@ -661,6 +661,7 @@ pub struct ImplBlock {
     /// Mapping of identifiers to the NameID of the entity which is the implementation
     /// for the specified function
     pub fns: HashMap<Identifier, (NameID, Loc<()>)>,
+    pub target: Loc<TypeSpec>,
 }
 impl WithLocation for ImplBlock {}
 

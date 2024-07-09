@@ -1,0 +1,15 @@
+---
+source: spade-tests/src/integration.rs
+---
+impl<T> T {
+    fn method(self) {}
+}
+
+
+error: Impl blocks cannot currently be used on generic types
+  ┌─ testinput:1:9
+  │
+1 │ impl<T> T {
+  │      -  ^ Impl on generic type
+  │      │   
+  │      T defined here

@@ -20,6 +20,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ### Changed
 
 - [!324][!324] Move `stdlib` and `prelude` directories to `spade-compiler`
+- [!331][!331] Allow multiple same-named methods on the same type with different generic parameters
 
 ### Fixed
 

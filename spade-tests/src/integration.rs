@@ -199,7 +199,7 @@ snapshot_error! {
 
 #[cfg(test)]
 mod trait_tests {
-    use crate::{build_items, snapshot_error};
+    use crate::{build_items, build_items_with_stdlib, snapshot_error};
 
     snapshot_error! {
         ast_lowering_errors_are_caught_in_impl_blocks,
@@ -866,5 +866,174 @@ mod trait_tests {
         ";
 
         build_items(code);
+    }
+
+    #[test]
+    fn mutually_exclusive_methods_are_allowed() {
+        let code = "
+            impl uint<8> {
+                fn method(self) {}
+            }
+
+            impl uint<16> {
+                fn method(self) {}
+            }
+        ";
+        build_items(code);
+    }
+
+    snapshot_error! {
+        conflicting_method_impls_are_disallowed_inner_generic,
+        "
+            impl<T> uint<T> {
+                fn method(self) {}
+            }
+
+            impl uint<16> {
+                fn method(self) {}
+            }
+        "
+    }
+
+    snapshot_error! {
+        conflicting_method_impls_are_disallowed_inner_tuple,
+        "
+            struct X<T> {}
+            impl<T> X<T> {
+                fn method(self) {}
+            }
+
+            impl X<(bool, bool)> {
+                fn method(self) {}
+            }
+        "
+    }
+
+    #[test]
+    fn non_conflicting_method_impls_are_allowed_inner_tuple() {
+        let code = "
+            struct X<T> {}
+            impl<T> X<(T, bool)> {
+                fn method(self) {}
+            }
+
+            impl X<(bool, uint<8>)> {
+                fn method(self) {}
+            }
+        ";
+        build_items(code);
+    }
+
+    snapshot_error! {
+        conflicting_method_impls_are_disallowed_inner_array_type,
+        "
+            struct X<T> {}
+            impl<T> X<[T; 3]> {
+                fn method(self) {}
+            }
+
+            impl X<[bool; 3]> {
+                fn method(self) {}
+            }
+        "
+    }
+
+    snapshot_error! {
+        conflicting_method_impls_are_disallowed_inner_array_size,
+        "
+            struct X<T> {}
+            impl<#N> X<[bool; N]> {
+                fn method(self) {}
+            }
+
+            impl X<[bool; 3]> {
+                fn method(self) {}
+            }
+        "
+    }
+
+    #[test]
+    fn non_conflicting_method_impls_are_allowed_array_different_size() {
+        let code = "
+            struct X<T> {}
+            impl X<[bool; 4]> {
+                fn method(self) {}
+            }
+
+            impl X<[bool; 3]> {
+                fn method(self) {}
+            }
+        ";
+        build_items(code);
+    }
+
+    #[test]
+    fn method_selection_works_multiple_exclusive_candidates() {
+        let code = "
+            impl uint<8> {
+                fn method(self) {}
+            }
+            impl uint<9> {
+                fn method(self) {}
+            }
+
+            fn test(x: uint<8>) {
+                x.method()
+            }
+        ";
+        build_items(code);
+    }
+
+    #[test]
+    fn method_selection_works_on_generic_impl() {
+        let code = "
+            impl<#N> uint<N> {
+                fn method(self) {}
+            }
+            fn test(x: uint<8>) {
+                x.method()
+            }
+        ";
+        build_items(code);
+    }
+
+    snapshot_error! {
+        blanket_impl_is_disallowed_gracefully,
+        "
+            impl<T> T {
+                fn method(self) {}
+            }
+        "
+    }
+
+    #[test]
+    fn method_selection_works_when_type_is_not_fully_known_until_later() {
+        let code = "
+            impl uint<3> {
+                fn method(self) {}
+            }
+
+            entity test() {
+                decl crc;
+
+                let to_transmit = std::conv::bits_to_uint(crc).method();
+
+                let crc = [true, true, true];
+            }
+        ";
+        build_items_with_stdlib(code);
+    }
+
+    snapshot_error! {
+        irrelevant_methods_are_not_suggested,
+        "
+            impl uint<8> {
+                fn method(self) {}
+            }
+
+            entity test(x: uint<10>) {
+                x.method()
+            }
+        "
     }
 }

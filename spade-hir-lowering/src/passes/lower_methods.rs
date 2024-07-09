@@ -31,18 +31,12 @@ impl<'a> Pass for LowerMethods<'a> {
                     Diagnostic::bug(self_.as_ref(), format!("did not find a type ({e})"))
                 })?;
 
-                let type_name = self_type.expect_named(
-                    |name, _params| Ok(name.clone()),
-                    || Err(Diagnostic::bug(self_.as_ref(), "Generic type")),
-                    |other| {
-                        Err(Diagnostic::bug(
-                            self_.as_ref(),
-                            format!("{other} cannot have methods"),
-                        ))
-                    },
-                )?;
-
-                let method = select_method(self_.loc(), &type_name, name, self.items)?;
+                let Some(method) = select_method(self_.loc(), &self_type, name, self.items)? else {
+                    return Err(Diagnostic::bug(
+                        expression.loc(),
+                        format!("Ambiguous method call. Multiple candidates exist for {self_type}"),
+                    ));
+                };
 
                 let unit = self.symtab.symtab().unit_by_id(&method.inner);
 
