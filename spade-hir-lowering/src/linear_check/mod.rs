@@ -55,7 +55,7 @@ pub fn check_linear_types(
                 format!("This has a field {} that", witness.motivation())
             }
         };
-        Diagnostic::error(&alias, "Unused resource")
+        Diagnostic::error(&alias, format!("{self_description} is unused"))
             .primary_label(format!("{self_description} is unused"))
             .note(format!(
                 "{self_description} is a &mut value which must be set"

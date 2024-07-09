@@ -1,0 +1,21 @@
+struct ArrayPatternOut {
+    at0: uint<8>,
+    at1: uint<8>,
+    at2: uint<8>,
+    at3: uint<8>,
+
+    is_1234: bool
+}
+fn test_array_pattern(input: [uint<8>; 4]) -> ArrayPatternOut {
+    let [at0, at1, at2, at3] = input;
+
+    let is_1234 = match input {
+        [0,1,2,3] => false,
+        [1,2,3,4] => true,
+        [1,2,2,4] => false,
+        _ => false,
+    };
+
+    ArrayPatternOut$(at0, at1, at2, at3, is_1234)
+}
+

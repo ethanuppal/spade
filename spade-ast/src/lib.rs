@@ -64,6 +64,7 @@ pub enum Pattern {
     Bool(bool),
     Path(Loc<Path>),
     Tuple(Vec<Loc<Pattern>>),
+    Array(Vec<Loc<Pattern>>),
     Type(Loc<Path>, Loc<ArgumentPattern>),
 }
 impl WithLocation for Pattern {}
@@ -117,6 +118,33 @@ pub enum BinaryOperator {
     BitwiseXor,
 }
 impl WithLocation for BinaryOperator {}
+
+impl std::fmt::Display for BinaryOperator {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            BinaryOperator::Add => write!(f, "+"),
+            BinaryOperator::Sub => write!(f, "-"),
+            BinaryOperator::Mul => write!(f, "*"),
+            BinaryOperator::Div => write!(f, "/"),
+            BinaryOperator::Mod => write!(f, "%"),
+            BinaryOperator::Equals => write!(f, "=="),
+            BinaryOperator::NotEquals => write!(f, "!="),
+            BinaryOperator::Lt => write!(f, "<"),
+            BinaryOperator::Gt => write!(f, ">"),
+            BinaryOperator::Le => write!(f, "<="),
+            BinaryOperator::Ge => write!(f, ">="),
+            BinaryOperator::LogicalAnd => write!(f, "&"),
+            BinaryOperator::LogicalOr => write!(f, "|"),
+            BinaryOperator::LogicalXor => write!(f, "^"),
+            BinaryOperator::LeftShift => write!(f, "<<"),
+            BinaryOperator::RightShift => write!(f, ">>"),
+            BinaryOperator::ArithmeticRightShift => write!(f, ">>>"),
+            BinaryOperator::BitwiseAnd => write!(f, "&&"),
+            BinaryOperator::BitwiseOr => write!(f, "||"),
+            BinaryOperator::BitwiseXor => write!(f, "^^"),
+        }
+    }
+}
 
 #[derive(PartialEq, Debug, Clone)]
 pub enum UnaryOperator {
@@ -387,6 +415,9 @@ impl TypeParam {
 
 #[derive(PartialEq, Debug, Clone)]
 pub enum Attribute {
+    Optimize {
+        passes: Vec<Loc<String>>,
+    },
     NoMangle,
     Fsm {
         state: Option<Loc<Identifier>>,
@@ -409,6 +440,7 @@ pub enum Attribute {
 impl Attribute {
     pub fn name(&self) -> &str {
         match self {
+            Attribute::Optimize { passes: _ } => "optimize",
             Attribute::NoMangle => "no_mangle",
             Attribute::Fsm { state: _ } => "fsm",
             Attribute::WalTraceable { .. } => "wal_traceable",
@@ -496,7 +528,8 @@ pub struct UnitHead {
     pub name: Loc<Identifier>,
     pub inputs: Loc<ParameterList>,
     pub output_type: Option<Loc<TypeSpec>>,
-    pub type_params: Vec<Loc<TypeParam>>,
+    pub type_params: Option<Loc<Vec<Loc<TypeParam>>>>,
+    pub where_clauses: Vec<(Loc<Path>, Loc<Expression>)>,
 }
 impl WithLocation for UnitHead {}
 
@@ -525,14 +558,24 @@ impl WithLocation for Register {}
 #[derive(PartialEq, Debug, Clone)]
 pub struct TraitDef {
     pub name: Loc<Identifier>,
+    pub type_params: Option<Loc<Vec<Loc<TypeParam>>>>,
     pub methods: Vec<Loc<UnitHead>>,
 }
 impl WithLocation for TraitDef {}
 
+/// A specification of a trait with type parameters
+#[derive(PartialEq, Debug, Clone)]
+pub struct TraitSpec {
+    pub path: Loc<Path>,
+    pub type_params: Option<Loc<Vec<Loc<TypeExpression>>>>,
+}
+impl WithLocation for TraitSpec {}
+
 #[derive(PartialEq, Debug, Clone)]
 pub struct ImplBlock {
-    pub r#trait: Option<Loc<Path>>,
-    pub target: Loc<Path>,
+    pub r#trait: Option<Loc<TraitSpec>>,
+    pub type_params: Option<Loc<Vec<Loc<TypeParam>>>>,
+    pub target: Loc<TypeSpec>,
     pub units: Vec<Loc<Unit>>,
 }
 impl WithLocation for ImplBlock {}
@@ -571,7 +614,7 @@ pub enum TypeDeclKind {
 pub struct TypeDeclaration {
     pub name: Loc<Identifier>,
     pub kind: TypeDeclKind,
-    pub generic_args: Vec<Loc<TypeParam>>,
+    pub generic_args: Option<Loc<Vec<Loc<TypeParam>>>>,
 }
 impl WithLocation for TypeDeclaration {}
 

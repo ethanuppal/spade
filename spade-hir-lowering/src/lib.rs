@@ -29,6 +29,7 @@ use hir::TypeDeclKind;
 use hir::TypeSpec;
 use hir::WalTrace;
 use local_impl::local_impl;
+use mir::passes::MirPass;
 use num::ToPrimitive;
 
 use hir::param_util::{match_args_with_params, Argument};
@@ -50,6 +51,7 @@ use spade_common::id_tracker::ExprIdTracker;
 use spade_common::location_info::WithLocation;
 use spade_common::name::{Identifier, Path};
 use spade_common::num_ext::InfallibleToBigInt;
+use spade_common::num_ext::InfallibleToBigUint;
 use spade_diagnostics::diag_anyhow;
 use spade_diagnostics::{diag_assert, diag_bail, DiagHandler, Diagnostic};
 use spade_typeinference::equation::TypeVar;
@@ -288,6 +290,37 @@ impl PatternLocal for Loc<Pattern> {
                     result.append(p.lower(p.value_name(), ctx)?)
                 }
             }
+            hir::PatternKind::Array(inner) => {
+                let index_ty =
+                    MirType::Int((((inner.len() as f32).log2().floor() + 1.) as u128).to_biguint());
+                for (i, p) in inner.iter().enumerate() {
+                    let idx_id = ctx.idtracker.next();
+                    result.push_secondary(
+                        mir::Statement::Constant(
+                            idx_id,
+                            index_ty.clone(),
+                            mir::ConstantValue::Int(i.to_bigint()),
+                        ),
+                        p,
+                        "destructured array index",
+                    );
+                    result.push_primary(
+                        mir::Statement::Binding(mir::Binding {
+                            name: p.value_name(),
+                            operator: mir::Operator::IndexArray,
+                            operands: vec![self_name.clone(), ValueName::Expr(idx_id)],
+                            ty: ctx
+                                .types
+                                .type_of_id(p.id, ctx.symtab.symtab(), &ctx.item_list.types)
+                                .to_mir_type(),
+                            loc: None,
+                        }),
+                        p,
+                    );
+
+                    result.append(p.lower(p.value_name(), ctx)?)
+                }
+            }
             hir::PatternKind::Type(path, args) => {
                 let patternable = ctx.symtab.symtab().patternable_type_by_id(path);
                 match patternable.kind {
@@ -434,10 +467,10 @@ impl PatternLocal for Loc<Pattern> {
                 )],
                 result_name,
             }),
-            hir::PatternKind::Tuple(branches) => {
+            hir::PatternKind::Tuple(branches) | hir::PatternKind::Array(branches) => {
                 assert!(
                     !branches.is_empty(),
-                    "Tuple patterns without any subpatterns are unsupported"
+                    "Tuple/array patterns without any subpatterns are unsupported"
                 );
 
                 let subpatterns = branches
@@ -537,6 +570,7 @@ impl PatternLocal for Loc<Pattern> {
             hir::PatternKind::Bool(_) => {}
             hir::PatternKind::Tuple(_) => {}
             hir::PatternKind::Type(_, _) => {}
+            hir::PatternKind::Array(_) => {}
         }
         ValueName::Expr(self.id)
     }
@@ -550,6 +584,7 @@ impl PatternLocal for Loc<Pattern> {
             hir::PatternKind::Bool(_) => false,
             hir::PatternKind::Tuple(_) => false,
             hir::PatternKind::Type(_, _) => false,
+            hir::PatternKind::Array(_) => false,
         }
     }
 
@@ -792,7 +827,9 @@ pub fn do_wal_trace_lowering(
             let generic_list = &ctx.types.create_generic_list(
                 spade_typeinference::GenericListSource::Anonymous,
                 &[],
+                &[],
                 None,
+                &[],
             )?;
             ctx.types
                 .visit_expression(&dummy_expr, &type_ctx, generic_list)
@@ -987,6 +1024,7 @@ impl StatementLocal for Statement {
                         Ok(())
                     }
                     Attribute::WalTraceable { .. } => Err(attr.report_unused("register")),
+                    Attribute::Optimize { .. } => Err(attr.report_unused("register")),
                 })?;
 
                 let initial = if let Some(init) = initial {
@@ -1981,7 +2019,7 @@ impl ExprLocal for Loc<Expression> {
                 self,
             ),
             Some(hir::ExecutableItem::Unit(u)) => {
-                let (type_params, unit_name) = (&u.head.type_params, u.name.clone());
+                let (type_params, unit_name) = (&u.head.get_type_params(), u.name.clone());
 
                 let instance_name = if !type_params.is_empty() {
                     let t = type_params
@@ -2039,7 +2077,7 @@ impl ExprLocal for Loc<Expression> {
                 );
             }
             Some(hir::ExecutableItem::BuiltinUnit(name, head)) => {
-                let (unit_name, type_params) = (name, &head.type_params);
+                let (unit_name, type_params) = (name, &head.get_type_params());
 
                 // NOTE: Ideally this check would be done earlier, when defining the generic
                 // builtin. However, at the moment, the compiler does not know if the generic
@@ -2892,6 +2930,7 @@ pub fn generate_unit<'a>(
     diag_handler: &mut DiagHandler,
     name_source_map: &mut NameSourceMap,
     self_mono_item: Option<MonoItem>,
+    opt_passes: &[&dyn MirPass],
 ) -> Result<mir::Entity> {
     let mir_inputs = unit
         .head
@@ -2978,11 +3017,37 @@ pub fn generate_unit<'a>(
         &item_list.types,
     )?;
 
+    let mut local_passes = opt_passes.to_vec();
+    let pass_impls = spade_mir::passes::mir_passes();
+    unit.attributes.lower(&mut |attr| match &attr.inner {
+        Attribute::Optimize { passes: new_passes } => {
+            for new_pass in new_passes {
+                if let Some(pass) = pass_impls.get(new_pass.inner.as_str()) {
+                    local_passes.push(pass.as_ref());
+                } else {
+                    return Err(Diagnostic::error(
+                        new_pass,
+                        format!("There is no optimization pass named {new_pass}"),
+                    )
+                    .primary_label("No such pass"))?;
+                }
+            }
+            Ok(())
+        }
+        Attribute::Fsm { .. } | Attribute::WalTraceable { .. } => Err(attr.report_unused("unit")),
+    })?;
+
+    let mut statements = statements.to_vec(name_source_map);
+
+    for pass in local_passes.iter().chain(opt_passes) {
+        statements = pass.transform_statements(&statements, idtracker);
+    }
+
     Ok(mir::Entity {
         name: name.as_mir(),
         inputs: mir_inputs,
         output: unit.body.variable(subs)?,
         output_type: output_t,
-        statements: statements.to_vec(name_source_map),
+        statements,
     })
 }

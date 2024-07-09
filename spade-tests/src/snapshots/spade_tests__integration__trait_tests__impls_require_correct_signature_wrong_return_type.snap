@@ -2,7 +2,7 @@
 source: spade-tests/src/integration.rs
 ---
 trait X {
-    fn a(self) -> int<10> ;
+    fn a(self) -> int<10>;
 }
 
 struct A {}
@@ -17,10 +17,8 @@ impl X for A {
 error: Return type does not match trait
   ┌─ testinput:8:19
   │
-2 │     fn a(self) -> int<10> ;
+2 │     fn a(self) -> int<10>;
   │                   ------- To match the trait
   ·
 8 │     fn a(self) -> bool {
   │                   ^^^^ Expected int<10>
-
-

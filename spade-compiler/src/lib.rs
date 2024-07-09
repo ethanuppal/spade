@@ -12,6 +12,7 @@ use spade_mir::codegen::{prepare_codegen, Codegenable};
 use spade_mir::unit_name::InstanceMap;
 use spade_mir::verilator_wrapper::verilator_wrappers;
 use std::collections::{BTreeMap, HashMap};
+use std::io::Write;
 use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::RwLock;
@@ -20,8 +21,9 @@ use tracing::Level;
 use spade_ast::ModuleBody;
 use spade_ast_lowering::{
     ensure_unique_anonymous_traits, global_symbols, visit_module_body, Context as AstLoweringCtx,
+    SelfContext,
 };
-use spade_common::id_tracker;
+use spade_common::id_tracker::ImplIdTracker;
 use spade_common::name::{NameID, Path as SpadePath};
 use spade_diagnostics::{CodeBundle, CompilationError, DiagHandler, Diagnostic};
 use spade_hir::symbol_table::SymbolTable;
@@ -59,6 +61,7 @@ pub struct Opt<'b> {
     pub print_type_traceback: bool,
     pub print_parse_traceback: bool,
     pub wl_infer_method: Option<spade_wordlength_inference::InferMethod>,
+    pub opt_passes: Vec<String>,
 }
 
 trait Reportable<T> {
@@ -155,6 +158,7 @@ pub fn compile(
     spade_ast_lowering::builtins::populate_symtab(&mut symtab, &mut item_list);
 
     let code = Rc::new(RwLock::new(CodeBundle::new("".to_string())));
+
     let mut errors = ErrorHandler {
         failed: false,
         error_buffer: opts.error_buffer,
@@ -174,19 +178,49 @@ pub fn compile(
         item_list: None,
     };
 
+    let pass_impls = spade_mir::passes::mir_passes();
+    let opt_passes = opts
+        .opt_passes
+        .iter()
+        .map(|pass| {
+            if let Some(pass) = pass_impls.get(pass.as_str()) {
+                Ok(pass.as_ref())
+            } else {
+                let err = format!("{pass} is not a known optimization pass.");
+                Err(err)
+            }
+        })
+        .collect::<Result<Vec<_>, _>>();
+    let opt_passes = match opt_passes {
+        Ok(p) => p,
+        Err(e) => {
+            errors.error_buffer.write_all(e.as_bytes()).unwrap();
+            return Err(unfinished_artefacts);
+        }
+    };
+
+
     if errors.failed {
         return Err(unfinished_artefacts);
     }
 
+    let mut ctx = AstLoweringCtx {
+        symtab,
+        idtracker: ExprIdTracker::new(),
+        impl_idtracker: ImplIdTracker::new(),
+        pipeline_ctx: None,
+        self_ctx: SelfContext::FreeStanding,
+    };
+
     for (namespace, module_ast) in &module_asts {
         if !namespace.namespace.0.is_empty() {
-            symtab.add_thing(
+            ctx.symtab.add_thing(
                 namespace.namespace.clone(),
                 spade_hir::symbol_table::Thing::Module(namespace.namespace.0[0].clone()),
             );
         }
-        do_in_namespace(namespace, &mut symtab, &mut |symtab| {
-            global_symbols::gather_types(module_ast, symtab).or_report(&mut errors);
+        do_in_namespace(namespace, &mut ctx, &mut |ctx| {
+            global_symbols::gather_types(module_ast, ctx).or_report(&mut errors);
         })
     }
 
@@ -195,9 +229,8 @@ pub fn compile(
     }
 
     for (namespace, module_ast) in &module_asts {
-        do_in_namespace(namespace, &mut symtab, &mut |symtab| {
-            global_symbols::gather_symbols(module_ast, symtab, &mut item_list)
-                .or_report(&mut errors);
+        do_in_namespace(namespace, &mut ctx, &mut |ctx| {
+            global_symbols::gather_symbols(module_ast, &mut item_list, ctx).or_report(&mut errors);
         })
     }
 
@@ -206,15 +239,6 @@ pub fn compile(
     if errors.failed {
         return Err(unfinished_artefacts);
     }
-
-    let idtracker = id_tracker::ExprIdTracker::new();
-    let impl_idtracker = id_tracker::ImplIdTracker::new();
-    let mut ctx = AstLoweringCtx {
-        symtab,
-        idtracker,
-        impl_idtracker,
-        pipeline_ctx: None,
-    };
 
     lower_ast(&module_asts, &mut item_list, &mut ctx, &mut errors);
 
@@ -225,13 +249,14 @@ pub fn compile(
         mut idtracker,
         impl_idtracker,
         pipeline_ctx: _,
+        self_ctx: _,
     } = ctx;
 
     for e in ensure_unique_anonymous_traits(&item_list) {
         errors.report(&e)
     }
 
-    // If we have errors during AST lowering, we need to early return becausue the
+    // If we have errors during AST lowering, we need to early return because the
     // items have already been added to the symtab when they are detected. Further compilation
     // relies on all names in the symtab being in the item list, which will not be the
     // case if we failed to compile some
@@ -255,7 +280,7 @@ pub fn compile(
                     .set_wordlength_inferece(opts.wl_infer_method.is_some());
 
                 if let Ok(()) = type_state
-                    .visit_entity(u, &type_inference_ctx)
+                    .visit_unit(u, &type_inference_ctx)
                     .report(&mut errors)
                 {
                     if opts.print_type_traceback {
@@ -290,6 +315,7 @@ pub fn compile(
         &item_list,
         &mut errors.diag_handler,
         opts.wl_infer_method,
+        &opt_passes,
     );
 
     let CodegenArtefacts {
@@ -369,20 +395,21 @@ pub fn compile(
 
 fn do_in_namespace(
     namespace: &ModuleNamespace,
-    symtab: &mut SymbolTable,
-    to_do: &mut dyn FnMut(&mut SymbolTable),
+    ctx: &mut AstLoweringCtx,
+    to_do: &mut dyn FnMut(&mut AstLoweringCtx),
 ) {
     for ident in &namespace.namespace.0 {
         // NOTE: These identifiers do not have the correct file_id. However,
         // as far as I know, they will never be part of an error, so we *should*
         // be safe.
-        symtab.push_namespace(ident.clone());
+        ctx.symtab.push_namespace(ident.clone());
     }
-    symtab.set_base_namespace(namespace.base_namespace.clone());
-    to_do(symtab);
-    symtab.set_base_namespace(SpadePath(vec![]));
+    ctx.symtab
+        .set_base_namespace(namespace.base_namespace.clone());
+    to_do(ctx);
+    ctx.symtab.set_base_namespace(SpadePath(vec![]));
     for _ in &namespace.namespace.0 {
-        symtab.pop_namespace();
+        ctx.symtab.pop_namespace();
     }
 }
 
@@ -517,7 +544,7 @@ pub fn stdlib_and_prelude() -> Vec<(ModuleNamespace, String, String)> {
                             namespace: SpadePath::from_strs(&$namespace),
                             base_namespace: SpadePath::from_strs(&$base_namespace),
                         },
-                        String::from($filename).replace("../../", "<compiler dir>/"),
+                        String::from($filename).replace("../", "<compiler dir>/"),
                         String::from(include_str!($filename))
                     )
                 ),*
@@ -526,14 +553,14 @@ pub fn stdlib_and_prelude() -> Vec<(ModuleNamespace, String, String)> {
     }
 
     sources! {
-        ([], [], "../../prelude/prelude.spade"),
-        (["std"], ["std", "conv"], "../../stdlib/conv.spade"),
-        (["std"], ["std", "io"], "../../stdlib/io.spade"),
-        (["std"], ["std", "mem"], "../../stdlib/mem.spade"),
-        (["std"], ["std", "ops"], "../../stdlib/ops.spade"),
-        (["std"], ["std", "ports"], "../../stdlib/ports.spade"),
-        (["std"], ["std", "option"], "../../stdlib/option.spade"),
-        (["std"], ["std", "cdc"], "../../stdlib/cdc.spade"),
+        ([], [], "../prelude/prelude.spade"),
+        (["std"], ["std", "conv"], "../stdlib/conv.spade"),
+        (["std"], ["std", "io"], "../stdlib/io.spade"),
+        (["std"], ["std", "mem"], "../stdlib/mem.spade"),
+        (["std"], ["std", "ops"], "../stdlib/ops.spade"),
+        (["std"], ["std", "ports"], "../stdlib/ports.spade"),
+        (["std"], ["std", "option"], "../stdlib/option.spade"),
+        (["std"], ["std", "cdc"], "../stdlib/cdc.spade"),
     }
 }
 
@@ -560,8 +587,8 @@ mod tests {
             })
             .collect::<Vec<_>>();
 
-        let missing_files = std::fs::read_dir("../stdlib/")
-            .expect("Failed to read ../stdlib")
+        let missing_files = std::fs::read_dir("stdlib/")
+            .expect("Failed to read stdlib")
             .into_iter()
             .map(|f| {
                 f.unwrap()

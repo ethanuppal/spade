@@ -10,11 +10,14 @@ use std::collections::{BTreeSet, HashMap};
 use std::sync::Arc;
 
 use colored::Colorize;
-use hir::{param_util, Binding, Parameter, TypeExpression, TypeSpec, UnitHead, WalTrace};
+use hir::{
+    param_util, Binding, ConstGeneric, Parameter, TypeExpression, TypeSpec, UnitHead, WalTrace,
+    WhereClause,
+};
 use itertools::Itertools;
 use num::{BigInt, Zero};
 use serde::{Deserialize, Serialize};
-use spade_common::num_ext::InfallibleToBigInt;
+use spade_common::num_ext::{InfallibleToBigInt, InfallibleToBigUint};
 use spade_diagnostics::Diagnostic;
 use spade_macros::trace_typechecker;
 use trace_stack::TraceStack;
@@ -243,7 +246,7 @@ impl TypeState {
     }
 
     /// Returns the type of the expression with the specified id. Error if no equation
-    /// for the specified epxression exists
+    /// for the specified expression exists
     pub fn type_of(&self, expr: &TypedExpression) -> Result<TypeVar> {
         for (e, t) in &self.equations {
             if e == expr {
@@ -306,11 +309,15 @@ impl TypeState {
 
     #[trace_typechecker]
     #[tracing::instrument(level = "trace", skip_all, fields(%entity.name))]
-    pub fn visit_entity(&mut self, entity: &Unit, ctx: &Context) -> Result<()> {
+    pub fn visit_unit(&mut self, entity: &Unit, ctx: &Context) -> Result<()> {
         let generic_list = self.create_generic_list(
             GenericListSource::Definition(&entity.name.name_id().inner),
-            &entity.head.type_params,
+            &entity.head.unit_type_params,
+            &entity.head.scope_type_params,
             None,
+            // NOTE: I'm not 100% sure we need to pass these here, the information
+            // is probably redundant
+            &entity.head.where_clauses,
         )?;
 
         // Add equations for the inputs
@@ -543,15 +550,17 @@ impl TypeState {
         // Add new symbols for all the type parameters
         let generic_list = self.create_generic_list(
             GenericListSource::Expression(expression_id.inner),
-            &head.type_params,
+            &head.unit_type_params,
+            &head.scope_type_params,
             turbofish,
+            &head.where_clauses,
         )?;
 
         if visit_args {
             self.visit_argument_list(args, ctx, &generic_list)?;
         }
 
-        let type_params = &head.type_params;
+        let type_params = &head.get_type_params();
 
         // Special handling of built in functions
         macro_rules! handle_special_functions {
@@ -800,11 +809,13 @@ impl TypeState {
     pub fn create_generic_list(
         &mut self,
         source: GenericListSource,
-        params: &[Loc<TypeParam>],
+        type_params: &[Loc<TypeParam>],
+        scope_type_params: &[Loc<TypeParam>],
         turbofish: Option<TurbofishCtx>,
+        where_clauses: &[Loc<WhereClause>],
     ) -> Result<GenericListToken> {
         let turbofish_params = if let Some(turbofish) = turbofish.as_ref() {
-            if params.is_empty() {
+            if type_params.is_empty() {
                 return Err(Diagnostic::error(
                     turbofish.turbofish,
                     "Turbofish on non-generic function",
@@ -813,7 +824,7 @@ impl TypeState {
             }
 
             let matched_params =
-                param_util::match_args_with_params(&turbofish.turbofish, &params, false)?;
+                param_util::match_args_with_params(&turbofish.turbofish, &type_params, false)?;
 
             // We want this to be positional, but the params we get from matching are
             // named, transform it. We'll do some unwrapping here, but it is safe
@@ -821,7 +832,7 @@ impl TypeState {
             matched_params
                 .iter()
                 .map(|matched_param| {
-                    let i = params
+                    let i = type_params
                         .iter()
                         .enumerate()
                         .find_map(|(i, param)| match &param.inner {
@@ -847,10 +858,21 @@ impl TypeState {
                 .map(|(_, mp)| Some(mp.value))
                 .collect::<Vec<_>>()
         } else {
-            params.iter().map(|_| None).collect::<Vec<_>>()
+            type_params.iter().map(|_| None).collect::<Vec<_>>()
         };
 
-        let new_list = params
+        let scope_type_params = scope_type_params
+            .iter()
+            .map(|param| {
+                let name = match &param.inner {
+                    hir::TypeParam::TypeName(_, name) => name.clone(),
+                    hir::TypeParam::Integer(_, name) => name.clone(),
+                };
+                (name.clone(), self.new_generic())
+            })
+            .collect::<Vec<_>>();
+
+        let new_list = type_params
             .iter()
             .enumerate()
             .map(|(i, param)| {
@@ -867,17 +889,41 @@ impl TypeState {
                     self.unify(&ty, &t, tf_ctx.type_ctx)
                         .into_default_diagnostic(param)?;
                 }
+
                 Ok((name, self.check_var_for_replacement(t)))
             })
             .collect::<Result<Vec<_>>>()?
             .into_iter()
+            .chain(scope_type_params.into_iter())
             .map(|(name, t)| (name, t.clone()))
             .collect::<HashMap<_, _>>();
 
         self.trace_stack
             .push(TraceStackEntry::NewGenericList(new_list.clone()));
 
-        Ok(self.add_mapped_generic_list(source, new_list))
+        let tok = self.add_mapped_generic_list(source, new_list.clone());
+
+        for clause in where_clauses {
+            let constraint = self.visit_const_generic(&clause.rhs, &tok)?;
+
+            let name = &clause.lhs;
+            let tvar = new_list.get(&name).ok_or_else(|| {
+                Diagnostic::error(
+                    &clause.lhs,
+                    format!("{name} is not a generic parameter on this unit"),
+                )
+                .primary_label("Not a generic parameter")
+            })?;
+            self.add_constraint(
+                tvar.clone(),
+                constraint,
+                clause.loc(),
+                &tvar,
+                ConstraintSource::Where,
+            );
+        }
+
+        Ok(tok)
     }
 
     /// Adds a generic list with parameters already mapped to types
@@ -970,6 +1016,45 @@ impl TypeState {
                 self.unify(pattern, &tuple_type, ctx)
                     .expect("Unification of new_generic with tuple type cannot fail");
             }
+            hir::PatternKind::Array(inner) => {
+                for pattern in inner {
+                    self.visit_pattern(pattern, ctx, generic_list)?;
+                }
+                if inner.len() == 0 {
+                    return Err(
+                        Diagnostic::error(pattern, "Empty array patterns are unsupported")
+                            .primary_label("Empty array pattern"),
+                    );
+                } else {
+                    let inner_t = inner[0].get_type(self)?;
+
+                    for pattern in inner.iter().skip(1) {
+                        self.unify(pattern, &inner_t, ctx)
+                            .into_default_diagnostic(pattern)?;
+                    }
+
+                    // The for loop may give us a more refined type which we need to inherit here.
+                    let inner_t = inner[0].get_type(self)?;
+
+                    self.unify(
+                        pattern,
+                        &TypeVar::Known(
+                            pattern.loc(),
+                            KnownType::Array,
+                            vec![
+                                inner_t,
+                                TypeVar::Known(
+                                    pattern.loc(),
+                                    KnownType::Integer(inner.len().to_biguint()),
+                                    vec![],
+                                ),
+                            ],
+                        ),
+                        ctx,
+                    )
+                    .into_default_diagnostic(pattern)?;
+                }
+            }
             hir::PatternKind::Type(name, args) => {
                 let (condition_type, params, generic_list) =
                     match ctx.symtab.patternable_type_by_id(name).inner {
@@ -981,7 +1066,9 @@ impl TypeState {
                             let generic_list = self.create_generic_list(
                                 GenericListSource::Anonymous,
                                 &enum_variant.type_params,
+                                &[],
                                 None,
+                                &[],
                             )?;
 
                             let condition_type = self.type_var_from_hir(
@@ -1000,7 +1087,9 @@ impl TypeState {
                             let generic_list = self.create_generic_list(
                                 GenericListSource::Anonymous,
                                 &s.type_params,
+                                &[],
                                 None,
+                                &[],
                             )?;
 
                             let condition_type =
@@ -1268,6 +1357,28 @@ impl TypeState {
             )?;
 
         Ok(())
+    }
+
+    pub fn visit_const_generic(
+        &self,
+        g: &ConstGeneric,
+        generic_list: &GenericListToken,
+    ) -> Result<ConstraintExpr> {
+        match g {
+            ConstGeneric::Name(n) => {
+                let var = self.get_generic_list(generic_list).get(n).ok_or_else(|| {
+                    Diagnostic::bug(n, "Found non-generic argument in where clause")
+                })?;
+                Ok(ConstraintExpr::Var(
+                    self.check_var_for_replacement(var.clone()),
+                ))
+            }
+            ConstGeneric::Const(val) => Ok(ConstraintExpr::Integer(val.clone())),
+            ConstGeneric::Add(lhs, rhs) => Ok(ConstraintExpr::Sum(
+                Box::new(self.visit_const_generic(lhs, generic_list)?),
+                Box::new(self.visit_const_generic(rhs, generic_list)?),
+            )),
+        }
     }
 }
 
@@ -2152,7 +2263,7 @@ mod tests {
             items: &ItemList::new(),
         };
         let generic_list = state
-            .create_generic_list(GenericListSource::Anonymous, &vec![], None)
+            .create_generic_list(GenericListSource::Anonymous, &vec![], &[], None, &[])
             .unwrap();
         state.visit_expression(&input, &ctx, &generic_list).unwrap();
 
@@ -2197,7 +2308,7 @@ mod tests {
             items: &ItemList::new(),
         };
         let generic_list = state
-            .create_generic_list(GenericListSource::Anonymous, &vec![], None)
+            .create_generic_list(GenericListSource::Anonymous, &vec![], &[], None, &[])
             .unwrap();
         state.visit_expression(&input, &ctx, &generic_list).unwrap();
 
@@ -2247,7 +2358,7 @@ mod tests {
             items: &ItemList::new(),
         };
         let generic_list = state
-            .create_generic_list(GenericListSource::Anonymous, &vec![], None)
+            .create_generic_list(GenericListSource::Anonymous, &vec![], &[], None, &[])
             .unwrap();
         assert_ne!(state.visit_expression(&input, &ctx, &generic_list), Ok(()));
     }
@@ -2291,7 +2402,7 @@ mod tests {
             items: &ItemList::new(),
         };
         let generic_list = state
-            .create_generic_list(GenericListSource::Anonymous, &vec![], None)
+            .create_generic_list(GenericListSource::Anonymous, &vec![], &[], None, &[])
             .unwrap();
         state.visit_expression(&input, &ctx, &generic_list).unwrap();
 
@@ -2344,7 +2455,7 @@ mod tests {
             items: &ItemList::new(),
         };
         let generic_list = state
-            .create_generic_list(GenericListSource::Anonymous, &vec![], None)
+            .create_generic_list(GenericListSource::Anonymous, &vec![], &[], None, &[])
             .unwrap();
         state.visit_expression(&input, &ctx, &generic_list).unwrap();
 
@@ -2387,7 +2498,7 @@ mod tests {
             items: &ItemList::new(),
         };
         let generic_list = state
-            .create_generic_list(GenericListSource::Anonymous, &vec![], None)
+            .create_generic_list(GenericListSource::Anonymous, &vec![], &[], None, &[])
             .unwrap();
         assert!(state.visit_statement(&input, &ctx, &generic_list).is_err());
     }
@@ -2419,7 +2530,7 @@ mod tests {
             items: &ItemList::new(),
         };
         let generic_list = state
-            .create_generic_list(GenericListSource::Anonymous, &vec![], None)
+            .create_generic_list(GenericListSource::Anonymous, &vec![], &[], None, &[])
             .unwrap();
         state.visit_expression(&input, &ctx, &generic_list).unwrap();
 
@@ -2460,7 +2571,7 @@ mod tests {
             items: &ItemList::new(),
         };
         let generic_list = state
-            .create_generic_list(GenericListSource::Anonymous, &vec![], None)
+            .create_generic_list(GenericListSource::Anonymous, &vec![], &[], None, &[])
             .unwrap();
         state.visit_statement(&input, &ctx, &generic_list).unwrap();
 
@@ -2508,7 +2619,7 @@ mod tests {
             items: &ItemList::new(),
         };
         let generic_list = state
-            .create_generic_list(GenericListSource::Anonymous, &vec![], None)
+            .create_generic_list(GenericListSource::Anonymous, &vec![], &[], None, &[])
             .unwrap();
         state.visit_register(&input, &ctx, &generic_list).unwrap();
 
@@ -2541,7 +2652,9 @@ mod tests {
             ]
             .nowhere(),
             output_type: Some(dtype!(symtab => "int"; (t_num(5)))),
-            type_params: vec![],
+            unit_type_params: vec![],
+            scope_type_params: vec![],
+            where_clauses: vec![],
         };
 
         let entity_name = symtab.add_thing(ast_path("test").inner, Thing::Unit(unit.nowhere()));
@@ -2568,7 +2681,7 @@ mod tests {
         state.add_eq_from_tvar(expr_b.clone(), TVar::Unknown(101, TraitList::empty()));
 
         let generic_list = state
-            .create_generic_list(GenericListSource::Anonymous, &vec![], None)
+            .create_generic_list(GenericListSource::Anonymous, &vec![], &[], None, &[])
             .unwrap();
         state
             .visit_expression(
@@ -2634,7 +2747,9 @@ mod tests {
             ]
             .nowhere(),
             output_type: Some(dtype!(symtab => "int"; ( t_num(5) ))),
-            type_params: vec![],
+            unit_type_params: vec![],
+            scope_type_params: vec![],
+            where_clauses: vec![],
         };
 
         let entity_name = symtab.add_thing(ast_path("test").inner, Thing::Unit(unit.nowhere()));
@@ -2661,7 +2776,7 @@ mod tests {
         state.add_eq_from_tvar(expr_b.clone(), TVar::Unknown(101, TraitList::empty()));
 
         let generic_list = state
-            .create_generic_list(GenericListSource::Anonymous, &vec![], None)
+            .create_generic_list(GenericListSource::Anonymous, &vec![], &[], None, &[])
             .unwrap();
         state
             .visit_expression(

@@ -6,12 +6,10 @@ entity x(resource: &mut bool) -> bool {
 }
 
 
-error: Unused resource
+error: resource is unused
   ┌─ testinput:1:10
   │
 1 │ entity x(resource: &mut bool) -> bool {
   │          ^^^^^^^^ resource is unused
   │
   = note: resource is a &mut value which must be set
-
-

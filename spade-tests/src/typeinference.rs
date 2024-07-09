@@ -1521,3 +1521,140 @@ snapshot_error! {
         }
     "
 }
+
+snapshot_error! {
+    impl_of_constrained_param_is_not_usable_outside_constraints,
+    "
+    struct HasGeneric<T> {}
+
+    impl HasGeneric<bool> {
+        fn requires_bool(self) {}
+    }
+
+    fn test() {
+        let g = HasGeneric::<int<8>>();
+
+        g.requires_bool()
+    }
+    "
+}
+
+snapshot_error! {
+    impl_of_semi_constrained_params_is_not_usable_outside_constraints,
+    "
+    struct HasGeneric<T, S> {}
+
+    impl<S> HasGeneric<bool, S> {
+        fn requires_bool(self) {}
+    }
+
+    fn test() {
+        let g = HasGeneric::<int<8>, bool>();
+
+        g.requires_bool()
+    }
+    "
+}
+
+snapshot_error! {
+    simple_unsatisfied_where_clause_errors,
+    "
+        fn add_one<#N, #O>(in: int<N>) -> int<O>
+            where O: N + 2
+        {
+            in + 1
+        }
+
+        fn test() -> int<10> {
+            add_one(10i8)
+        }
+    "
+}
+
+snapshot_error! {
+    simple_unsatisfied_where_clause_errors2,
+    "
+        fn add_one<#N, #O>(in: int<N>) -> int<O>
+            where O: N + 2
+        {
+            0
+        }
+
+        fn test() -> int<9> {
+            add_one(10i8)
+        }
+    "
+}
+
+#[test]
+fn where_clauses_drive_inference() {
+    let code = "
+        fn add_one<#N, #O>(in: int<N>) -> int<O>
+            where O: N + 2
+        {
+            0
+        }
+
+        fn test() {
+            let _ = add_one(10i8);
+        }
+    ";
+    build_items(code);
+}
+
+snapshot_error! {
+    array_pattern_mismatch_is_error,
+    "
+        fn test() {
+            let array = [true, true];
+            match array {
+                [true, 10] => {}
+            }
+        }
+    "
+}
+
+snapshot_error! {
+    array_pattern_mismatch_with_actual_is_error,
+    "
+        fn test() {
+            let array = [0, 1];
+            match array {
+                [true, true] => {}
+            }
+        }
+    "
+}
+
+snapshot_error! {
+    array_pattern_length_must_match,
+    "
+        fn test() {
+            let array = [0];
+            match array {
+                [0, 0] => true
+            }
+        }
+    "
+}
+
+#[test]
+fn irrefutable_array_pattern_compiles() {
+    let code = "
+        fn test_array_pattern(input: [uint<8>; 4]) {
+            let [at0, at1, at2, at3] = input;
+        }
+    ";
+    build_items(code);
+}
+
+snapshot_error! {
+    empty_array_pattern_is_error,
+    "
+        fn test(a: [bool; 0]) {
+            match a {
+                [] => {}
+            }
+        }
+    "
+}

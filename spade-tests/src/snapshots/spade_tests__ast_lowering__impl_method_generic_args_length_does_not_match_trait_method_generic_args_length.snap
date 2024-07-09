@@ -1,0 +1,22 @@
+---
+source: spade-tests/src/ast_lowering.rs
+---
+trait X {
+    fn foo<T2>(self) -> T2;
+}
+struct A {}
+impl X for A {
+    fn foo<U1, U2>(self) -> U2 {
+        A()
+    }
+}
+
+
+error: Wrong number of generic type parameters
+  ┌─ testinput:6:12
+  │
+2 │     fn foo<T2>(self) -> T2;
+  │            -- Because this has 1 type parameter
+  ·
+6 │     fn foo<U1, U2>(self) -> U2 {
+  │            ^^^^^^ Expected 1 type parameter

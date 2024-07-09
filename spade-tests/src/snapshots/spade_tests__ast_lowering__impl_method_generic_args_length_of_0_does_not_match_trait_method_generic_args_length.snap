@@ -1,0 +1,22 @@
+---
+source: spade-tests/src/ast_lowering.rs
+---
+trait X {
+    fn foo<U1, U2>(self) -> bool;
+}
+struct A {}
+impl X for A {
+    fn foo(self) -> bool {
+        false
+    }
+}
+
+
+error: Missing type parameters on impl of generic method
+  ┌─ testinput:6:8
+  │
+2 │     fn foo<U1, U2>(self) -> bool;
+  │            ------ Because this has 2 type parameters
+  ·
+6 │     fn foo(self) -> bool {
+  │        ^^^ Expected 2 type parameters

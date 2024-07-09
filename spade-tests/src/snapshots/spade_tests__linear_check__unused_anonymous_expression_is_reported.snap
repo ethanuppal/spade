@@ -9,12 +9,10 @@ entity x() -> bool {
 }
 
 
-error: Unused resource
+error: This has a field #1 that is unused
   ┌─ testinput:5:19
   │
 5 │     inst consumer(inst producer()#0)
   │                   ^^^^^^^^^^^^^^^ This has a field #1 that is unused
   │
   = note: This has a field #1 that is a &mut value which must be set
-
-

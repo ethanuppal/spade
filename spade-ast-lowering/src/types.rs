@@ -39,3 +39,16 @@ impl IsPort for ast::TypeSpec {
         }
     }
 }
+
+#[local_impl]
+impl IsSelf for ast::TypeSpec {
+    fn is_self(&self) -> Result<bool> {
+        match self {
+            ast::TypeSpec::Named(path, _) => {
+                let path = &path.inner.0;
+                Ok(path.len() == 1 && path.first().is_some_and(|ident| ident.inner.0 == "Self"))
+            }
+            _ => Ok(false),
+        }
+    }
+}

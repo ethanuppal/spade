@@ -1,0 +1,16 @@
+---
+source: spade-tests/src/ast_lowering.rs
+---
+trait X<T, U> {}
+struct S {}
+impl<T> X<T> for S {}
+
+
+error: Wrong number of generic type parameters
+  ┌─ testinput:3:10
+  │
+1 │ trait X<T, U> {}
+  │         ---- Because this has 2 type parameters
+2 │ struct S {}
+3 │ impl<T> X<T> for S {}
+  │          ^^^ Expected 2 type parameters

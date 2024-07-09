@@ -1,0 +1,24 @@
+---
+source: spade-tests/src/typeinference.rs
+---
+fn test() {
+    let array = [0, 1];
+    match array {
+        [true, true] => {}
+    }
+}
+
+
+error: Expected type [Number<_>; 2], got [bool; 2]
+  ┌─ testinput:4:9
+  │
+4 │         [true, true] => {}
+  │         ^^^^^^^^^^^^
+  │         ││
+  │         │Type bool inferred here
+  │         Expected [Number<_>; 2]
+  │
+  = note: Expected: Number<_>
+                in: [Number<_>; 2]
+               Got: bool
+                in: [bool; 2]

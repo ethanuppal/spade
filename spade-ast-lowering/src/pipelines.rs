@@ -174,20 +174,18 @@ pub fn maybe_perform_pipelining_tasks(
 
 #[cfg(test)]
 mod pipeline_visiting {
-    use crate::{visit_unit, SelfContext};
+    use crate::visit_unit;
 
     use super::*;
 
     use ast::comptime::MaybeComptime;
-    use hir::{expression::IntLiteralKind, symbol_table::SymbolTable};
+    use hir::expression::IntLiteralKind;
     use spade_ast::testutil::ast_ident;
     use spade_common::{
-        id_tracker::{ExprIdTracker, ImplIdTracker},
-        location_info::WithLocation,
-        name::testutil::name_id,
-        num_ext::InfallibleToBigInt,
+        location_info::WithLocation, name::testutil::name_id, num_ext::InfallibleToBigInt,
     };
 
+    use crate::testutil::test_context;
     use pretty_assertions::assert_eq;
 
     #[test]
@@ -205,8 +203,9 @@ mod pipeline_visiting {
                 )])
                 .nowhere(),
                 output_type: Some(ast::TypeSpec::Unit(().nowhere()).nowhere()),
-                type_params: vec![],
+                type_params: None,
                 attributes: ast::AttributeList(vec![]),
+                where_clauses: vec![],
             },
             body: Some(
                 ast::Expression::Block(Box::new(ast::Block {
@@ -262,22 +261,12 @@ mod pipeline_visiting {
             .nowhere(),
         ];
 
-        let mut symtab = SymbolTable::new();
-        let idtracker = ExprIdTracker::new();
+        let mut ctx = test_context();
 
-        crate::global_symbols::visit_unit(&None, &input, &mut symtab, &SelfContext::FreeStanding)
+        crate::global_symbols::visit_unit(&None, &input, &None, &mut ctx)
             .expect("Failed to add pipeline to symtab");
 
-        let result = visit_unit(
-            None,
-            &input,
-            &mut Context {
-                symtab,
-                idtracker,
-                impl_idtracker: ImplIdTracker::new(),
-                pipeline_ctx: None,
-            },
-        );
+        let result = visit_unit(None, &input, &None, &mut ctx);
 
         assert_eq!(
             result.unwrap().assume_unit().body.assume_block().statements,
@@ -300,8 +289,9 @@ mod pipeline_visiting {
                 )])
                 .nowhere(),
                 output_type: Some(ast::TypeSpec::Unit(().nowhere()).nowhere()),
-                type_params: vec![],
+                type_params: None,
                 attributes: ast::AttributeList(vec![]),
+                where_clauses: vec![],
             },
             body: Some(
                 ast::Expression::Block(Box::new(ast::Block {
@@ -357,22 +347,12 @@ mod pipeline_visiting {
             .nowhere(),
         ];
 
-        let mut symtab = SymbolTable::new();
-        let idtracker = ExprIdTracker::new();
+        let mut ctx = test_context();
 
-        crate::global_symbols::visit_unit(&None, &input, &mut symtab, &SelfContext::FreeStanding)
+        crate::global_symbols::visit_unit(&None, &input, &None, &mut ctx)
             .expect("Failed to add pipeline to symtab");
 
-        let result = visit_unit(
-            None,
-            &input,
-            &mut Context {
-                symtab,
-                idtracker,
-                impl_idtracker: ImplIdTracker::new(),
-                pipeline_ctx: None,
-            },
-        );
+        let result = visit_unit(None, &input, &None, &mut ctx);
 
         assert_eq!(
             result.unwrap().assume_unit().body.assume_block().statements,

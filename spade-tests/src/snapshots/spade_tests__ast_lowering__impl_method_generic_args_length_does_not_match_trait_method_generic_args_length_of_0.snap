@@ -1,0 +1,22 @@
+---
+source: spade-tests/src/ast_lowering.rs
+---
+trait X {
+    fn foo(self) -> bool;
+}
+struct A {}
+impl X for A {
+    fn foo<U1, U2>(self) -> bool {
+        false
+    }
+}
+
+
+error: Unexpected type parameters on impl of non-generic method
+  ┌─ testinput:6:12
+  │
+2 │     fn foo(self) -> bool;
+  │        --- But this is not generic
+  ·
+6 │     fn foo<U1, U2>(self) -> bool {
+  │            ^^^^^^ Type parameters specified here

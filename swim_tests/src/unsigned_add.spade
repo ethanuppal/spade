@@ -1,0 +1,3 @@
+fn unsigned_add(x: uint<8>, y: uint<8>) -> uint<9> {
+    x + y
+}

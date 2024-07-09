@@ -1,0 +1,31 @@
+---
+source: spade-tests/src/integration.rs
+---
+trait X {
+    fn a(self, x: Self) -> bool;
+}
+
+struct A {}
+struct B {}
+
+impl X for A {
+    fn a(self, x: Self) -> bool {
+        true
+    }
+}
+
+impl X for B {
+    fn a(self, x: A) -> bool {
+        true
+    }
+}
+
+
+error: Argument type mismatch
+   ┌─ testinput:15:19
+   │
+ 2 │     fn a(self, x: Self) -> bool;
+   │                   ---- Because of the type of x in the trait
+   ·
+15 │     fn a(self, x: A) -> bool {
+   │                   ^ Expected Self

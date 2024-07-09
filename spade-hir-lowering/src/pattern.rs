@@ -318,6 +318,10 @@ impl DeconstructedPattern {
                 Constructor::Single,
                 inner.iter().map(|i| Self::from_hir(i, ctx)).collect(),
             ),
+            spade_hir::PatternKind::Array(inner) => (
+                Constructor::Single,
+                inner.iter().map(|i| Self::from_hir(i, ctx)).collect(),
+            ),
             spade_hir::PatternKind::Type(path, args) => {
                 let patternable = ctx.symtab.symtab().patternable_type_by_id(path);
 

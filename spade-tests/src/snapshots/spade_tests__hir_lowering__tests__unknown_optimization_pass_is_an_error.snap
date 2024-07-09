@@ -1,0 +1,14 @@
+---
+source: spade-tests/src/hir_lowering.rs
+---
+#[optimize(banana)]
+entity a() {}
+
+
+error: There is no optimization pass named banana
+  ┌─ testinput:1:12
+  │
+1 │ #[optimize(banana)]
+  │            ^^^^^^ No such pass
+
+

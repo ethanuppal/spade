@@ -206,9 +206,7 @@ impl TypeState {
                 // reaching another inversion, go back to the normal direction
                 !invert,
             ),
-            TypeSpec::TraitSelf(_) => {
-                panic!("Trying to concretize HIR TraitSelf type")
-            }
+            TypeSpec::TraitSelf(_) => panic!("Trying to concretize HIR TraitSelf type"),
         }
     }
 

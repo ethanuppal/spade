@@ -6,6 +6,7 @@ pub mod diff_printing;
 mod enum_util;
 pub mod eval;
 pub mod macros;
+pub mod passes;
 pub mod renaming;
 mod type_list;
 pub mod types;
@@ -252,6 +253,12 @@ pub enum Operator {
         start: BigUint,
         end_exclusive: BigUint,
     },
+    /// Compiles to verilog [end_exclusive:start]. Supports single bit indexing, (when
+    /// end_exclusive == start + 1, in which case it compiles to [start]
+    RangeIndexBits {
+        start: BigUint,
+        end_exclusive: BigUint,
+    },
     /// Construct a tuple from all the operand expressions
     ConstructTuple,
     /// Construct the nth enum variant with the operand expressions as the payload
@@ -417,6 +424,10 @@ impl std::fmt::Display for Operator {
                 start,
                 end_exclusive: end,
             } => write!(f, "RangeIndexArray({start}, {end})"),
+            Operator::RangeIndexBits {
+                start,
+                end_exclusive: end,
+            } => write!(f, "RangeIndexBits({start}, {end})"),
             Operator::IndexMemory => write!(f, "IndexMemory"),
             Operator::Instance {
                 name,
@@ -558,7 +569,6 @@ pub struct MirInput {
     pub ty: Type,
     pub no_mangle: Option<Loc<()>>,
 }
-
 #[derive(Clone, PartialEq, Debug)]
 pub struct Entity {
     /// The name of the module

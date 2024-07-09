@@ -552,3 +552,75 @@ snapshot_error! {
         }
     "
 }
+
+#[test]
+fn generic_trait_is_valid() {
+    let code = r#"
+        trait X<T> {}
+    "#;
+
+    build_items(code);
+}
+
+#[test]
+fn generic_trait2_is_valid() {
+    let code = r#"
+        trait X<T, U> {}
+    "#;
+
+    build_items(code);
+}
+
+#[test]
+fn generic_impl_is_valid() {
+    let code = r#"
+        struct S<T> {}
+        impl <T> S<T> {}
+    "#;
+
+    build_items(code);
+}
+
+#[test]
+fn generic_trait_impl_is_valid() {
+    let code = r#"
+        trait X<T> {}
+        struct S<T> {}
+        impl <T> X<T> for S<T> {}
+    "#;
+
+    build_items(code);
+}
+
+#[test]
+fn generic_param_on_trait_is_valid() {
+    let code = r#"
+        trait X<T> {}
+        struct S {}
+        impl X<bool> for S {}
+    "#;
+
+    build_items(code);
+}
+
+#[test]
+fn generic_param_on_trait_and_struct_is_valid() {
+    let code = r#"
+        trait X<T> {}
+        struct S<T> {}
+        impl X<S<int<8>>> for S<int<8>> {}
+    "#;
+
+    build_items(code);
+}
+
+#[test]
+fn generic_param_on_struct_is_valid() {
+    let code = r#"
+        trait X {}
+        struct S<T> {}
+        impl X for S<int<8>> {}
+    "#;
+
+    build_items(code);
+}

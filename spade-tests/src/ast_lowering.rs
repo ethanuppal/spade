@@ -1,6 +1,51 @@
 use crate::{build_items, build_items_with_stdlib, snapshot_error};
 
 snapshot_error! {
+    impl_method_generic_args_length_does_not_match_trait_method_generic_args_length,
+    "
+    trait X {
+        fn foo<T2>(self) -> T2;
+    }
+    struct A {}
+    impl X for A {
+        fn foo<U1, U2>(self) -> U2 {
+            A()
+        }
+    }
+    "
+}
+
+snapshot_error! {
+    impl_method_generic_args_length_does_not_match_trait_method_generic_args_length_of_0,
+    "
+    trait X {
+        fn foo(self) -> bool;
+    }
+    struct A {}
+    impl X for A {
+        fn foo<U1, U2>(self) -> bool {
+            false
+        }
+    }
+    "
+}
+
+snapshot_error! {
+    impl_method_generic_args_length_of_0_does_not_match_trait_method_generic_args_length,
+    "
+    trait X {
+        fn foo<U1, U2>(self) -> bool;
+    }
+    struct A {}
+    impl X for A {
+        fn foo(self) -> bool {
+            false
+        }
+    }
+    "
+}
+
+snapshot_error! {
     wrong_number_of_generic_arguments_triggers_error,
     "
     struct S<T> {}
@@ -1153,4 +1198,59 @@ fn trait_impls_inside_modules_works() {
     "#;
 
     build_items(code);
+}
+
+snapshot_error! {
+    generic_trait_used_without_param_spec,
+    "
+        trait X<T> {}
+        struct S {}
+        impl X for S {}
+    "
+}
+
+snapshot_error! {
+    non_generic_trait_used_with_param_spec,
+    "
+        trait X {}
+        struct S {}
+        impl<T> X<T> for S {}
+    "
+}
+
+snapshot_error! {
+    generic_trait_used_with_wrong_number_of_params,
+    "
+        trait X<T, U> {}
+        struct S {}
+        impl<T> X<T> for S {}
+    "
+}
+
+snapshot_error! {
+    generic_type_in_const_generic_where_clause_lhs,
+    "
+        fn test<O>()
+            where O: 1
+        {}
+    "
+}
+
+snapshot_error! {
+    generic_type_in_const_generic_where_clause_rhs,
+    "
+        fn test<N, #O>()
+            where O: N
+        {}
+    "
+}
+
+snapshot_error! {
+    struct_type_in_const_generic_where_clause,
+    "
+        struct N {}
+        fn test<#O>()
+            where O: N
+        {}
+    "
 }

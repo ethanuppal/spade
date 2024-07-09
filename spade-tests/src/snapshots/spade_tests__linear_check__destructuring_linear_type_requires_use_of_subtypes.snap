@@ -7,12 +7,10 @@ entity x(a: (&mut bool, &mut bool)) -> &mut bool {
 }
 
 
-error: Unused resource
+error: y is unused
   ┌─ testinput:2:13
   │
 2 │     let (x, y) = a;
   │             ^ y is unused
   │
   = note: y is a &mut value which must be set
-
-

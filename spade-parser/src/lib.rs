@@ -15,8 +15,8 @@ use spade_ast::{
     ArgumentList, ArgumentPattern, Attribute, AttributeList, Binding, BitLiteral, Block, CallKind,
     ComptimeConfig, Enum, Expression, ImplBlock, IntLiteral, Item, Module, ModuleBody,
     NamedArgument, NamedTurbofish, ParameterList, Pattern, PipelineStageReference, Register,
-    Statement, Struct, TraitDef, TurbofishInner, TypeDeclKind, TypeDeclaration, TypeExpression,
-    TypeParam, TypeSpec, Unit, UnitHead, UnitKind, UseStatement,
+    Statement, Struct, TraitDef, TraitSpec, TurbofishInner, TypeDeclKind, TypeDeclaration,
+    TypeExpression, TypeParam, TypeSpec, Unit, UnitHead, UnitKind, UseStatement,
 };
 use spade_common::location_info::{lspan, AsLabel, FullSpan, HasCodespan, Loc, WithLocation};
 use spade_common::name::{Identifier, Path};
@@ -182,18 +182,12 @@ impl<'a> Parser<'a> {
                     None,
                 )));
             } else if self.peek_kind(&TokenKind::Lt)? {
-                let (params, loc) = self.surrounded(
-                    &TokenKind::Lt,
-                    |s| {
-                        s.comma_separated(Self::type_expression, &TokenKind::Gt)
-                            .extra_expected(vec!["type spec"])
-                    },
-                    &TokenKind::Gt,
-                )?;
+                // safe unwrap, only None for token kind != Lt
+                let params = self.generic_spec_list()?.unwrap();
 
                 break Ok(Some((
                     Path(result).between(self.file_id, &path_start, &path_end),
-                    Some(TurbofishInner::Positional(params).at_loc(&loc)),
+                    Some(params.map(|p| TurbofishInner::Positional(p))),
                 )));
             } else if self.peek_kind(&TokenKind::Dollar)? {
                 self.eat_unconditional()?;
@@ -785,6 +779,18 @@ impl<'a> Parser<'a> {
                 )))
             },
             &|s| {
+                let start = peek_for!(s, &TokenKind::OpenBracket);
+                let inner = s
+                    .comma_separated(Self::pattern, &TokenKind::CloseBracket)
+                    .no_context()?;
+                let end = s.eat(&TokenKind::CloseBracket)?;
+                Ok(Some(Pattern::Array(inner).between(
+                    s.file_id,
+                    &start.span,
+                    &end.span,
+                )))
+            },
+            &|s| {
                 Ok(s.int_literal()?
                     // Map option, then map Loc
                     .map(|val| val.map(Pattern::Integer)))
@@ -1263,9 +1269,9 @@ impl<'a> Parser<'a> {
     }
 
     #[trace_parser]
-    pub fn generics_list(&mut self) -> Result<Vec<Loc<TypeParam>>> {
+    pub fn generics_list(&mut self) -> Result<Option<Loc<Vec<Loc<TypeParam>>>>> {
         if self.peek_kind(&TokenKind::Lt)? {
-            let (params, _) = self.surrounded(
+            let (params, loc) = self.surrounded(
                 &TokenKind::Lt,
                 |s| {
                     s.comma_separated(Self::type_param, &TokenKind::Gt)
@@ -1273,9 +1279,26 @@ impl<'a> Parser<'a> {
                 },
                 &TokenKind::Gt,
             )?;
-            Ok(params)
+            Ok(Some(params.at_loc(&loc)))
         } else {
-            Ok(vec![])
+            Ok(None)
+        }
+    }
+
+    #[trace_parser]
+    pub fn generic_spec_list(&mut self) -> Result<Option<Loc<Vec<Loc<TypeExpression>>>>> {
+        if self.peek_kind(&TokenKind::Lt)? {
+            let (params, loc) = self.surrounded(
+                &TokenKind::Lt,
+                |s| {
+                    s.comma_separated(Self::type_expression, &TokenKind::Gt)
+                        .extra_expected(vec!["type spec"])
+                },
+                &TokenKind::Gt,
+            )?;
+            Ok(Some(params.at_loc(&loc)))
+        } else {
+            Ok(None)
         }
     }
 
@@ -1346,6 +1369,33 @@ impl<'a> Parser<'a> {
             None
         };
 
+        let where_clauses = if let Some(where_kw) = self.peek_and_eat(&TokenKind::Where)? {
+            let clauses = self
+                .comma_separated(
+                    |s| {
+                        if s.peek_cond(|t| matches!(t, &TokenKind::Identifier(_)), "identifier")? {
+                            let name = s.path()?;
+                            let _colon = s.eat(&TokenKind::Colon)?;
+                            let value = s.expression()?;
+                            Ok((name, value))
+                        } else {
+                            Err(Diagnostic::bug(
+                                ().at(s.file_id, &where_kw),
+                                "Comma separated should not show this error",
+                            ))
+                        }
+                        // NOTE: With this ending symbol we won't support __builtin__ with where
+                        // clauses.
+                    },
+                    &TokenKind::OpenBrace,
+                )
+                .extra_expected(vec!["identifier"])?;
+
+            clauses
+        } else {
+            vec![]
+        };
+
         let end = output_type
             .as_ref()
             .map(|o| o.loc())
@@ -1359,6 +1409,7 @@ impl<'a> Parser<'a> {
                 inputs,
                 output_type,
                 type_params,
+                where_clauses,
             }
             .between(self.file_id, &start_token, &end),
         ))
@@ -1418,8 +1469,11 @@ impl<'a> Parser<'a> {
 
         let name = self.identifier()?;
 
+        let type_params = self.generics_list()?;
+
         let mut result = TraitDef {
             name,
+            type_params,
             methods: vec![],
         };
 
@@ -1444,13 +1498,48 @@ impl<'a> Parser<'a> {
         let start_token = peek_for!(self, &TokenKind::Impl);
         self.disallow_attributes(attributes, &start_token)?;
 
-        let trait_or_target = self.path()?;
+        let type_params = self.generics_list()?;
+
+        let trait_or_target_path = self.path()?;
+        let generic_spec = self.generic_spec_list()?;
+        let trait_or_target_end = if let Some(spec) = &generic_spec {
+            spec.span()
+        } else {
+            trait_or_target_path.span()
+        };
 
         let (r#trait, target) = if self.peek_and_eat(&TokenKind::For)?.is_some() {
-            let target = self.path()?;
-            (Some(trait_or_target), target)
+            let r#trait = TraitSpec {
+                path: trait_or_target_path.clone(),
+                type_params: generic_spec,
+            }
+            .between(
+                self.file_id,
+                &trait_or_target_path.span(),
+                &trait_or_target_end,
+            );
+
+            let target_path = self.path()?;
+            let target_spec = self.generic_spec_list()?;
+
+            let target_end = match &target_spec {
+                Some(spec) => spec.span(),
+                None => target_path.span(),
+            };
+            let target = TypeSpec::Named(target_path.clone(), target_spec).between(
+                self.file_id,
+                &target_path.span(),
+                &target_end,
+            );
+
+            (Some(r#trait), target)
         } else {
-            (None, trait_or_target)
+            let target = TypeSpec::Named(trait_or_target_path.clone(), generic_spec).between(
+                self.file_id,
+                &trait_or_target_path.span(),
+                &trait_or_target_end,
+            );
+            (None, target)
         };
 
         let (body, body_span) = self.surrounded(
@@ -1462,6 +1551,7 @@ impl<'a> Parser<'a> {
         Ok(Some(
             ImplBlock {
                 r#trait,
+                type_params,
                 target,
                 units: body,
             }
@@ -1546,7 +1636,7 @@ impl<'a> Parser<'a> {
 
         let name = self.identifier()?;
 
-        let generic_args = self.generics_list()?;
+        let type_params = self.generics_list()?;
 
         let (options, options_loc) = self.surrounded(
             &TokenKind::OpenBrace,
@@ -1564,7 +1654,7 @@ impl<'a> Parser<'a> {
                 &start_token.span,
                 &options_loc,
             )),
-            generic_args,
+            generic_args: type_params,
         }
         .between(self.file_id, &start_token.span, &options_loc);
 
@@ -1585,7 +1675,7 @@ impl<'a> Parser<'a> {
 
         let name = self.identifier()?;
 
-        let generic_args = self.generics_list()?;
+        let type_params = self.generics_list()?;
 
         let (members, members_loc) = self.surrounded(
             &TokenKind::OpenBrace,
@@ -1605,7 +1695,7 @@ impl<'a> Parser<'a> {
                 }
                 .between(self.file_id, &start_token.span, &members_loc),
             ),
-            generic_args,
+            generic_args: type_params,
         }
         .between(self.file_id, &start_token.span, &members_loc);
 
@@ -1859,6 +1949,23 @@ impl<'a> Parser<'a> {
                 } else {
                     Ok(Attribute::Fsm { state: None })
                 }
+            }
+            "optimize" => {
+                let (passes, _) = self.surrounded(
+                    &TokenKind::OpenParen,
+                    |s| {
+                        s.comma_separated(|s| s.identifier(), &TokenKind::CloseParen)
+                            .no_context()
+                    },
+                    &TokenKind::CloseParen,
+                )?;
+
+                Ok(Attribute::Optimize {
+                    passes: passes
+                        .into_iter()
+                        .map(|loc| loc.map(|ident| ident.0))
+                        .collect(),
+                })
             }
             "wal_trace" => {
                 if self.peek_kind(&TokenKind::OpenParen)? {
@@ -2377,7 +2484,7 @@ pub fn format_parse_stack(stack: &[ParseStackEntry]) -> String {
 mod tests {
     use ast::comptime::{ComptimeCondOp, ComptimeCondition, MaybeComptime};
     use spade_ast as ast;
-    use spade_ast::testutil::{ast_ident, ast_path};
+    use spade_ast::testutil::{ast_ident, ast_path, ast_trait_spec, ast_type_expr, ast_type_spec};
     use spade_ast::*;
     use spade_common::num_ext::{InfallibleToBigInt, InfallibleToBigUint};
 
@@ -2483,7 +2590,8 @@ mod tests {
                 name: Identifier("no_inputs".to_string()).nowhere(),
                 inputs: aparams![],
                 output_type: None,
-                type_params: vec![],
+                type_params: None,
+                where_clauses: vec![],
             },
             body: Some(
                 Expression::Block(Box::new(Block {
@@ -2521,7 +2629,8 @@ mod tests {
                 name: ast_ident("with_inputs"),
                 inputs: aparams![("clk", tspec!("bool")), ("rst", tspec!("bool"))],
                 output_type: Some(TypeSpec::Named(ast_path("bool"), None).nowhere()),
-                type_params: vec![],
+                type_params: None,
+                where_clauses: vec![],
             },
             body: Some(
                 Expression::Block(Box::new(Block {
@@ -2546,14 +2655,18 @@ mod tests {
                 name: ast_ident("with_generics"),
                 inputs: aparams![],
                 output_type: None,
-                type_params: vec![
-                    TypeParam::TypeName {
-                        name: ast_ident("X"),
-                        traits: vec![],
-                    }
+                type_params: Some(
+                    vec![
+                        TypeParam::TypeName {
+                            name: ast_ident("X"),
+                            traits: vec![],
+                        }
+                        .nowhere(),
+                        TypeParam::Integer(ast_ident("Y")).nowhere(),
+                    ]
                     .nowhere(),
-                    TypeParam::Integer(ast_ident("Y")).nowhere(),
-                ],
+                ),
+                where_clauses: vec![],
             },
             body: Some(
                 Expression::Block(Box::new(Block {
@@ -2728,7 +2841,8 @@ mod tests {
                 name: Identifier("e1".to_string()).nowhere(),
                 inputs: aparams![],
                 output_type: None,
-                type_params: vec![],
+                type_params: None,
+                where_clauses: vec![],
             },
             body: Some(
                 Expression::Block(Box::new(Block {
@@ -2747,7 +2861,8 @@ mod tests {
                 name: Identifier("e2".to_string()).nowhere(),
                 inputs: aparams![],
                 output_type: None,
-                type_params: vec![],
+                type_params: None,
+                where_clauses: vec![],
             },
             body: Some(
                 Expression::Block(Box::new(Block {
@@ -2776,7 +2891,8 @@ mod tests {
 
         let expected = ImplBlock {
             r#trait: None,
-            target: ast_path("SomeType"),
+            type_params: None,
+            target: ast_type_spec("SomeType"),
             units: vec![Unit {
                 head: UnitHead {
                     attributes: AttributeList::empty(),
@@ -2784,7 +2900,8 @@ mod tests {
                     name: ast_ident("some_fn"),
                     inputs: ParameterList::without_self(vec![]).nowhere(),
                     output_type: None,
-                    type_params: vec![],
+                    type_params: None,
+                    where_clauses: vec![],
                 },
                 body: None,
             }
@@ -2808,8 +2925,9 @@ mod tests {
         "#;
 
         let expected = ImplBlock {
-            r#trait: Some(ast_path("SomeTrait")),
-            target: ast_path("SomeType"),
+            r#trait: Some(ast_trait_spec("SomeTrait", None)),
+            type_params: None,
+            target: ast_type_spec("SomeType"),
             units: vec![Unit {
                 head: UnitHead {
                     attributes: AttributeList::empty(),
@@ -2817,7 +2935,46 @@ mod tests {
                     name: ast_ident("some_fn"),
                     inputs: ParameterList::without_self(vec![]).nowhere(),
                     output_type: None,
-                    type_params: vec![],
+                    type_params: None,
+                    where_clauses: vec![],
+                },
+                body: None,
+            }
+            .nowhere()],
+        }
+        .nowhere();
+
+        check_parse!(
+            code,
+            impl_block(&AttributeList::empty()),
+            Ok(Some(expected))
+        );
+    }
+
+    #[test]
+    fn non_anonymous_impl_blocks_with_type_params_work() {
+        let code = r#"
+        impl SomeTrait<SomeTypeParam> for SomeType {
+            fn some_fn() __builtin__
+        }
+        "#;
+
+        let expected = ImplBlock {
+            r#trait: Some(ast_trait_spec(
+                "SomeTrait",
+                Some(vec![ast_type_expr("SomeTypeParam")]),
+            )),
+            type_params: None,
+            target: ast_type_spec("SomeType"),
+            units: vec![Unit {
+                head: UnitHead {
+                    attributes: AttributeList::empty(),
+                    unit_kind: UnitKind::Function.nowhere(),
+                    name: ast_ident("some_fn"),
+                    inputs: ParameterList::without_self(vec![]).nowhere(),
+                    output_type: None,
+                    type_params: None,
+                    where_clauses: vec![],
                 },
                 body: None,
             }
@@ -2933,7 +3090,8 @@ mod tests {
                     name: ast_ident("X"),
                     inputs: ParameterList::without_self(vec![]).nowhere(),
                     output_type: None,
-                    type_params: vec![],
+                    type_params: None,
+                    where_clauses: vec![],
                 },
                 body: None,
             }
@@ -2958,7 +3116,8 @@ mod tests {
                         MaybeComptime::Raw(IntLiteral::unsized_(1).nowhere()).nowhere(),
                     )
                     .nowhere(),
-                    type_params: vec![],
+                    type_params: None,
+                    where_clauses: vec![],
                 },
                 body: None,
             }
@@ -2980,7 +3139,8 @@ mod tests {
                     name: ast_ident("X"),
                     inputs: ParameterList::without_self(vec![]).nowhere(),
                     output_type: None,
-                    type_params: vec![],
+                    type_params: None,
+                    where_clauses: vec![],
                 },
                 body: None,
             }
@@ -3004,7 +3164,8 @@ mod tests {
                     name: ast_ident("X"),
                     inputs: ParameterList::without_self(vec![]).nowhere(),
                     output_type: None,
-                    type_params: vec![],
+                    type_params: None,
+                    where_clauses: vec![],
                 },
                 body: None,
             }
@@ -3028,7 +3189,8 @@ mod tests {
                     name: ast_ident("X"),
                     inputs: ParameterList::without_self(vec![]).nowhere(),
                     output_type: None,
-                    type_params: vec![],
+                    type_params: None,
+                    where_clauses: vec![],
                 },
                 body: None,
             }
@@ -3056,7 +3218,8 @@ mod tests {
                     name: ast_ident("test"),
                     inputs: aparams![("a", tspec!("bool"))],
                     output_type: None,
-                    type_params: vec![],
+                    type_params: None,
+                    where_clauses: vec![],
                 },
                 body: None,
             }
@@ -3083,7 +3246,8 @@ mod tests {
                     name: ast_ident("X"),
                     inputs: ParameterList::without_self(vec![]).nowhere(),
                     output_type: None,
-                    type_params: vec![],
+                    type_params: None,
+                    where_clauses: vec![],
                 },
                 body: Some(
                     Expression::Block(Box::new(Block {
@@ -3198,7 +3362,8 @@ mod tests {
                 name: ast_ident("test"),
                 inputs: aparams![("a", tspec!("bool"))],
                 output_type: Some(TypeSpec::Named(ast_path("bool"), None).nowhere()),
-                type_params: vec![],
+                type_params: None,
+                where_clauses: vec![],
             },
             body: Some(
                 Expression::Block(Box::new(Block {
@@ -3249,7 +3414,8 @@ mod tests {
                 name: ast_ident("test"),
                 inputs: aparams![("a", tspec!("bool"))],
                 output_type: Some(TypeSpec::Named(ast_path("bool"), None).nowhere()),
-                type_params: vec![],
+                type_params: None,
+                where_clauses: vec![],
             },
             body: Some(
                 Expression::Block(Box::new(Block {
@@ -3286,7 +3452,8 @@ mod tests {
                         name: ast_ident("test"),
                         inputs: aparams![("a", tspec!("bool"))],
                         output_type: Some(TypeSpec::Named(ast_path("bool"), None).nowhere()),
-                        type_params: vec![],
+                        type_params: None,
+                        where_clauses: vec![],
                     },
                     body: Some(
                         Expression::Block(Box::new(Block {
@@ -3351,7 +3518,7 @@ mod tests {
                     }
                     .nowhere(),
                 ),
-                generic_args: vec![],
+                generic_args: None,
             }
             .nowhere(),
         );
@@ -3384,14 +3551,17 @@ mod tests {
                     }
                     .nowhere(),
                 ),
-                generic_args: vec![
-                    TypeParam::TypeName {
-                        name: ast_ident("T"),
-                        traits: vec![],
-                    }
+                generic_args: Some(
+                    vec![
+                        TypeParam::TypeName {
+                            name: ast_ident("T"),
+                            traits: vec![],
+                        }
+                        .nowhere(),
+                        TypeParam::Integer(ast_ident("N")).nowhere(),
+                    ]
                     .nowhere(),
-                    TypeParam::Integer(ast_ident("N")).nowhere(),
-                ],
+                ),
             }
             .nowhere(),
         );
@@ -3415,7 +3585,7 @@ mod tests {
                     }
                     .nowhere(),
                 ),
-                generic_args: vec![],
+                generic_args: None,
             }
             .nowhere(),
         );
@@ -3439,7 +3609,7 @@ mod tests {
                     }
                     .nowhere(),
                 ),
-                generic_args: vec![],
+                generic_args: None,
             }
             .nowhere(),
         );

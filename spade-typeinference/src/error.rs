@@ -218,6 +218,7 @@ impl<T> UnificationErrorExt<T> for std::result::Result<T, UnificationError> {
                             "The size of a concatenation is the sum of the operand sizes"
                                 .to_string()
                         }
+                        ConstraintSource::Where => "".to_string(),
                     })
             }
             UnificationError::Specific(e) => e,

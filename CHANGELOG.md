@@ -13,11 +13,35 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Added
 
+- [!325][!325] Add `to_uint`, `bits` and `to_int` methods to `int` and `uint`.
+- [!326][!326] Add pattern matching for arrays
+
+### Changed
+
+- [!324][!324] Move `stdlib` and `prelude` directories to `spade-compiler`
+
+### Fixed
+
+### Removed
+
+[!324]: https://gitlab.com/spade-lang/spade/-/merge_requests/324
+[!325]: https://gitlab.com/spade-lang/spade/-/merge_requests/325
+[!326]: https://gitlab.com/spade-lang/spade/-/merge_requests/326
+
+## [0.9.0] - 2024-07-04
+
+### Added
+
 - [!304][!304] Allow specifying the bit width of integer literals as `512u32` or `123i64`
 - [!307][!307] Allow specifying command line arguments via a json file
 - [!308][!308] Add `/` and `%` for power of 2 operands, as well as `comb_div` and `comb_mod` for all operands
 - [!309][!309] Add named argument turbofishes (`::$<>`)
 - [!312][!312] Include a map of modules in `ItemList`
+- [!271][!271] Add automatic clock gating of the `Option`-type
+- [!319][!319] Add `where` clauses to allow specifying constraints on generic parameters
+- [!322][!322] Add `==` operator to outputs in cocotb
+- [!322][!322] Allow raw integers, booleans, and lists to be passed to inputs and outputs in cocotb.
+- [!318][!318] Add generic traits, generic impls, `Option<T>::is_some()` and `Option<T>::is_none()`
 
 ### Changed
 
@@ -25,14 +49,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Fixed
 
+- [!321][!321] Fix codegen for enums with a single variant
+
 ### Removed
 
+[!271]: https://gitlab.com/spade-lang/spade/-/merge_requests/271
 [!304]: https://gitlab.com/spade-lang/spade/-/merge_requests/304
 [!307]: https://gitlab.com/spade-lang/spade/-/merge_requests/307
 [!308]: https://gitlab.com/spade-lang/spade/-/merge_requests/308
 [!309]: https://gitlab.com/spade-lang/spade/-/merge_requests/309
 [!312]: https://gitlab.com/spade-lang/spade/-/merge_requests/312
 [!314]: https://gitlab.com/spade-lang/spade/-/merge_requests/314
+[!318]: https://gitlab.com/spade-lang/spade/-/merge_requests/318
+[!319]: https://gitlab.com/spade-lang/spade/-/merge_requests/319
+[!322]: https://gitlab.com/spade-lang/spade/-/merge_requests/322
 
 ## [0.8.0] - 2024-05-14
 
@@ -43,6 +73,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - [!290][!290] Add clock domain crossing primitives to `std::cdc`
 - [!293][!293] Add `inout<T>` for mapping to Verilog `inout` ports
 - [!294][!294] Add `.spade_repr()` to output fields in Verilator
+- [!303][!303] Add `Self` type in traits and impl blocks
 
 ### Changed
 
@@ -65,6 +96,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 [!297]: https://gitlab.com/spade-lang/spade/-/merge_requests/297
 [!299]: https://gitlab.com/spade-lang/spade/-/merge_requests/299
 [!300]: https://gitlab.com/spade-lang/spade/-/merge_requests/300
+[!303]: https://gitlab.com/spade-lang/spade/-/merge_requests/303
 
 ## [0.7.0] - 2024-03-21
 
@@ -259,7 +291,8 @@ Initial numbered version
 
 [Associated Swim release](https://gitlab.com/spade-lang/swim/-/tree/v0.1.0)
 
-[Unreleased]: https://gitlab.com/spade-lang/spade/-/compare/v0.8.0...main
+[Unreleased]: https://gitlab.com/spade-lang/spade/-/compare/v0.9.0...main
+[0.9.0]: https://gitlab.com/spade-lang/spade/-/compare/v0.9.0...v0.8.0
 [0.8.0]: https://gitlab.com/spade-lang/spade/-/compare/v0.8.0...v0.7.0
 [0.7.0]: https://gitlab.com/spade-lang/spade/-/compare/v0.7.0...v0.6.0
 [0.6.0]: https://gitlab.com/spade-lang/spade/-/compare/v0.5.0...v0.6.0

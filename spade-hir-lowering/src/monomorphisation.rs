@@ -1,6 +1,7 @@
 use std::collections::{BTreeMap, HashMap, VecDeque};
 
 use itertools::Itertools;
+use mir::passes::MirPass;
 use spade_common::location_info::Loc;
 use spade_common::{id_tracker::ExprIdTracker, location_info::WithLocation, name::NameID};
 use spade_diagnostics::diagnostic::{Message, Subdiagnostic};
@@ -139,6 +140,7 @@ pub fn compile_items(
     item_list: &ItemList,
     diag_handler: &mut DiagHandler,
     wordlength_inference_method: Option<wordlength_inference::InferMethod>,
+    opt_passes: &[&dyn MirPass],
 ) -> Vec<Result<MirOutput>> {
     // Build a map of items to use for compilation later. Also push all non
     // generic items to the compilation queue
@@ -148,7 +150,7 @@ pub fn compile_items(
     for (item, _) in items.values() {
         match item {
             ExecutableItem::Unit(u) => {
-                if u.head.type_params.is_empty() {
+                if u.head.get_type_params().is_empty() {
                     state.request_compilation(u.name.clone(), true, vec![], symtab, None);
                 }
             }
@@ -170,7 +172,7 @@ pub fn compile_items(
                     items: item_list,
                 };
                 let mut type_state = old_type_state.clone();
-                let generic_list_token = if !u.head.type_params.is_empty() {
+                let generic_list_token = if !u.head.get_type_params().is_empty() {
                     Some(GenericListToken::Definition(u.name.name_id().inner.clone()))
                 } else {
                     None
@@ -178,7 +180,9 @@ pub fn compile_items(
 
                 if let Some(generic_list_token) = &generic_list_token {
                     let generic_list = type_state.get_generic_list(generic_list_token).clone();
-                    for (source_param, new) in u.head.type_params.iter().zip(item.params.iter()) {
+                    for (source_param, new) in
+                        u.head.get_type_params().iter().zip(item.params.iter())
+                    {
                         let source_var = &generic_list[&source_param.name_id()];
 
                         type_state
@@ -256,6 +260,7 @@ pub fn compile_items(
                     diag_handler,
                     name_source_map,
                     self_mono_item,
+                    opt_passes,
                 )
                 .map_err(|e| state.add_mono_traceback(e, &item))
                 .map(|mir| MirOutput {

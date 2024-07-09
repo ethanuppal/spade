@@ -1,0 +1,25 @@
+---
+source: spade-tests/src/integration.rs
+---
+trait X {
+    fn fun(self) -> Self;
+}
+
+struct A {}
+struct B {}
+
+impl X for A {
+    fn fun(self) -> B {
+        self
+    }
+}
+
+
+error: Return type does not match trait
+  ┌─ testinput:9:21
+  │
+2 │     fn fun(self) -> Self;
+  │                     ---- To match the trait
+  ·
+9 │     fn fun(self) -> B {
+  │                     ^ Expected Self

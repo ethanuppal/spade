@@ -7,7 +7,7 @@ entity x<T, U>() {
 }
 
 
-error: Wrong number of type parameters
+error: Wrong number of generic type parameters
   ┌─ testinput:3:13
   │
 1 │ struct S<T> {}

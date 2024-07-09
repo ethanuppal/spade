@@ -1,5 +1,47 @@
 use crate::{build_items, snapshot_error};
 
+snapshot_error!(
+    trait_self_wrong_impl_return_type,
+    r#"
+        trait X {
+            fn fun(self) -> Self;
+        }
+
+        struct A {}
+        struct B {}
+
+        impl X for A {
+            fn fun(self) -> B {
+                self
+            }
+        }
+    "#
+);
+
+#[test]
+fn trait_self_return_type_works() {
+    let code = r#"
+        trait X {
+            fn fun(self) -> Self;
+        }
+
+        struct A {}
+
+        impl X for A {
+            fn fun(self) -> Self {
+                self
+            }
+        }
+
+        entity main() -> A {
+            let a = A();
+            a.fun()
+        }
+    "#;
+
+    build_items(code);
+}
+
 #[test]
 fn namespacing_works() {
     let code = r#"
@@ -242,7 +284,7 @@ mod trait_tests {
     }
 
     snapshot_error! {
-        pipelines_in_impl_blocks_are_graceuflly_disallowed,
+        pipelines_in_impl_blocks_are_gracefully_disallowed,
         "
             struct X {}
 
@@ -407,7 +449,7 @@ mod trait_tests {
     }
 
     #[test]
-    fn trait_in_module_works() {
+    fn anonymous_trait_in_module_works() {
         let code = "
             mod m {
                 enum ContainerSpot {
@@ -492,14 +534,21 @@ mod trait_tests {
     fn impl_trait_compiles() {
         let code = "
             trait X {
-                fn a(self) -> bool;
+                fn a(self, x: Self) -> Self;
             }
 
             struct A {}
+            struct B {}
 
             impl X for A {
-                fn a(self) -> bool {
-                    true
+                fn a(self, x: Self) -> Self {
+                    Self()
+                }
+            }
+
+            impl X for B {
+                fn a(self, x: B) -> B {
+                    B()
                 }
             }
         ";
@@ -651,7 +700,31 @@ mod trait_tests {
             struct A {}
 
             impl X for A {
-                fn a(self, x: int<10>) -> bool{
+                fn a(self, x: int<10>) -> bool {
+                    true
+                }
+            }
+        "
+    }
+
+    snapshot_error! {
+        impls_require_correct_signature_wrong_arg_type_self,
+        "
+            trait X {
+                fn a(self, x: Self) -> bool;
+            }
+
+            struct A {}
+            struct B {}
+
+            impl X for A {
+                fn a(self, x: Self) -> bool {
+                    true
+                }
+            }
+
+            impl X for B {
+                fn a(self, x: A) -> bool {
                     true
                 }
             }
@@ -662,7 +735,7 @@ mod trait_tests {
         impls_require_correct_signature_wrong_return_type,
         "
             trait X {
-                fn a(self) -> int<10> ;
+                fn a(self) -> int<10>;
             }
 
             struct A {}
@@ -670,6 +743,30 @@ mod trait_tests {
             impl X for A {
                 fn a(self) -> bool {
                     true
+                }
+            }
+        "
+    }
+
+    snapshot_error! {
+        impls_require_correct_signature_wrong_return_type_self,
+        "
+            trait X {
+                fn a(self) -> Self;
+            }
+
+            struct A {}
+            struct B {}
+
+            impl X for A {
+                fn a(self) -> A {
+                    A()
+                }
+            }
+
+            impl X for B {
+                fn a(self) -> A {
+                    A()
                 }
             }
         "
@@ -707,5 +804,67 @@ mod trait_tests {
                 }
             }
         "
+    }
+
+    #[test]
+    fn impl_blocks_support_generics() {
+        let code = r#"
+        struct HasGeneric<T> {}
+        impl<T> HasGeneric<T> {
+            fn test(self) {}
+        }
+        "#;
+        build_items(code);
+    }
+
+    snapshot_error! {
+        impl_on_tuple_is_error,
+        r#"
+            impl (bool, bool) {}
+        "#
+    }
+
+    snapshot_error! {
+        impl_of_tuple_is_error,
+        r#"
+            struct T {}
+
+            impl (bool, bool) for T {}
+        "#
+    }
+
+    #[test]
+    fn impl_type_parameters_are_visible_in_function_bodies() {
+        let code = "
+        struct HasGeneric<#N> {}
+
+        impl<#N> HasGeneric<N> {
+            fn get_generic(self) -> int<8> {
+                N
+            }
+        }
+        ";
+
+        build_items(code);
+    }
+
+    #[test]
+    fn generic_function_in_impl_block_works() {
+        let code = "
+        struct Fp<#Size, #FracBits> {
+            inner: int<Size>
+        }
+        impl<#Size, #FracBits> Fp<Size, FracBits> {
+            fn add<#OutSize>(self, other: Fp<Size, FracBits>) -> Fp<OutSize, FracBits> {
+                Fp(self.inner + other.inner)
+            }
+        
+            fn sub<#OutSize>(self, other: Fp<Size, FracBits>) -> Fp<OutSize, FracBits> {
+                Fp(self.inner - other.inner)
+            }
+        }
+        ";
+
+        build_items(code);
     }
 }

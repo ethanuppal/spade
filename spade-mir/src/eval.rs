@@ -293,6 +293,7 @@ pub fn eval_statements(statements: &[Statement]) -> Value {
                     Operator::IndexArray => todo!(),
                     Operator::IndexMemory => todo!(),
                     Operator::RangeIndexArray { .. } => todo!(),
+                    Operator::RangeIndexBits { .. } => todo!(),
                     Operator::ConstructTuple => {
                         Value::Concat(ops.iter().map(|op| name_vals[op].clone()).collect())
                     }
@@ -302,10 +303,14 @@ pub fn eval_statements(statements: &[Statement]) -> Value {
                     } => {
                         let tag_size = BigUint::from(enum_util::tag_size(*variant_count));
 
-                        let mut to_concat = vec![Value::UInt {
-                            size: tag_size.clone(),
-                            val: (*variant).into(),
-                        }];
+                        let mut to_concat = if *variant_count == 1 {
+                            vec![]
+                        } else {
+                            vec![Value::UInt {
+                                size: tag_size.clone(),
+                                val: (*variant).into(),
+                            }]
+                        };
                         to_concat.append(
                             &mut ops
                                 .iter()
