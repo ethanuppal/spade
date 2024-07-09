@@ -199,6 +199,28 @@ pub fn compile(
         }
     };
 
+
+    let pass_impls = spade_mir::passes::mir_passes();
+    let opt_passes = opts
+        .opt_passes
+        .iter()
+        .map(|pass| {
+            if let Some(pass) = pass_impls.get(pass.as_str()) {
+                Ok(pass.as_ref())
+            } else {
+                let err = format!("{pass} is not a known optimization pass.");
+                Err(err)
+            }
+        })
+        .collect::<Result<Vec<_>, _>>();
+    let opt_passes = match opt_passes {
+        Ok(p) => p,
+        Err(e) => {
+            errors.error_buffer.write_all(e.as_bytes()).unwrap();
+            return Err(unfinished_artefacts);
+        }
+    };
+
     if errors.failed {
         return Err(unfinished_artefacts);
     }
