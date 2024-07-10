@@ -17,6 +17,7 @@ use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::RwLock;
 use tracing::Level;
+use typeinference::TypeState;
 
 use spade_ast::ModuleBody;
 use spade_ast_lowering::{
@@ -117,12 +118,14 @@ pub struct Artefacts {
     // MIR entities after flattening
     pub flat_mir_entities: Vec<Codegenable>,
     pub state: CompilerState,
+    pub type_states: BTreeMap<NameID, TypeState>,
 }
 
 /// Like [Artefacts], but if the compiler didn't finish due to errors.
 pub struct UnfinishedArtefacts {
     pub code: CodeBundle,
     pub item_list: Option<ItemList>,
+    pub type_states: Option<BTreeMap<NameID, TypeState>>,
 }
 
 struct CodegenArtefacts {
@@ -176,6 +179,7 @@ pub fn compile(
     let mut unfinished_artefacts = UnfinishedArtefacts {
         code: code.read().unwrap().clone(),
         item_list: None,
+        type_states: None,
     };
 
     let pass_impls = spade_mir::passes::mir_passes();
@@ -305,6 +309,14 @@ pub fn compile(
         return Err(unfinished_artefacts);
     }
 
+    unfinished_artefacts.type_states = Some(
+        executables_and_types
+            .clone()
+            .into_iter()
+            .map(|(name_id, (_, type_state))| (name_id.clone(), type_state))
+            .collect::<BTreeMap<_, _>>(),
+    );
+
     let mut name_source_map = NameSourceMap::new();
     let mir_entities = spade_hir_lowering::monomorphisation::compile_items(
         &executables_and_types,
@@ -388,6 +400,7 @@ pub fn compile(
             code: code.read().unwrap().clone(),
             item_list,
             state,
+            type_states: unfinished_artefacts.type_states.unwrap(),
         })
     }
 }
