@@ -1,6 +1,3 @@
-use std::ports::read_mut_wire;
-use std::ports::new_mut_wire;
-
 /// A port to a unit which can scale a value by 2. We want this to
 /// appear as a port which a unit that wants to scale values can consume, so
 /// it is returned by a scaler, and consumed by a scalee

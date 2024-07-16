@@ -1,7 +1,6 @@
 ---
 source: spade-tests/src/linear_check.rs
 ---
-use std::ports::new_mut_wire;
 entity test() {
     let idx = 0;
     let a = [inst new_mut_wire(), inst new_mut_wire()];
@@ -10,9 +9,9 @@ entity test() {
 
 
 error: Array with mutable wires cannot be indexed by non-constant values
-  ┌─ testinput:5:9
+  ┌─ testinput:4:9
   │
-5 │     set a[idx] = 0u8;
+4 │     set a[idx] = 0u8;
   │         ^^^^^^
   │         │ │
   │         │ Expected constant

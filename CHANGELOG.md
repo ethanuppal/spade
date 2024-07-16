@@ -20,6 +20,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - [!339][!339] Allow wildcards (`_`) in turbofish and type specifications on bindings
 - [!339][!339] Allow const generics (`{a + b}` etc.) in turbofish and type specifications on bindings
 - [!339][!339] Add `-`, `*`, and `uint_bits_to_fit` as type expressions
+- [!334][!334] Add `to_be_bytes` and `to_le_bytes` to `uint<16>`, `uint<24>` and `uint<32>`
+- [!334][!334] Add `std::conv::concat_arrays`
+- [!334][!334] Add `std::conv::concat_arrays`, `std::ports::new_mut_wire` and `std::ports::read_mut_wire` to the prelude
 
 ### Changed
 
@@ -39,6 +42,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 [!329]: https://gitlab.com/spade-lang/spade/-/merge_requests/329
 [!331]: https://gitlab.com/spade-lang/spade/-/merge_requests/331
 [!335]: https://gitlab.com/spade-lang/spade/-/merge_requests/335
+[!334]: https://gitlab.com/spade-lang/spade/-/merge_requests/334
 [!338]: https://gitlab.com/spade-lang/spade/-/merge_requests/338
 [!339]: https://gitlab.com/spade-lang/spade/-/merge_requests/339
 [!342]: https://gitlab.com/spade-lang/spade/-/merge_requests/342

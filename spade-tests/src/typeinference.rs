@@ -514,7 +514,6 @@ snapshot_error! {
 #[test]
 fn destructuring_a_read_mut_wire_gives_real_values() {
     let code = "
-    mod std {mod ports { entity read_mut_wire<T>(t: &mut T) -> T __builtin__ }}
     struct A {
         x: bool,
         y: int<3>
@@ -535,14 +534,12 @@ fn destructuring_a_read_mut_wire_gives_real_values() {
     }
     ";
 
-    build_items(code);
+    build_items_with_stdlib(code);
 }
 
 snapshot_error! {
     reading_from_port_members_is_a_type_error,
     "
-    use std::ports::read_mut_wire;
-
     struct A {
         x: bool,
         y: int<3>
@@ -561,8 +558,6 @@ snapshot_error! {
 snapshot_error! {
     reading_from_tuple_members_is_an_error,
     "
-    use std::ports::read_mut_wire;
-
     fn takes_normal(x: bool, y: int<3>) -> bool __builtin__
 
     entity uut(val: &mut (bool, int<3>)) -> bool {
@@ -1406,9 +1401,6 @@ fn in_bounds_type_level_integer_is_ok() {
 snapshot_error! {
     type_parameter_propagation_regression,
     "
-        use std::ports::new_mut_wire;
-        use std::ports::read_mut_wire;
-
         struct ReadPort_<W> { }
 
         struct port FifoRead<#W> { }

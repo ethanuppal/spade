@@ -1,7 +1,6 @@
 ---
 source: spade-tests/src/linear_check.rs
 ---
-use std::ports::new_mut_wire;
 entity test() {
     let a = [inst new_mut_wire(), inst new_mut_wire()];
     set a[0] = 0u8;
@@ -11,9 +10,9 @@ entity test() {
 
 
 error: Use of consumed resource
-  ┌─ testinput:5:9
+  ┌─ testinput:4:9
   │
-4 │     set a[0] = 0u8;
+3 │     set a[0] = 0u8;
   │         ---- Previously used here
-5 │     set a[0] = 0u8;
+4 │     set a[0] = 0u8;
   │         ^^^^ Use of consumed resource

@@ -1,4 +1,4 @@
-use crate::{build_items, snapshot_error};
+use crate::{build_items, build_items_with_stdlib, snapshot_error};
 
 snapshot_error! {
     double_consumption_of_identifier_produces_error,
@@ -169,7 +169,6 @@ fn linear_checking_on_registers_works() {
 snapshot_error! {
     checking_works_with_decld_value,
     "
-    entity new_mut_wire() -> &mut bool __builtin__
     entity consume(p: &mut bool) -> bool __builtin__
 
     entity test() -> bool {
@@ -185,8 +184,6 @@ snapshot_error! {
 snapshot_error! {
     function_calls_consume_ports,
     "
-        entity new_mut_wire() -> &mut bool __builtin__
-
         entity consumer(x: &mut bool) -> bool __builtin__
 
         entity test() -> (bool, bool) {
@@ -199,14 +196,7 @@ snapshot_error! {
 #[test]
 fn reading_from_a_port_does_not_consume_it() {
     let code = "
-        mod std { mod ports {
-            entity read_mut_wire<T>(p: &mut T) -> T __builtin__
-        }}
-
-        entity new_mut_wire() -> &mut bool __builtin__
         entity consumer(x: &mut bool) -> bool __builtin__
-
-        use std::ports::read_mut_wire;
 
         entity test() -> (bool, bool) {
             let p = inst new_mut_wire();
@@ -214,7 +204,7 @@ fn reading_from_a_port_does_not_consume_it() {
             (inst read_mut_wire(p), inst read_mut_wire(p))
         }
     ";
-    build_items(code);
+    build_items_with_stdlib(code);
 }
 
 #[test]
@@ -231,7 +221,6 @@ fn set_statement_consumes_port() {
 snapshot_error! {
     array_indexing_does_not_use_whole_array,
     "
-        use std::ports::new_mut_wire;
         entity test() {
             let a = [inst new_mut_wire(), inst new_mut_wire()];
             set a[0] = 0u8;
@@ -242,7 +231,6 @@ snapshot_error! {
 snapshot_error! {
     double_use_of_linear_array_is_wrong,
     "
-        use std::ports::new_mut_wire;
         entity test() {
             let a = [inst new_mut_wire(), inst new_mut_wire()];
             set a[0] = 0u8;
@@ -255,7 +243,6 @@ snapshot_error! {
 snapshot_error! {
     array_index_linear_type_with_non_const_is_error,
     "
-        use std::ports::new_mut_wire;
         entity test() {
             let idx = 0;
             let a = [inst new_mut_wire(), inst new_mut_wire()];

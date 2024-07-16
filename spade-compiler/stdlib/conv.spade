@@ -119,3 +119,47 @@ impl<#N> uint<N> {
         uint_to_bits(self)
     }
 }
+
+
+impl uint<16> {
+    /// Converts `self` into an array of bytes in big-endian order. 0x1234
+    /// becomes [0x12, 0x34].
+    fn to_be_bytes(self) -> [uint<8>; 2] {
+        [trunc(self >> 8), trunc(self)]
+    }
+
+    /// Converts `self` into an array of bytes in little-endian order. 0x1234
+    /// becomes [0x34, 0x12].
+    fn to_le_bytes(self) -> [uint<8>; 2] {
+        std::conv::flip_array(self.to_be_bytes())
+    }
+}
+
+impl uint<24> {
+    /// Converts `self` into an array of bytes in big-endian order. 0x123456
+    /// becomes [0x12, 0x34, 0x56].
+    fn to_be_bytes(self) -> [uint<8>; 3] {
+        [trunc(self >> 16), trunc(self >> 8), trunc(self)]
+    }
+
+    /// Converts `self` into an array of bytes in little-endian order. 0x123456
+    /// becomes [0x56, 0x34, 0x12].
+    fn to_le_bytes(self) -> [uint<8>; 3] {
+        std::conv::flip_array(self.to_be_bytes())
+    }
+}
+
+impl uint<32> {
+    /// Converts `self` into an array of bytes in big-endian order. 0x12345678
+    /// becomes [0x12, 0x34, 0x56, 0x78].
+    fn to_be_bytes(self) -> [uint<8>; 4] {
+        [trunc(self >> 24), trunc(self >> 16), trunc(self >> 8), trunc(self)]
+    }
+
+    /// Converts `self` into an array of bytes in little-endian order. 0x12345678
+    /// becomes [0x78, 0x56, 0x34, 0x12].
+    fn to_le_bytes(self) -> [uint<8>; 4] {
+        std::conv::flip_array(self.to_be_bytes())
+    }
+}
+

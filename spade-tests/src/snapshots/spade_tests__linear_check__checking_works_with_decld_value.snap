@@ -1,7 +1,6 @@
 ---
 source: spade-tests/src/linear_check.rs
 ---
-entity new_mut_wire() -> &mut bool __builtin__
 entity consume(p: &mut bool) -> bool __builtin__
 
 entity test() -> bool {
@@ -14,12 +13,10 @@ entity test() -> bool {
 
 
 error: Use of consumed resource
-  ┌─ testinput:8:26
+  ┌─ testinput:7:26
   │
-6 │     let _ = inst consume(x);
+5 │     let _ = inst consume(x);
   │                          - Previously used here
-7 │     let x = inst new_mut_wire();
-8 │     let _ = inst consume(x);
+6 │     let x = inst new_mut_wire();
+7 │     let _ = inst consume(x);
   │                          ^ Use of consumed resource
-
-

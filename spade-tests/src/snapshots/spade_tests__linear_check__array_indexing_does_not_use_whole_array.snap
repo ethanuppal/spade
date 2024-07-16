@@ -1,7 +1,6 @@
 ---
 source: spade-tests/src/linear_check.rs
 ---
-use std::ports::new_mut_wire;
 entity test() {
     let a = [inst new_mut_wire(), inst new_mut_wire()];
     set a[0] = 0u8;
@@ -9,9 +8,9 @@ entity test() {
 
 
 error: a[1] is unused
-  ┌─ testinput:3:9
+  ┌─ testinput:2:9
   │
-3 │     let a = [inst new_mut_wire(), inst new_mut_wire()];
+2 │     let a = [inst new_mut_wire(), inst new_mut_wire()];
   │         ^ a[1] is unused
   │
   = note: a[1] is a &mut value which must be set

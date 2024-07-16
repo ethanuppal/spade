@@ -1,8 +1,6 @@
 ---
 source: spade-tests/src/typeinference.rs
 ---
-use std::ports::read_mut_wire;
-
 fn takes_normal(x: bool, y: int<3>) -> bool __builtin__
 
 entity uut(val: &mut (bool, int<3>)) -> bool {
@@ -13,13 +11,11 @@ entity uut(val: &mut (bool, int<3>)) -> bool {
 
 
 error: Attempt to use tuple indexing on non-tuple
-  ┌─ testinput:6:32
+  ┌─ testinput:4:32
   │
-5 │ entity uut(val: &mut (bool, int<3>)) -> bool {
+3 │ entity uut(val: &mut (bool, int<3>)) -> bool {
   │                 ------------------- Type &mut (bool, int<3>) inferred here
-6 │     let x = inst read_mut_wire(val#0);
+4 │     let x = inst read_mut_wire(val#0);
   │                                ^^^-- Because this is a tuple index
   │                                │   
   │                                expected tuple, got &mut (bool, int<3>)
-
-
