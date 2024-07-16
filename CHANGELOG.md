@@ -16,6 +16,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - [!325][!325] Add `to_uint`, `bits` and `to_int` methods to `int` and `uint`.
 - [!326][!326] Add pattern matching for arrays
 - [!329][!329] Add turbofish (`::<>`) to methods
+- [!335][!335] Add array shorthand literal syntax (`[0x10; 24]`)
 - [!339][!339] Allow wildcards (`_`) in turbofish and type specifications on bindings
 - [!339][!339] Allow const generics (`{a + b}` etc.) in turbofish and type specifications on bindings
 - [!339][!339] Add `-`, `*`, and `uint_bits_to_fit` as type expressions
@@ -36,6 +37,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 [!326]: https://gitlab.com/spade-lang/spade/-/merge_requests/326
 [!329]: https://gitlab.com/spade-lang/spade/-/merge_requests/329
 [!331]: https://gitlab.com/spade-lang/spade/-/merge_requests/331
+[!335]: https://gitlab.com/spade-lang/spade/-/merge_requests/335
 [!338]: https://gitlab.com/spade-lang/spade/-/merge_requests/338
 [!339]: https://gitlab.com/spade-lang/spade/-/merge_requests/339
 
@@ -73,6 +75,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 [!314]: https://gitlab.com/spade-lang/spade/-/merge_requests/314
 [!318]: https://gitlab.com/spade-lang/spade/-/merge_requests/318
 [!319]: https://gitlab.com/spade-lang/spade/-/merge_requests/319
+[!321]: https://gitlab.com/spade-lang/spade/-/merge_requests/321
 [!322]: https://gitlab.com/spade-lang/spade/-/merge_requests/322
 
 ## [0.8.0] - 2024-05-14
