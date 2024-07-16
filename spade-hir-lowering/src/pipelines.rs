@@ -559,6 +559,9 @@ impl PipelineAvailability for ExprKind {
             ExprKind::StageReady | ExprKind::StageValid => Ok(0),
             ExprKind::TupleLiteral(inner) => try_compute_availability(inner),
             ExprKind::ArrayLiteral(elems) => try_compute_availability(elems),
+            ExprKind::ArrayShorthandLiteral(inner, _) => {
+                try_compute_availability(&[inner.as_ref()])
+            }
             ExprKind::Index(lhs, idx) => try_compute_availability(&[lhs.as_ref(), idx.as_ref()]),
             ExprKind::RangeIndex {
                 target,

@@ -497,6 +497,9 @@ impl TypeState {
             ExprKind::TupleLiteral(_) => self.visit_tuple_literal(expression, ctx, generic_list)?,
             ExprKind::TupleIndex(_, _) => self.visit_tuple_index(expression, ctx, generic_list)?,
             ExprKind::ArrayLiteral(_) => self.visit_array_literal(expression, ctx, generic_list)?,
+            ExprKind::ArrayShorthandLiteral(_, _) => {
+                self.visit_array_shorthand_literal(expression, ctx, generic_list)?
+            }
             ExprKind::CreatePorts => self.visit_create_ports(expression, ctx, generic_list)?,
             ExprKind::FieldAccess(_, _) => {
                 self.visit_field_access(expression, ctx, generic_list)?

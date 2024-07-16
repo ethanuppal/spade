@@ -342,6 +342,15 @@ impl TokenKind {
             TokenKind::Integer(_) | TokenKind::HexInteger(_) | TokenKind::BinInteger(_)
         )
     }
+
+    pub fn as_biguint(&self) -> Option<BigUint> {
+        match self {
+            TokenKind::Integer((i, _))
+            | TokenKind::HexInteger((i, _))
+            | TokenKind::BinInteger((i, _)) => Some(i.clone()),
+            _ => None,
+        }
+    }
 }
 
 #[cfg(test)]

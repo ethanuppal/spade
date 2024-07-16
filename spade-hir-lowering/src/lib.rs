@@ -1137,6 +1137,7 @@ impl ExprLocal for Loc<Expression> {
             ExprKind::FieldAccess(_, _) => Ok(None),
             ExprKind::CreatePorts => Ok(None),
             ExprKind::ArrayLiteral { .. } => Ok(None),
+            ExprKind::ArrayShorthandLiteral { .. } => Ok(None),
             ExprKind::Index(_, _) => Ok(None),
             ExprKind::RangeIndex { .. } => Ok(None),
             ExprKind::Block(block) => {
@@ -1597,7 +1598,7 @@ impl ExprLocal for Loc<Expression> {
             }
             ExprKind::ArrayLiteral(values) => {
                 for elem in values {
-                    result.append(elem.lower(ctx)?)
+                    result.append(elem.lower(ctx)?);
                 }
                 result.push_primary(
                     mir::Statement::Binding(mir::Binding {
@@ -1606,6 +1607,33 @@ impl ExprLocal for Loc<Expression> {
                         operands: values
                             .iter()
                             .map(|v| v.variable(ctx.subs))
+                            .collect::<Result<_>>()?,
+                        ty: self_type,
+                        loc: Some(self.loc()),
+                    }),
+                    self,
+                )
+            }
+            ExprKind::ArrayShorthandLiteral(value, amount) => {
+                // This could be caught earlier, but if we for some reason want to allow
+                // arrays longer than usize::MAX elements (why?) we should report
+                // it as a diagnostic when we actually want to _use_ the amount as a usize.
+                let amount = amount.to_usize().ok_or_else(|| {
+                    Diagnostic::error(
+                        amount,
+                        format!(
+                            "Array cannot contain more than usize::max ({}) elements",
+                            usize::MAX
+                        ),
+                    )
+                })?;
+                result.append(value.lower(ctx)?);
+                result.push_primary(
+                    mir::Statement::Binding(mir::Binding {
+                        name: self.variable(ctx.subs)?,
+                        operator: mir::Operator::ConstructArray,
+                        operands: (0..=amount)
+                            .map(|_| value.variable(ctx.subs))
                             .collect::<Result<_>>()?,
                         ty: self_type,
                         loc: Some(self.loc()),

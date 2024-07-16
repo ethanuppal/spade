@@ -220,7 +220,10 @@ pub enum Expression {
     IntLiteral(IntLiteral),
     BoolLiteral(bool),
     BitLiteral(BitLiteral),
+    /// `[1, 2, 3]`
     ArrayLiteral(Vec<Loc<Expression>>),
+    /// `[<expr>; <amount>]`
+    ArrayShorthandLiteral(Box<Loc<Expression>>, Loc<BigUint>),
     Index(Box<Loc<Expression>>, Box<Loc<Expression>>),
     RangeIndex {
         target: Box<Loc<Expression>>,
@@ -320,6 +323,7 @@ impl Expression {
             Expression::BoolLiteral(_) => "bool literal",
             Expression::BitLiteral(_) => "bit literal",
             Expression::ArrayLiteral(_) => "array literal",
+            Expression::ArrayShorthandLiteral(_, _) => "array shorthand literal",
             Expression::CreatePorts => "port",
             Expression::Index(_, _) => "index",
             Expression::RangeIndex { .. } => "range index",

@@ -2242,8 +2242,8 @@ mod tests {
                     // them is changed, in particular, the stdlib. If we end up with
                     // more tests like this we should add them to MIR comparison
                     // lifeguard spade#225
-                    vec![statement!(const 648; Type::Int(8u32.to_biguint()); ConstantValue::Int(0.to_bigint()))],
-                    vec![statement!(const 649; Type::Int(8u32.to_biguint()); ConstantValue::Int(1.to_bigint()))],
+                    vec![statement!(const 653; Type::Int(8u32.to_biguint()); ConstantValue::Int(0.to_bigint()))],
+                    vec![statement!(const 654; Type::Int(8u32.to_biguint()); ConstantValue::Int(1.to_bigint()))],
                 ])
             }); n(0, "clk"), n(11, "ports"));
             (n(2, "mem"); mem_type; Alias; e(1));

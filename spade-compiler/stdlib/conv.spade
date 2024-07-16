@@ -16,13 +16,19 @@ fn zext<#N, #M>(x: uint<N>) -> uint<M> __builtin__
 /// it itself would be concat<#N, #M>(x: Number<N>, y: Number<M>) -> Number<N + M>.
 fn concat<N, M, K>(x: N, y: M) -> K __builtin__
 
+/// Concatenate the contents of two arrays `[l0, l1, l2...]`
+/// and `[r0, r1, r2...]` to form `[l0, l1, l2..., ln, r0, r1, r2...]`
+fn concat_arrays<T, #L, #R, #O>(l: [T; L], r: [T; R]) -> [T; O]
+    where O: L + R
+{
+    std::conv::unsafe::unsafe_cast((r, l))
+}
+
 /// Casts a `bit` to a `bool`. low maps to false, high maps to true, but HIGHIMP is undefined.
 /// In practice, in a simulator, it will map to Z
 fn bit_to_bool(b: bit) -> bool {
     unsafe::unsafe_cast(b)
 }
-
-
 
 /// Completely reverses the order of the elements in the `in` array
 /// For example, [1, 2, 3] becomes [3, 2, 1]

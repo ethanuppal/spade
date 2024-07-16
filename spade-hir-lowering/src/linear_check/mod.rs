@@ -146,6 +146,7 @@ fn visit_expression(
         spade_hir::ExprKind::BitLiteral(_) => true,
         spade_hir::ExprKind::TupleLiteral(_) => true,
         spade_hir::ExprKind::ArrayLiteral(_) => true,
+        spade_hir::ExprKind::ArrayShorthandLiteral(_, _) => true,
         spade_hir::ExprKind::CreatePorts => true,
         spade_hir::ExprKind::Index(_, _) => true,
         spade_hir::ExprKind::RangeIndex { .. } => true,
@@ -197,6 +198,11 @@ fn visit_expression(
                 trace!("Consuming array literal inner");
                 linear_state.consume_expression(expr)?;
             }
+        }
+        spade_hir::ExprKind::ArrayShorthandLiteral(inner, _) => {
+            // TODO: ?
+            visit_expression(inner, linear_state, ctx)?;
+            linear_state.consume_expression(inner)?;
         }
         spade_hir::ExprKind::CreatePorts => {}
         spade_hir::ExprKind::Index(target, idx_expr) => {

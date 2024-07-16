@@ -165,6 +165,7 @@ pub enum ExprKind {
     CreatePorts,
     TupleLiteral(Vec<Loc<Expression>>),
     ArrayLiteral(Vec<Loc<Expression>>),
+    ArrayShorthandLiteral(Box<Loc<Expression>>, Loc<BigUint>),
     Index(Box<Loc<Expression>>, Box<Loc<Expression>>),
     RangeIndex {
         target: Box<Loc<Expression>>,
@@ -283,6 +284,7 @@ impl LocExprExt for Loc<Expression> {
             ExprKind::ArrayLiteral(inner) => {
                 inner.iter().find_map(Self::runtime_requirement_witness)
             }
+            ExprKind::ArrayShorthandLiteral(inner, _) => inner.runtime_requirement_witness(),
             ExprKind::CreatePorts => Some(self.clone()),
             ExprKind::Index(l, r) => l
                 .runtime_requirement_witness()

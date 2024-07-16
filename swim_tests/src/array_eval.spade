@@ -2,6 +2,15 @@ struct ArrayInStruct {
     inner: [int<8>; 8],
     test: int<8>,
 }
+
 entity constant_array() -> ArrayInStruct {
     ArrayInStruct([1,2,3,4,5,6,7,8], 9)
+}
+
+entity array_in_array_in_array_with_shorthand() -> [[[int<2>; 2]; 2]; 2] {
+    [[[1; 2]; 2]; 2]
+}
+
+entity array_shorthand_concat() -> [int<4>; 16] {
+    [0; 4] `std::conv::concat_arrays` [1; 4] `std::conv::concat_arrays` [2; 4] `std::conv::concat_arrays` [3; 4]
 }

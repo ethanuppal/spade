@@ -118,6 +118,10 @@ impl<'a> Inferer<'a> {
                 self.tuple_or_array_literal(exprs)?;
                 None
             }
+            ExprKind::ArrayShorthandLiteral(expr, _) => {
+                self.expression(expr)?;
+                None
+            }
             ExprKind::Index(target, index) => {
                 self.expression(target)?;
                 self.expression(index)?;

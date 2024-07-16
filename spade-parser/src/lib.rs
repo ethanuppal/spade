@@ -244,17 +244,39 @@ impl<'a> Parser<'a> {
     fn array_literal(&mut self) -> Result<Option<Loc<Expression>>> {
         let start = peek_for!(self, &TokenKind::OpenBracket);
 
-        let inner = self
-            .comma_separated(Self::expression, &TokenKind::CloseBracket)
-            .no_context()?;
+        // empty array
+        if let Some(end) = self.peek_and_eat(&TokenKind::CloseBracket)? {
+            return Ok(Some(Expression::ArrayLiteral(vec![]).between(
+                self.file_id,
+                &start,
+                &end,
+            )));
+        }
+
+        // non-empty array => must be an expression
+        let first = self.expression()?;
+
+        let expr = if self.peek_and_eat(&TokenKind::Semi).unwrap().is_some() {
+            // array shorthand ([<expr>; N])
+            let amount = self.eat_cond(TokenKind::is_integer, "integer")?;
+            Expression::ArrayShorthandLiteral(
+                Box::new(first),
+                amount.kind.as_biguint().unwrap().at_loc(&amount.loc()),
+            )
+        } else {
+            // eat comma, if any
+            let _ = self.peek_and_eat(&TokenKind::Comma)?;
+            // now we can continue with the rest of the elements
+            let mut inner = self
+                .comma_separated(Self::expression, &TokenKind::CloseBracket)
+                .no_context()?;
+            inner.insert(0, first);
+            Expression::ArrayLiteral(inner)
+        };
 
         let end = self.eat(&TokenKind::CloseBracket)?;
 
-        Ok(Some(Expression::ArrayLiteral(inner).between(
-            self.file_id,
-            &start,
-            &end,
-        )))
+        Ok(Some(expr.between(self.file_id, &start, &end)))
     }
 
     #[trace_parser]

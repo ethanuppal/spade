@@ -42,6 +42,9 @@ impl Passable for Loc<Expression> {
                     i.apply(pass)?
                 }
             }
+            ExprKind::ArrayShorthandLiteral(inner, _) => {
+                inner.apply(pass)?;
+            }
             ExprKind::Index(lhs, rhs) => {
                 subnodes!(lhs, rhs)
             }

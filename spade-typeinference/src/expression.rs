@@ -309,6 +309,7 @@ impl TypeState {
                 self.visit_expression(expr, ctx, generic_list)?;
             }
 
+            // unify all elements in array pairwise, e.g. unify(0, 1), unify(1, 2), ...
             for (l, r) in members.iter().zip(members.iter().skip(1)) {
                 self.unify(r, l, ctx)
                     .into_diagnostic(r, |diag, Tm{e: expected, g: _got}| {
@@ -334,6 +335,24 @@ impl TypeState {
                 inner_type,
                 size_type,
             );
+
+            self.unify_expression_generic_error(expression, &result_type, ctx)?;
+        });
+        Ok(())
+    }
+
+    pub fn visit_array_shorthand_literal(
+        &mut self,
+        expression: &Loc<Expression>,
+        ctx: &Context,
+        generic_list: &GenericListToken,
+    ) -> Result<()> {
+        assuming_kind!(ExprKind::ArrayShorthandLiteral(expr, amount) = &expression => {
+            self.visit_expression(expr, ctx, generic_list)?;
+
+            let inner_type = expr.get_type(self)?;
+            let size_type = TypeVar::Known(amount.loc(), KnownType::Integer(amount.inner.clone()), vec![]);
+            let result_type = TypeVar::array(expression.loc(), inner_type, size_type);
 
             self.unify_expression_generic_error(expression, &result_type, ctx)?;
         });
