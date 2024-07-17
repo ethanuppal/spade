@@ -1,0 +1,14 @@
+---
+source: spade-tests/src/parser.rs
+---
+fn test() {
+    let length: uint<8> = 24;
+    let _ = [1u2; length];
+}
+
+
+error: Unexpected `identifier`, expected `integer`
+  ┌─ testinput:3:19
+  │
+3 │     let _ = [1u2; length];
+  │                   ^^^^^^ expected `integer`

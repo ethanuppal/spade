@@ -1786,3 +1786,41 @@ fn type_level_sub_works() {
     ";
     build_items(code);
 }
+
+#[test]
+fn infer_array_type_from_shorthand_syntax() {
+    let code = r#"
+        fn top() -> bool {
+            let _ = [1u2; 4];
+            true
+        }
+    "#;
+    build_items(code);
+}
+
+snapshot_error! {
+    array_shorthand_wrong_length,
+    "
+        fn test() {
+            let _: [uint<2>; 4] = [1u2; 5];
+        }
+    "
+}
+
+snapshot_error! {
+    array_shorthand_wrong_inner_type,
+    "
+        fn test() {
+            let _: [uint<2>; 4] = [1u4; 4];
+        }
+    "
+}
+
+snapshot_error! {
+    array_shorthand_wrong_type,
+    "
+        fn test() {
+            let _: [uint<4>; 4] = [1u2; 2];
+        }
+    "
+}

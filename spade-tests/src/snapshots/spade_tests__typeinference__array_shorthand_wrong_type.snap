@@ -1,0 +1,22 @@
+---
+source: spade-tests/src/typeinference.rs
+---
+fn test() {
+    let _: [uint<4>; 4] = [1u2; 2];
+}
+
+
+error: Expected type [uint<4>; 4], got [uint<2>; 2]
+  ┌─ testinput:2:27
+  │
+2 │     let _: [uint<4>; 4] = [1u2; 2];
+  │                  -        ^^^^^^^^
+  │                  │        ││
+  │                  │        │Type 2 inferred here
+  │                  │        Expected [uint<4>; 4]
+  │                  Type 4 inferred here
+  │
+  = note: Expected: 4
+                in: [uint<4>; 4]
+               Got: 2
+                in: [uint<2>; 2]

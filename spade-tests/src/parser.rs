@@ -651,3 +651,45 @@ snapshot_error! {
         }
     "
 }
+
+#[test]
+fn array_shorthand_literal_syntax_parses() {
+    let code = r#"
+        fn top() -> bool {
+            let _: [int<2>; 2] = [1; 2];
+            let _: [uint<8>; 4] = [0xff; 4];
+            let _: [uint<10>; 25] = [5u10; 25];
+            true
+        }
+    "#;
+    build_items(code);
+}
+
+snapshot_error! {
+    array_shorthand_signed_length,
+    "
+        fn test() {
+            let _ = [1u2; 2i];
+        }
+    "
+}
+
+snapshot_error! {
+    array_shorthand_ident_length,
+    "
+        fn test() {
+            let length: uint<8> = 24;
+            let _ = [1u2; length];
+        }
+    "
+}
+
+snapshot_error! {
+    array_shorthand_missing_length,
+    "
+        fn test() {
+            let length = 24;
+            let _ = [1u2;];
+        }
+    "
+}

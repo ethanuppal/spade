@@ -1,3 +1,5 @@
+use crate::snapshot_error;
+
 #[cfg(test)]
 mod tests {
     use crate::{
@@ -3235,4 +3237,13 @@ mod argument_list_tests {
         }
         "
     }
+}
+
+snapshot_error! {
+    array_shorthand_too_long,
+    "
+        fn top() {
+            let _ = [0u2; 11111111111111111111111111111111111111111111111111];
+        }
+    "
 }

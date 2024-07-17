@@ -1,0 +1,14 @@
+---
+source: spade-tests/src/parser.rs
+---
+fn test() {
+    let length = 24;
+    let _ = [1u2;];
+}
+
+
+error: Unexpected `]`, expected `integer`
+  ┌─ testinput:3:18
+  │
+3 │     let _ = [1u2;];
+  │                  ^ expected `integer`
