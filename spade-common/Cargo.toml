@@ -16,5 +16,4 @@ codespan.workspace = true
 codespan-reporting.workspace = true
 logos.workspace = true
 serde.workspace = true
-tracing.workspace = true
 num.workspace = true

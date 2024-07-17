@@ -12,11 +12,10 @@ rust-version.workspace = true
 doctest = false
 
 [dependencies]
-tracing.workspace = true
-local-impl.workspace = true
-pretty_assertions.workspace = true
-num.workspace = true
 itertools.workspace = true
+local-impl.workspace = true
+num.workspace = true
+tracing.workspace = true
 
 spade-ast = {path = "../spade-ast"}
 spade-common = {path = "../spade-common"}

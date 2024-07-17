@@ -12,20 +12,11 @@ rust-version.workspace = true
 doctest = false
 
 [dependencies]
-colored.workspace = true
-thiserror.workspace = true
-codespan-reporting.workspace = true
-codespan.workspace = true
-serde.workspace = true
-tracing.workspace = true
-local-impl.workspace = true
 num.workspace = true
 
-spade-ast = {path = "../spade-ast"}
 spade-common = {path = "../spade-common"}
 spade-hir = {path = "../spade-hir"}
 spade-macros = {path = "../spade-macros"}
-spade-parser = {path = "../spade-parser"}
 spade-typeinference = {path = "../spade-typeinference"}
 spade-types = {path = "../spade-types"}
 spade-diagnostics = {path = "../spade-diagnostics"}

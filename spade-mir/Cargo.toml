@@ -12,21 +12,19 @@ rust-version.workspace = true
 doctest = false
 
 [dependencies]
-logos.workspace = true
-codespan.workspace = true
 codespan-reporting.workspace = true
-indoc.workspace = true
-nesty = "0.2"
-itertools.workspace = true
-serde.workspace = true
-num.workspace = true
 derive-where = "1.2.7"
+indoc.workspace = true
+itertools.workspace = true
+nesty = "0.2"
+num.workspace = true
+serde.workspace = true
 
 spade-common = { path = "../spade-common" }
 spade-diagnostics = { path = "../spade-diagnostics" }
-spade-macros = { path = "../spade-macros" }
 
 [dev-dependencies]
 colored.workspace = true
+codespan.workspace = true
 prettydiff.workspace = true
 pretty_assertions.workspace = true
