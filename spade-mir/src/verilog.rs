@@ -5,6 +5,10 @@ pub fn assign(target: &str, value: &str) -> String {
     format!("assign {} = {};", target, value)
 }
 
+pub fn localparam_size_spec(size: &BigUint) -> String {
+    format!("[{}:0]", size - 1u32.to_biguint())
+}
+
 pub fn size_spec(size: &BigUint) -> String {
     if size == &1u32.to_biguint() {
         String::new()

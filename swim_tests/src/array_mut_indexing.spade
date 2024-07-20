@@ -1,0 +1,13 @@
+use std::ports::new_mut_wire;
+use std::ports::read_mut_wire;
+
+entity mutable_array_indexing() {
+    let array = [
+        inst new_mut_wire(),
+        inst new_mut_wire(),
+        inst new_mut_wire(),
+    ];
+    set array[0] = 1u8;
+    set array[1] = 2u8;
+    set array[2] = 3u8;
+}

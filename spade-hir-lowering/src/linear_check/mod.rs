@@ -1,3 +1,4 @@
+use num::ToPrimitive;
 use tracing::trace;
 
 use spade_common::{
@@ -8,11 +9,11 @@ use spade_diagnostics::{diag_bail, Diagnostic};
 use spade_hir::{
     expression::{NamedArgument, UnaryOperator},
     symbol_table::SymbolTable,
-    ArgumentList, Binding, Expression, Register, Statement, TypeList, TypeSpec,
+    ArgumentList, Binding, ExprKind, Expression, Register, Statement, TypeList, TypeSpec,
 };
 use spade_typeinference::TypeState;
 
-use self::linear_state::LinearState;
+use self::linear_state::{is_linear, LinearState};
 use crate::error::Result;
 
 mod linear_state;
@@ -198,12 +199,44 @@ fn visit_expression(
             }
         }
         spade_hir::ExprKind::CreatePorts => {}
-        spade_hir::ExprKind::Index(target, idx) => {
+        spade_hir::ExprKind::Index(target, idx_expr) => {
             visit_expression(target, linear_state, ctx)?;
-            visit_expression(idx, linear_state, ctx)?;
-            // Since array indices are not static, we have to just consume here
-            linear_state.consume_expression(target)?;
-            linear_state.consume_expression(idx)?;
+            visit_expression(idx_expr, linear_state, ctx)?;
+
+            if is_linear(&ctx.type_state.expr_type(target, ctx.symtab, ctx.types)?) {
+                let idx = match &idx_expr.kind {
+                    ExprKind::IntLiteral(value, _) => value,
+                    _ => {
+                        return Err(Diagnostic::error(
+                            expr,
+                            "Array with mutable wires cannot be indexed by non-constant values",
+                        )
+                        .primary_label("Array with mutable wires indexed by non-constant")
+                        .secondary_label(idx_expr.loc(), "Expected constant"))
+                    }
+                };
+
+                let idx = idx.to_u128().ok_or_else(|| {
+                    Diagnostic::error(
+                        target.loc(),
+                        "Array indices > 2^64 are not allowed on mutable wires",
+                    )
+                })?;
+
+                // If the array has mutable wires, we need to guarantee statically that they are
+                // used exactly once. To do that, we need to ensure that the array is indexed by a
+                // statically known index. However, this check is only required if the array actually
+                // has linear type
+                linear_state.alias_array_member(
+                    expr.id.at_loc(expr),
+                    target.id,
+                    &idx.at_loc(idx_expr),
+                )?;
+            } else {
+                linear_state.consume_expression(target)?;
+            }
+
+            linear_state.consume_expression(idx_expr)?;
         }
         spade_hir::ExprKind::RangeIndex {
             target,

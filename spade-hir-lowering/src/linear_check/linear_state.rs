@@ -1,5 +1,6 @@
 use std::{cell::RefCell, cmp::Ordering, collections::HashMap, rc::Rc};
 
+use num::ToPrimitive;
 use spade_diagnostics::Diagnostic;
 use tracing::trace;
 
@@ -21,6 +22,8 @@ pub enum MutWireWitness {
     Field(Identifier, Box<MutWireWitness>),
     /// This type has a tuple member which is &mut or has its own &mut subtuple
     TupleIndex(usize, Box<MutWireWitness>),
+    /// This type has a array member which is &mut or has its own &mut subtuple
+    ArrayIndex(usize, Box<MutWireWitness>),
 }
 
 impl MutWireWitness {
@@ -38,6 +41,7 @@ impl MutWireWitness {
             MutWireWitness::This => String::new(),
             MutWireWitness::Field(ident, rest) => format!(".{}{}", ident, rest.motivation()),
             MutWireWitness::TupleIndex(idx, rest) => format!("#{}{}", idx, rest.motivation()),
+            MutWireWitness::ArrayIndex(idx, rest) => format!("[{}]{}", idx, rest.motivation()),
         }
     }
 }
@@ -157,6 +161,7 @@ enum LinearTreeKind {
     Leaf(UsageInfo),
     Struct(HashMap<Identifier, Rc<RefCell<LinearTree>>>),
     Tuple(Vec<Rc<RefCell<LinearTree>>>),
+    Array(Vec<Rc<RefCell<LinearTree>>>),
 }
 
 pub type ConsumptionError = (MutWireWitness, Loc<()>);
@@ -193,6 +198,14 @@ impl LinearTree {
                 })?;
                 Ok(())
             }
+            LinearTreeKind::Array(members) => {
+                members.iter().enumerate().try_for_each(|(i, sub)| {
+                    sub.borrow_mut().try_consume(loc).map_err(|(witness, loc)| {
+                        (MutWireWitness::ArrayIndex(i, Box::new(witness)), loc)
+                    })
+                })?;
+                Ok(())
+            }
         }
     }
 
@@ -216,6 +229,13 @@ impl LinearTree {
         }
     }
 
+    fn array(inner: Vec<Rc<RefCell<LinearTree>>>) -> Self {
+        Self {
+            kind: LinearTreeKind::Array(inner),
+            aliases: vec![],
+        }
+    }
+
     fn struct_(fields: HashMap<Identifier, Rc<RefCell<LinearTree>>>) -> Self {
         Self {
             kind: LinearTreeKind::Struct(fields),
@@ -230,6 +250,13 @@ impl LinearTree {
     pub fn assume_tuple(&self) -> &Vec<Rc<RefCell<LinearTree>>> {
         match &self.kind {
             LinearTreeKind::Tuple(inner) => inner,
+            _ => panic!("Assumed tree was tuple, got {:?}", self.kind),
+        }
+    }
+
+    pub fn assume_array(&self) -> &Vec<Rc<RefCell<LinearTree>>> {
+        match &self.kind {
+            LinearTreeKind::Array(inner) => inner,
             _ => panic!("Assumed tree was tuple, got {:?}", self.kind),
         }
     }
@@ -270,6 +297,17 @@ impl LinearTree {
                 }
                 Ok(())
             }
+            LinearTreeKind::Array(members) => {
+                for (i, member) in members.iter().enumerate() {
+                    match member.borrow().check_unused() {
+                        Ok(_) => {}
+                        Err(witness) => {
+                            return Err(MutWireWitness::ArrayIndex(i, Box::new(witness)))
+                        }
+                    }
+                }
+                Ok(())
+            }
         }
     }
 }
@@ -295,12 +333,12 @@ fn build_linear_tree(source_loc: Loc<()>, ty: &ConcreteType) -> LinearTree {
                 .collect();
             LinearTree::struct_(inner)
         }
-        ConcreteType::Array { inner, size: _ } => {
+        ConcreteType::Array { inner, size } => {
             if is_linear(inner) {
-                // Since we can't keep track of dynamic indices, we won't allow
-                // indexing on arrays. We therefore have to resort to treating the whole
-                // thing as one giant linear type, and require destructuring
-                LinearTree::leaf(true)
+                let inner = (0..size.to_usize().expect("Array size > 2^64"))
+                    .map(|_| Rc::new(RefCell::new(build_linear_tree(source_loc, inner))))
+                    .collect();
+                LinearTree::array(inner)
             } else {
                 LinearTree::leaf(false)
             }
@@ -499,6 +537,21 @@ impl LinearState {
     ) -> Result<(), Diagnostic> {
         self.alias_subtree(to, base_expr, |base_tree| {
             let subtrees = base_tree.assume_tuple();
+            Rc::clone(&subtrees[idx.inner as usize])
+        })
+    }
+
+    /// Adds `from` as an alias to the tree at `base_expr[idx]`. Panics if base_expr is not
+    /// a tuple with at least idx elements
+    #[tracing::instrument(level = "trace", skip_all, fields(%base_expr, %idx, %to))]
+    pub fn alias_array_member(
+        &mut self,
+        to: Loc<u64>,
+        base_expr: u64,
+        idx: &Loc<u128>,
+    ) -> Result<(), Diagnostic> {
+        self.alias_subtree(to, base_expr, |base_tree| {
+            let subtrees = base_tree.assume_array();
             Rc::clone(&subtrees[idx.inner as usize])
         })
     }

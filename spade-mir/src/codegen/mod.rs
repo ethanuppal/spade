@@ -17,7 +17,7 @@ use crate::renaming::{make_names_predictable, VerilogNameMap};
 use crate::type_list::TypeList;
 use crate::types::Type;
 use crate::unit_name::{InstanceMap, InstanceNameTracker};
-use crate::verilog::{self, assign, logic, size_spec};
+use crate::verilog::{self, assign, localparam_size_spec, logic, size_spec};
 use crate::wal::insert_wal_signals;
 use crate::{
     enum_util, Binding, ConstantValue, Entity, MirInput, Operator, ParamName, Statement, ValueName,
@@ -132,13 +132,9 @@ fn statement_declaration(
                 code! {}
             }
         }
-        Statement::Constant(id, ty, _) => {
-            let name = ValueName::Expr(*id).var_name();
-            let declaration = logic(&name, &ty.size());
-
-            code! {
-                [0] &declaration;
-            }
+        Statement::Constant(_, _, _) => {
+            // Constants codegen as localparams in statement_code
+            code! {}
         }
         Statement::Assert(_) => {
             code! {}
@@ -658,6 +654,7 @@ fn backward_expression_code(binding: &Binding, types: &TypeList, ops: &[ValueNam
         .iter()
         .map(ValueName::backward_var_name)
         .collect::<Vec<_>>();
+    let fwd_op_names = ops.iter().map(ValueName::var_name).collect::<Vec<_>>();
     match &binding.operator {
         Operator::Add
         | Operator::UnsignedAdd
@@ -730,9 +727,9 @@ fn backward_expression_code(binding: &Binding, types: &TypeList, ops: &[ValueNam
         Operator::IndexArray => {
             let member_size = self_type.backward_size();
             if member_size == 1u32.to_biguint() {
-                format!("{}[{}]", op_names[0], op_names[1])
+                format!("{}[{}]", op_names[0], fwd_op_names[1])
             } else {
-                let end_index = format!("{} * {}", op_names[1], member_size);
+                let end_index = format!("{} * {}", fwd_op_names[1], member_size);
                 let offset = member_size;
 
                 // Strange indexing explained here https://stackoverflow.com/questions/18067571/indexing-vectors-and-arrays-with#18068296
@@ -996,7 +993,9 @@ fn statement_code(statement: &Statement, ctx: &mut Context) -> Code {
                 ConstantValue::HighImp => "'bz".to_string(),
             };
 
-            let assignment = format!("assign {} = {};", name, expression);
+            let size = localparam_size_spec(&t.size());
+
+            let assignment = format!("localparam{size} {name} = {expression};");
 
             code! {
                 [0] &assignment
@@ -1595,8 +1594,7 @@ mod tests {
                 `endif
                 logic[2:0] \a_mut ;
                 assign a_o = \a_mut ;
-                logic[5:0] _e_0;
-                assign _e_0 = 3;
+                localparam[5:0] _e_0 = 3;
                 assign output__ = _e_0;
             endmodule"#
         );
@@ -1639,8 +1637,7 @@ mod tests {
                 assign \a  = a_i;
                 logic[2:0] \a_mut ;
                 assign a_o = \a_mut ;
-                logic[5:0] _e_0;
-                assign _e_0 = 3;
+                localparam[5:0] _e_0 = 3;
                 assign output__ = _e_0;
             endmodule"#
         );
@@ -1701,8 +1698,7 @@ mod tests {
 
         let expected = indoc!(
             r#"
-            logic[9:0] _e_0;
-            assign _e_0 = 6;"#
+            localparam[9:0] _e_0 = 6;"#
         );
 
         assert_same_code!(
@@ -2219,8 +2215,7 @@ mod expression_tests {
 
         let expected = indoc!(
             r#"
-            logic _e_0;
-            assign _e_0 = 1;"#
+            localparam[0:0] _e_0 = 1;"#
         );
 
         assert_same_code!(
@@ -2443,8 +2438,7 @@ mod expression_tests {
 
         let expected = indoc!(
             r#"
-            logic[63:0] _e_0;
-            assign _e_0 = -64'd1;"#
+            localparam[63:0] _e_0 = -64'd1;"#
         );
 
         assert_same_code!(
@@ -3097,8 +3091,7 @@ mod expression_tests {
 
         let expected = indoc! {
             r#"
-            logic[31:0] _e_0;
-            assign _e_0 = 32'd3;"#
+            localparam[31:0] _e_0 = 32'd3;"#
         };
 
         assert_same_code!(

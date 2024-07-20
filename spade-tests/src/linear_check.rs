@@ -227,3 +227,39 @@ fn set_statement_consumes_port() {
 
     build_items(code);
 }
+
+snapshot_error! {
+    array_indexing_does_not_use_whole_array,
+    "
+        use std::ports::new_mut_wire;
+        entity test() {
+            let a = [inst new_mut_wire(), inst new_mut_wire()];
+            set a[0] = 0u8;
+        }
+    "
+}
+
+snapshot_error! {
+    double_use_of_linear_array_is_wrong,
+    "
+        use std::ports::new_mut_wire;
+        entity test() {
+            let a = [inst new_mut_wire(), inst new_mut_wire()];
+            set a[0] = 0u8;
+            set a[0] = 0u8;
+            set a[1] = 0;
+        }
+    "
+}
+
+snapshot_error! {
+    array_index_linear_type_with_non_const_is_error,
+    "
+        use std::ports::new_mut_wire;
+        entity test() {
+            let idx = 0;
+            let a = [inst new_mut_wire(), inst new_mut_wire()];
+            set a[idx] = 0u8;
+        }
+    "
+}
