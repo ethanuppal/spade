@@ -102,6 +102,7 @@ impl Requirement {
     /// - Or the requirement is now satisfied, in which case new unification tasks which are
     /// applied due to the result are returned. After this, the constraint is no longer needed
     /// and can be dropped
+    #[tracing::instrument(level = "trace", skip(type_state, ctx))]
     pub fn check(&self, type_state: &mut TypeState, ctx: &Context) -> Result<RequirementResult> {
         match self {
             Requirement::HasField {

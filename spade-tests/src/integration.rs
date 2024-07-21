@@ -1036,4 +1036,23 @@ mod trait_tests {
             }
         "
     }
+
+    #[test]
+    fn impl_inner_type_expr() {
+        let code = "
+            trait T<#N> {
+                fn method(self);
+            }
+
+            struct X {}
+            impl T<8> for X {
+                fn method(self) {}
+            }
+
+            fn use_method(x: X) {
+                x.method()
+            }
+        ";
+        build_items(code);
+    }
 }

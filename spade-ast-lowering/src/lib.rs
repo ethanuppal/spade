@@ -1165,6 +1165,29 @@ fn monomorphise_trait_method(
     })
 }
 
+fn monomorphise_type_expr(
+    te: &Loc<hir::TypeExpression>,
+    trait_type_params: &[Loc<hir::TypeParam>],
+    trait_method_type_params: &[Loc<hir::TypeParam>],
+    impl_type_params: &[Loc<hir::TypeExpression>],
+    impl_method_type_params: &[Loc<hir::TypeExpression>],
+) -> Result<Loc<hir::TypeExpression>> {
+    match &te.inner {
+        TypeExpression::Integer(_) => Ok(te.clone()),
+        TypeExpression::TypeSpec(s) => {
+            let (inner, loc) = monomorphise_type_spec(
+                &s.clone().at_loc(&te),
+                trait_type_params,
+                trait_method_type_params,
+                impl_type_params,
+                impl_method_type_params,
+            )?
+            .split_loc();
+            Ok(TypeExpression::TypeSpec(inner).at_loc(&loc))
+        }
+    }
+}
+
 fn monomorphise_type_spec(
     ty: &Loc<hir::TypeSpec>,
     trait_type_params: &[Loc<hir::TypeParam>],
@@ -1176,16 +1199,14 @@ fn monomorphise_type_spec(
         TypeSpec::Declared(name, te) => {
             let mono_tes = te
                 .iter()
-                .map(|te| match &te.inner {
-                    TypeExpression::TypeSpec(spec) => monomorphise_type_spec(
-                        &spec.clone().at_loc(te),
+                .map(|te| {
+                    monomorphise_type_expr(
+                        te,
                         trait_type_params,
                         trait_method_type_params,
                         impl_type_params,
                         impl_method_type_params,
                     )
-                    .map(|spec| spec.map(|spec| TypeExpression::TypeSpec(spec))),
-                    TypeExpression::Integer(_) => Ok(te.clone()),
                 })
                 .collect::<Result<_>>()?;
 
@@ -1254,17 +1275,14 @@ fn monomorphise_type_spec(
                 impl_type_params,
                 impl_method_type_params,
             )?;
-            let mono_size = match &size.inner {
-                TypeExpression::TypeSpec(spec) => monomorphise_type_spec(
-                    &spec.clone().at_loc(size),
-                    trait_type_params,
-                    trait_method_type_params,
-                    impl_type_params,
-                    impl_method_type_params,
-                )?
-                .map(|spec| TypeExpression::TypeSpec(spec)),
-                TypeExpression::Integer(_) => *(size.clone()),
-            };
+            let mono_size = monomorphise_type_expr(
+                &size,
+                trait_type_params,
+                trait_method_type_params,
+                impl_type_params,
+                impl_method_type_params,
+            )?;
+
             Ok(TypeSpec::Array {
                 inner: Box::from(mono_inner),
                 size: Box::from(mono_size),

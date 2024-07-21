@@ -24,12 +24,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Fixed
 
+- [!338][!338] Fix panics in generic impl blocks
+
 ### Removed
 
 [!324]: https://gitlab.com/spade-lang/spade/-/merge_requests/324
 [!325]: https://gitlab.com/spade-lang/spade/-/merge_requests/325
 [!326]: https://gitlab.com/spade-lang/spade/-/merge_requests/326
 [!329]: https://gitlab.com/spade-lang/spade/-/merge_requests/329
+[!331]: https://gitlab.com/spade-lang/spade/-/merge_requests/331
+[!338]: https://gitlab.com/spade-lang/spade/-/merge_requests/338
 
 ## [0.9.0] - 2024-07-04
 

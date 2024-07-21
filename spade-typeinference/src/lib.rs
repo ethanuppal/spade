@@ -2095,14 +2095,6 @@ impl TypeState {
                 .flatten()
                 .flatten()
                 .collect::<Vec<_>>();
-            if replacements.is_empty() {
-                break;
-            }
-
-            for Replacement { from, to, context } in replacements {
-                self.unify(&to, &from, ctx)
-                    .into_diagnostic_or_default(from.loc(), context)?;
-            }
 
             // Drop all replacements that have now been applied
             self.requirements = self
@@ -2111,6 +2103,15 @@ impl TypeState {
                 .zip(retain)
                 .filter_map(|(req, keep)| if keep { Some(req) } else { None })
                 .collect();
+
+            if replacements.is_empty() {
+                break;
+            }
+
+            for Replacement { from, to, context } in replacements {
+                self.unify(&to, &from, ctx)
+                    .into_diagnostic_or_default(from.loc(), context)?;
+            }
         }
 
         Ok(())
