@@ -4,8 +4,8 @@ source: spade-tests/src/integration.rs
 impl (bool, bool) {}
 
 
-error: Unexpected `(`, expected `Identifier`
+error: Impl target is not a named type
   ┌─ testinput:1:6
   │
 1 │ impl (bool, bool) {}
-  │      ^ expected `Identifier`
+  │      ^^^^^^^^^^^^ Not a named type

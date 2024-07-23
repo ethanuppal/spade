@@ -173,7 +173,7 @@ impl TypeState {
 
     #[tracing::instrument(level = "trace", skip_all)]
     fn hir_type_expr_to_var<'a>(
-        &'a self,
+        &'a mut self,
         e: &Loc<hir::TypeExpression>,
         generic_list_token: &GenericListToken,
     ) -> TypeVar {
@@ -189,7 +189,7 @@ impl TypeState {
 
     #[tracing::instrument(level = "trace", skip_all, fields(%hir_type))]
     pub fn type_var_from_hir<'a>(
-        &'a self,
+        &'a mut self,
         loc: Loc<()>,
         hir_type: &crate::hir::TypeSpec,
         generic_list_token: &GenericListToken,
@@ -239,6 +239,7 @@ impl TypeState {
             hir::TypeSpec::Inverted(inner) => {
                 TypeVar::inverted(loc, self.type_var_from_hir(loc, inner, generic_list_token))
             }
+            hir::TypeSpec::Wildcard => self.new_generic(),
             hir::TypeSpec::TraitSelf(_) => {
                 panic!("Trying to convert TraitSelf to type inference type var")
             }

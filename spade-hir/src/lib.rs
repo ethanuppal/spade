@@ -267,6 +267,9 @@ pub enum TypeSpec {
     /// occur in non-traits. The Loc is only used for diag_bails, so an approximate
     /// reference is fine.
     TraitSelf(Loc<()>),
+    /// A wildcard, cannot occur everywhere, but ast lowering enusres that wildcards are valid,
+    /// i.e. it is safe to emit a Diagnostic::bug if this is encountered where it is invalid
+    Wildcard,
 }
 impl WithLocation for TypeSpec {}
 
@@ -312,6 +315,7 @@ impl std::fmt::Display for TypeSpec {
             TypeSpec::Inverted(inner) => format!("~{inner}"),
             TypeSpec::Wire(inner) => format!("&{inner}"),
             TypeSpec::TraitSelf(_) => "Self".into(),
+            TypeSpec::Wildcard => "_".into(),
         };
         write!(f, "{str}")
     }

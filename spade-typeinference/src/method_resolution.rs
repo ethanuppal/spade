@@ -231,5 +231,6 @@ fn spec_is_overlapping(spec: &TypeSpec, var: &TypeVar) -> Overlap {
         (TypeSpec::TraitSelf(_), TypeVar::Known(_, _, _)) => {
             unreachable!("Trait self in impl target")
         }
+        (TypeSpec::Wildcard, _) => unreachable!("Wildcard during type spec overlap check"),
     }
 }

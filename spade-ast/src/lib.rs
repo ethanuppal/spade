@@ -1,4 +1,5 @@
 use comptime::{ComptimeCondition, MaybeComptime};
+use itertools::Itertools;
 use num::{BigInt, BigUint, Zero};
 use spade_common::{
     location_info::{Loc, WithLocation},
@@ -15,6 +16,15 @@ pub enum TypeExpression {
     Integer(BigUint),
 }
 impl WithLocation for TypeExpression {}
+
+impl std::fmt::Display for TypeExpression {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            TypeExpression::TypeSpec(inner) => write!(f, "{inner}"),
+            TypeExpression::Integer(inner) => write!(f, "{inner}"),
+        }
+    }
+}
 
 #[derive(PartialEq, Debug, Clone)]
 pub enum NamedTurbofish {
@@ -48,8 +58,32 @@ pub enum TypeSpec {
     /// An inverted port. Turns `&mut T` into `&T` and `&T` into `&mut T`
     Inverted(Box<Loc<TypeSpec>>),
     Wire(Box<Loc<TypeSpec>>),
+    Wildcard,
 }
 impl WithLocation for TypeSpec {}
+
+impl std::fmt::Display for TypeSpec {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            TypeSpec::Tuple(inner) => {
+                write!(f, "({})", inner.iter().map(|i| format!("{i}")).join(", "))
+            }
+            TypeSpec::Array { inner, size } => write!(f, "[{inner}; {size}]"),
+            TypeSpec::Named(name, args) => {
+                let args = match args {
+                    Some(a) => a.iter().map(|a| format!("{a}")).join(", "),
+                    None => String::new(),
+                };
+                write!(f, "{name}{args}")
+            }
+            TypeSpec::Unit(_) => write!(f, "()"),
+            TypeSpec::Backward(inner) => write!(f, "&mut {inner}"),
+            TypeSpec::Inverted(inner) => write!(f, "~{inner}"),
+            TypeSpec::Wire(inner) => write!(f, "&{inner}"),
+            TypeSpec::Wildcard => write!(f, "_"),
+        }
+    }
+}
 
 #[derive(PartialEq, Debug, Clone)]
 pub enum ArgumentPattern {

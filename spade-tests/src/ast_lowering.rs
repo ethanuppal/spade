@@ -1254,3 +1254,60 @@ snapshot_error! {
         {}
     "
 }
+
+snapshot_error! {
+    wildcard_is_not_allowed_in_function_type,
+    "
+        fn test(x: _) {}
+    "
+}
+
+snapshot_error! {
+    wildcard_is_not_allowed_in_function_return_type,
+    "
+        fn test() -> _ {}
+    "
+}
+
+snapshot_error! {
+    wildcard_is_not_allowed_in_struct_definition,
+    "
+        struct X {
+            x: _
+        }
+    "
+}
+
+snapshot_error! {
+    wildcard_is_not_allowed_in_struct_port_definition,
+    "
+        struct port X {
+            x: _
+        }
+    "
+}
+
+snapshot_error! {
+    wildcard_is_not_allowed_in_enum_definition,
+    "
+        enum X {
+            A{val: _}
+        }
+    "
+}
+
+snapshot_error! {
+    wildcard_is_not_allowed_in_impl_trait,
+    "
+        struct X {}
+        impl _ for X {}
+    "
+}
+
+snapshot_error! {
+    wildcard_is_not_allowed_in_impl_target,
+    "
+        trait T {}
+        impl T for _ {}
+    "
+}

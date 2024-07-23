@@ -706,6 +706,10 @@ impl<'a> Parser<'a> {
             // Single type, maybe with generics
             let (path, span) = self.path()?.separate();
 
+            if path.as_strs() == ["_"] {
+                return Ok(TypeSpec::Wildcard.at(self.file_id, &span));
+            }
+
             // Check if this type has generic params
             let generics = if self.peek_kind(&TokenKind::Lt)? {
                 let generic_start = self.eat_unconditional()?;
@@ -1532,45 +1536,29 @@ impl<'a> Parser<'a> {
 
         let type_params = self.generics_list()?;
 
-        let trait_or_target_path = self.path()?;
-        let generic_spec = self.generic_spec_list()?;
-        let trait_or_target_end = if let Some(spec) = &generic_spec {
-            spec.span()
-        } else {
-            trait_or_target_path.span()
-        };
+        let trait_or_target_path = self.type_spec()?;
 
         let (r#trait, target) = if self.peek_and_eat(&TokenKind::For)?.is_some() {
-            let r#trait = TraitSpec {
-                path: trait_or_target_path.clone(),
-                type_params: generic_spec,
-            }
-            .between(
-                self.file_id,
-                &trait_or_target_path.span(),
-                &trait_or_target_end,
-            );
-
-            let target_path = self.path()?;
-            let target_spec = self.generic_spec_list()?;
-
-            let target_end = match &target_spec {
-                Some(spec) => spec.span(),
-                None => target_path.span(),
+            let (trait_path, params) = match trait_or_target_path.inner.clone() {
+                TypeSpec::Named(p, params) => (p, params),
+                other => {
+                    return Err(Diagnostic::error(
+                        trait_or_target_path,
+                        format!("{other} is not a trait"),
+                    ))
+                }
             };
-            let target = TypeSpec::Named(target_path.clone(), target_spec).between(
-                self.file_id,
-                &target_path.span(),
-                &target_end,
-            );
+            let r#trait = TraitSpec {
+                path: trait_path.clone(),
+                type_params: params,
+            }
+            .at_loc(&trait_or_target_path);
+
+            let target = self.type_spec()?;
 
             (Some(r#trait), target)
         } else {
-            let target = TypeSpec::Named(trait_or_target_path.clone(), generic_spec).between(
-                self.file_id,
-                &trait_or_target_path.span(),
-                &trait_or_target_end,
-            );
+            let target = trait_or_target_path;
             (None, target)
         };
 

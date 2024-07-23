@@ -1,0 +1,13 @@
+---
+source: spade-tests/src/ast_lowering.rs
+---
+struct X {
+    x: _
+}
+
+
+error: Struct member types cannot contain wildcards
+  ┌─ testinput:2:8
+  │
+2 │     x: _
+  │        ^ Wildcard in struct member type

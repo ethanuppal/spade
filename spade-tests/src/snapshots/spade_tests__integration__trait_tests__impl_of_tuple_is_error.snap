@@ -6,8 +6,8 @@ struct T {}
 impl (bool, bool) for T {}
 
 
-error: Unexpected `(`, expected `Identifier`
+error: (bool, bool) is not a trait
   ┌─ testinput:3:6
   │
 3 │ impl (bool, bool) for T {}
-  │      ^ expected `Identifier`
+  │      ^^^^^^^^^^^^

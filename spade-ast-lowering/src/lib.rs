@@ -120,13 +120,25 @@ pub fn re_visit_type_param(param: &ast::TypeParam, ctx: &Context) -> Result<hir:
     }
 }
 
+/// The context in which a type expression occurs. This controls what hir::TypeExpressions an
+/// ast::TypeExpression can be lowered to
+pub enum TypeSpecKind {
+    Argument,
+    OutputType,
+    ImplTrait,
+    ImplTarget,
+    BindingType,
+    Turbofish,
+}
+
 pub fn visit_type_expression(
     expr: &ast::TypeExpression,
+    kind: &TypeSpecKind,
     ctx: &mut Context,
 ) -> Result<hir::TypeExpression> {
     match expr {
         ast::TypeExpression::TypeSpec(spec) => {
-            let inner = visit_type_spec(spec, ctx)?;
+            let inner = visit_type_spec(spec, kind, ctx)?;
             // Look up the type. For now, we'll panic if we don't find a concrete type
             Ok(hir::TypeExpression::TypeSpec(inner.inner))
         }
@@ -134,7 +146,11 @@ pub fn visit_type_expression(
     }
 }
 
-pub fn visit_type_spec(t: &Loc<ast::TypeSpec>, ctx: &mut Context) -> Result<Loc<hir::TypeSpec>> {
+pub fn visit_type_spec(
+    t: &Loc<ast::TypeSpec>,
+    kind: &TypeSpecKind,
+    ctx: &mut Context,
+) -> Result<Loc<hir::TypeSpec>> {
     let trait_loc = if let SelfContext::TraitDefinition(TraitName::Named(name)) = &ctx.self_ctx {
         name.loc()
     } else {
@@ -161,7 +177,7 @@ pub fn visit_type_spec(t: &Loc<ast::TypeSpec>, ctx: &mut Context) -> Result<Loc<
                         .map(|o| &o.inner)
                         .into_iter()
                         .flatten()
-                        .map(|p| p.try_map_ref(|p| visit_type_expression(p, ctx)))
+                        .map(|p| p.try_map_ref(|p| visit_type_expression(p, kind, ctx)))
                         .collect::<Result<Vec<_>>>()?;
 
                     if generic_args.len() != visited_params.len() {
@@ -217,8 +233,8 @@ pub fn visit_type_spec(t: &Loc<ast::TypeSpec>, ctx: &mut Context) -> Result<Loc<
             }
         }
         ast::TypeSpec::Array { inner, size } => {
-            let inner = Box::new(visit_type_spec(inner, ctx)?);
-            let size = Box::new(visit_type_expression(size, ctx)?.at_loc(size));
+            let inner = Box::new(visit_type_spec(inner, kind, ctx)?);
+            let size = Box::new(visit_type_expression(size, kind, ctx)?.at_loc(size));
 
             Ok(hir::TypeSpec::Array { inner, size })
         }
@@ -256,7 +272,7 @@ pub fn visit_type_spec(t: &Loc<ast::TypeSpec>, ctx: &mut Context) -> Result<Loc<
 
             let inner = inner
                 .iter()
-                .map(|p| visit_type_spec(p, ctx))
+                .map(|p| visit_type_spec(p, kind, ctx))
                 .collect::<Result<Vec<_>>>()?;
 
             Ok(hir::TypeSpec::Tuple(inner))
@@ -270,7 +286,7 @@ pub fn visit_type_spec(t: &Loc<ast::TypeSpec>, ctx: &mut Context) -> Result<Loc<
                 }));
             }
             Ok(hir::TypeSpec::Backward(Box::new(visit_type_spec(
-                inner, ctx,
+                inner, kind, ctx,
             )?)))
         }
         ast::TypeSpec::Wire(inner) => {
@@ -280,7 +296,9 @@ pub fn visit_type_spec(t: &Loc<ast::TypeSpec>, ctx: &mut Context) -> Result<Loc<
                     inner_type: inner.loc(),
                 }));
             }
-            Ok(hir::TypeSpec::Wire(Box::new(visit_type_spec(inner, ctx)?)))
+            Ok(hir::TypeSpec::Wire(Box::new(visit_type_spec(
+                inner, kind, ctx,
+            )?)))
         }
         ast::TypeSpec::Inverted(inner) => {
             if !inner.is_port(&ctx.symtab)? {
@@ -289,8 +307,23 @@ pub fn visit_type_spec(t: &Loc<ast::TypeSpec>, ctx: &mut Context) -> Result<Loc<
                     .secondary_label(inner.as_ref(), "This is not a port"));
             } else {
                 Ok(hir::TypeSpec::Inverted(Box::new(visit_type_spec(
-                    inner, ctx,
+                    inner, kind, ctx,
                 )?)))
+            }
+        }
+        ast::TypeSpec::Wildcard => {
+            let default_error = |message, primary| {
+                Err(
+                    Diagnostic::error(t, format!("{message} cannot have wildcards in their type"))
+                        .primary_label(format!("Wildcard in {primary}")),
+                )
+            };
+            match kind {
+                TypeSpecKind::Argument => default_error("Argument types", "argument type"),
+                TypeSpecKind::OutputType => default_error("Return types", "return type"),
+                TypeSpecKind::ImplTrait => default_error("Implemented trait", "implemented trait"),
+                TypeSpecKind::ImplTarget => default_error("Impl target", "impl target"),
+                TypeSpecKind::Turbofish | TypeSpecKind::BindingType => Ok(hir::TypeSpec::Wildcard),
             }
         }
     };
@@ -365,7 +398,7 @@ fn visit_parameter_list(
             );
         }
         arg_names.insert(name.clone());
-        let t = visit_type_spec(input_type, ctx)?;
+        let t = visit_type_spec(input_type, &TypeSpecKind::Argument, ctx)?;
 
         let mut attrs = attrs.clone();
         let no_mangle = attrs.consume_no_mangle().map(|ident| ident.loc());
@@ -407,7 +440,11 @@ pub fn unit_head(
         .collect::<Result<Vec<Loc<hir::TypeParam>>>>()?;
 
     let output_type = if let Some(output_type) = &head.output_type {
-        Some(visit_type_spec(output_type, ctx)?)
+        Some(visit_type_spec(
+            output_type,
+            &TypeSpecKind::OutputType,
+            ctx,
+        )?)
     } else {
         None
     };
@@ -907,7 +944,7 @@ pub fn visit_impl(
         .secondary_label(target_sym, format!("{target_name} defined here")));
     }
 
-    let target_type_spec = visit_type_spec(&block.target, ctx)?;
+    let target_type_spec = visit_type_spec(&block.target, &TypeSpecKind::ImplTarget, ctx)?;
 
     let mut trait_members = vec![];
     let mut trait_impl = HashMap::new();
@@ -995,7 +1032,7 @@ pub fn visit_impl(
 
     check_no_missing_methods(block, missing_methods)?;
 
-    let target = visit_type_spec(&block.target, ctx)?;
+    let target = visit_type_spec(&block.target, &TypeSpecKind::ImplTarget, ctx)?;
 
     let duplicate = items.impls.entry(target_name.clone()).or_default().insert(
         trait_name.clone(),
@@ -1624,7 +1661,9 @@ pub fn visit_trait_spec(trait_spec: &ast::TraitSpec, ctx: &mut Context) -> Resul
         let visited_params = params.try_map_ref(|params| {
             params
                 .iter()
-                .map(|param| param.try_map_ref(|te| visit_type_expression(te, ctx)))
+                .map(|param| {
+                    param.try_map_ref(|te| visit_type_expression(te, &TypeSpecKind::ImplTrait, ctx))
+                })
                 .collect::<Result<_>>()
         })?;
 
@@ -1946,7 +1985,7 @@ fn visit_statement(s: &Loc<ast::Statement>, ctx: &mut Context) -> Result<Vec<Loc
             let mut stmts = vec![];
 
             let hir_type = if let Some(t) = ty {
-                Some(visit_type_spec(t, ctx)?)
+                Some(visit_type_spec(t, &TypeSpecKind::BindingType, ctx)?)
             } else {
                 None
             };
@@ -2147,11 +2186,13 @@ pub fn visit_turbofish(
                             .at_loc(&name),
                     ));
 
-                    let arg = visit_type_expression(&arg, ctx)?.at_loc(name);
+                    let arg =
+                        visit_type_expression(&arg, &TypeSpecKind::Turbofish, ctx)?.at_loc(name);
                     Ok(hir::expression::NamedArgument::Short(name.clone(), arg))
                 }
                 ast::NamedTurbofish::Full(name, arg) => {
-                    let arg = visit_type_expression(arg, ctx)?.at_loc(arg);
+                    let arg =
+                        visit_type_expression(arg, &TypeSpecKind::Turbofish, ctx)?.at_loc(arg);
                     Ok(hir::expression::NamedArgument::Full(name.clone(), arg))
                 }
             })
@@ -2159,7 +2200,9 @@ pub fn visit_turbofish(
             .map(|params| hir::ArgumentList::Named(params)),
         ast::TurbofishInner::Positional(args) => args
             .iter()
-            .map(|arg| arg.try_map_ref(|arg| visit_type_expression(arg, ctx)))
+            .map(|arg| {
+                arg.try_map_ref(|arg| visit_type_expression(arg, &TypeSpecKind::Turbofish, ctx))
+            })
             .collect::<Result<_>>()
             .map(hir::ArgumentList::Positional),
     })
@@ -2518,7 +2561,11 @@ fn visit_register(reg: &Loc<ast::Register>, ctx: &mut Context) -> Result<Vec<Loc
     let value = reg.value.try_visit(visit_expression, ctx)?;
 
     let value_type = if let Some(value_type) = &reg.value_type {
-        Some(visit_type_spec(value_type, ctx)?)
+        Some(visit_type_spec(
+            value_type,
+            &TypeSpecKind::BindingType,
+            ctx,
+        )?)
     } else {
         None
     };
@@ -2670,6 +2717,7 @@ fn type_specs_overlap(l: &TypeSpec, r: &TypeSpec) -> bool {
         (TypeSpec::Wire(linner), TypeSpec::Wire(rinner)) => type_specs_overlap(linner, rinner),
         (TypeSpec::Wire(_), _) => false,
         (TypeSpec::TraitSelf(_), _) => unreachable!("Self type cannot be checked for overlap"),
+        (TypeSpec::Wildcard, _) => unreachable!("Wildcard type cannot be checked for overlap"),
     }
 }
 

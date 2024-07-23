@@ -197,6 +197,27 @@ snapshot_error! {
     "enum Option<T> {}"
 }
 
+#[test]
+fn wildcard_type_specs_work() {
+    let code = "
+        fn test() {
+            let x: uint<_> = 8u8;
+        }
+    ";
+    build_items(code);
+}
+
+#[test]
+fn wildcard_in_turbofish_works() {
+    let code = "
+        fn generic<A>(a: A) -> A {a}
+        fn test() {
+            let _ = generic::<_>(true);
+        }
+    ";
+    build_items(code);
+}
+
 #[cfg(test)]
 mod trait_tests {
     use crate::{build_items, build_items_with_stdlib, snapshot_error};
