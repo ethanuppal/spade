@@ -321,9 +321,9 @@ impl Spade {
             &[],
         )?;
 
-        let ty = self
-            .type_state
-            .type_var_from_hir(output_type.loc(), &output_type, &generic_list);
+        let ty =
+            self.type_state
+                .type_var_from_hir(output_type.loc(), &output_type, &generic_list)?;
 
         let concrete = TypeState::ungenerify_type(
             &ty,
@@ -374,9 +374,9 @@ impl Spade {
             None,
             &[],
         )?;
-        let ty = self
-            .type_state
-            .type_var_from_hir(output_type.loc(), &output_type, &generic_list);
+        let ty =
+            self.type_state
+                .type_var_from_hir(output_type.loc(), &output_type, &generic_list)?;
 
         // NOTE: safe unwrap, o_name is something we just created, so it can be any type
         let g = self.type_state.new_generic();
@@ -533,7 +533,7 @@ impl Spade {
         let mut type_state = TypeState::new();
         let generic_list =
             type_state.create_generic_list(GenericListSource::Anonymous, &[], &[], None, &[])?;
-        let ty = type_state.type_var_from_hir(port_ty.loc(), &port_ty, &generic_list);
+        let ty = type_state.type_var_from_hir(port_ty.loc(), &port_ty, &generic_list)?;
 
         let val = self.compile_expr(expr, &ty)?;
         Ok((port_name, val))

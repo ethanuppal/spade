@@ -102,6 +102,9 @@ impl TypeState {
             hir::TypeExpression::TypeSpec(inner) => {
                 Self::type_spec_to_concrete(inner, type_list, generic_substitutions, invert)
             }
+            hir::TypeExpression::ConstGeneric(_) => {
+                unreachable!("Const generic in type_expr_to_concrete")
+            }
         }
     }
 

@@ -233,6 +233,7 @@ pub enum TypeExpression {
     Integer(BigUint),
     /// Another type
     TypeSpec(TypeSpec),
+    ConstGeneric(Loc<ConstGeneric>),
 }
 impl WithLocation for TypeExpression {}
 
@@ -241,6 +242,7 @@ impl std::fmt::Display for TypeExpression {
         match self {
             TypeExpression::Integer(val) => write!(f, "{val}"),
             TypeExpression::TypeSpec(val) => write!(f, "{val}"),
+            TypeExpression::ConstGeneric(val) => write!(f, "{val}"),
         }
     }
 }
@@ -384,6 +386,16 @@ pub enum ConstGeneric {
     Add(Box<Loc<ConstGeneric>>, Box<Loc<ConstGeneric>>),
 }
 impl WithLocation for ConstGeneric {}
+
+impl std::fmt::Display for ConstGeneric {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ConstGeneric::Name(n) => write!(f, "{n}"),
+            ConstGeneric::Const(val) => write!(f, "{val}"),
+            ConstGeneric::Add(l, r) => write!(f, "({l} + {r})"),
+        }
+    }
+}
 
 #[derive(PartialEq, Debug, Clone, Serialize, Deserialize, Hash, Eq)]
 pub struct WhereClause {

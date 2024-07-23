@@ -6,8 +6,8 @@ struct port X {
 }
 
 
-error: Struct member types cannot contain wildcards
+error: Enum members cannot have wildcards in their type
   ┌─ testinput:2:8
   │
 2 │     x: _
-  │        ^ Wildcard in struct member type
+  │        ^ Wildcard in enum member

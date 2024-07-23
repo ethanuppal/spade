@@ -1215,7 +1215,7 @@ impl ExprLocal for Loc<Expression> {
                         self.loc(),
                         &hir::TypeSpec::Generic(name.clone().nowhere()),
                         generic_list,
-                    );
+                    )?;
 
                     let value = match TypeState::ungenerify_type(
                         &value,

@@ -666,6 +666,13 @@ impl<'a> Parser<'a> {
                 None => Err(Diagnostic::error(val, "Negative type level integer")
                     .primary_label("Type level integers must be positive")),
             }
+        } else if self.peek_kind(&TokenKind::OpenBrace)? {
+            let (expr, span) = self.surrounded(
+                &TokenKind::OpenBrace,
+                |s| s.expression(),
+                &TokenKind::CloseBrace,
+            )?;
+            Ok(TypeExpression::ConstGeneric(expr).at(self.file_id, &span))
         } else {
             let inner = self.type_spec()?;
 

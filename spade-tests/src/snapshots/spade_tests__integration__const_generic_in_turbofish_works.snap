@@ -1,0 +1,26 @@
+---
+source: spade-tests/src/integration.rs
+---
+fn sized_zero<#Size>() -> uint<Size> {
+    0
+}
+
+fn test() {
+    let x: uint<8> = sized_zero::<{1 + 2}>();
+}
+
+
+error: Expected type uint<8>, got uint<3>
+  ┌─ testinput:6:22
+  │
+6 │     let x: uint<8> = sized_zero::<{1 + 2}>();
+  │                 -    ^^^^^^^^^^^^^^^^^^^^^^^
+  │                 │    │             │
+  │                 │    │             Type 3 inferred here
+  │                 │    Expected uint<8>
+  │                 Type 8 inferred here
+  │
+  = note: Expected: 8
+                in: uint<8>
+               Got: 3
+                in: uint<3>

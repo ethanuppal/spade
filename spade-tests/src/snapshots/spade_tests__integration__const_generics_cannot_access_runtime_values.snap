@@ -1,0 +1,16 @@
+---
+source: spade-tests/src/integration.rs
+---
+fn test() {
+    let x = 5;
+    let y: uint<{x+5}> = 0;
+}
+
+
+error: Expected x to be a type symbol
+  ┌─ testinput:3:18
+  │
+2 │     let x = 5;
+  │         - x is a variable
+3 │     let y: uint<{x+5}> = 0;
+  │                  ^ Expected a type symbol

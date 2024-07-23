@@ -1,6 +1,5 @@
 use std::collections::HashSet;
 
-use ast::TypeSpec;
 use hir::{
     symbol_table::{EnumVariant, StructCallable},
     ItemList, TypeExpression, WalTraceable,
@@ -16,7 +15,7 @@ use spade_hir as hir;
 use crate::{
     attributes::{AttributeListExt, LocAttributeExt},
     types::IsPort,
-    visit_parameter_list, Context, Result,
+    visit_parameter_list, visit_type_spec, Context, Result, TypeSpecKind,
 };
 use spade_hir::symbol_table::{GenericArg, SymbolTable, Thing, TypeSymbol};
 
@@ -276,6 +275,7 @@ pub fn re_visit_type_declaration(
 
                 // Ensure that we don't have any port types in the enum variants
                 for (_, _, ty) in args {
+                    visit_type_spec(&ty, &TypeSpecKind::EnumMember, ctx)?;
                     if ty.is_port(&ctx.symtab)? {
                         return Err(Diagnostic::error(ty, "Port in enum")
                             .primary_label("This is a port")
@@ -334,13 +334,7 @@ pub fn re_visit_type_declaration(
             // if it is not
             if s.is_port() {
                 for (_, f, ty) in &s.members.args {
-                    if matches!(&ty.inner, TypeSpec::Wildcard) {
-                        return Err(Diagnostic::error(
-                            ty,
-                            "Struct member types cannot contain wildcards",
-                        )
-                        .primary_label("Wildcard in struct member type"));
-                    }
+                    visit_type_spec(&ty, &TypeSpecKind::EnumMember, ctx)?;
                     if !ty.is_port(&ctx.symtab)? {
                         return Err(Diagnostic::error(ty, "Non-port in port struct")
                             .primary_label("This is not a port type")
@@ -358,13 +352,7 @@ pub fn re_visit_type_declaration(
                 }
             } else {
                 for (_, _, ty) in &s.members.args {
-                    if matches!(&ty.inner, TypeSpec::Wildcard) {
-                        return Err(Diagnostic::error(
-                            ty,
-                            "Struct member types cannot contain wildcards",
-                        )
-                        .primary_label("Wildcard in struct member type"));
-                    }
+                    visit_type_spec(&ty, &TypeSpecKind::EnumMember, ctx)?;
                     if ty.is_port(&ctx.symtab)? {
                         return Err(Diagnostic::error(ty, "Port in non-port struct")
                             .primary_label("This is a port")

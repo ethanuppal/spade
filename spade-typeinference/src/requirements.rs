@@ -169,7 +169,7 @@ impl Requirement {
                             .add_mapped_generic_list(GenericListSource::Anonymous, mapping);
 
                         let raw_field_type =
-                            type_state.type_var_from_hir(expr.loc(), field_spec, &generic_list);
+                            type_state.type_var_from_hir(expr.loc(), field_spec, &generic_list)?;
                         let field_type = if inverted {
                             match raw_field_type {
                                 TypeVar::Known(loc, KnownType::Backward, inner) => {

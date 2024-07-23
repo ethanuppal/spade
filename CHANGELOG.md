@@ -16,6 +16,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - [!325][!325] Add `to_uint`, `bits` and `to_int` methods to `int` and `uint`.
 - [!326][!326] Add pattern matching for arrays
 - [!329][!329] Add turbofish (`::<>`) to methods
+- [!339][!339] Allow wildcards (`_`) in turbofish and type specifications on bindings
+- [!339][!339] Allow const generics (`{a + b}` etc.) in turbofish and type specifications on bindings
 
 ### Changed
 
@@ -34,6 +36,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 [!329]: https://gitlab.com/spade-lang/spade/-/merge_requests/329
 [!331]: https://gitlab.com/spade-lang/spade/-/merge_requests/331
 [!338]: https://gitlab.com/spade-lang/spade/-/merge_requests/338
+[!339]: https://gitlab.com/spade-lang/spade/-/merge_requests/339
 
 ## [0.9.0] - 2024-07-04
 

@@ -167,6 +167,9 @@ fn expr_is_overlapping(expr: &TypeExpression, var: &TypeVar) -> Overlap {
             unreachable!("Non integer and non-generic type matched with integer")
         }
         (TypeExpression::TypeSpec(s), v) => spec_is_overlapping(s, v),
+        (TypeExpression::ConstGeneric(_), _) => {
+            unreachable!("Const generic in expr_is_overlapping")
+        }
     }
 }
 

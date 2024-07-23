@@ -218,6 +218,42 @@ fn wildcard_in_turbofish_works() {
     build_items(code);
 }
 
+snapshot_error! {
+    const_generic_in_turbofish_works,
+    "
+        fn sized_zero<#Size>() -> uint<Size> {
+            0
+        }
+
+        fn test() {
+            let x: uint<8> = sized_zero::<{1 + 2}>();
+        }
+    "
+}
+
+snapshot_error! {
+    const_generic_in_binding_spec_works,
+    "
+        fn sized_zero<#Size>() -> uint<Size> {
+            0
+        }
+
+        fn test() {
+            let x: uint<{1 + 2}> = sized_zero::<8>();
+        }
+    "
+}
+
+snapshot_error! {
+    const_generics_cannot_access_runtime_values,
+    "
+        fn test() {
+            let x = 5;
+            let y: uint<{x+5}> = 0;
+        }
+    "
+}
+
 #[cfg(test)]
 mod trait_tests {
     use crate::{build_items, build_items_with_stdlib, snapshot_error};

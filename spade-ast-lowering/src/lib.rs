@@ -125,6 +125,8 @@ pub fn re_visit_type_param(param: &ast::TypeParam, ctx: &Context) -> Result<hir:
 pub enum TypeSpecKind {
     Argument,
     OutputType,
+    EnumMember,
+    StructMember,
     ImplTrait,
     ImplTarget,
     BindingType,
@@ -143,6 +145,26 @@ pub fn visit_type_expression(
             Ok(hir::TypeExpression::TypeSpec(inner.inner))
         }
         ast::TypeExpression::Integer(val) => Ok(hir::TypeExpression::Integer(val.clone())),
+        ast::TypeExpression::ConstGeneric(expr) => {
+            let default_error = |message, primary| {
+                Err(Diagnostic::error(
+                    expr,
+                    format!("{message} cannot have const generics in their type"),
+                )
+                .primary_label(format!("Const generic in {primary}")))
+            };
+            match kind {
+                TypeSpecKind::Argument => default_error("Argument types", "argument type"),
+                TypeSpecKind::OutputType => default_error("Return types", "return type"),
+                TypeSpecKind::ImplTrait => default_error("Implemented traits", "implemented trait"),
+                TypeSpecKind::ImplTarget => default_error("Impl targets", "impl target"),
+                TypeSpecKind::EnumMember => default_error("Enum members", "enum member"),
+                TypeSpecKind::StructMember => default_error("Struct members", "struct member"),
+                TypeSpecKind::Turbofish | TypeSpecKind::BindingType => Ok(
+                    hir::TypeExpression::ConstGeneric(visit_const_generic(expr, ctx)?),
+                ),
+            }
+        }
     }
 }
 
@@ -321,8 +343,10 @@ pub fn visit_type_spec(
             match kind {
                 TypeSpecKind::Argument => default_error("Argument types", "argument type"),
                 TypeSpecKind::OutputType => default_error("Return types", "return type"),
-                TypeSpecKind::ImplTrait => default_error("Implemented trait", "implemented trait"),
-                TypeSpecKind::ImplTarget => default_error("Impl target", "impl target"),
+                TypeSpecKind::ImplTrait => default_error("Implemented traits", "implemented trait"),
+                TypeSpecKind::ImplTarget => default_error("Impl targets", "impl target"),
+                TypeSpecKind::EnumMember => default_error("Enum members", "enum member"),
+                TypeSpecKind::StructMember => default_error("Struct members", "struct member"),
                 TypeSpecKind::Turbofish | TypeSpecKind::BindingType => Ok(hir::TypeSpec::Wildcard),
             }
         }
@@ -1222,6 +1246,7 @@ fn monomorphise_type_expr(
             .split_loc();
             Ok(TypeExpression::TypeSpec(inner).at_loc(&loc))
         }
+        TypeExpression::ConstGeneric(_) => diag_bail!(te, "Const generic in impl head"),
     }
 }
 
@@ -1262,6 +1287,7 @@ fn monomorphise_type_spec(
                         &impl_type_params[param_idx],
                         "Expected a TypeExpression::TypeSpec, found TypeExpression::Integer",
                     )),
+                    TypeExpression::ConstGeneric(_) => diag_bail!(ty, "Const generic in impl head"),
                 })
             } else {
                 let param_idx = trait_method_type_params
@@ -1276,6 +1302,9 @@ fn monomorphise_type_spec(
                             &impl_method_type_params[param_idx],
                             "Expected a TypeExpression::TypeSpec, found TypeExpression::Integer",
                         )),
+                        TypeExpression::ConstGeneric(_) => {
+                            diag_bail!(ty, "Const generic in impl head")
+                        }
                     })
                 } else {
                     Err(Diagnostic::bug(
@@ -2730,6 +2759,9 @@ fn type_exprs_overlap(l: &TypeExpression, r: &TypeExpression) -> bool {
         (TypeExpression::TypeSpec(_), TypeExpression::Integer(_)) => true,
         (TypeExpression::TypeSpec(lspec), TypeExpression::TypeSpec(rspec)) => {
             type_specs_overlap(lspec, rspec)
+        }
+        (TypeExpression::ConstGeneric(_), _) | (_, TypeExpression::ConstGeneric(_)) => {
+            unreachable!("Const generic during type_exprs_overlap")
         }
     }
 }

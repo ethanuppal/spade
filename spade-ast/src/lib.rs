@@ -14,6 +14,7 @@ pub mod testutil;
 pub enum TypeExpression {
     TypeSpec(Box<Loc<TypeSpec>>),
     Integer(BigUint),
+    ConstGeneric(Loc<Expression>),
 }
 impl WithLocation for TypeExpression {}
 
@@ -22,6 +23,7 @@ impl std::fmt::Display for TypeExpression {
         match self {
             TypeExpression::TypeSpec(inner) => write!(f, "{inner}"),
             TypeExpression::Integer(inner) => write!(f, "{inner}"),
+            TypeExpression::ConstGeneric(_) => write!(f, "{{...}}"),
         }
     }
 }
