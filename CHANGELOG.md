@@ -18,6 +18,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - [!329][!329] Add turbofish (`::<>`) to methods
 - [!339][!339] Allow wildcards (`_`) in turbofish and type specifications on bindings
 - [!339][!339] Allow const generics (`{a + b}` etc.) in turbofish and type specifications on bindings
+- [!339][!339] Add `-`, `*`, and `uint_bits_to_fit` as type expressions
 
 ### Changed
 

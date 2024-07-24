@@ -1738,3 +1738,51 @@ snapshot_error! {
         }
     "
 }
+
+#[test]
+fn uint_bits_to_fit_works_borderline_under() {
+    let code = "
+        fn test() {
+            let x: uint<{uint_bits_to_fit(255)}> = 0u8;
+        }
+    ";
+    build_items(code);
+}
+
+#[test]
+fn uint_bits_to_fit_works_borderline_over() {
+    let code = "
+        fn test() {
+            let x: uint<{uint_bits_to_fit(256)}> = 0u9;
+        }
+    ";
+    build_items(code);
+}
+
+snapshot_error! {
+    non_type_level_function_in_type_level_produces_error,
+    "
+        fn test() {
+            let x: uint<{not_a_function(256)}> = 0u10;
+        }
+    "
+}
+
+snapshot_error! {
+    wrong_number_of_args_to_uint_bits_to_fit_error,
+    "
+        fn test() {
+            let x: uint<{uint_bits_to_fit(256, 2)}> = 0u10;
+        }
+    "
+}
+
+#[test]
+fn type_level_sub_works() {
+    let code = "
+        fn test() {
+            let x: uint<{10-1}> = 0u9;
+        }
+    ";
+    build_items(code);
+}

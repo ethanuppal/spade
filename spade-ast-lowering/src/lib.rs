@@ -29,7 +29,7 @@ use spade_hir::{self as hir, Module};
 use crate::attributes::AttributeListExt;
 use crate::pipelines::maybe_perform_pipelining_tasks;
 use crate::types::{IsPort, IsSelf};
-use ast::{Binding, ParameterList, UnitKind};
+use ast::{Binding, CallKind, ParameterList, UnitKind};
 use hir::expression::{BinaryOperator, IntLiteralKind};
 use hir::symbol_table::{LookupError, SymbolTable, Thing, TypeSymbol};
 pub use spade_common::id_tracker;
@@ -564,6 +564,8 @@ pub fn visit_const_generic(
 
             match &op.inner {
                 ast::BinaryOperator::Add => ConstGeneric::Add(Box::new(lhs), Box::new(rhs)),
+                ast::BinaryOperator::Sub => ConstGeneric::Sub(Box::new(lhs), Box::new(rhs)),
+                ast::BinaryOperator::Mul => ConstGeneric::Mul(Box::new(lhs), Box::new(rhs)),
                 other => {
                     return Err(Diagnostic::error(
                         op,
@@ -573,6 +575,42 @@ pub fn visit_const_generic(
                 }
             }
         }
+        ast::Expression::Call {
+            kind: CallKind::Function,
+            callee,
+            args,
+            turbofish: None,
+        } => match callee.as_strs().as_slice() {
+            ["uint_bits_to_fit"] => match &args.inner {
+                ast::ArgumentList::Positional(a) => {
+                    if a.len() != 1 {
+                        return Err(Diagnostic::error(
+                            args,
+                            format!("This function takes one argument, {} provided", a.len()),
+                        )
+                        .primary_label("Expected 1 argument"));
+                    } else {
+                        let arg = visit_const_generic(&a[0], ctx)?;
+
+                        ConstGeneric::UintBitsToFit(Box::new(arg))
+                    }
+                }
+                ast::ArgumentList::Named(_) => {
+                    return Err(Diagnostic::error(
+                        t,
+                        "Passing arguments by name is unsupported in type expressions",
+                    )
+                    .primary_label("Arguments passed by name in type expression"))
+                }
+            },
+            _ => {
+                return Err(Diagnostic::error(
+                    callee,
+                    format!("{callee} cannot be evaluated in a type expression"),
+                )
+                .primary_label("Not supported in a type expression"))
+            }
+        },
         _ => {
             return Err(Diagnostic::error(
                 t,

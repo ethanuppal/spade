@@ -334,7 +334,7 @@ pub fn re_visit_type_declaration(
             // if it is not
             if s.is_port() {
                 for (_, f, ty) in &s.members.args {
-                    visit_type_spec(&ty, &TypeSpecKind::EnumMember, ctx)?;
+                    visit_type_spec(&ty, &TypeSpecKind::StructMember, ctx)?;
                     if !ty.is_port(&ctx.symtab)? {
                         return Err(Diagnostic::error(ty, "Non-port in port struct")
                             .primary_label("This is not a port type")
@@ -352,7 +352,7 @@ pub fn re_visit_type_declaration(
                 }
             } else {
                 for (_, _, ty) in &s.members.args {
-                    visit_type_spec(&ty, &TypeSpecKind::EnumMember, ctx)?;
+                    visit_type_spec(&ty, &TypeSpecKind::StructMember, ctx)?;
                     if ty.is_port(&ctx.symtab)? {
                         return Err(Diagnostic::error(ty, "Port in non-port struct")
                             .primary_label("This is a port")

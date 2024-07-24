@@ -1,0 +1,13 @@
+---
+source: spade-tests/src/typeinference.rs
+---
+fn test() {
+    let x: uint<{not_a_function(256)}> = 0u10;
+}
+
+
+error: not_a_function cannot be evaluated in a type expression
+  ┌─ testinput:2:18
+  │
+2 │     let x: uint<{not_a_function(256)}> = 0u10;
+  │                  ^^^^^^^^^^^^^^ Not supported in a type expression

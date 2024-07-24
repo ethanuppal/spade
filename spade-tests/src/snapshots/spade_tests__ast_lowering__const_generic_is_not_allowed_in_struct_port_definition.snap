@@ -6,8 +6,8 @@ struct port X {
 }
 
 
-error: Enum members cannot have const generics in their type
+error: Struct members cannot have const generics in their type
   ┌─ testinput:2:13
   │
 2 │     x: int<{1+2}>
-  │             ^^^ Const generic in enum member
+  │             ^^^ Const generic in struct member

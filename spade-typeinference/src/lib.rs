@@ -1403,6 +1403,17 @@ impl TypeState {
                 Box::new(self.visit_const_generic(lhs, generic_list)?),
                 Box::new(self.visit_const_generic(rhs, generic_list)?),
             )),
+            ConstGeneric::Sub(lhs, rhs) => Ok(ConstraintExpr::Difference(
+                Box::new(self.visit_const_generic(lhs, generic_list)?),
+                Box::new(self.visit_const_generic(rhs, generic_list)?),
+            )),
+            ConstGeneric::Mul(lhs, rhs) => Ok(ConstraintExpr::Product(
+                Box::new(self.visit_const_generic(lhs, generic_list)?),
+                Box::new(self.visit_const_generic(rhs, generic_list)?),
+            )),
+            ConstGeneric::UintBitsToFit(a) => Ok(ConstraintExpr::UintBitsToRepresent(Box::new(
+                self.visit_const_generic(a, generic_list)?,
+            ))),
         }
     }
 }
@@ -1449,6 +1460,8 @@ impl TypeState {
     }
 
     fn check_expr_for_replacement(&self, val: ConstraintExpr) -> ConstraintExpr {
+        // FIXME: AS this gets more complicated, consider rewriting it to clone `val` and
+        // then just replacing the inner values, this is error prone when copy pasting
         match val {
             v @ ConstraintExpr::Integer(_) => v,
             ConstraintExpr::Var(var) => ConstraintExpr::Var(self.check_var_for_replacement(var)),
@@ -1456,12 +1469,20 @@ impl TypeState {
                 Box::new(self.check_expr_for_replacement(*lhs)),
                 Box::new(self.check_expr_for_replacement(*rhs)),
             ),
+            ConstraintExpr::Difference(lhs, rhs) => ConstraintExpr::Difference(
+                Box::new(self.check_expr_for_replacement(*lhs)),
+                Box::new(self.check_expr_for_replacement(*rhs)),
+            ),
+            ConstraintExpr::Product(lhs, rhs) => ConstraintExpr::Product(
+                Box::new(self.check_expr_for_replacement(*lhs)),
+                Box::new(self.check_expr_for_replacement(*rhs)),
+            ),
             ConstraintExpr::Sub(inner) => {
                 ConstraintExpr::Sub(Box::new(self.check_expr_for_replacement(*inner)))
             }
-            ConstraintExpr::BitsToRepresent(inner) => {
-                ConstraintExpr::BitsToRepresent(Box::new(self.check_expr_for_replacement(*inner)))
-            }
+            ConstraintExpr::UintBitsToRepresent(inner) => ConstraintExpr::UintBitsToRepresent(
+                Box::new(self.check_expr_for_replacement(*inner)),
+            ),
         }
     }
 
@@ -2065,7 +2086,15 @@ impl TypeState {
                 Self::replace_type_var_in_constraint_expr(lhs, from, replacement);
                 Self::replace_type_var_in_constraint_expr(rhs, from, replacement);
             }
-            ConstraintExpr::Sub(i) | ConstraintExpr::BitsToRepresent(i) => {
+            ConstraintExpr::Difference(lhs, rhs) => {
+                Self::replace_type_var_in_constraint_expr(lhs, from, replacement);
+                Self::replace_type_var_in_constraint_expr(rhs, from, replacement);
+            }
+            ConstraintExpr::Product(lhs, rhs) => {
+                Self::replace_type_var_in_constraint_expr(lhs, from, replacement);
+                Self::replace_type_var_in_constraint_expr(rhs, from, replacement);
+            }
+            ConstraintExpr::Sub(i) | ConstraintExpr::UintBitsToRepresent(i) => {
                 Self::replace_type_var_in_constraint_expr(i, from, replacement);
             }
         }

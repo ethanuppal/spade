@@ -8,10 +8,12 @@ pub enum ConstraintExpr {
     Integer(BigInt),
     Var(TypeVar),
     Sum(Box<ConstraintExpr>, Box<ConstraintExpr>),
+    Difference(Box<ConstraintExpr>, Box<ConstraintExpr>),
+    Product(Box<ConstraintExpr>, Box<ConstraintExpr>),
     Sub(Box<ConstraintExpr>),
     /// The number of bits required to represent the specified number. In practice
     /// inner.log2().floor()+1
-    BitsToRepresent(Box<ConstraintExpr>),
+    UintBitsToRepresent(Box<ConstraintExpr>),
 }
 
 impl WithLocation for ConstraintExpr {}
@@ -28,11 +30,23 @@ impl ConstraintExpr {
                 }
                 _ => self.clone(),
             },
+            ConstraintExpr::Difference(lhs, rhs) => match (lhs.evaluate(), rhs.evaluate()) {
+                (ConstraintExpr::Integer(l), ConstraintExpr::Integer(r)) => {
+                    ConstraintExpr::Integer(l - r)
+                }
+                _ => self.clone(),
+            },
+            ConstraintExpr::Product(lhs, rhs) => match (lhs.evaluate(), rhs.evaluate()) {
+                (ConstraintExpr::Integer(l), ConstraintExpr::Integer(r)) => {
+                    ConstraintExpr::Integer(l * r)
+                }
+                _ => self.clone(),
+            },
             ConstraintExpr::Sub(inner) => match inner.evaluate() {
                 ConstraintExpr::Integer(val) => ConstraintExpr::Integer(-val),
                 _ => self.clone(),
             },
-            ConstraintExpr::BitsToRepresent(inner) => match inner.evaluate() {
+            ConstraintExpr::UintBitsToRepresent(inner) => match inner.evaluate() {
                 ConstraintExpr::Integer(val) => ConstraintExpr::Integer(
                     // NOTE: This might fail, but it will only do so for massive
                     // constraints. If this turns out to be an issue, we need to
@@ -99,14 +113,16 @@ impl std::fmt::Display for ConstraintExpr {
             ConstraintExpr::Integer(val) => write!(f, "{val}"),
             ConstraintExpr::Var(var) => write!(f, "{var}"),
             ConstraintExpr::Sum(rhs, lhs) => write!(f, "({rhs} + {lhs})"),
+            ConstraintExpr::Difference(rhs, lhs) => write!(f, "({rhs} - {lhs})"),
+            ConstraintExpr::Product(rhs, lhs) => write!(f, "({rhs} * {lhs})"),
             ConstraintExpr::Sub(val) => write!(f, "(-{val})"),
-            ConstraintExpr::BitsToRepresent(val) => write!(f, "BitsToRepresent({val})"),
+            ConstraintExpr::UintBitsToRepresent(val) => write!(f, "UintBitsToRepresent({val})"),
         }
     }
 }
 
 pub fn bits_to_store(inner: ConstraintExpr) -> ConstraintExpr {
-    ConstraintExpr::BitsToRepresent(Box::new(inner))
+    ConstraintExpr::UintBitsToRepresent(Box::new(inner))
 }
 
 // Shorthand constructors for constraint_expr
@@ -189,7 +205,9 @@ impl TypeConstraints {
                     }
                     ConstraintExpr::Var(_)
                     | ConstraintExpr::Sum(_, _)
-                    | ConstraintExpr::BitsToRepresent(_)
+                    | ConstraintExpr::Difference(_, _)
+                    | ConstraintExpr::Product(_, _)
+                    | ConstraintExpr::UintBitsToRepresent(_)
                     | ConstraintExpr::Sub(_) => Some((expr.clone(), rhs)),
                 }
             })
