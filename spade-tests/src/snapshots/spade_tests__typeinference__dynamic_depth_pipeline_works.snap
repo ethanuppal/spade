@@ -1,0 +1,24 @@
+---
+source: spade-tests/src/typeinference.rs
+---
+pipeline(N) p<#N>(clk: clock, x: bool) -> bool {
+    reg*N;
+        x
+}
+
+entity a(clk: clock) -> bool {
+    inst(10) p::<15>(clk, false)
+}
+
+
+error: Pipeline depth mismatch.
+  ┌─ testinput:7:10
+  │
+1 │ pipeline(N) p<#N>(clk: clock, x: bool) -> bool {
+  │          - p has depth 15
+  ·
+7 │     inst(10) p::<15>(clk, false)
+  │          ^^ Expected depth 15, got 10
+  │
+  = note: Expected: 15
+               Got: 10

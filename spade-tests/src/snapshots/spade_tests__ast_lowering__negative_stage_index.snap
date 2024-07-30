@@ -1,7 +1,7 @@
 ---
 source: spade-tests/src/ast_lowering.rs
 ---
-pipeline(3) main(x: int<8>) -> int<8> {
+pipeline(3) main(clk: clock, x: int<8>) -> int<8> {
         let a = stage(-1).x;
     reg;
     reg;
@@ -10,13 +10,10 @@ pipeline(3) main(x: int<8>) -> int<8> {
 }
 
 
-error: Reference to negative pipeline stage
+error: Pipeline references cannot refer to negative stages, inferred -1
   ┌─ testinput:2:17
   │
 2 │         let a = stage(-1).x;
-  │                 ^^^^^^^^^ This references a negative pipeline stage
+  │                 ^^^^^^^^^ This references stage {rdepth}
   │
-  = note: Since this is at stage 0, stage(-1) references stage -1
-  = note: Pipeline stages start at 0
-
-
+  = help: This offset is relative to the current stage which is 0

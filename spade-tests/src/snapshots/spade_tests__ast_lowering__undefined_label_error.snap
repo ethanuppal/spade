@@ -10,10 +10,8 @@ pipeline(3) main(clk: clock) -> int<8> {
         stage(b).x
 }
 
-error: Undefined pipeline stage
+error: Use of undeclared name b
   ┌─ testinput:7:15
   │
 7 │         stage(b).x
-  │               ^ Cannot find pipeline stage 'b
-
-
+  │               ^ Undeclared name

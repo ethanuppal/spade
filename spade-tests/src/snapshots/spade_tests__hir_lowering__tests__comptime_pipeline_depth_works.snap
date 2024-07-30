@@ -1,0 +1,19 @@
+---
+source: spade-tests/src/hir_lowering.rs
+---
+$config X = 1
+
+pipeline($if X == 1 {3} $else {2}) test(clk: clock) -> bool {
+    reg*2;
+        true
+}
+
+
+error: Pipeline depth mismatch. Expected 2 got 3
+  ┌─ testinput:3:22
+  │
+3 │ pipeline($if X == 1 {3} $else {2}) test(clk: clock) -> bool {
+  │                      ^ Found 2 stages
+  │
+  = note: Expected: 2
+               Got: 3

@@ -137,7 +137,13 @@ pub struct Argument<T> {
 pub enum CallKind {
     Function,
     Entity(Loc<()>),
-    Pipeline(Loc<()>, Loc<usize>),
+    Pipeline {
+        inst_loc: Loc<()>,
+        depth: Loc<TypeExpression>,
+        /// An expression ID for which the type inferer will infer the depth of the instantiated
+        /// pipeline, i.e. inst(<this>)
+        depth_typeexpr_id: u64,
+    },
 }
 impl WithLocation for CallKind {}
 
@@ -154,6 +160,13 @@ pub enum IntLiteralKind {
     Signed(BigUint),
     Unsigned(BigUint),
 }
+
+#[derive(PartialEq, Debug, Clone, Serialize, Deserialize)]
+pub enum PipelineRefKind {
+    Absolute(Loc<NameID>),
+    Relative(Loc<TypeExpression>),
+}
+impl WithLocation for PipelineRefKind {}
 
 #[derive(PartialEq, Debug, Clone, Serialize, Deserialize)]
 pub enum ExprKind {
@@ -204,9 +217,12 @@ pub enum ExprKind {
         Box<Loc<Expression>>,
     ),
     PipelineRef {
-        stage: Loc<usize>,
+        stage: Loc<PipelineRefKind>,
         name: Loc<NameID>,
         declares_name: bool,
+        /// An expression ID which after typeinference will contain the absolute depth
+        /// of this referenced value
+        depth_typeexpr_id: u64,
     },
     StageValid,
     StageReady,

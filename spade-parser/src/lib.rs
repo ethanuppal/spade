@@ -8,7 +8,6 @@ use colored::*;
 use itertools::Itertools;
 use local_impl::local_impl;
 use logos::Lexer;
-use num::ToPrimitive;
 use tracing::{debug, event, Level};
 
 use spade_ast::{
@@ -25,9 +24,8 @@ use spade_diagnostics::Diagnostic;
 use spade_macros::trace_parser;
 
 use crate::error::{
-    expected_pipeline_depth, unexpected_token_message, CSErrorTransformations,
-    CommaSeparatedResult, ExpectedArgumentList, Result, SuggestBraceEnumVariant,
-    TokenSeparatedError, UnexpectedToken,
+    unexpected_token_message, CSErrorTransformations, CommaSeparatedResult, ExpectedArgumentList,
+    Result, SuggestBraceEnumVariant, TokenSeparatedError, UnexpectedToken,
 };
 use crate::item_type::UnitKindLocal;
 use crate::lexer::{LiteralKind, TokenKind};
@@ -322,12 +320,7 @@ impl<'a> Parser<'a> {
         let pipeline_depth = if self.peek_kind(&TokenKind::OpenParen)? {
             Some(self.surrounded(
                 &TokenKind::OpenParen,
-                |s| {
-                    s.maybe_comptime(&|s| {
-                        s.int_literal()?
-                            .or_error(s, |p| Ok(expected_pipeline_depth(&p.peek()?)))
-                    })
-                },
+                |s| s.maybe_comptime(&|s| s.type_expression()),
                 &TokenKind::CloseParen,
             )?)
         } else {
@@ -560,18 +553,37 @@ impl<'a> Parser<'a> {
 
         let next = self.peek()?;
         let reference = match next.kind {
+            TokenKind::Plus => {
+                let start = self.eat_unconditional()?;
+                let offset = self.expression()?;
+                let result = PipelineStageReference::Relative(
+                    TypeExpression::ConstGeneric(Box::new(offset.clone())).between(
+                        self.file_id,
+                        &start,
+                        &offset,
+                    ),
+                );
+                result
+            }
+            TokenKind::Minus => {
+                let start = self.eat_unconditional()?;
+                let offset = self.expression()?;
+                let texpr = TypeExpression::ConstGeneric(Box::new(
+                    Expression::UnaryOperator(
+                        spade_ast::UnaryOperator::Sub,
+                        Box::new(offset.clone()),
+                    )
+                    .between(self.file_id, &start, &offset),
+                ))
+                .between(self.file_id, &start, &offset);
+                PipelineStageReference::Relative(texpr)
+            }
             TokenKind::Identifier(_) => PipelineStageReference::Absolute(self.identifier()?),
             _ => {
-                let num = if let Some(d) = self.int_literal()? {
-                    d
-                } else {
-                    return Err(Diagnostic::from(UnexpectedToken {
-                        got: next,
-                        expected: vec!["integer", "identifier"],
-                    }));
-                };
-                let offset = num.map(IntLiteral::as_signed);
-                PipelineStageReference::Relative(offset)
+                return Err(Diagnostic::from(UnexpectedToken {
+                    got: next,
+                    expected: vec!["+", "-", "identifier"],
+                }));
             }
         };
 
@@ -683,18 +695,14 @@ impl<'a> Parser<'a> {
     #[trace_parser]
     pub fn type_expression(&mut self) -> Result<Loc<TypeExpression>> {
         if let Some(val) = self.int_literal()? {
-            match val.inner.clone().as_unsigned() {
-                Some(u) => Ok(TypeExpression::Integer(u).at_loc(&val)),
-                None => Err(Diagnostic::error(val, "Negative type level integer")
-                    .primary_label("Type level integers must be positive")),
-            }
+            Ok(TypeExpression::Integer(val.inner.clone().as_signed()).at_loc(&val))
         } else if self.peek_kind(&TokenKind::OpenBrace)? {
             let (expr, span) = self.surrounded(
                 &TokenKind::OpenBrace,
                 |s| s.expression(),
                 &TokenKind::CloseBrace,
             )?;
-            Ok(TypeExpression::ConstGeneric(expr).at(self.file_id, &span))
+            Ok(TypeExpression::ConstGeneric(Box::new(expr)).at(self.file_id, &span))
         } else {
             let inner = self.type_spec()?;
 
@@ -1011,40 +1019,20 @@ impl<'a> Parser<'a> {
 
         // If this is a reg marker for a pipeline
         if self.peek_kind(&TokenKind::Semi)? || self.peek_kind(&TokenKind::Asterisk)? {
-            let count = if self.peek_and_eat(&TokenKind::Asterisk)?.is_some() {
-                if let Some(val) = self.int_literal()? {
-                    Some(
-                        val.inner
-                            .clone()
-                            .as_unsigned()
-                            .ok_or_else(|| {
-                                Diagnostic::error(&val, "Negative number of registers")
-                                    .primary_label("Expected positive number of stages")
-                            })?
-                            .to_usize()
-                            .ok_or_else(|| {
-                                Diagnostic::bug(&val, "Excessive number of registers")
-                                    .primary_label(format!(
-                                        "At most {} registers are supported",
-                                        usize::MAX
-                                    ))
-                            })?
-                            .at_loc(&val),
-                    )
-                } else {
-                    let got = self.peek()?;
-                    return Err(Diagnostic::error(
-                        got.loc(),
-                        format!("expected register count, got `{}`", got.kind.as_str()),
-                    )
-                    .primary_label("expected register count here")
-                    .help("register counts can only be integer constants"));
+            let count = if let Some(ast) = self.peek_and_eat(&TokenKind::Asterisk)? {
+                match self.type_expression() {
+                    Ok(t) => Some(t),
+                    Err(diag) => {
+                        return Err(
+                            diag.secondary_label(ast, "* is used to specify a register count")
+                        )
+                    }
                 }
             } else {
                 None
             };
 
-            let full_loc = if let Some(c) = count {
+            let full_loc = if let Some(c) = &count {
                 ().between(self.file_id, &start_token, &c.loc())
             } else {
                 ().at(self.file_id, &start_token)
@@ -1394,9 +1382,14 @@ impl<'a> Parser<'a> {
                 let (depth, depth_span) = self.surrounded(
                     &TokenKind::OpenParen,
                     |s| {
-                        s.maybe_comptime(&|s| {
-                            s.int_literal()?
-                                .or_error(s, |p| Ok(expected_pipeline_depth(&p.peek()?)))
+                        s.maybe_comptime(&|s| match s.type_expression() {
+                            Ok(t) => Ok(t),
+                            Err(diag) => {
+                                return Err(diag.secondary_label(
+                                    ().at(s.file_id, &start_token),
+                                    "Pipelines require a pipeline depth",
+                                ))
+                            }
                         })
                     },
                     &TokenKind::CloseParen,
@@ -2531,11 +2524,11 @@ pub fn format_parse_stack(stack: &[ParseStackEntry]) -> String {
 
 #[cfg(test)]
 mod tests {
-    use ast::comptime::{ComptimeCondOp, ComptimeCondition, MaybeComptime};
+    use ast::comptime::{ComptimeCondOp, ComptimeCondition};
     use spade_ast as ast;
     use spade_ast::testutil::{ast_ident, ast_path, ast_trait_spec, ast_type_expr, ast_type_spec};
     use spade_ast::*;
-    use spade_common::num_ext::{InfallibleToBigInt, InfallibleToBigUint};
+    use spade_common::num_ext::InfallibleToBigInt;
 
     use crate::lexer::TokenKind;
     use crate::*;
@@ -2818,7 +2811,7 @@ mod tests {
     fn size_types_work() {
         let expected = TypeSpec::Named(
             ast_path("uint"),
-            Some(vec![TypeExpression::Integer(10u32.to_biguint()).nowhere()].nowhere()),
+            Some(vec![TypeExpression::Integer(10u32.to_bigint()).nowhere()].nowhere()),
         )
         .nowhere();
         check_parse!("uint<10>", type_spec, Ok(expected));
@@ -2834,7 +2827,7 @@ mod tests {
                 vec![TypeExpression::TypeSpec(Box::new(
                     TypeSpec::Named(
                         ast_path("int"),
-                        Some(vec![TypeExpression::Integer(5u32.to_biguint()).nowhere()].nowhere()),
+                        Some(vec![TypeExpression::Integer(5u32.to_bigint()).nowhere()].nowhere()),
                     )
                     .nowhere(),
                 ))
@@ -2854,7 +2847,7 @@ mod tests {
         let expected = TypeSpec::Wire(Box::new(
             TypeSpec::Named(
                 ast_path("int"),
-                Some(vec![TypeExpression::Integer(5u32.to_biguint()).nowhere()].nowhere()),
+                Some(vec![TypeExpression::Integer(5u32.to_bigint()).nowhere()].nowhere()),
             )
             .nowhere(),
         ))
@@ -2870,7 +2863,7 @@ mod tests {
         let expected = TypeSpec::Backward(Box::new(
             TypeSpec::Named(
                 ast_path("int"),
-                Some(vec![TypeExpression::Integer(5u32.to_biguint()).nowhere()].nowhere()),
+                Some(vec![TypeExpression::Integer(5u32.to_bigint()).nowhere()].nowhere()),
             )
             .nowhere(),
         ))
@@ -3095,7 +3088,7 @@ mod tests {
 
         let expected = TypeSpec::Array {
             inner: Box::new(TypeSpec::Named(ast_path("int"), None).nowhere()),
-            size: Box::new(TypeExpression::Integer(5u32.to_biguint()).nowhere()),
+            size: Box::new(TypeExpression::Integer(5u32.to_bigint()).nowhere()),
         }
         .nowhere();
 
@@ -3139,32 +3132,6 @@ mod tests {
                     name: ast_ident("X"),
                     inputs: ParameterList::without_self(vec![]).nowhere(),
                     output_type: None,
-                    type_params: None,
-                    where_clauses: vec![],
-                },
-                body: None,
-            }
-            .nowhere(),
-        );
-
-        check_parse!(code, unit(&AttributeList::empty()), Ok(expected));
-    }
-
-    #[test]
-    fn builtin_pipelines_work() {
-        let code = "pipeline(1) X() __builtin__";
-
-        let expected = Some(
-            Unit {
-                head: UnitHead {
-                    attributes: AttributeList::empty(),
-                    name: ast_ident("X"),
-                    inputs: ParameterList::without_self(vec![]).nowhere(),
-                    output_type: None,
-                    unit_kind: UnitKind::Pipeline(
-                        MaybeComptime::Raw(IntLiteral::unsized_(1).nowhere()).nowhere(),
-                    )
-                    .nowhere(),
                     type_params: None,
                     where_clauses: vec![],
                 },
@@ -3247,35 +3214,6 @@ mod tests {
         ));
 
         check_parse!(code, item, Ok(expected));
-    }
-
-    #[test]
-    fn pipelines_can_have_attributes() {
-        let code = r#"
-            #[no_mangle]
-            pipeline(2) test(a: bool) __builtin__
-        "#;
-
-        let expected = Item::Unit(
-            Unit {
-                head: UnitHead {
-                    attributes: AttributeList(vec![Attribute::NoMangle.nowhere()]),
-                    unit_kind: UnitKind::Pipeline(
-                        MaybeComptime::Raw(IntLiteral::unsized_(2).nowhere()).nowhere(),
-                    )
-                    .nowhere(),
-                    name: ast_ident("test"),
-                    inputs: aparams![("a", tspec!("bool"))],
-                    output_type: None,
-                    type_params: None,
-                    where_clauses: vec![],
-                },
-                body: None,
-            }
-            .nowhere(),
-        );
-
-        check_parse!(code, item, Ok(Some(expected)));
     }
 
     #[test]
@@ -3385,161 +3323,6 @@ mod tests {
         let expected = NamedArgument::Short(ast_ident("x")).nowhere();
 
         check_parse!(code, named_argument, Ok(expected));
-    }
-
-    #[test]
-    fn pipeline_parsing_works() {
-        let code = r#"
-            pipeline(2) test(a: bool) -> bool {
-                    's0
-                reg;
-                    let b = 0;
-                reg;
-                    's2
-                    let c = 0;
-                    0
-            }
-        "#;
-
-        let expected = Unit {
-            head: UnitHead {
-                attributes: AttributeList::empty(),
-                unit_kind: UnitKind::Pipeline(
-                    MaybeComptime::Raw(IntLiteral::unsized_(2).nowhere()).nowhere(),
-                )
-                .nowhere(),
-                name: ast_ident("test"),
-                inputs: aparams![("a", tspec!("bool"))],
-                output_type: Some(TypeSpec::Named(ast_path("bool"), None).nowhere()),
-                type_params: None,
-                where_clauses: vec![],
-            },
-            body: Some(
-                Expression::Block(Box::new(Block {
-                    statements: vec![
-                        Statement::Label(ast_ident("s0")).nowhere(),
-                        Statement::PipelineRegMarker(None, None).nowhere(),
-                        Statement::binding(
-                            Pattern::name("b"),
-                            None,
-                            Expression::int_literal_signed(0).nowhere(),
-                        )
-                        .nowhere(),
-                        Statement::PipelineRegMarker(None, None).nowhere(),
-                        Statement::Label(ast_ident("s2")).nowhere(),
-                        Statement::binding(
-                            Pattern::name("c"),
-                            None,
-                            Expression::int_literal_signed(0).nowhere(),
-                        )
-                        .nowhere(),
-                    ],
-                    result: Some(Expression::int_literal_signed(0).nowhere()),
-                }))
-                .nowhere(),
-            ),
-        }
-        .nowhere();
-
-        check_parse!(code, unit(&AttributeList::empty()), Ok(Some(expected)));
-    }
-
-    #[test]
-    fn pipeline_parsing_with_many_regs_works() {
-        let code = r#"
-            pipeline(2) test(a: bool) -> bool {
-                reg*3;
-                    0
-            }
-        "#;
-
-        let expected = Unit {
-            head: UnitHead {
-                attributes: AttributeList::empty(),
-                unit_kind: UnitKind::Pipeline(
-                    MaybeComptime::Raw(IntLiteral::unsized_(2).nowhere()).nowhere(),
-                )
-                .nowhere(),
-                name: ast_ident("test"),
-                inputs: aparams![("a", tspec!("bool"))],
-                output_type: Some(TypeSpec::Named(ast_path("bool"), None).nowhere()),
-                type_params: None,
-                where_clauses: vec![],
-            },
-            body: Some(
-                Expression::Block(Box::new(Block {
-                    statements: vec![
-                        Statement::PipelineRegMarker(Some(3.nowhere()), None).nowhere()
-                    ],
-                    result: Some(Expression::int_literal_signed(0).nowhere()),
-                }))
-                .nowhere(),
-            ),
-        }
-        .nowhere();
-
-        check_parse!(code, unit(&AttributeList::empty()), Ok(Some(expected)));
-    }
-
-    #[test]
-    fn pipelines_are_items() {
-        let code = r#"
-            pipeline(2) test(a: bool) -> bool {
-                0
-            }
-        "#;
-
-        let expected = ModuleBody {
-            members: vec![Item::Unit(
-                Unit {
-                    head: UnitHead {
-                        attributes: AttributeList::empty(),
-                        unit_kind: UnitKind::Pipeline(
-                            MaybeComptime::Raw(IntLiteral::unsized_(2).nowhere()).nowhere(),
-                        )
-                        .nowhere(),
-                        name: ast_ident("test"),
-                        inputs: aparams![("a", tspec!("bool"))],
-                        output_type: Some(TypeSpec::Named(ast_path("bool"), None).nowhere()),
-                        type_params: None,
-                        where_clauses: vec![],
-                    },
-                    body: Some(
-                        Expression::Block(Box::new(Block {
-                            statements: vec![],
-                            result: Some(Expression::int_literal_signed(0).nowhere()),
-                        }))
-                        .nowhere(),
-                    ),
-                }
-                .nowhere(),
-            )],
-        };
-
-        check_parse!(code, module_body, Ok(expected));
-    }
-
-    #[test]
-    fn pipeline_instantiation_works() {
-        let code = "inst(2) some_pipeline(x, y, z)";
-
-        let expected = Expression::Call {
-            kind: CallKind::Pipeline(
-                ().nowhere(),
-                MaybeComptime::Raw(IntLiteral::unsized_(2).nowhere()).nowhere(),
-            ),
-            callee: ast_path("some_pipeline"),
-            args: ArgumentList::Positional(vec![
-                Expression::Identifier(ast_path("x")).nowhere(),
-                Expression::Identifier(ast_path("y")).nowhere(),
-                Expression::Identifier(ast_path("z")).nowhere(),
-            ])
-            .nowhere(),
-            turbofish: None,
-        }
-        .nowhere();
-
-        check_parse!(code, expression, Ok(expected), Parser::set_parsing_entity);
     }
 
     #[test]

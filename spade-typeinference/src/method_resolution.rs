@@ -154,7 +154,7 @@ fn specs_are_overlapping(specs: &[Loc<TypeSpec>], vars: &[TypeVar]) -> Overlap {
 }
 
 fn expr_is_overlapping(expr: &TypeExpression, var: &TypeVar) -> Overlap {
-    match (expr, var) {
+    match (&expr, var) {
         (TypeExpression::Integer(eval), TypeVar::Known(_, KnownType::Integer(vval), _)) => {
             if eval == vval {
                 Overlap::Yes

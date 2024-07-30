@@ -1,4 +1,6 @@
-use spade_common::{location_info::WithLocation, name::Path, num_ext::InfallibleToBigUint};
+use spade_common::location_info::WithLocation;
+use spade_common::name::Path;
+use spade_common::num_ext::InfallibleToBigInt;
 use spade_types::{ConcreteType, PrimitiveType};
 
 use crate::build_artifacts;
@@ -91,7 +93,7 @@ test_hierarchical_lookup! { type_of_hierarchical_sub_sub_value_is_found,
     ["sub_0", "sub_sub_0", "x"],
     ConcreteType::Single {
         base: PrimitiveType::Int,
-        params: vec![ConcreteType::Integer(10u32.to_biguint())],
+        params: vec![ConcreteType::Integer(10u32.to_bigint())],
     }
 }
 
@@ -110,7 +112,7 @@ test_hierarchical_lookup! { type_of_hierarchical_sub_value_is_found,
     ["sub_0", "x"],
     ConcreteType::Single {
         base: PrimitiveType::Int,
-        params: vec![ConcreteType::Integer(10u32.to_biguint())],
+        params: vec![ConcreteType::Integer(10u32.to_bigint())],
     }
 }
 
@@ -128,7 +130,7 @@ test_hierarchical_lookup! { type_of_hierarchical_root_value_is_found,
     ["x"],
     ConcreteType::Single {
         base: PrimitiveType::Int,
-        params: vec![ConcreteType::Integer(10u32.to_biguint())],
+        params: vec![ConcreteType::Integer(10u32.to_bigint())],
     }
 }
 
@@ -147,7 +149,7 @@ test_hierarchical_lookup! { type_of_hierarchical_pipeline_value_is_found,
     ["s1_x"],
     ConcreteType::Single {
         base: PrimitiveType::Int,
-        params: vec![ConcreteType::Integer(10u32.to_biguint())],
+        params: vec![ConcreteType::Integer(10u32.to_bigint())],
     }
 }
 

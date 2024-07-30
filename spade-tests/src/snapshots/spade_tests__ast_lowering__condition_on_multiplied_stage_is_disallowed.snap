@@ -15,9 +15,4 @@ error: Multiple registers with conditions can not be defined
   │         │       
   │         Condition specified here
   │
-  = Consider splitting into two reg statements
-  │
-2 │     reg[...]; reg*2;
-  │     ~~~~~~~~~~~~~~~
-
-
+  = help: Consider splitting into two reg statements

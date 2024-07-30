@@ -6,8 +6,8 @@ entity a() -> bool {
 }
 
 
-error: expected pipeline depth, got `)`
+error: Unexpected `)`, expected `type`
   ┌─ testinput:2:10
   │
 2 │     inst() x()
-  │          ^ expected pipeline depth here
+  │          ^ expected `type`

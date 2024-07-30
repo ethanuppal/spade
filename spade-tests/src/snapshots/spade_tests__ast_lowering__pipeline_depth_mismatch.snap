@@ -13,13 +13,14 @@ entity top(clk: clock) -> bool {
 }
 
 
-error: Pipeline depth mismatch
+error: Pipeline depth mismatch.
   ┌─ testinput:9:10
   │
 1 │ pipeline(3) p(clk: clock, b: bool) -> bool {
   │          - p has depth 3
   ·
 9 │     inst(2) p(clk, true)
-  │          ^ Expected depth 3
-
-
+  │          ^ Expected depth 3, got 2
+  │
+  = note: Expected: 3
+               Got: 2

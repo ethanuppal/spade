@@ -18,6 +18,7 @@ use crate::error::Result;
 use crate::generate_unit;
 use crate::name_map::NameSourceMap;
 use crate::passes::disallow_inout_bindings::InOutChecks;
+use crate::passes::flatten_regs::FlattenRegs;
 use crate::passes::lower_methods::LowerMethods;
 use crate::passes::pass::{Pass, Passable};
 
@@ -224,6 +225,11 @@ pub fn compile_items(
                         items: item_list,
                         symtab,
                     } as &mut dyn Pass,
+                    &mut FlattenRegs {
+                        type_state: &type_state,
+                        items: item_list,
+                        symtab,
+                    },
                 ];
                 for pass in passes {
                     let pass_result = u.apply(pass);

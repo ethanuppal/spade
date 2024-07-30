@@ -1,0 +1,18 @@
+---
+source: spade-tests/src/typeinference.rs
+---
+pipeline(10) p(clk: clock, x: bool) -> bool {
+    reg * {8};
+    reg;
+        x
+}
+
+
+error: Pipeline depth mismatch. Expected 9 got 10
+  ┌─ testinput:1:10
+  │
+1 │ pipeline(10) p(clk: clock, x: bool) -> bool {
+  │          ^^ Found 9 stages
+  │
+  = note: Expected: 9
+               Got: 10

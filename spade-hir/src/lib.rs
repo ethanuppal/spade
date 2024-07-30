@@ -7,7 +7,7 @@ use std::collections::{BTreeMap, HashMap};
 
 pub use expression::{Argument, ArgumentKind, ArgumentList, ExprKind, Expression};
 use itertools::Itertools;
-use num::{BigInt, BigUint};
+use num::BigInt;
 use serde::{Deserialize, Serialize};
 use spade_common::{
     location_info::{Loc, WithLocation},
@@ -149,12 +149,21 @@ pub struct Binding {
 }
 
 #[derive(PartialEq, Debug, Clone, Serialize, Deserialize)]
+pub enum PipelineRegMarkerExtra {
+    Condition(Loc<Expression>),
+    Count {
+        count: Loc<TypeExpression>,
+        count_typeexpr_id: u64,
+    },
+}
+
+#[derive(PartialEq, Debug, Clone, Serialize, Deserialize)]
 pub enum Statement {
     Binding(Binding),
     Register(Register),
     Declaration(Vec<Loc<NameID>>),
-    PipelineRegMarker(Option<Loc<Expression>>),
-    Label(Loc<Identifier>),
+    PipelineRegMarker(Option<PipelineRegMarkerExtra>),
+    Label(Loc<NameID>),
     Assert(Loc<Expression>),
     Set {
         target: Loc<Expression>,
@@ -230,7 +239,7 @@ impl TypeParam {
 #[derive(PartialEq, Debug, Clone, Serialize, Deserialize)]
 pub enum TypeExpression {
     /// An integer value
-    Integer(BigUint),
+    Integer(BigInt),
     /// Another type
     TypeSpec(TypeSpec),
     ConstGeneric(Loc<ConstGeneric>),
@@ -541,7 +550,10 @@ pub enum FunctionKind {
 pub enum UnitKind {
     Function(FunctionKind),
     Entity,
-    Pipeline(Loc<usize>),
+    Pipeline {
+        depth: Loc<TypeExpression>,
+        depth_typeexpr_id: u64,
+    },
 }
 impl WithLocation for UnitKind {}
 
@@ -552,12 +564,12 @@ impl UnitKind {
             UnitKind::Function(FunctionKind::Struct) => "struct",
             UnitKind::Function(FunctionKind::Enum) => "enum variant",
             UnitKind::Entity => "entity",
-            UnitKind::Pipeline(_) => "pipeline",
+            UnitKind::Pipeline { .. } => "pipeline",
         }
     }
 
     pub fn is_pipeline(&self) -> bool {
-        matches!(self, UnitKind::Pipeline(_))
+        matches!(self, UnitKind::Pipeline { .. })
     }
 }
 

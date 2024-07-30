@@ -195,31 +195,38 @@ impl<T> UnificationErrorExt<T> for std::result::Result<T, UnificationError> {
                 source,
                 loc,
             } => {
-                Diagnostic::error(loc, format!("Expected type {}, got {}", expected, got))
-                    .primary_label(format!("Expected {}, got {}", expected, got))
-                    .note(match source {
-                        ConstraintSource::AdditionOutput => {
-                            "Addition creates one more output bit than the input to avoid overflow"
-                                .to_string()
-                        }
-                        ConstraintSource::MultOutput => {
-                            "The size of a multiplication is the sum of the operand sizes"
-                                .to_string()
-                        }
-                        ConstraintSource::ArrayIndexing => {
-                            // NOTE: This error message could probably be improved
-                            "because the value is used as an index to an array".to_string()
-                        }
-                        ConstraintSource::MemoryIndexing => {
-                            // NOTE: This error message could probably be improved
-                            "because the value is used as an index to a memory".to_string()
-                        }
-                        ConstraintSource::Concatenation => {
-                            "The size of a concatenation is the sum of the operand sizes"
-                                .to_string()
-                        }
-                        ConstraintSource::Where => "".to_string(),
-                    })
+                let diag =
+                    Diagnostic::error(loc, format!("Expected type {}, got {}", expected, got))
+                        .primary_label(format!("Expected {}, got {}", expected, got));
+
+                match source {
+                    ConstraintSource::AdditionOutput => diag.note(
+                        "Addition creates one more output bit than the input to avoid overflow"
+                            .to_string(),
+                    ),
+                    ConstraintSource::MultOutput => diag.note(
+                        "The size of a multiplication is the sum of the operand sizes".to_string(),
+                    ),
+                    ConstraintSource::ArrayIndexing => {
+                        // NOTE: This error message could probably be improved
+                        diag.note("because the value is used as an index to an array".to_string())
+                    }
+                    ConstraintSource::MemoryIndexing => {
+                        // NOTE: This error message could probably be improved
+                        diag.note("because the value is used as an index to a memory".to_string())
+                    }
+                    ConstraintSource::Concatenation => diag.note(
+                        "The size of a concatenation is the sum of the operand sizes".to_string(),
+                    ),
+                    ConstraintSource::Where => diag,
+                    ConstraintSource::PipelineRegOffset { .. } => diag,
+                    ConstraintSource::PipelineRegCount { reg, total } => {
+                        Diagnostic::error(total, format!("Expected {expected} in this pipeline."))
+                            .primary_label(format!("Expected {expected} stages"))
+                            .secondary_label(reg, format!("This final register is number {got}"))
+                    }
+                    ConstraintSource::PipelineAvailDepth => diag,
+                }
             }
             UnificationError::Specific(e) => e,
         })

@@ -2191,73 +2191,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore]
-    fn memory_initial_values_work() {
-        let code = r#"
-            use std::mem::clocked_memory_init;
-            use std::mem::read_memory;
-
-            entity test(clk: clock) -> int<8> {
-                // lifeguard spade#151
-                let ports: [(bool, uint<1>, int<8>); 0] = [];
-                let mem: Memory<int<8>, 2> = inst clocked_memory_init(clk, ports, [0, 1]);
-                0
-            }
-        "#;
-
-        let ports_type = Type::Array {
-            inner: Box::new(Type::Tuple(vec![
-                Type::Bool,
-                Type::UInt(1u32.to_biguint()),
-                Type::Int(8u32.to_biguint()),
-            ])),
-            length: 0u32.to_biguint(),
-        };
-
-        let init_type = Type::Array {
-            inner: Box::new(Type::Int(8u32.to_biguint())),
-            length: 2u32.to_biguint(),
-        };
-
-        let mem_type = Type::Memory {
-            inner: Box::new(Type::Int(8u32.to_biguint())),
-            length: 2u32.to_biguint(),
-        };
-
-        let expected = vec![entity! {&["test"]; (
-            "clk", n(0, "clk"), Type::Bool,
-        ) -> Type::Int(8u32.to_biguint()); {
-            (e(10); ports_type.clone(); ConstructArray;);
-            (n(11, "ports"); ports_type; Alias; e(10));
-            (const(12); Type::Int(8u32.to_biguint()); ConstantValue::Int(0.to_bigint()));
-            (const(13); Type::Int(8u32.to_biguint()); ConstantValue::Int(1.to_bigint()));
-
-            (e(14); init_type; ConstructArray; e(12), e(13));
-
-            (e(1); mem_type.clone(); DeclClockedMemory({
-                write_ports: 0u32.to_biguint(),
-                addr_w: 1u32.to_biguint(),
-                inner_w: 8u32.to_biguint(),
-                elems: 2u32.to_biguint(),
-                initial: Some(vec![
-                    // NOTE: These constants are not compared using the normal mir comparison
-                    // infrastructure, which means that they get incremented if code before
-                    // them is changed, in particular, the stdlib. If we end up with
-                    // more tests like this we should add them to MIR comparison
-                    // lifeguard spade#225
-                    vec![statement!(const 701; Type::Int(8u32.to_biguint()); ConstantValue::Int(0.to_bigint()))],
-                    vec![statement!(const 702; Type::Int(8u32.to_biguint()); ConstantValue::Int(1.to_bigint()))],
-                ])
-            }); n(0, "clk"), n(11, "ports"));
-            (n(2, "mem"); mem_type; Alias; e(1));
-
-            (const 0; Type::Int(8u32.to_biguint()); ConstantValue::Int(0.to_bigint()));
-        } => e(0)}];
-
-        build_and_compare_entities!(code, expected);
-    }
-
-    #[test]
     fn port_pair_creation_works() {
         let code = "
             struct port P {
@@ -3002,6 +2935,55 @@ mod tests {
                 let [true, x] = [true, true];
             }
         "
+    }
+
+    snapshot_error! {
+        incorrect_stage_count,
+        "
+            pipeline(3) pipe(clk: clock) -> bool {
+                reg;
+                reg;
+                    true
+            }
+        "
+    }
+
+    snapshot_error! {
+        incorrect_stage_count_single,
+        "
+            pipeline(1) pipe(clk: clock) -> bool {
+                    true
+            }
+        "
+    }
+
+    snapshot_error! {
+        incorrect_stage_count_only_one,
+        "
+            pipeline(2) pipe(clk: clock) -> bool {
+                reg;
+                    true
+            }
+        "
+    }
+
+    snapshot_error! {
+        comptime_pipeline_depth_works,
+        r#"
+            $config X = 1
+
+            pipeline($if X == 1 {3} $else {2}) test(clk: clock) -> bool {
+                reg*2;
+                    true
+            }
+        "#
+    }
+
+    snapshot_error! {
+        negative_pipeline_depth_is_disallowed,
+        "pipeline(-1) x(clk: clock) -> bool {
+            true
+        }"
     }
 }
 

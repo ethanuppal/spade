@@ -1,10 +1,13 @@
 use std::collections::BTreeMap;
 
+use num::ToPrimitive;
+
 use local_impl::local_impl;
 use mir::ValueName;
 use mir::ValueNameSource;
 use spade_common::name::Path;
 use spade_common::{location_info::Loc, name::NameID};
+use spade_diagnostics::diag_anyhow;
 use spade_diagnostics::diag_bail;
 use spade_diagnostics::Diagnostic;
 use spade_hir::expression::CallKind;
@@ -12,6 +15,7 @@ use spade_hir::Binding;
 use spade_hir::TypeSpec;
 use spade_hir::{ExprKind, Expression, Pattern, Statement};
 use spade_mir as mir;
+use spade_types::ConcreteType;
 
 use crate::Context;
 use crate::ExprLocal;
@@ -70,7 +74,7 @@ pub fn handle_statement(
             wal_trace: _,
             ty: _,
         }) => {
-            let time = expr.inner.kind.available_in()?;
+            let time = expr.inner.kind.available_in(&ctx)?;
             for name in pat.get_names() {
                 let ty = ctx
                     .types
@@ -80,7 +84,7 @@ pub fn handle_statement(
             }
         }
         Statement::Register(reg) => {
-            let time = reg.value.kind.available_in()?;
+            let time = reg.value.kind.available_in(&ctx)?;
             for name in reg.pattern.get_names() {
                 let ty = ctx
                     .types
@@ -90,13 +94,21 @@ pub fn handle_statement(
             }
         }
         Statement::Declaration(_) => todo!(),
-        Statement::PipelineRegMarker(cond) => {
-            local_conds.push(if let Some(cond) = cond {
-                statements.append(cond.lower(ctx)?);
-                Some(cond.variable(ctx.subs)?)
-            } else {
-                None
-            });
+        Statement::PipelineRegMarker(extra) => {
+            let local_cond = match extra {
+                Some(spade_hir::PipelineRegMarkerExtra::Condition(cond)) => {
+                    statements.append(cond.lower(ctx)?);
+                    Some(cond.variable(ctx)?)
+                }
+                Some(spade_hir::PipelineRegMarkerExtra::Count {
+                    count,
+                    count_typeexpr_id: _,
+                }) => {
+                    diag_bail!(count, "Expected to have lowered multiplied pipeline stage")
+                }
+                None => None,
+            };
+            local_conds.push(local_cond);
             let live_vars = ctx.subs.next_stage(ctx.symtab);
 
             // Generate pipeline regs for previous live vars
@@ -158,6 +170,7 @@ pub fn handle_statement(
                     "Pipelined",
                 );
             }
+
             *current_stage += 1;
         }
         Statement::Label(_) => {
@@ -522,10 +535,11 @@ pub fn constexpr_inv(
 /// is a mismatch, an error is returned
 pub fn try_compute_availability(
     exprs: &[impl std::borrow::Borrow<Loc<Expression>>],
+    ctx: &Context,
 ) -> Result<usize> {
     let mut result = None;
     for expr in exprs {
-        let a = expr.borrow().kind.available_in()?;
+        let a = expr.borrow().kind.available_in(ctx)?;
 
         result = match result {
             None => Some(a),
@@ -548,7 +562,7 @@ pub fn try_compute_availability(
 
 #[local_impl]
 impl PipelineAvailability for ExprKind {
-    fn available_in(&self) -> Result<usize> {
+    fn available_in(&self, ctx: &Context) -> Result<usize> {
         match self {
             ExprKind::Identifier(_) => Ok(0),
             ExprKind::IntLiteral(_, _) => Ok(0),
@@ -557,26 +571,29 @@ impl PipelineAvailability for ExprKind {
             ExprKind::BitLiteral(_) => Ok(0),
             ExprKind::CreatePorts => Ok(0),
             ExprKind::StageReady | ExprKind::StageValid => Ok(0),
-            ExprKind::TupleLiteral(inner) => try_compute_availability(inner),
-            ExprKind::ArrayLiteral(elems) => try_compute_availability(elems),
+            ExprKind::TupleLiteral(inner) => try_compute_availability(inner, ctx),
+            ExprKind::ArrayLiteral(elems) => try_compute_availability(elems, ctx),
             ExprKind::ArrayShorthandLiteral(inner, _) => {
-                try_compute_availability(&[inner.as_ref()])
+                try_compute_availability(&[inner.as_ref()], ctx)
             }
-            ExprKind::Index(lhs, idx) => try_compute_availability(&[lhs.as_ref(), idx.as_ref()]),
+            ExprKind::Index(lhs, idx) => {
+                try_compute_availability(&[lhs.as_ref(), idx.as_ref()], ctx)
+            }
             ExprKind::RangeIndex {
                 target,
                 start: _,
                 end: _,
-            } => try_compute_availability(&[target.as_ref()]),
-            ExprKind::TupleIndex(lhs, _) => lhs.inner.kind.available_in(),
-            ExprKind::FieldAccess(lhs, _) => lhs.inner.kind.available_in(),
+            } => try_compute_availability(&[target.as_ref()], ctx),
+            ExprKind::TupleIndex(lhs, _) => lhs.inner.kind.available_in(ctx),
+            ExprKind::FieldAccess(lhs, _) => lhs.inner.kind.available_in(ctx),
             ExprKind::BinaryOperator(lhs, _, rhs) => {
-                try_compute_availability(&[lhs.as_ref(), rhs.as_ref()])
+                try_compute_availability(&[lhs.as_ref(), rhs.as_ref()], ctx)
             }
-            ExprKind::UnaryOperator(_, val) => val.inner.kind.available_in(),
-            ExprKind::Match(_, values) => {
-                try_compute_availability(&values.iter().map(|(_, expr)| expr).collect::<Vec<_>>())
-            }
+            ExprKind::UnaryOperator(_, val) => val.inner.kind.available_in(ctx),
+            ExprKind::Match(_, values) => try_compute_availability(
+                &values.iter().map(|(_, expr)| expr).collect::<Vec<_>>(),
+                ctx,
+            ),
             ExprKind::Block(inner) => {
                 // NOTE: Do we want to allow delayed values inside blocks? That could lead to some
                 // strange issues like
@@ -585,20 +602,39 @@ impl PipelineAvailability for ExprKind {
                 //      x // Will appear as having availability 1
                 // }
                 if let Some(result) = &inner.result {
-                    result.kind.available_in()
+                    result.kind.available_in(ctx)
                 } else {
                     Ok(0)
                 }
             }
             ExprKind::Call {
-                kind: CallKind::Pipeline(_, depth),
+                kind:
+                    CallKind::Pipeline {
+                        inst_loc,
+                        depth,
+                        depth_typeexpr_id,
+                    },
                 ..
             } => {
                 // FIXME: Re-add this check to allow nested pipelines
                 // let arg_availability = try_compute_availability(
                 //     &args.iter().map(|arg| &arg.value).collect::<Vec<_>>(),
                 // )?;
-                Ok(depth.inner)
+                match ctx.types.try_get_type_of_id(
+                    *depth_typeexpr_id,
+                    ctx.symtab.symtab(),
+                    &ctx.item_list.types,
+                ) {
+                    Some(ConcreteType::Integer(val)) => Ok(val.to_usize().ok_or_else(|| {
+                        diag_anyhow!(inst_loc, "Inferred more than `usize::MAX` pipeline stages")
+                    })?),
+                    Some(_) => diag_bail!(depth, "Found non-integer for pipeline depth"),
+                    None => Err(Diagnostic::error(
+                        depth,
+                        "The latency of this pipeline instantiation is not known",
+                    )
+                    .primary_label("Unknown latency")),
+                }
             }
             ExprKind::Call {
                 kind: CallKind::Function,
@@ -608,7 +644,7 @@ impl PipelineAvailability for ExprKind {
                 kind: CallKind::Entity(_),
                 ..
             } => Ok(0),
-            ExprKind::If(_, t, f) => try_compute_availability(&[t.as_ref(), f.as_ref()]),
+            ExprKind::If(_, t, f) => try_compute_availability(&[t.as_ref(), f.as_ref()], ctx),
             ExprKind::PipelineRef { .. } => Ok(0),
             ExprKind::MethodCall { name, .. } => diag_bail!(
                 name,

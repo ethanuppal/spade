@@ -126,7 +126,7 @@ impl MirLowerable for ConcreteType {
             }
             CType::Array { inner, size } => Type::Array {
                 inner: Box::new(inner.to_mir_type()),
-                length: size.clone(),
+                length: size.to_biguint().expect("Found negative array size"),
             },
             CType::Single {
                 base: PrimitiveType::Bool | PrimitiveType::Clock | PrimitiveType::Bit,
@@ -136,14 +136,18 @@ impl MirLowerable for ConcreteType {
                 base: PrimitiveType::Int,
                 params,
             } => match params.as_slice() {
-                [CType::Integer(val)] => Type::Int(val.clone()),
+                [CType::Integer(val)] => {
+                    Type::Int(val.to_biguint().expect("Found negative int size"))
+                }
                 t => unreachable!("{:?} is an invalid generic parameter for an integer", t),
             },
             CType::Single {
                 base: PrimitiveType::Uint,
                 params,
             } => match params.as_slice() {
-                [CType::Integer(val)] => Type::UInt(val.clone()),
+                [CType::Integer(val)] => {
+                    Type::UInt(val.to_biguint().expect("Found negative uint size"))
+                }
                 t => unreachable!("{:?} is an invalid generic parameter for an integer", t),
             },
             CType::Single {
@@ -152,7 +156,7 @@ impl MirLowerable for ConcreteType {
             } => match params.as_slice() {
                 [inner, CType::Integer(length)] => Type::Memory {
                     inner: Box::new(inner.to_mir_type()),
-                    length: length.clone(),
+                    length: length.to_biguint().expect("Found negative uint "),
                 },
                 t => unreachable!("{:?} is an invalid generic parameter for a memory", t),
             },
@@ -647,7 +651,7 @@ pub fn do_wal_trace_lowering(
                 }
                 (Some(signal), true) => result.push_anonymous(mir::Statement::WalTrace {
                     name: main_value_name.clone(),
-                    val: signal.variable(ctx.subs)?,
+                    val: signal.variable(ctx)?,
                     suffix: format!("__{suffix}__{}", wal_traceable.suffix.clone()),
                     ty: MirType::Bool,
                 }),
@@ -960,7 +964,7 @@ impl StatementLocal for Statement {
                     mir::Statement::Binding(mir::Binding {
                         name: pattern.value_name(),
                         operator: mir::Operator::Alias,
-                        operands: vec![value.variable(ctx.subs)?],
+                        operands: vec![value.variable(ctx)?],
                         ty: mir_ty.clone(),
                         loc: Some(pattern.loc()),
                     }),
@@ -971,7 +975,7 @@ impl StatementLocal for Statement {
                     lower_wal_trace(pattern, wal_trace, ctx, &mut result, &concrete_ty)?;
                 }
 
-                result.append(pattern.lower(value.variable(ctx.subs)?, ctx)?);
+                result.append(pattern.lower(value.variable(ctx)?, ctx)?);
             }
             Statement::Register(register) => {
                 let hir::Register {
@@ -1052,15 +1056,15 @@ impl StatementLocal for Statement {
                             .types
                             .type_of_id(pattern.id, ctx.symtab.symtab(), &ctx.item_list.types)
                             .to_mir_type(),
-                        clock: clock.variable(ctx.subs)?,
+                        clock: clock.variable(ctx)?,
                         reset: reset
                             .as_ref()
                             .map::<Result<_>, _>(|(value, trig)| {
-                                Ok((value.variable(ctx.subs)?, trig.variable(ctx.subs)?))
+                                Ok((value.variable(ctx)?, trig.variable(ctx)?))
                             })
                             .transpose()?,
                         initial,
-                        value: value.variable(ctx.subs)?,
+                        value: value.variable(ctx)?,
                         loc: Some(pattern.loc()),
                         traced,
                     }),
@@ -1077,9 +1081,7 @@ impl StatementLocal for Statement {
             Statement::Label(_) => {}
             Statement::Assert(expr) => {
                 result.append(expr.lower(ctx)?);
-                result.push_anonymous(mir::Statement::Assert(
-                    expr.variable(ctx.subs)?.at_loc(expr),
-                ))
+                result.push_anonymous(mir::Statement::Assert(expr.variable(ctx)?.at_loc(expr)))
             }
             Statement::WalSuffixed { suffix, target } => {
                 let ty = ctx
@@ -1098,8 +1100,8 @@ impl StatementLocal for Statement {
                 result.append(target.lower(ctx)?);
                 result.append(value.lower(ctx)?);
                 result.push_anonymous(mir::Statement::Set {
-                    target: target.variable(ctx.subs)?.at_loc(target),
-                    value: value.variable(ctx.subs)?.at_loc(value),
+                    target: target.variable(ctx)?.at_loc(target),
+                    value: value.variable(ctx)?.at_loc(value),
                 })
             }
         }
@@ -1116,7 +1118,8 @@ impl ExprLocal for Loc<Expression> {
     /// If the verilog code for this expression is just an alias for another variable
     /// that is returned here. This allows us to skip generating wires that we don't
     /// really need
-    fn alias(&self, subs: &Substitutions) -> Result<Option<mir::ValueName>> {
+    fn alias(&self, ctx: &Context) -> Result<Option<mir::ValueName>> {
+        let subs = &ctx.subs;
         match &self.kind {
             ExprKind::Identifier(ident) => match subs.lookup(ident) {
                 Substitution::Undefined => Err(undefined_variable(&ident.clone().at_loc(self))),
@@ -1142,7 +1145,7 @@ impl ExprLocal for Loc<Expression> {
             ExprKind::RangeIndex { .. } => Ok(None),
             ExprKind::Block(block) => {
                 if let Some(result) = &block.result {
-                    result.variable(subs).map(Some)
+                    result.variable(ctx).map(Some)
                 } else {
                     Ok(None)
                 }
@@ -1155,8 +1158,22 @@ impl ExprLocal for Loc<Expression> {
                 stage,
                 name,
                 declares_name: _,
+                depth_typeexpr_id,
             } => {
-                match subs.lookup_referenced(stage.inner, name) {
+                let depth = match ctx.types.try_get_type_of_id(
+                    *depth_typeexpr_id,
+                    ctx.symtab.symtab(),
+                    &ctx.item_list.types
+                ) {
+                    Some(ConcreteType::Integer(val)) => val.to_usize().ok_or_else(|| {
+                        diag_anyhow!(stage, "Inferred a pipeline offset that does not fit in usize::MAX ({val})")
+                    })?,
+                    Some(_) => diag_bail!(stage, "Inferred non-integer for pipeline ref offset"),
+                    None => return Err(Diagnostic::error(stage, "Could not infer pipeline stage offset")
+                        .primary_label("Unknown pipeline stage offset")
+                        .help("This is likely caused by a type variable that is not fully known being used."))
+                };
+                match subs.lookup_referenced(depth, name) {
                     Substitution::Undefined => Err(undefined_variable(name)),
                     Substitution::Waiting(available_at, _) => {
                         // Available at is the amount of cycles left at the stage
@@ -1183,11 +1200,11 @@ impl ExprLocal for Loc<Expression> {
 
     // NOTE: this impl and a few others could be moved to a impl block that does not have
     // the Loc requirement if desired
-    fn variable(&self, subs: &Substitutions) -> Result<mir::ValueName> {
+    fn variable(&self, ctx: &Context) -> Result<mir::ValueName> {
         // If this expressions should not use the standard __expr__{} variable,
         // that is specified here
 
-        Ok(self.alias(subs)?.unwrap_or(mir::ValueName::Expr(self.id)))
+        Ok(self.alias(ctx)?.unwrap_or(mir::ValueName::Expr(self.id)))
     }
 
     fn lower(&self, ctx: &mut Context) -> Result<StatementList> {
@@ -1232,7 +1249,7 @@ impl ExprLocal for Loc<Expression> {
                         mir::Statement::Constant(
                             self.id,
                             ty,
-                            mir::ConstantValue::Int(value.to_bigint()),
+                            mir::ConstantValue::Int(value.clone()),
                         ),
                         self,
                     )
@@ -1267,9 +1284,9 @@ impl ExprLocal for Loc<Expression> {
 
                         result.push_primary(
                             mir::Statement::Binding(mir::Binding {
-                                name: self.variable(ctx.subs)?,
+                                name: self.variable(ctx)?,
                                 operator: $op,
-                                operands: vec![lhs.variable(ctx.subs)?, rhs.variable(ctx.subs)?],
+                                operands: vec![lhs.variable(ctx)?, rhs.variable(ctx)?],
                                 ty: self_type,
                                 loc: Some(self.loc()),
                             }),
@@ -1294,9 +1311,9 @@ impl ExprLocal for Loc<Expression> {
 
                         result.push_primary(
                             mir::Statement::Binding(mir::Binding {
-                                name: self.variable(ctx.subs)?,
+                                name: self.variable(ctx)?,
                                 operator: op,
-                                operands: vec![lhs.variable(ctx.subs)?, rhs.variable(ctx.subs)?],
+                                operands: vec![lhs.variable(ctx)?, rhs.variable(ctx)?],
                                 ty: self_type,
                                 loc: Some(self.loc()),
                             }),
@@ -1401,9 +1418,9 @@ impl ExprLocal for Loc<Expression> {
 
                     result.push_primary(
                         mir::Statement::Binding(mir::Binding {
-                            name: self.variable(ctx.subs)?,
+                            name: self.variable(ctx)?,
                             operator: op,
-                            operands: vec![operand.variable(ctx.subs)?],
+                            operands: vec![operand.variable(ctx)?],
                             ty: self_type,
                             loc: Some(self.loc()),
                         }),
@@ -1430,11 +1447,11 @@ impl ExprLocal for Loc<Expression> {
 
                 result.push_primary(
                     mir::Statement::Binding(mir::Binding {
-                        name: self.variable(ctx.subs)?,
+                        name: self.variable(ctx)?,
                         operator: mir::Operator::ConstructTuple,
                         operands: elems
                             .iter()
-                            .map(|e| e.variable(ctx.subs))
+                            .map(|e| e.variable(ctx))
                             .collect::<Result<_>>()?,
                         ty: self_type,
                         loc: Some(self.loc()),
@@ -1457,9 +1474,9 @@ impl ExprLocal for Loc<Expression> {
 
                 result.push_primary(
                     mir::Statement::Binding(mir::Binding {
-                        name: self.variable(ctx.subs)?,
+                        name: self.variable(ctx)?,
                         operator: mir::Operator::IndexTuple(idx.inner as u64, types),
-                        operands: vec![tup.variable(ctx.subs)?],
+                        operands: vec![tup.variable(ctx)?],
                         ty: self_type,
                         loc: Some(self.loc()),
                     }),
@@ -1535,7 +1552,7 @@ impl ExprLocal for Loc<Expression> {
                 );
                 result.push_primary(
                     mir::Statement::Binding(mir::Binding {
-                        name: self.variable(ctx.subs)?,
+                        name: self.variable(ctx)?,
                         operator: mir::Operator::ConstructTuple,
                         operands: vec![lname, rname],
                         ty: self_type,
@@ -1587,9 +1604,9 @@ impl ExprLocal for Loc<Expression> {
 
                 result.push_primary(
                     mir::Statement::Binding(mir::Binding {
-                        name: self.variable(ctx.subs)?,
+                        name: self.variable(ctx)?,
                         operator: mir::Operator::IndexTuple(field_index as u64, member_types),
-                        operands: vec![target.variable(ctx.subs)?],
+                        operands: vec![target.variable(ctx)?],
                         ty: self_type,
                         loc: Some(self.loc()),
                     }),
@@ -1602,11 +1619,11 @@ impl ExprLocal for Loc<Expression> {
                 }
                 result.push_primary(
                     mir::Statement::Binding(mir::Binding {
-                        name: self.variable(ctx.subs)?,
+                        name: self.variable(ctx)?,
                         operator: mir::Operator::ConstructArray,
                         operands: values
                             .iter()
-                            .map(|v| v.variable(ctx.subs))
+                            .map(|v| v.variable(ctx))
                             .collect::<Result<_>>()?,
                         ty: self_type,
                         loc: Some(self.loc()),
@@ -1630,10 +1647,10 @@ impl ExprLocal for Loc<Expression> {
                 result.append(value.lower(ctx)?);
                 result.push_primary(
                     mir::Statement::Binding(mir::Binding {
-                        name: self.variable(ctx.subs)?,
+                        name: self.variable(ctx)?,
                         operator: mir::Operator::ConstructArray,
                         operands: (0..amount)
-                            .map(|_| value.variable(ctx.subs))
+                            .map(|_| value.variable(ctx))
                             .collect::<Result<_>>()?,
                         ty: self_type,
                         loc: Some(self.loc()),
@@ -1647,9 +1664,9 @@ impl ExprLocal for Loc<Expression> {
 
                 result.push_primary(
                     mir::Statement::Binding(mir::Binding {
-                        name: self.variable(ctx.subs)?,
+                        name: self.variable(ctx)?,
                         operator: mir::Operator::IndexArray,
-                        operands: vec![target.variable(ctx.subs)?, index.variable(ctx.subs)?],
+                        operands: vec![target.variable(ctx)?, index.variable(ctx)?],
                         ty: self_type,
                         loc: Some(self.loc()),
                     }),
@@ -1662,7 +1679,7 @@ impl ExprLocal for Loc<Expression> {
                 match target.get_type(ctx.types)? {
                     TypeVar::Known(_, KnownType::Array, inner) => match &inner[1] {
                         TypeVar::Known(_, KnownType::Integer(size), _) => {
-                            if &start.inner >= size {
+                            if &start.inner.clone().to_bigint() >= size {
                                 return Err(Diagnostic::error(start, "Array index out of bounds")
                                     .primary_label("index out of bounds")
                                     .secondary_label(
@@ -1670,7 +1687,7 @@ impl ExprLocal for Loc<Expression> {
                                         format!("This array only has {size} elements"),
                                     ));
                             }
-                            if &end.inner > size {
+                            if &end.inner.clone().to_bigint() > size {
                                 return Err(Diagnostic::error(end, "Array index out of bounds")
                                     .primary_label("index out of bounds")
                                     .secondary_label(
@@ -1688,12 +1705,12 @@ impl ExprLocal for Loc<Expression> {
 
                 result.push_primary(
                     mir::Statement::Binding(mir::Binding {
-                        name: self.variable(ctx.subs)?,
+                        name: self.variable(ctx)?,
                         operator: mir::Operator::RangeIndexArray {
                             start: start.inner.clone(),
                             end_exclusive: end.inner.clone(),
                         },
-                        operands: vec![target.variable(ctx.subs)?],
+                        operands: vec![target.variable(ctx)?],
                         ty: self_type,
                         loc: Some(self.loc()),
                     }),
@@ -1717,12 +1734,12 @@ impl ExprLocal for Loc<Expression> {
 
                 result.push_primary(
                     mir::Statement::Binding(mir::Binding {
-                        name: self.variable(ctx.subs)?,
+                        name: self.variable(ctx)?,
                         operator: mir::Operator::Select,
                         operands: vec![
-                            cond.variable(ctx.subs)?,
-                            on_true.variable(ctx.subs)?,
-                            on_false.variable(ctx.subs)?,
+                            cond.variable(ctx)?,
+                            on_true.variable(ctx)?,
+                            on_false.variable(ctx)?,
                         ],
                         ty: ctx
                             .types
@@ -1764,20 +1781,20 @@ impl ExprLocal for Loc<Expression> {
                 result.append(operand.lower(ctx)?);
                 let mut operands = vec![];
                 for (pat, result_expr) in branches {
-                    result.append(pat.lower(operand.variable(ctx.subs)?, ctx)?);
+                    result.append(pat.lower(operand.variable(ctx)?, ctx)?);
 
-                    let cond = pat.condition(&operand.variable(ctx.subs)?, ctx)?;
+                    let cond = pat.condition(&operand.variable(ctx)?, ctx)?;
                     result.append_secondary(cond.statements, pat, "Pattern condition");
 
                     result.append(result_expr.lower(ctx)?);
 
                     operands.push(cond.result_name);
-                    operands.push(result_expr.variable(ctx.subs)?);
+                    operands.push(result_expr.variable(ctx)?);
                 }
 
                 result.push_primary(
                     mir::Statement::Binding(mir::Binding {
-                        name: self.variable(ctx.subs)?,
+                        name: self.variable(ctx)?,
                         operator: mir::Operator::Match,
                         operands,
                         ty: ctx
@@ -1804,16 +1821,17 @@ impl ExprLocal for Loc<Expression> {
                     | (CallKind::Entity(_), UnitKind::Entity) => {
                         result.append(self.handle_call(callee, &args, ctx)?);
                     }
-                    (CallKind::Pipeline(_, cdepth), UnitKind::Pipeline(udepth)) => {
-                        if cdepth != udepth {
-                            return Err(Diagnostic::error(
-                                cdepth,
-                                "Pipeline depth mismatch".to_string(),
-                            )
-                            .primary_label(format!("Expected depth {udepth}"))
-                            .secondary_label(udepth, format!("{} has depth {udepth}", head.name)));
-                        }
-
+                    (
+                        CallKind::Pipeline {
+                            inst_loc: _,
+                            depth: _,
+                            depth_typeexpr_id: _,
+                        },
+                        UnitKind::Pipeline {
+                            depth: _,
+                            depth_typeexpr_id: _,
+                        },
+                    ) => {
                         result.append(self.handle_call(callee, &args, ctx)?);
                     }
                     (CallKind::Function, other) => {
@@ -1822,9 +1840,14 @@ impl ExprLocal for Loc<Expression> {
                     (CallKind::Entity(inst), other) => {
                         return Err(expect_entity(inst, callee, head.loc(), other))
                     }
-                    (CallKind::Pipeline(inst, _), other) => {
-                        return Err(expect_pipeline(inst, callee, head.loc(), other))
-                    }
+                    (
+                        CallKind::Pipeline {
+                            inst_loc,
+                            depth: _,
+                            depth_typeexpr_id: _,
+                        },
+                        other,
+                    ) => return Err(expect_pipeline(inst_loc, callee, head.loc(), other)),
                 }
             }
             ExprKind::PipelineRef { .. } => {
@@ -1836,7 +1859,8 @@ impl ExprLocal for Loc<Expression> {
                     .get(self)?
                     .ready_signals
                     .get(ctx.subs.current_stage)
-                    .ok_or_else(|| Diagnostic::bug(self, "Pipeline ready signal overflow"))?;
+                    .ok_or_else(|| Diagnostic::bug(self, "Pipeline ready signal overflow"))?
+                    .clone();
 
                 // If there is no enable signal, valid will be true, generate a constant
                 match signal {
@@ -1846,7 +1870,7 @@ impl ExprLocal for Loc<Expression> {
                         // signal is set
                         result.push_primary(
                             mir::Statement::Binding(mir::Binding {
-                                name: self.variable(ctx.subs)?,
+                                name: self.variable(ctx)?,
                                 operator: mir::Operator::Alias,
                                 operands: vec![signal_name.clone()],
                                 ty: mir::types::Type::Bool,
@@ -1871,7 +1895,8 @@ impl ExprLocal for Loc<Expression> {
                     .get(self)?
                     .valid_signals
                     .get(ctx.subs.current_stage)
-                    .ok_or_else(|| Diagnostic::bug(self, "Pipeline valid signal overflow"))?;
+                    .ok_or_else(|| Diagnostic::bug(self, "Pipeline valid signal overflow"))?
+                    .clone();
 
                 match signal {
                     Some(signal_name) => {
@@ -1880,7 +1905,7 @@ impl ExprLocal for Loc<Expression> {
                         // signal is set
                         result.push_primary(
                             mir::Statement::Binding(mir::Binding {
-                                name: self.variable(ctx.subs)?,
+                                name: self.variable(ctx)?,
                                 operator: mir::Operator::Alias,
                                 operands: vec![signal_name.clone()],
                                 ty: mir::types::Type::Bool,
@@ -2012,7 +2037,7 @@ impl ExprLocal for Loc<Expression> {
 
                 result.push_primary(
                     mir::Statement::Binding(mir::Binding {
-                        name: self.variable(ctx.subs)?,
+                        name: self.variable(ctx)?,
                         ty: ctx
                             .types
                             .expr_type(self, ctx.symtab.symtab(), &ctx.item_list.types)?
@@ -2023,7 +2048,7 @@ impl ExprLocal for Loc<Expression> {
                         },
                         operands: args
                             .iter()
-                            .map(|arg| arg.value.variable(ctx.subs))
+                            .map(|arg| arg.value.variable(ctx))
                             .collect::<Result<_>>()?,
                         loc: Some(self.loc()),
                     }),
@@ -2032,7 +2057,7 @@ impl ExprLocal for Loc<Expression> {
             }
             Some(hir::ExecutableItem::StructInstance) => result.push_primary(
                 mir::Statement::Binding(mir::Binding {
-                    name: self.variable(ctx.subs)?,
+                    name: self.variable(ctx)?,
                     ty: ctx
                         .types
                         .expr_type(self, ctx.symtab.symtab(), &ctx.item_list.types)?
@@ -2040,7 +2065,7 @@ impl ExprLocal for Loc<Expression> {
                     operator: mir::Operator::ConstructTuple,
                     operands: args
                         .iter()
-                        .map(|arg| arg.value.variable(ctx.subs))
+                        .map(|arg| arg.value.variable(ctx))
                         .collect::<Result<Vec<_>>>()?,
                     loc: Some(self.loc()),
                 }),
@@ -2085,7 +2110,7 @@ impl ExprLocal for Loc<Expression> {
 
                 result.push_primary(
                     mir::Statement::Binding(mir::Binding {
-                        name: self.variable(ctx.subs)?,
+                        name: self.variable(ctx)?,
                         operator: mir::Operator::Instance {
                             name: instance_name.as_mir(),
                             params,
@@ -2093,7 +2118,7 @@ impl ExprLocal for Loc<Expression> {
                         },
                         operands: args
                             .iter()
-                            .map(|arg| arg.value.variable(ctx.subs))
+                            .map(|arg| arg.value.variable(ctx))
                             .collect::<Result<_>>()?,
                         ty: ctx
                             .types
@@ -2132,7 +2157,7 @@ impl ExprLocal for Loc<Expression> {
                 // should still emit the code for instantiating them
                 result.push_primary(
                     mir::Statement::Binding(mir::Binding {
-                        name: self.variable(ctx.subs)?,
+                        name: self.variable(ctx)?,
                         operator: mir::Operator::Instance {
                             name: unit_name.as_mir(),
                             params,
@@ -2140,7 +2165,7 @@ impl ExprLocal for Loc<Expression> {
                         },
                         operands: args
                             .iter()
-                            .map(|arg| arg.value.variable(ctx.subs))
+                            .map(|arg| arg.value.variable(ctx))
                             .collect::<Result<_>>()?,
                         ty: ctx
                             .types
@@ -2250,12 +2275,19 @@ impl ExprLocal for Loc<Expression> {
 
                 result.push_primary(
                     mir::Statement::Binding(mir::Binding {
-                        name: self.variable(ctx.subs)?,
+                        name: self.variable(ctx)?,
                         operator: mir::Operator::DeclClockedMemory {
                             addr_w,
                             inner_w,
-                            write_ports,
-                            elems: elem_count.clone(),
+                            write_ports: write_ports.to_biguint().ok_or_else(|| {
+                                diag_anyhow!(
+                                    self,
+                                    "Found negative number of write ports for memory"
+                                )
+                            })?,
+                            elems: elem_count.clone().to_biguint().ok_or_else(|| {
+                                diag_anyhow!(self, "Found negative number of elements for memory")
+                            })?,
                             initial,
                         },
                         operands: args
@@ -2263,7 +2295,7 @@ impl ExprLocal for Loc<Expression> {
                             // The third argument (if present) is the initial values which
                             // are passed in the operand
                             .take(2)
-                            .map(|arg| arg.value.variable(ctx.subs))
+                            .map(|arg| arg.value.variable(ctx))
                             .collect::<Result<Vec<_>>>()?,
                         ty: ctx
                             .types
@@ -2304,9 +2336,9 @@ impl ExprLocal for Loc<Expression> {
 
         result.push_primary(
             mir::Statement::Binding(mir::Binding {
-                name: self.variable(ctx.subs)?,
+                name: self.variable(ctx)?,
                 operator: mir::Operator::IndexMemory,
-                operands: vec![target.variable(ctx.subs)?, index.variable(ctx.subs)?],
+                operands: vec![target.variable(ctx)?, index.variable(ctx)?],
                 ty: self_type,
                 loc: Some(self.loc()),
             }),
@@ -2348,9 +2380,9 @@ impl ExprLocal for Loc<Expression> {
 
         result.push_primary(
             mir::Statement::Binding(mir::Binding {
-                name: self.variable(ctx.subs)?,
+                name: self.variable(ctx)?,
                 operator: mir::Operator::Truncate,
-                operands: vec![args[0].value.variable(ctx.subs)?],
+                operands: vec![args[0].value.variable(ctx)?],
                 ty: ctx
                     .types
                     .expr_type(self, ctx.symtab.symtab(), &ctx.item_list.types)?
@@ -2409,12 +2441,12 @@ impl ExprLocal for Loc<Expression> {
 
         result.push_primary(
             mir::Statement::Binding(mir::Binding {
-                name: self.variable(ctx.subs)?,
+                name: self.variable(ctx)?,
                 operator: mir::Operator::SignExtend {
                     extra_bits,
                     operand_size: input_type.size(),
                 },
-                operands: vec![args[0].value.variable(ctx.subs)?],
+                operands: vec![args[0].value.variable(ctx)?],
                 ty: self_type,
                 loc: Some(self.loc()),
             }),
@@ -2469,9 +2501,9 @@ impl ExprLocal for Loc<Expression> {
 
         result.push_primary(
             mir::Statement::Binding(mir::Binding {
-                name: self.variable(ctx.subs)?,
+                name: self.variable(ctx)?,
                 operator: mir::Operator::ZeroExtend { extra_bits },
-                operands: vec![args[0].value.variable(ctx.subs)?],
+                operands: vec![args[0].value.variable(ctx)?],
                 ty: self_type,
                 loc: None,
             }),
@@ -2544,9 +2576,9 @@ impl ExprLocal for Loc<Expression> {
 
         result.push_primary(
             mir::Statement::Binding(mir::Binding {
-                name: self.variable(ctx.subs)?,
+                name: self.variable(ctx)?,
                 operator: mir::Operator::ZeroExtend { extra_bits },
-                operands: vec![args[0].value.variable(ctx.subs)?],
+                operands: vec![args[0].value.variable(ctx)?],
                 ty: self_type,
                 loc: None,
             }),
@@ -2574,9 +2606,9 @@ impl ExprLocal for Loc<Expression> {
 
         result.push_primary(
             mir::Statement::Binding(mir::Binding {
-                name: self.variable(ctx.subs)?,
+                name: self.variable(ctx)?,
                 operator: mir::Operator::Bitreverse,
-                operands: vec![args[0].value.variable(ctx.subs)?],
+                operands: vec![args[0].value.variable(ctx)?],
                 ty: self_type,
                 loc: None,
             }),
@@ -2620,12 +2652,9 @@ impl ExprLocal for Loc<Expression> {
         } else {
             result.push_primary(
                 mir::Statement::Binding(mir::Binding {
-                    name: self.variable(ctx.subs)?,
+                    name: self.variable(ctx)?,
                     operator: mir::Operator::Concat,
-                    operands: vec![
-                        args[0].value.variable(ctx.subs)?,
-                        args[1].value.variable(ctx.subs)?,
-                    ],
+                    operands: vec![args[0].value.variable(ctx)?, args[1].value.variable(ctx)?],
                     ty: self_type,
                     loc: None,
                 }),
@@ -2652,12 +2681,9 @@ impl ExprLocal for Loc<Expression> {
 
         result.push_primary(
             mir::Statement::Binding(mir::Binding {
-                name: self.variable(ctx.subs)?,
+                name: self.variable(ctx)?,
                 operator: mir::Operator::DivPow2,
-                operands: vec![
-                    args[0].value.variable(ctx.subs)?,
-                    args[1].value.variable(ctx.subs)?,
-                ],
+                operands: vec![args[0].value.variable(ctx)?, args[1].value.variable(ctx)?],
                 ty: self_type,
                 loc: Some(self.loc()),
             }),
@@ -2683,11 +2709,11 @@ impl ExprLocal for Loc<Expression> {
 
         result.push_primary(
             mir::Statement::Binding(mir::Binding {
-                name: self.variable(ctx.subs)?,
+                name: self.variable(ctx)?,
                 operator: mir::Operator::Gray2Bin {
                     num_bits: self_type.size(),
                 },
-                operands: vec![args[0].value.variable(ctx.subs)?],
+                operands: vec![args[0].value.variable(ctx)?],
                 ty: self_type,
                 loc: Some(self.loc()),
             }),
@@ -2713,9 +2739,9 @@ impl ExprLocal for Loc<Expression> {
 
         result.push_primary(
             mir::Statement::Binding(mir::Binding {
-                name: self.variable(ctx.subs)?,
+                name: self.variable(ctx)?,
                 operator: mir::Operator::ReduceAnd,
-                operands: vec![args[0].value.variable(ctx.subs)?],
+                operands: vec![args[0].value.variable(ctx)?],
                 ty: self_type,
                 loc: Some(self.loc()),
             }),
@@ -2741,9 +2767,9 @@ impl ExprLocal for Loc<Expression> {
 
         result.push_primary(
             mir::Statement::Binding(mir::Binding {
-                name: self.variable(ctx.subs)?,
+                name: self.variable(ctx)?,
                 operator: mir::Operator::ReduceOr,
-                operands: vec![args[0].value.variable(ctx.subs)?],
+                operands: vec![args[0].value.variable(ctx)?],
                 ty: self_type,
                 loc: Some(self.loc()),
             }),
@@ -2769,9 +2795,9 @@ impl ExprLocal for Loc<Expression> {
 
         result.push_primary(
             mir::Statement::Binding(mir::Binding {
-                name: self.variable(ctx.subs)?,
+                name: self.variable(ctx)?,
                 operator: mir::Operator::ReduceXor,
-                operands: vec![args[0].value.variable(ctx.subs)?],
+                operands: vec![args[0].value.variable(ctx)?],
                 ty: self_type,
                 loc: Some(self.loc()),
             }),
@@ -2808,12 +2834,9 @@ impl ExprLocal for Loc<Expression> {
 
         result.push_primary(
             mir::Statement::Binding(mir::Binding {
-                name: self.variable(ctx.subs)?,
+                name: self.variable(ctx)?,
                 operator,
-                operands: vec![
-                    args[0].value.variable(ctx.subs)?,
-                    args[1].value.variable(ctx.subs)?,
-                ],
+                operands: vec![args[0].value.variable(ctx)?, args[1].value.variable(ctx)?],
                 ty: self_type,
                 loc: Some(self.loc()),
             }),
@@ -2850,12 +2873,9 @@ impl ExprLocal for Loc<Expression> {
 
         result.push_primary(
             mir::Statement::Binding(mir::Binding {
-                name: self.variable(ctx.subs)?,
+                name: self.variable(ctx)?,
                 operator,
-                operands: vec![
-                    args[0].value.variable(ctx.subs)?,
-                    args[1].value.variable(ctx.subs)?,
-                ],
+                operands: vec![args[0].value.variable(ctx)?, args[1].value.variable(ctx)?],
                 ty: self_type,
                 loc: Some(self.loc()),
             }),
@@ -2883,7 +2903,7 @@ impl ExprLocal for Loc<Expression> {
 
         result.push_primary(
             mir::Statement::Binding(mir::Binding {
-                name: self.variable(ctx.subs)?,
+                name: self.variable(ctx)?,
                 operator: mir::Operator::Nop,
                 operands: vec![],
                 ty: self_type,
@@ -2913,9 +2933,9 @@ impl ExprLocal for Loc<Expression> {
 
         result.push_primary(
             mir::Statement::Binding(mir::Binding {
-                name: self.variable(ctx.subs)?,
+                name: self.variable(ctx)?,
                 operator: mir::Operator::ReadPort,
-                operands: vec![args[0].value.variable(ctx.subs)?],
+                operands: vec![args[0].value.variable(ctx)?],
                 ty: self_type,
                 loc: None,
             }),
@@ -3021,7 +3041,11 @@ pub fn generate_unit<'a>(
         self_mono_item,
     };
 
-    if let UnitKind::Pipeline(_) = unit.head.unit_kind.inner {
+    if let UnitKind::Pipeline {
+        depth: _,
+        depth_typeexpr_id: _,
+    } = unit.head.unit_kind.inner
+    {
         lower_pipeline(
             &unit.inputs,
             &unit.body,
@@ -3033,15 +3057,16 @@ pub fn generate_unit<'a>(
 
     statements.append(unit.body.lower(&mut ctx)?);
 
-    let output_t = types
-        .expr_type(&unit.body, symtab.symtab(), &item_list.types)?
+    let output_t = ctx
+        .types
+        .expr_type(&unit.body, ctx.symtab.symtab(), &item_list.types)?
         .to_mir_type();
 
     linear_check::check_linear_types(
         &unit.inputs,
         &unit.body,
-        types,
-        symtab.symtab(),
+        ctx.types,
+        ctx.symtab.symtab(),
         &item_list.types,
     )?;
 
@@ -3068,13 +3093,13 @@ pub fn generate_unit<'a>(
     let mut statements = statements.to_vec(name_source_map);
 
     for pass in local_passes.iter().chain(opt_passes) {
-        statements = pass.transform_statements(&statements, idtracker);
+        statements = pass.transform_statements(&statements, ctx.idtracker);
     }
 
     Ok(mir::Entity {
         name: name.as_mir(),
         inputs: mir_inputs,
-        output: unit.body.variable(subs)?,
+        output: unit.body.variable(&ctx)?,
         output_type: output_t,
         statements,
     })

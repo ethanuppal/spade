@@ -1,5 +1,5 @@
 ---
-source: spade-tests/src/ast_lowering.rs
+source: spade-tests/src/hir_lowering.rs
 ---
 pipeline(-1) x(clk: clock) -> bool {
     true

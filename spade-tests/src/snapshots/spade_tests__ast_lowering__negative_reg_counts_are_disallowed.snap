@@ -7,10 +7,11 @@ pipeline(0) x(clk: clock) -> bool {
 }
 
 
-error: Negative number of registers
-  ┌─ testinput:2:9
+error: Pipeline depth mismatch. Expected -10 got 0
+  ┌─ testinput:1:10
   │
-2 │     reg*-10;
-  │         ^^^ Expected positive number of stages
-
-
+1 │ pipeline(0) x(clk: clock) -> bool {
+  │          ^ Found -10 stages
+  │
+  = note: Expected: -10
+               Got: 0

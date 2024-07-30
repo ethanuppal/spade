@@ -1,6 +1,5 @@
 ---
 source: spade-tests/src/ast_lowering.rs
-assertion_line: 887
 ---
 pipeline(0) y(clk: clock) -> bool {
     true
@@ -9,10 +8,14 @@ pipeline(0) x(clk: clock) -> bool {
     inst(-1) y(clk)
 }
 
-error: Negative depth
+error: Pipeline depth mismatch.
   ┌─ testinput:5:10
   │
+1 │ pipeline(0) y(clk: clock) -> bool {
+  │          - y has depth 0
+  ·
 5 │     inst(-1) y(clk)
-  │          ^^ Expected non-negative depth
-
-
+  │          ^^ Expected depth 0, got -1
+  │
+  = note: Expected: 0
+               Got: -1

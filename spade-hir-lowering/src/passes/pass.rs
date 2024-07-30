@@ -1,10 +1,19 @@
 use spade_common::location_info::Loc;
-use spade_hir::{Binding, ExprKind, Expression, Register, Statement, Unit};
+use spade_hir::{Binding, ExprKind, Expression, PipelineRegMarkerExtra, Register, Statement, Unit};
 
 use crate::Result;
 
 pub trait Pass {
     fn visit_expression(&mut self, expression: &mut Loc<Expression>) -> Result<()>;
+    /// Visit a statement, transforming it into a list of new statements which replace it. If the
+    /// statement should be replaced Ok(Some(new...)) should be returned, if it should be kept,
+    /// Ok(None) should be returned
+    fn visit_statement(
+        &mut self,
+        _statement: &Loc<Statement>,
+    ) -> Result<Option<Vec<Loc<Statement>>>> {
+        Ok(None)
+    }
     /// Perform transformations on the unit. This should not transform the body of the unit, that
     /// is handled by `visit_expression`
     fn visit_unit(&mut self, unit: &mut Unit) -> Result<()>;
@@ -88,6 +97,18 @@ impl Passable for Loc<Expression> {
                 }
             }
             ExprKind::Block(block) => {
+                block.statements = block
+                    .statements
+                    .iter()
+                    .map(|stmt| match pass.visit_statement(stmt)? {
+                        Some(new) => Ok(new),
+                        None => Ok(vec![stmt.clone()]),
+                    })
+                    .collect::<Result<Vec<_>>>()?
+                    .into_iter()
+                    .flatten()
+                    .collect();
+
                 for statement in &mut block.statements {
                     match &mut statement.inner {
                         Statement::Binding(Binding {
@@ -120,11 +141,16 @@ impl Passable for Loc<Expression> {
                             subnodes!(clock, value);
                         }
                         Statement::Declaration(_) => {}
-                        Statement::PipelineRegMarker(cond) => {
-                            if let Some(cond) = cond {
+                        Statement::PipelineRegMarker(extra) => match extra {
+                            Some(PipelineRegMarkerExtra::Condition(cond)) => {
                                 cond.apply(pass)?;
                             }
-                        }
+                            Some(PipelineRegMarkerExtra::Count {
+                                count: _,
+                                count_typeexpr_id: _,
+                            }) => {}
+                            None => {}
+                        },
                         Statement::Label(_) => {}
                         Statement::WalSuffixed {
                             suffix: _,
@@ -144,6 +170,7 @@ impl Passable for Loc<Expression> {
                 stage: _,
                 name: _,
                 declares_name: _,
+                depth_typeexpr_id: _,
             } => {}
             ExprKind::Null => {}
         };

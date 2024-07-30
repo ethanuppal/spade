@@ -10,7 +10,8 @@ use spade_diagnostics::{diag_bail, Diagnostic};
 use spade_hir::{
     expression::{NamedArgument, UnaryOperator},
     symbol_table::SymbolTable,
-    ArgumentList, Binding, ExprKind, Expression, Register, Statement, TypeList, TypeSpec,
+    ArgumentList, Binding, ExprKind, Expression, PipelineRegMarkerExtra, Register, Statement,
+    TypeList, TypeSpec,
 };
 use spade_typeinference::TypeState;
 
@@ -115,11 +116,16 @@ pub fn visit_statement(
                 linear_state.push_new_name(name, ctx)
             }
         }
-        Statement::PipelineRegMarker(cond) => {
-            if let Some(cond) = cond {
+        Statement::PipelineRegMarker(cond) => match cond {
+            Some(PipelineRegMarkerExtra::Count {
+                count: _,
+                count_typeexpr_id: _,
+            }) => {}
+            Some(PipelineRegMarkerExtra::Condition(cond)) => {
                 visit_expression(cond, linear_state, ctx)?;
             }
-        }
+            None => {}
+        },
         Statement::Label(_) => {}
         Statement::Assert(_) => {}
         Statement::WalSuffixed { .. } => {}
@@ -164,6 +170,7 @@ fn visit_expression(
             stage: _,
             name: _,
             declares_name: _,
+            depth_typeexpr_id: _,
         } => false,
         spade_hir::ExprKind::MethodCall { .. } => diag_bail!(
             expr,
@@ -355,6 +362,7 @@ fn visit_expression(
             stage: _,
             name,
             declares_name,
+            depth_typeexpr_id: _,
         } => {
             if *declares_name {
                 linear_state.push_new_name(name, ctx);

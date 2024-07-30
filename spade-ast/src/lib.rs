@@ -13,8 +13,8 @@ pub mod testutil;
 #[derive(PartialEq, Debug, Clone)]
 pub enum TypeExpression {
     TypeSpec(Box<Loc<TypeSpec>>),
-    Integer(BigUint),
-    ConstGeneric(Loc<Expression>),
+    Integer(BigInt),
+    ConstGeneric(Box<Loc<Expression>>),
 }
 impl WithLocation for TypeExpression {}
 
@@ -192,9 +192,21 @@ pub enum UnaryOperator {
 }
 impl WithLocation for UnaryOperator {}
 
+impl std::fmt::Display for UnaryOperator {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            UnaryOperator::Sub => write!(f, "-"),
+            UnaryOperator::Not => write!(f, "!"),
+            UnaryOperator::BitwiseNot => write!(f, "~"),
+            UnaryOperator::Dereference => write!(f, "*"),
+            UnaryOperator::Reference => write!(f, "&"),
+        }
+    }
+}
+
 #[derive(PartialEq, Debug, Clone)]
 pub enum PipelineStageReference {
-    Relative(Loc<BigInt>),
+    Relative(Loc<TypeExpression>),
     Absolute(Loc<Identifier>),
 }
 
@@ -202,7 +214,7 @@ pub enum PipelineStageReference {
 pub enum CallKind {
     Function,
     Entity(Loc<()>),
-    Pipeline(Loc<()>, Loc<MaybeComptime<Loc<IntLiteral>>>),
+    Pipeline(Loc<()>, Loc<MaybeComptime<Loc<TypeExpression>>>),
 }
 impl WithLocation for CallKind {}
 
@@ -404,7 +416,7 @@ pub enum Statement {
     Label(Loc<Identifier>),
     Declaration(Vec<Loc<Identifier>>),
     Binding(Binding),
-    PipelineRegMarker(Option<Loc<usize>>, Option<Loc<Expression>>),
+    PipelineRegMarker(Option<Loc<TypeExpression>>, Option<Loc<Expression>>),
     Register(Loc<Register>),
     /// Sets the value of the target expression, which must be a Backward port to
     /// the value of `value`
@@ -536,7 +548,7 @@ impl ParameterList {
 pub enum UnitKind {
     Function,
     Entity,
-    Pipeline(Loc<MaybeComptime<Loc<IntLiteral>>>),
+    Pipeline(Loc<MaybeComptime<Loc<TypeExpression>>>),
 }
 impl WithLocation for UnitKind {}
 

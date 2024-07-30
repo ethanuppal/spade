@@ -10,15 +10,16 @@ use std::collections::{BTreeSet, HashMap};
 use std::sync::Arc;
 
 use colored::Colorize;
+use hir::expression::CallKind;
 use hir::{
-    param_util, Binding, ConstGeneric, Parameter, TypeExpression, TypeSpec, UnitHead, WalTrace,
-    WhereClause,
+    param_util, Binding, ConstGeneric, Parameter, PipelineRegMarkerExtra, TypeExpression, TypeSpec,
+    UnitHead, UnitKind, WalTrace, WhereClause,
 };
 use itertools::Itertools;
 use num::{BigInt, Zero};
 use serde::{Deserialize, Serialize};
-use spade_common::num_ext::{InfallibleToBigInt, InfallibleToBigUint};
-use spade_diagnostics::Diagnostic;
+use spade_common::num_ext::InfallibleToBigInt;
+use spade_diagnostics::{diag_anyhow, Diagnostic};
 use spade_macros::trace_typechecker;
 use trace_stack::TraceStack;
 use tracing::{info, trace};
@@ -100,6 +101,12 @@ pub struct TurbofishCtx<'a> {
     type_ctx: &'a Context<'a>,
 }
 
+#[derive(Clone)]
+pub struct PipelineState {
+    current_stage_depth: TypeVar,
+    total_depth: Loc<TypeVar>,
+}
+
 /// State of the type inference algorithm
 #[derive(Clone)]
 pub struct TypeState {
@@ -120,6 +127,9 @@ pub struct TypeState {
     requirements: Vec<Requirement>,
 
     replacements: HashMap<TypeVar, TypeVar>,
+
+    /// The type var containing the depth of the pipeline stage we are currently in
+    pipeline_state: Option<PipelineState>,
 
     pub trace_stack: Arc<TraceStack>,
 
@@ -144,6 +154,7 @@ impl TypeState {
             requirements: vec![],
             replacements: HashMap::new(),
             generic_lists: HashMap::new(),
+            pipeline_state: None,
             use_wordlenght_inference: false,
         }
     }
@@ -177,14 +188,12 @@ impl TypeState {
         e: &Loc<hir::TypeExpression>,
         generic_list_token: &GenericListToken,
     ) -> Result<TypeVar> {
-        match &e.inner {
-            hir::TypeExpression::Integer(i) => Ok(TypeVar::Known(
-                e.loc(),
-                KnownType::Integer(i.clone()),
-                vec![],
-            )),
+        let tvar = match &e.inner {
+            hir::TypeExpression::Integer(i) => {
+                TypeVar::Known(e.loc(), KnownType::Integer(i.clone()), vec![])
+            }
             hir::TypeExpression::TypeSpec(spec) => {
-                self.type_var_from_hir(e.loc(), &spec.clone(), generic_list_token)
+                self.type_var_from_hir(e.loc(), &spec.clone(), generic_list_token)?
             }
             hir::TypeExpression::ConstGeneric(g) => {
                 let constraint = self.visit_const_generic(&g, &generic_list_token)?;
@@ -198,9 +207,11 @@ impl TypeState {
                     ConstraintSource::Where,
                 );
 
-                Ok(tvar)
+                tvar
             }
-        }
+        };
+
+        Ok(tvar)
     }
 
     #[tracing::instrument(level = "trace", skip_all, fields(%hir_type))]
@@ -331,6 +342,15 @@ impl TypeState {
         TypeVar::Unknown(id, traits)
     }
 
+    /// Returns the current pipeline state. `access_loc` is *not* used to specify where to get the
+    /// state from, it is only used for the Diagnostic::bug that gets emitted if there is no
+    /// pipeline state
+    pub fn get_pipeline_state<T>(&self, access_loc: &Loc<T>) -> Result<&PipelineState> {
+        self.pipeline_state
+            .as_ref()
+            .ok_or_else(|| diag_anyhow!(access_loc, "Expected to have a pipeline state"))
+    }
+
     #[trace_typechecker]
     #[tracing::instrument(level = "trace", skip_all, fields(%entity.name))]
     pub fn visit_unit(&mut self, entity: &Unit, ctx: &Context) -> Result<()> {
@@ -350,7 +370,24 @@ impl TypeState {
             self.add_equation(TypedExpression::Name(name.inner.clone()), tvar)
         }
 
-        if entity.head.unit_kind.is_pipeline() {
+        if let UnitKind::Pipeline {
+            depth,
+            depth_typeexpr_id,
+        } = &entity.head.unit_kind.inner
+        {
+            let depth_var = self.hir_type_expr_to_var(&depth, &generic_list)?;
+            self.add_equation(TypedExpression::Id(*depth_typeexpr_id), depth_var.clone());
+            self.pipeline_state = Some(PipelineState {
+                current_stage_depth: TypeVar::Known(
+                    entity.head.unit_kind.loc(),
+                    KnownType::Integer(BigInt::zero()),
+                    vec![],
+                ),
+                total_depth: depth_var.clone().at_loc(depth),
+            });
+            self.add_requirement(Requirement::PositivePipelineDepth {
+                depth: depth_var.at_loc(depth),
+            });
             self.unify(
                 &TypedExpression::Name(entity.inputs[0].0.clone().inner),
                 &t_clock(ctx.symtab).at_loc(&entity.head.unit_kind),
@@ -369,6 +406,9 @@ impl TypeState {
                     .primary_label("expected clock")
                 },
             )?;
+            // In order to catch negative depth early when they are specified as literals,
+            // we'll instantly check requirements here
+            self.check_requirements(ctx)?;
         }
 
         self.visit_expression(&entity.body, ctx, &generic_list)?;
@@ -414,7 +454,25 @@ impl TypeState {
             })?;
         }
 
+        if let Some(PipelineState {
+            current_stage_depth,
+            total_depth,
+        }) = self.pipeline_state.clone()
+        {
+            self.unify(&total_depth.inner, &current_stage_depth, ctx)
+                .into_diagnostic_no_expected_source(total_depth, |diag, Tm { g, e }| {
+                    diag.message(format!("Pipeline depth mismatch. Expected {e} got {g}"))
+                        .primary_label(format!("Found {e} stages"))
+                })?;
+        }
+
         self.check_requirements(ctx)?;
+
+        // NOTE: We may accidentally leak a stage depth if this function returns early. However,
+        // since we only use stage depths in pipelines where we re-set it when we enter,
+        // accidentally leaving a depth in place should not trigger any *new* compiler bugs, but
+        // may help track something down
+        self.pipeline_state = None;
 
         Ok(())
     }
@@ -517,17 +575,19 @@ impl TypeState {
                 self.visit_unary_operator(expression, ctx, generic_list)?
             }
             ExprKind::Call {
-                kind: _,
+                kind,
                 callee,
                 args,
                 turbofish,
             } => {
                 let head = ctx.symtab.unit_by_id(&callee.inner);
+
                 self.handle_function_like(
                     expression.map_ref(|e| e.id),
                     &expression.get_type(self)?,
                     &callee.inner,
                     &head,
+                    kind,
                     args,
                     ctx,
                     true,
@@ -537,10 +597,11 @@ impl TypeState {
                         prev_generic_list: generic_list,
                         type_ctx: ctx,
                     }),
+                    generic_list,
                 )?;
             }
             ExprKind::PipelineRef { .. } => {
-                self.visit_pipeline_ref(expression, ctx)?;
+                self.visit_pipeline_ref(expression, generic_list, ctx)?;
             }
             ExprKind::StageReady | ExprKind::StageValid => {
                 self.unify_expression_generic_error(
@@ -563,6 +624,7 @@ impl TypeState {
         expression_type: &TypeVar,
         name: &NameID,
         head: &Loc<UnitHead>,
+        call_kind: &CallKind,
         args: &Loc<ArgumentList<Expression>>,
         ctx: &Context,
         // Whether or not to visit the argument expressions passed to the function here. This
@@ -573,6 +635,7 @@ impl TypeState {
         // that any error reporting number of arguments should be reduced by one
         is_method: bool,
         turbofish: Option<TurbofishCtx>,
+        old_generic_list: &GenericListToken,
     ) -> Result<()> {
         // Add new symbols for all the type parameters
         let generic_list = self.create_generic_list(
@@ -582,6 +645,36 @@ impl TypeState {
             turbofish,
             &head.where_clauses,
         )?;
+
+        match (&head.unit_kind.inner, call_kind) {
+            (
+                UnitKind::Pipeline {
+                    depth: udepth,
+                    depth_typeexpr_id: _,
+                },
+                CallKind::Pipeline {
+                    inst_loc: _,
+                    depth: cdepth,
+                    depth_typeexpr_id: cdepth_typeexpr_id,
+                },
+            ) => {
+                let definition_depth = self.hir_type_expr_to_var(udepth, &generic_list)?;
+                let call_depth = self.hir_type_expr_to_var(cdepth, &old_generic_list)?;
+
+                // NOTE: We're not adding udepth_typeexpr_id here as that would break
+                // in the future if we try to do recursion. We will also never need to look
+                // up the depth in the definition
+                self.add_equation(TypedExpression::Id(*cdepth_typeexpr_id), call_depth.clone());
+
+                self.unify(&call_depth, &definition_depth, ctx)
+                    .into_diagnostic_no_expected_source(cdepth, |diag, Tm { e, g }| {
+                        diag.message("Pipeline depth mismatch.")
+                            .primary_label(format!("Expected depth {e}, got {g}"))
+                            .secondary_label(udepth, format!("{name} has depth {e}"))
+                    })?;
+            }
+            _ => {}
+        }
 
         if visit_args {
             self.visit_argument_list(args, ctx, &generic_list)?;
@@ -1073,7 +1166,7 @@ impl TypeState {
                                 inner_t,
                                 TypeVar::Known(
                                     pattern.loc(),
-                                    KnownType::Integer(inner.len().to_biguint()),
+                                    KnownType::Integer(inner.len().to_bigint()),
                                     vec![],
                                 ),
                             ],
@@ -1243,19 +1336,96 @@ impl TypeState {
                 }
                 Ok(())
             }
-            Statement::PipelineRegMarker(cond) => {
-                if let Some(cond) = cond {
-                    self.visit_expression(cond, ctx, generic_list)?;
-                    self.unify_expression_generic_error(
-                        cond,
-                        &t_bool(ctx.symtab).at_loc(cond),
-                        ctx,
-                    )?;
+            Statement::PipelineRegMarker(extra) => {
+                match extra {
+                    Some(PipelineRegMarkerExtra::Condition(cond)) => {
+                        self.visit_expression(cond, ctx, generic_list)?;
+                        self.unify_expression_generic_error(
+                            cond,
+                            &t_bool(ctx.symtab).at_loc(cond),
+                            ctx,
+                        )?;
+                    }
+                    Some(PipelineRegMarkerExtra::Count {
+                        count: _,
+                        count_typeexpr_id: _,
+                    }) => {}
+                    None => {}
                 }
+
+                let current_stage_depth = self
+                    .pipeline_state
+                    .clone()
+                    .ok_or_else(|| {
+                        diag_anyhow!(stmt, "Found a pipeline reg marker in a non-pipeline")
+                    })?
+                    .current_stage_depth;
+
+                let new_depth = self.new_generic();
+                let offset = match extra {
+                    Some(PipelineRegMarkerExtra::Count {
+                        count,
+                        count_typeexpr_id,
+                    }) => {
+                        let var = self.hir_type_expr_to_var(count, generic_list)?;
+                        self.add_equation(TypedExpression::Id(*count_typeexpr_id), var.clone());
+                        var
+                    }
+                    Some(PipelineRegMarkerExtra::Condition(_)) | None => {
+                        TypeVar::Known(stmt.loc(), KnownType::Integer(1.to_bigint()), vec![])
+                    }
+                };
+
+                let total_depth = ConstraintExpr::Sum(
+                    Box::new(ConstraintExpr::Var(offset)),
+                    Box::new(ConstraintExpr::Var(current_stage_depth)),
+                );
+                self.pipeline_state
+                    .as_mut()
+                    .expect("Expected to have a pipeline state")
+                    .current_stage_depth = new_depth.clone();
+
+                self.add_constraint(
+                    new_depth.clone(),
+                    total_depth,
+                    stmt.loc(),
+                    &new_depth,
+                    ConstraintSource::PipelineRegCount {
+                        reg: stmt.loc(),
+                        total: self.get_pipeline_state(&stmt)?.total_depth.loc(),
+                    },
+                );
+
                 Ok(())
             }
-            // This statement have no effect on the types
-            Statement::Label(_) => Ok(()),
+            Statement::Label(name) => {
+                let key = TypedExpression::Name(name.inner.clone());
+                let var = if !self.equations.contains_key(&key) {
+                    let var = self.new_generic();
+                    self.trace_stack.push(TraceStackEntry::AddingPipelineLabel(
+                        name.inner.clone(),
+                        var.clone(),
+                    ));
+                    self.add_equation(key.clone(), var.clone());
+                    var
+                } else {
+                    let var = self.equations.get(&key).unwrap().clone();
+                    self.trace_stack
+                        .push(TraceStackEntry::RecoveringPipelineLabel(
+                            name.inner.clone(),
+                            var.clone(),
+                        ));
+                    var
+                };
+                // Safe unwrap, unifying with a fresh var
+                self.unify(
+                    &var,
+                    &self.get_pipeline_state(&name)?.current_stage_depth.clone(),
+                    ctx,
+                )
+                .unwrap();
+                Ok(())
+            }
             Statement::WalSuffixed { .. } => Ok(()),
             Statement::Assert(expr) => {
                 self.visit_expression(expr, ctx, generic_list)?;
@@ -1548,6 +1718,7 @@ impl TypeState {
                 args,
                 turbofish,
                 prev_generic_list,
+                call_kind,
             } => Requirement::HasMethod {
                 expr_id,
                 target_type: replace!(target_type),
@@ -1556,6 +1727,7 @@ impl TypeState {
                 args,
                 turbofish,
                 prev_generic_list,
+                call_kind,
             },
             Requirement::FitsIntLiteral { value, target_type } => Requirement::FitsIntLiteral {
                 value: match value {
@@ -1565,6 +1737,18 @@ impl TypeState {
                     lit @ ConstantInt::Literal(_) => lit,
                 },
                 target_type: replace!(target_type),
+            },
+            Requirement::ValidPipelineOfset {
+                definition_depth,
+                current_stage,
+                reference_offset,
+            } => Requirement::ValidPipelineOfset {
+                definition_depth: replace!(definition_depth),
+                current_stage: replace!(current_stage),
+                reference_offset: replace!(reference_offset),
+            },
+            Requirement::PositivePipelineDepth { depth } => Requirement::PositivePipelineDepth {
+                depth: replace!(depth),
             },
             Requirement::SharedBase(types) => {
                 Requirement::SharedBase(types.iter().map(|ty| replace!(ty)).collect())
@@ -1849,6 +2033,15 @@ impl TypeState {
                 requirement.replace_type_var(&replaced_type, &new_type)
             }
 
+            if let Some(PipelineState {
+                current_stage_depth,
+                total_depth,
+            }) = &mut self.pipeline_state
+            {
+                TypeState::replace_type_var(current_stage_depth, &replaced_type, &new_type);
+                TypeState::replace_type_var(&mut total_depth.inner, &replaced_type, &new_type);
+            }
+
             self.constraints.inner = self
                 .constraints
                 .inner
@@ -1906,18 +2099,8 @@ impl TypeState {
 
                 let var = self.check_var_for_replacement(var);
 
-                if replacement.val < BigInt::zero() {
-                    // lifeguard spade#126
-                    return Err(Diagnostic::bug(loc, "Inferred integer < 0")
-                        .primary_label(format!(
-                            "{} is not >= 0 in {}",
-                            replacement.val, replacement.context.inside
-                        ))
-                        .into());
-                }
-
                 // NOTE: safe unwrap. We already checked the constraint above
-                let expected_type = &KnownType::Integer(replacement.val.to_biguint().unwrap());
+                let expected_type = &KnownType::Integer(replacement.val.clone());
                 match self.unify_inner(&expected_type.clone().at_loc(&loc), &var, ctx) {
                     Ok(_) => {}
                     Err(UnificationError::Normal(Tm { mut e, mut g })) => {
@@ -2080,7 +2263,7 @@ impl TypeState {
 
                 match v {
                     TypeVar::Known(_, KnownType::Integer(val), _) => {
-                        *in_constraint = ConstraintExpr::Integer(val.clone().to_bigint())
+                        *in_constraint = ConstraintExpr::Integer(val.clone())
                     }
                     _ => {}
                 }
@@ -2284,19 +2467,16 @@ mod tests {
     use super::TypeVar as TVar;
     use super::TypedExpression as TExpr;
 
+    use crate::ensure_same_type;
     use crate::testutil::{sized_int, unsized_int};
-    use crate::{ensure_same_type, get_type, HasType};
     use crate::{fixed_types::t_clock, hir};
-    use hir::expression::IntLiteralKind;
-    use hir::hparams;
+    use hir::dtype;
     use hir::symbol_table::TypeDeclKind;
     use hir::PatternKind;
-    use hir::{dtype, testutil::t_num, ArgumentList};
-    use spade_ast::testutil::{ast_ident, ast_path};
+    use spade_ast::testutil::ast_path;
     use spade_common::location_info::WithLocation;
     use spade_common::name::testutil::name_id;
-    use spade_common::num_ext::InfallibleToBigInt;
-    use spade_hir::symbol_table::{SymbolTable, Thing};
+    use spade_hir::symbol_table::SymbolTable;
 
     #[test]
     fn if_statements_have_correctly_inferred_types() {
@@ -2610,274 +2790,5 @@ mod tests {
         ensure_same_type!(state, TExpr::Id(0), expr_a);
         ensure_same_type!(state, TExpr::Id(1), expr_b);
         ensure_same_type!(state, TExpr::Id(2), expr_c);
-    }
-
-    #[test]
-    fn typed_let_bindings_typecheck_correctly() {
-        let mut symtab = SymbolTable::new();
-        spade_ast_lowering::builtins::populate_symtab(&mut symtab, &mut ItemList::new());
-
-        let input = hir::Statement::binding(
-            PatternKind::name(name_id(0, "a")).with_id(10).nowhere(),
-            Some(dtype!(symtab => "int"; (t_num(5)))),
-            ExprKind::IntLiteral(0.to_bigint(), IntLiteralKind::Unsized)
-                .with_id(0)
-                .nowhere(),
-        )
-        .nowhere();
-
-        let mut state = TypeState::new();
-
-        let ctx = Context {
-            symtab: &symtab,
-            items: &ItemList::new(),
-        };
-        let generic_list = state
-            .create_generic_list(GenericListSource::Anonymous, &vec![], &[], None, &[])
-            .unwrap();
-        state.visit_statement(&input, &ctx, &generic_list).unwrap();
-
-        let ta = get_type!(state, &TExpr::Name(name_id(0, "a").inner));
-        ensure_same_type!(state, ta, sized_int(5, &symtab));
-    }
-
-    #[test]
-    fn tuple_type_specs_propagate_correctly() {
-        let mut symtab = SymbolTable::new();
-        spade_ast_lowering::builtins::populate_symtab(&mut symtab, &mut ItemList::new());
-
-        let input = Register {
-            pattern: PatternKind::name(name_id(0, "test")).with_id(10).nowhere(),
-            clock: ExprKind::Identifier(name_id(1, "clk").inner)
-                .with_id(0)
-                .nowhere(),
-            reset: None,
-            initial: None,
-            value: ExprKind::TupleLiteral(vec![
-                ExprKind::IntLiteral(5.to_bigint(), IntLiteralKind::Unsized)
-                    .with_id(1)
-                    .nowhere(),
-                ExprKind::BoolLiteral(true).with_id(2).nowhere(),
-            ])
-            .with_id(3)
-            .nowhere(),
-            value_type: Some(
-                hir::TypeSpec::Tuple(vec![
-                    dtype!(symtab => "int"; ( t_num(5) )),
-                    hir::dtype!(symtab => "bool"),
-                ])
-                .nowhere(),
-            ),
-            attributes: hir::AttributeList::empty(),
-        };
-
-        let mut state = TypeState::new();
-
-        let expr_clk = TExpr::Name(name_id(1, "clk").inner);
-        state.add_eq_from_tvar(expr_clk.clone(), TVar::Unknown(100, TraitList::empty()));
-
-        let ctx = Context {
-            symtab: &symtab,
-            items: &ItemList::new(),
-        };
-        let generic_list = state
-            .create_generic_list(GenericListSource::Anonymous, &vec![], &[], None, &[])
-            .unwrap();
-        state.visit_register(&input, &ctx, &generic_list).unwrap();
-
-        let ttup = get_type!(state, &TExpr::Id(3));
-        let reg = get_type!(state, &TExpr::Name(name_id(0, "test").inner));
-        let expected = TypeVar::tuple(
-            ().nowhere(),
-            vec![
-                sized_int(5, &symtab),
-                TypeVar::Known(().nowhere(), t_bool(&symtab), vec![]),
-            ],
-        );
-        ensure_same_type!(state, ttup, &expected);
-        ensure_same_type!(state, reg, &expected);
-    }
-
-    #[test]
-    fn entity_type_inference_works() {
-        // Add the head to the symtab
-        let mut symtab = SymbolTable::new();
-        spade_ast_lowering::builtins::populate_symtab(&mut symtab, &mut ItemList::new());
-
-        // Add the entity to the symtab
-        let unit = hir::UnitHead {
-            name: Identifier("".to_string()).nowhere(),
-            unit_kind: hir::UnitKind::Entity.nowhere(),
-            inputs: hparams![
-                ("a", dtype!(symtab => "bool")),
-                ("b", dtype!(symtab => "int"; (t_num(10)))),
-            ]
-            .nowhere(),
-            output_type: Some(dtype!(symtab => "int"; (t_num(5)))),
-            unit_type_params: vec![],
-            scope_type_params: vec![],
-            where_clauses: vec![],
-        };
-
-        let entity_name = symtab.add_thing(ast_path("test").inner, Thing::Unit(unit.nowhere()));
-
-        let input = ExprKind::Call {
-            kind: hir::expression::CallKind::Entity(().nowhere()),
-            callee: entity_name.nowhere(),
-            args: ArgumentList::Positional(vec![
-                Expression::ident(0, 0, "x").nowhere(),
-                Expression::ident(1, 1, "b").nowhere(),
-            ])
-            .nowhere(),
-            turbofish: None,
-        }
-        .with_id(2)
-        .nowhere();
-
-        let mut state = TypeState::new();
-
-        // Add eqs for the literals
-        let expr_a = TExpr::Name(name_id(0, "a").inner);
-        let expr_b = TExpr::Name(name_id(1, "b").inner);
-        state.add_eq_from_tvar(expr_a.clone(), TVar::Unknown(100, TraitList::empty()));
-        state.add_eq_from_tvar(expr_b.clone(), TVar::Unknown(101, TraitList::empty()));
-
-        let generic_list = state
-            .create_generic_list(GenericListSource::Anonymous, &vec![], &[], None, &[])
-            .unwrap();
-        state
-            .visit_expression(
-                &input,
-                &Context {
-                    symtab: &symtab,
-                    items: &ItemList::new(),
-                },
-                &generic_list,
-            )
-            .unwrap();
-
-        let t0 = get_type!(state, &TExpr::Id(0));
-        let t1 = get_type!(state, &TExpr::Id(1));
-        let t2 = get_type!(state, &TExpr::Id(2));
-
-        let ta = get_type!(state, &expr_a);
-        let tb = get_type!(state, &expr_b);
-
-        // Check the generic type variables
-        ensure_same_type!(
-            state,
-            t0.clone(),
-            TVar::Known(().nowhere(), t_bool(&symtab), vec![])
-        );
-        ensure_same_type!(
-            state,
-            t1.clone(),
-            TVar::Known(
-                ().nowhere(),
-                t_int(&symtab),
-                vec![TypeVar::Known(().nowhere(), KnownType::integer(10), vec![])],
-            )
-        );
-        ensure_same_type!(
-            state,
-            t2,
-            TVar::Known(
-                ().nowhere(),
-                t_int(&symtab),
-                vec![TypeVar::Known(().nowhere(), KnownType::integer(5), vec![])],
-            )
-        );
-
-        // Check the constraints added to the literals
-        ensure_same_type!(state, t0.clone(), ta);
-        ensure_same_type!(state, t1.clone(), tb);
-    }
-
-    #[test]
-    fn pipeline_type_inference_works() {
-        // Add the head to the symtab
-        let mut symtab = SymbolTable::new();
-        spade_ast_lowering::builtins::populate_symtab(&mut symtab, &mut ItemList::new());
-
-        // Add the entity to the symtab
-        let unit = hir::UnitHead {
-            name: Identifier("".to_string()).nowhere(),
-            unit_kind: hir::UnitKind::Pipeline(2.nowhere()).nowhere(),
-            inputs: hparams![
-                ("a", dtype!(symtab => "bool")),
-                ("b", dtype!(symtab => "int"; ( t_num(10) ))),
-            ]
-            .nowhere(),
-            output_type: Some(dtype!(symtab => "int"; ( t_num(5) ))),
-            unit_type_params: vec![],
-            scope_type_params: vec![],
-            where_clauses: vec![],
-        };
-
-        let entity_name = symtab.add_thing(ast_path("test").inner, Thing::Unit(unit.nowhere()));
-
-        let input = ExprKind::Call {
-            kind: hir::expression::CallKind::Pipeline(().nowhere(), 2.nowhere()),
-            callee: entity_name.nowhere(),
-            args: ArgumentList::Positional(vec![
-                Expression::ident(0, 0, "x").nowhere(),
-                Expression::ident(1, 1, "b").nowhere(),
-            ])
-            .nowhere(),
-            turbofish: None,
-        }
-        .with_id(2)
-        .nowhere();
-
-        let mut state = TypeState::new();
-
-        // Add eqs for the literals
-        let expr_a = TExpr::Name(name_id(0, "a").inner);
-        let expr_b = TExpr::Name(name_id(1, "b").inner);
-        state.add_eq_from_tvar(expr_a.clone(), TVar::Unknown(100, TraitList::empty()));
-        state.add_eq_from_tvar(expr_b.clone(), TVar::Unknown(101, TraitList::empty()));
-
-        let generic_list = state
-            .create_generic_list(GenericListSource::Anonymous, &vec![], &[], None, &[])
-            .unwrap();
-        state
-            .visit_expression(
-                &input,
-                &Context {
-                    symtab: &symtab,
-                    items: &ItemList::new(),
-                },
-                &generic_list,
-            )
-            .unwrap();
-
-        // Check the generic type variables
-        ensure_same_type!(
-            state,
-            TExpr::Id(0),
-            TVar::Known(().nowhere(), t_bool(&symtab), vec![])
-        );
-        ensure_same_type!(
-            state,
-            TExpr::Id(1),
-            TVar::Known(
-                ().nowhere(),
-                t_int(&symtab),
-                vec![TypeVar::Known(().nowhere(), KnownType::integer(10), vec![])],
-            )
-        );
-        ensure_same_type!(
-            state,
-            TExpr::Id(2),
-            TVar::Known(
-                ().nowhere(),
-                t_int(&symtab),
-                vec![TypeVar::Known(().nowhere(), KnownType::integer(5), vec![])],
-            )
-        );
-
-        // Check the constraints added to the literals
-        ensure_same_type!(state, &TExpr::Id(0), &expr_a);
-        ensure_same_type!(state, &TExpr::Id(1), &expr_b);
     }
 }

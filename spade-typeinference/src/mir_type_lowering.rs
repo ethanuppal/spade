@@ -97,7 +97,7 @@ impl TypeState {
         generic_substitutions: &HashMap<NameID, &ConcreteType>,
         invert: bool,
     ) -> ConcreteType {
-        match expr {
+        match &expr {
             hir::TypeExpression::Integer(val) => ConcreteType::Integer(val.clone()),
             hir::TypeExpression::TypeSpec(inner) => {
                 Self::type_spec_to_concrete(inner, type_list, generic_substitutions, invert)

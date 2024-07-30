@@ -68,6 +68,9 @@ macro_rules! build_entity {
 #[macro_export]
 macro_rules! snapshot_error {
     ($fn:ident, $src:literal) => {
+        snapshot_error!($fn, $src, true);
+    };
+    ($fn:ident, $src:literal, $include_stdlib:expr) => {
         #[test]
         fn $fn() {
             use tracing_subscriber::filter::{EnvFilter, LevelFilter};
@@ -110,7 +113,7 @@ macro_rules! snapshot_error {
 
             let _ = spade::compile(
                 files,
-                true,
+                $include_stdlib,
                 opts,
                 spade_diagnostics::DiagHandler::new(Box::new(
                     spade_diagnostics::emitter::CodespanEmitter,
@@ -127,6 +130,17 @@ macro_rules! snapshot_error {
                     std::str::from_utf8(buffer.as_slice()).expect("error contains invalid utf-8")
                 ));
             });
+        }
+    };
+}
+
+#[macro_export]
+macro_rules! code_compiles {
+    ($fn:ident, $src:literal) => {
+        #[test]
+        fn $fn() {
+            let code = $src;
+            build_items(code);
         }
     };
 }

@@ -1,7 +1,7 @@
 use num::{BigInt, One, Zero};
 use spade_common::location_info::{Loc, WithLocation};
 use spade_common::name::Identifier;
-use spade_common::num_ext::{InfallibleToBigInt, InfallibleToBigUint};
+use spade_common::num_ext::InfallibleToBigInt;
 use spade_diagnostics::diagnostic::DiagnosticLevel;
 use spade_diagnostics::{diag_anyhow, Diagnostic};
 use spade_hir::expression::{BinaryOperator, IntLiteralKind, NamedArgument, UnaryOperator};
@@ -9,7 +9,7 @@ use spade_hir::{ExprKind, Expression};
 use spade_macros::trace_typechecker;
 use spade_types::KnownType;
 
-use crate::constraints::{bits_to_store, ce_int, ce_var, ConstraintSource};
+use crate::constraints::{bits_to_store, ce_int, ce_var, ConstraintExpr, ConstraintSource};
 use crate::equation::{TypeVar, TypedExpression};
 use crate::error::{TypeMismatch as Tm, UnificationErrorExt};
 use crate::fixed_types::{t_bit, t_bool, t_void};
@@ -74,14 +74,66 @@ impl TypeState {
     pub fn visit_pipeline_ref(
         &mut self,
         expression: &Loc<Expression>,
+        generic_list: &GenericListToken,
         ctx: &Context,
     ) -> Result<()> {
-        assuming_kind!(ExprKind::PipelineRef{stage: _, name, declares_name} = &expression => {
+        assuming_kind!(ExprKind::PipelineRef{stage, name, declares_name, depth_typeexpr_id} = &expression => {
             // If this reference declares the referenced name, add a new equation
             if *declares_name {
                 let new_var = self.new_generic();
                 self.add_equation(TypedExpression::Name(name.clone().inner), new_var)
             }
+
+            let depth = self.new_generic();
+            self.add_equation(TypedExpression::Id(*depth_typeexpr_id), depth.clone());
+            let depth = match &stage.inner {
+                spade_hir::expression::PipelineRefKind::Absolute(name) => {
+                    let key = TypedExpression::Name(name.inner.clone());
+                    let var = if !self.equations.contains_key(&key) {
+                        let var = self.new_generic();
+                        self.add_equation(key.clone(), var.clone());
+                        self.trace_stack.push(TraceStackEntry::PreAddingPipelineLabel(name.inner.clone(), var.clone()));
+                        var
+                    } else {
+                        let var = self.equations.get(&key).unwrap().clone();
+                        self.trace_stack.push(TraceStackEntry::RecoveringPipelineLabel(name.inner.clone(), var.clone()));
+                        var
+                    };
+                    // NOTE: Safe unwrap, depth is fresh
+                    self.unify(&depth, &var, ctx).unwrap()
+                },
+                spade_hir::expression::PipelineRefKind::Relative(expr) => {
+                    let expr_var = self.hir_type_expr_to_var(expr, generic_list)?;
+                    let total_offset = self.new_generic();
+                    self.add_constraint(
+                        total_offset.clone(),
+                        ConstraintExpr::Sum(
+                            Box::new(ConstraintExpr::Var(expr_var)),
+                            Box::new(ConstraintExpr::Var(self.get_pipeline_state(expression)?
+                                .current_stage_depth.clone()))
+                        ),
+                        stage.loc(),
+                        &total_offset,
+                        ConstraintSource::PipelineRegOffset{reg: expr.loc(), total: self.get_pipeline_state(&expr)?.total_depth.loc()}
+                    );
+                    // Safe unwrap, depth is a fresh type var
+                    self.unify(&depth, &total_offset, ctx).unwrap()
+                },
+            };
+
+            let pipeline_state = self.pipeline_state
+                .as_ref()
+                .ok_or_else(|| diag_anyhow!(
+                    expression,
+                    "Expected a pipeline state"
+                ))?;
+            self.add_requirement(Requirement::ValidPipelineOfset {
+                definition_depth: pipeline_state
+                    .total_depth
+                    .clone(),
+                current_stage: pipeline_state.current_stage_depth.clone().nowhere(),
+                reference_offset: depth.at_loc(stage)
+            });
 
             // Add an equation for the anonymous id
             self.unify_expression_generic_error(
@@ -102,13 +154,13 @@ impl TypeState {
                 IntLiteralKind::Signed(size) => {
                     let (t, size_var) = self.new_split_generic_int(expression.loc(), ctx.symtab);
                     // NOTE: Safe unwrap, we're unifying a generic int with a size
-                    self.unify(&size_var, &KnownType::Integer(size.clone()).at_loc(expression), ctx).unwrap();
+                    self.unify(&size_var, &KnownType::Integer(size.to_bigint()).at_loc(expression), ctx).unwrap();
                     (t, size_var)
                 },
                 IntLiteralKind::Unsigned(size) => {
                     let (t, size_var) = self.new_split_generic_uint(expression.loc(), ctx.symtab);
                     // NOTE: Safe unwrap, we're unifying a generic int with a size
-                    self.unify(&size_var, &KnownType::Integer(size.clone()).at_loc(expression), ctx).unwrap();
+                    self.unify(&size_var, &KnownType::Integer(size.to_bigint()).at_loc(expression), ctx).unwrap();
                     (t, size_var)
                 }
             };
@@ -258,7 +310,7 @@ impl TypeState {
         ctx: &Context,
         generic_list: &GenericListToken,
     ) -> Result<()> {
-        assuming_kind!(ExprKind::MethodCall{call_kind: _, target, name, args, turbofish} = &expression => {
+        assuming_kind!(ExprKind::MethodCall{call_kind, target, name, args, turbofish} = &expression => {
             // NOTE: We don't visit_expression here as it is being added to the argument_list
             // which we *do* visit
             // self.visit_expression(target, ctx, generic_list)?;
@@ -288,7 +340,8 @@ impl TypeState {
                 expr: self_type.at_loc(expression),
                 args: args_with_self,
                 turbofish: turbofish.clone(),
-                prev_generic_list: generic_list.clone()
+                prev_generic_list: generic_list.clone(),
+                call_kind: call_kind.clone()
             };
 
             requirement.check_or_add(self, ctx)?
@@ -329,7 +382,7 @@ impl TypeState {
                 members[0].get_type(self)?
             };
 
-            let size_type = TypeVar::Known(expression.loc(), KnownType::Integer(members.len().to_biguint()), vec![]);
+            let size_type = TypeVar::Known(expression.loc(), KnownType::Integer(members.len().to_bigint()), vec![]);
             let result_type = TypeVar::array(
                 expression.loc(),
                 inner_type,
@@ -351,7 +404,7 @@ impl TypeState {
             self.visit_expression(expr, ctx, generic_list)?;
 
             let inner_type = expr.get_type(self)?;
-            let size_type = TypeVar::Known(amount.loc(), KnownType::Integer(amount.inner.clone()), vec![]);
+            let size_type = TypeVar::Known(amount.loc(), KnownType::Integer(amount.inner.clone().to_bigint()), vec![]);
             let result_type = TypeVar::array(expression.loc(), inner_type, size_type);
 
             self.unify_expression_generic_error(expression, &result_type, ctx)?;
@@ -469,7 +522,7 @@ impl TypeState {
 
 
 
-            let out_array_size = TypeVar::Known(expression.loc(), KnownType::Integer(size), vec![]);
+            let out_array_size = TypeVar::Known(expression.loc(), KnownType::Integer(size.to_bigint()), vec![]);
             let out_array_type = TypeVar::array(expression.loc(), inner_type.clone(), out_array_size);
 
             self.unify(&expression.inner, &out_array_type, ctx)

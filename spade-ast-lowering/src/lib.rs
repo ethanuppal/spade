@@ -9,8 +9,8 @@ pub mod types;
 
 use attributes::LocAttributeExt;
 use itertools::{EitherOrBoth, Itertools};
-use num::{BigInt, ToPrimitive, Zero};
-use pipelines::{int_literal_to_pipeline_stages, PipelineContext};
+use num::{BigInt, Zero};
+use pipelines::PipelineContext;
 use spade_diagnostics::{diag_bail, Diagnostic};
 use tracing::{event, info, Level};
 
@@ -131,6 +131,7 @@ pub enum TypeSpecKind {
     ImplTarget,
     BindingType,
     Turbofish,
+    PipelineDepth,
 }
 
 pub fn visit_type_expression(
@@ -148,7 +149,7 @@ pub fn visit_type_expression(
         ast::TypeExpression::ConstGeneric(expr) => {
             let default_error = |message, primary| {
                 Err(Diagnostic::error(
-                    expr,
+                    expr.as_ref(),
                     format!("{message} cannot have const generics in their type"),
                 )
                 .primary_label(format!("Const generic in {primary}")))
@@ -160,9 +161,11 @@ pub fn visit_type_expression(
                 TypeSpecKind::ImplTarget => default_error("Impl targets", "impl target"),
                 TypeSpecKind::EnumMember => default_error("Enum members", "enum member"),
                 TypeSpecKind::StructMember => default_error("Struct members", "struct member"),
-                TypeSpecKind::Turbofish | TypeSpecKind::BindingType => Ok(
-                    hir::TypeExpression::ConstGeneric(visit_const_generic(expr, ctx)?),
-                ),
+                TypeSpecKind::Turbofish
+                | TypeSpecKind::BindingType
+                | TypeSpecKind::PipelineDepth => Ok(hir::TypeExpression::ConstGeneric(
+                    visit_const_generic(expr.as_ref(), ctx)?,
+                )),
             }
         }
     }
@@ -347,6 +350,7 @@ pub fn visit_type_spec(
                 TypeSpecKind::ImplTarget => default_error("Impl targets", "impl target"),
                 TypeSpecKind::EnumMember => default_error("Enum members", "enum member"),
                 TypeSpecKind::StructMember => default_error("Struct members", "struct member"),
+                TypeSpecKind::PipelineDepth => default_error("Pipeline depth", "pipeline depth"),
                 TypeSpecKind::Turbofish | TypeSpecKind::BindingType => Ok(hir::TypeSpec::Wildcard),
             }
         }
@@ -501,26 +505,33 @@ pub fn unit_head(
 
     let where_clauses = visit_where_clauses(&head.where_clauses, ctx);
 
+    let unit_kind: Result<_> = (|| {
+        head.unit_kind.try_map_ref(|k| {
+            let inner = match k {
+                ast::UnitKind::Function => hir::UnitKind::Function(hir::FunctionKind::Fn),
+                ast::UnitKind::Entity => hir::UnitKind::Entity,
+                ast::UnitKind::Pipeline(depth) => hir::UnitKind::Pipeline {
+                    depth: depth
+                        .inner
+                        .maybe_unpack(&ctx.symtab)?
+                        .ok_or_else(|| {
+                            Diagnostic::error(depth, "Missing pipeline depth")
+                                .primary_label("Missing pipeline depth")
+                                .note("The current comptime branch does not specify a depth")
+                        })?
+                        .try_map_ref(|t| {
+                            visit_type_expression(t, &TypeSpecKind::PipelineDepth, ctx)
+                        })?,
+                    depth_typeexpr_id: ctx.idtracker.next(),
+                },
+            };
+            Ok(inner)
+        })
+    })();
+
     ctx.symtab.close_scope();
     port_error?;
     let where_clauses = where_clauses?;
-
-    let unit_kind: Result<_> = head.unit_kind.try_map_ref(|k| {
-        let inner = match k {
-            ast::UnitKind::Function => hir::UnitKind::Function(hir::FunctionKind::Fn),
-            ast::UnitKind::Entity => hir::UnitKind::Entity,
-            ast::UnitKind::Pipeline(depth) => {
-                hir::UnitKind::Pipeline(int_literal_to_pipeline_stages(
-                    &depth.inner.maybe_unpack(&ctx.symtab)?.ok_or_else(|| {
-                        Diagnostic::error(depth, "Missing pipeline depth")
-                            .primary_label("Missing pipeline depth")
-                            .note("The current comptime branch does not specify a depth")
-                    })?,
-                )?)
-            }
-        };
-        Ok(inner)
-    });
 
     Ok(hir::UnitHead {
         name: head.name.clone(),
@@ -569,6 +580,23 @@ pub fn visit_const_generic(
                 other => {
                     return Err(Diagnostic::error(
                         op,
+                        format!("Operator `{other}` is not supported in a type expression"),
+                    )
+                    .primary_label("Not supported in a type expression"))
+                }
+            }
+        }
+        ast::Expression::UnaryOperator(op, operand) => {
+            let operand = visit_const_generic(operand, ctx)?;
+
+            match &op {
+                ast::UnaryOperator::Sub => ConstGeneric::Sub(
+                    Box::new(ConstGeneric::Const(BigInt::zero()).at_loc(&operand)),
+                    Box::new(operand),
+                ),
+                other => {
+                    return Err(Diagnostic::error(
+                        t,
                         format!("Operator `{other}` is not supported in a type expression"),
                     )
                     .primary_label("Not supported in a type expression"))
@@ -1072,7 +1100,7 @@ pub fn visit_impl(
         check_type_params_for_impl_method_and_trait_method_match(impl_method, &trait_method)?;
 
         let trait_method_mono =
-            monomorphise_trait_method(trait_method, impl_method, trait_def, &trait_spec)?;
+            monomorphise_trait_method(trait_method, impl_method, trait_def, &trait_spec, ctx)?;
 
         check_output_type_for_impl_method_and_trait_method_matches(
             impl_method,
@@ -1201,6 +1229,7 @@ fn monomorphise_trait_method(
     impl_method: &hir::UnitHead,
     trait_def: &hir::TraitDef,
     trait_spec: &hir::TraitSpec,
+    ctx: &mut Context,
 ) -> Result<hir::UnitHead> {
     let trait_type_params = trait_def
         .type_params
@@ -1234,6 +1263,7 @@ fn monomorphise_trait_method(
                     trait_method_type_params.as_slice(),
                     impl_type_params.as_slice(),
                     impl_method_type_params.as_slice(),
+                    ctx,
                 )
                 .map(|ty| hir::Parameter {
                     name: param.name.clone(),
@@ -1252,6 +1282,7 @@ fn monomorphise_trait_method(
             trait_method_type_params.as_slice(),
             impl_type_params.as_slice(),
             impl_method_type_params.as_slice(),
+            ctx,
         )?)
     } else {
         None
@@ -1270,6 +1301,7 @@ fn monomorphise_type_expr(
     trait_method_type_params: &[Loc<hir::TypeParam>],
     impl_type_params: &[Loc<hir::TypeExpression>],
     impl_method_type_params: &[Loc<hir::TypeExpression>],
+    ctx: &mut Context,
 ) -> Result<Loc<hir::TypeExpression>> {
     match &te.inner {
         TypeExpression::Integer(_) => Ok(te.clone()),
@@ -1280,6 +1312,7 @@ fn monomorphise_type_expr(
                 trait_method_type_params,
                 impl_type_params,
                 impl_method_type_params,
+                ctx,
             )?
             .split_loc();
             Ok(TypeExpression::TypeSpec(inner).at_loc(&loc))
@@ -1294,6 +1327,7 @@ fn monomorphise_type_spec(
     trait_method_type_params: &[Loc<hir::TypeParam>],
     impl_type_params: &[Loc<hir::TypeExpression>],
     impl_method_type_params: &[Loc<hir::TypeExpression>],
+    ctx: &mut Context,
 ) -> Result<Loc<hir::TypeSpec>> {
     match &ty.inner {
         TypeSpec::Declared(name, te) => {
@@ -1306,6 +1340,7 @@ fn monomorphise_type_spec(
                         trait_method_type_params,
                         impl_type_params,
                         impl_method_type_params,
+                        ctx,
                     )
                 })
                 .collect::<Result<_>>()?;
@@ -1319,13 +1354,15 @@ fn monomorphise_type_spec(
                 .map(|(idx, _)| idx);
 
             if let Some(param_idx) = param_idx {
-                impl_type_params[param_idx].try_map_ref(|te| match te {
+                impl_type_params[param_idx].try_map_ref(|te| match &te {
                     TypeExpression::TypeSpec(spec) => Ok(spec.clone()),
                     TypeExpression::Integer(_) => Err(Diagnostic::bug(
                         &impl_type_params[param_idx],
                         "Expected a TypeExpression::TypeSpec, found TypeExpression::Integer",
                     )),
-                    TypeExpression::ConstGeneric(_) => diag_bail!(ty, "Const generic in impl head"),
+                    TypeExpression::ConstGeneric(_) => {
+                        diag_bail!(ty, "Const generic in impl head")
+                    }
                 })
             } else {
                 let param_idx = trait_method_type_params
@@ -1334,7 +1371,7 @@ fn monomorphise_type_spec(
                     .map(|(idx, _)| idx);
 
                 if let Some(param_idx) = param_idx {
-                    impl_method_type_params[param_idx].try_map_ref(|te| match te {
+                    impl_method_type_params[param_idx].try_map_ref(|te| match &te {
                         TypeExpression::TypeSpec(spec) => Ok(spec.clone()),
                         TypeExpression::Integer(_) => Err(Diagnostic::bug(
                             &impl_method_type_params[param_idx],
@@ -1365,6 +1402,7 @@ fn monomorphise_type_spec(
                         trait_method_type_params,
                         impl_type_params,
                         impl_method_type_params,
+                        ctx,
                     )
                 })
                 .collect::<Result<_>>()?;
@@ -1378,6 +1416,7 @@ fn monomorphise_type_spec(
                 trait_method_type_params,
                 impl_type_params,
                 impl_method_type_params,
+                ctx,
             )?;
             let mono_size = monomorphise_type_expr(
                 &size,
@@ -1385,6 +1424,7 @@ fn monomorphise_type_spec(
                 trait_method_type_params,
                 impl_type_params,
                 impl_method_type_params,
+                ctx,
             )?;
 
             Ok(TypeSpec::Array {
@@ -1400,6 +1440,7 @@ fn monomorphise_type_spec(
                 trait_method_type_params,
                 impl_type_params,
                 impl_method_type_params,
+                ctx,
             )?;
             Ok(TypeSpec::Backward(Box::from(mono_inner)).at_loc(ty))
         }
@@ -1410,6 +1451,7 @@ fn monomorphise_type_spec(
                 trait_method_type_params,
                 impl_type_params,
                 impl_method_type_params,
+                ctx,
             )?;
             Ok(TypeSpec::Inverted(Box::from(mono_inner)).at_loc(ty))
         }
@@ -1420,6 +1462,7 @@ fn monomorphise_type_spec(
                 trait_method_type_params,
                 impl_type_params,
                 impl_method_type_params,
+                ctx,
             )?;
             Ok(TypeSpec::Wire(Box::from(mono_inner)).at_loc(ty))
         }
@@ -2112,46 +2155,38 @@ fn visit_statement(s: &Loc<ast::Statement>, ctx: &mut Context) -> Result<Vec<Loc
         ast::Statement::Register(inner) => visit_register(inner, ctx),
         ast::Statement::PipelineRegMarker(count, cond) => {
             let cond = match cond {
-                Some(cond) => {
-                    if let Some(count) = count {
-                        if count.inner != 1 {
-                            return Err(Diagnostic::error(
-                                count,
-                                "Multiple registers with conditions can not be defined",
-                            )
-                            .primary_label("Multiple registers not allowed")
-                            .secondary_label(cond, "Condition specified here")
-                            .span_suggest_replace(
-                                "Consider splitting into two reg statements",
-                                s,
-                                if count.inner - 1 == 1 {
-                                    "reg[...]; reg".to_string()
-                                } else {
-                                    format!("reg[...]; reg*{}", count.inner - 1)
-                                },
-                            ));
-                        }
-                    }
-                    Some(cond.try_map_ref(|c| visit_expression(c, ctx))?)
-                }
+                Some(cond) => Some(cond.try_map_ref(|c| visit_expression(c, ctx))?),
                 None => None,
             };
 
-            let result = (0..count.map(|v| v.inner).unwrap_or(1))
-                .map(|_| {
-                    ctx.pipeline_ctx
-                        .as_mut()
-                        .expect("Expected to have a pipeline context")
-                        .current_stage += 1;
-                    hir::Statement::PipelineRegMarker(cond.clone()).at_loc(s)
-                })
-                .collect();
+            let extra = match (count, cond) {
+                (None, None) => None,
+                (Some(count), None) => Some(hir::PipelineRegMarkerExtra::Count {
+                    count: count.try_map_ref(|c| {
+                        visit_type_expression(c, &TypeSpecKind::PipelineDepth, ctx)
+                    })?,
+                    count_typeexpr_id: ctx.idtracker.next(),
+                }),
+                (None, Some(cond)) => Some(hir::PipelineRegMarkerExtra::Condition(cond)),
+                (Some(count), Some(cond)) => {
+                    return Err(Diagnostic::error(
+                        count,
+                        "Multiple registers with conditions can not be defined",
+                    )
+                    .primary_label("Multiple registers not allowed")
+                    .secondary_label(cond, "Condition specified here")
+                    .help("Consider splitting into two reg statements"));
+                }
+            };
 
-            Ok(result)
+            Ok(vec![hir::Statement::PipelineRegMarker(extra).at_loc(s)])
         }
         ast::Statement::Label(name) => {
             // NOTE: pipeline labels are lowered in visit_pipeline
-            Ok(vec![hir::Statement::Label(name.clone()).at_loc(s)])
+            let (name, sym) = ctx
+                .symtab
+                .lookup_type_symbol(&Path::ident(name.clone()).at_loc(name))?;
+            Ok(vec![hir::Statement::Label(name.at_loc(&sym)).at_loc(s)])
         }
         ast::Statement::Assert(expr) => {
             let expr = expr.try_visit(visit_expression, ctx)?;
@@ -2230,11 +2265,19 @@ pub fn visit_call_kind(
         ast::CallKind::Function => hir::expression::CallKind::Function,
         ast::CallKind::Entity(loc) => hir::expression::CallKind::Entity(*loc),
         ast::CallKind::Pipeline(loc, depth) => {
-            let depth = depth.clone().maybe_unpack(&ctx.symtab)?.ok_or_else(|| {
-                Diagnostic::error(depth, "Expected pipeline depth")
-                    .help("The current comptime branch did not specify a depth")
-            })?;
-            hir::expression::CallKind::Pipeline(*loc, int_literal_to_pipeline_stages(&depth)?)
+            let depth = depth
+                .clone()
+                .maybe_unpack(&ctx.symtab)?
+                .ok_or_else(|| {
+                    Diagnostic::error(depth, "Expected pipeline depth")
+                        .help("The current comptime branch did not specify a depth")
+                })?
+                .try_map_ref(|e| visit_type_expression(e, &TypeSpecKind::PipelineDepth, ctx))?;
+            hir::expression::CallKind::Pipeline {
+                inst_loc: *loc,
+                depth,
+                depth_typeexpr_id: ctx.idtracker.next(),
+            }
         }
     })
 }
@@ -2284,10 +2327,12 @@ pub fn visit_expression(e: &ast::Expression, ctx: &mut Context) -> Result<hir::E
             let kind = match val {
                 ast::IntLiteral::Unsized(_) => IntLiteralKind::Unsized,
                 ast::IntLiteral::Signed { val: _, size } => IntLiteralKind::Signed(size.clone()),
-                ast::IntLiteral::Unsigned { val: _, size } => IntLiteralKind::Unsigned(size.clone()),
+                ast::IntLiteral::Unsigned { val: _, size } => {
+                    IntLiteralKind::Unsigned(size.clone())
+                }
             };
             Ok(hir::ExprKind::IntLiteral(val.clone().as_signed(), kind))
-        },
+        }
         ast::Expression::BoolLiteral(val) => Ok(hir::ExprKind::BoolLiteral(*val)),
         ast::Expression::BitLiteral(lit) => {
             let result = match lit {
@@ -2296,13 +2341,15 @@ pub fn visit_expression(e: &ast::Expression, ctx: &mut Context) -> Result<hir::E
                 ast::BitLiteral::HighImp => hir::expression::BitLiteral::HighImp,
             };
             Ok(hir::ExprKind::BitLiteral(result))
-        },
+        }
         ast::Expression::CreatePorts => Ok(hir::ExprKind::CreatePorts),
         ast::Expression::BinaryOperator(lhs, tok, rhs) => {
             let lhs = lhs.try_visit(visit_expression, ctx)?;
             let rhs = rhs.try_visit(visit_expression, ctx)?;
 
-            let operator = |op: BinaryOperator| hir::ExprKind::BinaryOperator(Box::new(lhs), op.at_loc(tok), Box::new(rhs));
+            let operator = |op: BinaryOperator| {
+                hir::ExprKind::BinaryOperator(Box::new(lhs), op.at_loc(tok), Box::new(rhs))
+            };
 
             match tok.inner {
                 ast::BinaryOperator::Add => Ok(operator(BinaryOperator::Add)),
@@ -2318,7 +2365,9 @@ pub fn visit_expression(e: &ast::Expression, ctx: &mut Context) -> Result<hir::E
                 ast::BinaryOperator::Le => Ok(operator(BinaryOperator::Le)),
                 ast::BinaryOperator::LeftShift => Ok(operator(BinaryOperator::LeftShift)),
                 ast::BinaryOperator::RightShift => Ok(operator(BinaryOperator::RightShift)),
-                ast::BinaryOperator::ArithmeticRightShift => Ok(operator(BinaryOperator::ArithmeticRightShift)),
+                ast::BinaryOperator::ArithmeticRightShift => {
+                    Ok(operator(BinaryOperator::ArithmeticRightShift))
+                }
                 ast::BinaryOperator::LogicalAnd => Ok(operator(BinaryOperator::LogicalAnd)),
                 ast::BinaryOperator::LogicalOr => Ok(operator(BinaryOperator::LogicalOr)),
                 ast::BinaryOperator::LogicalXor => Ok(operator(BinaryOperator::LogicalXor)),
@@ -2367,9 +2416,13 @@ pub fn visit_expression(e: &ast::Expression, ctx: &mut Context) -> Result<hir::E
             let index = index.try_visit(visit_expression, ctx)?;
             Ok(hir::ExprKind::Index(Box::new(target), Box::new(index)))
         }
-        ast::Expression::RangeIndex{target, start, end} => {
+        ast::Expression::RangeIndex { target, start, end } => {
             let target = target.try_visit(visit_expression, ctx)?;
-            Ok(hir::ExprKind::RangeIndex{target: Box::new(target), start: start.clone(), end: end.clone()})
+            Ok(hir::ExprKind::RangeIndex {
+                target: Box::new(target),
+                start: start.clone(),
+                end: end.clone(),
+            })
         }
         ast::Expression::TupleIndex(tuple, index) => Ok(hir::ExprKind::TupleIndex(
             Box::new(tuple.try_visit(visit_expression, ctx)?),
@@ -2379,12 +2432,21 @@ pub fn visit_expression(e: &ast::Expression, ctx: &mut Context) -> Result<hir::E
             Box::new(target.try_visit(visit_expression, ctx)?),
             field.clone(),
         )),
-        ast::Expression::MethodCall{kind, target, name, args, turbofish} => Ok(hir::ExprKind::MethodCall{
+        ast::Expression::MethodCall {
+            kind,
+            target,
+            name,
+            args,
+            turbofish,
+        } => Ok(hir::ExprKind::MethodCall {
             target: Box::new(target.try_visit(visit_expression, ctx)?),
             name: name.clone(),
             args: args.try_map_ref(|args| visit_argument_list(args, ctx))?,
             call_kind: visit_call_kind(kind, ctx)?,
-            turbofish: turbofish.as_ref().map(|t| visit_turbofish(t, ctx)).transpose()?
+            turbofish: turbofish
+                .as_ref()
+                .map(|t| visit_turbofish(t, ctx))
+                .transpose()?,
         }),
         ast::Expression::If(cond, ontrue, onfalse) => {
             let cond = cond.try_visit(visit_expression, ctx)?;
@@ -2401,7 +2463,8 @@ pub fn visit_expression(e: &ast::Expression, ctx: &mut Context) -> Result<hir::E
             let e = expression.try_visit(visit_expression, ctx)?;
 
             if branches.is_empty() {
-                return Err(Diagnostic::error(branches, "Match body has no arms").primary_label("This match body has no arms"));
+                return Err(Diagnostic::error(branches, "Match body has no arms")
+                    .primary_label("This match body has no arms"));
             }
 
             let b = branches
@@ -2420,45 +2483,64 @@ pub fn visit_expression(e: &ast::Expression, ctx: &mut Context) -> Result<hir::E
         ast::Expression::Block(block) => {
             Ok(hir::ExprKind::Block(Box::new(visit_block(block, ctx)?)))
         }
-        ast::Expression::Call{kind, callee, args, turbofish} => {
+        ast::Expression::Call {
+            kind,
+            callee,
+            args,
+            turbofish,
+        } => {
             let (name_id, _) = ctx.symtab.lookup_unit(callee)?;
             let args = visit_argument_list(args, ctx)?.at_loc(args);
 
             let kind = visit_call_kind(kind, ctx)?;
 
-            let turbofish = turbofish.as_ref().map(|t| visit_turbofish(t, ctx)).transpose()?;
+            let turbofish = turbofish
+                .as_ref()
+                .map(|t| visit_turbofish(t, ctx))
+                .transpose()?;
 
-            Ok(hir::ExprKind::Call{kind, callee: name_id.at_loc(callee), args, turbofish})
+            Ok(hir::ExprKind::Call {
+                kind,
+                callee: name_id.at_loc(callee),
+                args,
+                turbofish,
+            })
         }
         ast::Expression::Identifier(path) => {
             // If the identifier isn't a valid variable, report as "expected value".
             match ctx.symtab.lookup_variable(path) {
-                Ok(id) => {
-                    Ok(hir::ExprKind::Identifier(id))
-                }
+                Ok(id) => Ok(hir::ExprKind::Identifier(id)),
                 Err(LookupError::IsAType(_)) => {
                     let ty = ctx.symtab.lookup_type_symbol(path)?;
                     let (name, ty) = &ty;
                     match ty.inner {
                         TypeSymbol::GenericInt => Ok(hir::ExprKind::TypeLevelInteger(name.clone())),
-                        TypeSymbol::GenericArg { .. } => {
-                            Err(Diagnostic::error(path, format!("Generic type {name} is used as a value"))
-                                .primary_label(format!("{name} is a generic type"))
-                                .secondary_label(ty, format!("{name} is declared here"))
-                                .span_suggest_insert_before(
-                                    format!("Consider making `{name}` a type level integer"),
-                                    ty,
-                                    "#"
-                                ))
-                        }
-                        TypeSymbol::Declared(_, _) => {
-                            Err(Diagnostic::error(path, format!("Type {name} is used as a value"))
-                                .primary_label(format!("{name} is a type")))
-                        }
+                        TypeSymbol::GenericArg { .. } => Err(Diagnostic::error(
+                            path,
+                            format!("Generic type {name} is used as a value"),
+                        )
+                        .primary_label(format!("{name} is a generic type"))
+                        .secondary_label(ty, format!("{name} is declared here"))
+                        .span_suggest_insert_before(
+                            format!("Consider making `{name}` a type level integer"),
+                            ty,
+                            "#",
+                        )),
+                        TypeSymbol::Declared(_, _) => Err(Diagnostic::error(
+                            path,
+                            format!("Type {name} is used as a value"),
+                        )
+                        .primary_label(format!("{name} is a type"))),
                     }
                 }
-                Err(LookupError::NotAVariable(path, ref was @ Thing::EnumVariant(_))) |
-                Err(LookupError::NotAVariable(path, ref was @ Thing::Alias { path: _, in_namespace: _ })) => {
+                Err(LookupError::NotAVariable(path, ref was @ Thing::EnumVariant(_)))
+                | Err(LookupError::NotAVariable(
+                    path,
+                    ref was @ Thing::Alias {
+                        path: _,
+                        in_namespace: _,
+                    },
+                )) => {
                     let (name_id, variant) = match ctx.symtab.lookup_enum_variant(&path) {
                         Ok(res) => res,
                         Err(_) => return Err(LookupError::NotAValue(path, was.clone()).into()),
@@ -2468,62 +2550,48 @@ pub fn visit_expression(e: &ast::Expression, ctx: &mut Context) -> Result<hir::E
                         // that any error will reference the empty argument list.
                         let callee = name_id.at_loc(&path);
                         let args = hir::ArgumentList::Positional(vec![]).at_loc(&path);
-                        Ok(hir::ExprKind::Call{kind: hir::expression::CallKind::Function, callee, args, turbofish: None})
+                        Ok(hir::ExprKind::Call {
+                            kind: hir::expression::CallKind::Function,
+                            callee,
+                            args,
+                            turbofish: None,
+                        })
                     } else {
                         Err(LookupError::NotAValue(path, was.clone()).into())
                     }
                 }
-                Err(LookupError::NotAVariable(path, was)) => Err(LookupError::NotAValue(path, was).into()),
+                Err(LookupError::NotAVariable(path, was)) => {
+                    Err(LookupError::NotAValue(path, was).into())
+                }
                 Err(err) => Err(err.into()),
             }
         }
-        ast::Expression::PipelineReference { stage_kw_and_reference_loc, stage, name } => {
+        ast::Expression::PipelineReference {
+            stage_kw_and_reference_loc,
+            stage,
+            name,
+        } => {
+            let stage = match stage {
+                ast::PipelineStageReference::Relative(offset) => {
+                    hir::expression::PipelineRefKind::Relative(offset.try_map_ref(|t| {
+                        visit_type_expression(t, &TypeSpecKind::PipelineDepth, ctx)
+                    })?)
+                }
+                ast::PipelineStageReference::Absolute(name) => {
+                    hir::expression::PipelineRefKind::Absolute(
+                        ctx.symtab
+                            .lookup_type_symbol(&Path::ident(name.clone()).at_loc(name))?
+                            .0
+                            .at_loc(name),
+                    )
+                }
+            }
+            .at_loc(&stage_kw_and_reference_loc);
+
             let pipeline_ctx = ctx
                 .pipeline_ctx
                 .as_ref()
                 .expect("Expected to have a pipeline context");
-
-            let (stage_index, loc) = match stage {
-                ast::PipelineStageReference::Relative(offset) => {
-                    let current = pipeline_ctx.current_stage;
-                    let absolute = current as i64 + &offset.inner;
-
-                    if absolute < BigInt::zero() {
-                        return Err(Diagnostic::error(
-                            stage_kw_and_reference_loc,
-                            "Reference to negative pipeline stage",
-                        )
-                        .primary_label("This references a negative pipeline stage")
-                        .note(format!(
-                            "Since this is at stage {current}, stage({offset}) references stage {absolute}"
-                        ))
-                        .note("Pipeline stages start at 0"));
-                    }
-                    let absolute = absolute.to_usize().ok_or_else(|| {
-                        Diagnostic::error(offset, "Pipeline offset overflow")
-                            .primary_label(format!("Pipeline stages must fit in 0..{}", usize::MAX))
-                    })?;
-                    let pipeline_depth = pipeline_ctx.stages.len();
-                    if absolute >= pipeline_depth {
-                        return Err(Diagnostic::error(stage_kw_and_reference_loc, "Reference to pipeline stage beyond pipeline depth")
-                            .primary_label("This references a pipeline stage beyond the pipeline depth")
-                            .note(format!("Since this is at stage {current}, stage(+{offset}) references stage {absolute}"))
-                            .note(format!("The pipeline has depth {}", pipeline_depth - 1))
-
-                        )
-                    }
-
-                    (absolute, offset.loc())
-                }
-                ast::PipelineStageReference::Absolute(name) => (
-                    pipeline_ctx
-                        .get_stage(name)
-                        .ok_or_else(|| Diagnostic::error(name, "Undefined pipeline stage")
-                            .primary_label(format!("Cannot find pipeline stage '{name}"))
-                        )?,
-                    name.loc(),
-                ),
-            };
 
             let path = Path(vec![name.clone()]).at_loc(name);
             let (name_id, declares_name) = match ctx.symtab.try_lookup_variable(&path)? {
@@ -2535,25 +2603,26 @@ pub fn visit_expression(e: &ast::Expression, ctx: &mut Context) -> Result<hir::E
                     if let Some(DeclarationState::Undecleared(name_id)) = undecleared_lookup {
                         (name_id.clone().at_loc(name), false)
                     } else {
-                        let name_id = ctx.symtab.add_undecleared_at_offset(pipeline_offset, name.clone());
+                        let name_id = ctx
+                            .symtab
+                            .add_undecleared_at_offset(pipeline_offset, name.clone());
                         (name_id.at_loc(name), true)
                     }
                 }
             };
 
             Ok(hir::ExprKind::PipelineRef {
-                stage: stage_index.at_loc(&loc),
+                stage,
                 name: name_id,
                 declares_name,
+                depth_typeexpr_id: ctx.idtracker.next(),
             })
         }
         ast::Expression::Comptime(inner) => {
-            let inner = inner
-                .maybe_unpack(&ctx.symtab)?
-                .ok_or_else(|| {
+            let inner = inner.maybe_unpack(&ctx.symtab)?.ok_or_else(|| {
                 Diagnostic::error(inner.as_ref(), "Missing expression")
                     .help("The current comptime branch has no expression")
-                })?;
+            })?;
             Ok(visit_expression(&inner, ctx)?.kind)
         }
         ast::Expression::StageReady => Ok(hir::ExprKind::StageReady),
@@ -3040,28 +3109,6 @@ mod statement_visiting {
         assert_eq!(ctx.symtab.has_symbol(ast_path("x").inner), true);
         assert_eq!(ctx.symtab.has_symbol(ast_path("y").inner), true);
     }
-
-    #[test]
-    fn multi_reg_statements_lower_correctly() {
-        let input = ast::Statement::PipelineRegMarker(Some(3.nowhere()), None).nowhere();
-
-        let mut ctx = test_context();
-        ctx.pipeline_ctx = Some(PipelineContext {
-            stages: vec![],
-            current_stage: 0,
-            scope: 0,
-        });
-        assert_eq!(
-            visit_statement(&input, &mut ctx),
-            Ok(vec![
-                hir::Statement::PipelineRegMarker(None).nowhere(),
-                hir::Statement::PipelineRegMarker(None).nowhere(),
-                hir::Statement::PipelineRegMarker(None).nowhere(),
-            ])
-        );
-
-        assert_eq!(ctx.pipeline_ctx.as_ref().unwrap().current_stage, 3);
-    }
 }
 
 #[cfg(test)]
@@ -3069,13 +3116,11 @@ mod expression_visiting {
     use super::*;
 
     use crate::testutil::test_context;
-    use ast::comptime::MaybeComptime;
     use hir::hparams;
     use hir::symbol_table::EnumVariant;
     use spade_ast::testutil::{ast_ident, ast_path};
     use spade_common::location_info::WithLocation;
     use spade_common::name::testutil::name_id;
-    use spade_common::num_ext::InfallibleToBigInt;
 
     #[test]
     fn int_literals_work() {
@@ -3557,69 +3602,6 @@ mod expression_visiting {
                     unit_type_params: vec![],
                     scope_type_params: vec![],
                     unit_kind: hir::UnitKind::Function(hir::FunctionKind::Fn).nowhere(),
-                    where_clauses: vec![],
-                }
-                .nowhere(),
-            ),
-        );
-
-        assert_eq!(
-            visit_expression(
-                &input,
-                &mut Context {
-                    symtab,
-                    ..test_context()
-                }
-            ),
-            Ok(expected)
-        );
-    }
-
-    #[test]
-    fn pipeline_instantiation_works() {
-        let input = ast::Expression::Call {
-            kind: ast::CallKind::Pipeline(
-                ().nowhere(),
-                MaybeComptime::Raw(ast::IntLiteral::Unsized(2.to_bigint()).nowhere()).nowhere(),
-            ),
-            callee: ast_path("test"),
-            args: ast::ArgumentList::Positional(vec![
-                ast::Expression::int_literal_signed(1).nowhere(),
-                ast::Expression::int_literal_signed(2).nowhere(),
-            ])
-            .nowhere(),
-            turbofish: None,
-        }
-        .nowhere();
-
-        let expected = hir::ExprKind::Call {
-            kind: hir::expression::CallKind::Pipeline(().nowhere(), 2.nowhere()),
-            callee: name_id(0, "test"),
-            args: hir::ArgumentList::Positional(vec![
-                hir::ExprKind::int_literal(1).idless().nowhere(),
-                hir::ExprKind::int_literal(2).idless().nowhere(),
-            ])
-            .nowhere(),
-            turbofish: None,
-        }
-        .idless();
-
-        let mut symtab = SymbolTable::new();
-
-        symtab.add_thing(
-            ast_path("test").inner,
-            Thing::Unit(
-                hir::UnitHead {
-                    name: Identifier("".to_string()).nowhere(),
-                    unit_kind: hir::UnitKind::Pipeline(2.nowhere()).nowhere(),
-                    inputs: hparams![
-                        ("a", hir::TypeSpec::unit().nowhere()),
-                        ("b", hir::TypeSpec::unit().nowhere()),
-                    ]
-                    .nowhere(),
-                    output_type: None,
-                    unit_type_params: vec![],
-                    scope_type_params: vec![],
                     where_clauses: vec![],
                 }
                 .nowhere(),

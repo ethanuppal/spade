@@ -1,7 +1,7 @@
 ---
 source: spade-tests/src/ast_lowering.rs
 ---
-pipeline(3) main(x: int<8>) -> int<8> {
+pipeline(3) main(clk: clock, x: int<8>) -> int<8> {
     reg;
     reg;
     reg;
@@ -9,13 +9,13 @@ pipeline(3) main(x: int<8>) -> int<8> {
 }
 
 
-error: Reference to pipeline stage beyond pipeline depth
+error: Pipeline references stage 4 which is beyond the end of the pipeline
   ┌─ testinput:5:9
   │
+1 │ pipeline(3) main(clk: clock, x: int<8>) -> int<8> {
+  │          - Depth 3 specified here
+  ·
 5 │         stage(+1).x
-  │         ^^^^^^^^^ This references a pipeline stage beyond the pipeline depth
+  │         ^^^^^^^^^ Reference past the end of the pipeline
   │
-  = note: Since this is at stage 3, stage(+1) references stage 4
-  = note: The pipeline has depth 3
-
-
+  = help: This offset is relative to the current stage which is 3

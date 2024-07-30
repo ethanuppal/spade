@@ -460,10 +460,8 @@ impl<'a> Parser<'a> {
 
 #[cfg(test)]
 mod test {
-    use spade_ast::comptime::MaybeComptime;
     use spade_ast::testutil::{ast_ident, ast_path};
     use spade_ast::*;
-    use spade_common::num_ext::InfallibleToBigInt;
 
     use super::*;
     use crate::lexer::TokenKind;
@@ -1063,72 +1061,6 @@ mod test {
         .nowhere();
 
         check_parse!(code, expression, Ok(expected));
-    }
-
-    #[test]
-    fn absolute_pipeline_references_parse() {
-        let code = r#"stage(s).var"#;
-
-        let expected = Expression::PipelineReference {
-            stage_kw_and_reference_loc: ().nowhere(),
-            stage: PipelineStageReference::Absolute(ast_ident("s")),
-            name: ast_ident("var"),
-        }
-        .nowhere();
-
-        check_parse!(code, expression, Ok(expected), |p: &mut Parser| {
-            p.set_item_context(
-                UnitKind::Pipeline(
-                    MaybeComptime::Raw(IntLiteral::Unsized(5u32.into()).nowhere()).nowhere(),
-                )
-                .nowhere(),
-            )
-            .unwrap();
-        });
-    }
-
-    #[test]
-    fn relative_forward_pipeline_references_parse() {
-        let code = r#"stage(+5).var"#;
-
-        let expected = Expression::PipelineReference {
-            stage_kw_and_reference_loc: ().nowhere(),
-            stage: PipelineStageReference::Relative(5.to_bigint().nowhere()),
-            name: ast_ident("var"),
-        }
-        .nowhere();
-
-        check_parse!(code, expression, Ok(expected), |p: &mut Parser| {
-            p.set_item_context(
-                UnitKind::Pipeline(
-                    MaybeComptime::Raw(IntLiteral::Unsized(6u32.into()).nowhere()).nowhere(),
-                )
-                .nowhere(),
-            )
-            .unwrap();
-        });
-    }
-
-    #[test]
-    fn relative_backward_pipeline_references_parse() {
-        let code = r#"stage(-5).var"#;
-
-        let expected = Expression::PipelineReference {
-            stage_kw_and_reference_loc: ().nowhere(),
-            stage: PipelineStageReference::Relative((-5).to_bigint().nowhere()),
-            name: ast_ident("var"),
-        }
-        .nowhere();
-
-        check_parse!(code, expression, Ok(expected), |p: &mut Parser| {
-            p.set_item_context(
-                UnitKind::Pipeline(
-                    MaybeComptime::Raw(IntLiteral::Unsized(6u32.into()).nowhere()).nowhere(),
-                )
-                .nowhere(),
-            )
-            .unwrap();
-        });
     }
 
     // Precedence related tests

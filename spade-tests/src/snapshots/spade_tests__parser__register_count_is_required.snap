@@ -6,10 +6,10 @@ pipeline(3) main(x: X) -> int<8> {
 }
 
 
-error: expected register count, got `;`
+error: Unexpected `;`, expected `type`
   ┌─ testinput:2:10
   │
 2 │     reg *;
-  │          ^ expected register count here
-  │
-  = help: register counts can only be integer constants
+  │         -^ expected `type`
+  │         │ 
+  │         * is used to specify a register count

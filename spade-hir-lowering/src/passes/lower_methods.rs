@@ -56,7 +56,10 @@ impl<'a> Pass for LowerMethods<'a> {
                 match unit.unit_kind.inner {
                     spade_hir::UnitKind::Function(_) => {}
                     spade_hir::UnitKind::Entity => {}
-                    spade_hir::UnitKind::Pipeline(_) => {
+                    spade_hir::UnitKind::Pipeline {
+                        depth: _,
+                        depth_typeexpr_id: _,
+                    } => {
                         return Err(Diagnostic::error(
                             expression.loc(),
                             "Pipeline methods cannot be instantiated",

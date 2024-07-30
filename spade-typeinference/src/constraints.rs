@@ -15,7 +15,6 @@ pub enum ConstraintExpr {
     /// inner.log2().floor()+1
     UintBitsToRepresent(Box<ConstraintExpr>),
 }
-
 impl WithLocation for ConstraintExpr {}
 
 impl ConstraintExpr {
@@ -140,6 +139,9 @@ pub enum ConstraintSource {
     ArrayIndexing,
     MemoryIndexing,
     Concatenation,
+    PipelineRegOffset { reg: Loc<()>, total: Loc<()> },
+    PipelineRegCount { reg: Loc<()>, total: Loc<()> },
+    PipelineAvailDepth,
     Where,
 }
 
@@ -152,6 +154,9 @@ impl std::fmt::Display for ConstraintSource {
             ConstraintSource::MemoryIndexing => write!(f, "MemoryIndexing"),
             ConstraintSource::Concatenation => write!(f, "Concatenation"),
             ConstraintSource::Where => write!(f, "Where"),
+            ConstraintSource::PipelineRegOffset { .. } => write!(f, "PipelineRegOffset"),
+            ConstraintSource::PipelineRegCount { .. } => write!(f, "PipelineRegOffset"),
+            ConstraintSource::PipelineAvailDepth => write!(f, "PipelineAvailDepth"),
         }
     }
 }

@@ -1,0 +1,25 @@
+---
+source: spade-tests/src/typeinference.rs
+---
+pipeline(N) p<#N>(clk: clock, x: bool) -> bool {
+    reg * {N-2};
+    reg;
+        x
+}
+
+entity a(clk: clock) -> bool {
+    inst(10) p(clk, false)
+}
+
+
+error: Expected 10 in this pipeline.
+  ┌─ testinput:1:10
+  │
+1 │ pipeline(N) p<#N>(clk: clock, x: bool) -> bool {
+  │          ^ Expected 10 stages
+2 │     reg * {N-2};
+3 │     reg;
+  │     --- This final register is number 9
+  │
+  = The error is in a generic unit instantiated at
+    ╰ testinput:8 p<10>

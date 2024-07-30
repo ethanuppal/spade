@@ -163,16 +163,6 @@ snapshot_error! {
 }
 
 snapshot_error! {
-    missing_pipeline_depth_error_with_variable,
-    "
-        entity a() -> bool {
-            let abc = 2;
-            inst(abc) x()
-        }
-    "
-}
-
-snapshot_error! {
     min_max_compiles,
     "
         entity a(b: int<8>, c: int<8>, d: int<8>) -> int<8> {

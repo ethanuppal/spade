@@ -1,4 +1,4 @@
-use crate::{build_items, build_items_with_stdlib, snapshot_error};
+use crate::{build_items, build_items_with_stdlib, code_compiles, snapshot_error};
 
 snapshot_error! {
     impl_method_generic_args_length_does_not_match_trait_method_generic_args_length,
@@ -91,7 +91,7 @@ snapshot_error! {
 snapshot_error! {
     negative_stage_index,
     "
-    pipeline(3) main(x: int<8>) -> int<8> {
+    pipeline(3) main(clk: clock, x: int<8>) -> int<8> {
             let a = stage(-1).x;
         reg;
         reg;
@@ -104,7 +104,7 @@ snapshot_error! {
 snapshot_error! {
     negative_stage_index_later,
     "
-    pipeline(3) main(x: int<8>) -> int<8> {
+    pipeline(3) main(clk: clock, x: int<8>) -> int<8> {
         reg;
         reg;
             let a = stage(-5).x;
@@ -117,26 +117,14 @@ snapshot_error! {
 snapshot_error! {
     stage_index_overflow,
     "
-    pipeline(3) main(x: int<8>) -> int<8> {
+    pipeline(3) main(clk: clock, x: int<8>) -> int<8> {
         reg;
         reg;
         reg;
             stage(+1).x
     }
-    "
-}
-
-snapshot_error! {
-    duplicate_label_error,
-    "
-    pipeline(3) main(clk: clock) -> int<8> {
-        reg;
-            'a
-        reg;
-            'a
-        reg;
-            0
-    }"
+    ",
+    false
 }
 
 snapshot_error! {
@@ -152,7 +140,7 @@ snapshot_error! {
     }"
 }
 
-snapshot_error! {
+code_compiles! {
     multiple_labels_for_same_stage,
     "
     pipeline(3) main(clk: clock) -> int<8> {
@@ -683,36 +671,6 @@ snapshot_error! {
 }
 
 snapshot_error! {
-    incorrect_stage_count,
-    "
-        pipeline(3) pipe(clk: clock) -> bool {
-            reg;
-            reg;
-                true
-        }
-    "
-}
-
-snapshot_error! {
-    incorrect_stage_count_single,
-    "
-        pipeline(1) pipe(clk: clock) -> bool {
-                true
-        }
-    "
-}
-
-snapshot_error! {
-    incorrect_stage_count_only_one,
-    "
-        pipeline(2) pipe(clk: clock) -> bool {
-            reg;
-                true
-        }
-    "
-}
-
-snapshot_error! {
     pipeline_without_arguments,
     "
         pipeline(1) pipe() -> bool {
@@ -871,18 +829,6 @@ snapshot_error! {
 }
 
 snapshot_error! {
-    comptime_pipeline_depth_works,
-    r#"
-        $config X = 1
-
-        pipeline($if X == 1 {3} $else {2}) test(clk: clock) -> bool {
-            reg*2;
-                true
-        }
-    "#
-}
-
-snapshot_error! {
     comptime_pipeline_depth_missing_depth_gives_decent_error,
     r#"
         $config X = 0
@@ -967,7 +913,7 @@ snapshot_error! {
 
 snapshot_error! {
     negative_pipeline_depth_is_disallowed,
-    "pipeline(-1) x() -> bool {
+    "pipeline(-1) x(clk: clock) -> bool {
         true
     }"
 }
@@ -1367,5 +1313,16 @@ snapshot_error! {
     "
         trait T {}
         impl T for int<{1+2}> {}
+    "
+}
+
+snapshot_error! {
+    missing_pipeline_depth_error_with_variable,
+    "
+        pipeline(1) x(clk: clock) {}
+        entity a(clk: clock) -> bool {
+            let abc = 2;
+            inst(abc) x(clk)
+        }
     "
 }

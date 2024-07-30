@@ -15,5 +15,3 @@ error: Expected type 8, got 3
   │
 6 │     let x: uint<{1 + 2}> = sized_zero::<8>();
   │                  ^^^^^ Expected 8, got 3
-  │
-  = note:

@@ -1,9 +1,9 @@
-use num::BigUint;
+use num::BigInt;
 use serde::{Deserialize, Serialize};
 use spade_common::{
     location_info::WithLocation,
     name::{Identifier, NameID},
-    num_ext::InfallibleToBigUint,
+    num_ext::InfallibleToBigInt,
 };
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -43,7 +43,7 @@ pub enum ConcreteType {
     },
     Array {
         inner: Box<ConcreteType>,
-        size: BigUint,
+        size: BigInt,
     },
     Enum {
         options: Vec<(NameID, Vec<(Identifier, ConcreteType)>)>,
@@ -52,7 +52,7 @@ pub enum ConcreteType {
         base: PrimitiveType,
         params: Vec<ConcreteType>,
     },
-    Integer(BigUint),
+    Integer(BigInt),
     Backward(Box<ConcreteType>),
     Wire(Box<ConcreteType>),
 }
@@ -160,7 +160,7 @@ impl std::fmt::Display for ConcreteType {
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub enum KnownType {
     Named(NameID),
-    Integer(BigUint),
+    Integer(BigInt),
     Tuple,
     Array,
     Backward,
@@ -172,6 +172,6 @@ impl WithLocation for KnownType {}
 
 impl KnownType {
     pub fn integer(val: u64) -> Self {
-        Self::Integer(val.to_biguint())
+        Self::Integer(val.to_bigint())
     }
 }

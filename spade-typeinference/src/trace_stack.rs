@@ -47,6 +47,9 @@ pub enum TraceStackEntry {
     NewGenericList(HashMap<NameID, TypeVar>),
     /// Inferring more from constraints
     InferringFromConstraints(TypeVar, BigInt),
+    AddingPipelineLabel(NameID, TypeVar),
+    RecoveringPipelineLabel(NameID, TypeVar),
+    PreAddingPipelineLabel(NameID, TypeVar),
     /// Arbitrary message
     Message(String),
 }
@@ -119,6 +122,21 @@ pub fn format_trace_stack(type_state: &TypeState) -> String {
                         .iter()
                         .map(|(k, v)| format!("{k} -> {}", maybe_replaced(v)))
                         .join(", ")
+                )
+            }
+            TraceStackEntry::AddingPipelineLabel(name, var) => {
+                format!("{} {name:?} as {var:?}", "declaring label".bright_black())
+            }
+            TraceStackEntry::PreAddingPipelineLabel(name, var) => {
+                format!(
+                    "{} {name:?} as {var:?}",
+                    "pre-declaring label".bright_black()
+                )
+            }
+            TraceStackEntry::RecoveringPipelineLabel(name, var) => {
+                format!(
+                    "{} {name:?} as {var:?}",
+                    "using previously declared label".bright_black()
                 )
             }
             TraceStackEntry::Message(msg) => {

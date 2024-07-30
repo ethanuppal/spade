@@ -86,7 +86,10 @@ pub fn expect_function(
         spade_hir::UnitKind::Entity => diag
             .span_suggest_insert_before("consider adding inst", callee_name, "inst ")
             .secondary_label(unit_def, format!("{callee_name} is an entity")),
-        spade_hir::UnitKind::Pipeline(depth) => diag
+        spade_hir::UnitKind::Pipeline {
+            depth,
+            depth_typeexpr_id: _,
+        } => diag
             .span_suggest_insert_before(
                 "consider adding inst",
                 callee_name,
@@ -122,9 +125,10 @@ pub fn expect_entity(
         spade_hir::UnitKind::Entity => {
             spade_diagnostics::Diagnostic::bug(unit_name, "expected entity and got it")
         }
-        spade_hir::UnitKind::Pipeline(depth) => {
-            diag.span_suggest_insert_after("Consider adding depth", inst, format!("({depth})"))
-        }
+        spade_hir::UnitKind::Pipeline {
+            depth,
+            depth_typeexpr_id: _,
+        } => diag.span_suggest_insert_after("Consider adding depth", inst, format!("({depth})")),
     }
 }
 
@@ -150,8 +154,9 @@ pub fn expect_pipeline(
         spade_hir::UnitKind::Entity => diag
             .span_suggest_replace("Consider removing the depth", inst, "inst")
             .secondary_label(unit_def, format!("{unit_name} is an entity")),
-        spade_hir::UnitKind::Pipeline(_) => {
-            spade_diagnostics::Diagnostic::bug(unit_name, "expected pipeline and got it")
-        }
+        spade_hir::UnitKind::Pipeline {
+            depth: _,
+            depth_typeexpr_id: _,
+        } => spade_diagnostics::Diagnostic::bug(unit_name, "expected pipeline and got it"),
     }
 }

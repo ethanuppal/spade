@@ -235,6 +235,14 @@ impl Diagnostic {
 
     /// Attach a simple (one-line) note to this diagnostic.
     pub fn note(mut self, message: impl Into<Message>) -> Self {
+        self.add_note(message);
+        self
+    }
+
+    /// Attach a simple (one-line) note to this diagnostic.
+    ///
+    /// Modifying version of [Self::note].
+    pub fn add_note(&mut self, message: impl Into<Message>) -> &mut Self {
         self.subdiagnostics.push(Subdiagnostic::Note {
             level: SubdiagnosticLevel::Note,
             message: message.into(),

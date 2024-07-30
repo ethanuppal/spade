@@ -1,4 +1,4 @@
-use crate::{build_items, build_items_with_stdlib, snapshot_error};
+use crate::{build_items, build_items_with_stdlib, code_compiles, snapshot_error};
 
 #[test]
 fn visit_unary_operator_works_for_tilde_int() {
@@ -1825,4 +1825,75 @@ fn negative_integers_on_bound_compiles() {
         }
     "#;
     build_items(code);
+}
+
+snapshot_error! {
+    dynamic_depth_pipeline_works,
+    "
+        pipeline(N) p<#N>(clk: clock, x: bool) -> bool {
+            reg*N;
+                x
+        }
+
+        entity a(clk: clock) -> bool {
+            inst(10) p::<15>(clk, false)
+        }
+    ",
+    false
+}
+
+code_compiles! {
+    regs_can_have_const_generics,
+    "
+        pipeline(N) p<#N>(clk: clock, x: bool) -> bool {
+            reg * {N-1};
+            reg;
+                x
+        }
+
+        entity a(clk: clock) -> bool {
+            inst(10) p(clk, false)
+        }
+    "
+}
+
+snapshot_error! {
+    incorrect_reg_count_produces_useful_error,
+    "
+        pipeline(N) p<#N>(clk: clock, x: bool) -> bool {
+            reg * {N-2};
+            reg;
+                x
+        }
+
+        entity a(clk: clock) -> bool {
+            inst(10) p(clk, false)
+        }
+    "
+}
+
+snapshot_error! {
+    non_generic_incorrect_reg_count_produces_useful_error,
+    "
+        pipeline(10) p(clk: clock, x: bool) -> bool {
+            reg * {8};
+            reg;
+                x
+        }
+    "
+}
+
+snapshot_error! {
+    generic_relative_out_of_bounds_pipeline_offset_is_error,
+    "
+        pipeline(N) p<#N, #O>(clk: clock, x: bool) -> bool {
+            reg * {N};
+                let a = stage(+O).x;
+                x
+        }
+
+        entity a(clk: clock) -> bool {
+            inst(10) p::<10, 5>(clk, false)
+        }
+    "
 }

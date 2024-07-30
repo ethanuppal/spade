@@ -5,6 +5,7 @@ use spade_common::name::Path;
 use spade_common::num_ext::InfallibleToBigInt;
 use spade_common::{location_info::Loc, name::Identifier};
 use spade_diagnostics::{diag_anyhow, diag_assert, diag_bail, Diagnostic};
+use spade_hir::expression::CallKind;
 use spade_hir::symbol_table::{TypeDeclKind, TypeSymbol};
 use spade_hir::{ArgumentList, Expression, TypeExpression};
 use spade_types::KnownType;
@@ -32,6 +33,7 @@ pub enum Requirement {
         expr: Loc<TypeVar>,
     },
     HasMethod {
+        call_kind: CallKind,
         /// The ID of the expression which causes this requirement
         expr_id: Loc<u64>,
         /// The type which should have the associated method
@@ -52,6 +54,14 @@ pub enum Requirement {
     FitsIntLiteral {
         value: ConstantInt,
         target_type: Loc<TypeVar>,
+    },
+    ValidPipelineOfset {
+        definition_depth: Loc<TypeVar>,
+        current_stage: Loc<TypeVar>,
+        reference_offset: Loc<TypeVar>,
+    },
+    PositivePipelineDepth {
+        depth: Loc<TypeVar>,
     },
     /// The provided TypeVar should all share a base type
     SharedBase(Vec<Loc<TypeVar>>),
@@ -76,6 +86,7 @@ impl Requirement {
                 args: _,
                 turbofish: _,
                 prev_generic_list: _,
+                call_kind: _,
             } => {
                 TypeState::replace_type_var(target_type, from, to);
                 TypeState::replace_type_var(expr, from, to);
@@ -86,6 +97,18 @@ impl Requirement {
                     ConstantInt::Literal(_) => {}
                 };
                 TypeState::replace_type_var(target_type, from, to);
+            }
+            Requirement::ValidPipelineOfset {
+                definition_depth,
+                current_stage,
+                reference_offset,
+            } => {
+                TypeState::replace_type_var(definition_depth, from, to);
+                TypeState::replace_type_var(current_stage, from, to);
+                TypeState::replace_type_var(reference_offset, from, to);
+            }
+            Requirement::PositivePipelineDepth { depth } => {
+                TypeState::replace_type_var(depth, from, to)
             }
             Requirement::SharedBase(bases) => {
                 for t in bases {
@@ -214,6 +237,7 @@ impl Requirement {
                 args,
                 turbofish,
                 prev_generic_list,
+                call_kind,
             } => target_type.expect_named(
                 |_type_name, _params| {
                     let Some(implementor) =
@@ -229,6 +253,7 @@ impl Requirement {
                         &expr.inner,
                         &implementor,
                         &fn_head,
+                        call_kind,
                         args,
                         ctx,
                         false,
@@ -238,6 +263,7 @@ impl Requirement {
                             prev_generic_list,
                             type_ctx: ctx,
                         }),
+                        prev_generic_list,
                     )?;
                     Ok(RequirementResult::Satisfied(vec![]))
                 },
@@ -293,7 +319,7 @@ impl Requirement {
                                 let value = match value {
                                     ConstantInt::Generic(TypeVar::Unknown(_, _)) => return Ok(RequirementResult::NoChange),
                                     ConstantInt::Generic(TypeVar::Known(_, KnownType::Integer(val), _)) => {
-                                        val.to_bigint()
+                                        val.clone()
                                     }
                                     ConstantInt::Generic(other @ TypeVar::Known(_, _, _)) => diag_bail!(
                                         target_type,
@@ -354,6 +380,67 @@ impl Requirement {
                     |other| diag_bail!(target_type, "Inferred {other} for integer literal"),
                 )
             }
+            Requirement::PositivePipelineDepth { depth } => match &depth.inner {
+                TypeVar::Known(_, KnownType::Integer(i), _) => {
+                    if i < &BigInt::zero() {
+                        Err(Diagnostic::error(depth, "Negative pipeline depth")
+                            .primary_label(format!("Expected non-negative depth, found {i}")))
+                    } else {
+                        Ok(RequirementResult::Satisfied(vec![]))
+                    }
+                }
+                TypeVar::Known(_, _, _) => {
+                    Err(diag_anyhow!(depth, "Got non integer pipeline depth"))
+                }
+                TypeVar::Unknown(_, _) => Ok(RequirementResult::NoChange),
+            },
+            Requirement::ValidPipelineOfset {
+                definition_depth,
+                current_stage,
+                reference_offset,
+            } => match (&definition_depth.inner, &reference_offset.inner) {
+                (TypeVar::Known(_, dk, _), TypeVar::Known(_, rk, _)) => match (&dk, &rk) {
+                    (KnownType::Integer(ddepth), KnownType::Integer(rdepth)) => {
+                        if rdepth < &BigInt::zero() {
+                            Err(Diagnostic::error(
+                                reference_offset,
+                                format!("Pipeline references cannot refer to negative stages, inferred {rdepth}")
+                            )
+                                .primary_label("This references stage {rdepth}")
+                                .help(format!("This offset is relative to the current stage which is {current_stage}")))
+                        } else if rdepth > ddepth {
+                            Err(Diagnostic::error(
+                                reference_offset,
+                                format!("Pipeline references stage {rdepth} which is beyond the end of the pipeline")
+                            )
+                                .primary_label("Reference past the end of the pipeline")
+                                .secondary_label(definition_depth, format!(
+                                    "Depth {ddepth} specified here"
+                                ))
+                                .help(format!(
+                                    "This offset is relative to the current stage which is {current_stage}"
+                                )))
+                        } else {
+                            Ok(RequirementResult::Satisfied(vec![]))
+                        }
+                    }
+                    (KnownType::Integer(_), _) => Err(Diagnostic::bug(
+                        reference_offset,
+                        "Inferred non-integer pipeline depth",
+                    )),
+                    (_, _) => Err(Diagnostic::bug(
+                        definition_depth,
+                        "Inferred non-integer pipeline depth",
+                    )),
+                },
+                (TypeVar::Known(_, _, _), TypeVar::Unknown(_, _)) => {
+                    Ok(RequirementResult::NoChange)
+                }
+                (TypeVar::Unknown(_, _), TypeVar::Known(_, _, _)) => {
+                    Ok(RequirementResult::NoChange)
+                }
+                (TypeVar::Unknown(_, _), TypeVar::Unknown(_, _)) => Ok(RequirementResult::NoChange),
+            },
             Requirement::SharedBase(types) => {
                 let first_known = types.iter().find_map(|t| match &t.inner {
                     TypeVar::Known(loc, base, params) => {

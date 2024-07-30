@@ -1,0 +1,17 @@
+---
+source: spade-tests/src/hir_lowering.rs
+---
+pipeline(2) pipe(clk: clock) -> bool {
+    reg;
+        true
+}
+
+
+error: Pipeline depth mismatch. Expected 1 got 2
+  ┌─ testinput:1:10
+  │
+1 │ pipeline(2) pipe(clk: clock) -> bool {
+  │          ^ Found 1 stages
+  │
+  = note: Expected: 1
+               Got: 2
