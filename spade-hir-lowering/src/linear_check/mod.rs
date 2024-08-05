@@ -208,7 +208,7 @@ fn visit_expression(
             if let Err(mut diag) = linear_state.consume_expression(inner) {
                 diag.push_subdiagnostic(Subdiagnostic::span_note(
                     expr,
-                    "The expression is used in this array initialization",
+                    "The resource is used in this array initialization",
                 ));
                 return Err(diag);
             }

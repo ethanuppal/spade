@@ -15,7 +15,7 @@ error: Use of consumed resource
   │                   Use of consumed resource
   │                   Previously used here
   │
-note: The expression is used in this array initialization
+note: The resource is used in this array initialization
   ┌─ testinput:2:18
   │
 2 │     let many_p = [p; 3];
