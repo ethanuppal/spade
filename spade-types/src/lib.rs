@@ -115,7 +115,6 @@ impl std::fmt::Display for ConcreteType {
                 format!("[{}; {}]", inner, size)
             }
             ConcreteType::Enum { options } => {
-                format!("enum {{");
                 let inner = options
                     .iter()
                     .map(|o| {
@@ -128,8 +127,7 @@ impl std::fmt::Display for ConcreteType {
                     })
                     .collect::<Vec<_>>()
                     .join(",");
-                format!("{}", inner);
-                format!("}}")
+                format!("enum {{{}}}", inner)
             }
             ConcreteType::Single { base, params } => {
                 let params_str = if params.is_empty() {
