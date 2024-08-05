@@ -1622,7 +1622,7 @@ impl ExprLocal for Loc<Expression> {
                     Diagnostic::error(
                         amount,
                         format!(
-                            "Array cannot contain more than usize::max ({}) elements",
+                            "Array using shorthand initialization cannot contain more than usize::max ({}) elements",
                             usize::MAX
                         ),
                     )

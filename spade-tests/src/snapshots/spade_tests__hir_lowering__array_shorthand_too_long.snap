@@ -6,7 +6,7 @@ fn top() {
 }
 
 
-error: Array cannot contain more than usize::max (18446744073709551615) elements
+error: Array using shorthand initialization cannot contain more than usize::max (18446744073709551615) elements
   ┌─ testinput:2:19
   │
 2 │     let _ = [0u2; 11111111111111111111111111111111111111111111111111];
