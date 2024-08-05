@@ -263,3 +263,12 @@ snapshot_error! {
         }
     "
 }
+
+snapshot_error! {
+    array_shorthand_uses_mut_wire,
+    "
+        entity e(p: &mut bool) {
+            let many_p = [p; 3];
+        }
+    "
+}

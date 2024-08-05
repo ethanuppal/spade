@@ -5,6 +5,7 @@ use spade_common::{
     location_info::{Loc, WithLocation},
     name::{NameID, Path},
 };
+use spade_diagnostics::diagnostic::Subdiagnostic;
 use spade_diagnostics::{diag_bail, Diagnostic};
 use spade_hir::{
     expression::{NamedArgument, UnaryOperator},
@@ -200,9 +201,17 @@ fn visit_expression(
             }
         }
         spade_hir::ExprKind::ArrayShorthandLiteral(inner, _) => {
-            // TODO: ?
             visit_expression(inner, linear_state, ctx)?;
+            // FIXME: should allow `[instance of &mut T; 0]` and `[instance of &mut T; 1]` here
+            // try to consume twice. if we get an error, add a note
             linear_state.consume_expression(inner)?;
+            if let Err(mut diag) = linear_state.consume_expression(inner) {
+                diag.push_subdiagnostic(Subdiagnostic::span_note(
+                    expr,
+                    "The expression is used in this array initialization",
+                ));
+                return Err(diag);
+            }
         }
         spade_hir::ExprKind::CreatePorts => {}
         spade_hir::ExprKind::Index(target, idx_expr) => {

@@ -1,0 +1,23 @@
+---
+source: spade-tests/src/linear_check.rs
+---
+entity e(p: &mut bool) {
+    let many_p = [p; 3];
+}
+
+
+error: Use of consumed resource
+  ┌─ testinput:2:19
+  │
+2 │     let many_p = [p; 3];
+  │                   ^
+  │                   │
+  │                   Use of consumed resource
+  │                   Previously used here
+  │
+note: The expression is used in this array initialization
+  ┌─ testinput:2:18
+  │
+2 │     let many_p = [p; 3];
+  │                  ^^^^^^
+  │
