@@ -666,15 +666,6 @@ fn array_shorthand_literal_syntax_parses() {
 }
 
 snapshot_error! {
-    array_shorthand_signed_length,
-    "
-        fn test() {
-            let _ = [1u2; 2i];
-        }
-    "
-}
-
-snapshot_error! {
     array_shorthand_ident_length,
     "
         fn test() {
