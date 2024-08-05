@@ -1632,7 +1632,7 @@ impl ExprLocal for Loc<Expression> {
                     mir::Statement::Binding(mir::Binding {
                         name: self.variable(ctx.subs)?,
                         operator: mir::Operator::ConstructArray,
-                        operands: (0..=amount)
+                        operands: (0..amount)
                             .map(|_| value.variable(ctx.subs))
                             .collect::<Result<_>>()?,
                         ty: self_type,
