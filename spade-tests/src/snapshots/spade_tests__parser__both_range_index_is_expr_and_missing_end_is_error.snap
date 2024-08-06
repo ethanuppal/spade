@@ -11,6 +11,4 @@ error: Range indices must be integers
   ┌─ testinput:3:7
   │
 3 │     a[1+1:]
-  │       ^^^ range index is not an integer literal
-
-
+  │       ^^^ Range index is not an integer literal

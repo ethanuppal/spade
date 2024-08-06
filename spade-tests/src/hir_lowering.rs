@@ -78,8 +78,7 @@ mod tests {
         }";
 
         let expected = entity! {&["name"]; () -> Type::int(32); {
-            (const 2; Type::int(32); ConstantValue::int(1));
-            (e(1); Type::int(32); USub; e(2))
+            (const 1; Type::int(32); ConstantValue::int(-1))
         } => e(1)};
 
         assert_same_mir!(&build_entity!(code), &expected);

@@ -1824,3 +1824,13 @@ snapshot_error! {
         }
     "
 }
+
+#[test]
+fn negative_integers_on_bound_compiles() {
+    let code = r#"
+        fn test() {
+            let a: int<3> = -4;
+        }
+    "#;
+    build_items(code);
+}

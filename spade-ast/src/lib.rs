@@ -1,6 +1,6 @@
 use comptime::{ComptimeCondition, MaybeComptime};
 use itertools::Itertools;
-use num::{BigInt, BigUint, Zero};
+use num::{BigInt, BigUint, Signed, Zero};
 use spade_common::{
     location_info::{Loc, WithLocation},
     name::{Identifier, Path},
@@ -299,15 +299,6 @@ impl Expression {
         }
     }
 
-    pub fn is_usub_int_literal(&self) -> bool {
-        match self {
-            Expression::UnaryOperator(UnaryOperator::Sub, e) => {
-                matches!(e.inner, Expression::IntLiteral(_))
-            }
-            _ => false,
-        }
-    }
-
     pub fn assume_block(&self) -> &Block {
         if let Expression::Block(inner) = self {
             inner
@@ -382,6 +373,13 @@ impl IntLiteral {
                 }
             }
             IntLiteral::Unsigned { val, size: _ } => Some(val),
+        }
+    }
+
+    pub fn is_negative(&self) -> bool {
+        match self {
+            IntLiteral::Unsized(val) | IntLiteral::Signed { val, size: _ } => val.is_negative(),
+            IntLiteral::Unsigned { .. } => false,
         }
     }
 }

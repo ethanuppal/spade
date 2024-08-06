@@ -1,5 +1,5 @@
 use num::ToPrimitive;
-use spade_ast::{ArgumentList, BinaryOperator, CallKind, Expression, UnaryOperator};
+use spade_ast::{ArgumentList, BinaryOperator, CallKind, Expression, IntLiteral, UnaryOperator};
 use spade_common::location_info::{Loc, WithLocation};
 use spade_diagnostics::Diagnostic;
 use spade_macros::trace_parser;
@@ -150,6 +150,35 @@ impl<'a> Parser<'a> {
         }
     }
 
+    /// If `op` is a subtraction, and `rhs` is an integer literal, construct a negative integer literal instead.
+    fn inline_negative_literal(
+        &self,
+        op: Loc<UnaryOperator>,
+        rhs: Loc<Expression>,
+    ) -> Result<Loc<Expression>> {
+        let (op, op_loc) = op.split_loc();
+        let (rhs, rhs_loc) = rhs.split_loc();
+        let expr_loc = ().between_locs(&op_loc, &rhs_loc);
+        let expr: Result<Expression> = match (op, rhs) {
+            (UnaryOperator::Sub, Expression::IntLiteral(int)) => {
+                let int = match int {
+                    IntLiteral::Unsized(val) => Ok(IntLiteral::Unsized(-val)),
+                    IntLiteral::Signed { val, size } => Ok(IntLiteral::Signed { val: -val, size }),
+                    IntLiteral::Unsigned { .. } => Err(Diagnostic::error(
+                        expr_loc,
+                        "Cannot apply unary minus to unsigned integer literal",
+                    )),
+                }?;
+                Ok(Expression::IntLiteral(int))
+            }
+            (op, rhs) => Ok(Expression::UnaryOperator(
+                op,
+                Box::new(rhs.at_loc(&rhs_loc)),
+            )),
+        };
+        Ok(expr?.at_loc(&expr_loc))
+    }
+
     // Based on matklads blog post on pratt parsing:
     // https://matklad.github.io/2020/04/13/simple-but-powerful-pratt-parsing.html
     fn expr_bp(&mut self, min_power: OpBindingPower) -> Result<Loc<Expression>> {
@@ -159,10 +188,8 @@ impl<'a> Parser<'a> {
         {
             self.eat_unconditional()?;
             let op_power = unop_binding_power(&op);
-
             let rhs = self.expr_bp(op_power)?;
-
-            Expression::UnaryOperator(op, Box::new(rhs.clone())).between(self.file_id, &tok, &rhs)
+            self.inline_negative_literal(op.at_loc(&tok.loc()), rhs)?
         } else {
             self.base_expression()?
         };
@@ -373,33 +400,28 @@ impl<'a> Parser<'a> {
 
                     if let Some(colon) = s.peek_and_eat(&TokenKind::Colon)? {
                         // colon => range index: `[1:2]`
-                        let start_is_usub_literal = start.is_usub_int_literal();
-                        let start = start
-                            .try_map(|x| {
-                                x.as_int_literal().ok_or_else(|| {
-                                    if start_is_usub_literal {
-                                        Diagnostic::error(
-                                            start_loc,
-                                            "Range indices must be non-negative",
-                                        )
-                                        .primary_label("range index is negative")
-                                    } else {
-                                        Diagnostic::error(
-                                            start_loc,
-                                            "Range indices must be integers",
-                                        )
-                                        .primary_label("range index is not an integer literal")
-                                    }
-                                })
-                            })?
-                            // safe unwrap: -123 is parsed as usub(123), which we already checked
-                            .map(|x| x.as_unsigned().unwrap());
+                        // start must be integer literal
+                        let start = start.try_map(|x| {
+                            x.as_int_literal().ok_or_else(|| {
+                                Diagnostic::error(start_loc, "Range indices must be integers")
+                                    .primary_label("Range index is not an integer literal")
+                            })
+                        })?;
+                        if start.is_negative() {
+                            return Err(Diagnostic::error(
+                                start_loc,
+                                "Range indices must be non-negative",
+                            )
+                            .primary_label("Range index is negative"));
+                        }
+                        // safe unwrap: already checked that start is not negative
+                        let start = start.map(|x| x.as_unsigned().unwrap());
                         let Some(end) = s.int_literal()? else {
                             return Err(Diagnostic::error(s.peek()?, "Expected end of range")
-                                .primary_label("expected end of range")
+                                .primary_label("Expected end of range")
                                 .secondary_label(
                                     ().between_locs(&start_loc, &colon.loc()),
-                                    "since this index is a range",
+                                    "...since this index is a range",
                                 ));
                         };
                         let end_loc = end.loc();

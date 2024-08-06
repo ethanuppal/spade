@@ -11,8 +11,6 @@ error: Expected end of range
   ┌─ testinput:3:9
   │
 3 │     a[1:]
-  │       --^ expected end of range
+  │       --^ Expected end of range
   │       │  
-  │       since this index is a range
-
-
+  │       ...since this index is a range
