@@ -684,3 +684,12 @@ snapshot_error! {
         }
     "
 }
+
+snapshot_error! {
+    negative_unsigned_integer_literal,
+    "
+        fn test() {
+            let _ = -5u4;
+        }
+    "
+}

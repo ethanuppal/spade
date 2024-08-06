@@ -1,0 +1,13 @@
+---
+source: spade-tests/src/parser.rs
+---
+fn test() {
+    let _ = -5u4;
+}
+
+
+error: Cannot apply unary minus to unsigned integer literal
+  ┌─ testinput:2:13
+  │
+2 │     let _ = -5u4;
+  │             ^^^^
