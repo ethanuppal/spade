@@ -1,7 +1,7 @@
 ---
 source: spade-tests/src/integration.rs
 ---
-fn sized_zero<#Size>() -> uint<Size> {
+fn sized_zero<#uint Size>() -> uint<Size> {
     0
 }
 

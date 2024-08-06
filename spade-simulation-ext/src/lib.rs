@@ -379,7 +379,7 @@ impl Spade {
                 .type_var_from_hir(output_type.loc(), &output_type, &generic_list)?;
 
         // NOTE: safe unwrap, o_name is something we just created, so it can be any type
-        let g = self.type_state.new_generic();
+        let g = self.type_state.new_generic_any();
         self.type_state
             .add_equation(TypedExpression::Name(o_name.clone()), g);
         self.type_state
@@ -434,7 +434,7 @@ impl Spade {
             .visit_expression(&hir, &type_ctx, &generic_list)
             .report_and_convert(&mut self.error_buffer, &self.code, &mut self.diag_handler)?;
 
-        let g = self.type_state.new_generic();
+        let g = self.type_state.new_generic_any();
         self.type_state
             .unify_expression_generic_error(
                 &hir,

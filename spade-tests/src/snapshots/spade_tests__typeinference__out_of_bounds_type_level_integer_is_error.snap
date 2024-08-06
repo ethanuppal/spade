@@ -1,7 +1,7 @@
 ---
 source: spade-tests/src/typeinference.rs
 ---
-fn return_t<#T>() -> int<8> {
+fn return_t<#uint T>() -> int<8> {
     T
 }
 
@@ -19,5 +19,3 @@ error: Integer value does not fit in int<8>
   = note: int<8> fits integers in the range (-128, 127)
   = The error is in a generic unit instantiated at
     ╰ testinput:6 return_t<1024>
-
-

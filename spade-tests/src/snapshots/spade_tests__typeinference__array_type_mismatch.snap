@@ -14,8 +14,7 @@ error: Array element type mismatch. Expected Number<_>
   │              -  ^^^^ Expected Number<_>
   │              │   
   │              To match this
+  │              Type Number<_> inferred here
   │
   = note: Expected: Number<_>
                Got: bool
-
-

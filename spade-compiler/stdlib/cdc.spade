@@ -25,7 +25,7 @@ mod unsafe {
     /// Synchronizes a uint counter signal between domains. *The counter*
     /// aspect is important, it must be a N bit gray counter for this to do
     /// anything useful.
-    entity sync_uint_counter<#N>(source_clk: clock, dest_clk: clock, in: uint<N>) -> uint<N> {
+    entity sync_uint_counter<#uint N>(source_clk: clock, dest_clk: clock, in: uint<N>) -> uint<N> {
         reg(source_clk) gray = bin_to_gray(in);
         gray_to_bin(inst sync2(dest_clk, gray))
     }

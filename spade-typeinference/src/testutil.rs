@@ -3,9 +3,13 @@ use spade_common::num_ext::InfallibleToBigInt;
 use spade_hir::symbol_table::SymbolTable;
 use spade_types::KnownType;
 
-use crate::equation::TraitList;
 use crate::fixed_types::t_int;
 use crate::TypeVar as TVar;
+
+#[cfg(test)]
+use crate::equation::TraitList;
+#[cfg(test)]
+use spade_types::meta_types::MetaType;
 
 pub fn sized_int(size: u128, symtab: &SymbolTable) -> TVar {
     TVar::Known(
@@ -19,11 +23,17 @@ pub fn sized_int(size: u128, symtab: &SymbolTable) -> TVar {
     )
 }
 
+#[cfg(test)]
 pub fn unsized_int(id: u64, symtab: &SymbolTable) -> TVar {
     TVar::Known(
         ().nowhere(),
         t_int(symtab),
-        vec![TVar::Unknown(id, TraitList::empty())],
+        vec![TVar::Unknown(
+            ().nowhere(),
+            id,
+            TraitList::empty(),
+            MetaType::Uint,
+        )],
     )
 }
 

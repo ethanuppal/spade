@@ -4,6 +4,7 @@ use colored::Colorize;
 use itertools::Itertools;
 use num::BigInt;
 use serde::{Deserialize, Serialize};
+use spade_types::meta_types::MetaType;
 use tap::prelude::*;
 use thiserror::Error;
 use tracing::trace;
@@ -294,7 +295,19 @@ pub enum GenericArg {
         name: Identifier,
         traits: Vec<Loc<Path>>,
     },
-    Number(Identifier),
+    TypeWithMeta {
+        name: Identifier,
+        meta: MetaType,
+    },
+}
+
+impl GenericArg {
+    pub fn uint(name: Identifier) -> Self {
+        GenericArg::TypeWithMeta {
+            name,
+            meta: MetaType::Uint,
+        }
+    }
 }
 impl WithLocation for GenericArg {}
 
@@ -334,7 +347,7 @@ pub enum TypeSymbol {
     GenericArg {
         traits: Vec<Loc<NameID>>,
     },
-    GenericInt,
+    GenericMeta(MetaType),
 }
 impl WithLocation for TypeSymbol {}
 

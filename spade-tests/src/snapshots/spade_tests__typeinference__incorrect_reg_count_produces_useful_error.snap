@@ -1,7 +1,7 @@
 ---
 source: spade-tests/src/typeinference.rs
 ---
-pipeline(N) p<#N>(clk: clock, x: bool) -> bool {
+pipeline(N) p<#int N>(clk: clock, x: bool) -> bool {
     reg * {N-2};
     reg;
         x
@@ -15,7 +15,7 @@ entity a(clk: clock) -> bool {
 error: Expected 10 in this pipeline.
   ┌─ testinput:1:10
   │
-1 │ pipeline(N) p<#N>(clk: clock, x: bool) -> bool {
+1 │ pipeline(N) p<#int N>(clk: clock, x: bool) -> bool {
   │          ^ Expected 10 stages
 2 │     reg * {N-2};
 3 │     reg;

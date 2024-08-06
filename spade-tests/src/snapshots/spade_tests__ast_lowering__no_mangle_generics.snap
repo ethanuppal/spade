@@ -2,7 +2,7 @@
 source: spade-tests/src/ast_lowering.rs
 ---
 #[no_mangle]
-fn mangling_time<#N>() -> int<N> __builtin__
+fn mangling_time<#uint N>() -> int<N> __builtin__
 
 
 error: no_mangle is not allowed on generic units
@@ -10,5 +10,5 @@ error: no_mangle is not allowed on generic units
   │
 1 │ #[no_mangle]
   │ ^^^^^^^^^^^^ no_mangle not allowed here
-2 │ fn mangling_time<#N>() -> int<N> __builtin__
-  │                 ---- Because this unit is generic
+2 │ fn mangling_time<#uint N>() -> int<N> __builtin__
+  │                 --------- Because this unit is generic

@@ -12,6 +12,9 @@ fn test() {
 error: Expected type [Number<_>; 2], got [bool; 2]
   ┌─ testinput:4:9
   │
+2 │     let array = [0, 1];
+  │                     - Type Number<_> inferred here
+3 │     match array {
 4 │         [true, true] => {}
   │         ^^^^^^^^^^^^
   │         ││

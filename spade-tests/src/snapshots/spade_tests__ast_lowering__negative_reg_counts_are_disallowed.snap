@@ -7,11 +7,15 @@ pipeline(0) x(clk: clock) -> bool {
 }
 
 
-error: Pipeline depth mismatch. Expected -10 got 0
-  ┌─ testinput:1:10
-  │
-1 │ pipeline(0) x(clk: clock) -> bool {
-  │          ^ Found -10 stages
-  │
+error: Pipeline depth mismatch. Expected 0 got -10
+  ┌─ testinput:1:1
+  │  
+1 │ ╭ pipeline(0) x(clk: clock) -> bool {
+  │            - Type 0 inferred here
+2 │ │     reg*-10;
+3 │ │         true
+4 │ │ }
+  │ ╰─^ Found -10 stages in this pipeline
+  │  
   = note: Expected: -10
                Got: 0

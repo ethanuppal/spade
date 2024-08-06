@@ -155,7 +155,7 @@ impl Requirement {
                                 .primary_label(format!("expected a struct, got {}", type_name))
                                 .note("Field access is only allowed on structs"));
                             }
-                            TypeSymbol::GenericArg { traits: _ } | TypeSymbol::GenericInt => {
+                            TypeSymbol::GenericArg { traits: _ } | TypeSymbol::GenericMeta(_) => {
                                 return Err(Diagnostic::error(
                                     target_type,
                                     "Field access on a generic type",
@@ -317,7 +317,7 @@ impl Requirement {
                                 })?;
 
                                 let value = match value {
-                                    ConstantInt::Generic(TypeVar::Unknown(_, _)) => return Ok(RequirementResult::NoChange),
+                                    ConstantInt::Generic(TypeVar::Unknown(_, _, _, _)) => return Ok(RequirementResult::NoChange),
                                     ConstantInt::Generic(TypeVar::Known(_, KnownType::Integer(val), _)) => {
                                         val.clone()
                                     }
@@ -392,7 +392,7 @@ impl Requirement {
                 TypeVar::Known(_, _, _) => {
                     Err(diag_anyhow!(depth, "Got non integer pipeline depth"))
                 }
-                TypeVar::Unknown(_, _) => Ok(RequirementResult::NoChange),
+                TypeVar::Unknown(_, _, _, _) => Ok(RequirementResult::NoChange),
             },
             Requirement::ValidPipelineOfset {
                 definition_depth,
@@ -433,20 +433,22 @@ impl Requirement {
                         "Inferred non-integer pipeline depth",
                     )),
                 },
-                (TypeVar::Known(_, _, _), TypeVar::Unknown(_, _)) => {
+                (TypeVar::Known(_, _, _), TypeVar::Unknown(_, _, _, _)) => {
                     Ok(RequirementResult::NoChange)
                 }
-                (TypeVar::Unknown(_, _), TypeVar::Known(_, _, _)) => {
+                (TypeVar::Unknown(_, _, _, _), TypeVar::Known(_, _, _)) => {
                     Ok(RequirementResult::NoChange)
                 }
-                (TypeVar::Unknown(_, _), TypeVar::Unknown(_, _)) => Ok(RequirementResult::NoChange),
+                (TypeVar::Unknown(_, _, _, _), TypeVar::Unknown(_, _, _, _)) => {
+                    Ok(RequirementResult::NoChange)
+                }
             },
             Requirement::SharedBase(types) => {
                 let first_known = types.iter().find_map(|t| match &t.inner {
                     TypeVar::Known(loc, base, params) => {
                         Some((loc, base.clone().at_loc(t), params))
                     }
-                    TypeVar::Unknown(_, _) => None,
+                    TypeVar::Unknown(_, _, _, _) => None,
                 });
 
                 if let Some((loc, base, first_params)) = first_known {
@@ -465,7 +467,7 @@ impl Requirement {
                                         base.inner.clone(),
                                         first_params
                                             .iter()
-                                            .map(|_| type_state.new_generic())
+                                            .map(|_| type_state.new_generic_any())
                                             .collect(),
                                     ),
                                     context: Some(Box::new(move |d, TypeMismatch { e, g }| {

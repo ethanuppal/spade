@@ -1302,9 +1302,16 @@ impl<'a> Parser<'a> {
     #[trace_parser]
     pub fn type_param(&mut self) -> Result<Loc<TypeParam>> {
         // If this is a type level integer
-        if let Some(hash) = self.peek_and_eat(&TokenKind::Hash)? {
-            let (id, loc) = self.identifier()?.separate();
-            Ok(TypeParam::Integer(id).between(self.file_id, &hash.span, &loc))
+        if let Some(_hash) = self.peek_and_eat(&TokenKind::Hash)? {
+            let meta_type = self.identifier()?;
+            let name = self.identifier()?;
+
+            let loc = ().between_locs(&meta_type, &name);
+            Ok(TypeParam::TypeWithMeta {
+                meta: meta_type,
+                name,
+            }
+            .at_loc(&loc))
         } else {
             let (id, loc) = self.identifier()?.separate();
             let traits = if self.peek_and_eat(&TokenKind::Colon)?.is_some() {
@@ -2688,42 +2695,6 @@ mod tests {
     }
 
     #[test]
-    fn entity_with_generics() {
-        let code = include_str!("../parser_test_code/entity_with_generics.sp");
-        let expected = Unit {
-            head: UnitHead {
-                attributes: AttributeList::empty(),
-                unit_kind: UnitKind::Entity.nowhere(),
-                name: ast_ident("with_generics"),
-                inputs: aparams![],
-                output_type: None,
-                type_params: Some(
-                    vec![
-                        TypeParam::TypeName {
-                            name: ast_ident("X"),
-                            traits: vec![],
-                        }
-                        .nowhere(),
-                        TypeParam::Integer(ast_ident("Y")).nowhere(),
-                    ]
-                    .nowhere(),
-                ),
-                where_clauses: vec![],
-            },
-            body: Some(
-                Expression::Block(Box::new(Block {
-                    statements: vec![],
-                    result: Some(Expression::Identifier(ast_path("clk")).nowhere()),
-                }))
-                .nowhere(),
-            ),
-        }
-        .nowhere();
-
-        check_parse!(code, unit(&AttributeList::empty()), Ok(Some(expected)));
-    }
-
-    #[test]
     fn parsing_register_without_reset_works() {
         let code = "reg(clk) name = 1;";
 
@@ -3045,15 +3016,6 @@ mod tests {
     }
 
     #[test]
-    fn typeints_parse() {
-        let code = "#X";
-
-        let expected = TypeParam::Integer(ast_ident("X")).nowhere();
-
-        check_parse!(code, type_param(), Ok(expected));
-    }
-
-    #[test]
     fn dec_int_literals_work() {
         let code = "1";
         let expected = IntLiteral::unsized_(1).nowhere();
@@ -3351,49 +3313,6 @@ mod tests {
                     .nowhere(),
                 ),
                 generic_args: None,
-            }
-            .nowhere(),
-        );
-
-        check_parse!(code, item, Ok(Some(expected)));
-    }
-
-    #[test]
-    fn enum_declarations_with_type_args_parse() {
-        let code = "enum State<T, #N> {
-            First,
-            Second{a: T},
-            Third{a: N, b: bool}
-        }";
-
-        let expected = Item::Type(
-            TypeDeclaration {
-                name: ast_ident("State"),
-                kind: TypeDeclKind::Enum(
-                    Enum {
-                        name: ast_ident("State"),
-                        options: vec![
-                            (ast_ident("First"), None),
-                            (ast_ident("Second"), Some(aparams![("a", tspec!("T"))])),
-                            (
-                                ast_ident("Third"),
-                                Some(aparams![("a", tspec!("N")), ("b", tspec!("bool")),]),
-                            ),
-                        ],
-                    }
-                    .nowhere(),
-                ),
-                generic_args: Some(
-                    vec![
-                        TypeParam::TypeName {
-                            name: ast_ident("T"),
-                            traits: vec![],
-                        }
-                        .nowhere(),
-                        TypeParam::Integer(ast_ident("N")).nowhere(),
-                    ]
-                    .nowhere(),
-                ),
             }
             .nowhere(),
         );

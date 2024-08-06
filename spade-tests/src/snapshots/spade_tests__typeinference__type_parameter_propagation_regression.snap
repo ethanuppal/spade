@@ -3,9 +3,9 @@ source: spade-tests/src/typeinference.rs
 ---
 struct ReadPort_<W> { }
 
-struct port FifoRead<#W> { }
+struct port FifoRead<#uint W> { }
 
-entity fifo_read_side<#W>(
+entity fifo_read_side<#uint W>(
     write_ptr_w: uint<W>,
     ram_read: ReadPort_<W>,
     read_ptr_wire: &mut uint<W>,
@@ -13,7 +13,7 @@ entity fifo_read_side<#W>(
     FifoRead$()
 }
 
-entity fifo<#W>(
+entity fifo<#uint W>(
     ram_read: ReadPort_<W>
 ) -> FifoRead<W> {
     let read_ptr_wire = inst new_mut_wire();

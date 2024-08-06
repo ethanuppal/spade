@@ -1301,7 +1301,7 @@ snapshot_error! {
 snapshot_error! {
     turbofish_overrides_type,
     "
-        fn ret_int<#N>() -> int<N> {
+        fn ret_int<#uint N>() -> int<N> {
             0
         }
 
@@ -1327,7 +1327,7 @@ snapshot_error! {
 snapshot_error! {
     turbofish_param_number_mismatch,
     "
-        fn ret_int<#A, #B>() -> int<8> {
+        fn ret_int<#uint A, #uint B>() -> int<8> {
             0
         }
 
@@ -1357,23 +1357,24 @@ snapshot_error! {
     type_params_are_accessible_in_units2,
     "
         mod mem {
-            fn produce_something<T>() -> T __builtin__
+            fn produce_something<#uint N>() -> int<N> __builtin__
 
-            fn test<#T>() {
-                let a: int<T> = produce_something::<int<8>>();
+            fn test<#uint N>() {
+                let a: int<N> = produce_something::<8>();
             }
 
             fn main() {
-                test::<int<9>>()
+                test::<9>()
             }
         }
-    "
+    ",
+    false
 }
 
 snapshot_error! {
     out_of_bounds_type_level_integer_is_error,
     "
-        fn return_t<#T>() -> int<8> {
+        fn return_t<#uint T>() -> int<8> {
             T
         }
 
@@ -1387,7 +1388,7 @@ snapshot_error! {
 fn in_bounds_type_level_integer_is_ok() {
     build_items(
         "
-        fn return_t<#T>() -> int<8> {
+        fn return_t<#uint T>() -> int<8> {
             T
         }
 
@@ -1403,9 +1404,9 @@ snapshot_error! {
     "
         struct ReadPort_<W> { }
 
-        struct port FifoRead<#W> { }
+        struct port FifoRead<#uint W> { }
 
-        entity fifo_read_side<#W>(
+        entity fifo_read_side<#uint W>(
             write_ptr_w: uint<W>,
             ram_read: ReadPort_<W>,
             read_ptr_wire: &mut uint<W>,
@@ -1413,7 +1414,7 @@ snapshot_error! {
             FifoRead$()
         }
 
-        entity fifo<#W>(
+        entity fifo<#uint W>(
             ram_read: ReadPort_<W>
         ) -> FifoRead<W> {
             let read_ptr_wire = inst new_mut_wire();
@@ -1551,7 +1552,7 @@ snapshot_error! {
 snapshot_error! {
     simple_unsatisfied_where_clause_errors,
     "
-        fn add_one<#N, #O>(in: int<N>) -> int<O>
+        fn add_one<#uint N, #uint O>(in: int<N>) -> int<O>
             where O: N + 2
         {
             in + 1
@@ -1566,7 +1567,7 @@ snapshot_error! {
 snapshot_error! {
     simple_unsatisfied_where_clause_errors2,
     "
-        fn add_one<#N, #O>(in: int<N>) -> int<O>
+        fn add_one<#uint N, #uint O>(in: int<N>) -> int<O>
             where O: N + 2
         {
             0
@@ -1581,7 +1582,7 @@ snapshot_error! {
 #[test]
 fn where_clauses_drive_inference() {
     let code = "
-        fn add_one<#N, #O>(in: int<N>) -> int<O>
+        fn add_one<#uint N, #uint O>(in: int<N>) -> int<O>
             where O: N + 2
         {
             0
@@ -1656,7 +1657,7 @@ snapshot_error! {
     "
         struct T {}
         impl T {
-            fn uwu<#W>(self) -> uint<W> {
+            fn uwu<#uint W>(self) -> uint<W> {
                 0
             }
         }
@@ -1672,7 +1673,7 @@ snapshot_error! {
     "
         struct T {}
         impl T {
-            fn uwu<#W>(self) -> uint<W> {
+            fn uwu<#uint W>(self) -> uint<W> {
                 0
             }
         }
@@ -1688,7 +1689,7 @@ snapshot_error! {
     "
         struct T<I> {}
         impl<I> T<I> {
-            fn uwu<#W>(self) -> uint<W> {
+            fn uwu<#uint W>(self) -> uint<W> {
                 0
             }
         }
@@ -1704,7 +1705,7 @@ snapshot_error! {
     "
         struct T<I> {}
         impl<I> T<I> {
-            fn uwu<#W>(self) -> uint<W> {
+            fn uwu<#uint W>(self) -> uint<W> {
                 0
             }
         }
@@ -1720,7 +1721,7 @@ snapshot_error! {
     "
         struct T<I> {}
         impl<I> T<I> {
-            fn uwu<#W>(self) -> uint<W> {
+            fn uwu<#uint W>(self) -> uint<W> {
                 0
             }
         }
@@ -1830,7 +1831,7 @@ fn negative_integers_on_bound_compiles() {
 snapshot_error! {
     dynamic_depth_pipeline_works,
     "
-        pipeline(N) p<#N>(clk: clock, x: bool) -> bool {
+        pipeline(N) p<#int N>(clk: clock, x: bool) -> bool {
             reg*N;
                 x
         }
@@ -1845,7 +1846,7 @@ snapshot_error! {
 code_compiles! {
     regs_can_have_const_generics,
     "
-        pipeline(N) p<#N>(clk: clock, x: bool) -> bool {
+        pipeline(N) p<#int N>(clk: clock, x: bool) -> bool {
             reg * {N-1};
             reg;
                 x
@@ -1860,7 +1861,7 @@ code_compiles! {
 snapshot_error! {
     incorrect_reg_count_produces_useful_error,
     "
-        pipeline(N) p<#N>(clk: clock, x: bool) -> bool {
+        pipeline(N) p<#int N>(clk: clock, x: bool) -> bool {
             reg * {N-2};
             reg;
                 x
@@ -1886,7 +1887,7 @@ snapshot_error! {
 snapshot_error! {
     generic_relative_out_of_bounds_pipeline_offset_is_error,
     "
-        pipeline(N) p<#N, #O>(clk: clock, x: bool) -> bool {
+        pipeline(N) p<#int N, #int O>(clk: clock, x: bool) -> bool {
             reg * {N};
                 let a = stage(+O).x;
                 x
@@ -1894,6 +1895,31 @@ snapshot_error! {
 
         entity a(clk: clock) -> bool {
             inst(10) p::<10, 5>(clk, false)
+        }
+    "
+}
+
+snapshot_error! {
+    generic_uint_depth_and_stuff_is_error,
+    "
+        pipeline(N) p<#uint N, #uint O>(clk: clock, x: bool) -> bool {
+            reg * {N};
+                let a = stage(+O).x;
+                x
+        }
+
+        entity a(clk: clock) -> bool {
+            inst(10) p::<10, 5>(clk, false)
+        }
+    "
+}
+snapshot_error! {
+    negative_int_sizes_are_gracefully_disallowed,
+    "
+        fn make_an_int_appear<#uint N>() -> uint<N> __builtin__
+
+        fn test() {
+            let x: uint<-1> = make_an_int_appear();
         }
     "
 }

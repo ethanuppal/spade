@@ -1,7 +1,7 @@
 ---
 source: spade-tests/src/hir_lowering.rs
 ---
-fn a<N>(x: int<N>, y: int<32>) -> int<33> {
+fn a<#uint N>(x: int<N>, y: int<32>) -> int<33> {
     x + y
 }
 
@@ -15,8 +15,8 @@ fn main() -> int<33> {
 error: Expected type 32, got 16
   ┌─ testinput:1:1
   │  
-1 │ ╭ fn a<N>(x: int<N>, y: int<32>) -> int<33> {
-  │                             -- Type 32 inferred here
+1 │ ╭ fn a<#uint N>(x: int<N>, y: int<32>) -> int<33> {
+  │                                   -- Type 32 inferred here
 2 │ │     x + y
 3 │ │ }
   │ ╰─^ Expected 32
@@ -28,5 +28,3 @@ error: Expected type 32, got 16
                Got: 16
   = The error is in a generic unit instantiated at
     ╰ testinput:8 a<16>
-
-

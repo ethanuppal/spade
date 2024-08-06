@@ -221,7 +221,7 @@ fn wildcard_in_turbofish_works() {
 snapshot_error! {
     const_generic_in_turbofish_works,
     "
-        fn sized_zero<#Size>() -> uint<Size> {
+        fn sized_zero<#uint Size>() -> uint<Size> {
             0
         }
 
@@ -234,7 +234,7 @@ snapshot_error! {
 snapshot_error! {
     const_generic_in_binding_spec_works,
     "
-        fn sized_zero<#Size>() -> uint<Size> {
+        fn sized_zero<#uint Size>() -> uint<Size> {
             0
         }
 
@@ -893,9 +893,9 @@ mod trait_tests {
     #[test]
     fn impl_type_parameters_are_visible_in_function_bodies() {
         let code = "
-        struct HasGeneric<#N> {}
+        struct HasGeneric<#uint N> {}
 
-        impl<#N> HasGeneric<N> {
+        impl<#uint N> HasGeneric<N> {
             fn get_generic(self) -> int<8> {
                 N
             }
@@ -908,15 +908,15 @@ mod trait_tests {
     #[test]
     fn generic_function_in_impl_block_works() {
         let code = "
-        struct Fp<#Size, #FracBits> {
+        struct Fp<#uint Size, #uint FracBits> {
             inner: int<Size>
         }
-        impl<#Size, #FracBits> Fp<Size, FracBits> {
-            fn add<#OutSize>(self, other: Fp<Size, FracBits>) -> Fp<OutSize, FracBits> {
+        impl<#uint Size, #uint FracBits> Fp<Size, FracBits> {
+            fn add<#uint OutSize>(self, other: Fp<Size, FracBits>) -> Fp<OutSize, FracBits> {
                 Fp(self.inner + other.inner)
             }
         
-            fn sub<#OutSize>(self, other: Fp<Size, FracBits>) -> Fp<OutSize, FracBits> {
+            fn sub<#uint OutSize>(self, other: Fp<Size, FracBits>) -> Fp<OutSize, FracBits> {
                 Fp(self.inner - other.inner)
             }
         }
@@ -999,7 +999,7 @@ mod trait_tests {
         conflicting_method_impls_are_disallowed_inner_array_size,
         "
             struct X<T> {}
-            impl<#N> X<[bool; N]> {
+            impl<#uint N> X<[bool; N]> {
                 fn method(self) {}
             }
 
@@ -1044,7 +1044,7 @@ mod trait_tests {
     #[test]
     fn method_selection_works_on_generic_impl() {
         let code = "
-            impl<#N> uint<N> {
+            impl<#uint N> uint<N> {
                 fn method(self) {}
             }
             fn test(x: uint<8>) {
@@ -1097,7 +1097,7 @@ mod trait_tests {
     #[test]
     fn impl_inner_type_expr() {
         let code = "
-            trait T<#N> {
+            trait T<#uint N> {
                 fn method(self);
             }
 

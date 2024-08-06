@@ -1,20 +1,24 @@
 ---
 source: spade-tests/src/ast_lowering.rs
 ---
-fn test<N, #O>()
+fn test<N, #uint O>()
     where O: N
 {}
 
 
-error: N is not a type level integer.
+error: N is not a type level integer but is used in a const generic expression.
   ┌─ testinput:2:14
   │
-1 │ fn test<N, #O>()
+1 │ fn test<N, #uint O>()
   │         - N is defined here
 2 │     where O: N
   │              ^ Expected type level integer
   │
-  = Try making the generic a number
+  = Try making the generic an integer
   │
-1 │ fn test<#N, #O>()
-  │         +
+1 │ fn test<#int N, #uint O>()
+  │         +++++
+  = or an unsigned integer
+  │
+1 │ fn test<#uint N, #uint O>()
+  │         ++++++

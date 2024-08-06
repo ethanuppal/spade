@@ -8,7 +8,7 @@ use spade_common::{
     location_info::{Loc, WithLocation},
     name::NameID,
 };
-use spade_types::KnownType;
+use spade_types::{meta_types::MetaType, KnownType};
 
 pub type TypeEquations = HashMap<TypedExpression, TypeVar>;
 
@@ -18,18 +18,26 @@ pub struct TraitReq {
     pub type_params: Vec<TypeVar>,
 }
 
-impl std::fmt::Display for TraitReq {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl TraitReq {
+    fn display_with_meta(&self, display_meta: bool) -> String {
         if self.type_params.is_empty() {
-            write!(f, "{}", self.name)
+            format!("{}", self.name)
         } else {
-            write!(
-                f,
+            format!(
                 "{}<{}>",
                 self.name,
-                self.type_params.iter().map(|t| format!("{t}")).join(", ")
+                self.type_params
+                    .iter()
+                    .map(|t| format!("{}", t.display_with_meta(display_meta)))
+                    .join(", ")
             )
         }
+    }
+}
+
+impl std::fmt::Display for TraitReq {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.display_with_meta(false))
     }
 }
 impl std::fmt::Debug for TraitReq {
@@ -99,7 +107,7 @@ pub enum TypeVar {
     Known(Loc<()>, KnownType, Vec<TypeVar>),
     /// The type is unknown, but must satisfy the specified traits. When the generic substitution
     /// is done, the TypeVars will be carried over to the KnownType type vars
-    Unknown(u64, TraitList),
+    Unknown(Loc<()>, u64, TraitList, MetaType),
 }
 
 impl WithLocation for TypeVar {}
@@ -131,7 +139,7 @@ impl TypeVar {
         K: FnOnce(&KnownType, &[TypeVar]) -> T,
     {
         match self {
-            TypeVar::Unknown(_, _) => on_unknown(),
+            TypeVar::Unknown(_, _, _, _) => on_unknown(),
             TypeVar::Known(_, k, v) => on_known(k, v),
         }
     }
@@ -143,7 +151,7 @@ impl TypeVar {
         O: FnOnce(&TypeVar) -> T,
     {
         match self {
-            TypeVar::Unknown(_, _) => on_unknown(),
+            TypeVar::Unknown(_, _, _, _) => on_unknown(),
             TypeVar::Known(_, KnownType::Named(name), params) => on_named(name, params),
             other => on_other(other),
         }
@@ -169,7 +177,7 @@ impl TypeVar {
         O: FnOnce(&TypeVar) -> T,
     {
         match self {
-            TypeVar::Unknown(_, _) => on_unknown(),
+            TypeVar::Unknown(_, _, _, _) => on_unknown(),
             TypeVar::Known(_, KnownType::Inverted, params) => {
                 if params.len() != 1 {
                     panic!("Found wire with {} params", params.len())
@@ -196,7 +204,7 @@ impl TypeVar {
         O: FnOnce(&TypeVar) -> T,
     {
         match self {
-            TypeVar::Unknown(_, _) => on_unknown(),
+            TypeVar::Unknown(_, _, _, _) => on_unknown(),
             TypeVar::Known(_, k, v) if k == &KnownType::Named(name) => on_correct(v),
             other => on_other(other),
         }
@@ -216,8 +224,75 @@ impl TypeVar {
                 assert!(params.is_empty());
                 on_integer(size.clone())
             }
-            TypeVar::Unknown(_, _) => on_unknown(),
+            TypeVar::Unknown(_, _, _, _) => on_unknown(),
             other => on_other(other),
+        }
+    }
+
+    pub fn display_with_meta(&self, display_meta: bool) -> String {
+        match self {
+            TypeVar::Known(_, KnownType::Named(t), params) => {
+                let generics = if params.is_empty() {
+                    String::new()
+                } else {
+                    format!(
+                        "<{}>",
+                        params
+                            .iter()
+                            .map(|p| format!("{}", p.display_with_meta(display_meta)))
+                            .collect::<Vec<_>>()
+                            .join(", ")
+                    )
+                };
+                format!("{}{}", t, generics)
+            }
+            TypeVar::Known(_, KnownType::Integer(inner), _) => {
+                format!("{inner}")
+            }
+            TypeVar::Known(_, KnownType::Tuple, params) => {
+                format!(
+                    "({})",
+                    params
+                        .iter()
+                        .map(|t| format!("{}", t.display_with_meta(display_meta)))
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                )
+            }
+            TypeVar::Known(_, KnownType::Array, params) => {
+                format!(
+                    "[{}; {}]",
+                    params[0].display_with_meta(display_meta),
+                    params[1].display_with_meta(display_meta)
+                )
+            }
+            TypeVar::Known(_, KnownType::Backward, params) => {
+                format!("&mut {}", params[0].display_with_meta(display_meta))
+            }
+            TypeVar::Known(_, KnownType::Wire, params) => {
+                format!("&{}", params[0].display_with_meta(display_meta))
+            }
+            TypeVar::Known(_, KnownType::Inverted, params) => {
+                format!("~{}", params[0].display_with_meta(display_meta))
+            }
+            TypeVar::Unknown(_, _, traits, meta) if traits.inner.is_empty() => {
+                if display_meta {
+                    format!("{meta}")
+                } else {
+                    "_".to_string()
+                }
+            }
+            // If we have traits, we know this is a type
+            TypeVar::Unknown(_, _, traits, _meta) => {
+                format!(
+                    "{}",
+                    traits
+                        .inner
+                        .iter()
+                        .map(|t| format!("{}", t.display_with_meta(display_meta)))
+                        .join("+"),
+                )
+            }
         }
     }
 }
@@ -260,9 +335,9 @@ impl std::fmt::Debug for TypeVar {
             TypeVar::Known(_, KnownType::Backward, params) => write!(f, "&mut {:?}", params[0]),
             TypeVar::Known(_, KnownType::Wire, params) => write!(f, "&{:?}", params[0]),
             TypeVar::Known(_, KnownType::Inverted, params) => write!(f, "~{:?}", params[0]),
-            TypeVar::Unknown(id, traits) => write!(
+            TypeVar::Unknown(_, id, traits, meta_type) => write!(
                 f,
-                "t{id}({})",
+                "t{id}({}, {meta_type})",
                 traits.inner.iter().map(|t| format!("{t}")).join("+")
             ),
         }
@@ -271,51 +346,7 @@ impl std::fmt::Debug for TypeVar {
 
 impl std::fmt::Display for TypeVar {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            TypeVar::Known(_, KnownType::Named(t), params) => {
-                let generics = if params.is_empty() {
-                    String::new()
-                } else {
-                    format!(
-                        "<{}>",
-                        params
-                            .iter()
-                            .map(|p| format!("{}", p))
-                            .collect::<Vec<_>>()
-                            .join(", ")
-                    )
-                };
-                write!(f, "{}{}", t, generics)
-            }
-            TypeVar::Known(_, KnownType::Integer(inner), _) => {
-                write!(f, "{inner}")
-            }
-            TypeVar::Known(_, KnownType::Tuple, params) => {
-                write!(
-                    f,
-                    "({})",
-                    params
-                        .iter()
-                        .map(|t| format!("{}", t))
-                        .collect::<Vec<_>>()
-                        .join(", ")
-                )
-            }
-            TypeVar::Known(_, KnownType::Array, params) => {
-                write!(f, "[{}; {}]", params[0], params[1])
-            }
-            TypeVar::Known(_, KnownType::Backward, params) => write!(f, "&mut {}", params[0]),
-            TypeVar::Known(_, KnownType::Wire, params) => write!(f, "&{}", params[0]),
-            TypeVar::Known(_, KnownType::Inverted, params) => write!(f, "~{}", params[0]),
-            TypeVar::Unknown(_, traits) if traits.inner.is_empty() => write!(f, "_"),
-            TypeVar::Unknown(_, traits) => {
-                write!(
-                    f,
-                    "{}",
-                    traits.inner.iter().map(|t| format!("{t}")).join("+"),
-                )
-            }
-        }
+        write!(f, "{}", self.display_with_meta(false))
     }
 }
 

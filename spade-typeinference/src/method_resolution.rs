@@ -162,7 +162,7 @@ fn expr_is_overlapping(expr: &TypeExpression, var: &TypeVar) -> Overlap {
                 Overlap::No
             }
         }
-        (TypeExpression::Integer(_), TypeVar::Unknown(_, _)) => Overlap::Maybe,
+        (TypeExpression::Integer(_), TypeVar::Unknown(_, _, _, _)) => Overlap::Maybe,
         (TypeExpression::Integer(_), _) => {
             unreachable!("Non integer and non-generic type matched with integer")
         }
@@ -190,7 +190,7 @@ fn spec_is_overlapping(spec: &TypeSpec, var: &TypeVar) -> Overlap {
         // Generics overlap with anything
         (TypeSpec::Generic(_), _) => Overlap::Yes,
         // For anything non-generic, we need a concrete type to know if there is overlap.
-        (_, TypeVar::Unknown(_, _)) => Overlap::Maybe,
+        (_, TypeVar::Unknown(_, _, _, _)) => Overlap::Maybe,
         (
             TypeSpec::Declared(specname, specparams),
             TypeVar::Known(_, KnownType::Named(varname), varparams),

@@ -28,6 +28,7 @@ impl std::fmt::Display for UnificationTrace {
         write!(f, "{}", self.outer())
     }
 }
+
 impl UnificationTrace {
     pub fn new(failing: TypeVar) -> Self {
         Self {
@@ -38,6 +39,13 @@ impl UnificationTrace {
 
     pub fn outer(&self) -> &TypeVar {
         self.inside.as_ref().unwrap_or(&self.failing)
+    }
+
+    pub fn display_with_meta(&self, meta: bool) -> String {
+        self.inside
+            .as_ref()
+            .unwrap_or(&self.failing)
+            .display_with_meta(meta)
     }
 }
 pub trait UnificationErrorExt<T>: Sized {
@@ -126,6 +134,17 @@ impl<T> UnificationErrorExt<T> for std::result::Result<T, UnificationError> {
                     g: old_g,
                 }))
             }
+            Err(UnificationError::MetaMismatch(TypeMismatch {
+                e: mut old_e,
+                g: mut old_g,
+            })) => {
+                old_e.inside.replace(expected);
+                old_g.inside.replace(got);
+                Err(UnificationError::MetaMismatch(TypeMismatch {
+                    e: old_e,
+                    g: old_g,
+                }))
+            }
             e @ Err(UnificationError::UnsatisfiedTraits(_, _)) => e,
             Err(UnificationError::FromConstraints { .. } | UnificationError::Specific { .. }) => {
                 panic!("Called add_context on a constraint based unfication error")
@@ -142,93 +161,139 @@ impl<T> UnificationErrorExt<T> for std::result::Result<T, UnificationError> {
     where
         F: Fn(Diagnostic, TypeMismatch) -> Diagnostic,
     {
-        self.map_err(|e| match e {
-            UnificationError::Normal(TypeMismatch { e, g }) => {
-                let msg = format!("Expected type {e}, got {g}");
-                let diag = Diagnostic::error(unification_point.clone(), msg)
-                    .primary_label(format!("Expected {e}"));
-                let diag = message(
-                    diag,
-                    TypeMismatch {
-                        e: e.clone(),
-                        g: g.clone(),
-                    },
-                );
+        self.map_err(|err| {
+            let display_meta = match &err {
+                UnificationError::Normal { .. } => false,
+                UnificationError::MetaMismatch { .. } => true,
+                _ => false,
+            };
+            match err {
+                UnificationError::Normal(TypeMismatch { e, g })
+                | UnificationError::MetaMismatch(TypeMismatch { e, g }) => {
+                    let e_disp = e.display_with_meta(display_meta);
+                    let g_disp = g.display_with_meta(display_meta);
+                    let msg = format!("Expected type {e_disp}, got {g_disp}");
+                    let diag = Diagnostic::error(unification_point.clone(), msg)
+                        .primary_label(format!("Expected {e_disp}"));
+                    let diag = message(
+                        diag,
+                        TypeMismatch {
+                            e: e.clone(),
+                            g: g.clone(),
+                        },
+                    );
 
-                let diag = if !omit_expected_source {
-                    add_known_type_context(diag, unification_point.clone(), &e.failing)
-                } else {
-                    diag
-                };
+                    let diag = if !omit_expected_source {
+                        add_known_type_context(
+                            diag,
+                            unification_point.clone(),
+                            &e.failing,
+                            display_meta,
+                        )
+                    } else {
+                        diag
+                    };
 
-                let diag = add_known_type_context(diag, unification_point, &g.failing);
-                diag.type_error(
-                    format!("{}", e.failing),
-                    e.inside.map(|o| format!("{o}")),
-                    format!("{}", g.failing),
-                    g.inside.map(|o| format!("{o}")),
-                )
-            }
-            UnificationError::UnsatisfiedTraits(var, impls) => {
-                let impls_str = if impls.len() >= 2 {
-                    format!(
-                        "{} and {}",
-                        impls[0..impls.len() - 1]
-                            .iter()
-                            .map(|i| format!("{i}"))
-                            .join(", "),
-                        impls[impls.len() - 1]
+                    let diag =
+                        add_known_type_context(diag, unification_point, &g.failing, display_meta);
+                    diag.type_error(
+                        format!("{}", e.failing.display_with_meta(display_meta)),
+                        e.inside.map(|o| o.display_with_meta(display_meta)),
+                        format!("{}", g.failing.display_with_meta(display_meta)),
+                        g.inside.map(|o| o.display_with_meta(display_meta)),
                     )
-                } else {
-                    format!("{}", impls[0])
-                };
-                let short_msg = format!("{var} does not impl {impls_str}");
-                Diagnostic::error(
-                    unification_point,
-                    format!("Unsatisfied trait requirements. {short_msg}"),
-                )
-                .primary_label(short_msg)
-            }
-            UnificationError::FromConstraints {
-                expected,
-                got,
-                source,
-                loc,
-            } => {
-                let diag =
-                    Diagnostic::error(loc, format!("Expected type {}, got {}", expected, got))
-                        .primary_label(format!("Expected {}, got {}", expected, got));
-
-                match source {
-                    ConstraintSource::AdditionOutput => diag.note(
-                        "Addition creates one more output bit than the input to avoid overflow"
-                            .to_string(),
-                    ),
-                    ConstraintSource::MultOutput => diag.note(
-                        "The size of a multiplication is the sum of the operand sizes".to_string(),
-                    ),
-                    ConstraintSource::ArrayIndexing => {
-                        // NOTE: This error message could probably be improved
-                        diag.note("because the value is used as an index to an array".to_string())
-                    }
-                    ConstraintSource::MemoryIndexing => {
-                        // NOTE: This error message could probably be improved
-                        diag.note("because the value is used as an index to a memory".to_string())
-                    }
-                    ConstraintSource::Concatenation => diag.note(
-                        "The size of a concatenation is the sum of the operand sizes".to_string(),
-                    ),
-                    ConstraintSource::Where => diag,
-                    ConstraintSource::PipelineRegOffset { .. } => diag,
-                    ConstraintSource::PipelineRegCount { reg, total } => {
-                        Diagnostic::error(total, format!("Expected {expected} in this pipeline."))
-                            .primary_label(format!("Expected {expected} stages"))
-                            .secondary_label(reg, format!("This final register is number {got}"))
-                    }
-                    ConstraintSource::PipelineAvailDepth => diag,
                 }
+                UnificationError::UnsatisfiedTraits(var, impls) => {
+                    let impls_str = if impls.len() >= 2 {
+                        format!(
+                            "{} and {}",
+                            impls[0..impls.len() - 1]
+                                .iter()
+                                .map(|i| format!("{i}"))
+                                .join(", "),
+                            impls[impls.len() - 1]
+                        )
+                    } else {
+                        format!("{}", impls[0])
+                    };
+                    let short_msg = format!("{var} does not impl {impls_str}");
+                    Diagnostic::error(
+                        unification_point,
+                        format!("Unsatisfied trait requirements. {short_msg}"),
+                    )
+                    .primary_label(short_msg)
+                }
+                UnificationError::FromConstraints {
+                    expected,
+                    got,
+                    source,
+                    loc,
+                    is_meta_error,
+                } => {
+                    let diag = Diagnostic::error(
+                        loc,
+                        format!(
+                            "Expected type {}, got {}",
+                            expected.display_with_meta(is_meta_error),
+                            got.display_with_meta(is_meta_error)
+                        ),
+                    )
+                    .primary_label(format!(
+                        "Expected {}, got {}",
+                        expected.display_with_meta(is_meta_error),
+                        got.display_with_meta(is_meta_error)
+                    ));
+
+                    let diag = diag.type_error(
+                        format!("{}", expected.failing.display_with_meta(is_meta_error)),
+                        expected
+                            .inside
+                            .as_ref()
+                            .map(|o| o.display_with_meta(is_meta_error)),
+                        format!("{}", got.failing.display_with_meta(is_meta_error)),
+                        got.inside
+                            .as_ref()
+                            .map(|o| o.display_with_meta(is_meta_error)),
+                    );
+
+                    match source {
+                        ConstraintSource::AdditionOutput => diag.note(
+                            "Addition creates one more output bit than the input to avoid overflow"
+                                .to_string(),
+                        ),
+                        ConstraintSource::MultOutput => diag.note(
+                            "The size of a multiplication is the sum of the operand sizes"
+                                .to_string(),
+                        ),
+                        ConstraintSource::ArrayIndexing => {
+                            // NOTE: This error message could probably be improved
+                            diag.note(
+                                "because the value is used as an index to an array".to_string(),
+                            )
+                        }
+                        ConstraintSource::MemoryIndexing => {
+                            // NOTE: This error message could probably be improved
+                            diag.note(
+                                "because the value is used as an index to a memory".to_string(),
+                            )
+                        }
+                        ConstraintSource::Concatenation => diag.note(
+                            "The size of a concatenation is the sum of the operand sizes"
+                                .to_string(),
+                        ),
+                        ConstraintSource::Where => diag,
+                        ConstraintSource::PipelineRegOffset { .. } => diag,
+                        ConstraintSource::PipelineRegCount { reg, total } => Diagnostic::error(
+                            total,
+                            format!("Expected {expected} in this pipeline."),
+                        )
+                        .primary_label(format!("Expected {expected} stages"))
+                        .secondary_label(reg, format!("This final register is number {got}")),
+                        ConstraintSource::PipelineAvailDepth => diag,
+                    }
+                }
+                UnificationError::Specific(e) => e,
             }
-            UnificationError::Specific(e) => e,
         })
     }
 }
@@ -237,15 +302,29 @@ fn add_known_type_context(
     diag: Diagnostic,
     unification_point: impl Into<FullSpan> + Clone,
     failing: &TypeVar,
+    meta: bool,
 ) -> Diagnostic {
-    if let TypeVar::Known(k, _, _) = &failing {
-        if FullSpan::from(k) != unification_point.clone().into() {
-            diag.secondary_label(k, format!("Type {} inferred here", failing))
-        } else {
-            diag
+    match failing {
+        TypeVar::Known(k, _, _) => {
+            if FullSpan::from(k) != unification_point.clone().into() {
+                diag.secondary_label(
+                    k,
+                    format!("Type {} inferred here", failing.display_with_meta(meta)),
+                )
+            } else {
+                diag
+            }
         }
-    } else {
-        diag
+        TypeVar::Unknown(k, _, _, _) => {
+            if FullSpan::from(k) != unification_point.clone().into() {
+                diag.secondary_label(
+                    k,
+                    format!("Type {} inferred here", failing.display_with_meta(meta)),
+                )
+            } else {
+                diag
+            }
+        }
     }
 }
 
@@ -255,6 +334,20 @@ pub struct TypeMismatch {
     pub e: UnificationTrace,
     /// Got type
     pub g: UnificationTrace,
+}
+impl TypeMismatch {
+    pub fn is_meta_error(&self) -> bool {
+        matches!(self.e.failing, TypeVar::Unknown(_, _, _, _))
+            || matches!(self.g.failing, TypeVar::Unknown(_, _, _, _))
+    }
+
+    pub fn display_e_g(&self) -> (String, String) {
+        let is_meta = self.is_meta_error();
+        (
+            self.e.display_with_meta(is_meta),
+            self.g.display_with_meta(is_meta),
+        )
+    }
 }
 impl std::fmt::Display for TypeMismatch {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -266,6 +359,8 @@ impl std::fmt::Display for TypeMismatch {
 pub enum UnificationError {
     #[error("Unification error")]
     Normal(TypeMismatch),
+    #[error("Meta type mismatch")]
+    MetaMismatch(TypeMismatch),
     #[error("")]
     Specific(#[from] spade_diagnostics::Diagnostic),
     #[error("Unsatisfied traits")]
@@ -276,6 +371,7 @@ pub enum UnificationError {
         got: UnificationTrace,
         source: ConstraintSource,
         loc: Loc<()>,
+        is_meta_error: bool,
     },
 }
 

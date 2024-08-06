@@ -1,6 +1,6 @@
-struct HasGeneric<#N> {}
+struct HasGeneric<#uint N> {}
 
-impl<#N> HasGeneric<N> {
+impl<#uint N> HasGeneric<N> {
     fn get_generic(self) -> int<8> {
         N
     }

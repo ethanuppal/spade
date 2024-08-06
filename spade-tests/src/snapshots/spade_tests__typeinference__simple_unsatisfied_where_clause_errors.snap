@@ -1,7 +1,7 @@
 ---
 source: spade-tests/src/typeinference.rs
 ---
-fn add_one<#N, #O>(in: int<N>) -> int<O>
+fn add_one<#uint N, #uint O>(in: int<N>) -> int<O>
     where O: N + 2
 {
     in + 1
@@ -18,6 +18,10 @@ error: Expected type Number<10>, got Number<9>
 4 │     in + 1
   │     ^^^^^^ Expected Number<10>, got Number<9>
   │
+  = note: Expected: 10
+                in: Number<10>
+               Got: 9
+                in: Number<9>
   = note: Addition creates one more output bit than the input to avoid overflow
   = The error is in a generic unit instantiated at
     ╰ testinput:8 add_one<8, 10>

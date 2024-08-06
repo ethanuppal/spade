@@ -7,7 +7,7 @@ use spade_hir::{
     TypeDeclaration,
 };
 use spade_hir::{ItemList, TypeParam};
-use spade_types::PrimitiveType;
+use spade_types::{meta_types::MetaType, PrimitiveType};
 
 /// Add built in symbols like types to the symtab. The symbols are added with very high NameIDs to
 /// not interfere with tests with hardcoded NameIDs
@@ -42,15 +42,15 @@ pub fn populate_symtab(symtab: &mut SymbolTable, item_list: &mut ItemList) {
                                 Path(vec![a.clone().nowhere()]),
                                 TypeSymbol::GenericArg { traits: vec![] }.nowhere(),
                             );
-                            TypeParam::TypeName(a.clone().nowhere(), id)
+                            TypeParam(a.clone().nowhere(), id, MetaType::Type)
                         }
-                        GenericArg::Number(a) => {
+                        GenericArg::TypeWithMeta { name, meta } => {
                             let id = symtab.add_type_with_id(
                                 id,
-                                Path(vec![a.clone().nowhere()]),
-                                TypeSymbol::GenericInt.nowhere(),
+                                Path(vec![name.clone().nowhere()]),
+                                TypeSymbol::GenericMeta(meta.clone()).nowhere(),
                             );
-                            TypeParam::Integer(a.clone().nowhere(), id)
+                            TypeParam(name.clone().nowhere(), id, meta.clone())
                         }
                     }
                     .nowhere();
@@ -72,13 +72,13 @@ pub fn populate_symtab(symtab: &mut SymbolTable, item_list: &mut ItemList) {
         };
     add_type(
         &["uint"],
-        vec![GenericArg::Number(Identifier("size".into())).nowhere()],
+        vec![GenericArg::uint(Identifier("size".into())).nowhere()],
         PrimitiveType::Uint,
         false,
     );
     add_type(
         &["int"],
-        vec![GenericArg::Number(Identifier("size".into())).nowhere()],
+        vec![GenericArg::uint(Identifier("size".into())).nowhere()],
         PrimitiveType::Int,
         false,
     );
@@ -90,7 +90,7 @@ pub fn populate_symtab(symtab: &mut SymbolTable, item_list: &mut ItemList) {
                 traits: vec![],
             }
             .nowhere(),
-            GenericArg::Number(Identifier("AddrWidth".into())).nowhere(),
+            GenericArg::uint(Identifier("AddrWidth".into())).nowhere(),
         ],
         PrimitiveType::Memory,
         true,
@@ -101,7 +101,7 @@ pub fn populate_symtab(symtab: &mut SymbolTable, item_list: &mut ItemList) {
     add_type(&["bit"], vec![], PrimitiveType::Bool, false);
     add_type(
         &["inout"],
-        vec![GenericArg::Number(Identifier("T".into())).nowhere()],
+        vec![GenericArg::uint(Identifier("T".into())).nowhere()],
         PrimitiveType::InOut,
         false,
     );

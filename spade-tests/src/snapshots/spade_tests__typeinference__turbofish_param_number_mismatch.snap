@@ -1,7 +1,7 @@
 ---
 source: spade-tests/src/typeinference.rs
 ---
-fn ret_int<#A, #B>() -> int<8> {
+fn ret_int<#uint A, #uint B>() -> int<8> {
     0
 }
 

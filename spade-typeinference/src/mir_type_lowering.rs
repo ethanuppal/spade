@@ -282,7 +282,7 @@ impl TypeState {
             TypeVar::Known(_, KnownType::Inverted, inner) => {
                 Self::inner_ungenerify_type(&inner[0], symtab, type_list, !invert)
             }
-            TypeVar::Unknown(_, _) => None,
+            TypeVar::Unknown(_, _, _, _) => None,
         }
     }
 

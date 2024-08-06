@@ -8,10 +8,12 @@ pub mod testutil;
 pub mod types;
 
 use attributes::LocAttributeExt;
+use global_symbols::visit_meta_type;
 use itertools::{EitherOrBoth, Itertools};
 use num::{BigInt, Zero};
 use pipelines::PipelineContext;
 use spade_diagnostics::{diag_bail, Diagnostic};
+use spade_types::meta_types::MetaType;
 use tracing::{event, info, Level};
 
 use std::collections::{HashMap, HashSet};
@@ -85,15 +87,16 @@ pub fn visit_type_param(param: &ast::TypeParam, ctx: &mut Context) -> Result<hir
                 TypeSymbol::GenericArg { traits }.at_loc(ident),
             );
 
-            Ok(hir::TypeParam::TypeName(ident.clone(), name_id))
+            Ok(hir::TypeParam(ident.clone(), name_id, MetaType::Type))
         }
-        ast::TypeParam::Integer(ident) => {
+        ast::TypeParam::TypeWithMeta { meta, name } => {
+            let meta = visit_meta_type(meta)?;
             let name_id = ctx.symtab.add_type(
-                Path::ident(ident.clone()),
-                TypeSymbol::GenericInt.at_loc(ident),
+                Path::ident(name.clone()),
+                TypeSymbol::GenericMeta(meta.clone()).at_loc(name),
             );
 
-            Ok(hir::TypeParam::Integer(ident.clone(), name_id))
+            Ok(hir::TypeParam(name.clone(), name_id, meta))
         }
     }
 }
@@ -110,12 +113,16 @@ pub fn re_visit_type_param(param: &ast::TypeParam, ctx: &Context) -> Result<hir:
         } => {
             let path = Path::ident(ident.clone()).at_loc(ident);
             let name_id = ctx.symtab.lookup_type_symbol(&path)?.0;
-            Ok(hir::TypeParam::TypeName(ident.clone(), name_id))
+            Ok(hir::TypeParam(ident.clone(), name_id, MetaType::Type))
         }
-        ast::TypeParam::Integer(ident) => {
-            let path = Path::ident(ident.clone()).at_loc(ident);
+        ast::TypeParam::TypeWithMeta { meta, name } => {
+            let path = Path::ident(name.clone()).at_loc(name);
             let name_id = ctx.symtab.lookup_type_symbol(&path)?.0;
-            Ok(hir::TypeParam::Integer(ident.clone(), name_id))
+            Ok(hir::TypeParam(
+                name.clone(),
+                name_id,
+                visit_meta_type(meta)?,
+            ))
         }
     }
 }
@@ -240,7 +247,7 @@ pub fn visit_type_spec(
                         ))
                     }
                 }
-                TypeSymbol::GenericArg { traits: _ } | TypeSymbol::GenericInt => {
+                TypeSymbol::GenericArg { traits: _ } | TypeSymbol::GenericMeta(_) => {
                     // If this typename refers to a generic argument we need to make
                     // sure that no generic arguments are passed, as generic names
                     // can't have generic parameters
@@ -552,20 +559,39 @@ pub fn visit_const_generic(
         ast::Expression::Identifier(name) => {
             let (name, sym) = ctx.symtab.lookup_type_symbol(name)?;
             match &sym.inner {
-                TypeSymbol::GenericArg { traits: _ } | TypeSymbol::Declared(_, _) => {
+                TypeSymbol::Declared(_, _) => {
                     return Err(Diagnostic::error(
                         t,
-                        format!("{name} is not a type level integer."),
+                        format!(
+                            "{name} is not a type level integer but is used in a const generic expression."
+                        ),
+                    )
+                    .primary_label(format!("Expected type level integer"))
+                    .secondary_label(&sym, format!("{name} is defined here")))
+                }
+                TypeSymbol::GenericArg { traits: _ }=> {
+                    return Err(Diagnostic::error(
+                        t,
+                        format!(
+                            "{name} is not a type level integer but is used in a const generic expression."
+                        ),
                     )
                     .primary_label(format!("Expected type level integer"))
                     .secondary_label(&sym, format!("{name} is defined here"))
                     .span_suggest_insert_before(
-                        "Try making the generic a number",
-                        sym,
-                        "#",
+                        "Try making the generic an integer",
+                        &sym,
+                        "#int ",
+                    )
+                    .span_suggest_insert_before(
+                        "or an unsigned integer",
+                        &sym,
+                        "#uint ",
                     ))
                 }
-                TypeSymbol::GenericInt => ConstGeneric::Name(name.at_loc(t)),
+                TypeSymbol::GenericMeta(_) => {
+                    ConstGeneric::Name(name.at_loc(t))
+                },
             }
         }
         ast::Expression::IntLiteral(val) => ConstGeneric::Const(val.clone().as_signed()),
@@ -681,7 +707,8 @@ pub fn visit_where_clauses(
                         "#",
                     ))
                 }
-                TypeSymbol::GenericInt => name_id.at_loc(name),
+                // FIXME: Maybe check meta against the where clause rhs here
+                TypeSymbol::GenericMeta(_) => name_id.at_loc(name),
             };
 
             let rhs = visit_const_generic(rhs, ctx)?;
@@ -803,10 +830,8 @@ pub fn visit_unit(
 
     // Add the type params to the symtab to make them visible in the body
     for param in head.get_type_params() {
-        match param.inner.clone() {
-            hir::TypeParam::TypeName(ident, name) => ctx.symtab.re_add_type(ident, name),
-            hir::TypeParam::Integer(ident, name) => ctx.symtab.re_add_type(ident, name),
-        }
+        let hir::TypeParam(ident, name, _) = param.inner;
+        ctx.symtab.re_add_type(ident, name)
     }
 
     ctx.pipeline_ctx = maybe_perform_pipelining_tasks(unit, &head, ctx)?;
@@ -887,15 +912,17 @@ pub fn create_trait_from_unit_heads(
                                     .at_loc(name)
                                 }
                             }
-                            TypeParam::Integer(n) => TypeSymbol::GenericInt.at_loc(n),
+                            TypeParam::TypeWithMeta { meta, name } => {
+                                TypeSymbol::GenericMeta(visit_meta_type(meta)?).at_loc(name)
+                            }
                         };
                         let name = ctx.symtab.add_type(Path::ident(ident.clone()), type_symbol);
                         match tp {
                             TypeParam::TypeName { .. } => {
-                                Ok(hir::TypeParam::TypeName(ident.clone(), name))
+                                Ok(hir::TypeParam(ident.clone(), name, MetaType::Type))
                             }
-                            TypeParam::Integer(_) => {
-                                Ok(hir::TypeParam::Integer(ident.clone(), name))
+                            TypeParam::TypeWithMeta { meta, name: _ } => {
+                                Ok(hir::TypeParam(ident.clone(), name, visit_meta_type(meta)?))
                             }
                         }
                     })
@@ -960,7 +987,9 @@ pub fn visit_impl(
                             .at_loc(name)
                         }
                     }
-                    TypeParam::Integer(n) => TypeSymbol::GenericInt.at_loc(n),
+                    TypeParam::TypeWithMeta { meta, name } => {
+                        TypeSymbol::GenericMeta(visit_meta_type(meta)?).at_loc(name)
+                    }
                 },
             );
         }
@@ -1025,7 +1054,8 @@ pub fn visit_impl(
 
     let (target_name, target_sym) = ctx.symtab.lookup_type_symbol(target_path)?;
 
-    if let TypeSymbol::GenericArg { traits: _ } | TypeSymbol::GenericInt = &target_sym.inner {
+    if let TypeSymbol::GenericArg { traits: _ } | TypeSymbol::GenericMeta { .. } = &target_sym.inner
+    {
         return Err(Diagnostic::error(
             target_path,
             "Impl blocks cannot currently be used on generic types",
@@ -2514,18 +2544,27 @@ pub fn visit_expression(e: &ast::Expression, ctx: &mut Context) -> Result<hir::E
                     let ty = ctx.symtab.lookup_type_symbol(path)?;
                     let (name, ty) = &ty;
                     match ty.inner {
-                        TypeSymbol::GenericInt => Ok(hir::ExprKind::TypeLevelInteger(name.clone())),
-                        TypeSymbol::GenericArg { .. } => Err(Diagnostic::error(
-                            path,
-                            format!("Generic type {name} is used as a value"),
-                        )
-                        .primary_label(format!("{name} is a generic type"))
-                        .secondary_label(ty, format!("{name} is declared here"))
-                        .span_suggest_insert_before(
-                            format!("Consider making `{name}` a type level integer"),
-                            ty,
-                            "#",
-                        )),
+                        TypeSymbol::GenericMeta(
+                            MetaType::Int | MetaType::Uint | MetaType::Number,
+                        ) => Ok(hir::ExprKind::TypeLevelInteger(name.clone())),
+                        TypeSymbol::GenericMeta(_) | TypeSymbol::GenericArg { traits: _ } => {
+                            Err(Diagnostic::error(
+                                path,
+                                format!("Generic type {name} is a type but it is used as a value"),
+                            )
+                            .primary_label(format!("{name} is a type"))
+                            .secondary_label(ty, format!("{name} is declared here"))
+                            .span_suggest_insert_before(
+                                format!("Consider making `{name}` a type level integer"),
+                                ty,
+                                "#int ",
+                            )
+                            .span_suggest_insert_before(
+                                format!("or a type level uint"),
+                                ty,
+                                "#uint ",
+                            ))
+                        }
                         TypeSymbol::Declared(_, _) => Err(Diagnostic::error(
                             path,
                             format!("Type {name} is used as a value"),

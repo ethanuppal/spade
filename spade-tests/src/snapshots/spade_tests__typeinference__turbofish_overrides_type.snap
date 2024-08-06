@@ -1,7 +1,7 @@
 ---
 source: spade-tests/src/typeinference.rs
 ---
-fn ret_int<#N>() -> int<N> {
+fn ret_int<#uint N>() -> int<N> {
     0
 }
 
@@ -24,5 +24,3 @@ error: Expected type int<8>, got int<10>
                 in: int<8>
                Got: 10
                 in: int<10>
-
-

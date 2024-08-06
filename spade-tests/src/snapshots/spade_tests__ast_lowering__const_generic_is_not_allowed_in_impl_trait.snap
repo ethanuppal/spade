@@ -2,7 +2,7 @@
 source: spade-tests/src/ast_lowering.rs
 ---
 struct X {}
-trait T<#A> {}
+trait T<#uint A> {}
 impl T<{1+2}> for X {}
 
 

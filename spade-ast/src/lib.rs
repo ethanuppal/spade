@@ -452,14 +452,17 @@ pub enum TypeParam {
         name: Loc<Identifier>,
         traits: Vec<Loc<Path>>,
     },
-    Integer(Loc<Identifier>),
+    TypeWithMeta {
+        meta: Loc<Identifier>,
+        name: Loc<Identifier>,
+    },
 }
 impl WithLocation for TypeParam {}
 impl TypeParam {
     pub fn name(&self) -> &Loc<Identifier> {
         match self {
             TypeParam::TypeName { name, traits: _ } => name,
-            TypeParam::Integer(n) => n,
+            TypeParam::TypeWithMeta { meta: _, name } => name,
         }
     }
 }

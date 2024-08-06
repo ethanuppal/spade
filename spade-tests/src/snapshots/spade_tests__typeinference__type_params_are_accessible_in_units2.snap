@@ -2,33 +2,31 @@
 source: spade-tests/src/typeinference.rs
 ---
 mod mem {
-    fn produce_something<T>() -> T __builtin__
+    fn produce_something<#uint N>() -> int<N> __builtin__
 
-    fn test<#T>() {
-        let a: int<T> = produce_something::<int<8>>();
+    fn test<#uint N>() {
+        let a: int<N> = produce_something::<8>();
     }
 
     fn main() {
-        test::<int<9>>()
+        test::<9>()
     }
 }
 
 
-error: Expected type 8, got int<9>
+error: Expected type 8, got 9
   ┌─ testinput:4:5
   │  
-4 │ ╭     fn test<#T>() {
-5 │ │         let a: int<T> = produce_something::<int<8>>();
-  │ │                                                 - Type 8 inferred here
+4 │ ╭     fn test<#uint N>() {
+5 │ │         let a: int<N> = produce_something::<8>();
+  │ │                                             - Type 8 inferred here
 6 │ │     }
   │ ╰─────^ Expected 8
   ·  
-9 │           test::<int<9>>()
-  │                  ----- Type int<9> inferred here
+9 │           test::<9>()
+  │                  - Type 9 inferred here
   │  
   = note: Expected: 8
-               Got: int<9>
+               Got: 9
   = The error is in a generic unit instantiated at
-    ╰ testinput:9 mem::test<int<9>>
-
-
+    ╰ testinput:9 mem::test<9>

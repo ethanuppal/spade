@@ -47,7 +47,7 @@ pub fn infer_and_check(
                 known.insert(*var, Range::new(1 - bound.clone(), bound - 2));
             }
             TypeVar::Known(_, KnownType::Named(n), _) => panic!("How do I handle a type? {:?}", n),
-            TypeVar::Unknown(_, _) => {
+            TypeVar::Unknown(_, _, _, _) => {
                 // known.insert(var, Range { lo: 0, hi: 0 });
             }
 

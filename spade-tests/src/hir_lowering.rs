@@ -1577,7 +1577,7 @@ mod tests {
     #[test]
     fn generic_integers_codegen_correctly() {
         let code = r#"
-            fn create_t<#T>() -> int<8> {
+            fn create_t<#uint T>() -> int<8> {
                 T
             }
 
@@ -1736,7 +1736,7 @@ mod tests {
     snapshot_error! {
         late_type_inference_failures_are_reported_well,
         "
-            fn a<N>(x: int<N>, y: int<32>) -> int<33> {
+            fn a<#uint N>(x: int<N>, y: int<32>) -> int<33> {
                 x + y
             }
 

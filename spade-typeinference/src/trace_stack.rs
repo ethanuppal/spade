@@ -63,7 +63,7 @@ pub fn format_trace_stack(type_state: &TypeState) -> String {
     // has not been replaced by a concrete type at the end of type inference
     let maybe_replaced = |t: &TypeVar| {
         let replacement = type_state.check_var_for_replacement(t.clone());
-        if &replacement == t && matches!(replacement, TypeVar::Unknown(_, _)) {
+        if &replacement == t && matches!(replacement, TypeVar::Unknown(_, _, _, _)) {
             format!("{}", format!("{:?}", t).bright_yellow())
         } else {
             format!("{:?}", t)

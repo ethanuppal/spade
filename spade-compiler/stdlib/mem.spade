@@ -11,7 +11,7 @@ use std::cdc as cdc;
 /// `write enable`, `address` and `data` field. When WE is enabled, data is written
 /// to address. Otherwise no change takes effect
 /// NOTE: We when possible, we should make compute AddrWidth from NumElements
-entity clocked_memory<#NumElements, #WritePorts, #AddrWidth, D>(
+entity clocked_memory<#uint NumElements, #uint WritePorts, #uint AddrWidth, D>(
     clk: clock,
     writes: [(bool, uint<AddrWidth>, D); WritePorts],
 ) -> Memory<D, NumElements>
@@ -20,7 +20,7 @@ entity clocked_memory<#NumElements, #WritePorts, #AddrWidth, D>(
 
 /// Same as `clocked_memory` but initializes the memory with the values specified in `initial_values`.
 /// The initial values must be evaluatable at compile time, otherwise an error is thrown
-entity clocked_memory_init<#NumElements, #WritePorts, #AddrWidth, D>(
+entity clocked_memory_init<#uint NumElements, #uint WritePorts, #uint AddrWidth, D>(
     clk: clock,
     writes: [(bool, uint<AddrWidth>, D); WritePorts],
     initial_values: [D; NumElements]
@@ -28,14 +28,14 @@ entity clocked_memory_init<#NumElements, #WritePorts, #AddrWidth, D>(
     __builtin__
 
 /// Get the value out of a memory
-entity read_memory<#AddrWidth, D, #NumElements> (
+entity read_memory<#uint AddrWidth, D, #uint NumElements> (
     mem: Memory<D, NumElements>,
     addr: uint<AddrWidth>
 ) -> D
     __builtin__
 
 
-struct port WritePort<W, D> {
+struct port WritePort<#uint W, D> {
     addr: &mut uint<W>,
     write: &mut Option<D>,
 }
@@ -43,12 +43,12 @@ struct port WritePort<W, D> {
 
 /// A read port for a memory. It is not recommended to manually read the signals
 /// in this struct, instead use `read_read_port` to access the port.
-struct port ReadPort<W, D> {
+struct port ReadPort<#uint W, D> {
     addr: &mut uint<W>,
     out: &D,
 }
 
-pipeline(1) read_read_port<#W, D>(read_clk: clock, addr: uint<W>, p: ReadPort<W, D>) -> D {
+pipeline(1) read_read_port<#uint W, D>(read_clk: clock, addr: uint<W>, p: ReadPort<W, D>) -> D {
         set p.addr = addr;
     reg;
         *p.out
@@ -56,7 +56,7 @@ pipeline(1) read_read_port<#W, D>(read_clk: clock, addr: uint<W>, p: ReadPort<W,
 
 /// A dual port block RAM that supports read and write ports being in different domains.
 /// If writes and reads happen to the same address, the behaviour is undefined.
-entity dp_bram<#W, D, C>(write_clk: clock, read_clk: clock) -> (WritePort<W, D>, ReadPort<W, D>) {
+entity dp_bram<#uint W, D, #uint C>(write_clk: clock, read_clk: clock) -> (WritePort<W, D>, ReadPort<W, D>) {
     let w_addr = inst new_mut_wire();
     let w_write = inst new_mut_wire();
     let r_addr = inst new_mut_wire();
@@ -86,7 +86,7 @@ struct port FifoWrite<D> {
 /// that element is popped from the fifo this clock cycle. / The num_elements
 /// is approximate but guaranteed to be a conservative estimate, i.e. there are
 /// at least `num_elements` in the fifo.
-struct port FifoRead<#W, D> {
+struct port FifoRead<#uint W, D> {
     read: &Option<D>,
     ack: &mut bool,
     num_elements: &uint<W>
@@ -107,12 +107,12 @@ mod fifo_impl {
     use lib::mem::WritePort;
     use lib::mem::read_read_port;
 
-    struct port FifoRtoW<#W> {
+    struct port FifoRtoW<#uint W> {
         read_ptr: &uint<W>,
         write_ptr: &mut uint<W>,
     }
 
-    entity fifo_read<#W, D, #C>(
+    entity fifo_read<#uint W, D, #uint C>(
         read_clk: clock,
         read_rst: bool,
         mem: ReadPort<W, D>,
@@ -162,7 +162,7 @@ mod fifo_impl {
         )
     }
 
-    entity fifo_write<#W, D>(
+    entity fifo_write<#uint W, D>(
         write_clk: clock,
         write_rst: bool,
         mem: WritePort<W, D>,
@@ -202,7 +202,7 @@ mod fifo_impl {
 
 /// A cross-domain fifo backed by block RAM.
 /// NOTE: W *must* be 2^C but this is not currently checked
-entity fifo<#AddrWidth, Data, #NumElements>(
+entity fifo<#uint AddrWidth, Data, #uint NumElements>(
     write_clk: clock,
     write_rst: bool,
     read_clk: clock,

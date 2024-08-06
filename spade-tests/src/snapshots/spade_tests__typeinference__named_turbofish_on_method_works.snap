@@ -3,7 +3,7 @@ source: spade-tests/src/typeinference.rs
 ---
 struct T {}
 impl T {
-    fn uwu<#W>(self) -> uint<W> {
+    fn uwu<#uint W>(self) -> uint<W> {
         0
     }
 }

@@ -29,7 +29,7 @@ impl IsPort for ast::TypeSpec {
                         TypeDeclKind::Primitive { is_port } => Ok(*is_port),
                     },
                     TypeSymbol::GenericArg { traits: _ } => Ok(false),
-                    TypeSymbol::GenericInt => Ok(false),
+                    TypeSymbol::GenericMeta(_) => Ok(false),
                 }
             }
             ast::TypeSpec::Unit(_) => Ok(false),

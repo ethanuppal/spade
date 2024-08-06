@@ -13,6 +13,8 @@ error: Expected type Number<8>, got Number<9>
 2 │     reg(clk) x = x + 1;
   │                  ^^^^^ Expected Number<8>, got Number<9>
   │
+  = note: Expected: 8
+                in: Number<8>
+               Got: 9
+                in: Number<9>
   = note: Addition creates one more output bit than the input to avoid overflow
-
-

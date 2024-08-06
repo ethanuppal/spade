@@ -1,7 +1,7 @@
 ---
 source: spade-tests/src/typeinference.rs
 ---
-fn add_one<#N, #O>(in: int<N>) -> int<O>
+fn add_one<#uint N, #uint O>(in: int<N>) -> int<O>
     where O: N + 2
 {
     0

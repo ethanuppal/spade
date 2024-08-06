@@ -1,3 +1,5 @@
+pub mod meta_types;
+
 use num::BigInt;
 use serde::{Deserialize, Serialize};
 use spade_common::{

@@ -1,6 +1,5 @@
 ---
 source: spade-tests/src/typeinference.rs
-assertion_line: 148
 ---
 entity main() -> uint<8> {
     ~None
@@ -10,9 +9,10 @@ error: Expected type Number<_>, got std::option::Option<_>
   ┌─ testinput:2:6
   │
 2 │     ~None
-  │      ^^^^ Expected Number<_>
+  │     -^^^^
+  │     ││
+  │     │Expected Number<_>
+  │     Type Number<_> inferred here
   │
   = note: Expected: Number<_>
                Got: std::option::Option<_>
-
-

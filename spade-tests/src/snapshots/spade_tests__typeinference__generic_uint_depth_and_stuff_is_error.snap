@@ -1,0 +1,27 @@
+---
+source: spade-tests/src/typeinference.rs
+---
+pipeline(N) p<#uint N, #uint O>(clk: clock, x: bool) -> bool {
+    reg * {N};
+        let a = stage(+O).x;
+        x
+}
+
+entity a(clk: clock) -> bool {
+    inst(10) p::<10, 5>(clk, false)
+}
+
+
+error: Pipeline depth mismatch. Expected #uint got #int
+  ┌─ testinput:1:1
+  │  
+1 │ ╭ pipeline(N) p<#uint N, #uint O>(clk: clock, x: bool) -> bool {
+  │                  ------ Type #uint inferred here
+2 │ │     reg * {N};
+3 │ │         let a = stage(+O).x;
+4 │ │         x
+5 │ │ }
+  │ ╰─^ Found #int stages in this pipeline
+  │  
+  = note: Expected: #int
+               Got: #uint

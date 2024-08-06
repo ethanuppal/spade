@@ -12,6 +12,8 @@ error: Expected type uint<7>, got uint<4>
 2 │     x[idx]
   │       ^^^ Expected uint<7>, got uint<4>
   │
+  = note: Expected: 7
+                in: uint<7>
+               Got: 4
+                in: uint<4>
   = note: because the value is used as an index to an array
-
-

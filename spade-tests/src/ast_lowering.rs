@@ -582,7 +582,7 @@ snapshot_error! {
     no_mangle_generics,
     "
     #[no_mangle]
-    fn mangling_time<#N>() -> int<N> __builtin__
+    fn mangling_time<#uint N>() -> int<N> __builtin__
     "
 }
 
@@ -936,7 +936,8 @@ snapshot_error! {
             reg*-10;
                 true
         }
-    "
+    ",
+    false
 }
 
 snapshot_error! {
@@ -1185,7 +1186,7 @@ snapshot_error! {
 snapshot_error! {
     generic_type_in_const_generic_where_clause_rhs,
     "
-        fn test<N, #O>()
+        fn test<N, #uint O>()
             where O: N
         {}
     "
@@ -1195,7 +1196,7 @@ snapshot_error! {
     struct_type_in_const_generic_where_clause,
     "
         struct N {}
-        fn test<#O>()
+        fn test<#uint O>()
             where O: N
         {}
     "
@@ -1303,7 +1304,7 @@ snapshot_error! {
     const_generic_is_not_allowed_in_impl_trait,
     "
         struct X {}
-        trait T<#A> {}
+        trait T<#uint A> {}
         impl T<{1+2}> for X {}
     "
 }

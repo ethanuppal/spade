@@ -15,7 +15,7 @@ use spade_common::{
     num_ext::InfallibleToBigInt,
 };
 use spade_diagnostics::Diagnostic;
-use spade_types::PrimitiveType;
+use spade_types::{meta_types::MetaType, PrimitiveType};
 
 /**
   Representation of the language with most language constructs still present, with
@@ -222,17 +222,11 @@ pub struct Module {
 /// ast lowering process in a few separate steps, and the identifier needs to be
 /// re-added to the symtab multiple times
 #[derive(PartialEq, Debug, Clone, Hash, Eq, Serialize, Deserialize)]
-pub enum TypeParam {
-    TypeName(Loc<Identifier>, NameID),
-    Integer(Loc<Identifier>, NameID),
-}
+pub struct TypeParam(pub Loc<Identifier>, pub NameID, pub MetaType);
 impl WithLocation for TypeParam {}
 impl TypeParam {
     pub fn name_id(&self) -> NameID {
-        match self {
-            TypeParam::TypeName(_, n) => n.clone(),
-            TypeParam::Integer(_, n) => n.clone(),
-        }
+        self.1.clone()
     }
 }
 

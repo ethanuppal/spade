@@ -2,7 +2,7 @@
 source: spade-tests/src/integration.rs
 ---
 struct X<T> {}
-impl<#N> X<[bool; N]> {
+impl<#uint N> X<[bool; N]> {
     fn method(self) {}
 }
 

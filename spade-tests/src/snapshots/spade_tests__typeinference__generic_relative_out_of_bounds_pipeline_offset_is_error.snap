@@ -1,7 +1,7 @@
 ---
 source: spade-tests/src/typeinference.rs
 ---
-pipeline(N) p<#N, #O>(clk: clock, x: bool) -> bool {
+pipeline(N) p<#int N, #int O>(clk: clock, x: bool) -> bool {
     reg * {N};
         let a = stage(+O).x;
         x
@@ -15,7 +15,7 @@ entity a(clk: clock) -> bool {
 error: Pipeline references stage 15 which is beyond the end of the pipeline
   ┌─ testinput:3:17
   │
-1 │ pipeline(N) p<#N, #O>(clk: clock, x: bool) -> bool {
+1 │ pipeline(N) p<#int N, #int O>(clk: clock, x: bool) -> bool {
   │          - Depth 10 specified here
 2 │     reg * {N};
 3 │         let a = stage(+O).x;

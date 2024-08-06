@@ -10,11 +10,10 @@ error: Expected type bool, got Number<_>
   ┌─ testinput:2:19
   │
 2 │     let x: bool = 0;
-  │            ----   ^ Expected bool
-  │            │       
-  │            Type bool inferred here
+  │         -  ----   ^ Expected bool
+  │         │  │       
+  │         │  Type bool inferred here
+  │         Type Number<_> inferred here
   │
   = note: Expected: bool
                Got: Number<_>
-
-

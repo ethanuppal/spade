@@ -2,21 +2,16 @@
 source: spade-tests/src/ast_lowering.rs
 ---
 struct N {}
-fn test<#O>()
+fn test<#uint O>()
     where O: N
 {}
 
 
-error: N is not a type level integer.
+error: N is not a type level integer but is used in a const generic expression.
   ┌─ testinput:3:14
   │
 1 │ struct N {}
   │ ----------- N is defined here
-2 │ fn test<#O>()
+2 │ fn test<#uint O>()
 3 │     where O: N
   │              ^ Expected type level integer
-  │
-  = Try making the generic a number
-  │
-1 │ #struct N {}
-  │ +

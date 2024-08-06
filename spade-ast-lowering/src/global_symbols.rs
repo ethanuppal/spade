@@ -11,6 +11,7 @@ use spade_common::{
 };
 use spade_diagnostics::Diagnostic;
 use spade_hir as hir;
+use spade_types::meta_types::MetaType;
 
 use crate::{
     attributes::{AttributeListExt, LocAttributeExt},
@@ -138,6 +139,20 @@ pub fn visit_unit(
     Ok(())
 }
 
+pub fn visit_meta_type(meta: &Loc<Identifier>) -> Result<MetaType> {
+    let meta = match meta.inner.0.as_str() {
+        "int" => MetaType::Int,
+        "uint" => MetaType::Uint,
+        "type" => MetaType::Type,
+        _ => {
+            return Err(Diagnostic::error(meta, "{meta} is not a valid meta-type")
+                .primary_label("Invalid meta-type")
+                .help("Expected #int, #uint or #type"))
+        }
+    };
+    Ok(meta)
+}
+
 pub fn visit_type_declaration(
     t: &Loc<ast::TypeDeclaration>,
     symtab: &mut SymbolTable,
@@ -149,16 +164,20 @@ pub fn visit_type_declaration(
         .unwrap_or(&vec![])
         .iter()
         .map(|arg| {
-            match &arg.inner {
+            let result = match &arg.inner {
                 ast::TypeParam::TypeName { name, traits } => GenericArg::TypeName {
                     name: name.inner.clone(),
                     traits: traits.clone(),
                 },
-                ast::TypeParam::Integer(n) => GenericArg::Number(n.inner.clone()),
+                ast::TypeParam::TypeWithMeta { name, meta } => GenericArg::TypeWithMeta {
+                    name: name.inner.clone(),
+                    meta: visit_meta_type(meta)?,
+                },
             }
-            .at_loc(&arg.loc())
+            .at_loc(&arg.loc());
+            Ok(result)
         })
-        .collect();
+        .collect::<Result<_>>()?;
 
     let kind = match &t.kind {
         ast::TypeDeclKind::Enum(_) => hir::symbol_table::TypeDeclKind::Enum,
@@ -212,7 +231,9 @@ pub fn re_visit_type_declaration(
                     },
                 )
             }
-            ast::TypeParam::Integer(n) => (n, TypeSymbol::GenericInt),
+            ast::TypeParam::TypeWithMeta { name, meta } => {
+                (name, TypeSymbol::GenericMeta(visit_meta_type(meta)?))
+            }
         };
         ctx.symtab
             .add_type(Path::ident(name.clone()), symbol_type.at_loc(param));
@@ -231,9 +252,11 @@ pub fn re_visit_type_declaration(
             .at_loc(arg);
         let param = match &arg.inner {
             ast::TypeParam::TypeName { name, traits: _ } => {
-                hir::TypeParam::TypeName(name.clone(), name_id.clone())
+                hir::TypeParam(name.clone(), name_id.clone(), MetaType::Type)
             }
-            ast::TypeParam::Integer(n) => hir::TypeParam::Integer(n.clone(), name_id.clone()),
+            ast::TypeParam::TypeWithMeta { meta, name } => {
+                hir::TypeParam(name.clone(), name_id.clone(), visit_meta_type(&meta)?)
+            }
         };
         output_type_exprs.push(expr);
         type_params.push(param.at_loc(arg))

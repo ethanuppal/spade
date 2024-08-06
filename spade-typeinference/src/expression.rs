@@ -7,6 +7,7 @@ use spade_diagnostics::{diag_anyhow, Diagnostic};
 use spade_hir::expression::{BinaryOperator, IntLiteralKind, NamedArgument, UnaryOperator};
 use spade_hir::{ExprKind, Expression};
 use spade_macros::trace_typechecker;
+use spade_types::meta_types::MetaType;
 use spade_types::KnownType;
 
 use crate::constraints::{bits_to_store, ce_int, ce_var, ConstraintExpr, ConstraintSource};
@@ -50,7 +51,7 @@ impl TypeState {
         ctx: &Context,
     ) -> Result<()> {
         assuming_kind!(ExprKind::TypeLevelInteger(value) = &expression => {
-            let (t, _size) = self.new_generic_number(ctx);
+            let (t, _size) = self.new_generic_number(expression.loc(), ctx);
             self.unify(&t, &expression.inner, ctx)
                 .into_diagnostic(expression.loc(), |diag, Tm{e: _, g: _got}| {
                     diag
@@ -80,17 +81,17 @@ impl TypeState {
         assuming_kind!(ExprKind::PipelineRef{stage, name, declares_name, depth_typeexpr_id} = &expression => {
             // If this reference declares the referenced name, add a new equation
             if *declares_name {
-                let new_var = self.new_generic();
+                let new_var = self.new_generic_type(expression.loc());
                 self.add_equation(TypedExpression::Name(name.clone().inner), new_var)
             }
 
-            let depth = self.new_generic();
+            let depth = self.new_generic_tlint(stage.loc());
             self.add_equation(TypedExpression::Id(*depth_typeexpr_id), depth.clone());
             let depth = match &stage.inner {
                 spade_hir::expression::PipelineRefKind::Absolute(name) => {
                     let key = TypedExpression::Name(name.inner.clone());
                     let var = if !self.equations.contains_key(&key) {
-                        let var = self.new_generic();
+                        let var = self.new_generic_tlint(stage.loc());
                         self.add_equation(key.clone(), var.clone());
                         self.trace_stack.push(TraceStackEntry::PreAddingPipelineLabel(name.inner.clone(), var.clone()));
                         var
@@ -104,7 +105,7 @@ impl TypeState {
                 },
                 spade_hir::expression::PipelineRefKind::Relative(expr) => {
                     let expr_var = self.hir_type_expr_to_var(expr, generic_list)?;
-                    let total_offset = self.new_generic();
+                    let total_offset = self.new_generic_tlint(stage.loc());
                     self.add_constraint(
                         total_offset.clone(),
                         ConstraintExpr::Sum(
@@ -150,7 +151,7 @@ impl TypeState {
     pub fn visit_int_literal(&mut self, expression: &Loc<Expression>, ctx: &Context) -> Result<()> {
         assuming_kind!(ExprKind::IntLiteral(value, kind) = &expression => {
             let (t, _size) = match kind {
-                IntLiteralKind::Unsized => self.new_generic_number(ctx),
+                IntLiteralKind::Unsized => self.new_generic_number(expression.loc(), ctx),
                 IntLiteralKind::Signed(size) => {
                     let (t, size_var) = self.new_split_generic_int(expression.loc(), ctx.symtab);
                     // NOTE: Safe unwrap, we're unifying a generic int with a size
@@ -251,10 +252,17 @@ impl TypeState {
                         .secondary_label(other_source, format!("Type {t} inferred here"))
                     );
                 }
-                TypeVar::Unknown(_, _) => {
+                TypeVar::Unknown(_, _, _, MetaType::Type | MetaType::Any) => {
                     return Err(
                         Diagnostic::error(tup.as_ref(), "Type of tuple indexee must be known at this point")
                             .primary_label("The type of this must be known")
+                    )
+                }
+                TypeVar::Unknown(ref other_source, _, _, meta @ (MetaType::Uint | MetaType::Int | MetaType::Number)) => {
+                    return Err(
+                        Diagnostic::error(tup.as_ref(), "Cannot use tuple indexing on a type level number")
+                            .primary_label("Tuple indexing on type level number")
+                        .secondary_label(other_source, format!("Meta-type {meta} inferred here"))
                     )
                 }
             };
@@ -376,7 +384,7 @@ impl TypeState {
             }
 
             let inner_type = if members.is_empty() {
-                self.new_generic()
+                self.new_generic_type(expression.loc())
             }
             else {
                 members[0].get_type(self)?
@@ -421,7 +429,7 @@ impl TypeState {
         _generic_list: &GenericListToken,
     ) -> Result<()> {
         assuming_kind!(ExprKind::CreatePorts = &expression => {
-            let inner_type = self.new_generic();
+            let inner_type = self.new_generic_type(expression.loc());
             let inverted = TypeVar::Known(expression.loc(), KnownType::Inverted, vec![inner_type.clone()]);
             let compound = TypeVar::tuple(expression.loc(), vec![inner_type, inverted]);
             self.unify_expression_generic_error(expression, &compound, ctx)?;
@@ -443,7 +451,7 @@ impl TypeState {
             self.visit_expression(index, ctx, generic_list)?;
 
             // Add constraints
-            let inner_type = self.new_generic();
+            let inner_type = self.new_generic_type(expression.loc());
 
             // Unify inner type with this expression
             self.unify_expression_generic_error(
@@ -452,7 +460,7 @@ impl TypeState {
                 ctx
             )?;
 
-            let array_size = self.new_generic();
+            let array_size = self.new_generic_tluint(expression.loc());
             let (int_type, int_size) = self.new_split_generic_uint(index.loc(), ctx.symtab);
 
             // NOTE[et]: Only used for size constraints of this exact type - this can be a
@@ -498,7 +506,7 @@ impl TypeState {
         assuming_kind!(ExprKind::RangeIndex{target, ref start, ref end} = &expression => {
             self.visit_expression(target, ctx, generic_list)?;
             // Add constraints
-            let inner_type = self.new_generic();
+            let inner_type = self.new_generic_type(target.loc());
 
             let size = (&end.inner).to_bigint() - (&start.inner).to_bigint();
 
@@ -529,7 +537,7 @@ impl TypeState {
                 .into_default_diagnostic(expression)?;
 
 
-            let in_array_size = self.new_generic();
+            let in_array_size = self.new_generic_tluint(target.loc());
             let in_array_type = TypeVar::array(expression.loc(), inner_type, in_array_size);
             self.unify(&target.inner, &in_array_type, ctx)
                 .into_diagnostic(target.as_ref(), |diag, Tm{e: _expected, g: got}| {
@@ -666,8 +674,8 @@ impl TypeState {
                 }
                 BinaryOperator::Add
                 | BinaryOperator::Sub => {
-                    let (in_t, lhs_size) = self.new_generic_number(ctx);
-                    let (result_t, result_size) = self.new_generic_number(ctx);
+                    let (in_t, lhs_size) = self.new_generic_number(expression.loc(), ctx);
+                    let (result_t, result_size) = self.new_generic_number(expression.loc(), ctx);
 
                     self.add_constraint(
                         result_size.clone(),
@@ -695,9 +703,9 @@ impl TypeState {
 
                 }
                 BinaryOperator::Mul => {
-                    let (lhs_t, lhs_size) = self.new_generic_number(ctx);
-                    let (rhs_t, rhs_size) = self.new_generic_number(ctx);
-                    let (result_t, result_size) = self.new_generic_number(ctx);
+                    let (lhs_t, lhs_size) = self.new_generic_number(expression.loc(), ctx);
+                    let (rhs_t, rhs_size) = self.new_generic_number(expression.loc(), ctx);
+                    let (result_t, result_size) = self.new_generic_number(expression.loc(), ctx);
 
                     // Result size is sum of input sizes
                     self.add_constraint(
@@ -733,7 +741,7 @@ impl TypeState {
                 }
                 // Division, being integer division has the same width out as in
                 BinaryOperator::Div | BinaryOperator::Mod => {
-                    let (int_type, _size) = self.new_generic_number(ctx);
+                    let (int_type, _size) = self.new_generic_number(expression.loc(), ctx);
 
                     self.unify_expression_generic_error(lhs, &int_type, ctx)?;
                     self.unify_expression_generic_error(lhs, &rhs.inner, ctx)?;
@@ -746,7 +754,7 @@ impl TypeState {
                 | BinaryOperator::BitwiseOr
                 | BinaryOperator::ArithmeticRightShift
                 | BinaryOperator::RightShift => {
-                    let (int_type, _size) = self.new_generic_number(ctx);
+                    let (int_type, _size) = self.new_generic_number(expression.loc(), ctx);
 
                     // FIXME: Make generic over types that can be bitmanipulated
                     self.unify_expression_generic_error(lhs, &int_type, ctx)?;
@@ -759,7 +767,7 @@ impl TypeState {
                 | BinaryOperator::Lt
                 | BinaryOperator::Ge
                 | BinaryOperator::Le => {
-                    let (base, _size) = self.new_generic_number(ctx);
+                    let (base, _size) = self.new_generic_number(expression.loc(), ctx);
                     // FIXME: Make generic over types that can be compared
                     self.unify_expression_generic_error(lhs, &base, ctx)?;
                     self.unify_expression_generic_error(lhs, &rhs.inner, ctx)?;
@@ -795,7 +803,7 @@ impl TypeState {
                     self.unify_expression_generic_error(expression, &int_type, ctx)?
                 }
                 UnaryOperator::BitwiseNot => {
-                    let (number_type, _) = self.new_generic_number(ctx);
+                    let (number_type, _) = self.new_generic_number(expression.loc(), ctx);
                     self.unify_expression_generic_error(operand, &number_type, ctx)?;
                     self.unify_expression_generic_error(expression, &number_type, ctx)?
                 }
@@ -804,19 +812,19 @@ impl TypeState {
                     self.unify_expression_generic_error(expression, &t_bool(ctx.symtab).at_loc(expression), ctx)?
                 }
                 UnaryOperator::Dereference => {
-                    let result_type = self.new_generic();
+                    let result_type = self.new_generic_type(expression.loc());
                     let reference_type = TypeVar::wire(expression.loc(), result_type.clone());
                     self.unify_expression_generic_error(operand, &reference_type, ctx)?;
                     self.unify_expression_generic_error(expression, &result_type, ctx)?
                 }
                 UnaryOperator::Reference => {
-                    let result_type = self.new_generic();
+                    let result_type = self.new_generic_type(expression.loc());
                     let reference_type = TypeVar::wire(expression.loc(), result_type.clone());
                     self.unify_expression_generic_error(operand, &result_type, ctx)?;
                     self.unify_expression_generic_error(expression, &reference_type, ctx)?
                 }
                 UnaryOperator::FlipPort => {
-                    let inner_type = self.new_generic();
+                    let inner_type = self.new_generic_type(expression.loc());
                     let inverted_type = TypeVar::inverted(expression.loc(), inner_type.clone());
                     self.unify_expression_generic_error(operand, &inner_type, ctx)?;
                     self.unify_expression_generic_error(expression, &inverted_type, ctx)?

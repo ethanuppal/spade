@@ -28,6 +28,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 - [!324][!324] Move `stdlib` and `prelude` directories to `spade-compiler`
 - [!331][!331] Allow multiple same-named methods on the same type with different generic parameters
+- [!343][!343] **Breaking change** Changed the syntax for integer type parameters to `#uint X` instead of `#X`
+- [!343][!343] Add meta-types which differentiate between types, type level integers and type level unsigneds
 
 ### Fixed
 
