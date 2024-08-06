@@ -29,6 +29,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ### Fixed
 
 - [!338][!338] Fix panics in generic impl blocks
+- [!342][!342] Fix negative integer literals on negative bound (`let a: int<3> = -4`)
 
 ### Removed
 
@@ -40,6 +41,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 [!335]: https://gitlab.com/spade-lang/spade/-/merge_requests/335
 [!338]: https://gitlab.com/spade-lang/spade/-/merge_requests/338
 [!339]: https://gitlab.com/spade-lang/spade/-/merge_requests/339
+[!342]: https://gitlab.com/spade-lang/spade/-/merge_requests/342
 
 ## [0.9.0] - 2024-07-04
 
