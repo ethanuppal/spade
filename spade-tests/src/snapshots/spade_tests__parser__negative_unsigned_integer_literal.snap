@@ -11,3 +11,9 @@ error: Cannot apply unary minus to unsigned integer literal
   │
 2 │     let _ = -5u4;
   │             ^^^^
+  │
+  = help: Only signed integers can have negative values
+  = Try making the integer signed
+  │
+2 │     let _ = -5i4;
+  │             ~~~~

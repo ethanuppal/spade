@@ -164,9 +164,15 @@ impl<'a> Parser<'a> {
                 let int = match int {
                     IntLiteral::Unsized(val) => Ok(IntLiteral::Unsized(-val)),
                     IntLiteral::Signed { val, size } => Ok(IntLiteral::Signed { val: -val, size }),
-                    IntLiteral::Unsigned { .. } => Err(Diagnostic::error(
+                    IntLiteral::Unsigned { val, size } => Err(Diagnostic::error(
                         expr_loc,
                         "Cannot apply unary minus to unsigned integer literal",
+                    )
+                    .help("Only signed integers can have negative values")
+                    .span_suggest_replace(
+                        "Try making the integer signed",
+                        expr_loc,
+                        format!("-{val}i{size}"),
                     )),
                 }?;
                 Ok(Expression::IntLiteral(int))
