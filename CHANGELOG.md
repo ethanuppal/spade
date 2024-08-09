@@ -30,6 +30,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - [!331][!331] Allow multiple same-named methods on the same type with different generic parameters
 - [!343][!343] **Breaking change** Changed the syntax for integer type parameters to `#uint X` instead of `#X`
 - [!343][!343] Add meta-types which differentiate between types, type level integers and type level unsigneds
+- [!335][!335] Move pipeline depth computation into the types system to allow generically depthed pipelines
 
 ### Fixed
 
@@ -43,8 +44,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 [!326]: https://gitlab.com/spade-lang/spade/-/merge_requests/326
 [!329]: https://gitlab.com/spade-lang/spade/-/merge_requests/329
 [!331]: https://gitlab.com/spade-lang/spade/-/merge_requests/331
-[!335]: https://gitlab.com/spade-lang/spade/-/merge_requests/335
 [!334]: https://gitlab.com/spade-lang/spade/-/merge_requests/334
+[!335]: https://gitlab.com/spade-lang/spade/-/merge_requests/335
 [!338]: https://gitlab.com/spade-lang/spade/-/merge_requests/338
 [!339]: https://gitlab.com/spade-lang/spade/-/merge_requests/339
 [!342]: https://gitlab.com/spade-lang/spade/-/merge_requests/342

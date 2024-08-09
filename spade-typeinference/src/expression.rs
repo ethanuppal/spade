@@ -128,7 +128,7 @@ impl TypeState {
                     expression,
                     "Expected a pipeline state"
                 ))?;
-            self.add_requirement(Requirement::ValidPipelineOfset {
+            self.add_requirement(Requirement::ValidPipelineOffset {
                 definition_depth: pipeline_state
                     .total_depth
                     .clone(),

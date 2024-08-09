@@ -13,7 +13,7 @@ entity main(clk: clock) -> bool {
 }
 
 
-error: Pipeline depth mismatch.
+error: Pipeline depth mismatch
   ┌─ testinput:9:22
   │
 3 │ pipeline(2) test(clk: clock) -> bool {

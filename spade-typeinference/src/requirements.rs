@@ -55,7 +55,7 @@ pub enum Requirement {
         value: ConstantInt,
         target_type: Loc<TypeVar>,
     },
-    ValidPipelineOfset {
+    ValidPipelineOffset {
         definition_depth: Loc<TypeVar>,
         current_stage: Loc<TypeVar>,
         reference_offset: Loc<TypeVar>,
@@ -98,7 +98,7 @@ impl Requirement {
                 };
                 TypeState::replace_type_var(target_type, from, to);
             }
-            Requirement::ValidPipelineOfset {
+            Requirement::ValidPipelineOffset {
                 definition_depth,
                 current_stage,
                 reference_offset,
@@ -394,7 +394,7 @@ impl Requirement {
                 }
                 TypeVar::Unknown(_, _, _, _) => Ok(RequirementResult::NoChange),
             },
-            Requirement::ValidPipelineOfset {
+            Requirement::ValidPipelineOffset {
                 definition_depth,
                 current_stage,
                 reference_offset,
@@ -406,7 +406,7 @@ impl Requirement {
                                 reference_offset,
                                 format!("Pipeline references cannot refer to negative stages, inferred {rdepth}")
                             )
-                                .primary_label("This references stage {rdepth}")
+                                .primary_label(format!("This references stage {rdepth}"))
                                 .help(format!("This offset is relative to the current stage which is {current_stage}")))
                         } else if rdepth > ddepth {
                             Err(Diagnostic::error(

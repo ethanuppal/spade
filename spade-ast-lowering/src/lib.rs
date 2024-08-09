@@ -2439,7 +2439,10 @@ pub fn visit_expression(e: &ast::Expression, ctx: &mut Context) -> Result<hir::E
             Ok(hir::ExprKind::ArrayLiteral(exprs))
         }
         ast::Expression::ArrayShorthandLiteral(expr, amount) => {
-            Ok(hir::ExprKind::ArrayShorthandLiteral(Box::new(visit_expression(expr, ctx)?.at_loc(&expr)), amount.clone()))
+            Ok(hir::ExprKind::ArrayShorthandLiteral(
+                Box::new(visit_expression(expr, ctx)?.at_loc(&expr)),
+                amount.clone(),
+            ))
         }
         ast::Expression::Index(target, index) => {
             let target = target.try_visit(visit_expression, ctx)?;

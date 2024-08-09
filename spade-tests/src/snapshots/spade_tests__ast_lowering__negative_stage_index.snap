@@ -14,6 +14,6 @@ error: Pipeline references cannot refer to negative stages, inferred -1
   ┌─ testinput:2:17
   │
 2 │         let a = stage(-1).x;
-  │                 ^^^^^^^^^ This references stage {rdepth}
+  │                 ^^^^^^^^^ This references stage -1
   │
   = help: This offset is relative to the current stage which is 0

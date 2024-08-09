@@ -18,7 +18,7 @@ fn concat<N, M, K>(x: N, y: M) -> K __builtin__
 
 /// Concatenate the contents of two arrays `[l0, l1, l2...]`
 /// and `[r0, r1, r2...]` to form `[l0, l1, l2..., ln, r0, r1, r2...]`
-fn concat_arrays<T, #L, #R, #O>(l: [T; L], r: [T; R]) -> [T; O]
+fn concat_arrays<T, #uint L, #uint R, #uint O>(l: [T; L], r: [T; R]) -> [T; O]
     where O: L + R
 {
     std::conv::unsafe::unsafe_cast((r, l))

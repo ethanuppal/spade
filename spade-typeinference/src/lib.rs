@@ -701,7 +701,7 @@ impl TypeState {
 
                 self.unify(&call_depth, &definition_depth, ctx)
                     .into_diagnostic_no_expected_source(cdepth, |diag, Tm { e, g }| {
-                        diag.message("Pipeline depth mismatch.")
+                        diag.message("Pipeline depth mismatch")
                             .primary_label(format!("Expected depth {e}, got {g}"))
                             .secondary_label(udepth, format!("{name} has depth {e}"))
                     })?;
@@ -1770,11 +1770,11 @@ impl TypeState {
                 },
                 target_type: replace!(target_type),
             },
-            Requirement::ValidPipelineOfset {
+            Requirement::ValidPipelineOffset {
                 definition_depth,
                 current_stage,
                 reference_offset,
-            } => Requirement::ValidPipelineOfset {
+            } => Requirement::ValidPipelineOffset {
                 definition_depth: replace!(definition_depth),
                 current_stage: replace!(current_stage),
                 reference_offset: replace!(reference_offset),

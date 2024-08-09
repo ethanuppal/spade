@@ -8,7 +8,7 @@ pipeline(0) x(clk: clock) -> bool {
     inst(-1) y(clk)
 }
 
-error: Pipeline depth mismatch.
+error: Pipeline depth mismatch
   ┌─ testinput:5:10
   │
 1 │ pipeline(0) y(clk: clock) -> bool {

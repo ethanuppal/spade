@@ -40,10 +40,13 @@ impl<'a> Pass for FlattenRegs<'a> {
                         &self.items.types,
                     );
                     let count = match ty {
-                        Some(ConcreteType::Integer(val)) => val
-                            .to_usize()
-                            .ok_or_else(|| diag_anyhow!(count, "Stage count exceeds usize::MAX")),
-                        Some(_) => Err(diag_anyhow!(count, "Inferred non-integer for type")),
+                        Some(ConcreteType::Integer(val)) => val.to_usize().ok_or_else(|| {
+                            diag_anyhow!(count, "Repetition count exceeds usize::MAX")
+                        }),
+                        Some(_) => Err(diag_anyhow!(
+                            count,
+                            "Inferred non-integer count for register repetition"
+                        )),
                         None => Err(Diagnostic::error(count, "Could not infer register count")
                             .primary_label("Unknown register count")),
                     }?;
