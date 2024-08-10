@@ -304,7 +304,7 @@ impl TypeState {
         loc: Loc<()>,
         symtab: &SymbolTable,
     ) -> (TypeVar, TypeVar) {
-        let size = self.new_generic_tlint(loc.clone());
+        let size = self.new_generic_tlint(loc);
         let full = TypeVar::Known(loc, t_int(symtab), vec![size.clone()]);
         (full, size)
     }
@@ -314,7 +314,7 @@ impl TypeState {
         loc: Loc<()>,
         symtab: &SymbolTable,
     ) -> (TypeVar, TypeVar) {
-        let size = self.new_generic_tluint(loc.clone());
+        let size = self.new_generic_tluint(loc);
         let full = TypeVar::Known(loc, t_uint(symtab), vec![size.clone()]);
         (full, size)
     }
@@ -356,7 +356,7 @@ impl TypeState {
             .expect("Did not find number in symtab")
             .0;
         let id = self.new_typeid();
-        let size = self.new_generic_tluint(loc.clone());
+        let size = self.new_generic_tluint(loc);
         let t = TraitReq {
             name: number,
             type_params: vec![size.clone()],
@@ -916,11 +916,11 @@ impl TypeState {
         let (addr_type, addr_size) = self.new_split_generic_uint(args[1].value.loc(), ctx.symtab);
         let arg1_loc = args[1].value.loc();
         let port_type = TypeVar::array(
-            arg1_loc.clone(),
+            arg1_loc,
             TypeVar::tuple(
                 args[1].value.loc(),
                 vec![
-                    self.new_generic_type(arg1_loc.clone()),
+                    self.new_generic_type(arg1_loc),
                     addr_type,
                     self.new_generic_type(arg1_loc),
                 ],
@@ -1977,7 +1977,7 @@ impl TypeState {
                         if traits1.inner.is_empty() || traits2.inner.is_empty() {
                             panic!("Inferred an any meta-type with traits",);
                         }
-                        self.new_generic_with_meta(loc1.clone(), meta)
+                        self.new_generic_with_meta(*loc1, meta)
                     }
                     Some(MetaType::Type) => {
                         let new_trait_names = traits1
@@ -2015,13 +2015,10 @@ impl TypeState {
                             )
                             .collect::<std::result::Result<Vec<_>, UnificationError>>()?;
 
-                        self.new_generic_with_traits(
-                            new_loc.clone(),
-                            TraitList::from_vec(new_traits),
-                        )
+                        self.new_generic_with_traits(*new_loc, TraitList::from_vec(new_traits))
                     }
-                    Some(MetaType::Int) => self.new_generic_tlint(new_loc.clone()),
-                    Some(MetaType::Uint) => self.new_generic_tluint(new_loc.clone()),
+                    Some(MetaType::Int) => self.new_generic_tlint(*new_loc),
+                    Some(MetaType::Uint) => self.new_generic_tluint(*new_loc),
                     None => return Err(meta_err_producer!()),
                 };
                 Ok((new_t, vec![v1, v2]))
@@ -2271,7 +2268,7 @@ impl TypeState {
             if trait_is_expected {
                 Err(UnificationError::Normal(Tm {
                     e: UnificationTrace::new(
-                        self.new_generic_with_traits(trait_list_loc.clone(), required_traits),
+                        self.new_generic_with_traits(*trait_list_loc, required_traits),
                     ),
                     g: UnificationTrace::new(var.clone()),
                 }))
@@ -2279,7 +2276,7 @@ impl TypeState {
                 Err(UnificationError::Normal(Tm {
                     e: UnificationTrace::new(var.clone()),
                     g: UnificationTrace::new(
-                        self.new_generic_with_traits(trait_list_loc.clone(), required_traits),
+                        self.new_generic_with_traits(*trait_list_loc, required_traits),
                     ),
                 }))
             }

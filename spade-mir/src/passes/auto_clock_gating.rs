@@ -26,7 +26,7 @@ fn split_trivial_tag_value(
         },
         operands: vec![value.clone()],
         ty: Type::Bool,
-        loc: loc.clone(),
+        loc: *loc,
     }));
     statements.push(Statement::Binding(Binding {
         name: payload_name.clone(),
@@ -36,7 +36,7 @@ fn split_trivial_tag_value(
         },
         operands: vec![value.clone()],
         ty: Type::Tuple(variants[1].clone()),
-        loc: loc.clone(),
+        loc: *loc,
     }));
 
     (tag_name, payload_name)

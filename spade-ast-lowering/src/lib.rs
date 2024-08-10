@@ -3139,7 +3139,7 @@ mod statement_visiting {
     #[test]
     fn declarations_declare_variables() {
         let input = ast::Statement::Declaration(vec![ast_ident("x"), ast_ident("y")]).nowhere();
-        let mut ctx = &mut test_context();
+        let ctx = &mut test_context();
         assert_eq!(
             visit_statement(&input, ctx),
             Ok(vec![hir::Statement::Declaration(vec![
