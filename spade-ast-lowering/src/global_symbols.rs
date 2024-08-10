@@ -255,7 +255,7 @@ pub fn re_visit_type_declaration(
                 hir::TypeParam(name.clone(), name_id.clone(), MetaType::Type)
             }
             ast::TypeParam::TypeWithMeta { meta, name } => {
-                hir::TypeParam(name.clone(), name_id.clone(), visit_meta_type(&meta)?)
+                hir::TypeParam(name.clone(), name_id.clone(), visit_meta_type(meta)?)
             }
         };
         output_type_exprs.push(expr);
@@ -357,7 +357,7 @@ pub fn re_visit_type_declaration(
             // if it is not
             if s.is_port() {
                 for (_, f, ty) in &s.members.args {
-                    visit_type_spec(&ty, &TypeSpecKind::StructMember, ctx)?;
+                    visit_type_spec(ty, &TypeSpecKind::StructMember, ctx)?;
                     if !ty.is_port(&ctx.symtab)? {
                         return Err(Diagnostic::error(ty, "Non-port in port struct")
                             .primary_label("This is not a port type")
@@ -375,7 +375,7 @@ pub fn re_visit_type_declaration(
                 }
             } else {
                 for (_, _, ty) in &s.members.args {
-                    visit_type_spec(&ty, &TypeSpecKind::StructMember, ctx)?;
+                    visit_type_spec(ty, &TypeSpecKind::StructMember, ctx)?;
                     if ty.is_port(&ctx.symtab)? {
                         return Err(Diagnostic::error(ty, "Port in non-port struct")
                             .primary_label("This is a port")

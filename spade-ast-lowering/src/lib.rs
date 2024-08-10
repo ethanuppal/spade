@@ -1127,7 +1127,7 @@ pub fn visit_impl(
 
         let impl_method = &item.assume_unit().head;
 
-        check_type_params_for_impl_method_and_trait_method_match(impl_method, &trait_method)?;
+        check_type_params_for_impl_method_and_trait_method_match(impl_method, trait_method)?;
 
         let trait_method_mono =
             monomorphise_trait_method(trait_method, impl_method, trait_def, &trait_spec, ctx)?;
@@ -1337,7 +1337,7 @@ fn monomorphise_type_expr(
         TypeExpression::Integer(_) => Ok(te.clone()),
         TypeExpression::TypeSpec(s) => {
             let (inner, loc) = monomorphise_type_spec(
-                &s.clone().at_loc(&te),
+                &s.clone().at_loc(te),
                 trait_type_params,
                 trait_method_type_params,
                 impl_type_params,
@@ -1449,7 +1449,7 @@ fn monomorphise_type_spec(
                 ctx,
             )?;
             let mono_size = monomorphise_type_expr(
-                &size,
+                size,
                 trait_type_params,
                 trait_method_type_params,
                 impl_type_params,
@@ -1528,8 +1528,8 @@ fn check_type_params_for_impl_method_and_trait_method_match(
             ))
             .secondary_label(
                 ().between_locs(
-                    &trait_method.unit_type_params.first().unwrap(),
-                    &trait_method.unit_type_params.last().unwrap(),
+                    trait_method.unit_type_params.first().unwrap(),
+                    trait_method.unit_type_params.last().unwrap(),
                 ),
                 format!(
                     "Because this has {} type parameter{}",
@@ -1544,8 +1544,8 @@ fn check_type_params_for_impl_method_and_trait_method_match(
         } else if trait_method.unit_type_params.is_empty() {
             Err(Diagnostic::error(
                 ().between_locs(
-                    &impl_method.unit_type_params.first().unwrap(),
-                    &impl_method.unit_type_params.last().unwrap(),
+                    impl_method.unit_type_params.first().unwrap(),
+                    impl_method.unit_type_params.last().unwrap(),
                 ),
                 format!(
                     "Unexpected type parameter{} on impl of non-generic method",
@@ -1568,8 +1568,8 @@ fn check_type_params_for_impl_method_and_trait_method_match(
         } else {
             Err(Diagnostic::error(
                 ().between_locs(
-                    &impl_method.unit_type_params.first().unwrap(),
-                    &impl_method.unit_type_params.last().unwrap(),
+                    impl_method.unit_type_params.first().unwrap(),
+                    impl_method.unit_type_params.last().unwrap(),
                 ),
                 "Wrong number of generic type parameters",
             )
@@ -1584,8 +1584,8 @@ fn check_type_params_for_impl_method_and_trait_method_match(
             ))
             .secondary_label(
                 ().between_locs(
-                    &trait_method.unit_type_params.first().unwrap(),
-                    &trait_method.unit_type_params.last().unwrap(),
+                    trait_method.unit_type_params.first().unwrap(),
+                    trait_method.unit_type_params.last().unwrap(),
                 ),
                 format!(
                     "Because this has {} type parameter{}",
@@ -2322,8 +2322,8 @@ pub fn visit_turbofish(
             .map(|fish| match &fish.inner {
                 ast::NamedTurbofish::Short(name) => {
                     let arg = ast::TypeExpression::TypeSpec(Box::new(
-                        ast::TypeSpec::Named(Path(vec![name.clone()]).at_loc(&name), None)
-                            .at_loc(&name),
+                        ast::TypeSpec::Named(Path(vec![name.clone()]).at_loc(name), None)
+                            .at_loc(name),
                     ));
 
                     let arg =
@@ -2440,7 +2440,7 @@ pub fn visit_expression(e: &ast::Expression, ctx: &mut Context) -> Result<hir::E
         }
         ast::Expression::ArrayShorthandLiteral(expr, amount) => {
             Ok(hir::ExprKind::ArrayShorthandLiteral(
-                Box::new(visit_expression(expr, ctx)?.at_loc(&expr)),
+                Box::new(visit_expression(expr, ctx)?.at_loc(expr)),
                 amount.clone(),
             ))
         }
@@ -2628,7 +2628,7 @@ pub fn visit_expression(e: &ast::Expression, ctx: &mut Context) -> Result<hir::E
                     )
                 }
             }
-            .at_loc(&stage_kw_and_reference_loc);
+            .at_loc(stage_kw_and_reference_loc);
 
             let pipeline_ctx = ctx
                 .pipeline_ctx
@@ -3141,7 +3141,7 @@ mod statement_visiting {
         let input = ast::Statement::Declaration(vec![ast_ident("x"), ast_ident("y")]).nowhere();
         let mut ctx = &mut test_context();
         assert_eq!(
-            visit_statement(&input, &mut ctx),
+            visit_statement(&input, ctx),
             Ok(vec![hir::Statement::Declaration(vec![
                 name_id(0, "x"),
                 name_id(1, "y")

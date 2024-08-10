@@ -198,7 +198,7 @@ impl TypeState {
                 self.type_var_from_hir(e.loc(), &spec.clone(), generic_list_token)?
             }
             hir::TypeExpression::ConstGeneric(g) => {
-                let constraint = self.visit_const_generic(&g, &generic_list_token)?;
+                let constraint = self.visit_const_generic(g, generic_list_token)?;
 
                 let tvar = self.new_generic_tlnumber(e.loc());
                 self.add_constraint(
@@ -405,7 +405,7 @@ impl TypeState {
             depth_typeexpr_id,
         } = &entity.head.unit_kind.inner
         {
-            let depth_var = self.hir_type_expr_to_var(&depth, &generic_list)?;
+            let depth_var = self.hir_type_expr_to_var(depth, &generic_list)?;
             self.add_equation(TypedExpression::Id(*depth_typeexpr_id), depth_var.clone());
             self.pipeline_state = Some(PipelineState {
                 current_stage_depth: TypeVar::Known(
@@ -692,7 +692,7 @@ impl TypeState {
                 },
             ) => {
                 let definition_depth = self.hir_type_expr_to_var(udepth, &generic_list)?;
-                let call_depth = self.hir_type_expr_to_var(cdepth, &old_generic_list)?;
+                let call_depth = self.hir_type_expr_to_var(cdepth, old_generic_list)?;
 
                 // NOTE: We're not adding udepth_typeexpr_id here as that would break
                 // in the future if we try to do recursion. We will also never need to look
@@ -985,7 +985,7 @@ impl TypeState {
             }
 
             let matched_params =
-                param_util::match_args_with_params(&turbofish.turbofish, &type_params, false)?;
+                param_util::match_args_with_params(turbofish.turbofish, &type_params, false)?;
 
             // We want this to be positional, but the params we get from matching are
             // named, transform it. We'll do some unwrapping here, but it is safe
@@ -1058,7 +1058,7 @@ impl TypeState {
             let constraint = self.visit_const_generic(&clause.rhs, &tok)?;
 
             let name = &clause.lhs;
-            let tvar = new_list.get(&name).ok_or_else(|| {
+            let tvar = new_list.get(name).ok_or_else(|| {
                 Diagnostic::error(
                     &clause.lhs,
                     format!("{name} is not a generic parameter on this unit"),
@@ -1069,7 +1069,7 @@ impl TypeState {
                 tvar.clone(),
                 constraint,
                 clause.loc(),
-                &tvar,
+                tvar,
                 ConstraintSource::Where,
             );
         }
@@ -1422,7 +1422,7 @@ impl TypeState {
                     &new_depth,
                     ConstraintSource::PipelineRegCount {
                         reg: stmt.loc(),
-                        total: self.get_pipeline_state(&stmt)?.total_depth.loc(),
+                        total: self.get_pipeline_state(stmt)?.total_depth.loc(),
                     },
                 );
 
@@ -1450,7 +1450,7 @@ impl TypeState {
                 // Safe unwrap, unifying with a fresh var
                 self.unify(
                     &var,
-                    &self.get_pipeline_state(&name)?.current_stage_depth.clone(),
+                    &self.get_pipeline_state(name)?.current_stage_depth.clone(),
                     ctx,
                 )
                 .unwrap();

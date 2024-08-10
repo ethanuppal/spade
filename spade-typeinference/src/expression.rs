@@ -115,7 +115,7 @@ impl TypeState {
                         ),
                         stage.loc(),
                         &total_offset,
-                        ConstraintSource::PipelineRegOffset{reg: expr.loc(), total: self.get_pipeline_state(&expr)?.total_depth.loc()}
+                        ConstraintSource::PipelineRegOffset{reg: expr.loc(), total: self.get_pipeline_state(expr)?.total_depth.loc()}
                     );
                     // Safe unwrap, depth is a fresh type var
                     self.unify(&depth, &total_offset, ctx).unwrap()

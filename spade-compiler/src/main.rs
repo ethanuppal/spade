@@ -99,7 +99,7 @@ fn main() -> Result<()> {
         let files = opts
             .files
             .iter()
-            .map(|s| namespaced_file(&s).map_err(|e| anyhow!("{e}")))
+            .map(|s| namespaced_file(s).map_err(|e| anyhow!("{e}")))
             .collect::<Result<Vec<_>>>()
             .with_context(|| format!("Failed to decode file list in {command_file:?}"))?;
 

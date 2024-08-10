@@ -62,7 +62,7 @@ impl Register {
 
                     let (value_tag, value_payload) = split_trivial_tag_value(
                         &self.value,
-                        &variants,
+                        variants,
                         &mut new_statements,
                         expr_idtracker,
                         &self.loc,
@@ -71,7 +71,7 @@ impl Register {
                         if let Some((reset_trig, reset_val)) = &self.reset {
                             let (tag, payload) = split_trivial_tag_value(
                                 reset_val,
-                                &variants,
+                                variants,
                                 &mut new_statements,
                                 expr_idtracker,
                                 &self.loc,

@@ -241,7 +241,7 @@ impl Requirement {
             } => target_type.expect_named(
                 |_type_name, _params| {
                     let Some(implementor) =
-                        select_method(expr.loc(), &target_type, method, ctx.items)?
+                        select_method(expr.loc(), target_type, method, ctx.items)?
                     else {
                         return Ok(RequirementResult::NoChange);
                     };

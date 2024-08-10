@@ -222,7 +222,7 @@ pub fn match_args_with_params<'a, T: Clone, TypeLike>(
                 .iter()
                 .zip(params.0)
                 .map(|(arg, param)| Argument {
-                    target: &param.0,
+                    target: param.0,
                     target_type: param.1,
                     value: arg,
                     kind: ArgumentKind::Positional,

@@ -74,7 +74,7 @@ pub fn handle_statement(
             wal_trace: _,
             ty: _,
         }) => {
-            let time = expr.inner.kind.available_in(&ctx)?;
+            let time = expr.inner.kind.available_in(ctx)?;
             for name in pat.get_names() {
                 let ty = ctx
                     .types
@@ -84,7 +84,7 @@ pub fn handle_statement(
             }
         }
         Statement::Register(reg) => {
-            let time = reg.value.kind.available_in(&ctx)?;
+            let time = reg.value.kind.available_in(ctx)?;
             for name in reg.pattern.get_names() {
                 let ty = ctx
                     .types
