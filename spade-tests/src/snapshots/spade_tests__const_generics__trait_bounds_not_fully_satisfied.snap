@@ -1,0 +1,20 @@
+---
+source: spade-tests/src/const_generics.rs
+---
+trait X {}
+trait Y {}
+impl X for bool {}
+fn test<T: X + Y>(x: T)
+{
+    test(false)
+}
+
+
+error: Trait bound not satisfied. bool does not implement Y
+  ┌─ testinput:6:10
+  │
+4 │ fn test<T: X + Y>(x: T)
+  │                - Required because of the trait bound specified here
+5 │ {
+6 │     test(false)
+  │          ^^^^^ bool does not implement Y

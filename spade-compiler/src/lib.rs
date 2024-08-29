@@ -209,6 +209,7 @@ pub fn compile(
 
     let mut ctx = AstLoweringCtx {
         symtab,
+        item_list,
         idtracker: ExprIdTracker::new(),
         impl_idtracker: ImplIdTracker::new(),
         pipeline_ctx: None,
@@ -233,27 +234,28 @@ pub fn compile(
 
     for (namespace, module_ast) in &module_asts {
         do_in_namespace(namespace, &mut ctx, &mut |ctx| {
-            global_symbols::gather_symbols(module_ast, &mut item_list, ctx).or_report(&mut errors);
+            global_symbols::gather_symbols(module_ast, ctx).or_report(&mut errors);
         })
     }
 
-    unfinished_artefacts.item_list = Some(item_list.clone());
+    unfinished_artefacts.item_list = Some(ctx.item_list.clone());
 
     if errors.failed {
         return Err(unfinished_artefacts);
     }
 
-    lower_ast(&module_asts, &mut item_list, &mut ctx, &mut errors);
-
-    unfinished_artefacts.item_list = Some(item_list.clone());
+    lower_ast(&module_asts, &mut ctx, &mut errors);
 
     let AstLoweringCtx {
         symtab,
+        item_list,
         mut idtracker,
         impl_idtracker,
         pipeline_ctx: _,
         self_ctx: _,
     } = ctx;
+
+    unfinished_artefacts.item_list = Some(item_list.clone());
 
     for e in ensure_unique_anonymous_traits(&item_list) {
         errors.report(&e)
@@ -269,9 +271,14 @@ pub fn compile(
 
     let mut frozen_symtab = symtab.freeze();
 
+    let Ok(mapped_trait_impls) = TypeState::new().visit_impl_blocks(&item_list) else {
+        return Err(unfinished_artefacts);
+    };
+
     let type_inference_ctx = typeinference::Context {
         symtab: frozen_symtab.symtab(),
         items: &item_list,
+        trait_impls: &mapped_trait_impls,
     };
 
     let executables_and_types = item_list
@@ -460,7 +467,6 @@ fn parse(
 #[tracing::instrument(skip_all)]
 fn lower_ast(
     module_asts: &[(ModuleNamespace, ModuleBody)],
-    item_list: &mut ItemList,
     ctx: &mut AstLoweringCtx,
     errors: &mut ErrorHandler,
 ) {
@@ -475,7 +481,7 @@ fn lower_ast(
         }
         ctx.symtab
             .set_base_namespace(namespace.base_namespace.clone());
-        visit_module_body(item_list, module_ast, ctx).or_report(errors);
+        visit_module_body(module_ast, ctx).or_report(errors);
         ctx.symtab.set_base_namespace(SpadePath(vec![]));
         for _ in &namespace.namespace.0 {
             ctx.symtab.pop_namespace();

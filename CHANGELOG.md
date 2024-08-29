@@ -23,6 +23,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - [!334][!334] Add `to_be_bytes` and `to_le_bytes` to `uint<16>`, `uint<24>` and `uint<32>`
 - [!334][!334] Add `std::conv::concat_arrays`
 - [!334][!334] Add `std::conv::concat_arrays`, `std::ports::new_mut_wire` and `std::ports::read_mut_wire` to the prelude
+- [!345][!345] Add trait bounds (`T: Trait<T>`), these can be used in generic type definitions and `where` clauses
+- [!345][!345] Allow `where` clauses with trait bounds or const generics on impl blocks
 
 ### Changed
 
@@ -31,6 +33,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - [!343][!343] **Breaking change** Changed the syntax for integer type parameters to `#uint X` instead of `#X`
 - [!343][!343] Add meta-types which differentiate between types, type level integers and type level unsigneds
 - [!335][!335] Move pipeline depth computation into the types system to allow generically depthed pipelines
+- [!345][!345] **Breaking change** Changed the syntax for generic integer constraints to `N: { M + 2 }` instead of `N: M + 2`
 
 ### Fixed
 
@@ -49,6 +52,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 [!338]: https://gitlab.com/spade-lang/spade/-/merge_requests/338
 [!339]: https://gitlab.com/spade-lang/spade/-/merge_requests/339
 [!342]: https://gitlab.com/spade-lang/spade/-/merge_requests/342
+[!343]: https://gitlab.com/spade-lang/spade/-/merge_requests/343
+[!345]: https://gitlab.com/spade-lang/spade/-/merge_requests/345
 
 ## [0.9.0] - 2024-07-04
 

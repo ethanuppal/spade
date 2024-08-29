@@ -1,9 +1,8 @@
 ---
-source: spade-tests/src/typeinference.rs
+source: spade-tests/src/const_generics.rs
 ---
 fn add_one<#uint N, #uint O>(in: int<N>) -> int<O>
-    where O: N + 2
-{
+where O: { N + 2 } {
     0
 }
 
@@ -13,16 +12,16 @@ fn test() -> int<9> {
 
 
 error: Output type mismatch. Expected int<9>, got int<10>
-  ┌─ testinput:7:21
+  ┌─ testinput:6:21
   │  
-2 │       where O: N + 2
-  │             -------- Type 10 inferred here
+2 │   where O: { N + 2 } {
+  │              ----- Type 10 inferred here
   ·  
-7 │   fn test() -> int<9> {
+6 │   fn test() -> int<9> {
   │                ------ int<9> type specified here
   │ ╭─────────────────────^
-8 │ │     add_one(10i8)
-9 │ │ }
+7 │ │     add_one(10i8)
+8 │ │ }
   │ ╰─^ Found type int<10>
   │  
   = note: Expected: 9

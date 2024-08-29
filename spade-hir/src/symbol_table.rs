@@ -14,7 +14,7 @@ use spade_common::location_info::{Loc, WithLocation};
 use spade_common::name::{Identifier, NameID, Path};
 use spade_diagnostics::diagnostic::Diagnostic;
 
-use crate::{FunctionKind, ParameterList, TypeParam, TypeSpec, UnitHead, UnitKind};
+use crate::{FunctionKind, ParameterList, TraitSpec, TypeParam, TypeSpec, UnitHead, UnitKind};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum LookupError {
@@ -57,7 +57,7 @@ impl From<LookupError> for Diagnostic {
             | LookupError::NotATrait(path, got)
             | LookupError::NotAComptimeValue(path, got) => {
                 let expected = match lookup_error {
-                    LookupError::NotATypeSymbol(_, _) => "a type symbol",
+                    LookupError::NotATypeSymbol(_, _) => "a type",
                     LookupError::NotAVariable(_, _) => "a variable",
                     LookupError::NotAUnit(_, _) => "a unit",
                     LookupError::NotAnEnumVariant(_, _) => "an enum variant",
@@ -293,7 +293,7 @@ impl WithLocation for Patternable {}
 pub enum GenericArg {
     TypeName {
         name: Identifier,
-        traits: Vec<Loc<Path>>,
+        traits: Vec<Loc<TraitSpec>>,
     },
     TypeWithMeta {
         name: Identifier,
@@ -345,7 +345,7 @@ pub enum TypeSymbol {
     Declared(Vec<Loc<GenericArg>>, TypeDeclKind),
     /// A generic type present in the current scope
     GenericArg {
-        traits: Vec<Loc<NameID>>,
+        traits: Vec<Loc<TraitSpec>>,
     },
     GenericMeta(MetaType),
 }
@@ -512,6 +512,24 @@ impl SymbolTable {
     pub fn add_type(&mut self, name: Path, t: Loc<TypeSymbol>) -> NameID {
         let id = self.id_tracker.next();
         self.add_type_with_id(id, name, t)
+    }
+
+    pub fn add_traits_to_generic(
+        &mut self,
+        name_id: &NameID,
+        traits: Vec<Loc<TraitSpec>>,
+    ) -> Result<(), Diagnostic> {
+        assert!(self.types.contains_key(&name_id));
+        match &mut self.types.get_mut(name_id).unwrap().inner {
+            TypeSymbol::GenericArg { traits: existing } => {
+                existing.extend(traits);
+                Ok(())
+            }
+            _ => Err(Diagnostic::bug(
+                self.type_symbol_by_id(name_id).loc(),
+                "Attempted to add trait bounds to a non-generic type",
+            )),
+        }
     }
 
     pub fn add_unique_type(

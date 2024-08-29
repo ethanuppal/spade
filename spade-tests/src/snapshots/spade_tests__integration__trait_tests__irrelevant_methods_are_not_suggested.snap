@@ -10,13 +10,13 @@ entity test(x: uint<10>) {
 }
 
 
-error: uint<10> has no method method
+error: `uint<10>` has no method `method`
   ┌─ testinput:6:7
   │
 6 │     x.method()
   │     --^^^^^^--
   │     │ │
   │     │ No such method
-  │     This has type uint<10>
+  │     This has type `uint<10>`
   │
-  = help: The method exists for uint<8>
+  = help: The method exists for `uint<8>`

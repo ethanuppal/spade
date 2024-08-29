@@ -31,6 +31,7 @@ use spade_mir::unit_name::InstanceMap;
 use spade_parser::lexer;
 use spade_parser::Parser;
 use spade_typeinference::equation::{TypeVar, TypedExpression};
+use spade_typeinference::traits::TraitImplList;
 use spade_typeinference::{GenericListSource, HasType, TypeState};
 use spade_types::ConcreteType;
 use vcd_translate::translation::{self, inner_translate_value};
@@ -98,6 +99,8 @@ pub struct SpadeType(pub ConcreteType);
 /// take ownership of temporarily
 pub struct OwnedState {
     symtab: FrozenSymtab,
+    item_list: ItemList,
+    trait_impls: TraitImplList,
     idtracker: ExprIdTracker,
     impl_idtracker: ImplIdTracker,
 }
@@ -158,7 +161,6 @@ pub struct Spade {
     error_buffer: Buffer,
     diag_handler: DiagHandler,
     owned: Option<OwnedState>,
-    item_list: ItemList,
     uut: Loc<SpadePath>,
     /// Type state used for new code written into the context of this struct.
     type_state: TypeState,
@@ -221,10 +223,11 @@ impl Spade {
             code,
             error_buffer,
             diag_handler,
-            item_list: state.item_list,
             type_state: TypeState::new(),
             owned: Some(OwnedState {
                 symtab,
+                item_list: state.item_list,
+                trait_impls: TraitImplList::new(),
                 idtracker: state.idtracker,
                 impl_idtracker: state.impl_idtracker,
             }),
@@ -267,10 +270,11 @@ impl Spade {
     ) -> Result<ComparisonResult> {
         let spade_bits = BitString(self.compile_expr(spade_expr, &field.ty)?.as_string());
 
+        let owned_state = self.owned.as_ref().unwrap();
         let concrete = TypeState::ungenerify_type(
             &field.ty,
-            self.owned.as_ref().unwrap().symtab.symtab(),
-            &self.item_list.types,
+            owned_state.symtab.symtab(),
+            &owned_state.item_list.types,
         )
         .unwrap();
 
@@ -293,10 +297,12 @@ impl Spade {
         // The bits of the whole output struct
         output_bits: &BitString,
     ) -> Result<String> {
+        let owned_state = self.owned.as_ref().unwrap();
+
         let concrete = TypeState::ungenerify_type(
             &field.ty,
-            self.owned.as_ref().unwrap().symtab.symtab(),
-            &self.item_list.types,
+            owned_state.symtab.symtab(),
+            &owned_state.item_list.types,
         )
         .unwrap();
 
@@ -325,10 +331,11 @@ impl Spade {
             self.type_state
                 .type_var_from_hir(output_type.loc(), &output_type, &generic_list)?;
 
+        let owned_state = self.owned.as_ref().unwrap();
         let concrete = TypeState::ungenerify_type(
             &ty,
-            self.owned.as_ref().unwrap().symtab.symtab(),
-            &self.item_list.types,
+            owned_state.symtab.symtab(),
+            &owned_state.item_list.types,
         )
         .unwrap();
 
@@ -361,8 +368,8 @@ impl Spade {
         };
 
         // Create a new variable which is guaranteed to have the output type
-        let owned = self.take_owned();
-        let mut symtab = owned.symtab.unfreeze();
+        let owned_state = self.take_owned();
+        let mut symtab = owned_state.symtab.unfreeze();
 
         symtab.new_scope();
         let o_name = symtab.add_local_variable(Identifier("o".to_string()).nowhere());
@@ -382,16 +389,15 @@ impl Spade {
         let g = self.type_state.new_generic_any();
         self.type_state
             .add_equation(TypedExpression::Name(o_name.clone()), g);
-        self.type_state
-            .unify(
-                &o_name,
-                &ty,
-                &spade_typeinference::Context {
-                    symtab: &symtab,
-                    items: &self.item_list,
-                },
-            )
-            .unwrap();
+        self.type_state.unify(
+            &o_name,
+            &ty,
+            &spade_typeinference::Context {
+                symtab: &symtab,
+                items: &owned_state.item_list,
+                trait_impls: &owned_state.trait_impls,
+            },
+        )?;
 
         // Now that we have a type which we can work with, we can create a virtual expression
         // which accesses the field in order to learn the type of the field
@@ -408,8 +414,9 @@ impl Spade {
 
         let mut ast_ctx = spade_ast_lowering::Context {
             symtab,
-            idtracker: owned.idtracker,
-            impl_idtracker: owned.impl_idtracker,
+            item_list: owned_state.item_list,
+            idtracker: owned_state.idtracker,
+            impl_idtracker: owned_state.impl_idtracker,
             pipeline_ctx: None,
             self_ctx: SelfContext::FreeStanding,
         };
@@ -419,8 +426,10 @@ impl Spade {
 
         let type_ctx = spade_typeinference::Context {
             symtab: &ast_ctx.symtab,
-            items: &self.item_list,
+            items: &ast_ctx.item_list,
+            trait_impls: &owned_state.trait_impls,
         };
+
         let generic_list = self.type_state.create_generic_list(
             GenericListSource::Anonymous,
             &[],
@@ -441,7 +450,8 @@ impl Spade {
                 &g,
                 &spade_typeinference::Context {
                     symtab: &ast_ctx.symtab,
-                    items: &self.item_list,
+                    items: &ast_ctx.item_list,
+                    trait_impls: &owned_state.trait_impls,
                 },
             )
             .report_and_convert(&mut self.error_buffer, &self.code, &mut self.diag_handler)?;
@@ -455,7 +465,7 @@ impl Spade {
         // the types are good so we can do lots of unwrapping
         let mut concrete = &self
             .type_state
-            .name_type(&o_name.nowhere(), &ast_ctx.symtab, &self.item_list.types)
+            .name_type(&o_name.nowhere(), &ast_ctx.symtab, &ast_ctx.item_list.types)
             .unwrap();
         let (mut start, mut end) = (BigUint::zero(), concrete.to_mir_type().size());
 
@@ -473,10 +483,21 @@ impl Spade {
             }
         }
 
+        let spade_ast_lowering::Context {
+            symtab,
+            item_list,
+            idtracker,
+            impl_idtracker,
+            pipeline_ctx: _,
+            self_ctx: _,
+        } = ast_ctx;
+
         self.return_owned(OwnedState {
-            symtab: ast_ctx.symtab.freeze(),
-            idtracker: ast_ctx.idtracker,
-            impl_idtracker: ast_ctx.impl_idtracker,
+            symtab: symtab.freeze(),
+            item_list,
+            trait_impls: self.type_state.trait_impls.clone(),
+            idtracker,
+            impl_idtracker,
         });
 
         let result = Some(FieldRef {
@@ -496,6 +517,7 @@ impl Spade {
 
     // Translate a value from a verilog instance path into a string value
     pub fn translate_value(&self, path: &str, value: &str) -> Result<String> {
+        let owned_state = self.owned.as_ref().unwrap();
         let hierarchy = path.split('.').map(str::to_string).collect::<Vec<_>>();
         if hierarchy.is_empty() {
             return Err(anyhow!("{path} is not a hierarchy path"));
@@ -506,11 +528,8 @@ impl Spade {
             &hierarchy,
             &self.instance_map,
             &self.mir_context,
-            self.owned
-                .as_ref()
-                .map(|state| state.symtab.symtab())
-                .unwrap(),
-            &self.item_list,
+            owned_state.symtab.symtab(),
+            &owned_state.item_list,
         )?;
 
         Ok(val_to_spade(value, concrete))
@@ -553,8 +572,8 @@ impl Spade {
     /// input port
     #[tracing::instrument(level = "trace", skip(self))]
     fn get_port(&mut self, port: String) -> Result<(String, Loc<TypeSpec>)> {
-        let owned = self.owned.as_ref().unwrap();
-        let symtab = owned.symtab.symtab();
+        let owned_state = self.owned.as_ref().unwrap();
+        let symtab = owned_state.symtab.symtab();
         let head = Self::lookup_function_like(&self.uut, symtab)
             .map_err(Diagnostic::from)
             .report_and_convert(&mut self.error_buffer, &self.code, &mut self.diag_handler)?;
@@ -603,6 +622,8 @@ impl Spade {
 
         let OwnedState {
             symtab,
+            item_list,
+            trait_impls,
             idtracker,
             impl_idtracker,
         } = self
@@ -614,25 +635,40 @@ impl Spade {
 
         let mut ast_ctx = spade_ast_lowering::Context {
             symtab,
+            item_list,
             idtracker,
             impl_idtracker,
             pipeline_ctx: None,
             self_ctx: SelfContext::FreeStanding,
         };
+
         let hir = spade_ast_lowering::visit_expression(&ast, &mut ast_ctx)
             .report_and_convert(&mut self.error_buffer, &self.code, &mut self.diag_handler)?
             .at_loc(&ast);
 
-        let mut symtab = ast_ctx.symtab.freeze();
+        let spade_ast_lowering::Context {
+            symtab,
+            item_list,
+            mut idtracker,
+            impl_idtracker,
+            pipeline_ctx: _,
+            self_ctx: _,
+        } = ast_ctx;
+
+        let mut symtab = symtab.freeze();
 
         let type_ctx = spade_typeinference::Context {
             symtab: symtab.symtab(),
-            items: &self.item_list,
+            items: &item_list,
+            trait_impls: &trait_impls,
         };
-        let generic_list = self
-            .type_state
-            .create_generic_list(GenericListSource::Anonymous, &[], &[], None, &[])
-            .unwrap();
+        let generic_list = self.type_state.create_generic_list(
+            GenericListSource::Anonymous,
+            &[],
+            &[],
+            None,
+            &[],
+        )?;
 
         self.type_state
             .visit_expression(&hir, &type_ctx, &generic_list)
@@ -644,22 +680,24 @@ impl Spade {
                 ty,
                 &spade_typeinference::Context {
                     symtab: symtab.symtab(),
-                    items: &self.item_list,
+                    items: &item_list,
+                    trait_impls: &trait_impls,
                 },
             )
             .report_and_convert(&mut self.error_buffer, &self.code, &mut self.diag_handler)?;
         self.type_state
             .check_requirements(&spade_typeinference::Context {
-                items: &self.item_list,
+                items: &item_list,
                 symtab: symtab.symtab(),
+                trait_impls: &trait_impls,
             })
             .report_and_convert(&mut self.error_buffer, &self.code, &mut self.diag_handler)?;
 
         let mut hir_ctx = spade_hir_lowering::Context {
             symtab: &mut symtab,
-            idtracker: &mut ast_ctx.idtracker,
+            idtracker: &mut idtracker,
             types: &mut self.type_state,
-            item_list: &self.item_list,
+            item_list: &item_list,
             unit_generic_list: &None,
             // NOTE: This requires changes if we end up wanting to write tests
             // for generic units
@@ -678,8 +716,10 @@ impl Spade {
 
         self.return_owned(OwnedState {
             symtab,
-            idtracker: ast_ctx.idtracker,
-            impl_idtracker: ast_ctx.impl_idtracker,
+            item_list,
+            trait_impls,
+            idtracker,
+            impl_idtracker,
         });
 
         let result = eval_statements(&mir.to_vec_no_source_map());

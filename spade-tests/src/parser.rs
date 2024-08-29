@@ -615,6 +615,40 @@ fn generic_param_on_struct_is_valid() {
     build_items(code);
 }
 
+#[test]
+fn where_clause_on_unit_is_valid() {
+    let code = r#"
+        trait S {}
+        fn foo<T>() -> bool where T: S {
+            true
+        }
+        "#;
+
+    build_items(code);
+}
+
+#[test]
+fn where_clause_on_trait_is_valid() {
+    let code = r#"
+        trait S {}
+        trait T<X> where X: S {}
+        "#;
+
+    build_items(code);
+}
+
+#[test]
+fn where_clause_on_impl_block_is_valid() {
+    let code = r#"
+        trait S<T> {}
+        struct X {}
+        impl<T> S<T> for X
+            where T: S<bool> {}
+        "#;
+
+    build_items(code);
+}
+
 snapshot_error! {
     method_turbofish_without_argument_list,
     "

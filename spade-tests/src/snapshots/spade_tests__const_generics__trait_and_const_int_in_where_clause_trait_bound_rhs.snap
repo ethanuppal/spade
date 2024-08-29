@@ -1,0 +1,27 @@
+---
+source: spade-tests/src/const_generics.rs
+---
+trait X {}
+fn test<T>()
+    where T: { X + 1 }
+{}
+
+
+error: Expected `T` to be a type level integer
+  ┌─ testinput:3:11
+  │
+2 │ fn test<T>()
+  │         - `T` is a generic type
+3 │     where T: { X + 1 }
+  │           ^    ----- This is an integer constraint
+  │           │     
+  │           Generic type in generic integer constraint
+  │
+  = Try making the generic an integer
+  │
+2 │ fn test<#int T>()
+  │         +++++
+  = or an unsigned integer
+  │
+2 │ fn test<#uint T>()
+  │         ++++++

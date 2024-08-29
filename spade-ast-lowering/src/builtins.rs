@@ -37,12 +37,18 @@ pub fn populate_symtab(symtab: &mut SymbolTable, item_list: &mut ItemList) {
                                 t.is_empty(),
                                 "Constrained generics are not supported on primitives"
                             );
+
                             let id = symtab.add_type_with_id(
                                 id,
                                 Path(vec![a.clone().nowhere()]),
                                 TypeSymbol::GenericArg { traits: vec![] }.nowhere(),
                             );
-                            TypeParam(a.clone().nowhere(), id, MetaType::Type)
+                            TypeParam {
+                                ident: a.clone().nowhere(),
+                                name_id: id,
+                                trait_bounds: vec![],
+                                meta: MetaType::Type,
+                            }
                         }
                         GenericArg::TypeWithMeta { name, meta } => {
                             let id = symtab.add_type_with_id(
@@ -50,7 +56,12 @@ pub fn populate_symtab(symtab: &mut SymbolTable, item_list: &mut ItemList) {
                                 Path(vec![name.clone().nowhere()]),
                                 TypeSymbol::GenericMeta(meta.clone()).nowhere(),
                             );
-                            TypeParam(name.clone().nowhere(), id, meta.clone())
+                            TypeParam {
+                                ident: name.clone().nowhere(),
+                                name_id: id,
+                                trait_bounds: vec![],
+                                meta: meta.clone(),
+                            }
                         }
                     }
                     .nowhere();

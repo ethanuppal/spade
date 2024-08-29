@@ -1,3 +1,4 @@
+use crate::passes::pass::Pass;
 use spade_common::{
     location_info::{Loc, WithLocation},
     name::Identifier,
@@ -7,8 +8,6 @@ use spade_hir::{
     expression::NamedArgument, symbol_table::FrozenSymtab, ArgumentList, Expression, ItemList,
 };
 use spade_typeinference::{method_resolution::select_method, HasType, TypeState};
-
-use crate::passes::pass::Pass;
 
 pub struct LowerMethods<'a> {
     pub type_state: &'a TypeState,
@@ -31,7 +30,14 @@ impl<'a> Pass for LowerMethods<'a> {
                     Diagnostic::bug(self_.as_ref(), format!("did not find a type ({e})"))
                 })?;
 
-                let Some(method) = select_method(self_.loc(), &self_type, name, self.items)? else {
+                let Some(method) = select_method(
+                    self_.loc(),
+                    &self_type,
+                    &None,
+                    name,
+                    &self.type_state.trait_impls,
+                )?
+                else {
                     return Err(Diagnostic::bug(
                         expression.loc(),
                         format!("Ambiguous method call. Multiple candidates exist for {self_type}"),

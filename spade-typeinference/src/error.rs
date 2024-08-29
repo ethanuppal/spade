@@ -1,15 +1,12 @@
 use itertools::Itertools;
 use thiserror::Error;
 
-use spade_common::{
-    location_info::{FullSpan, Loc, WithLocation},
-    name::NameID,
-};
+use spade_common::location_info::{FullSpan, Loc, WithLocation};
 use spade_diagnostics::Diagnostic;
 
 use crate::constraints::ConstraintSource;
 
-use super::equation::TypeVar;
+use super::equation::{TraitReq, TypeVar};
 
 /// A trace of a unification error. The `failing` field indicates which exact type failed to unify,
 /// while the `inside` is the "top level" type which failed to unify if it's not the same as
@@ -145,9 +142,9 @@ impl<T> UnificationErrorExt<T> for std::result::Result<T, UnificationError> {
                     g: old_g,
                 }))
             }
-            e @ Err(UnificationError::UnsatisfiedTraits(_, _)) => e,
+            e @ Err(UnificationError::UnsatisfiedTraits { .. }) => e,
             Err(UnificationError::FromConstraints { .. } | UnificationError::Specific { .. }) => {
-                panic!("Called add_context on a constraint based unfication error")
+                panic!("Called add_context on a constraint-based unification error")
             }
         }
     }
@@ -203,25 +200,34 @@ impl<T> UnificationErrorExt<T> for std::result::Result<T, UnificationError> {
                         g.inside.map(|o| o.display_with_meta(display_meta)),
                     )
                 }
-                UnificationError::UnsatisfiedTraits(var, impls) => {
-                    let impls_str = if impls.len() >= 2 {
+                UnificationError::UnsatisfiedTraits {
+                    var,
+                    traits,
+                    target_loc: _,
+                } => {
+                    let trait_bound_loc = ().at_loc(&traits[0]);
+                    let impls_str = if traits.len() >= 2 {
                         format!(
                             "{} and {}",
-                            impls[0..impls.len() - 1]
+                            traits[0..traits.len() - 1]
                                 .iter()
-                                .map(|i| format!("{i}"))
+                                .map(|i| i.inner.display_with_meta(display_meta))
                                 .join(", "),
-                            impls[impls.len() - 1]
+                            traits[traits.len() - 1]
                         )
                     } else {
-                        format!("{}", impls[0])
+                        format!("{}", traits[0].display_with_meta(display_meta))
                     };
-                    let short_msg = format!("{var} does not impl {impls_str}");
+                    let short_msg = format!("{var} does not implement {impls_str}");
                     Diagnostic::error(
                         unification_point,
-                        format!("Unsatisfied trait requirements. {short_msg}"),
+                        format!("Trait bound not satisfied. {short_msg}"),
                     )
                     .primary_label(short_msg)
+                    .secondary_label(
+                        trait_bound_loc,
+                        "Required because of the trait bound specified here",
+                    )
                 }
                 UnificationError::FromConstraints {
                     expected,
@@ -364,7 +370,11 @@ pub enum UnificationError {
     #[error("")]
     Specific(#[from] spade_diagnostics::Diagnostic),
     #[error("Unsatisfied traits")]
-    UnsatisfiedTraits(TypeVar, Vec<NameID>),
+    UnsatisfiedTraits {
+        var: TypeVar,
+        traits: Vec<Loc<TraitReq>>,
+        target_loc: Loc<()>,
+    },
     #[error("Unification error from constraints")]
     FromConstraints {
         expected: UnificationTrace,

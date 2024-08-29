@@ -1,0 +1,14 @@
+---
+source: spade-tests/src/const_generics.rs
+---
+struct S {}
+fn test<T: S>() {}
+
+
+error: Expected S to be a trait
+  ┌─ testinput:2:12
+  │
+1 │ struct S {}
+  │ ----------- S is a struct
+2 │ fn test<T: S>() {}
+  │            ^ Expected a trait

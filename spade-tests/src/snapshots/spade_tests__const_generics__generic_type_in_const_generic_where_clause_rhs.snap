@@ -1,18 +1,18 @@
 ---
-source: spade-tests/src/ast_lowering.rs
+source: spade-tests/src/const_generics.rs
 ---
 fn test<N, #uint O>()
-    where O: N
+    where O: { N }
 {}
 
 
 error: N is not a type level integer but is used in a const generic expression.
-  ┌─ testinput:2:14
+  ┌─ testinput:2:16
   │
 1 │ fn test<N, #uint O>()
   │         - N is defined here
-2 │     where O: N
-  │              ^ Expected type level integer
+2 │     where O: { N }
+  │                ^ Expected type level integer
   │
   = Try making the generic an integer
   │

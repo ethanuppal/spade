@@ -16,32 +16,31 @@ use spade_diagnostics::{diag_bail, Diagnostic};
 use spade_types::meta_types::MetaType;
 use tracing::{event, info, Level};
 
-use std::collections::{HashMap, HashSet};
-
-use comptime::ComptimeCondExt;
-use hir::param_util::ArgumentError;
-use hir::symbol_table::DeclarationState;
-use hir::{ConstGeneric, ExecutableItem, PatternKind, TraitName, WalTrace, WhereClause};
-use spade_ast as ast;
-use spade_common::id_tracker::{ExprIdTracker, ImplIdTracker};
-use spade_common::location_info::{Loc, WithLocation};
-use spade_common::name::{Identifier, NameID, Path};
-use spade_hir::{self as hir, Module};
-
 use crate::attributes::AttributeListExt;
 use crate::pipelines::maybe_perform_pipelining_tasks;
 use crate::types::{IsPort, IsSelf};
 use ast::{Binding, CallKind, ParameterList, UnitKind};
+use comptime::ComptimeCondExt;
 use hir::expression::{BinaryOperator, IntLiteralKind};
+use hir::param_util::ArgumentError;
+use hir::symbol_table::DeclarationState;
 use hir::symbol_table::{LookupError, SymbolTable, Thing, TypeSymbol};
+use hir::{ConstGeneric, ExecutableItem, PatternKind, TraitName, WalTrace};
+use spade_ast::{self as ast, ImplBlock, TypeParam, Unit, WhereClause};
 pub use spade_common::id_tracker;
+use spade_common::id_tracker::{ExprIdTracker, ImplIdTracker};
+use spade_common::location_info::{Loc, WithLocation};
+use spade_common::name::{Identifier, NameID, Path};
+use spade_hir::{
+    self as hir, ItemList, Module, TraitDef, TraitSpec, TypeExpression, TypeSpec, UnitHead,
+};
+use std::collections::{HashMap, HashSet};
 
 use error::Result;
-use spade_ast::{ImplBlock, TypeParam, Unit};
-use spade_hir::{TraitDef, TraitSpec, TypeExpression, TypeSpec, UnitHead};
 
 pub struct Context {
     pub symtab: SymbolTable,
+    pub item_list: ItemList,
     pub idtracker: ExprIdTracker,
     pub impl_idtracker: ImplIdTracker,
     pub pipeline_ctx: Option<PipelineContext>,
@@ -72,22 +71,25 @@ pub fn visit_type_param(param: &ast::TypeParam, ctx: &mut Context) -> Result<hir
             name: ident,
             traits,
         } => {
-            let traits = traits
+            let trait_bounds: Vec<Loc<TraitSpec>> = traits
                 .iter()
-                .map(|t| {
-                    ctx.symtab
-                        .lookup_trait(t)
-                        .map(|(name, _)| name.at_loc(t))
-                        .map_err(|e| e.into())
-                })
+                .map(|t| visit_trait_spec(t, &TypeSpecKind::TraitBound, ctx))
                 .collect::<Result<_>>()?;
 
             let name_id = ctx.symtab.add_type(
                 Path::ident(ident.clone()),
-                TypeSymbol::GenericArg { traits }.at_loc(ident),
+                TypeSymbol::GenericArg {
+                    traits: trait_bounds.clone(),
+                }
+                .at_loc(ident),
             );
 
-            Ok(hir::TypeParam(ident.clone(), name_id, MetaType::Type))
+            Ok(hir::TypeParam {
+                ident: ident.clone(),
+                name_id,
+                trait_bounds,
+                meta: MetaType::Type,
+            })
         }
         ast::TypeParam::TypeWithMeta { meta, name } => {
             let meta = visit_meta_type(meta)?;
@@ -96,7 +98,12 @@ pub fn visit_type_param(param: &ast::TypeParam, ctx: &mut Context) -> Result<hir
                 TypeSymbol::GenericMeta(meta.clone()).at_loc(name),
             );
 
-            Ok(hir::TypeParam(name.clone(), name_id, meta))
+            Ok(hir::TypeParam {
+                ident: name.clone(),
+                name_id,
+                trait_bounds: vec![],
+                meta,
+            })
         }
     }
 }
@@ -112,17 +119,34 @@ pub fn re_visit_type_param(param: &ast::TypeParam, ctx: &Context) -> Result<hir:
             traits: _,
         } => {
             let path = Path::ident(ident.clone()).at_loc(ident);
-            let name_id = ctx.symtab.lookup_type_symbol(&path)?.0;
-            Ok(hir::TypeParam(ident.clone(), name_id, MetaType::Type))
+            let (name_id, tsym) = ctx.symtab.lookup_type_symbol(&path)?;
+
+            let trait_bounds = match &tsym.inner {
+                TypeSymbol::GenericArg { traits } => traits.clone(),
+                _ => return Err(Diagnostic::bug(
+                    ident,
+                    format!(
+                        "Trait bound on {ident} on non-generic argument, which should've been caught by the first pass"
+                    ),
+                ))
+            };
+
+            Ok(hir::TypeParam {
+                ident: ident.clone(),
+                name_id,
+                trait_bounds,
+                meta: MetaType::Type,
+            })
         }
         ast::TypeParam::TypeWithMeta { meta, name } => {
             let path = Path::ident(name.clone()).at_loc(name);
             let name_id = ctx.symtab.lookup_type_symbol(&path)?.0;
-            Ok(hir::TypeParam(
-                name.clone(),
+            Ok(hir::TypeParam {
+                ident: name.clone(),
                 name_id,
-                visit_meta_type(meta)?,
-            ))
+                trait_bounds: vec![],
+                meta: visit_meta_type(meta)?,
+            })
         }
     }
 }
@@ -139,6 +163,7 @@ pub enum TypeSpecKind {
     BindingType,
     Turbofish,
     PipelineDepth,
+    TraitBound,
 }
 
 pub fn visit_type_expression(
@@ -168,11 +193,14 @@ pub fn visit_type_expression(
                 TypeSpecKind::ImplTarget => default_error("Impl targets", "impl target"),
                 TypeSpecKind::EnumMember => default_error("Enum members", "enum member"),
                 TypeSpecKind::StructMember => default_error("Struct members", "struct member"),
+                TypeSpecKind::TraitBound => {
+                    default_error("Traits used in trait bounds", "trait bound")
+                }
                 TypeSpecKind::Turbofish
                 | TypeSpecKind::BindingType
-                | TypeSpecKind::PipelineDepth => Ok(hir::TypeExpression::ConstGeneric(
-                    visit_const_generic(expr.as_ref(), ctx)?,
-                )),
+                | TypeSpecKind::PipelineDepth => {
+                    visit_const_generic(expr.as_ref(), ctx).map(hir::TypeExpression::ConstGeneric)
+                }
             }
         }
     }
@@ -358,6 +386,9 @@ pub fn visit_type_spec(
                 TypeSpecKind::EnumMember => default_error("Enum members", "enum member"),
                 TypeSpecKind::StructMember => default_error("Struct members", "struct member"),
                 TypeSpecKind::PipelineDepth => default_error("Pipeline depth", "pipeline depth"),
+                TypeSpecKind::TraitBound => {
+                    default_error("Traits used in trait bound", "trait bound")
+                }
                 TypeSpecKind::Turbofish | TypeSpecKind::BindingType => Ok(hir::TypeSpec::Wildcard),
             }
         }
@@ -453,6 +484,7 @@ fn visit_parameter_list(
 pub fn unit_head(
     head: &ast::UnitHead,
     scope_type_params: &Option<Loc<Vec<Loc<TypeParam>>>>,
+    scope_where_clauses: &[Loc<hir::WhereClause>],
     ctx: &mut Context,
 ) -> Result<hir::UnitHead> {
     ctx.symtab.new_scope();
@@ -473,6 +505,8 @@ pub fn unit_head(
         .flatten()
         .map(|loc| loc.try_map_ref(|p| visit_type_param(p, ctx)))
         .collect::<Result<Vec<Loc<hir::TypeParam>>>>()?;
+
+    let unit_where_clauses = visit_where_clauses(&head.where_clauses, ctx);
 
     let output_type = if let Some(output_type) = &head.output_type {
         Some(visit_type_spec(
@@ -510,35 +544,33 @@ pub fn unit_head(
         }
     }
 
-    let where_clauses = visit_where_clauses(&head.where_clauses, ctx);
-
-    let unit_kind: Result<_> = (|| {
-        head.unit_kind.try_map_ref(|k| {
-            let inner = match k {
-                ast::UnitKind::Function => hir::UnitKind::Function(hir::FunctionKind::Fn),
-                ast::UnitKind::Entity => hir::UnitKind::Entity,
-                ast::UnitKind::Pipeline(depth) => hir::UnitKind::Pipeline {
-                    depth: depth
-                        .inner
-                        .maybe_unpack(&ctx.symtab)?
-                        .ok_or_else(|| {
-                            Diagnostic::error(depth, "Missing pipeline depth")
-                                .primary_label("Missing pipeline depth")
-                                .note("The current comptime branch does not specify a depth")
-                        })?
-                        .try_map_ref(|t| {
-                            visit_type_expression(t, &TypeSpecKind::PipelineDepth, ctx)
-                        })?,
-                    depth_typeexpr_id: ctx.idtracker.next(),
-                },
-            };
-            Ok(inner)
-        })
-    })();
+    let unit_kind: Result<_> = head.unit_kind.try_map_ref(|k| {
+        let inner = match k {
+            ast::UnitKind::Function => hir::UnitKind::Function(hir::FunctionKind::Fn),
+            ast::UnitKind::Entity => hir::UnitKind::Entity,
+            ast::UnitKind::Pipeline(depth) => hir::UnitKind::Pipeline {
+                depth: depth
+                    .inner
+                    .maybe_unpack(&ctx.symtab)?
+                    .ok_or_else(|| {
+                        Diagnostic::error(depth, "Missing pipeline depth")
+                            .primary_label("Missing pipeline depth")
+                            .note("The current comptime branch does not specify a depth")
+                    })?
+                    .try_map_ref(|t| visit_type_expression(t, &TypeSpecKind::PipelineDepth, ctx))?,
+                depth_typeexpr_id: ctx.idtracker.next(),
+            },
+        };
+        Ok(inner)
+    });
 
     ctx.symtab.close_scope();
     port_error?;
-    let where_clauses = where_clauses?;
+    let where_clauses = unit_where_clauses?
+        .iter()
+        .chain(scope_where_clauses.iter())
+        .cloned()
+        .collect();
 
     Ok(hir::UnitHead {
         name: head.name.clone(),
@@ -554,19 +586,17 @@ pub fn unit_head(
 pub fn visit_const_generic(
     t: &Loc<ast::Expression>,
     ctx: &mut Context,
-) -> Result<Loc<hir::ConstGeneric>> {
+) -> Result<Loc<ConstGeneric>> {
     let kind = match &t.inner {
         ast::Expression::Identifier(name) => {
             let (name, sym) = ctx.symtab.lookup_type_symbol(name)?;
             match &sym.inner {
                 TypeSymbol::Declared(_, _) => {
-                    return Err(Diagnostic::error(
-                        t,
-                        format!(
+                    return Err(Diagnostic::error(t, format!(
                             "{name} is not a type level integer but is used in a const generic expression."
                         ),
                     )
-                    .primary_label(format!("Expected type level integer"))
+                        .primary_label(format!("Expected type level integer"))
                     .secondary_label(&sym, format!("{name} is defined here")))
                 }
                 TypeSymbol::GenericArg { traits: _ }=> {
@@ -574,20 +604,19 @@ pub fn visit_const_generic(
                         t,
                         format!(
                             "{name} is not a type level integer but is used in a const generic expression."
-                        ),
-                    )
-                    .primary_label(format!("Expected type level integer"))
-                    .secondary_label(&sym, format!("{name} is defined here"))
-                    .span_suggest_insert_before(
-                        "Try making the generic an integer",
+                        ))
+                        .primary_label("Expected type level integer")
+                        .secondary_label(&sym, format!("{name} is defined here"))
+                        .span_suggest_insert_before(
+                            "Try making the generic an integer",
                         &sym,
                         "#int ",
                     )
                     .span_suggest_insert_before(
                         "or an unsigned integer",
-                        &sym,
-                        "#uint ",
-                    ))
+                            &sym,
+                            "#uint ",
+                        ))
                 }
                 TypeSymbol::GenericMeta(_) => {
                     ConstGeneric::Name(name.at_loc(t))
@@ -678,45 +707,118 @@ pub fn visit_const_generic(
 }
 
 pub fn visit_where_clauses(
-    where_clauses: &[(Loc<Path>, Loc<ast::Expression>)],
+    where_clauses: &[WhereClause],
     ctx: &mut Context,
-) -> Result<Vec<Loc<WhereClause>>> {
-    where_clauses
-        .iter()
-        .map(|(name, rhs)| {
-            let (name_id, sym) = ctx.symtab.lookup_type_symbol(name)?;
-            let lhs = match &sym.inner {
-                TypeSymbol::Declared(_, _) => {
-                    return Err(Diagnostic::error(
-                        name,
-                        format!("Currently, only generic numbers can occur in where clauses"),
+) -> Result<Vec<Loc<hir::WhereClause>>> {
+    let mut visited_where_clauses: Vec<Loc<hir::WhereClause>> = vec![];
+    for where_clause in where_clauses {
+        match where_clause {
+            WhereClause::GenericInt { target, expression } => {
+                let make_diag = |primary| {
+                    Diagnostic::error(
+                        target,
+                        format!("Expected `{}` to be a type level integer", target),
                     )
-                    .primary_label("Declared type in where clause")
-                    .secondary_label(sym, format!("{name} is a type declared here")))
+                    .primary_label(primary)
+                    .secondary_label(expression, "This is an integer constraint")
+                };
+                let (name_id, sym) = match ctx.symtab.lookup_type_symbol(target) {
+                    Ok(res) => res,
+                    Err(LookupError::NotATypeSymbol(_, thing)) => {
+                        return Err(make_diag(format!("`{target}` is not a type level integer"))
+                            .secondary_label(
+                                thing.loc(),
+                                format!("`{}` is a {} declared here", target, thing.kind_string()),
+                            ))
+                    }
+                    Err(e) => return Err(e.into()),
+                };
+                match &sym.inner {
+                    TypeSymbol::GenericMeta(_) => {
+                        let clause = hir::WhereClause::Int {
+                            target: name_id.at_loc(target),
+                            constraint: visit_const_generic(expression, ctx)?,
+                        }
+                        .between_locs(target, expression);
+
+                        visited_where_clauses.push(clause);
+                    }
+                    TypeSymbol::GenericArg { .. } => {
+                        return Err(
+                            make_diag("Generic type in generic integer constraint".into())
+                                .secondary_label(
+                                    sym.clone(),
+                                    format!("`{target}` is a generic type"),
+                                )
+                                .span_suggest_insert_before(
+                                    "Try making the generic an integer",
+                                    &sym,
+                                    "#int ",
+                                )
+                                .span_suggest_insert_before(
+                                    "or an unsigned integer",
+                                    &sym,
+                                    "#uint ",
+                                ),
+                        );
+                    }
+                    TypeSymbol::Declared { .. } => {
+                        return Err(make_diag(
+                            "Declared type in generic integer constraint".into(),
+                        )
+                        .secondary_label(sym, format!("`{target}` is a type declared here")));
+                    }
                 }
-                TypeSymbol::GenericArg { .. } => {
-                    return Err(Diagnostic::error(
-                        name,
-                        format!("Currently, only generic numbers can occur in where clauses"),
+            }
+            WhereClause::TraitBounds { target, traits } => {
+                let make_diag = |primary| {
+                    Diagnostic::error(
+                        target,
+                        format!("Expected `{}` to be a generic type", target),
                     )
-                    .primary_label("Generic type in where clause")
-                    .secondary_label(&sym, format!("{name} is a generic type declared here"))
-                    .span_suggest_insert_before(
-                        "Try making the generic a number",
-                        &sym,
-                        "#",
-                    ))
-                }
-                // FIXME: Maybe check meta against the where clause rhs here
-                TypeSymbol::GenericMeta(_) => name_id.at_loc(name),
-            };
+                    .primary_label(primary)
+                };
+                let (name_id, sym) = match ctx.symtab.lookup_type_symbol(where_clause.target()) {
+                    Ok(res) => res,
+                    Err(LookupError::NotATypeSymbol(path, thing)) => {
+                        return Err(make_diag(format!("`{target}` is not a type symbol"))
+                            .secondary_label(
+                                path,
+                                format!("`{}` is {} declared here", target, thing.kind_string()),
+                            ));
+                    }
+                    Err(e) => return Err(e.into()),
+                };
+                match &sym.inner {
+                    TypeSymbol::GenericArg { .. } | TypeSymbol::GenericMeta(MetaType::Type) => {
+                        let traits = traits
+                            .iter()
+                            .map(|t| visit_trait_spec(t, &TypeSpecKind::TraitBound, ctx))
+                            .collect::<Result<Vec<_>>>()?;
 
-            let rhs = visit_const_generic(rhs, ctx)?;
+                        ctx.symtab.add_traits_to_generic(&name_id, traits.clone())?;
 
-            let loc = ().between_locs(&lhs, &rhs);
-            Ok(WhereClause { lhs, rhs }.at_loc(&loc))
-        })
-        .collect()
+                        visited_where_clauses.push(
+                            hir::WhereClause::Type {
+                                target: name_id.at_loc(target),
+                                traits,
+                            }
+                            .at_loc(target),
+                        );
+                    }
+                    TypeSymbol::GenericMeta(_) => {
+                        return Err(make_diag("Generic int in trait bound".into())
+                            .secondary_label(sym, format!("{target} is a generic int")));
+                    }
+                    TypeSymbol::Declared { .. } => {
+                        return Err(make_diag("Declared type in trait bound".into())
+                            .secondary_label(sym, format!("{target} is a type declared here")));
+                    }
+                };
+            }
+        }
+    }
+    Ok(visited_where_clauses)
 }
 
 /// The `extra_path` parameter allows specifying an extra path prepended to
@@ -830,8 +932,13 @@ pub fn visit_unit(
 
     // Add the type params to the symtab to make them visible in the body
     for param in head.get_type_params() {
-        let hir::TypeParam(ident, name, _) = param.inner;
-        ctx.symtab.re_add_type(ident, name)
+        let hir::TypeParam {
+            ident,
+            name_id,
+            trait_bounds: _,
+            meta: _,
+        } = param.inner;
+        ctx.symtab.re_add_type(ident, name_id)
     }
 
     ctx.pipeline_ctx = maybe_perform_pipelining_tasks(unit, &head, ctx)?;
@@ -881,8 +988,8 @@ pub fn visit_unit(
 pub fn create_trait_from_unit_heads(
     name: TraitName,
     type_params: &Option<Loc<Vec<Loc<TypeParam>>>>,
+    where_clauses: &[WhereClause],
     heads: &[Loc<ast::UnitHead>],
-    item_list: &mut hir::ItemList,
     ctx: &mut Context,
 ) -> Result<()> {
     ctx.symtab.new_scope();
@@ -896,62 +1003,70 @@ pub fn create_trait_from_unit_heads(
                         let ident = tp.name();
                         let type_symbol = match tp {
                             TypeParam::TypeName { name, traits } => {
-                                if !traits.is_empty() {
-                                    return Err(Diagnostic::bug(
-                                        ().between_locs(
-                                            traits.first().unwrap(),
-                                            traits.last().unwrap(),
-                                        ),
-                                        "Trait bounds are not allowed on trait type parameters",
-                                    )
-                                    .primary_label("Trait bounds not allowed here"));
-                                } else {
-                                    TypeSymbol::GenericArg {
-                                        traits: vec![], /* TODO trait bounds */
-                                    }
-                                    .at_loc(name)
-                                }
+                                let traits = traits
+                                    .iter()
+                                    .map(|t| visit_trait_spec(t, &TypeSpecKind::TraitBound, ctx))
+                                    .collect::<Result<Vec<_>>>()?;
+
+                                TypeSymbol::GenericArg { traits }.at_loc(name)
                             }
                             TypeParam::TypeWithMeta { meta, name } => {
                                 TypeSymbol::GenericMeta(visit_meta_type(meta)?).at_loc(name)
                             }
                         };
-                        let name = ctx.symtab.add_type(Path::ident(ident.clone()), type_symbol);
-                        match tp {
-                            TypeParam::TypeName { .. } => {
-                                Ok(hir::TypeParam(ident.clone(), name, MetaType::Type))
+                        let name_id = ctx.symtab.add_type(Path::ident(ident.clone()), type_symbol);
+                        Ok(match tp {
+                            TypeParam::TypeName { name: _, traits } => {
+                                let trait_bounds = traits
+                                    .iter()
+                                    .map(|t| visit_trait_spec(t, &TypeSpecKind::TraitBound, ctx))
+                                    .collect::<Result<_>>()?;
+
+                                hir::TypeParam {
+                                    ident: ident.clone(),
+                                    name_id,
+                                    trait_bounds,
+                                    meta: MetaType::Type,
+                                }
                             }
-                            TypeParam::TypeWithMeta { meta, name: _ } => {
-                                Ok(hir::TypeParam(ident.clone(), name, visit_meta_type(meta)?))
-                            }
-                        }
+                            TypeParam::TypeWithMeta { meta, name: _ } => hir::TypeParam {
+                                ident: ident.clone(),
+                                name_id,
+                                trait_bounds: vec![],
+                                meta: visit_meta_type(meta)?,
+                            },
+                        })
                     })
                 })
-                .collect()
+                .collect::<Result<Vec<_>>>()
         })?)
     } else {
         None
     };
 
+    let visited_where_clauses = visit_where_clauses(where_clauses, ctx)?;
+
     ctx.self_ctx = SelfContext::TraitDefinition(name.clone());
     let trait_members = heads
         .iter()
-        .map(|head| Ok((head.name.inner.clone(), unit_head(head, type_params, ctx)?)))
+        .map(|head| {
+            Ok((
+                head.name.inner.clone(),
+                unit_head(head, type_params, &visited_where_clauses, ctx)?,
+            ))
+        })
         .collect::<Result<Vec<_>>>()?;
 
     // Add the trait to the trait list
-    item_list.add_trait(name, visited_type_params, trait_members)?;
+    ctx.item_list
+        .add_trait(name, visited_type_params, trait_members)?;
 
     ctx.symtab.close_scope();
     Ok(())
 }
 
-#[tracing::instrument(skip(items, ctx))]
-pub fn visit_impl(
-    block: &Loc<ast::ImplBlock>,
-    items: &mut hir::ItemList,
-    ctx: &mut Context,
-) -> Result<Vec<hir::Item>> {
+#[tracing::instrument(skip(ctx))]
+pub fn visit_impl(block: &Loc<ast::ImplBlock>, ctx: &mut Context) -> Result<Vec<hir::Item>> {
     let mut result = vec![];
 
     ctx.symtab.new_scope();
@@ -967,40 +1082,23 @@ pub fn visit_impl(
         );
     };
 
+    let mut impl_type_params = vec![];
+
     if let Some(type_params) = &block.type_params {
         for param in type_params.inner.iter() {
-            let ident = param.inner.name();
-            ctx.symtab.add_type(
-                Path::ident(ident.clone()),
-                match &param.inner {
-                    TypeParam::TypeName { name, traits } => {
-                        if !traits.is_empty() {
-                            return Err(Diagnostic::bug(
-                                ().between_locs(traits.first().unwrap(), traits.last().unwrap()),
-                                "Trait bounds are not allowed on trait type parameters",
-                            )
-                            .primary_label("Trait bounds not allowed here"));
-                        } else {
-                            TypeSymbol::GenericArg {
-                                traits: vec![], /* TODO trait bounds */
-                            }
-                            .at_loc(name)
-                        }
-                    }
-                    TypeParam::TypeWithMeta { meta, name } => {
-                        TypeSymbol::GenericMeta(visit_meta_type(meta)?).at_loc(name)
-                    }
-                },
-            );
+            let param = param.try_map_ref(|p| visit_type_param(p, ctx))?;
+            impl_type_params.push(param);
         }
     }
 
+    let visited_where_clauses = visit_where_clauses(&block.where_clauses, ctx)?;
+
     let impl_block_id = ctx.impl_idtracker.next();
-    let (trait_name, trait_spec) = if let Some(t) = &block.r#trait {
-        let name = ctx.symtab.lookup_trait(&t.inner.path)?;
+    let (trait_name, trait_spec) = if let Some(trait_spec) = &block.r#trait {
+        let (name, loc) = ctx.symtab.lookup_trait(&trait_spec.inner.path)?;
         (
-            TraitName::Named(name.0.at_loc(&name.1)),
-            visit_trait_spec(t, ctx)?,
+            TraitName::Named(name.at_loc(&loc)),
+            visit_trait_spec(trait_spec, &TypeSpecKind::ImplTrait, ctx)?,
         )
     } else {
         // Create an anonymous trait which we will impl
@@ -1009,17 +1107,16 @@ pub fn visit_impl(
         create_trait_from_unit_heads(
             trait_name.clone(),
             &block.type_params,
+            &block.where_clauses,
             &block
                 .units
                 .iter()
                 .map(|u| u.head.clone().at_loc(u))
                 .collect::<Vec<_>>(),
-            items,
             ctx,
         )?;
 
         let type_params = match &block.type_params {
-            None => None,
             Some(params) => {
                 let mut type_expressions = vec![];
                 for param in &params.inner {
@@ -1031,24 +1128,30 @@ pub fn visit_impl(
                 }
                 Some(type_expressions.at_loc(params))
             }
+            None => None,
         };
 
         let spec = TraitSpec {
-            path: target_path.clone(),
+            name: trait_name.clone(),
             type_params,
-        };
+        }
+        .nowhere();
 
         (trait_name, spec)
     };
 
-    let trait_def = items.get_trait(&trait_name).ok_or_else(|| {
-        Diagnostic::bug(
-            block,
-            format!("Failed to find trait {trait_name} in the item list"),
-        )
-    })?;
+    let trait_def = ctx
+        .item_list
+        .get_trait(&trait_name)
+        .ok_or_else(|| {
+            Diagnostic::bug(
+                block,
+                format!("Failed to find trait {} in the item list", &trait_name),
+            )
+        })?
+        .clone();
 
-    check_generic_params_match_trait_def(&trait_name, trait_def, &trait_spec)?;
+    check_generic_params_match_trait_def(&trait_def, &trait_spec)?;
 
     let trait_methods = &trait_def.fns;
 
@@ -1098,7 +1201,13 @@ pub fn visit_impl(
             Identifier(format!("impl_{}", impl_block_id)).nowhere()
         ]));
 
-        global_symbols::visit_unit(&path_suffix, unit, &block.type_params, ctx)?;
+        global_symbols::visit_unit(
+            &path_suffix,
+            unit,
+            &block.type_params,
+            &visited_where_clauses,
+            ctx,
+        )?;
         let item = visit_unit(path_suffix, unit, &block.type_params, ctx)?;
 
         match &item {
@@ -1130,7 +1239,7 @@ pub fn visit_impl(
         check_type_params_for_impl_method_and_trait_method_match(impl_method, trait_method)?;
 
         let trait_method_mono =
-            monomorphise_trait_method(trait_method, impl_method, trait_def, &trait_spec, ctx)?;
+            monomorphise_trait_method(trait_method, impl_method, &trait_def, &trait_spec, ctx)?;
 
         check_output_type_for_impl_method_and_trait_method_matches(
             impl_method,
@@ -1154,16 +1263,55 @@ pub fn visit_impl(
 
     let target = visit_type_spec(&block.target, &TypeSpecKind::ImplTarget, ctx)?;
 
-    let duplicate = items.impls.entry(target_name.clone()).or_default().insert(
-        trait_name.clone(),
-        hir::ImplBlock {
-            fns: trait_impl,
-            target,
-        }
-        .at_loc(block),
-    );
+    let trait_type_params = if let Some(trait_type_params) = &trait_spec.type_params {
+        trait_type_params
+            .inner
+            .iter()
+            .map(Loc::strip_ref)
+            .cloned()
+            .collect()
+    } else {
+        vec![]
+    };
+
+    let impl_only_differing_by_trait_type_params = ctx
+        .item_list
+        .impls
+        .get(&target_name)
+        .map(|impls| {
+            impls
+                .iter()
+                .find_position(|((name, _), _)| name == &trait_name)
+                .map(|(idx, _)| idx)
+        })
+        .flatten();
+
+    let duplicate = ctx
+        .item_list
+        .impls
+        .entry(target_name.clone())
+        .or_default()
+        .insert(
+            (trait_name.clone(), trait_type_params),
+            hir::ImplBlock {
+                fns: trait_impl,
+                type_params: impl_type_params,
+                target,
+                id: impl_block_id,
+            }
+            .at_loc(block),
+        );
 
     check_no_duplicate_trait_impl(duplicate, block, &trait_name, &target_name)?;
+
+    if let Some(_) = impl_only_differing_by_trait_type_params {
+        return Err(Diagnostic::error(
+            block,
+            format!("An impl of trait {trait_name} for {target_name} already exists"),
+        )
+            .primary_label(format!("An impl of trait {trait_name} for {target_name} already exists"))
+            .note("The impls only differ by type parameters of the trait, which is currently not supported"));
+    }
 
     ctx.self_ctx = SelfContext::FreeStanding;
     ctx.symtab.close_scope();
@@ -1172,15 +1320,14 @@ pub fn visit_impl(
 }
 
 fn check_generic_params_match_trait_def(
-    trait_name: &TraitName,
     trait_def: &TraitDef,
-    trait_spec: &TraitSpec,
+    trait_spec: &Loc<TraitSpec>,
 ) -> Result<()> {
     if let Some(generic_params) = &trait_def.type_params {
         if let TraitSpec {
             type_params: Some(generic_spec),
             ..
-        } = trait_spec
+        } = &trait_spec.inner
         {
             if generic_params.len() != generic_spec.len() {
                 Err(
@@ -1206,28 +1353,27 @@ fn check_generic_params_match_trait_def(
                 Ok(())
             }
         } else {
-            match trait_name {
+            match &trait_spec.name {
                 TraitName::Named(name) => Err(Diagnostic::error(
-                    &trait_spec.path,
-                    format!("Raw use of generic trait {}", name),
+                    trait_spec,
+                    format!("Raw use of generic trait {name}"),
                 )
                 .primary_label(format!(
-                    "Trait {} used without specifying type parameters",
-                    name
+                    "Trait {name} used without specifying type parameters"
                 ))
-                .secondary_label(name, format!("Trait {} defined here", name))),
+                .secondary_label(name, format!("Trait {name} defined here"))),
                 TraitName::Anonymous(_) => Err(Diagnostic::bug(
                     ().nowhere(),
-                    "Generic anonymous trait found, which should not be possible",
+                    "Generic anonymous trait found, which should not be possible here",
                 )),
             }
         }
     } else if let TraitSpec {
+        name,
         type_params: Some(generic_spec),
-        ..
-    } = trait_spec
+    } = &trait_spec.inner
     {
-        match trait_name {
+        match name {
             TraitName::Named(name) => {
                 Err(Diagnostic::error(
                     generic_spec,
@@ -1796,35 +1942,39 @@ fn check_no_missing_methods(
 }
 
 #[tracing::instrument(skip_all, fields(name=?trait_spec.path))]
-pub fn visit_trait_spec(trait_spec: &ast::TraitSpec, ctx: &mut Context) -> Result<hir::TraitSpec> {
-    if let Some(params) = &trait_spec.type_params {
-        let visited_params = params.try_map_ref(|params| {
+pub fn visit_trait_spec(
+    trait_spec: &Loc<ast::TraitSpec>,
+    type_spec_kind: &TypeSpecKind,
+    ctx: &mut Context,
+) -> Result<Loc<hir::TraitSpec>> {
+    let (name_id, loc) = match ctx.symtab.lookup_trait(&trait_spec.inner.path) {
+        Ok(res) => res,
+        Err(LookupError::IsAType(path)) => {
+            let (_, loc) = ctx.symtab.lookup_type_symbol(&path)?;
+            return Err(Diagnostic::error(
+                path.clone(),
+                format!("Unexpected type {}, expected a trait", path.inner),
+            )
+            .primary_label("Unexpected type")
+            .secondary_label(loc, format!("Type {} defined here", path.inner)));
+        }
+        Err(err) => return Err(err.into()),
+    };
+    let name = TraitName::Named(name_id.at_loc(&loc));
+    let type_params = match &trait_spec.inner.type_params {
+        Some(params) => Some(params.try_map_ref(|params| {
             params
                 .iter()
-                .map(|param| {
-                    param.try_map_ref(|te| visit_type_expression(te, &TypeSpecKind::ImplTrait, ctx))
-                })
+                .map(|param| param.try_map_ref(|te| visit_type_expression(te, type_spec_kind, ctx)))
                 .collect::<Result<_>>()
-        })?;
-
-        Ok(hir::TraitSpec {
-            path: trait_spec.path.clone(),
-            type_params: Some(visited_params),
-        })
-    } else {
-        Ok(hir::TraitSpec {
-            path: trait_spec.path.clone(),
-            type_params: None,
-        })
-    }
+        })?),
+        None => None,
+    };
+    Ok(hir::TraitSpec { name, type_params }.at_loc(trait_spec))
 }
 
 #[tracing::instrument(skip_all, fields(name=?item.name()))]
-pub fn visit_item(
-    item: &ast::Item,
-    ctx: &mut Context,
-    item_list: &mut hir::ItemList,
-) -> Result<Vec<hir::Item>> {
+pub fn visit_item(item: &ast::Item, ctx: &mut Context) -> Result<Vec<hir::Item>> {
     match item {
         ast::Item::Unit(u) => Ok(vec![visit_unit(None, u, &None, ctx)?]),
         ast::Item::TraitDef(_) => {
@@ -1837,10 +1987,10 @@ pub fn visit_item(
             event!(Level::INFO, "Type definition");
             Ok(vec![])
         }
-        ast::Item::ImplBlock(block) => visit_impl(block, item_list, ctx),
+        ast::Item::ImplBlock(block) => visit_impl(block, ctx),
         ast::Item::Module(m) => {
             ctx.symtab.push_namespace(m.name.clone());
-            let result = visit_module(item_list, m, ctx);
+            let result = visit_module(m, ctx);
             ctx.symtab.pop_namespace();
             result.map(|_| vec![])
         }
@@ -1853,11 +2003,7 @@ pub fn visit_item(
 }
 
 #[tracing::instrument(skip_all, fields(module.name = %module.name.inner))]
-pub fn visit_module(
-    item_list: &mut hir::ItemList,
-    module: &ast::Module,
-    ctx: &mut Context,
-) -> Result<()> {
+pub fn visit_module(module: &ast::Module, ctx: &mut Context) -> Result<()> {
     let path = &ctx
         .symtab
         .current_namespace()
@@ -1872,30 +2018,26 @@ pub fn visit_module(
         })
         .expect("Attempting to lower a module that has not been added to the symtab previously");
 
-    item_list.modules.insert(
+    ctx.item_list.modules.insert(
         id.clone(),
         Module {
             name: id.at_loc(&module.name),
         },
     );
 
-    visit_module_body(item_list, &module.body, ctx)
+    visit_module_body(&module.body, ctx)
 }
 
 #[tracing::instrument(skip_all)]
-pub fn visit_module_body(
-    item_list: &mut hir::ItemList,
-    body: &ast::ModuleBody,
-    ctx: &mut Context,
-) -> Result<()> {
+pub fn visit_module_body(body: &ast::ModuleBody, ctx: &mut Context) -> Result<()> {
     for i in &body.members {
-        for item in visit_item(i, ctx, item_list)? {
+        for item in visit_item(i, ctx)? {
             match item {
-                hir::Item::Unit(u) => {
-                    item_list.add_executable(u.name.name_id().clone(), ExecutableItem::Unit(u))?
-                }
+                hir::Item::Unit(u) => ctx
+                    .item_list
+                    .add_executable(u.name.name_id().clone(), ExecutableItem::Unit(u))?,
 
-                hir::Item::Builtin(name, head) => item_list.add_executable(
+                hir::Item::Builtin(name, head) => ctx.item_list.add_executable(
                     name.name_id().clone(),
                     ExecutableItem::BuiltinUnit(name, head),
                 )?,
@@ -2471,16 +2613,19 @@ pub fn visit_expression(e: &ast::Expression, ctx: &mut Context) -> Result<hir::E
             name,
             args,
             turbofish,
-        } => Ok(hir::ExprKind::MethodCall {
-            target: Box::new(target.try_visit(visit_expression, ctx)?),
-            name: name.clone(),
-            args: args.try_map_ref(|args| visit_argument_list(args, ctx))?,
-            call_kind: visit_call_kind(kind, ctx)?,
-            turbofish: turbofish
-                .as_ref()
-                .map(|t| visit_turbofish(t, ctx))
-                .transpose()?,
-        }),
+        } => {
+            let target = target.try_visit(visit_expression, ctx)?;
+            Ok(hir::ExprKind::MethodCall {
+                target: Box::new(target),
+                name: name.clone(),
+                args: args.try_map_ref(|args| visit_argument_list(args, ctx))?,
+                call_kind: visit_call_kind(kind, ctx)?,
+                turbofish: turbofish
+                    .as_ref()
+                    .map(|t| visit_turbofish(t, ctx))
+                    .transpose()?,
+            })
+        }
         ast::Expression::If(cond, ontrue, onfalse) => {
             let cond = cond.try_visit(visit_expression, ctx)?;
             let ontrue = ontrue.try_visit(visit_expression, ctx)?;
@@ -2817,7 +2962,7 @@ pub fn ensure_unique_anonymous_traits(item_list: &hir::ItemList) -> Vec<Diagnost
         .flat_map(|(type_name, impls)| {
             let mut fns = impls
                 .iter()
-                .filter(|(trait_name, _)| trait_name.is_anonymous())
+                .filter(|(t, _)| t.0.is_anonymous())
                 .flat_map(|(_, impl_block)| impl_block.fns.iter().map(|f| (f, &impl_block.target)))
                 .collect::<Vec<_>>();
 
@@ -2990,7 +3135,7 @@ mod entity_visiting {
 
         let mut ctx = test_context();
 
-        global_symbols::visit_unit(&None, &input, &None, &mut ctx)
+        global_symbols::visit_unit(&None, &input, &None, &vec![], &mut ctx)
             .expect("Failed to collect global symbols");
 
         let result = visit_unit(None, &input, &None, &mut ctx);
@@ -3829,7 +3974,6 @@ mod item_visiting {
     use super::*;
 
     use ast::aparams;
-    use hir::ItemList;
     use spade_ast::testutil::ast_ident;
     use spade_common::location_info::WithLocation;
     use spade_common::name::testutil::name_id;
@@ -3887,11 +4031,8 @@ mod item_visiting {
 
         let mut ctx = test_context();
 
-        global_symbols::visit_item(&input, &mut ItemList::new(), &mut ctx).unwrap();
-        assert_eq!(
-            visit_item(&input, &mut ctx, &mut ItemList::new()),
-            Ok(vec![expected])
-        );
+        global_symbols::visit_item(&input, &mut ctx).unwrap();
+        assert_eq!(visit_item(&input, &mut ctx), Ok(vec![expected]));
     }
 }
 
@@ -3901,7 +4042,7 @@ mod module_visiting {
 
     use super::*;
 
-    use hir::{hparams, ItemList};
+    use hir::hparams;
     use spade_ast::testutil::ast_ident;
     use spade_common::location_info::WithLocation;
     use spade_common::name::testutil::name_id;
@@ -3972,12 +4113,9 @@ mod module_visiting {
         };
 
         let mut ctx = test_context();
-        global_symbols::gather_symbols(&input, &mut ItemList::new(), &mut ctx)
-            .expect("failed to collect global symbols");
-        let mut item_list = ItemList::new();
-        assert_eq!(visit_module_body(&mut item_list, &input, &mut ctx,), Ok(()));
-
-        assert_eq!(item_list, expected);
+        global_symbols::gather_symbols(&input, &mut ctx).expect("failed to collect global symbols");
+        assert_eq!(visit_module_body(&input, &mut ctx), Ok(()));
+        assert_eq!(ctx.item_list, expected);
     }
 
     #[test]
@@ -4036,9 +4174,7 @@ mod module_visiting {
         );
         global_symbols::gather_types(&input, &mut ctx).expect("failed to collect types");
 
-        let mut item_list = ItemList::new();
-        assert_eq!(visit_module_body(&mut item_list, &input, &mut ctx), Ok(()));
-
-        assert_eq!(item_list, expected);
+        assert_eq!(visit_module_body(&input, &mut ctx), Ok(()));
+        assert_eq!(ctx.item_list, expected);
     }
 }

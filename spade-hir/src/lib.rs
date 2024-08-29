@@ -4,6 +4,7 @@ pub mod symbol_table;
 pub mod testutil;
 
 use std::collections::{BTreeMap, HashMap};
+use std::fmt::Formatter;
 
 pub use expression::{Argument, ArgumentKind, ArgumentList, ExprKind, Expression};
 use itertools::Itertools;
@@ -222,15 +223,20 @@ pub struct Module {
 /// ast lowering process in a few separate steps, and the identifier needs to be
 /// re-added to the symtab multiple times
 #[derive(PartialEq, Debug, Clone, Hash, Eq, Serialize, Deserialize)]
-pub struct TypeParam(pub Loc<Identifier>, pub NameID, pub MetaType);
+pub struct TypeParam {
+    pub ident: Loc<Identifier>,
+    pub name_id: NameID,
+    pub trait_bounds: Vec<Loc<TraitSpec>>,
+    pub meta: MetaType,
+}
 impl WithLocation for TypeParam {}
 impl TypeParam {
     pub fn name_id(&self) -> NameID {
-        self.1.clone()
+        self.name_id.clone()
     }
 }
 
-#[derive(PartialEq, Debug, Clone, Serialize, Deserialize)]
+#[derive(PartialEq, Debug, Clone, Serialize, Deserialize, Hash, Eq)]
 pub enum TypeExpression {
     /// An integer value
     Integer(BigInt),
@@ -252,7 +258,7 @@ impl std::fmt::Display for TypeExpression {
 
 /// A specification of a type to be used. For example, the types of input/output arguments the type
 /// of fields in a struct etc.
-#[derive(PartialEq, Debug, Clone, Serialize, Deserialize)]
+#[derive(PartialEq, Debug, Clone, Serialize, Deserialize, Hash, Eq)]
 pub enum TypeSpec {
     /// The type is a declared type (struct, enum, typedef etc.) with n arguments
     Declared(Loc<NameID>, Vec<Loc<TypeExpression>>),
@@ -327,11 +333,12 @@ impl std::fmt::Display for TypeSpec {
 }
 
 /// A specification of a trait with type parameters
-#[derive(PartialEq, Debug, Clone)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Hash, Eq)]
 pub struct TraitSpec {
-    pub path: Loc<Path>,
+    pub name: TraitName,
     pub type_params: Option<Loc<Vec<Loc<TypeExpression>>>>,
 }
+impl WithLocation for TraitSpec {}
 
 /// Declaration of an enum
 #[derive(PartialEq, Debug, Clone, Serialize, Deserialize)]
@@ -407,11 +414,34 @@ impl std::fmt::Display for ConstGeneric {
 }
 
 #[derive(PartialEq, Debug, Clone, Serialize, Deserialize, Hash, Eq)]
-pub struct WhereClause {
-    pub lhs: Loc<NameID>,
-    pub rhs: Loc<ConstGeneric>,
+pub enum WhereClause {
+    Int {
+        target: Loc<NameID>,
+        constraint: Loc<ConstGeneric>,
+    },
+    Type {
+        target: Loc<NameID>,
+        traits: Vec<Loc<TraitSpec>>,
+    },
 }
 impl WithLocation for WhereClause {}
+
+impl std::fmt::Display for WhereClause {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        let str = match self {
+            WhereClause::Int { target, constraint } => {
+                format!("{target}: {{ {constraint} }}")
+            }
+            WhereClause::Type { target, traits } => {
+                format!(
+                    "{target}: {}",
+                    traits.iter().map(|trait_spec| &trait_spec.name).join(" + ")
+                )
+            }
+        };
+        write!(f, "{}", str)
+    }
+}
 
 #[derive(PartialEq, Debug, Clone, Serialize, Deserialize, Hash, Eq)]
 pub enum UnitName {
@@ -626,7 +656,7 @@ impl WithLocation for ExecutableItem {}
 
 pub type TypeList = HashMap<NameID, Loc<TypeDeclaration>>;
 
-#[derive(Serialize, Deserialize, PartialEq, Eq, Hash, Debug, Clone)]
+#[derive(Serialize, Deserialize, PartialEq, Eq, Hash, Debug, Clone, PartialOrd, Ord)]
 pub enum TraitName {
     Named(Loc<NameID>),
     Anonymous(u64),
@@ -689,7 +719,9 @@ pub struct ImplBlock {
     /// Mapping of identifiers to the NameID of the entity which is the implementation
     /// for the specified function
     pub fns: HashMap<Identifier, (NameID, Loc<()>)>,
+    pub type_params: Vec<Loc<TypeParam>>,
     pub target: Loc<TypeSpec>,
+    pub id: u64,
 }
 impl WithLocation for ImplBlock {}
 
@@ -718,7 +750,7 @@ pub struct ItemList {
     /// by name. Anonymous impl blocks are also members here, but their name is never
     /// visible to the user.
     pub traits: HashMap<TraitName, TraitDef>,
-    pub impls: HashMap<NameID, HashMap<TraitName, Loc<ImplBlock>>>,
+    pub impls: HashMap<NameID, HashMap<(TraitName, Vec<TypeExpression>), Loc<ImplBlock>>>,
 }
 
 impl Default for ItemList {
@@ -783,7 +815,7 @@ impl ItemList {
         }
     }
 
-    pub fn get_trait(&mut self, name: &TraitName) -> Option<&TraitDef> {
+    pub fn get_trait(&self, name: &TraitName) -> Option<&TraitDef> {
         self.traits.get(name)
     }
 

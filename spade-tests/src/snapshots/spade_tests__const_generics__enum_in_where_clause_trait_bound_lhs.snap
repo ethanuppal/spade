@@ -1,0 +1,18 @@
+---
+source: spade-tests/src/const_generics.rs
+---
+enum E {}
+trait X {}
+fn test()
+    where E: X
+{}
+
+
+error: Expected `E` to be a generic type
+  ┌─ testinput:4:11
+  │
+1 │ enum E {}
+  │ --------- E is a type declared here
+  ·
+4 │     where E: X
+  │           ^ Declared type in trait bound

@@ -1,6 +1,5 @@
-use std::collections::HashMap;
-
 use itertools::Itertools;
+use std::collections::{BTreeSet, HashMap};
 
 use num::BigInt;
 use serde::{Deserialize, Serialize};
@@ -8,18 +7,21 @@ use spade_common::{
     location_info::{Loc, WithLocation},
     name::NameID,
 };
+use spade_hir::TraitName;
 use spade_types::{meta_types::MetaType, KnownType};
 
 pub type TypeEquations = HashMap<TypedExpression, TypeVar>;
 
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub struct TraitReq {
-    pub name: NameID,
+    pub name: TraitName,
     pub type_params: Vec<TypeVar>,
 }
 
+impl WithLocation for TraitReq {}
+
 impl TraitReq {
-    fn display_with_meta(&self, display_meta: bool) -> String {
+    pub fn display_with_meta(&self, display_meta: bool) -> String {
         if self.type_params.is_empty() {
             format!("{}", self.name)
         } else {
@@ -55,9 +57,9 @@ impl std::fmt::Debug for TraitReq {
     }
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct TraitList {
-    pub inner: Vec<TraitReq>,
+    pub inner: Vec<Loc<TraitReq>>,
 }
 
 impl TraitList {
@@ -65,12 +67,41 @@ impl TraitList {
         Self { inner: vec![] }
     }
 
-    pub fn from_vec(inner: Vec<TraitReq>) -> Self {
+    pub fn from_vec(inner: Vec<Loc<TraitReq>>) -> Self {
         Self { inner }
     }
 
-    pub fn get_trait(&self, name: &NameID) -> Option<&TraitReq> {
+    pub fn get_trait(&self, name: &TraitName) -> Option<&Loc<TraitReq>> {
         self.inner.iter().find(|t| &t.name == name)
+    }
+
+    pub fn get_trait_with_type_params(
+        &self,
+        name: &TraitName,
+        type_params: &[TypeVar],
+    ) -> Option<&Loc<TraitReq>> {
+        self.inner
+            .iter()
+            .find(|t| &t.name == name && &t.type_params.as_slice() == &type_params)
+    }
+
+    pub fn extend(self, other: Self) -> Self {
+        let merged = self
+            .inner
+            .into_iter()
+            .chain(other.inner.into_iter())
+            .collect::<BTreeSet<_>>()
+            .into_iter()
+            .collect_vec();
+
+        TraitList { inner: merged }
+    }
+
+    pub fn display_with_meta(&self, display_meta: bool) -> String {
+        self.inner
+            .iter()
+            .map(|t| t.inner.display_with_meta(display_meta))
+            .join(" + ")
     }
 }
 
@@ -93,6 +124,17 @@ impl PartialOrd for TraitList {
 impl Ord for TraitList {
     fn cmp(&self, _other: &Self) -> std::cmp::Ordering {
         std::cmp::Ordering::Equal
+    }
+}
+
+impl std::fmt::Display for TraitList {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.display_with_meta(false))
+    }
+}
+impl std::fmt::Debug for TraitList {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.display_with_meta(true))
     }
 }
 

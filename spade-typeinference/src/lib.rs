@@ -6,6 +6,7 @@
 // and should be done by the visitor for that node. The visitor should then unify
 // types according to the rules of the node.
 
+use std::cmp::PartialEq;
 use std::collections::{BTreeSet, HashMap};
 use std::sync::Arc;
 
@@ -32,7 +33,7 @@ use spade_hir::param_util::{match_args_with_params, Argument};
 use spade_hir::symbol_table::{Patternable, PatternableKind, SymbolTable, TypeSymbol};
 use spade_hir::{
     ArgumentList, Block, ExprKind, Expression, ItemList, Pattern, PatternArgument, Register,
-    Statement, TypeParam, Unit,
+    Statement, TraitName, TraitSpec, TypeParam, Unit,
 };
 use spade_types::KnownType;
 
@@ -50,6 +51,7 @@ use trace_stack::{format_trace_stack, TraceStackEntry};
 use crate::error::TypeMismatch as Tm;
 use crate::fixed_types::t_void;
 use crate::requirements::ConstantInt;
+use crate::traits::{TraitImpl, TraitImplList};
 
 mod constraints;
 pub mod dump;
@@ -62,10 +64,12 @@ pub mod mir_type_lowering;
 mod requirements;
 pub mod testutil;
 pub mod trace_stack;
+pub mod traits;
 
 pub struct Context<'a> {
     pub symtab: &'a SymbolTable,
     pub items: &'a ItemList,
+    pub trait_impls: &'a TraitImplList,
 }
 
 // NOTE(allow) This is a debug macro which is not normally used but can come in handy
@@ -84,6 +88,10 @@ pub enum GenericListSource<'a> {
     /// For managing the generics of callable with the specified name when type checking
     /// their body
     Definition(&'a NameID),
+    ImplBlock {
+        target: &'a NameID,
+        id: u64,
+    },
     /// For expressions which instantiate generic items
     Expression(u64),
 }
@@ -93,6 +101,7 @@ pub enum GenericListSource<'a> {
 pub enum GenericListToken {
     Anonymous(usize),
     Definition(NameID),
+    ImplBlock(NameID, u64),
     Expression(u64),
 }
 
@@ -133,6 +142,8 @@ pub struct TypeState {
     /// The type var containing the depth of the pipeline stage we are currently in
     pipeline_state: Option<PipelineState>,
 
+    pub trait_impls: TraitImplList,
+
     pub trace_stack: Arc<TraceStack>,
 
     /// (Experimental) Use Affine- or Interval-Arithmetic to bounds check integers in a separate
@@ -156,6 +167,7 @@ impl TypeState {
             requirements: vec![],
             replacements: HashMap::new(),
             generic_lists: HashMap::new(),
+            trait_impls: TraitImplList::new(),
             pipeline_state: None,
             use_wordlenght_inference: false,
         }
@@ -358,9 +370,10 @@ impl TypeState {
         let id = self.new_typeid();
         let size = self.new_generic_tluint(loc);
         let t = TraitReq {
-            name: number,
+            name: TraitName::Named(number.nowhere()),
             type_params: vec![size.clone()],
-        };
+        }
+        .nowhere();
         (
             TypeVar::Unknown(loc, id, TraitList::from_vec(vec![t]), MetaType::Type),
             size,
@@ -384,6 +397,8 @@ impl TypeState {
     #[trace_typechecker]
     #[tracing::instrument(level = "trace", skip_all, fields(%entity.name))]
     pub fn visit_unit(&mut self, entity: &Loc<Unit>, ctx: &Context) -> Result<()> {
+        self.trait_impls = ctx.trait_impls.clone();
+
         let generic_list = self.create_generic_list(
             GenericListSource::Definition(&entity.name.name_id().inner),
             &entity.head.unit_type_params,
@@ -966,7 +981,7 @@ impl TypeState {
         Ok(())
     }
 
-    #[tracing::instrument(level = "trace", skip(self, turbofish))]
+    #[tracing::instrument(level = "trace", skip(self, turbofish, where_clauses))]
     pub fn create_generic_list(
         &mut self,
         source: GenericListSource,
@@ -997,7 +1012,12 @@ impl TypeState {
                         .iter()
                         .enumerate()
                         .find_map(|(i, param)| match &param.inner {
-                            TypeParam(ident, _, _) => {
+                            TypeParam {
+                                ident,
+                                name_id: _,
+                                trait_bounds: _,
+                                meta: _,
+                            } => {
                                 if ident == matched_param.target {
                                     Some(i)
                                 } else {
@@ -1015,22 +1035,48 @@ impl TypeState {
             type_params.iter().map(|_| None).collect::<Vec<_>>()
         };
 
+        let mut inline_trait_bounds: Vec<Loc<WhereClause>> = vec![];
+
         let scope_type_params = scope_type_params
             .iter()
             .map(|param| {
-                let hir::TypeParam(_, name, meta) = &param.inner;
-                (
-                    name.clone(),
+                let hir::TypeParam {
+                    ident,
+                    name_id,
+                    trait_bounds,
+                    meta,
+                } = &param.inner;
+                if !trait_bounds.is_empty() {
+                    if let MetaType::Type = meta {
+                        inline_trait_bounds.push(
+                            WhereClause::Type {
+                                target: name_id.clone().at_loc(ident),
+                                traits: trait_bounds.clone(),
+                            }
+                            .at_loc(param),
+                        );
+                    } else {
+                        return Err(Diagnostic::bug(param, "Trait bounds on generic int")
+                            .primary_label("Trait bounds are only allowed on type parameters"));
+                    }
+                }
+                Ok((
+                    name_id.clone(),
                     self.new_generic_with_meta(param.loc(), meta.clone()),
-                )
+                ))
             })
-            .collect::<Vec<_>>();
+            .collect::<Result<Vec<_>>>()?;
 
         let new_list = type_params
             .iter()
             .enumerate()
             .map(|(i, param)| {
-                let hir::TypeParam(_, name, meta) = &param.inner;
+                let hir::TypeParam {
+                    ident,
+                    name_id,
+                    trait_bounds,
+                    meta,
+                } = &param.inner;
 
                 let t = self.new_generic_with_meta(param.loc(), meta.clone());
 
@@ -1041,7 +1087,20 @@ impl TypeState {
                         .into_default_diagnostic(param)?;
                 }
 
-                Ok((name.clone(), self.check_var_for_replacement(t)))
+                if !trait_bounds.is_empty() {
+                    if let MetaType::Type = meta {
+                        inline_trait_bounds.push(
+                            WhereClause::Type {
+                                target: name_id.clone().at_loc(ident),
+                                traits: trait_bounds.clone(),
+                            }
+                            .at_loc(param),
+                        );
+                    }
+                    Ok((name_id.clone(), t))
+                } else {
+                    Ok((name_id.clone(), self.check_var_for_replacement(t)))
+                }
             })
             .collect::<Result<Vec<_>>>()?
             .into_iter()
@@ -1052,29 +1111,35 @@ impl TypeState {
         self.trace_stack
             .push(TraceStackEntry::NewGenericList(new_list.clone()));
 
-        let tok = self.add_mapped_generic_list(source, new_list.clone());
+        let token = self.add_mapped_generic_list(source, new_list.clone());
 
-        for clause in where_clauses {
-            let constraint = self.visit_const_generic(&clause.rhs, &tok)?;
+        for constraint in where_clauses.iter().chain(inline_trait_bounds.iter()) {
+            match &constraint.inner {
+                WhereClause::Type { target, traits } => {
+                    self.visit_trait_bounds(target, traits.as_slice(), &token)?;
+                }
+                WhereClause::Int { target, constraint } => {
+                    let int_constraint = self.visit_const_generic(constraint, &token)?;
+                    let tvar = new_list.get(target).ok_or_else(|| {
+                        Diagnostic::error(
+                            target,
+                            format!("{target} is not a generic parameter on this unit"),
+                        )
+                        .primary_label("Not a generic parameter")
+                    })?;
 
-            let name = &clause.lhs;
-            let tvar = new_list.get(name).ok_or_else(|| {
-                Diagnostic::error(
-                    &clause.lhs,
-                    format!("{name} is not a generic parameter on this unit"),
-                )
-                .primary_label("Not a generic parameter")
-            })?;
-            self.add_constraint(
-                tvar.clone(),
-                constraint,
-                clause.loc(),
-                tvar,
-                ConstraintSource::Where,
-            );
+                    self.add_constraint(
+                        tvar.clone(),
+                        int_constraint,
+                        constraint.loc(),
+                        &tvar,
+                        ConstraintSource::Where,
+                    );
+                }
+            }
         }
 
-        Ok(tok)
+        Ok(token)
     }
 
     /// Adds a generic list with parameters already mapped to types
@@ -1086,6 +1151,9 @@ impl TypeState {
         let reference = match source {
             GenericListSource::Anonymous => GenericListToken::Anonymous(self.generic_lists.len()),
             GenericListSource::Definition(name) => GenericListToken::Definition(name.clone()),
+            GenericListSource::ImplBlock { target, id } => {
+                GenericListToken::ImplBlock(target.clone(), id)
+            }
             GenericListSource::Expression(id) => GenericListToken::Expression(id),
         };
 
@@ -1114,6 +1182,50 @@ impl TypeState {
             self.visit_expression(result, ctx, generic_list)?;
         }
         Ok(())
+    }
+
+    #[tracing::instrument(level = "trace", skip_all)]
+    #[trace_typechecker]
+    pub fn visit_impl_blocks(&mut self, item_list: &ItemList) -> Result<TraitImplList> {
+        let mut trait_impls = TraitImplList::new();
+        for (target, impls) in &item_list.impls {
+            for ((trait_name, type_expressions), impl_block) in impls {
+                let generic_list = self.create_generic_list(
+                    GenericListSource::ImplBlock {
+                        target,
+                        id: impl_block.id,
+                    },
+                    &[],
+                    impl_block.type_params.as_slice(),
+                    None,
+                    &[],
+                )?;
+
+                let loc = trait_name
+                    .name_loc()
+                    .map(|n| ().at_loc(&n))
+                    .unwrap_or(().at_loc(&impl_block));
+
+                let mapped_type_vars = type_expressions
+                    .iter()
+                    .map(|param| {
+                        self.hir_type_expr_to_var(&param.clone().at_loc(&loc), &generic_list)
+                    })
+                    .collect::<Result<_>>()?;
+
+                trait_impls
+                    .inner
+                    .entry(target.clone())
+                    .or_default()
+                    .push(TraitImpl {
+                        name: trait_name.clone(),
+                        type_params: mapped_type_vars,
+                        impl_block: impl_block.inner.clone(),
+                    });
+            }
+        }
+
+        Ok(trait_impls)
     }
 
     #[trace_typechecker]
@@ -1587,12 +1699,101 @@ impl TypeState {
         Ok(())
     }
 
+    #[trace_typechecker]
+    pub fn visit_trait_spec(
+        &mut self,
+        trait_spec: &Loc<TraitSpec>,
+        generic_list: &GenericListToken,
+    ) -> Result<Loc<TraitReq>> {
+        let type_params = if let Some(type_params) = &trait_spec.inner.type_params {
+            type_params
+                .inner
+                .iter()
+                .map(|te| self.hir_type_expr_to_var(te, generic_list))
+                .collect::<Result<_>>()?
+        } else {
+            vec![]
+        };
+
+        Ok(TraitReq {
+            name: trait_spec.name.clone(),
+            type_params,
+        }
+        .at_loc(trait_spec))
+    }
+
+    #[trace_typechecker]
+    pub fn visit_trait_bounds(
+        &mut self,
+        target: &Loc<NameID>,
+        traits: &[Loc<TraitSpec>],
+        generic_list: &GenericListToken,
+    ) -> Result<()> {
+        let trait_reqs = traits
+            .iter()
+            .map(|spec| self.visit_trait_spec(spec, generic_list))
+            .collect::<Result<BTreeSet<_>>>()?
+            .into_iter()
+            .collect_vec();
+
+        if !trait_reqs.is_empty() {
+            let trait_list = TraitList::from_vec(trait_reqs);
+
+            let generic_list = self.generic_lists.get_mut(generic_list).unwrap();
+
+            let Some(tvar) = generic_list.get(&target.inner) else {
+                return Err(Diagnostic::bug(
+                    target,
+                    "Couldn't find generic from where clause in generic list",
+                )
+                .primary_label(format!(
+                    "Generic type {} not found in generic list",
+                    target.inner
+                )));
+            };
+
+            self.trace_stack.push(TraceStackEntry::AddingTraitBounds(
+                tvar.clone(),
+                trait_list.clone(),
+            ));
+
+            let TypeVar::Unknown(loc, id, old_trait_list, MetaType::Type) = tvar else {
+                return Err(Diagnostic::bug(
+                    target,
+                    "Trait bounds on known type or type-level integer",
+                )
+                .primary_label(format!(
+                    "Trait bounds on {}, which should've been caught in ast-lowering",
+                    target.inner
+                )));
+            };
+
+            let new_tvar = TypeVar::Unknown(
+                *loc,
+                *id,
+                old_trait_list.clone().extend(trait_list),
+                MetaType::Type,
+            );
+
+            trace!(
+                "Adding trait bound {} on type {}",
+                new_tvar.display_with_meta(true),
+                target.inner
+            );
+
+            generic_list.insert(target.inner.clone(), new_tvar);
+        }
+
+        Ok(())
+    }
+
+    #[trace_typechecker]
     pub fn visit_const_generic(
         &self,
-        g: &ConstGeneric,
+        constraint: &ConstGeneric,
         generic_list: &GenericListToken,
     ) -> Result<ConstraintExpr> {
-        match g {
+        match constraint {
             ConstGeneric::Name(n) => {
                 let var = self.get_generic_list(generic_list).get(n).ok_or_else(|| {
                     Diagnostic::bug(n, "Found non-generic argument in where clause")
@@ -1649,13 +1850,17 @@ impl TypeState {
                     traits
                         .inner
                         .iter()
-                        .map(|t| TraitReq {
-                            name: t.name.clone(),
-                            type_params: t
-                                .type_params
-                                .iter()
-                                .map(|v| self.check_var_for_replacement(v.clone()))
-                                .collect(),
+                        .map(|t| {
+                            TraitReq {
+                                name: t.inner.name.clone(),
+                                type_params: t
+                                    .inner
+                                    .type_params
+                                    .iter()
+                                    .map(|v| self.check_var_for_replacement(v.clone()))
+                                    .collect(),
+                            }
+                            .at_loc(t)
                         })
                         .collect(),
                 ),
@@ -1721,7 +1926,7 @@ impl TypeState {
             .with_context(&replaces, &inside.clone(), source)
             .at_loc(&loc);
 
-        self.constraints.add_constraint(lhs, rhs);
+        self.constraints.add_int_constraint(lhs, rhs);
     }
 
     fn add_requirement(&mut self, requirement: Requirement) {
@@ -1745,6 +1950,7 @@ impl TypeState {
             Requirement::HasMethod {
                 expr_id,
                 target_type,
+                trait_list,
                 method,
                 expr,
                 args,
@@ -1754,6 +1960,7 @@ impl TypeState {
             } => Requirement::HasMethod {
                 expr_id,
                 target_type: replace!(target_type),
+                trait_list,
                 method,
                 expr: replace!(expr),
                 args,
@@ -1984,8 +2191,7 @@ impl TypeState {
                             .inner
                             .iter()
                             .chain(traits2.inner.iter())
-                            .cloned()
-                            .map(|t| t.name)
+                            .map(|t| t.name.clone())
                             .collect::<BTreeSet<_>>()
                             .into_iter()
                             .collect::<Vec<_>>();
@@ -1996,9 +2202,10 @@ impl TypeState {
                                 |name| match (traits1.get_trait(name), traits2.get_trait(name)) {
                                     (Some(req1), Some(req2)) => {
                                         let new_params = req1
+                                            .inner
                                             .type_params
                                             .iter()
-                                            .zip(req2.type_params.iter())
+                                            .zip(req2.inner.type_params.iter())
                                             .map(|(p1, p2)| self.unify(p1, p2, ctx))
                                             .collect::<std::result::Result<_, UnificationError>>(
                                             )?;
@@ -2006,7 +2213,8 @@ impl TypeState {
                                         Ok(TraitReq {
                                             name: name.clone(),
                                             type_params: new_params,
-                                        })
+                                        }
+                                        .at_loc(req1))
                                     }
                                     (Some(t), None) => Ok(t.clone()),
                                     (None, Some(t)) => Ok(t.clone()),
@@ -2132,6 +2340,18 @@ impl TypeState {
                     TypeState::replace_type_var(lhs, &replaced_type, &new_type)
                 }
             }
+            for traits in &mut self.trait_impls.inner.values_mut() {
+                for TraitImpl {
+                    name: _,
+                    type_params,
+                    impl_block: _,
+                } in traits.iter_mut()
+                {
+                    for tvar in type_params.iter_mut() {
+                        TypeState::replace_type_var(tvar, &replaced_type, &new_type);
+                    }
+                }
+            }
             for requirement in &mut self.requirements {
                 requirement.replace_type_var(&replaced_type, &new_type)
             }
@@ -2180,7 +2400,7 @@ impl TypeState {
         // more type inference information. Try to do unification of those new constraints too
         loop {
             trace!("Updating constraints");
-            let new_info = self.constraints.update_constraints();
+            let new_info = self.constraints.update_int_constraints();
 
             if new_info.is_empty() {
                 break;
@@ -2236,7 +2456,7 @@ impl TypeState {
                     Err(
                         e @ UnificationError::FromConstraints { .. }
                         | e @ UnificationError::Specific { .. }
-                        | e @ UnificationError::UnsatisfiedTraits(_, _),
+                        | e @ UnificationError::UnsatisfiedTraits { .. },
                     ) => return Err(e),
                 };
             }
@@ -2258,40 +2478,54 @@ impl TypeState {
             traits.clone(),
             trait_is_expected,
         ));
+
         let number = ctx
             .symtab
             .lookup_trait(&Path::from_strs(&["Number"]).nowhere())
             .expect("Did not find number in symtab")
             .0;
 
-        let mut error_producer = |required_traits| {
-            if trait_is_expected {
-                Err(UnificationError::Normal(Tm {
-                    e: UnificationTrace::new(
-                        self.new_generic_with_traits(*trait_list_loc, required_traits),
-                    ),
-                    g: UnificationTrace::new(var.clone()),
-                }))
-            } else {
-                Err(UnificationError::Normal(Tm {
-                    e: UnificationTrace::new(var.clone()),
-                    g: UnificationTrace::new(
-                        self.new_generic_with_traits(*trait_list_loc, required_traits),
-                    ),
-                }))
-            }
-        };
+        macro_rules! error_producer {
+            ($required_traits:expr) => {
+                if trait_is_expected {
+                    if $required_traits.inner.len() == 1
+                        && $required_traits
+                            .get_trait(&TraitName::Named(number.clone().nowhere()))
+                            .is_some()
+                    {
+                        Err(UnificationError::Normal(Tm {
+                            e: UnificationTrace::new(
+                                self.new_generic_with_traits(*trait_list_loc, $required_traits),
+                            ),
+                            g: UnificationTrace::new(var.clone()),
+                        }))
+                    } else {
+                        Err(UnificationError::UnsatisfiedTraits {
+                            var: var.clone(),
+                            traits: $required_traits.inner,
+                            target_loc: trait_list_loc.clone(),
+                        })
+                    }
+                } else {
+                    Err(UnificationError::Normal(Tm {
+                        e: UnificationTrace::new(var.clone()),
+                        g: UnificationTrace::new(
+                            self.new_generic_with_traits(*trait_list_loc, $required_traits),
+                        ),
+                    }))
+                }
+            };
+        }
 
         match var {
             TypeVar::Known(_, KnownType::Named(name), _) => {
-                let impld = ctx.items.impls.get(name);
                 let unsatisfied = traits
                     .inner
                     .iter()
-                    .filter(|t| {
+                    .filter(|trait_req| {
                         // Number is special cased for now because we can't impl traits
                         // on generic types
-                        if t.name == number {
+                        if trait_req.name.name_loc().is_some_and(|n| n.inner == number) {
                             let int_type = &ctx
                                 .symtab
                                 .lookup_type_symbol(&Path::from_strs(&["int"]).nowhere())
@@ -2305,13 +2539,14 @@ impl TypeState {
 
                             !(name == int_type || name == uint_type)
                         } else {
-                            impld
-                                .map(|impld| {
-                                    impld.contains_key(&hir::TraitName::Named(
-                                        t.name.clone().nowhere(),
-                                    ))
+                            if let Some(impld) = self.trait_impls.inner.get(name) {
+                                !impld.iter().any(|trait_impl| {
+                                    trait_impl.name == trait_req.name
+                                        && trait_impl.type_params == trait_req.type_params
                                 })
-                                .unwrap_or(true)
+                            } else {
+                                true
+                            }
                         }
                     })
                     .cloned()
@@ -2320,7 +2555,7 @@ impl TypeState {
                 if unsatisfied.is_empty() {
                     Ok(())
                 } else {
-                    error_producer(TraitList::from_vec(unsatisfied.clone()))
+                    error_producer!(TraitList::from_vec(unsatisfied.clone()))
                 }
             }
             TypeVar::Unknown(_, _, _, _) => {
@@ -2330,7 +2565,7 @@ impl TypeState {
                 if traits.inner.is_empty() {
                     Ok(())
                 } else {
-                    error_producer(traits.clone())
+                    error_producer!(traits.clone())
                 }
             }
         }
@@ -2411,7 +2646,7 @@ impl TypeState {
         // Self::replace_type_var(&mut in_constraint.from, from, replacement);
     }
 
-    pub fn unify_expression_generic_error<'a>(
+    pub fn unify_expression_generic_error(
         &mut self,
         expr: &Loc<Expression>,
         other: &impl HasType,

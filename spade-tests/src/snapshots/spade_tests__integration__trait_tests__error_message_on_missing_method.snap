@@ -8,11 +8,11 @@ fn t(x: X) {
 }
 
 
-error: X has no method test
+error: `X` has no method `test`
   ┌─ testinput:4:7
   │
 4 │     x.test()
   │     --^^^^--
   │     │ │
   │     │ No such method
-  │     This has type X
+  │     This has type `X`

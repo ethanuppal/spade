@@ -10,7 +10,7 @@ use spade_hir::symbol_table::{TypeDeclKind, TypeSymbol};
 use spade_hir::{ArgumentList, Expression, TypeExpression};
 use spade_types::KnownType;
 
-use crate::equation::TypeVar;
+use crate::equation::{TraitList, TypeVar};
 use crate::error::{Result, TypeMismatch, UnificationErrorExt};
 use crate::method_resolution::select_method;
 use crate::trace_stack::TraceStackEntry;
@@ -38,6 +38,9 @@ pub enum Requirement {
         expr_id: Loc<u64>,
         /// The type which should have the associated method
         target_type: Loc<TypeVar>,
+        /// For method call on monomorphised generic with trait bounds
+        /// The traits which should be searched for the method
+        trait_list: Option<TraitList>,
         /// The method which should exist on the type
         method: Loc<Identifier>,
         /// The expression from which this requirement arises
@@ -81,6 +84,7 @@ impl Requirement {
             Requirement::HasMethod {
                 expr_id: _,
                 target_type,
+                trait_list,
                 expr,
                 method: _,
                 args: _,
@@ -88,6 +92,11 @@ impl Requirement {
                 prev_generic_list: _,
                 call_kind: _,
             } => {
+                if let TypeVar::Unknown(_, _, from_trait_list, _) = from {
+                    if !from_trait_list.inner.is_empty() {
+                        *trait_list = Some(from_trait_list.clone());
+                    }
+                }
                 TypeState::replace_type_var(target_type, from, to);
                 TypeState::replace_type_var(expr, from, to);
             }
@@ -233,6 +242,7 @@ impl Requirement {
                 expr_id,
                 target_type,
                 method,
+                trait_list,
                 expr,
                 args,
                 turbofish,
@@ -240,8 +250,13 @@ impl Requirement {
                 call_kind,
             } => target_type.expect_named(
                 |_type_name, _params| {
-                    let Some(implementor) =
-                        select_method(expr.loc(), target_type, method, ctx.items)?
+                    let Some(implementor) = select_method(
+                        expr.loc(),
+                        target_type,
+                        trait_list,
+                        method,
+                        &type_state.trait_impls,
+                    )?
                     else {
                         return Ok(RequirementResult::NoChange);
                     };

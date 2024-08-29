@@ -2,7 +2,7 @@ use std::collections::HashSet;
 
 use hir::{
     symbol_table::{EnumVariant, StructCallable},
-    ItemList, TypeExpression, WalTraceable,
+    TypeExpression, WalTraceable,
 };
 use spade_ast as ast;
 use spade_common::{
@@ -11,21 +11,22 @@ use spade_common::{
 };
 use spade_diagnostics::Diagnostic;
 use spade_hir as hir;
+use spade_hir::WhereClause;
 use spade_types::meta_types::MetaType;
 
 use crate::{
     attributes::{AttributeListExt, LocAttributeExt},
     types::IsPort,
-    visit_parameter_list, visit_type_spec, Context, Result, TypeSpecKind,
+    visit_parameter_list, visit_trait_spec, visit_type_spec, Context, Result, TypeSpecKind,
 };
-use spade_hir::symbol_table::{GenericArg, SymbolTable, Thing, TypeSymbol};
+use spade_hir::symbol_table::{GenericArg, Thing, TypeSymbol};
 
 #[tracing::instrument(skip_all)]
 pub fn gather_types(module: &ast::ModuleBody, ctx: &mut Context) -> Result<()> {
     for item in &module.members {
         match item {
             ast::Item::Type(t) => {
-                visit_type_declaration(t, &mut ctx.symtab)?;
+                visit_type_declaration(t, ctx)?;
             }
             ast::Item::Module(m) => {
                 ctx.symtab.add_unique_thing(
@@ -69,22 +70,18 @@ pub fn gather_types(module: &ast::ModuleBody, ctx: &mut Context) -> Result<()> {
 
 /// Collect global symbols as a first pass before generating HIR
 #[tracing::instrument(skip_all)]
-pub fn gather_symbols(
-    module: &ast::ModuleBody,
-    item_list: &mut ItemList,
-    ctx: &mut Context,
-) -> Result<()> {
+pub fn gather_symbols(module: &ast::ModuleBody, ctx: &mut Context) -> Result<()> {
     for item in &module.members {
-        visit_item(item, item_list, ctx)?;
+        visit_item(item, ctx)?;
     }
     Ok(())
 }
 
 #[tracing::instrument(skip_all)]
-pub fn visit_item(item: &ast::Item, item_list: &mut ItemList, ctx: &mut Context) -> Result<()> {
+pub fn visit_item(item: &ast::Item, ctx: &mut Context) -> Result<()> {
     match item {
         ast::Item::Unit(e) => {
-            visit_unit(&None, e, &None, ctx)?;
+            visit_unit(&None, e, &None, &vec![], ctx)?;
         }
         ast::Item::TraitDef(def) => {
             let name = ctx.symtab.add_unique_thing(
@@ -95,18 +92,18 @@ pub fn visit_item(item: &ast::Item, item_list: &mut ItemList, ctx: &mut Context)
             crate::create_trait_from_unit_heads(
                 hir::TraitName::Named(name.at_loc(&def.name)),
                 &def.type_params,
+                &def.where_clauses,
                 &def.methods,
-                item_list,
                 ctx,
             )?;
         }
         ast::Item::ImplBlock(_) => {}
         ast::Item::Type(t) => {
-            re_visit_type_declaration(t, item_list, ctx)?;
+            re_visit_type_declaration(t, ctx)?;
         }
         ast::Item::Module(m) => {
             ctx.symtab.push_namespace(m.name.clone());
-            if let Err(e) = gather_symbols(&m.body, item_list, ctx) {
+            if let Err(e) = gather_symbols(&m.body, ctx) {
                 ctx.symtab.pop_namespace();
                 return Err(e);
             }
@@ -123,9 +120,10 @@ pub fn visit_unit(
     extra_path: &Option<Path>,
     unit: &Loc<ast::Unit>,
     scope_type_params: &Option<Loc<Vec<Loc<ast::TypeParam>>>>,
+    scope_where_clauses: &[Loc<WhereClause>],
     ctx: &mut Context,
 ) -> Result<()> {
-    let head = crate::unit_head(&unit.head, scope_type_params, ctx)?;
+    let head = crate::unit_head(&unit.head, scope_type_params, scope_where_clauses, ctx)?;
 
     let new_path = extra_path
         .as_ref()
@@ -153,10 +151,7 @@ pub fn visit_meta_type(meta: &Loc<Identifier>) -> Result<MetaType> {
     Ok(meta)
 }
 
-pub fn visit_type_declaration(
-    t: &Loc<ast::TypeDeclaration>,
-    symtab: &mut SymbolTable,
-) -> Result<()> {
+pub fn visit_type_declaration(t: &Loc<ast::TypeDeclaration>, ctx: &mut Context) -> Result<()> {
     let args = t
         .generic_args
         .as_ref()
@@ -165,10 +160,17 @@ pub fn visit_type_declaration(
         .iter()
         .map(|arg| {
             let result = match &arg.inner {
-                ast::TypeParam::TypeName { name, traits } => GenericArg::TypeName {
-                    name: name.inner.clone(),
-                    traits: traits.clone(),
-                },
+                ast::TypeParam::TypeName { name, traits } => {
+                    let traits = traits
+                        .iter()
+                        .map(|t| visit_trait_spec(t, &TypeSpecKind::TraitBound, ctx))
+                        .collect::<Result<Vec<_>>>()?;
+
+                    GenericArg::TypeName {
+                        name: name.inner.clone(),
+                        traits,
+                    }
+                }
                 ast::TypeParam::TypeWithMeta { name, meta } => GenericArg::TypeWithMeta {
                     name: name.inner.clone(),
                     meta: visit_meta_type(meta)?,
@@ -187,7 +189,8 @@ pub fn visit_type_declaration(
     };
 
     let new_thing = Path::ident(t.name.clone()).at_loc(&t.name.loc());
-    symtab.add_unique_type(new_thing, TypeSymbol::Declared(args, kind).at_loc(t))?;
+    ctx.symtab
+        .add_unique_type(new_thing, TypeSymbol::Declared(args, kind).at_loc(t))?;
 
     Ok(())
 }
@@ -196,11 +199,7 @@ pub fn visit_type_declaration(
 /// as well as adding enum variants to the global scope.
 /// This needs to happen as a separate pass since other types need to be in scope when
 /// we check type declarations
-pub fn re_visit_type_declaration(
-    t: &Loc<ast::TypeDeclaration>,
-    items: &mut ItemList,
-    ctx: &mut Context,
-) -> Result<()> {
+pub fn re_visit_type_declaration(t: &Loc<ast::TypeDeclaration>, ctx: &mut Context) -> Result<()> {
     // Process right hand side of type declarations
     // The first visitor has already added the LHS to the symtab
     // Look up the ID
@@ -222,7 +221,7 @@ pub fn re_visit_type_declaration(
             ast::TypeParam::TypeName { name: n, traits } => {
                 let resolved_traits = traits
                     .iter()
-                    .map(|t| Ok(ctx.symtab.lookup_trait(t)?.0.at_loc(t)))
+                    .map(|t| visit_trait_spec(t, &TypeSpecKind::TraitBound, ctx))
                     .collect::<Result<Vec<_>>>()?;
                 (
                     n,
@@ -251,12 +250,25 @@ pub fn re_visit_type_declaration(
         let expr = TypeExpression::TypeSpec(hir::TypeSpec::Generic(name_id.clone().at_loc(arg)))
             .at_loc(arg);
         let param = match &arg.inner {
-            ast::TypeParam::TypeName { name, traits: _ } => {
-                hir::TypeParam(name.clone(), name_id.clone(), MetaType::Type)
+            ast::TypeParam::TypeName { name, traits } => {
+                let trait_bounds = traits
+                    .iter()
+                    .map(|t| visit_trait_spec(t, &TypeSpecKind::TraitBound, ctx))
+                    .collect::<Result<Vec<_>>>()?;
+
+                hir::TypeParam {
+                    ident: name.clone(),
+                    name_id: name_id.clone(),
+                    trait_bounds,
+                    meta: MetaType::Type,
+                }
             }
-            ast::TypeParam::TypeWithMeta { meta, name } => {
-                hir::TypeParam(name.clone(), name_id.clone(), visit_meta_type(meta)?)
-            }
+            ast::TypeParam::TypeWithMeta { meta, name } => hir::TypeParam {
+                ident: name.clone(),
+                name_id: name_id.clone(),
+                trait_bounds: vec![],
+                meta: visit_meta_type(&meta)?,
+            },
         };
         output_type_exprs.push(expr);
         type_params.push(param.at_loc(arg))
@@ -325,7 +337,7 @@ pub fn re_visit_type_declaration(
                     Thing::EnumVariant(variant_thing.at_loc(&option.0)),
                 );
                 // Add option constructor to item list
-                items.executables.insert(
+                ctx.item_list.executables.insert(
                     head_id.clone(),
                     hir::ExecutableItem::EnumInstance {
                         base_enum: declaration_id.inner.clone(),
@@ -408,7 +420,7 @@ pub fn re_visit_type_declaration(
                 ),
             );
 
-            items.executables.insert(
+            ctx.item_list.executables.insert(
                 declaration_id.inner.clone(),
                 hir::ExecutableItem::StructInstance,
             );
@@ -464,7 +476,7 @@ pub fn re_visit_type_declaration(
         generic_args: type_params,
     }
     .at_loc(t);
-    items.types.insert(declaration_id.inner, decl);
+    ctx.item_list.types.insert(declaration_id.inner, decl);
 
     Ok(())
 }

@@ -170,7 +170,7 @@ impl<'a> ParameterListLike<'a, ()> for &[Loc<TypeParam>] {
         ParameterListWrapper(
             self.iter()
                 .map(|p| match &p.inner {
-                    TypeParam(name, _, _) => (name, &()),
+                    TypeParam { ident, .. } => (ident, &()),
                 })
                 .collect(),
         )

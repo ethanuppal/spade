@@ -15,7 +15,7 @@ use spade_ast::{
     ComptimeConfig, Enum, Expression, ImplBlock, IntLiteral, Item, Module, ModuleBody,
     NamedArgument, NamedTurbofish, ParameterList, Pattern, PipelineStageReference, Register,
     Statement, Struct, TraitDef, TraitSpec, TurbofishInner, TypeDeclKind, TypeDeclaration,
-    TypeExpression, TypeParam, TypeSpec, Unit, UnitHead, UnitKind, UseStatement,
+    TypeExpression, TypeParam, TypeSpec, Unit, UnitHead, UnitKind, UseStatement, WhereClause,
 };
 use spade_common::location_info::{lspan, AsLabel, FullSpan, HasCodespan, Loc, WithLocation};
 use spade_common::name::{Identifier, Path};
@@ -1316,11 +1316,17 @@ impl<'a> Parser<'a> {
             let (id, loc) = self.identifier()?.separate();
             let traits = if self.peek_and_eat(&TokenKind::Colon)?.is_some() {
                 self.token_separated(
-                    Self::path,
+                    Self::path_with_generic_spec,
                     &TokenKind::Plus,
                     vec![TokenKind::Comma, TokenKind::Gt],
                 )
                 .no_context()?
+                .into_iter()
+                .map(|(path, type_params)| {
+                    let loc = ().at_loc(&path);
+                    TraitSpec { path, type_params }.at_loc(&loc)
+                })
+                .collect()
             } else {
                 vec![]
             };
@@ -1360,6 +1366,13 @@ impl<'a> Parser<'a> {
         } else {
             Ok(None)
         }
+    }
+
+    #[trace_parser]
+    pub fn path_with_generic_spec(
+        &mut self,
+    ) -> Result<(Loc<Path>, Option<Loc<Vec<Loc<TypeExpression>>>>)> {
+        Ok((self.path()?, self.generic_spec_list()?))
     }
 
     fn disallow_attributes(&self, attributes: &AttributeList, item_start: &Token) -> Result<()> {
@@ -1434,32 +1447,7 @@ impl<'a> Parser<'a> {
             None
         };
 
-        let where_clauses = if let Some(where_kw) = self.peek_and_eat(&TokenKind::Where)? {
-            let clauses = self
-                .comma_separated(
-                    |s| {
-                        if s.peek_cond(|t| matches!(t, &TokenKind::Identifier(_)), "identifier")? {
-                            let name = s.path()?;
-                            let _colon = s.eat(&TokenKind::Colon)?;
-                            let value = s.expression()?;
-                            Ok((name, value))
-                        } else {
-                            Err(Diagnostic::bug(
-                                ().at(s.file_id, &where_kw),
-                                "Comma separated should not show this error",
-                            ))
-                        }
-                        // NOTE: With this ending symbol we won't support __builtin__ with where
-                        // clauses.
-                    },
-                    &TokenKind::OpenBrace,
-                )
-                .extra_expected(vec!["identifier"])?;
-
-            clauses
-        } else {
-            vec![]
-        };
+        let where_clauses = self.where_clauses()?;
 
         let end = output_type
             .as_ref()
@@ -1478,6 +1466,67 @@ impl<'a> Parser<'a> {
             }
             .between(self.file_id, &start_token, &end),
         ))
+    }
+
+    fn where_clauses(&mut self) -> Result<Vec<WhereClause>> {
+        if let Some(where_kw) = self.peek_and_eat(&TokenKind::Where)? {
+            let clauses = self
+                .comma_separated(
+                    |s| {
+                        if s.peek_cond(|t| matches!(t, &TokenKind::Identifier(_)), "identifier")? {
+                            let name = s.path()?;
+                            let _colon = s.eat(&TokenKind::Colon)?;
+
+                            if s.peek_cond(|tok| tok == &TokenKind::OpenBrace, "{")? {
+                                let expression = s
+                                    .surrounded(
+                                        &TokenKind::OpenBrace,
+                                        Self::expression,
+                                        &TokenKind::CloseBrace,
+                                    )?
+                                    .0;
+
+                                Ok(WhereClause::GenericInt {
+                                    target: name,
+                                    expression,
+                                })
+                            } else {
+                                let traits = s
+                                    .token_separated(
+                                        Self::path_with_generic_spec,
+                                        &TokenKind::Plus,
+                                        vec![TokenKind::Comma, TokenKind::OpenBrace],
+                                    )
+                                    .extra_expected(vec!["identifier"])?
+                                    .into_iter()
+                                    .map(|(path, type_params)| {
+                                        let loc = ().at_loc(&path);
+                                        TraitSpec { path, type_params }.at_loc(&loc)
+                                    })
+                                    .collect();
+
+                                Ok(WhereClause::TraitBounds {
+                                    target: name,
+                                    traits,
+                                })
+                            }
+                        } else {
+                            Err(Diagnostic::bug(
+                                ().at(s.file_id, &where_kw),
+                                "Comma separated should not show this error",
+                            ))
+                        }
+                        // NOTE: With this ending symbol we won't support __builtin__ with where
+                        // clauses.
+                    },
+                    &TokenKind::OpenBrace,
+                )
+                .extra_expected(vec!["identifier"])?;
+
+            Ok(clauses)
+        } else {
+            Ok(vec![])
+        }
     }
 
     // Entities
@@ -1533,12 +1582,13 @@ impl<'a> Parser<'a> {
         self.disallow_attributes(attributes, &start_token)?;
 
         let name = self.identifier()?;
-
         let type_params = self.generics_list()?;
+        let where_clauses = self.where_clauses()?;
 
         let mut result = TraitDef {
             name,
             type_params,
+            where_clauses,
             methods: vec![],
         };
 
@@ -1591,6 +1641,8 @@ impl<'a> Parser<'a> {
             (None, target)
         };
 
+        let where_clauses = self.where_clauses()?;
+
         let (body, body_span) = self.surrounded(
             &TokenKind::OpenBrace,
             Self::impl_body,
@@ -1601,6 +1653,7 @@ impl<'a> Parser<'a> {
             ImplBlock {
                 r#trait,
                 type_params,
+                where_clauses,
                 target,
                 units: body,
             }
@@ -2905,6 +2958,7 @@ mod tests {
         let expected = ImplBlock {
             r#trait: None,
             type_params: None,
+            where_clauses: vec![],
             target: ast_type_spec("SomeType"),
             units: vec![Unit {
                 head: UnitHead {
@@ -2940,6 +2994,7 @@ mod tests {
         let expected = ImplBlock {
             r#trait: Some(ast_trait_spec("SomeTrait", None)),
             type_params: None,
+            where_clauses: vec![],
             target: ast_type_spec("SomeType"),
             units: vec![Unit {
                 head: UnitHead {
@@ -2978,6 +3033,7 @@ mod tests {
                 Some(vec![ast_type_expr("SomeTypeParam")]),
             )),
             type_params: None,
+            where_clauses: vec![],
             target: ast_type_spec("SomeType"),
             units: vec![Unit {
                 head: UnitHead {

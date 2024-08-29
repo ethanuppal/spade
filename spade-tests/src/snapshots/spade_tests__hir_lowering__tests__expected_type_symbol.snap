@@ -8,12 +8,10 @@ fn f() -> bool {
 }
 
 
-error: Expected A to be a type symbol
+error: Expected A to be a type
   ┌─ testinput:3:12
   │
 2 │     let A = false;
   │         - A is a variable
 3 │     let a: A = false;
-  │            ^ Expected a type symbol
-
-
+  │            ^ Expected a type

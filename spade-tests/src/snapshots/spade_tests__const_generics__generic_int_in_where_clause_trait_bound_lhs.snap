@@ -1,0 +1,16 @@
+---
+source: spade-tests/src/const_generics.rs
+---
+trait X {}
+fn test<#uint N>()
+    where N: X
+{}
+
+
+error: Expected `N` to be a generic type
+  ┌─ testinput:3:11
+  │
+2 │ fn test<#uint N>()
+  │               - N is a generic int
+3 │     where N: X
+  │           ^ Generic int in trait bound

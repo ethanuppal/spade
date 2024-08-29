@@ -6,7 +6,7 @@ use spade_common::{
     name::{Identifier, Path},
     num_ext::InfallibleToBigInt,
 };
-
+use std::fmt::Display;
 pub mod comptime;
 pub mod testutil;
 
@@ -129,6 +129,30 @@ pub enum ArgumentList {
     Named(Vec<NamedArgument>),
 }
 impl WithLocation for ArgumentList {}
+
+#[derive(PartialEq, Debug, Clone)]
+pub enum WhereClause {
+    GenericInt {
+        target: Loc<Path>,
+        expression: Loc<Expression>,
+    },
+    TraitBounds {
+        target: Loc<Path>,
+        traits: Vec<Loc<TraitSpec>>,
+    },
+}
+impl WhereClause {
+    pub fn target(&self) -> &Loc<Path> {
+        match self {
+            WhereClause::GenericInt {
+                target,
+                expression: _,
+            } => target,
+            WhereClause::TraitBounds { target, traits: _ } => target,
+        }
+    }
+}
+impl WithLocation for WhereClause {}
 
 #[derive(PartialEq, Debug, Clone)]
 pub enum BinaryOperator {
@@ -396,6 +420,16 @@ impl IntLiteral {
     }
 }
 
+impl Display for IntLiteral {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            // this is not dry
+            IntLiteral::Unsized(val) | IntLiteral::Signed { val, .. } => write!(f, "{}", val),
+            IntLiteral::Unsigned { val, .. } => write!(f, "{}", val),
+        }
+    }
+}
+
 #[derive(PartialEq, Debug, Clone)]
 pub struct Block {
     pub statements: Vec<Loc<Statement>>,
@@ -450,7 +484,7 @@ impl Statement {
 pub enum TypeParam {
     TypeName {
         name: Loc<Identifier>,
-        traits: Vec<Loc<Path>>,
+        traits: Vec<Loc<TraitSpec>>,
     },
     TypeWithMeta {
         meta: Loc<Identifier>,
@@ -463,6 +497,23 @@ impl TypeParam {
         match self {
             TypeParam::TypeName { name, traits: _ } => name,
             TypeParam::TypeWithMeta { meta: _, name } => name,
+        }
+    }
+}
+
+#[derive(PartialEq, Debug, Clone)]
+pub enum GenericBound {
+    IntegerConstraint(Loc<Path>, Loc<Expression>),
+    TypeConstraint(Loc<Path>, Vec<Loc<Identifier>>),
+}
+
+impl WithLocation for GenericBound {}
+
+impl GenericBound {
+    pub fn path(&self) -> &Loc<Path> {
+        match self {
+            GenericBound::IntegerConstraint(path, _) => path,
+            GenericBound::TypeConstraint(path, _) => path,
         }
     }
 }
@@ -583,7 +634,7 @@ pub struct UnitHead {
     pub inputs: Loc<ParameterList>,
     pub output_type: Option<Loc<TypeSpec>>,
     pub type_params: Option<Loc<Vec<Loc<TypeParam>>>>,
-    pub where_clauses: Vec<(Loc<Path>, Loc<Expression>)>,
+    pub where_clauses: Vec<WhereClause>,
 }
 impl WithLocation for UnitHead {}
 
@@ -613,6 +664,7 @@ impl WithLocation for Register {}
 pub struct TraitDef {
     pub name: Loc<Identifier>,
     pub type_params: Option<Loc<Vec<Loc<TypeParam>>>>,
+    pub where_clauses: Vec<WhereClause>,
     pub methods: Vec<Loc<UnitHead>>,
 }
 impl WithLocation for TraitDef {}
@@ -629,6 +681,7 @@ impl WithLocation for TraitSpec {}
 pub struct ImplBlock {
     pub r#trait: Option<Loc<TraitSpec>>,
     pub type_params: Option<Loc<Vec<Loc<TypeParam>>>>,
+    pub where_clauses: Vec<WhereClause>,
     pub target: Loc<TypeSpec>,
     pub units: Vec<Loc<Unit>>,
 }

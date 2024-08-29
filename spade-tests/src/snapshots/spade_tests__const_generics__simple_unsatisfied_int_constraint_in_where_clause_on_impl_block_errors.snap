@@ -1,22 +1,24 @@
 ---
-source: spade-tests/src/typeinference.rs
+source: spade-tests/src/const_generics.rs
 ---
-fn add_one<#uint N, #uint O>(in: int<N>) -> int<O>
-    where O: N + 2
+impl <#uint N, #uint O> int<N>
+where O: { N + 2 }
 {
-    in + 1
+    fn add_one(self) -> int<O> {
+        self + 1
+    }
 }
 
 fn test() -> int<10> {
-    add_one(10i8)
+    10i8.add_one()
 }
 
 
 error: Expected type Number<10>, got Number<9>
-  ┌─ testinput:4:5
+  ┌─ testinput:5:9
   │
-4 │     in + 1
-  │     ^^^^^^ Expected Number<10>, got Number<9>
+5 │         self + 1
+  │         ^^^^^^^^ Expected Number<10>, got Number<9>
   │
   = note: Expected: 10
                 in: Number<10>
@@ -24,4 +26,4 @@ error: Expected type Number<10>, got Number<9>
                 in: Number<9>
   = note: Addition creates one more output bit than the input to avoid overflow
   = The error is in a generic unit instantiated at
-    ╰ testinput:8 add_one<8, 10>
+    ╰ testinput:10 impl_6::add_one<8, 10>

@@ -404,6 +404,15 @@ mod trait_tests {
     }
 
     snapshot_error! {
+        multiple_impls_of_same_trait_different_type_params_is_error,
+        "
+            trait X<T> {}
+            impl X<bool> for bool {}
+            impl X<uint<1>> for bool {}
+        "
+    }
+
+    snapshot_error! {
         multiple_same_name_traits_is_error,
         "
             trait A {}
@@ -1111,5 +1120,12 @@ mod trait_tests {
             }
         ";
         build_items(code);
+    }
+
+    snapshot_error! {
+        impl_on_unnamed_type,
+        "
+            impl (bool, bool) {}
+        "
     }
 }

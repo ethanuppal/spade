@@ -180,13 +180,13 @@ impl TypeConstraints {
         Self { inner: vec![] }
     }
 
-    pub fn add_constraint(&mut self, lhs: TypeVar, rhs: Loc<ConstraintRhs>) {
+    pub fn add_int_constraint(&mut self, lhs: TypeVar, rhs: Loc<ConstraintRhs>) {
         self.inner.push((lhs, rhs));
     }
 
     /// Calls `evaluate` on all constraints. If any constraints are now `T = Integer(val)`,
     /// those updated values are returned. Such constraints are then removed
-    pub fn update_constraints(&mut self) -> Vec<Loc<(TypeVar, ConstraintReplacement)>> {
+    pub fn update_int_constraints(&mut self) -> Vec<Loc<(TypeVar, ConstraintReplacement)>> {
         let mut new_known = vec![];
         self.inner = self
             .inner
@@ -199,13 +199,14 @@ impl TypeConstraints {
                     ConstraintExpr::Integer(val) => {
                         // ().at_loc(..).map is a somewhat ugly way to wrap an arbitrary type
                         // in a known Loc. This is done to avoid having to impl WithLocation for
-                        // the the unusual tuple used here
+                        // the unusual tuple used here
                         let replacement = ConstraintReplacement {
                             val: val.clone(),
                             context: rhs.context.clone(),
                         };
                         new_known
                             .push(().at_loc(&rhs).map(|_| (expr.clone(), replacement.clone())));
+
                         None
                     }
                     ConstraintExpr::Var(_)
@@ -244,7 +245,7 @@ pub struct ConstraintContext {
 impl std::fmt::Display for TypeConstraints {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         for (lhs, rhs) in &self.inner {
-            writeln!(f, "{lhs}: {rhs}", rhs = rhs.constraint)?;
+            writeln!(f, "{lhs}: {{ {rhs} }}", rhs = rhs.inner.constraint)?;
         }
         Ok(())
     }

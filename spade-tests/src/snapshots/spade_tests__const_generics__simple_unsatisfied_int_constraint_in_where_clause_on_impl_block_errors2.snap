@@ -1,0 +1,32 @@
+---
+source: spade-tests/src/const_generics.rs
+---
+impl <#uint N, #uint O> int<N>
+where O: { N + 2 } {
+    fn add_one(self) -> int<O> {
+        0
+    }
+}
+
+fn test() -> int<9> {
+    10i8.add_one()
+}
+
+
+error: Output type mismatch. Expected int<9>, got int<10>
+   ┌─ testinput:8:21
+   │  
+ 2 │   where O: { N + 2 } {
+   │              ----- Type 10 inferred here
+   ·  
+ 8 │   fn test() -> int<9> {
+   │                ------ int<9> type specified here
+   │ ╭─────────────────────^
+ 9 │ │     10i8.add_one()
+10 │ │ }
+   │ ╰─^ Found type int<10>
+   │  
+   = note: Expected: 9
+                 in: int<9>
+                Got: 10
+                 in: int<10>

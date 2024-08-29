@@ -14,13 +14,13 @@ fn test() {
 }
 
 
-error: HasGeneric<int<8>, bool> has no method requires_bool
+error: `HasGeneric<int<8>, bool>` has no method `requires_bool`
    ┌─ testinput:10:7
    │
 10 │     g.requires_bool()
    │     --^^^^^^^^^^^^^--
    │     │ │
    │     │ No such method
-   │     This has type HasGeneric<int<8>, bool>
+   │     This has type `HasGeneric<int<8>, bool>`
    │
-   = help: The method exists for HasGeneric<bool, S>
+   = help: The method exists for `HasGeneric<bool, S>`

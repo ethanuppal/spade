@@ -1,0 +1,19 @@
+---
+source: spade-tests/src/const_generics.rs
+---
+struct S {}
+fn test<#uint N>() 
+    where S: { N }
+{}
+
+
+error: Expected `S` to be a type level integer
+  ┌─ testinput:3:11
+  │
+1 │ struct S {}
+  │ ----------- `S` is a type declared here
+2 │ fn test<#uint N>() 
+3 │     where S: { N }
+  │           ^    - This is an integer constraint
+  │           │     
+  │           Declared type in generic integer constraint

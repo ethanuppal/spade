@@ -42,6 +42,7 @@ pub enum TraceStackEntry {
     Unified(TypeVar, TypeVar, TypeVar, Vec<TypeVar>),
     EnsuringImpls(TypeVar, TraitList, bool),
     AddingEquation(TypedExpression, TypeVar),
+    AddingTraitBounds(TypeVar, TraitList),
     AddRequirement(Requirement),
     ResolvedRequirement(Requirement),
     NewGenericList(HashMap<NameID, TypeVar>),
@@ -148,6 +149,9 @@ pub fn format_trace_stack(type_state: &TypeState) -> String {
             }
             TraceStackEntry::AddRequirement(req) => format!("{} {req:?}", "added".yellow()),
             TraceStackEntry::ResolvedRequirement(req) => format!("{} {req:?}", "resolved".blue()),
+            TraceStackEntry::AddingTraitBounds(tvar, traits) => {
+                format!("{} {traits:?} to {tvar:?}", "adding trait bound".yellow())
+            }
         };
         if let TraceStackEntry::Exit = entry {
         } else {

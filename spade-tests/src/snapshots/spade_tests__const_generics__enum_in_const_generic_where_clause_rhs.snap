@@ -1,0 +1,17 @@
+---
+source: spade-tests/src/const_generics.rs
+---
+enum E {}
+fn test<T>()
+    where T: E
+{}
+
+
+error: Unexpected type E, expected a trait
+  ┌─ testinput:3:14
+  │
+1 │ enum E {}
+  │ --------- Type E defined here
+2 │ fn test<T>()
+3 │     where T: E
+  │              ^ Unexpected type

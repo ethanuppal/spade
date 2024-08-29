@@ -1,0 +1,12 @@
+---
+source: spade-tests/src/const_generics.rs
+---
+trait X {}
+fn test<T: 1>() {}
+
+
+error: Unexpected `integer`, expected `Identifier`
+  ┌─ testinput:2:12
+  │
+2 │ fn test<T: 1>() {}
+  │            ^ expected `Identifier`
