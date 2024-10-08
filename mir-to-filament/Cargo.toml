@@ -1,0 +1,16 @@
+[package]
+name = "mir-to-filament"
+version.workspace = true
+license.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+spade-mir = { path = "../spade-mir" }
+fil-ast = { git = "https://github.com/ethanuppal/filament.git", rev = "6afc326885b4a4fe819f9a9ae931bb536fa0026c" }
+fil-ir = { git = "https://github.com/ethanuppal/filament.git", rev = "6afc326885b4a4fe819f9a9ae931bb536fa0026c" }
+fil = { git = "https://github.com/ethanuppal/filament.git", rev = "6afc326885b4a4fe819f9a9ae931bb536fa0026c", package = "filament" }
+fil-utils = { git = "https://github.com/ethanuppal/filament.git", rev = "6afc326885b4a4fe819f9a9ae931bb536fa0026c" }
+calyx-ir = "0.7.1"
+log = "0.4.22"
+bimap = "0.6.3"

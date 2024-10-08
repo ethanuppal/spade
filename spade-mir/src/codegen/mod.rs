@@ -1486,6 +1486,7 @@ mod tests {
             }],
             output: ValueName::Expr(0),
             output_type: Type::Bool,
+            pipeline_latency: None,
             statements: vec![],
         };
 
@@ -1533,6 +1534,7 @@ mod tests {
             }],
             output: ValueName::Expr(0),
             output_type: Type::Bool,
+            pipeline_latency: None,
             statements: vec![],
         };
 
@@ -3135,6 +3137,7 @@ mod expression_tests {
             }],
             output: ValueName::Expr(0),
             output_type: Type::Void,
+            pipeline_latency: None,
             statements: vec![],
         };
 

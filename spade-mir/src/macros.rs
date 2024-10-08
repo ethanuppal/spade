@@ -159,6 +159,7 @@ macro_rules! entity {
             ],
             output: spade_mir::value_name!($output_name_kind $output_name),
             output_type: $output_type,
+            pipeline_latency: None,
             statements: vec![
                 $( spade_mir::statement! $statement ),*
             ],
@@ -303,6 +304,7 @@ mod tests {
             }],
             output: ValueName::_test_named(1, "value".to_string()),
             output_type: Type::int(6),
+            pipeline_latency: None,
             statements: vec![
                 statement!(e(0); Type::int(6); Add; n(1, "value")),
                 statement!(reg n(1, "value"); Type::int(6); clock (n(0, "clk")); e(0)),

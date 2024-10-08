@@ -577,6 +577,7 @@ pub struct Entity {
     pub inputs: Vec<MirInput>,
     pub output: ValueName,
     pub output_type: Type,
+    pub pipeline_latency: Option<usize>,
     pub statements: Vec<Statement>,
 }
 
@@ -588,6 +589,7 @@ impl std::fmt::Display for Entity {
             output,
             output_type,
             statements,
+            ..
         } = self;
 
         let inputs = inputs

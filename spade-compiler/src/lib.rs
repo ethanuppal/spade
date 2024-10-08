@@ -345,6 +345,19 @@ pub fn compile(
         mir_context,
     } = codegen(mir_entities, Rc::clone(&code), &mut errors, &mut idtracker);
 
+    // <lol>
+    if let Some(outfile) = &opts.outfile {
+        if outfile.extension().map_or(false, |ext| ext == "fil") {
+            let fil_ctx = mir_to_filament::build_fil_ctx(
+                &flat_mir_entities,
+                vec![PathBuf::from("../filament")],
+            );
+            mir_to_filament::print_fil_ctx(&fil_ctx).expect("failed to print");
+            // mir_to_filament::lower_fil_ctx(fil_ctx).expect("failed to lower filament");
+        }
+    }
+    // </lol>'
+
     let state = CompilerState {
         code: code.read().unwrap().dump_files(),
         symtab: frozen_symtab,

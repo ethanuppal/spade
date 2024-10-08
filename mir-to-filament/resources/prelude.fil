@@ -1,0 +1,9 @@
+import "primitives/core.fil";
+
+extern "prelude.sv" {
+   comp Wire[WIDTH]<'G: 0, 'L: 0>(
+      in: ['G, 'L] WIDTH,
+   ) -> (
+      out: ['G, 'L] WIDTH,
+   ) where 'L >= 'G, WIDTH > 0;
+}

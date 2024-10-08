@@ -198,6 +198,7 @@ where
         output,
         output_type,
         statements,
+        ..
     } = entity;
 
     let inputs = inputs

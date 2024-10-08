@@ -2983,6 +2983,21 @@ pub fn generate_unit<'a>(
     self_mono_item: Option<MonoItem>,
     opt_passes: &[&dyn MirPass],
 ) -> Result<mir::Entity> {
+    let pipeline_latency = if let UnitKind::Pipeline {
+        depth_typeexpr_id, ..
+    } = unit.head.unit_kind.inner
+    {
+        if let Some(ConcreteType::Integer(depth)) =
+            types.try_get_type_of_id(depth_typeexpr_id, symtab.symtab(), &item_list.types)
+        {
+            depth.to_usize()
+        } else {
+            None
+        }
+    } else {
+        None
+    };
+
     let mir_inputs = unit
         .head
         .inputs
@@ -3104,6 +3119,7 @@ pub fn generate_unit<'a>(
         inputs: mir_inputs,
         output: unit.body.variable(&ctx)?,
         output_type: output_t,
+        pipeline_latency,
         statements,
     })
 }

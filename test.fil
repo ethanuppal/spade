@@ -1,0 +1,422 @@
+module \std::conv::bit_to_bool  (
+        input b_i,
+        output output__
+    );
+    `ifdef COCOTB_SIM
+    string __top_module;
+    string __vcd_file;
+    initial begin
+        if ($value$plusargs("TOP_MODULE=%s", __top_module) && __top_module == "std::conv::bit_to_bool" && $value$plusargs("VCD_FILENAME=%s", __vcd_file)) begin
+            $dumpfile (__vcd_file);
+            $dumpvars (0, \std::conv::bit_to_bool );
+        end
+    end
+    `endif
+    logic \b ;
+    assign \b  = b_i;
+    logic _e_8;
+    assign _e_8 = \b ;
+    assign output__ = _e_8;
+endmodule
+
+module \std::conv::unsafe::clock_to_bool  (
+        input c_i,
+        output output__
+    );
+    `ifdef COCOTB_SIM
+    string __top_module;
+    string __vcd_file;
+    initial begin
+        if ($value$plusargs("TOP_MODULE=%s", __top_module) && __top_module == "std::conv::unsafe::clock_to_bool" && $value$plusargs("VCD_FILENAME=%s", __vcd_file)) begin
+            $dumpfile (__vcd_file);
+            $dumpvars (0, \std::conv::unsafe::clock_to_bool );
+        end
+    end
+    `endif
+    logic \c ;
+    assign \c  = c_i;
+    logic _e_29;
+    assign _e_29 = \c ;
+    assign output__ = _e_29;
+endmodule
+
+module \std::conv::unsafe::bool_to_clock  (
+        input c_i,
+        output output__
+    );
+    `ifdef COCOTB_SIM
+    string __top_module;
+    string __vcd_file;
+    initial begin
+        if ($value$plusargs("TOP_MODULE=%s", __top_module) && __top_module == "std::conv::unsafe::bool_to_clock" && $value$plusargs("VCD_FILENAME=%s", __vcd_file)) begin
+            $dumpfile (__vcd_file);
+            $dumpvars (0, \std::conv::unsafe::bool_to_clock );
+        end
+    end
+    `endif
+    logic \c ;
+    assign \c  = c_i;
+    logic _e_32;
+    assign _e_32 = \c ;
+    assign output__ = _e_32;
+endmodule
+
+module \std::io::rising_edge  (
+        input clk_i,
+        input sync1_i,
+        output output__
+    );
+    `ifdef COCOTB_SIM
+    string __top_module;
+    string __vcd_file;
+    initial begin
+        if ($value$plusargs("TOP_MODULE=%s", __top_module) && __top_module == "std::io::rising_edge" && $value$plusargs("VCD_FILENAME=%s", __vcd_file)) begin
+            $dumpfile (__vcd_file);
+            $dumpvars (0, \std::io::rising_edge );
+        end
+    end
+    `endif
+    logic \clk ;
+    assign \clk  = clk_i;
+    logic \sync1 ;
+    assign \sync1  = sync1_i;
+    (* src = "<compiler dir>/stdlib/io.spade:3,14" *)
+    reg \sync2 ;
+    (* src = "<compiler dir>/stdlib/io.spade:4,14" *)
+    logic _e_100;
+    (* src = "<compiler dir>/stdlib/io.spade:4,5" *)
+    logic _e_98;
+    always @(posedge \clk ) begin
+        \sync2  <= \sync1 ;
+    end
+    assign _e_100 = !\sync2 ;
+    assign _e_98 = \sync1  && _e_100;
+    assign output__ = _e_98;
+endmodule
+
+module \std::io::falling_edge  (
+        input clk_i,
+        input sync1_i,
+        output output__
+    );
+    `ifdef COCOTB_SIM
+    string __top_module;
+    string __vcd_file;
+    initial begin
+        if ($value$plusargs("TOP_MODULE=%s", __top_module) && __top_module == "std::io::falling_edge" && $value$plusargs("VCD_FILENAME=%s", __vcd_file)) begin
+            $dumpfile (__vcd_file);
+            $dumpvars (0, \std::io::falling_edge );
+        end
+    end
+    `endif
+    logic \clk ;
+    assign \clk  = clk_i;
+    logic \sync1 ;
+    assign \sync1  = sync1_i;
+    (* src = "<compiler dir>/stdlib/io.spade:9,14" *)
+    reg \sync2 ;
+    (* src = "<compiler dir>/stdlib/io.spade:10,14" *)
+    logic _e_108;
+    (* src = "<compiler dir>/stdlib/io.spade:10,5" *)
+    logic _e_106;
+    always @(posedge \clk ) begin
+        \sync2  <= \sync1 ;
+    end
+    assign _e_108 = !\sync1 ;
+    assign _e_106 = \sync2  && _e_108;
+    assign output__ = _e_106;
+endmodule
+
+module \std::cdc::sync2_bool  (
+        input clk_i,
+        input in_i,
+        output output__
+    );
+    `ifdef COCOTB_SIM
+    string __top_module;
+    string __vcd_file;
+    initial begin
+        if ($value$plusargs("TOP_MODULE=%s", __top_module) && __top_module == "std::cdc::sync2_bool" && $value$plusargs("VCD_FILENAME=%s", __vcd_file)) begin
+            $dumpfile (__vcd_file);
+            $dumpvars (0, \std::cdc::sync2_bool );
+        end
+    end
+    `endif
+    logic \clk ;
+    assign \clk  = clk_i;
+    logic \in ;
+    assign \in  = in_i;
+    (* src = "<compiler dir>/stdlib/cdc.spade:38,5" *)
+    logic _e_415;
+    (* src = "<compiler dir>/stdlib/cdc.spade:38,5" *)
+    \std::cdc::unsafe::sync2[385]  sync2_0(.clk_i(\clk ), .in_i(\in ), .output__(_e_415));
+    assign output__ = _e_415;
+endmodule
+
+module \shift  (
+        input clk_i,
+        input[3:0] in_i,
+        output[3:0] output__
+    );
+    `ifdef COCOTB_SIM
+    string __top_module;
+    string __vcd_file;
+    initial begin
+        if ($value$plusargs("TOP_MODULE=%s", __top_module) && __top_module == "shift" && $value$plusargs("VCD_FILENAME=%s", __vcd_file)) begin
+            $dumpfile (__vcd_file);
+            $dumpvars (0, \shift );
+        end
+    end
+    `endif
+    logic \clk ;
+    assign \clk  = clk_i;
+    logic[3:0] \in ;
+    assign \in  = in_i;
+    (* src = "test.sp:3,5" *)
+    reg[3:0] \s1_in ;
+    (* src = "test.sp:3,5" *)
+    reg[3:0] \s1_first ;
+    (* src = "test.sp:2,13" *)
+    logic[3:0] \first ;
+    always @(posedge \clk ) begin
+        \s1_in  <= \in ;
+    end
+    always @(posedge \clk ) begin
+        \s1_first  <= \first ;
+    end
+    assign \first  = \in ;
+    assign output__ = \s1_first ;
+endmodule
+
+module \std::conv::impl_2::to_be_bytes  (
+        input[15:0] self_i,
+        output[15:0] output__
+    );
+    `ifdef COCOTB_SIM
+    string __top_module;
+    string __vcd_file;
+    initial begin
+        if ($value$plusargs("TOP_MODULE=%s", __top_module) && __top_module == "std::conv::impl_2::to_be_bytes" && $value$plusargs("VCD_FILENAME=%s", __vcd_file)) begin
+            $dumpfile (__vcd_file);
+            $dumpvars (0, \std::conv::impl_2::to_be_bytes );
+        end
+    end
+    `endif
+    logic[15:0] \self ;
+    assign \self  = self_i;
+    (* src = "<compiler dir>/stdlib/conv.spade:128,16" *)
+    logic[15:0] _e_49;
+    (* src = "<compiler dir>/stdlib/conv.spade:128,10" *)
+    logic[7:0] _e_48;
+    (* src = "<compiler dir>/stdlib/conv.spade:128,28" *)
+    logic[7:0] _e_52;
+    (* src = "<compiler dir>/stdlib/conv.spade:128,9" *)
+    logic[15:0] _e_47;
+    localparam[15:0] _e_51 = 8;
+    assign _e_49 = \self  >> _e_51;
+    assign _e_48 = _e_49[7:0];
+    assign _e_52 = \self [7:0];
+    assign _e_47 = {_e_52, _e_48};
+    assign output__ = _e_47;
+endmodule
+
+module \std::conv::impl_2::to_le_bytes  (
+        input[15:0] self_i,
+        output[15:0] output__
+    );
+    `ifdef COCOTB_SIM
+    string __top_module;
+    string __vcd_file;
+    initial begin
+        if ($value$plusargs("TOP_MODULE=%s", __top_module) && __top_module == "std::conv::impl_2::to_le_bytes" && $value$plusargs("VCD_FILENAME=%s", __vcd_file)) begin
+            $dumpfile (__vcd_file);
+            $dumpvars (0, \std::conv::impl_2::to_le_bytes );
+        end
+    end
+    `endif
+    logic[15:0] \self ;
+    assign \self  = self_i;
+    (* src = "<compiler dir>/stdlib/conv.spade:134,31" *)
+    logic[15:0] _e_56;
+    logic[15:0] _e_55;
+    (* src = "<compiler dir>/stdlib/conv.spade:134,31" *)
+    \std::conv::impl_2::to_be_bytes  to_be_bytes_0(.self_i(\self ), .output__(_e_56));
+    genvar _e_55_i;
+    for (_e_55_i = 0; _e_55_i < 16; _e_55_i = _e_55_i + 1) begin
+        assign _e_55[_e_55_i] = _e_56[16 - 1 - _e_55_i];
+    end
+    assign output__ = _e_55;
+endmodule
+
+module \std::conv::impl_3::to_be_bytes  (
+        input[23:0] self_i,
+        output[23:0] output__
+    );
+    `ifdef COCOTB_SIM
+    string __top_module;
+    string __vcd_file;
+    initial begin
+        if ($value$plusargs("TOP_MODULE=%s", __top_module) && __top_module == "std::conv::impl_3::to_be_bytes" && $value$plusargs("VCD_FILENAME=%s", __vcd_file)) begin
+            $dumpfile (__vcd_file);
+            $dumpvars (0, \std::conv::impl_3::to_be_bytes );
+        end
+    end
+    `endif
+    logic[23:0] \self ;
+    assign \self  = self_i;
+    (* src = "<compiler dir>/stdlib/conv.spade:142,16" *)
+    logic[23:0] _e_61;
+    (* src = "<compiler dir>/stdlib/conv.spade:142,10" *)
+    logic[7:0] _e_60;
+    (* src = "<compiler dir>/stdlib/conv.spade:142,35" *)
+    logic[23:0] _e_65;
+    (* src = "<compiler dir>/stdlib/conv.spade:142,29" *)
+    logic[7:0] _e_64;
+    (* src = "<compiler dir>/stdlib/conv.spade:142,47" *)
+    logic[7:0] _e_68;
+    (* src = "<compiler dir>/stdlib/conv.spade:142,9" *)
+    logic[23:0] _e_59;
+    localparam[23:0] _e_63 = 16;
+    assign _e_61 = \self  >> _e_63;
+    assign _e_60 = _e_61[7:0];
+    localparam[23:0] _e_67 = 8;
+    assign _e_65 = \self  >> _e_67;
+    assign _e_64 = _e_65[7:0];
+    assign _e_68 = \self [7:0];
+    assign _e_59 = {_e_68, _e_64, _e_60};
+    assign output__ = _e_59;
+endmodule
+
+module \std::conv::impl_3::to_le_bytes  (
+        input[23:0] self_i,
+        output[23:0] output__
+    );
+    `ifdef COCOTB_SIM
+    string __top_module;
+    string __vcd_file;
+    initial begin
+        if ($value$plusargs("TOP_MODULE=%s", __top_module) && __top_module == "std::conv::impl_3::to_le_bytes" && $value$plusargs("VCD_FILENAME=%s", __vcd_file)) begin
+            $dumpfile (__vcd_file);
+            $dumpvars (0, \std::conv::impl_3::to_le_bytes );
+        end
+    end
+    `endif
+    logic[23:0] \self ;
+    assign \self  = self_i;
+    (* src = "<compiler dir>/stdlib/conv.spade:148,31" *)
+    logic[23:0] _e_72;
+    logic[23:0] _e_71;
+    (* src = "<compiler dir>/stdlib/conv.spade:148,31" *)
+    \std::conv::impl_3::to_be_bytes  to_be_bytes_0(.self_i(\self ), .output__(_e_72));
+    genvar _e_71_i;
+    for (_e_71_i = 0; _e_71_i < 24; _e_71_i = _e_71_i + 1) begin
+        assign _e_71[_e_71_i] = _e_72[24 - 1 - _e_71_i];
+    end
+    assign output__ = _e_71;
+endmodule
+
+module \std::conv::impl_4::to_be_bytes  (
+        input[31:0] self_i,
+        output[31:0] output__
+    );
+    `ifdef COCOTB_SIM
+    string __top_module;
+    string __vcd_file;
+    initial begin
+        if ($value$plusargs("TOP_MODULE=%s", __top_module) && __top_module == "std::conv::impl_4::to_be_bytes" && $value$plusargs("VCD_FILENAME=%s", __vcd_file)) begin
+            $dumpfile (__vcd_file);
+            $dumpvars (0, \std::conv::impl_4::to_be_bytes );
+        end
+    end
+    `endif
+    logic[31:0] \self ;
+    assign \self  = self_i;
+    (* src = "<compiler dir>/stdlib/conv.spade:156,16" *)
+    logic[31:0] _e_77;
+    (* src = "<compiler dir>/stdlib/conv.spade:156,10" *)
+    logic[7:0] _e_76;
+    (* src = "<compiler dir>/stdlib/conv.spade:156,35" *)
+    logic[31:0] _e_81;
+    (* src = "<compiler dir>/stdlib/conv.spade:156,29" *)
+    logic[7:0] _e_80;
+    (* src = "<compiler dir>/stdlib/conv.spade:156,54" *)
+    logic[31:0] _e_85;
+    (* src = "<compiler dir>/stdlib/conv.spade:156,48" *)
+    logic[7:0] _e_84;
+    (* src = "<compiler dir>/stdlib/conv.spade:156,66" *)
+    logic[7:0] _e_88;
+    (* src = "<compiler dir>/stdlib/conv.spade:156,9" *)
+    logic[31:0] _e_75;
+    localparam[31:0] _e_79 = 32'd24;
+    assign _e_77 = \self  >> _e_79;
+    assign _e_76 = _e_77[7:0];
+    localparam[31:0] _e_83 = 32'd16;
+    assign _e_81 = \self  >> _e_83;
+    assign _e_80 = _e_81[7:0];
+    localparam[31:0] _e_87 = 32'd8;
+    assign _e_85 = \self  >> _e_87;
+    assign _e_84 = _e_85[7:0];
+    assign _e_88 = \self [7:0];
+    assign _e_75 = {_e_88, _e_84, _e_80, _e_76};
+    assign output__ = _e_75;
+endmodule
+
+module \std::conv::impl_4::to_le_bytes  (
+        input[31:0] self_i,
+        output[31:0] output__
+    );
+    `ifdef COCOTB_SIM
+    string __top_module;
+    string __vcd_file;
+    initial begin
+        if ($value$plusargs("TOP_MODULE=%s", __top_module) && __top_module == "std::conv::impl_4::to_le_bytes" && $value$plusargs("VCD_FILENAME=%s", __vcd_file)) begin
+            $dumpfile (__vcd_file);
+            $dumpvars (0, \std::conv::impl_4::to_le_bytes );
+        end
+    end
+    `endif
+    logic[31:0] \self ;
+    assign \self  = self_i;
+    (* src = "<compiler dir>/stdlib/conv.spade:162,31" *)
+    logic[31:0] _e_92;
+    logic[31:0] _e_91;
+    (* src = "<compiler dir>/stdlib/conv.spade:162,31" *)
+    \std::conv::impl_4::to_be_bytes  to_be_bytes_0(.self_i(\self ), .output__(_e_92));
+    genvar _e_91_i;
+    for (_e_91_i = 0; _e_91_i < 32; _e_91_i = _e_91_i + 1) begin
+        assign _e_91[_e_91_i] = _e_92[32 - 1 - _e_91_i];
+    end
+    assign output__ = _e_91;
+endmodule
+
+module \std::cdc::unsafe::sync2[385]  (
+        input clk_i,
+        input in_i,
+        output output__
+    );
+    `ifdef COCOTB_SIM
+    string __top_module;
+    string __vcd_file;
+    initial begin
+        if ($value$plusargs("TOP_MODULE=%s", __top_module) && __top_module == "std::cdc::unsafe::sync2[385]" && $value$plusargs("VCD_FILENAME=%s", __vcd_file)) begin
+            $dumpfile (__vcd_file);
+            $dumpvars (0, \std::cdc::unsafe::sync2[385] );
+        end
+    end
+    `endif
+    logic \clk ;
+    assign \clk  = clk_i;
+    logic \in ;
+    assign \in  = in_i;
+    (* src = "<compiler dir>/stdlib/cdc.spade:20,18" *)
+    reg \sync1 ;
+    (* src = "<compiler dir>/stdlib/cdc.spade:21,18" *)
+    reg \sync2 ;
+    always @(posedge \clk ) begin
+        \sync1  <= \in ;
+    end
+    always @(posedge \clk ) begin
+        \sync2  <= \sync1 ;
+    end
+    assign output__ = \sync2 ;
+endmodule
