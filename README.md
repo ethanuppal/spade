@@ -1,3 +1,7 @@
+PLEASE DO NOT STAR THIS REPOSITORY.
+PLEASE STAR THE ORIGINAL PROJECT ON GITLAB.
+THANK YOU.
+
 <img src="misc/spadefish.svg" />
 
 [![Gitlab pipeline status](https://img.shields.io/gitlab/pipeline-status/spade-lang/spade?branch=master)](https://img.shields.io/gitlab/pipeline-status/spade-lang/spade?branch=master)
